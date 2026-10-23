@@ -12,7 +12,7 @@ namespace Puck.Maths.Tests;
 /// entry point <see cref="FixedQuaternion.FromAxisAngle"/>, <see cref="FixedQuaternion.Exp"/> and
 /// <see cref="FixedRigidTransform.Exp"/> all reach their sine and cosine through — and
 /// <c>FixedVectorMath.TryNormalizeWithMagnitude</c>, the one-pass axis-and-norm those same three call first. The coverage
-/// manifest credits both to the laws here, so the ratchet notices if their gate disappears.
+/// declarations bind both to the laws here.
 /// </para>
 /// <para>
 /// Neither is measured against a <see cref="double"/> reference — no floating-point arithmetic may enter law logic —
@@ -380,9 +380,7 @@ internal static class TransformKernelClaims {
     /// </summary>
     /// <returns>The counterexample, or <see langword="null"/> when the claim holds.</returns>
     /// <remarks>
-    /// The sweep is written out inline rather than taken from a <c>Domain</c>: an Exhaustive case that consumed one
-    /// would advance the frontier counter its Default sibling reads, sliding that sibling's operands as a side effect
-    /// of this sweep having run.
+    /// The sweep is written out inline rather than taken from a <c>Domain</c>: a sampled domain cannot establish this sweep's full-carrier claim.
     /// </remarks>
     internal static string? SinCosRawWidthSweepSurface() {
         for (var rawAngle = 0UL; (rawAngle <= DenseTurnLimit); ++rawAngle) {

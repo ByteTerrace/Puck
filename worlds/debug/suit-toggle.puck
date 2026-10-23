@@ -1,0 +1,25 @@
+// One seat's suit toggle (suit.puck): the suit channel of the 1-based local `seat` flips the `suit` register of that
+// seat's own body, the 0-based `index` (a local seat's body is seat minus one), once while the body stands. A press in
+// the air fires only if it is still held when the body lands. A library: it emits no document. A rule reads a seat as a
+// literal, checked against the document's local seats (`bodies.localSeats`), so suit.puck instantiates seat 1, the seat
+// every Moth world has, and a world that seats more bodies imports this file and instantiates one toggle for each more:
+//
+//   import "suit-toggle"
+//   bodies { localSeats: 2 }
+//   suitToggle(seat: 2, index: 1)
+
+template suitToggle(seat, index) {
+  rule $"suit-toggle-{seat}" {
+    when channel(seat, suit) >= 1 and fact(body, index, Airborne) == 0
+    mode: Edge
+    setBodyState(key: $"{index}", state: "suit", expression: 1 - bodyState(body, index, suit))
+  }
+
+  // Out of the suit she has no flight pack, so flight mode is off (the basis's `fly-1` would otherwise switch it on for
+  // the pilot), and she puts the suit back on standing.
+  rule $"suit-off-flight-{seat}" {
+    when bodyState(body, index, suit) == 0 and bodyState(body, index, flightFuel) > 0
+    mode: Level
+    setBodyState(key: $"{index}", state: "flightFuel", expression: 0)
+  }
+}

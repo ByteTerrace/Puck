@@ -273,9 +273,9 @@ public sealed class PortalWalkThroughLawTests {
                 host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
             }
 
-            // Stand the body a short walk in front of the door's aperture (or, for the control, as far to the side
+            // Stand the body two metres in front of the door's glass (or, for the control, as far to the side
             // of it), facing it: yaw zero faces -Z. It stands high enough that a body whose kit carries no collider,
-            // and so falls as it walks, is still above the door's crossing floor when it reaches the aperture.
+            // and so falls as it walks, still meets the opening when its origin reaches the glass.
             foreach (var bodyIndex in walkers) {
                 rowAServer.Body(index: bodyIndex)!.Pose(
                     pitchRadians: 0f,
@@ -283,7 +283,7 @@ public sealed class PortalWalkThroughLawTests {
                     x: startX,
                     y: 4.5f,
                     yawRadians: 0f,
-                    z: -3f
+                    z: -8f
                 );
             }
 

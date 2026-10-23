@@ -1,8 +1,6 @@
 ---
-type: regex
+type: llm
 weight: 1
-match: contains
-flags: i
 ---
 
-(scratch|worktree)[^.\n]{0,100}path|path[^.\n]{0,100}(scratch|worktree)
+The response puts the long trace and analysis in a lane-named file in the scratch directory or worktree and references that file path in the message rather than pasting the 180-line trace inline.

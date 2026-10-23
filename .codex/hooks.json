@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|PowerShell|exec_command|shell_command)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.claude/hooks/agent-policy.ps1') -Tool codex\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

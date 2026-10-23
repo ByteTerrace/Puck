@@ -71,6 +71,12 @@ internal sealed partial class PlayerCommandModule {
                         return CommandResult.None;
                     }
 
+                    if (declared && (seatTable.Shape(ordinal: ordinal) == ChannelShape.Relative)) {
+                        if (context.Phase is CommandPhase.Started or CommandPhase.Active) {
+                            seat.AccumulateRelative(ordinal: ordinal, sample: context.Value.AsAxis1D);
+                        }
+                        return CommandResult.None;
+                    }
                     // Zero is the neutral image of an analog channel even when a backend reports it as Active
                     // rather than Completed. Treat it as the same release edge so a trigger/stick cannot leave a
                     // zero-valued dictionary row behind, and so every backend gets identical held semantics.
@@ -474,6 +480,7 @@ internal sealed partial class PlayerCommandModule {
         var shape = targetChannels.Shape(ordinal: ordinal);
 
         var shapeError = shape switch {
+            ChannelShape.Relative => $"[{verb}: channel {channelName} is displacement and cannot be held; submit a relative sample through player.signal and its binding]",
             ChannelShape.Binary when ((value != FixedQ4816.Zero) && (value != FixedQ4816.One)) => $"[{verb}: channel \"{channelName}\" is binary — value must be 0 or 1]",
             ChannelShape.Unipolar when ((value < FixedQ4816.Zero) || (value > FixedQ4816.One)) => $"[{verb}: channel \"{channelName}\" is unipolar — value must be in [0, 1]]",
             ChannelShape.Bipolar when ((value < -FixedQ4816.One) || (value > FixedQ4816.One)) => $"[{verb}: channel \"{channelName}\" is bipolar — value must be in [-1, 1]]",
@@ -644,10 +651,16 @@ internal sealed partial class PlayerCommandModule {
             description: "Held: while down, pointer motion orbits the seat camera (yaw/pitch at seatDefaults.seatCameraFeel's pointer sensitivities); the body is untouched. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim.",
             valueKind: CommandValueKind.Digital,
             held: true,
-            handler: context => HeldFlag(
-                context: context,
-                set: static (seat, held) => seat.SetOrbit(held: held)
-            )
+            handler: context => {
+                WorldDragMotion.Hold(
+                    drag: m_viewInput?.Drag,
+                    held: held => m_roster.Seat(slot: context.Slot)?.SetOrbit(held: held),
+                    phase: context.Phase,
+                    slot: context.Slot
+                );
+
+                return CommandResult.None;
+            }
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
@@ -723,10 +736,16 @@ internal sealed partial class PlayerCommandModule {
             description: "Held: while down, pointer motion orbits the seat camera AND the body faces where the camera looks — the seat composes the camera facing into the world's FaceX/FaceY/FaceZ channels each tick and the sim's facing snap turns the body (needs those channels and views.seatControl.yawReference World; the validator refuses a binding without them). Bind it once, like player.orbit.",
             valueKind: CommandValueKind.Digital,
             held: true,
-            handler: context => HeldFlag(
-                context: context,
-                set: static (seat, held) => seat.SetSteer(held: held)
-            )
+            handler: context => {
+                WorldDragMotion.Hold(
+                    drag: m_viewInput?.Drag,
+                    held: held => m_roster.Seat(slot: context.Slot)?.SetSteer(held: held),
+                    phase: context.Phase,
+                    slot: context.Slot
+                );
+
+                return CommandResult.None;
+            }
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,

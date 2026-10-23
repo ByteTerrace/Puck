@@ -23,7 +23,8 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Application storage — one table, one derivation
 - `Compose` = check Control → rebuild the set → sync the latch
 - `WorldScreenRoute.EngageChannel` — the context-sensitive button
-- The emulator view — the camera frames the engaged screen
+- Tabletops — the context button sits a seat at a board
+- The framed screen — the camera frames the engaged screen's picture as an emulator shows it
 - `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 - `Dissolve` — three outcomes, no repair
 - The one fold
@@ -31,6 +32,7 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Replay visibility
 - Machines: server-authoritative
 - Read-backs
+- The device frame — a device's controls are the seat's own
 - Observation delivery and session query disclosure
 - Verifying
 
@@ -48,7 +50,7 @@ recipient-filtered state observations, and authoritative readbacks require a ful
 
 `ControlApplication(GrantSubject Target, string? Kit, ChannelReachMask Reach)`.
 
-- **target** — `Screen(index)` (a booted machine's pad) or `Body(index)` (its
+- **target** — `Screen(index)` (a booted machine's pad), `Placement(id)` (a tabletop) or `Body(index)` (its
   own body, or another body under possession).
 - **kit** — the `WorldKit` name whose `pad` map assigns the delivered channels
   their meaning at the target, or `null` for passthrough (every reached ordinal
@@ -232,24 +234,238 @@ identical decision at the identical tick.
 **Scope today**: local seats only (`AdvanceSeats`, indices 0..3) —
 `AdvanceSimulated`'s peers/inhabitants are not probed.
 
-## The emulator view — the camera frames the engaged screen
+## Tabletops — the context button sits a seat at a board
+
+A placement's board facet may carry an `engage` block (`WorldTabletopEngage`:
+`channel`, `radius`, `pitch`, `margin`, `surface`). The same probe
+(`ResolveEngageProbes`) considers it beside the screens and takes the nearest
+target on the ground plane (screens first on a tie): the board's centre
+(`WorldTabletopFrame.Centre`, the anchored topology's footprint) within
+`radius`, the channel declared, and `CheckEngage` passing for
+`GrantSubject.Placement(<id>)`. The probe composes a CAPTURING application onto
+`placement:<id>` (Control over a placement is a legitimate subject,
+`WorldGrants.IsLegitimateSubject`; seats hold it through their seeded
+`control all`), so the avatar idles exactly as on a screen, and
+`ResolveLeaveProbe` leaves on the same channel. A table takes no occupancy
+check: several seats may sit at one. `body.engage placement:<id>` composes the
+same application by hand, under the same policy (`CheckTabletopEngagePolicy`).
+`FoldTick` routes a placement member nowhere: the game is the world's rules,
+which read the seat's channels (`channel(<seat>, <name>)`) and three fixed-point
+seat operands — `board(engaged, <row>, <seat>)` (the set names the placement),
+`board(pointer, <row>, <seat>)` (the cell `PlayerIntent.SourceRay` meets on the
+plane `surface` above the topology origin, `WorldTabletopFrame.TryPointerCell`)
+and `board(side, <row>, <seat>)` (the board edge the body stands nearest,
+`SideOf`, 0 -Z, 1 +X, 2 +Z, 3 -X) — through `BoardSeatOperand`
+(`WorldRuleHost.ReadBoardSeat`). The windowed host casts the OS pointer whenever
+the world declares an engageable tabletop (`WorldPointerRayCapture`), so a
+seated seat's ray reaches the rules every tick.
+
+Presentation: `WorldSeatContextSync` publishes the seated placement into
+`WorldPerceptionAnchor.EngagedTabletop` and the `engagement` context family's
+`tabletop` state (instead of `engaged`), so a binding overlay's context row
+`{engagement, tabletop, <group>}` swaps the seat to the table's controls; the
+seat camera eases to `WorldTabletopFraming`'s board view (the whole board from
+the seat's side at `pitch`, near plane at the board) on the rig's dynamics
+through `WorldFramingEase`. `TabletopEngagementLawTests` (Server) and
+`WorldTabletopFramingLawTests` (Client) hold the probe, the reads and the view;
+the debug world's chess table (`worlds/debug/chess.puck`, `chess.md`) is the
+worked game, and `chess-tests.puck`'s seated-player test plays it headless with
+`body.press` and `source.pointer.*` steps. A tabletop has no matte or screen
+fidelity: the board view stays the in-world look.
+
+## The framed screen — the camera frames the engaged screen's picture as an emulator shows it
+
+The engaged view is diegetic: the seat's own camera on the in-world screen,
+panned and zoomed until the window shows the console's picture the way a desktop
+emulator does, and easing out reveals the room around it. There is no separate
+2D image.
 
 A seat captured on a screen frames it: `WorldSeatContextSync.Publish` publishes
 the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
 `Applications` read (−1 while unengaged, mirrored or possessing), and
-`WorldFramePresenter.ResolveCamera` hands the row to the seat's
-`WorldScreenFraming` (`src/Puck.World.Client`). `TryFrame` puts the eye on the
-face normal (`cross(right, up)`), far enough that the glass fills the
-viewport's limiting axis exactly at the seat rig's field of view, and sets the
-camera's `Near` one slab thickness (`2 × halfDepth`) short of the glass, so the
-engaging avatar and anything else between eye and glass draws nothing. The
-seat's camera eases to it and back on the seat rig's own reported `dynamics`
-(the Moth's `camera-boom`); a rig with none cuts. It is the engine default for
-every captured screen application, presentation only, and needs no authored
-field. The overlay fact `ScreenEngaged` (`WorldOverlayFacts`) reads the same
-anchor, so a panel, the cursor or the bar can show or step aside while
-engaged. `WorldScreenFramingLawTests` holds the fit, the near plane and the
-ease.
+`WorldFramePresenter.Dress` hands the row to the seat's `WorldScreenFraming`
+(`src/Puck.World.Client`), refitted from the window's size every frame:
+
+- **The picture, not the slab.** `PictureHalfExtents` is the glass inside its
+  bezel band (`WorldScreenMappings.Glass`); a window-projection session screen
+  has no bezel and uses the whole face. A 4:3 glass showing 256×240 carries the
+  console's 8:7 pixels by its own shape: there is no pixel-aspect field and no
+  crop.
+- **The matte.** `Matte` is the rect of the seat's view the picture fills: each
+  source row the largest whole number of window pixels that fits the view
+  vertically and horizontally, the width following the picture's aspect, centred
+  on whole pixels; below 1× it fills the limiting axis. A 1280×900 window shows
+  a 256×240 source at 3× (720 rows), 960 columns wide on a 4:3 glass and 768
+  on a square-pixel one.
+- **The camera.** `TryFrame` puts the eye on the face normal (`cross(right,
+  up)`), far enough that the picture's height is the matte's share of the
+  view's at the seat rig's field of view, with `Near` one slab thickness
+  (`2 × halfDepth`) short of the glass so the avatar and anything else between
+  eye and glass draws nothing. It looks at the picture's centre shifted by
+  `MatteOffset`, the half pixel a matte centred on whole pixels sits off the
+  view's centre when a gutter is odd, so the picture's edges land on the
+  matte's pixel edges. The camera eases to it and back on the seat rig's own
+  reported `dynamics` (the Moth's `camera-boom`); a rig with none cuts.
+- **The settled view shows only its matte.** Once the ease settles
+  (`WorldScreenFraming.Framed`), the seat's view keeps its whole slot and
+  renders at native scale (its `RenderScale` and dynamic resolution pinned to
+  1), and `WorldViewGraphHost.PlaceViews` places it on the matte with the
+  `place` pass's `crop` set to the matte's part of its output, a crop of the
+  rect's own pixel extent, so the matte's pixels are copied one for one. What
+  no view covers is the root's letterbox, written in the route's
+  `display.fill`. A crop rather than a matte-sized view keeps the view's
+  extent exact: the render graph quantizes an arbitrary footprint
+  (`RenderGraphExtent`), while a whole display or a half is exact.
+- **Fidelity.** The ease's weight is the view's screen fidelity
+  (`SdfViewSnapshot.ScreenFidelity`, the `screenFidelity` pass-block value, and
+  the `place` pass's `fidelity`). At 1 the glass's grille, scanlines, bloom,
+  vignette and glint are off and its bezel band is a hard edge
+  (`shade/sdf-environment.hlsli`), the views stage and composite clear the
+  atmosphere's transmittance, in-scatter and bounded volumes, and the root's
+  `place` pass writes the view's native source past its sharpen and tone map.
+  Every view that frames nothing carries 0, the in-world look; leaving fades it
+  all back in as the camera pulls back.
+
+The route authors only the matte's surround (`screens[*].route.display`,
+`WorldScreenDisplay`): `fill` (`#RRGGBB`, default black), refused by name in
+`ValidateDisplay`, and only on an engageable route. Emulator-style borders or
+filler images around the matte belong there when they are built.
+`world.screens` echoes `display:fill=…` per engageable screen. The overlay fact
+`ScreenFramed` (`WorldOverlayFacts`) reads the same anchor
+(`WorldPerceptionAnchor.ScreenFramed`), so a panel, the cursor or the bar can step
+aside while the picture is framed.
+
+- `WorldViewGraphHost.FrameScreen` records each settled seat's screen and matte,
+  and `PublishFramed` publishes the screen's own mapping (`Screens`) on the
+  matte as the last pane, its warp dropped because the matte is the picture: the
+  picker maps a display point there to the source pixel the ray meets, and the
+  cursor never outlines it (`ShowsFramed`).
+- An engageable screen with no machine engages when it shows a producer
+  (`WorldTick.ShowsEngageTarget`): its pad reaches nothing, and the framed
+  picture shows its image.
+- A framed capture (a window's, or a whole monitor's) is a passthrough
+  candidate: the local user's physical press on its picture opens it
+  (`WorldSourcePassthrough`: a pointer press only the window pump delivers, or
+  a local pad's bound press, `PadButton`), and the source closes once the seat
+  no longer frames the screen. A console `body.engage`, an addon's or a
+  scripted press engages without opening it
+  ([decision](../../../../docs/decisions/rendering.md#the-frame-graph-and-nesting)).
+  While the pointer rests on the candidate's picture the system arrow shows,
+  opened or not. A window (`Win32PassthroughWindow`) hears its input as window
+  messages and takes the keyboard on a press. A monitor
+  (`ISourcePassthroughDesktop`, `Win32DesktopPassthrough`) is reached through
+  the system's own input (`SendInput`): a press on its picture is replayed at
+  its release at the desktop point the picture shows (move, press, drag,
+  release, move back, one batch), a wheel turn the same way, a move reaches
+  nothing, and it takes no keyboard (`SourcePassthroughRouter` returns focus
+  to the game), so keys go wherever Windows sends them. A replayed press whose
+  point shows a window of the host's own process is sent nowhere, so a click
+  on the World's mirror in the picture cannot repeat itself.
+- **One-step exit.** While a local seat frames a capture, the reserved chord
+  Control+Alt+Escape is the host's whoever has the keyboard
+  (`SourceFocus.ClaimsChord`, answered through `TakeChord`): it returns the
+  keyboard, closes the source (releasing what it and the pad hold) and leaves
+  the seat's engagement through `IWorldPassthroughSeats.Leave` (the
+  `DissolveControl` the context button's press makes, under the seat's acting
+  principal). Over a framed desktop another window may hold the keyboard, so
+  the chord is claimed system-wide (`ISourcePassthroughDesktop.ClaimsChord`, a
+  `RegisterHotKey` on a message-only window the pump thread pumps, claimed and
+  released per frame in `TakeWarp`), and leaving brings the World's window
+  back to the front (`ReturnForeground`: `SetForegroundWindow`, then an Alt
+  tap, then a click on its caption, which dismisses Start and the shell's
+  flyouts). The pad's RB leaves through the context button, as at every
+  device.
+- **The pad as a desktop pointer.** A seat captured on a capture's screen
+  reads the `engagement` family's `passthrough` state
+  (`WorldSeatContextSync`, from the delivered screen row:
+  `WorldImageProducerSettings.IsPassthroughCapture`), so a context row gives it
+  a desktop page (the debug world's `desktop-pad` overlay in `desktop.puck`).
+  Over a framed desktop the pad is the desktop's mouse instead of a pointer on
+  the picture: the stick moves the system cursor across the monitor in
+  monitor heights (`ISourcePassthroughDesktop.MovePointer`, any window in
+  front), buttons, wheel and arrows are sent at it, and the first press opens
+  the source (`OpenFramed`). A pad press on the frame of the host's own window
+  (caption, caption buttons, borders) is never sent
+  (`Win32DesktopPassthrough.PressPointer`): Windows runs a press there as a
+  modal loop on the window pump thread (caption-button tracking, move, size)
+  until the button comes up, and the pad's release is read and sent only by
+  that stalled thread, so the World would freeze for good. A left press there
+  runs its click's `WM_SYSCOMMAND` at once (`FrameCommandOf`: minimize,
+  maximize or restore, close) or brings the window forward. Leaving the
+  engagement any way (the context button, the console) brings the window back
+  to the front once the seat's desktop is given back (`ClaimChord`), restoring
+  a minimized window.
+  The page binds `source.passthrough.pointer` and `.scroll` (sticks),
+  `.button.<left|right|middle|back|forward>` and `.arrow.<up|down|left|right>`
+  (`WorldPassthroughPadCommandModule`, core-registered for vocabulary parity).
+  Each verb acts only for `WorldPassthroughPad.IsLocalPad`: a binding's
+  dispatch of a known `gamepad.*` source from a reported device, so a typed
+  line, an authored command, a wheel sector, `player.signal` (no device) and a
+  probe (no gamepad source) are refused by name. The pointer stick moves the
+  system cursor (`WorldSourcePassthrough.TakeWarp`, through
+  `IWindowCursorPolicy.TryTakeWarp` and `INativeWindowCursor.WarpPointer`,
+  foreground window only) across the framed picture, clamped to it, at the
+  route's `padPointer` feel (`WorldScreenPadPointer`: `speed` in picture
+  heights per second, `curve`, `boost` over `rampSeconds`, `scrollSpeed` in
+  notches per second; absent moves and scrolls nothing), integrated exactly
+  per frame so the travel does not depend on the frame rate. Presses take the
+  physical press's door (`OpenEngagedUnderPointer`, then the router); arrows
+  reach only an opened window. `source.passthrough` echoes `pad p<n> screen
+  <n> '<instance>' stick … scroll … buttons … keys … feel …` or `pad idle`;
+  `world.screens` echoes `padPointer:…`. The context family is published by
+  the windowed `WorldSimulation` only, so a headless boot never switches to
+  the page. `WorldPassthroughPadLawTests`, `WorldPassthroughPadCommandModuleLawTests`,
+  `WorldViewPaneMappingLawTests.Engaged`, `WorldViewPaneMappingLawTests.Desktop`,
+  `Win32DesktopPassthroughTests` and `WorldSeatContextSyncTabletopLawTests`
+  hold it.
+
+**A carried screen.** A screen row's `carry` (`WorldScreenCarry`: `look`,
+`pose`, `shape`) hands its picture to a body: while a body wearing that
+creation look holds the look's `pose` frame, the screen's own slab is not drawn
+(`WorldStaticSceneEmit` declares the surface alone, `SdfProgramBuilder.ScreenSurface`),
+the look's named ungrouped box is emitted in the screen's material
+(`WorldStampPool.CarriedScreenMaterials`), the screen's surface rides the box's
+front face (author `-Z`) every frame through the residency's screen-surface
+transform seam (`WorldFramePresenter.ScreenSurfaceTransforms`, the pool's
+`ScreenSurfaceTransforms` over `TryCarriedScreen`; `WorldScreenCarryLawTests`
+runs it on the CPU), and the framed view frames the picture
+there (`EngagedScreenRow`). Picking it up or putting it down rebuilds the
+program (`WorldSceneEmitter`'s carried-screen revision component). Rules read an
+engagement through `engaged(each, <screen>)` (`$engaged:<bodyRef>:<screen>`,
+`WorldEngagement.Applies`). The debug world's Humble Gaming Brick is the worked
+example: `brick-pick-up` (`devices.puck`) sets the out-of-suit, full-size
+Moth's `pilotHold` from it, the brick's placement responds to the same cell with
+an empty creation, and screen 0 carries onto her look's `brickPicture`. The
+server's screen row, engage radius and pointer mapping keep the authored frame.
+
+The held view and the frame toggle: a carry that names a `camera` (a `cameras`
+row, `WorldScreenCarry.Camera`) starts the engagement on a camera that shows the
+body holding the device instead of on the framed picture. The rig runs in
+`WorldFramePresenter.HeldView` against an anchor at the carried picture's face
+whose axes are the picture's (+X right, +Y up, +Z its normal, toward the body
+looking at it), so `offset` and `lookAt` without `worldAxes` place the eye and
+the aim relative to the brick. `player.frame [seat]` (bindable, presentation
+only; the Moth basis binds `L`, and the bar's View page the pad's East under the
+left trigger) switches the seat between the
+framed picture and the other view, which is the held view of a carried screen
+with a camera and the seat's own camera (the room) for any other screen; the
+choice lasts until the engaged screen changes (`WorldPerceptionAnchor.ToggleFrame`,
+`ScreenFramed`, `HoldView`). `WorldScreenFraming.Apply` eases the seat camera to
+the held view and on to the framing on the rig's dynamics, and only the framing
+carries the screen fidelity, the matte and the near plane, so the held view and
+the room show the in-world look. The device's controls read the seat's channels,
+never the camera, so they play in both views. `WorldScreenFramingLawTests` and
+`WorldPerceptionAnchorFrameLawTests` hold the eases and the toggle.
+
+Known limits: the matte cuts in when the ease settles and out when it starts
+back, while the treatment fades over the ease; the uncovered display takes the
+first framed seat's fill. `WorldScreenFramingLawTests` holds the picture, the
+matte, the whole-pixel landing, the near plane and the ease;
+`WorldViewPlacementLawTests` the matted placement;
+`WorldViewPaneMappingLawTests.Engaged` the framed mapping and the passthrough
+press; `SdfFrameBlockLawTests` the fidelity's pass-block member. Three-or-more
+seat layouts whose slots are not a whole display or a half render at a
+quantized extent, so their framed picture is resampled.
 
 ## `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 
@@ -465,6 +681,40 @@ and the debug world's device row (`worlds/debug/devices.puck`, `devices.md`) lis
 each device's shipped folder, then its `roms/` folder. Provider operations, a
 swap among them, are refused while `replay.record` runs (`WhileRecording`).
 
+**A local boot default lives in the folder, never the document (the owner's
+ruling: ROM names never enter the repository, a build, a package, a log line
+or a commit).** A folder may hold `folder.json`
+(`WorldMachineContentFolder.SettingsFile`, schema `puck.content-folder.v1`,
+one optional `default` naming a bare file in that folder; strict, refused by
+name otherwise) and is never listed as content. A machine row with
+`preferFolderDefault: true` (validated: it needs `contentFolders`) boots the
+default of the first folder, in authored order, whose settings name one or
+cannot be read (`WorldMachineContentFolder.TryDefault`), when the folder holds
+it and the engine can mount it; otherwise it boots its authored content, and
+the refusal is narrated on stderr by folder and settings file, never by the
+default's name. `WorldMachineHost.TryPrepareInstances` resolves it on every
+preparation (boot, `world.reload`, a machine-affecting mutation) through
+`WithFolderDefault`, which swaps the configuration's `content.path`
+(`MachineOperationValidation.ReplaceContent`). The host keeps the effective
+declaration, so `machine.content` marks the default mounted and a reset
+recreates it, while the document side never sees it: `CaptureInstances` and an
+operation plan's `Current`/`Candidate` report the authored configuration
+whenever the machine runs its folder boot (`Documented`), so the server's
+candidate check, `world.save`'s capture and a replay tape's embedded definition
+name the shipped cartridge. A replay re-boots from that definition and resolves
+the folder default again; machine cores are outside the hash, so the tape
+verifies the same with or without the local folders. A machine whose row the
+candidate document shares by reference with the current one keeps what it
+runs, so a swap the document adopted survives a later machine-affecting
+mutation, while a reload, which re-reads every row, decides the folder default
+again.
+`machine.default <instance> <name>|none` (a local console or seat only) writes
+the named file's folder's `folder.json` and names none in the machine's other
+folders; `machine.content` echoes `preferDefault=`, `default=`,
+`defaultRefused=` and each folder's `default=`/`settingsRefused=`.
+`MachineContentFolderLawTests` holds the boot, reload, capture, swap and every
+refusal.
+
 ## Read-backs
 
 `screen.state`/`world.screens` tag a mirrored participant `p<n>(mirror)` (both
@@ -476,7 +726,31 @@ breakdown; the own-body member is listed like any other, so its ABSENCE (capture
 is legible rather than inferred. `screen.state` ends its engagement segment with
 `gun=off` or `gun=(<x>, <y>)`, the tick's merged aim as source fractions
 (`WorldEngagement.PointerOn`), the same numbers `body.channels` prints for the
-hit.
+hit, then `pad=off` (no application reaches the screen) or
+`pad=<buttons>/stick(<x>, <y>)` (`WorldEngagement.PadOn`): the merged pad the
+machine receives this tick, its buttons as `MachineButtons` names joined by `+`
+(`none` for none) and its left stick with +X right and +Y up, which every
+host (`BrickPad`, `AdvancedPad`, `HgdPad`) reads as the d-pad. It is the
+engine-neutral way to see what a device is pressed with; `screen.peek <screen>
+0xC280` shows the brick's own joypad byte only under a forged cartridge (a local
+folder default is not one).
+
+## The device frame — a device's controls are the seat's own
+
+The client rotates the movement pair into world axes before it reaches the wire
+(`WorldClient.ComposeMoveFrame`), which is right for a body and wrong for a
+device: a camera looking +Z would turn the stick's right into the pad's left.
+So a seat whose authority holds it captured on a device composes the pair raw:
+`WorldAuthorityEndpoint.DrivesDevice(body)`, answered for a local instance by
+`WorldEngagement.DrivesDevice` (the set omits its own body, names no other body,
+and names a screen the document declares or a tabletop placement). The rows and
+the stick then sum unrotated and no facing is written, so a screen's pad and a
+board's rules (`chess.puck` turns the seat's ahead and right by `board(side, …)`)
+read the keys as pressed. A mirrored set, a possession and a portal face (a
+screen with no row) keep camera-relative movement. A remote authority's endpoint
+carries no such read, so a seat engaged on a remote world still composes
+camera-relative. `ControlApplicationLawTests.OnlyACapturedDeviceSetDrivesADevice`
+holds the predicate.
 
 ## Verifying
 
@@ -486,7 +760,7 @@ actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
 world's device row declares engageable machine screens 0 to 2 (kit
 `devicePad`, engage radius 3, engage channel `interact`, the Moth's context
-button on E and the pad's X; `devices.md` has the stand-there `body.pose`
+button on E and the pad's RB; `devices.md` has the stand-there `body.pose`
 lines), so the screen path runs in the live world: drive the button through
 the real input path with `player.signal keyboard.e press`, a `world.wait`, and
 `release`, never `body.engage`, when the probe is what you are showing. Remember actor ≠ target: every seat holds wide grants by default, so

@@ -356,16 +356,18 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    /// <param name="channels">The compiled typed input table.</param>
     /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
     /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
+    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
         );
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
+        SetChannelTable(channels: channels);
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,

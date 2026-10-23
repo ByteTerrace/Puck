@@ -1,0 +1,195 @@
+[
+  {
+    "Id": "symmetric-solve.solve-shift-refusal",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TrySolveSymmetric2" },
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TrySolveSymmetric3" }
+    ],
+    "Legs": [{
+      "Kind": "Structural", "Flavor": "None",
+      "Subject": "Both symmetric solve dimensions refuse negative output shifts and clear every output in Release and Debug; no assertion terminates a Debug caller.",
+      "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+    }]
+  },
+  {
+    "Id": "q3232.direct-peer-conversion-hooks",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ3232", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.FixedQ3232", "Name": "Value" },
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "Value" },
+      { "Type": "Puck.Maths.UFixedQ4816", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.UFixedQ4816", "Name": "Value" }
+    ],
+    "Legs": [{
+      "Kind": "Classical", "Flavor": "None",
+      "Subject": "Direct INumberBase from/to hooks in all three modes, FixedQ3232 paired with each Q16 carrier: signed carrier endpoints, large narrowing ties and neighbours, exact widening and checked overflow. No Create fallback can hide an unsupported hook.",
+      "Against": "BigInteger exact widening or Oracles.RoundRationalTiesToEven, followed by the target checked, saturating or low-bit range policy.",
+      "Shared": "", "Citation": "", "Absolute": ""
+    }]
+  },
+  {
+    "Id": "symmetric-solve.inverse-shift-refusal",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric2"
+      },
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric3"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Inversion refuses negative outputFractionShift before preconditioning can hide it and clears every output; excessive positive shifts also refuse.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.round-rational-argument-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPointRounding",
+        "Name": "RoundRational"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "RoundRational refuses zero denominators including 0/0 and negative fractionBitCount including a zero numerator; exception types and parameter names are asserted.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.scale-decimal-wide-shift-refusal",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPointConvert",
+        "Name": "ScaleDecimalWide"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ScaleDecimalWide refuses negative fractionBitCount for zero, signed and maximum decimal inputs, with ArgumentOutOfRangeException naming fractionBitCount.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.explicit-single-rounding",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "op_Explicit"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816 explicit and generic float conversion at every raw binade, both midpoint parities and their immediate raw neighbours, both signs and carrier endpoints.",
+        "Against": "Oracles.NearestBinaryPresentationBits searches ordered IEEE encodings and compares exact BigInteger distances; no floating arithmetic or subject rounding kernel.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.half-midpoints-vs-exact-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Name": "FromRawBits",
+        "Type": "Puck.Maths.FixedQ4816"
+      },
+      {
+        "Name": "Value",
+        "Type": "Puck.Maths.FixedQ4816"
+      },
+      {
+        "Name": "FromRawBits",
+        "Type": "Puck.Maths.FixedQ3232"
+      },
+      {
+        "Name": "Value",
+        "Type": "Puck.Maths.FixedQ3232"
+      },
+      {
+        "Name": "FromRawBits",
+        "Type": "Puck.Maths.UFixedQ4816"
+      },
+      {
+        "Name": "Value",
+        "Type": "Puck.Maths.UFixedQ4816"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "All three generic Half conversion modes from FixedQ4816, FixedQ3232 and UFixedQ4816 at every binary16 midpoint and its adjacent fixed-point raws, both signs, subnormal/normal and finite/infinity seams, zero and carrier endpoints. The decimal-backed path is correctly rounded at these scales.",
+        "Against": "Oracles.NearestBinaryPresentationBits searches ordered IEEE encodings and compares exact BigInteger distances with even-encoding tie selection, including signed underflow zero and the overflow midpoint.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q3232.unsigned-peer-conversions",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Name": "FromRawBits",
+        "Type": "Puck.Maths.FixedQ3232"
+      },
+      {
+        "Name": "Value",
+        "Type": "Puck.Maths.FixedQ3232"
+      },
+      {
+        "Name": "FromRawBits",
+        "Type": "Puck.Maths.UFixedQ4816"
+      },
+      {
+        "Name": "Value",
+        "Type": "Puck.Maths.UFixedQ4816"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ3232 and UFixedQ4816 generic conversion in all modes: exact overlapping-grid round trips, ties and their adjacent raws, negative results, range edges and width wrapping.",
+        "Against": "BigInteger exact scaling and Oracles.RoundRationalTiesToEven followed by the checked, saturating or wrapping target range policy.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -10,7 +10,7 @@
              [SupportedOSPlatform] surface annotations keep firing here exactly as they do in Puck.DirectX.
              PackageDownload makes the official C#/WinRT Windows SDK projection available without a Windows TFM. -->
         <PackageDownload Include="Microsoft.Windows.SDK.NET.Ref" Version="[$(WindowsSdkNetRefVersion)]" />
-        <PackageReference Include="Microsoft.Windows.CsWin32" Version="[0.3.183]">
+        <PackageReference Include="Microsoft.Windows.CsWin32" Version="[0.3.366]">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

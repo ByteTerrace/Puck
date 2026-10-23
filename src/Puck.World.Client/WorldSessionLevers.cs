@@ -1,4 +1,5 @@
 using Puck.Launcher;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 
@@ -25,10 +26,15 @@ public static partial class WorldSessionLevers {
     public const double BindingBarAuto = -1.0;
     /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
     public const string CadenceGate = "cadence";
+    /// <summary>The raster passes' cull of mesh draws they cannot show (<c>world.cull</c>).</summary>
+    public const string Cull = "cull";
     /// <summary>The indirect-light tier the irradiance volume traces at (<c>world.indirect</c>).</summary>
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
+    /// <summary>Which work updates less often when far or small on screen, a <see cref="SdfUpdateRates"/> in
+    /// <see cref="WorldSessionLever.A"/> (<c>world.rates</c>).</summary>
+    public const string Rates = "rates";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
     public const string RenderScale = "render-scale";
     /// <summary>The shadow tier, a <see cref="ShadowTier"/> in <see cref="WorldSessionLever.A"/> (<c>world.shadows</c>).</summary>
@@ -44,6 +50,8 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
     public const string Temporal = "temporal";
+    /// <summary>The presentation-only cel-shading choice (<c>world.toon</c>).</summary>
+    public const string Toon = "toon";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -91,6 +99,14 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.CadenceGate = Flag(lever: lever)
         );
         sink.Register(
+            name: Cull,
+            setter: lever => settings.Cull = ((SdfMeshCullLevel)((int)lever.A))
+        );
+        sink.Register(
+            name: Rates,
+            setter: lever => settings.UpdateRates = (((SdfUpdateRates)((int)lever.A)) & SdfUpdateRates.All)
+        );
+        sink.Register(
             name: Indirect,
             setter: lever => settings.IndirectTier = ((SdfIndirectTier)((int)lever.A))
         );
@@ -106,6 +122,7 @@ public static partial class WorldSessionLevers {
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
+        sink.Register(name: Toon, setter: lever => settings.Toon = Flag(lever: lever));
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
                 Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");

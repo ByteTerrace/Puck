@@ -51,16 +51,21 @@ public sealed class GpuBuildCacheLawTests {
 
         Assert.Equal(expected: 0, actual: cache.SharedEntries);
     }
-    [Fact]
-    public async Task AHoldersOwnPoolBuildWaitsForTheEntry() {
-        var builds = new Builds();
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AHoldersOwnPoolBuildWaitsForTheEntry(bool asynchronous) {
+        using var gate = new ManualResetEventSlim();
+        var builds = new Builds(gate: gate);
         var cache = builds.Cache();
         var device = new StubDevice();
         var lease = cache.Acquire(device: device, key: "a");
-        var waited = await Task.Run(
+        var waiting = asynchronous ? lease.WaitAsync(cancellationToken: TestContext.Current.CancellationToken) : Task.Run(
             cancellationToken: TestContext.Current.CancellationToken,
             function: () => lease.Wait(cancellationToken: TestContext.Current.CancellationToken)
-        ).WaitAsync(
+        );
+        gate.Set();
+        var waited = await waiting.WaitAsync(
             cancellationToken: TestContext.Current.CancellationToken,
             timeout: TestLiveness.Bound
         );

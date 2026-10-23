@@ -72,13 +72,32 @@ public sealed class AddonPrepareGateLawTests {
             Addon: new WorldAddonRow(
                 Name: name,
                 ModulePath: "unreachable.wasm",
-                Hash: "sha256-64/0000000000000000",
+                Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                 Fuel: 1000UL,
                 Enabled: true
             ),
             Principal: Principal.Console
         ));
         fixture.Step();
+    }
+
+    [Fact]
+    public void ShortAddonPinsAreRefusedBeforePreparingTheGuest() {
+        using var fixture = Fixtures.FreshServer();
+        var host = new RecordingAddonHost();
+        fixture.Server.AttachAddons(runtime: host);
+        host.Reset();
+        var before = fixture.DefinitionBytes();
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
+            Addon: new WorldAddonRow(Name: "guest", ModulePath: "unreachable.wasm",
+                Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: true),
+            Principal: Principal.Console));
+        fixture.Step();
+
+        Assert.Equal(before, fixture.DefinitionBytes());
+        Assert.Equal(0, host.TryPrepareCallCount);
+        Assert.True(ApplyAndObserveChange(fixture, "guest"));
+        Assert.Equal(1, host.TryPrepareCallCount);
     }
 
     // The plan-ownership guard now covers contention-array staging, not only Commit — see WorldServer.
@@ -143,7 +162,7 @@ public sealed class AddonPrepareGateLawTests {
             Addon: new WorldAddonRow(
                 Name: "intervening",
                 ModulePath: "unreachable.wasm",
-                Hash: "sha256-64/0000000000000000",
+                Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                 Fuel: 1000UL,
                 Enabled: true
             ),
@@ -182,7 +201,7 @@ public sealed class AddonPrepareGateLawTests {
                 row: new WorldAddonRow(
                     Name: "no-host-enabled",
                     ModulePath: "unreachable.wasm",
-                    Hash: "sha256-64/0000000000000000",
+                    Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                     Fuel: 1000UL,
                     Enabled: true
                 )
@@ -192,7 +211,7 @@ public sealed class AddonPrepareGateLawTests {
                 row: new WorldAddonRow(
                     Name: "no-host-disabled",
                     ModulePath: "unreachable.wasm",
-                    Hash: "sha256-64/0000000000000000",
+                    Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                     Fuel: 1000UL,
                     Enabled: false
                 )
@@ -213,7 +232,7 @@ public sealed class AddonPrepareGateLawTests {
                     Addon: new WorldAddonRow(
                         Name: "no-host",
                         ModulePath: "unreachable.wasm",
-                        Hash: "sha256-64/0000000000000000",
+                        Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                         Fuel: 1000UL,
                         Enabled: true
                     ),

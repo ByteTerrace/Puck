@@ -6,8 +6,10 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed class SdfCompositionFrameSourceLawTests {
-    [Fact]
-    public void ABackgroundRebuildHoldsTheProgramBeforeItUntilTheBuildFinishesAndAConvergingCaptureWaitsForIt() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ABackgroundRebuildHoldsTheProgramUntilItFinishesAndLockedPresentationWaitsForIt(bool tickLocked) {
         var emitter = new RadiusEmitter();
         var source = new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]) { BuildsInBackground = true };
         var first = Capture(source: source).Program;
@@ -42,7 +44,11 @@ public sealed class SdfCompositionFrameSourceLawTests {
         _ = Capture(source: source);
         Assert.True(condition: source.Building);
 
-        source.BeginConvergence(request: new FrameCaptureRequest(path: "converge.png"));
+        if (tickLocked) {
+            emitter.TickLocked = true;
+        } else {
+            source.BeginConvergence(request: new FrameCaptureRequest(path: "converge.png"));
+        }
 
         // A converging capture adopts the build in flight, and builds a program it moves to in its own frame.
         var converged = Capture(source: source).Program;
@@ -119,6 +125,7 @@ public sealed class SdfCompositionFrameSourceLawTests {
     // emission leaves an instance open, which the build refuses. Of its two dynamic slots, a repack poses the first at the
     // origin and the second at the radius along X.
     private sealed class RadiusEmitter : ISdfSceneEmitter, ISdfFrameDresser {
+        public bool TickLocked { get; set; }
         private SdfProgram? m_dressed;
         private int m_revision;
 

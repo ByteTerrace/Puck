@@ -15,4 +15,8 @@ public sealed class GpuDeviceOptions {
     /// device-removal report or a GPU capture shows each object's name. The World turns it on with any validation level
     /// and with a capture tool (<c>--capture-tool</c>); off, naming formats nothing.</summary>
     public bool NameObjects { get; init; }
+    /// <summary>Gets whether the device is created on the platform's software rasterizer rather than a hardware adapter:
+    /// WARP on Direct3D 12, which runs on the CPU on a host with or without a GPU. Vulkan has no software device here and
+    /// refuses the option. The World sets it from its <c>--software-gpu</c> flag.</summary>
+    public bool Software { get; init; }
 }

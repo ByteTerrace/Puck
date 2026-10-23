@@ -86,6 +86,13 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `x = x - …`. A call-form gate where only comparisons are legal is
   **PUCK038**. Cartridge rules admit `if`, `repeat`, `break`, `key(...)` gates
   and compound assignment.
+- **A `test`'s `expect` reads one world, or names the document it reads.** A line
+  reads the booted world; a block named for a sibling document the world
+  references (`garden { bodyState(body, 0, size) == 0.25 }`) is judged in the
+  instance a crossing starts there, passes on any tick the claim holds, and fails
+  when nothing crossed. An absent body reads every register as 0, so a claim of
+  `0` there also claims presence
+  ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
 - A `: Kind`/`as Kind` comparison-kind suffix binds only to the one comparison
   it follows; wrap it in parentheses beside `and`/`or`.
 
@@ -93,6 +100,48 @@ A document's `schema:` field selects its vocabulary, never the filename.
 examples; [references/diagnostics.md](references/diagnostics.md) the codes
 authors hit most. `PuckDiagnosticCodes.cs` declares every code once, with its
 meaning as the XML doc comment.
+
+## Authoring a console command
+
+The owner's ruling: a console command composed from existing verbs is authored
+in a world document, never as C# work. A `commands` row lowers through the
+generic value path (no sugar); its full contract is
+[document-authored commands](../../../docs/reference/commands.md#document-authored-commands):
+
+```text
+commands [
+  {
+    name: "gallery.show"                  // namespaced; never an engine verb's name
+    help: "Stands a body at the gallery and picks a layout."
+    parameters [
+      { name: "layout", kind: Choice, values ["play", "front"], default: "play" }
+      { name: "body", kind: Body, default: "0" }  // a default is written as typed
+    ]
+    lines [
+      "body.pose spawn:gallery {body}"    // {name} substitutes; {{ and }} are literal braces
+      "view.override layout {layout}"
+    ]
+  }
+]
+```
+
+- Kinds: `Text` (default), `Number`, `Integer`, `Choice` (`values`), `Body`
+  (0..4095), `Spawn` (a `spawnPoints` id). Arguments are positional plain
+  tokens; required parameters come first; every parameter appears in a line.
+- A line's first token (the verb) is literal; it may be another authored
+  command (no loops) or any verb a binding may name. Operator verbs,
+  unbindable verbs (`quit`, `world.save`, `storage.*`), engine-verb names and
+  verbs no boot shape registers are refused by `puck compile --validate`
+  (against the catalog `puck verbs` generates) and again when the World
+  validates the document (boot, `world.reload`). A rendered-only verb
+  (`world.debug-view`, `world.slice`) is fine in a line: a headless boot
+  admits it and refuses only that line when it runs ("not available in this
+  host"). Regenerate the catalog with `puck verbs` after adding or changing a
+  verb.
+- `commands` is keyed by `name`, so each imported document authors its own
+  rows. Bind one like any verb (`command: "debug.go", text: "chess"`), or run
+  `run <name> [args]`. Verify by booting the world: `help --names <prefix>`
+  lists it, and the command answers its lines' output.
 
 ## The verbs
 
@@ -120,16 +169,16 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   `.embeddings.json` lock files.
 - `puck vocabulary [--check]` regenerates the world vocabulary page.
 
-**Source and generated documents.** A committed cartridge source has its
-`.cartridge.json` twin committed beside it and regenerated in the same change
-(`CartridgeRoundTripTests` byte-compares them); a module it imports, under
-`cartridges/shared/`, contributes templates and has no twin. A world source has no committed
-document: the build compiles it. `--world foo.puck` boots straight from source,
+**Source and generated documents.** The owner's ruling treats cartridge JSON
+twins as derived caches, never committed or byte-compared against a saved copy.
+Compile the authored sources when needed; semantic round trips compare fresh
+compilations. Imported modules contribute templates, not standalone documents.
+A world source also has no committed document: the build compiles it. `--world foo.puck` boots straight from source,
 `world.reload` recompiles it, and `world.save` writes edits back through the
 printer (generated rows refuse by name).
 
 After editing a world, run it (`dotnet run --project src/Puck.World -c Release
--- --world worlds/debug --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
+-- --world worlds/debug --devices none --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
 
 ## Route adjacent work
 

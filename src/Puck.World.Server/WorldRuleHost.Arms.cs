@@ -165,6 +165,11 @@ public sealed partial class WorldRuleHost {
                     effect: fact,
                     refusal: out refusal
                 );
+            case WorldBodyStateEffect bodyState:
+                return FireBodyState(
+                    effect: bodyState,
+                    refusal: out refusal
+                );
             case WorldDocumentEffect document:
                 return FireDocument(
                     effect: document,
@@ -475,9 +480,13 @@ public sealed partial class WorldRuleHost {
         refusal = EffectRefusal.None;
         if (!preflight) {
             var centre = topology.CellCentre(cell: ((int)cell));
+            var position = new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z));
 
-            body.Pose(position: new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z)),
-                yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+            if (effect.Glide) {
+                body.Glide(position: position);
+            } else {
+                body.Pose(position: position, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+            }
         }
         return true;
     }
@@ -542,6 +551,51 @@ public sealed partial class WorldRuleHost {
                 text: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]"
             );
         }
+
+        return true;
+    }
+    // The register lives in the arena's participant lane, so the write is rewound by the firing's own scope like any
+    // arena write; the body settles it through the register's envelope exactly as a kit action's setState.
+    private bool FireBodyState(WorldBodyStateEffect effect, out EffectRefusal refusal) {
+        var bodyIndex = ResolveBodyKeyIndex(
+            key: effect.Key,
+            keyFrom: effect.KeyFrom
+        );
+
+        if (Host.Body(index: bodyIndex) is not { } body) {
+            return Refuse(
+                code: WorldRuleEffectRefusal.BodyInactive,
+                reason: $"body:{bodyIndex} is inactive",
+                refusal: out refusal
+            );
+        }
+
+        long value;
+
+        if (effect.Source.Expression is { } program) {
+            if (!RuleExpressions.TryEvaluate(
+                fault: out _,
+                kind: CellKind.Fixed,
+                program: program,
+                reader: this,
+                value: out value
+            )) {
+                return Refuse(
+                    code: WorldRuleEffectRefusal.BodyStateFaulted,
+                    reason: "the value expression faulted",
+                    refusal: out refusal
+                );
+            }
+        } else {
+            value = effect.Source.RawValue;
+        }
+
+        body.ApplyRuleState(
+            requested: value,
+            rule: effect.Describe,
+            slot: effect.Slot
+        );
+        refusal = EffectRefusal.None;
 
         return true;
     }

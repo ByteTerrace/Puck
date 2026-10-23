@@ -73,7 +73,7 @@ Several pieces exist with nothing using them:
   height fields upload their bricks into it (`WorldFieldEmitter`), and the bake
   samples them.
 
-The inspector (E5) is in place. `world.inspect on|off` is bindable and draws a
+The inspector (E5) is in place. `world.inspect on|off|toggle` is bindable and draws a
 panel on the `Editor` overlay channel (`InspectorWriter`); `world.inspect` alone
 prints the same text, because `WorldInspectorText` in `Puck.World.Client` is the
 one formatter both read and `WorldInspectionCommandModule` registers the verb.
@@ -514,7 +514,7 @@ the canary.
 read-back verb and reads its output in a terminal.
 
 **Delivers:** an inspector panel drawn on the `Editor` overlay channel, toggled
-by the bindable `world.inspect on|off`. It shows the placement under the
+by the bindable `world.inspect on|off|toggle`. It shows the placement under the
 pointer (id, prototype, material and its name, world position, normal, distance
 from the camera), a summary of the selection, the camera's pose and field of
 view, the simulation and presentation ticks, the render scale, the active debug
@@ -627,6 +627,11 @@ drag; Escape or a right click cancels and sends nothing. A gamepad drags along
 the camera-relative plane with the sticks, with the same commit rule, as the
 sculptor's pad model did. Before adding the ghost, check whether
 `world.reflow.preview` already draws proposed positions (AGENTS.md rule 7).
+A pointer ray meeting a horizontal plane in fixed point already exists for
+tabletops (`WorldTabletopFrame.TryPointerCell`, read by rules as
+`board(pointer, …)`), with the debug world's chess table lifting a piece on
+press and putting it down on a click or a release elsewhere; the plane solve
+here is its sibling.
 
 **Touches:** `Puck.Overlays`, `Puck.World.Client` (the stamper's presentation
 override, the drag state), `Puck.World.Authoring` (`GridSnap`), the editor

@@ -229,6 +229,8 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     public RuleFact Read(BodyFactOperand operand) => Unserved();
     /// <inheritdoc/>
     public RuleFact Read(BodyPositionOperand operand) => Unserved();
+    /// <inheritdoc/>
+    public RuleFact Read(EngagedOperand operand) => Unserved();
     public RuleFact Read(BodyStateOperand operand) => Unserved();
     /// <inheritdoc/>
     public RuleFact Read(LinkStalenessOperand operand) => Unserved();
@@ -241,6 +243,7 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     public RuleFact Read(NavigationOperand operand) => Unserved();
     /// <inheritdoc/>
     public RuleFact Read(BoardCellOfOperand operand) => Unserved();
+    public RuleFact Read(BoardSeatOperand operand) => Unserved();
 
     /// <summary>Gets or sets the body index every body reference resolves to; <c>-1</c> resolves none.</summary>
     public int ResolvedBody { get; set; } = -1;

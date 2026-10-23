@@ -25,7 +25,7 @@ namespace Puck.DirectX;
 /// recording binds and a clear's descriptors come from, and whose
 /// <see cref="DirectXDeviceContext.DispatchSignature"/> every indirect dispatch uses.</param>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext) : IGpuRecorder {
+public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext deviceContext) : IGpuRecorder {
     /// <inheritdoc/>
     public void BeginCommandBuffer(nint commandBufferHandle) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
@@ -447,6 +447,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         }
         state.PendingBarriers.Clear();
     }
+
     // Records one barrier, or holds it for its open run's one call.
     private static void Emit(D3D12_RESOURCE_BARRIER barrier, ID3D12GraphicsCommandList* commandList, DirectXCommandBufferState state) {
         if (state.BarrierDepth > 0) {
@@ -459,6 +460,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             pBarriers: &barrier
         );
     }
+
     /// <inheritdoc/>
     /// <remarks>Each attachment is transitioned from the state it is tracked in to its attachment state, since
     /// Direct3D 12 render passes do not transition resource state. An attachment that clears is cleared by

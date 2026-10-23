@@ -225,7 +225,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var directory = scratch.PathOf(name: "meshes");
         // Each run is a process of its own: a library of its own over the one store.
         SdfMeshPathBake Run(string name) {
-            var bake = new SdfMeshPathBake { Identity = 5, Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
+            var bake = new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 5), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
 
             Drive(bake: bake, frame: frame, materials: materials, shapes: Shapes);
 
@@ -234,7 +234,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Vector3[][] Meshes(SdfMeshPathBake bake) => [.. bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh.Positions.ToArray())];
 
         var baked = Run(name: "first");
-        var entries = Directory.GetFiles(path: directory).OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
+        var entries = Directory.GetFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.mesh").OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
 
         Assert.Equal(expected: 2, actual: entries.Length);
         Assert.Contains(expectedSubstring: "loaded=0", actualString: baked.Describe());
@@ -365,7 +365,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var directory = scratch.PathOf(name: "meshes");
 
         SdfMeshPathBake Run(string name) {
-            var bake = new SdfMeshPathBake { Identity = 7, Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
+            var bake = new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 7), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
             var index = 0L;
 
             TestLiveness.Until(reason: bake.Describe, step: () => {

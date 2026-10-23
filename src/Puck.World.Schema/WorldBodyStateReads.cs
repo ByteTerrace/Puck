@@ -20,6 +20,18 @@ public static class WorldBodyStateReads {
     /// reserved prefix, so no authored row shares it.</summary>
     public const string RowPrefix = "$bodyState:";
 
+    /// <summary>Returns the presentation row a body-state slot is read through.</summary>
+    /// <param name="slot">The slot's name.</param>
+    /// <returns>The row <see cref="RowPrefix"/> and the name spell, which a binding keys by the body.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="slot"/> is <see langword="null"/>.</exception>
+    public static string BindingRow(string slot) {
+        ArgumentNullException.ThrowIfNull(argument: slot);
+
+        return string.Concat(
+            str0: RowPrefix,
+            str1: slot
+        );
+    }
     /// <summary>Resolves a declared slot by name.</summary>
     /// <param name="definition">The world.</param>
     /// <param name="name">The slot's name.</param>

@@ -31,15 +31,6 @@
 #define SDF_OP_LANE_ERODE        25u
 #define SDF_OP_CELL_DISPLACE     26u
 
-// Puck.SignedDistance.SdfIndirectSources.
-#define SDF_INDIRECT_SOURCES_NONE     0u
-#define SDF_INDIRECT_SOURCES_DIRECT   1u
-#define SDF_INDIRECT_SOURCES_FEEDBACK 2u
-#define SDF_INDIRECT_SOURCES_EMISSION 4u
-#define SDF_INDIRECT_SOURCES_SKY      8u
-#define SDF_INDIRECT_SOURCES_SCREENS  16u
-#define SDF_INDIRECT_SOURCES_ALL      31u
-
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u
 #define SDF_SHAPE_CAPSULE             1u
@@ -169,68 +160,30 @@
 #define SDF_SAMPLED_REGION_DIM_MASK 0x000003FFu
 
 // Program capacities, strides and floors.
-#define SDF_MAX_INSTANCES               65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY  21u
-#define SDF_PAINT_VECTORS_PER_ENTRY     12u
-#define SDF_MAX_PAINTS_PER_MATERIAL     8u
-#define SDF_PAINT_WINNING_FRAME         0xFFFFFFFFu
-#define SDF_MAX_FIELD_SCOPE_DEPTH       2u
-#define SDF_FLARE_MIN_SCALE             0.05
-#define SDF_LANE_ERODE_RAGGED_AMOUNT    0.35
-#define SDF_SCREEN_MATERIAL             65535
-#define SDF_MAX_SCREEN_SURFACES         32u
-#define SDF_MAX_LIGHTS                  8u
-#define SDF_MAX_SHADOW_SLOTS            4u
-#define SDF_MAX_DISPATCH_GROUPS         65535u
-#define SDF_MAX_NOISE_OCTAVES           8u
-#define SDF_MAX_SWEEP_STRANDS           4u
-#define SDF_MAX_CONVEX_VERTICES         32u
-#define SDF_CONVEX_COUNT_BITS           5u
-#define SDF_MAX_PATH_EDGES              128u
-#define SDF_SCREEN_EMISSION_EDGE        4u
-#define SDF_SCREEN_EMISSION_DIRECT_GAIN 2.5
-#define SDF_MINIMUM_NEAR                0.02
-#define SDF_NOISE_PERIOD_CELLS          4096u
-#define SDF_VOLUME_VECTORS_PER_ENTRY    12u
+#define SDF_MAX_INSTANCES              65536u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 22u
+#define SDF_PAINT_VECTORS_PER_ENTRY    12u
+#define SDF_MAX_PAINTS_PER_MATERIAL    8u
+#define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
+#define SDF_MAX_FIELD_SCOPE_DEPTH      2u
+#define SDF_FLARE_MIN_SCALE            0.05
+#define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
+#define SDF_SCREEN_MATERIAL            65535
+#define SDF_MAX_NOISE_OCTAVES          8u
+#define SDF_MAX_SWEEP_STRANDS          4u
+#define SDF_MAX_CONVEX_VERTICES        32u
+#define SDF_CONVEX_COUNT_BITS          5u
+#define SDF_MAX_PATH_EDGES             128u
+#define SDF_NOISE_PERIOD_CELLS         4096u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u
 #define SDF_FILTER_LINEAR  1u
 
-// Puck.SdfVm.GridOverlayFlags.
-#define SDF_GRID_NONE    0u
-#define SDF_GRID_WORLD   1u
-#define SDF_GRID_OBJECT  2u
-#define SDF_GRID_SURFACE 4u
-
-// Puck.SignedDistance.SdfLightKind.
-#define SDF_LIGHT_DIRECTIONAL 0u
-#define SDF_LIGHT_RIM         1u
-#define SDF_LIGHT_POINT       2u
-#define SDF_LIGHT_OCCLUDER    3u
-
-// Puck.SdfVm.SdfVisibilityKind.
-#define SDF_VISIBILITY_KIND_BACKGROUND 0u
-#define SDF_VISIBILITY_KIND_SDF        1u
-#define SDF_VISIBILITY_KIND_MESH       2u
-
-// The visibility record's identity fields, frame-slot lane and the record passes' workgroup edge (SdfVisibility).
-#define SDF_VISIBILITY_KIND_SHIFT  30u
-#define SDF_VISIBILITY_SOURCE_MASK 0x3FFFFFFFu
-#define SDF_TRANSFORM_SLOT_NONE    (-1)
-#define SDF_VISIBILITY_GROUP_EDGE  8u
-#define SDF_SHADOW_BITS            8u
-#define SDF_SHADOW_MASK            0x000000FFu
-#define SDF_SHADOW_SLOTS           4u
-#define SDF_SHADOW_FADE_CAPACITY   2u
-
-// The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).
+// The dynamic-transform slot of no slot, and the packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).
+#define SDF_TRANSFORM_SLOT_NONE         (-1)
 #define SDF_TRANSFORM_SLOT_STATIC_WORD  0u
 #define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)
-
-// The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
-#define SDF_VISIBILITY_NORMAL_SCALE 32767.0
-#define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
 
 // The field's shared constants: the chamfer bevel's scale (SdfProgram.SqrtHalf), the smooth blends' radius floor (SdfProgram.SmoothRadiusMin) and the sweep search (SdfFieldEvaluator).
 #define SDF_SQRT_HALF         0.70710677
@@ -248,61 +201,5 @@
 #define SDF_NOISE_SEED_STREAM_Z 0x85EBCA77u
 #define SDF_R2_ALPHA1           0xC13FA9A9u
 #define SDF_R2_ALPHA2           0x91E10DA6u
-
-// The mesh region's draw record (SdfMeshRecord) and the view shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshViewShift).
-#define SDF_MESH_DRAW_WORDS             33u
-#define SDF_MESH_MATERIAL_WORD          16u
-#define SDF_MESH_INDEX_WORD             17u
-#define SDF_MESH_INDEX_COUNT_WORD       18u
-#define SDF_MESH_VERTEX_WORD            19u
-#define SDF_MESH_FLAGS_WORD             20u
-#define SDF_MESH_TRIANGLE_MATERIAL_WORD 21u
-#define SDF_MESH_NORMAL_MATRIX_WORD     22u
-#define SDF_MESH_FRAME_SLOT_WORD        31u
-#define SDF_MESH_SKIN_WORD              32u
-#define SDF_MESH_VERTEX_WORDS           6u
-#define SDF_MESH_MEMBER_WORDS           8u
-#define SDF_MESH_NORMALS_FLAG           0x00000001u
-#define SDF_MESH_MATERIALS_FLAG         0x00000002u
-#define SDF_MESH_SKIN_FLAG              0x00000004u
-#define SDF_MESH_VIEW_SHIFT             24u
-
-// The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
-#define SDF_MESH_IRRADIANCE_PROBE_WORDS 13u
-#define SDF_MESH_IRRADIANCE_WRITTEN     0x40000000u
-#define SDF_MESH_IRRADIANCE_NORMAL_BIAS 0.35
-
-// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords) and the weight its history saturates at, one period of samples (SdfTemporalSamples.Period).
-#define SDF_HISTORY_SURFACE_WORDS 4u
-#define SDF_HISTORY_WEIGHT_CAP    8.0
-
-// The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).
-#define SDF_SKY_ENVIRONMENT_SIZE         64
-#define SDF_SKY_ENVIRONMENT_COEFFICIENTS 9u
-#define SDF_SKY_ENVIRONMENT_MAX_RADIANCE 65504.0
-#define SDF_MAX_VOLUMES                  64u
-#define SDF_VOLUME_SCATTER_ANISOTROPY    0.3
-
-// The surface transport's word (SdfSurfaceTransport) and the atmosphere's guards and flags (SdfAir).
-#define SDF_TRANSPORT_INVERSE_DISTANCE_SCALE 1024.0
-#define SDF_TRANSPORT_SAMPLE_BIT             0x80000000u
-#define SDF_AIR_FOG_COLOR_AUTHORED           0x00000001u
-#define SDF_AIR_MAX_LIGHTS                   4u
-#define SDF_AIR_SERIES_LIMIT                 0.001
-#define SDF_AIR_EXPONENT_LIMIT               60.0
-#define SDF_AIR_STEEP_LIMIT                  (-20.0)
-
-// The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.
-#define SDF_DEBUG_VIEW_COUNT       10
-#define SDF_DEBUG_VIEW_OFF         0
-#define SDF_DEBUG_VIEW_DEPTH       1
-#define SDF_DEBUG_VIEW_NORMALS     2
-#define SDF_DEBUG_VIEW_RAYDIR      3
-#define SDF_DEBUG_VIEW_MATERIAL_ID 4
-#define SDF_DEBUG_VIEW_VISIBILITY  5
-#define SDF_DEBUG_VIEW_MOTION      6
-#define SDF_DEBUG_VIEW_SKY_COST    7
-#define SDF_DEBUG_VIEW_AO          8
-#define SDF_DEBUG_VIEW_SHADOW      9
 
 #endif // SDF_ISA_HLSLI

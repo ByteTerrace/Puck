@@ -32,9 +32,10 @@ The corpus is three trees, enumerated where they live rather than copied:
   `modules/` and `extensions/` subdirectories hold fragments, which are not
   root documents.
 
-The committed cartridges round-trip in `tests/Puck.GamingBricks.Transpiler.Tests`
-(`TestEveryCommittedCartridgeSurvivesADecompileAndRecompile`), beside the gate
-that holds each to the document committed with it.
+The authored cartridge sources compile and round-trip in
+`tests/Puck.GamingBricks.Transpiler.Tests`
+(`TestEveryCommittedCartridgeSurvivesADecompileAndRecompile`), using fresh
+compiled documents rather than committed derived copies.
 
 Quarantined: both exempt sources, and `ExemptSourceStillFailsForItsReason`, moved
 to `experimental/` with the worlds they read, so the live exemption ledger is

@@ -8,9 +8,10 @@ namespace Puck.HumbleGamingDeck;
 /// dot: six palette bits and the three emphasis bits. Every memory access below $3F00 goes through the cartridge board,
 /// which also observes each address the PPU drives.
 /// <para>
-/// The register timing is dot-exact but not yet sub-dot exact: a CPU access lands between two dots, the second write to
-/// $2006 reaches <c>v</c> at once, and the I/O latch holds its value without decaying. Those refinements belong to the NTSC
-/// accuracy work that pins them against the PPU test suites.
+/// A CPU access lands between two dots: a read at the cycle's read point, a write as M2 falls. The rendering pipeline
+/// sees a $2001 write two dots after it lands; the second write to $2006 reaches <c>v</c> at once, and the I/O latch holds
+/// its value without decaying. Those last refinements belong to the NTSC accuracy work that pins them against the PPU test
+/// suites.
 /// </para>
 /// </summary>
 public sealed partial class HgdPpu : ISnapshotable {
@@ -22,6 +23,9 @@ public sealed partial class HgdPpu : ISnapshotable {
     private const int DotsPerLine = 341;
     private const int PreRenderLine = 261;
     private const int VblankLine = 241;
+    // Toggling rendering takes effect about three to four dots after the CPU's write cycle begins; the write lands as M2
+    // falls, two dots before the pipeline sees it. https://www.nesdev.org/wiki/PPU_registers#PPUMASK
+    private const int MaskDelayDots = 2;
 
     private readonly IHgdMapper m_mapper;
     private readonly HgdNametableRam m_nametables;
@@ -42,6 +46,8 @@ public sealed partial class HgdPpu : ISnapshotable {
 
     private byte m_control;
     private byte m_mask;
+    private byte m_maskWritten;
+    private int m_maskDelay;
     private bool m_vblank;
     private bool m_spriteZeroHit;
     private bool m_spriteOverflow;
@@ -158,7 +164,8 @@ public sealed partial class HgdPpu : ISnapshotable {
                 break;
             case 1:
                 if (!m_warmingUp) {
-                    m_mask = value;
+                    m_maskWritten = value;
+                    m_maskDelay = MaskDelayDots;
                 }
 
                 break;
@@ -227,6 +234,9 @@ public sealed partial class HgdPpu : ISnapshotable {
     /// <summary>Advances one dot.</summary>
     /// <param name="masterTick">The master tick the dot ends on, forwarded with every address the board observes.</param>
     public void StepDot(ulong masterTick) {
+        if ((m_maskDelay != 0) && (--m_maskDelay == 0)) {
+            m_mask = m_maskWritten;
+        }
         m_masterTick = masterTick;
         if (RenderingLine) {
             if (RenderingEnabled) {
@@ -268,7 +278,8 @@ public sealed partial class HgdPpu : ISnapshotable {
             (((uint)m_spriteCount) > 8) ||
             (((uint)m_nextSpriteCount) > 8) ||
             (((uint)m_secondaryIndex) > 32) ||
-            (((uint)m_copyRemaining) > 3)
+            (((uint)m_copyRemaining) > 3) ||
+            (((uint)m_maskDelay) > MaskDelayDots)
         ) {
             throw new InvalidDataException(message: "Snapshot PPU position or sprite pipeline is out of range.");
         }
@@ -303,11 +314,17 @@ public sealed partial class HgdPpu : ISnapshotable {
             IncrementY();
         } else {
             m_v = ((ushort)((m_v + (((m_control & 4) != 0) ? 32 : 1)) & 0x7FFF));
+            // Outside rendering the address bus rests on v, so the increment reaches the board.
+            m_mapper.ObservePpuAddress(
+                address: ((ushort)(m_v & 0x3FFF)),
+                masterTick: m_masterTick
+            );
         }
     }
     private void AdvancePosition() {
-        // The pre-render line's last dot is skipped on odd frames while rendering is enabled.
-        if ((m_line == PreRenderLine) && (m_dot == 339) && m_oddFrame && RenderingEnabled) {
+        // The pre-render line's last dot is skipped on odd frames while rendering is enabled; the skip follows the value
+        // last written to $2001 rather than the pipeline's delayed copy.
+        if ((m_line == PreRenderLine) && (m_dot == 339) && m_oddFrame && ((m_maskWritten & 0x18) != 0)) {
             m_dot = 340;
         }
         ++m_dot;
@@ -332,6 +349,8 @@ public sealed partial class HgdPpu : ISnapshotable {
         transfer.Boolean(value: ref m_warmingUp);
         transfer.Byte(value: ref m_control);
         transfer.Byte(value: ref m_mask);
+        transfer.Byte(value: ref m_maskWritten);
+        transfer.Int32(value: ref m_maskDelay);
         transfer.Boolean(value: ref m_vblank);
         transfer.Boolean(value: ref m_spriteZeroHit);
         transfer.Boolean(value: ref m_spriteOverflow);

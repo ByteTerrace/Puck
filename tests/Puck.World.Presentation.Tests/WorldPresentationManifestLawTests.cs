@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using Puck.Abstractions.Counting;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -21,6 +22,7 @@ namespace Puck.World.Presentation.Tests;
 public sealed class WorldPresentationManifestLawTests {
     private const int Repetitions = 64;
 
+    private static readonly string ScaleBindingRow = WorldBodyStateReads.BindingRow(slot: Fixtures.BodyScaleRegister);
     private static readonly WorldPresentationBinding[] ExpectedBindings = [
         Number(row: "alpha"),
         Color(key: "ring", row: "palette"),
@@ -34,7 +36,7 @@ public sealed class WorldPresentationManifestLawTests {
         Number(row: "daylight", target: false),
     ];
     private static readonly WorldPresentationBinding[] ExpectedBodyBindings = [
-        Number(row: "scale", key: StateBinding.BodyKey),
+        Number(row: ScaleBindingRow, key: StateBinding.BodyKey),
         Number(key: StateBinding.BodyKey, row: "pose", target: true),
         Number(row: "tint"),
         Number(row: "swayClock"),
@@ -107,7 +109,9 @@ public sealed class WorldPresentationManifestLawTests {
             scale: 1f
         );
 
-        return baseline with {
+        return Fixtures.WithBodyScale(
+            initial: FixedQ4816.One,
+            source: baseline with {
             BindingOverlaysRaw = Section<IReadOnlyList<WorldBindingOverlay>>(json: """
                 [
                   {
@@ -196,11 +200,10 @@ public sealed class WorldPresentationManifestLawTests {
                   }
                 ]
                 """),
-            PopulationRaw = (baseline.Population with { ScaleRow = "scale" }),
             TimelineRaw = Section<WorldTimelineSection>(json: """
                 { "clocks": [ { "name": "daylight", "state": "daylight" }, { "name": "day", "periodSeconds": 60 } ] }
                 """),
-        };
+        });
     }
 
     [Fact]
@@ -368,7 +371,7 @@ public sealed class WorldPresentationManifestLawTests {
 
         Assert.Equal(
             actual: manifest.TemplatesOf(owner: definition).ToArray(),
-            expected: [Number(row: "scale", key: StateBinding.BodyKey)]
+            expected: [Number(row: ScaleBindingRow, key: StateBinding.BodyKey)]
         );
         Assert.Equal(
             actual: manifest.TemplatesOf(owner: definition.Looks[0]).ToArray().Select(selector: static entry => entry.ToString()).Order(),

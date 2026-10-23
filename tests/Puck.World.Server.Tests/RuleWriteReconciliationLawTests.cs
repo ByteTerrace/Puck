@@ -8,17 +8,14 @@ namespace Puck.World.Server.Tests;
 /// <summary>CONTRACT UNDER TEST: a state value reaches the installed document through two doors, a value mutation and
 /// the export of what the tick's rules wrote, and what lies outside the arena and keeps its own copy of a value is
 /// brought up to date by both. A drive gate a rule closes refuses drive exactly as one a command closes, and a body
-/// scale a rule writes reaches the body exactly as one a command writes.</summary>
+/// scale written to its register reaches the body whichever writer wrote it.</summary>
 public sealed class RuleWriteReconciliationLawTests {
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
 
-    private static WorldDefinition Document(WorldRule[] rules, bool scaled) {
+    private static WorldDefinition Document(WorldRule[] rules) {
         var source = Fixtures.BuildDocument();
 
         return source with {
-            PopulationRaw = (scaled
-                ? (source.Population with { ScaleRow = "scale" })
-                : source.Population),
             Rules = rules,
             StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
                 World = [
@@ -34,7 +31,7 @@ public sealed class RuleWriteReconciliationLawTests {
                     GatesDrive: true
                 ),
                 new WorldStateRow(
-                    CellName.Parse(candidate: "scale"),
+                    CellName.Parse(candidate: "quiet"),
                     CellKind.Fixed,
                     Capacity: 4,
                     Cells: [new StateCell(
@@ -71,17 +68,14 @@ public sealed class RuleWriteReconciliationLawTests {
     // installed document already held, and only the row that moved is read back out of the arena.
     [Fact]
     public void APublicationCarriesTheRowsThatMovedAndKeepsTheRest() {
-        using var fixture = Fixtures.FreshServer(definition: Document(
-            rules: [new WorldRule(
+        using var fixture = Fixtures.FreshServer(definition: Document(rules: [new WorldRule(
                     CellName.Parse(candidate: "count"),
                     [new ActionEffect.AddState(
                             Key: "0",
                             State: "stunned",
                             Value: 1m
                         )]
-                )],
-            scaled: false
-        ));
+                )]));
 
         static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(
             name: name,
@@ -93,7 +87,7 @@ public sealed class RuleWriteReconciliationLawTests {
 
         var quiet = Row(
             fixture: fixture,
-            name: "scale"
+            name: "quiet"
         );
         var written = Row(
             fixture: fixture,
@@ -105,7 +99,7 @@ public sealed class RuleWriteReconciliationLawTests {
         Assert.Same(
             actual: Row(
                 fixture: fixture,
-                name: "scale"
+                name: "quiet"
             ),
             expected: quiet
         );
@@ -128,15 +122,12 @@ public sealed class RuleWriteReconciliationLawTests {
     [InlineData(true)]
     [Theory]
     public void AClosedDriveGateRefusesDriveWhicheverDoorClosedIt(bool byRule) {
-        using var fixture = Fixtures.FreshServer(definition: Document(
-            rules: (byRule
+        using var fixture = Fixtures.FreshServer(definition: Document(rules: (byRule
                 ? [Write(
                     row: "stunned",
                     value: 1m
                 )]
-                : []),
-            scaled: false
-        ));
+                : [])));
 
         Assert.False(condition: fixture.Server.Grants.TryGetDriveGate(
             bodyIndex: 0,
@@ -167,27 +158,29 @@ public sealed class RuleWriteReconciliationLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void AWrittenBodyScaleReachesTheBodyWhicheverDoorWroteIt(bool byRule) {
-        using var fixture = Fixtures.FreshServer(definition: Document(
-            rules: (byRule
-                ? [Write(
-                    row: "scale",
-                    value: 0.5m
+    public void AWrittenBodyScaleReachesTheBodyWhicheverWriterWroteIt(bool byRule) {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.WithBodyScale(
+            initial: FixedQ4816.One,
+            source: Document(rules: (byRule
+                ? [new WorldRule(
+                    CellName.Parse(candidate: "shrink"),
+                    [new WorldEffect.SetBodyState(
+                            Key: "0",
+                            State: Fixtures.BodyScaleRegister,
+                            Value: 0.5m
+                        )]
                 )]
-                : []),
-            scaled: true
+                : []))
         ));
 
         Join(fixture: fixture);
 
         if (!byRule) {
-            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                Key: "0",
-                Kind: WorldDocumentWriteKind.Set,
-                Principal: Principal.Console,
-                Row: "scale",
-                Value: Half.Value
-            ));
+            Fixtures.WriteBodyScale(
+                body: 0,
+                server: fixture.Server,
+                value: Half
+            );
         }
 
         fixture.Step();

@@ -65,7 +65,7 @@ public sealed class HistoryScrubLawTests {
         Assert.False(condition: resumed.IsError, userMessage: resumed.Output);
 
         // The operator's forms stay the operator's, whatever a seat holds.
-        var on = console.Seat(line: "world.history on", slot: 0);
+        var on = console.Seat(line: "world.history off", slot: 0);
 
         Assert.True(condition: on.IsError);
         Assert.Contains(expectedSubstring: "an operator form; seat1 is not the operator", actualString: on.Output, comparisonType: StringComparison.Ordinal);

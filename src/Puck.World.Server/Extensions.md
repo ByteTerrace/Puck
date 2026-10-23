@@ -149,13 +149,16 @@ the loaded image predates an operation.
 ## Replay and lifetime
 
 Offline replay suppresses recorded extensions before invoking the addon factory.
-Live replay revokes them before replacing the timeline and drops queued provider
-contributions. Suppression remains after a drive ends or forks. The host must
-explicitly call `StartRecordedExtensionEpoch` after selecting the appropriate
-bindings and journal namespaces, then create fresh runtime instances. Old
-instances remain revoked. Reopening is refused while replay is active or an
-external call is in flight; nothing reconnects automatically to the original
-resources.
+Live replay (a drive, a fork, a history seek) revokes them before replacing the
+timeline and drops queued provider contributions; when it completes, the live
+epoch opens again, so a fresh runtime instance admits and contributes. Every
+instance admitted before the replay stays revoked, because the timeline it
+observed was replaced; its owner creates a new one. A host's own suppression
+(`SuppressRecordedExtensions`, before a recovery or an activation from a
+checkpoint) lasts until the host calls `StartRecordedExtensionEpoch` after
+selecting the appropriate bindings and journal namespaces. Reopening is refused
+while replay is active or an external call is in flight; nothing reconnects
+automatically to the original resources.
 
 An external call holds a lifetime lease, not the simulation lock. A live timeline
 reset refuses while that call is in flight; isolated replay remains available.

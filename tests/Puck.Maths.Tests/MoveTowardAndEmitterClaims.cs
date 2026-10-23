@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Puck.Maths.Tests;
 
 /// <summary>
-/// Claims for members the ratchet found classified nowhere: <see cref="FixedVector3.MoveToward"/>, whose statement
+/// Claims for members without earlier law bindings: <see cref="FixedVector3.MoveToward"/>, whose statement
 /// is a set of exact boundary identities plus bounded interpolation; its scalar twin <see cref="FixedQ4816.MoveToward"/>,
 /// whose interpolation identities are EXACT rather than tolerance-bounded because a scalar step has no divide or
 /// normalize in its path; and the two <see cref="FixedQ4816RustPort"/> emitters, whose statement is purity and live

@@ -56,6 +56,42 @@ public sealed class WorldCaptureBudgetLawTests {
         }
     }
 
+    /// <summary>Under lockstep an ordinary settled still converges over the samples the host names, and is stamped with
+    /// the tick it is held at; a still that already converges keeps its own, and a presented capture or a still already
+    /// claimed takes no convergence.</summary>
+    [Fact]
+    public void ALockstepStillConvergesOverAFreshSequence() {
+        using var directory = new TemporaryDirectory();
+        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
+        var samples = 8;
+        var scheduler = new WorldCaptureScheduler(server: row.Server, directory: directory.RootPath, backend: "vulkan",
+            worldFile: "fixture.world.json", captureTarget: null, stillSamples: () => samples);
+        var still = new FrameCaptureRequest(path: Path.Join(path1: directory.RootPath, path2: "still.png"));
+
+        scheduler.PublishTick(tick: 3);
+        scheduler.ArmUnscheduled(request: still, target: new Target());
+        Assert.Equal(expected: 8, actual: still.Converge);
+        Assert.Equal(expected: 3UL, actual: still.StateTick);
+        Assert.StartsWith(expectedStartString: "tick=3 hash=", actualString: still.StateStamp, comparisonType: StringComparison.Ordinal);
+
+        var converging = new FrameCaptureRequest(converge: 2, path: Path.Join(path1: directory.RootPath, path2: "converging.png"));
+
+        scheduler.ArmUnscheduled(request: converging, target: new Target());
+        Assert.Equal(expected: 2, actual: converging.Converge);
+
+        var presented = FrameCaptureRequest.Presented(path: Path.Join(path1: directory.RootPath, path2: "presented.png"));
+
+        samples = 0;
+        var ordinary = new FrameCaptureRequest(path: Path.Join(path1: directory.RootPath, path2: "ordinary.png"));
+
+        scheduler.ArmUnscheduled(request: ordinary, target: new Target());
+        Assert.Equal(expected: 0, actual: ordinary.Converge);
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ordinary.ConvergeOver(samples: 0));
+        Assert.Throws<InvalidOperationException>(testCode: () => presented.ConvergeOver(samples: 1));
+        _ = ordinary.TryFail(error: new InvalidOperationException());
+        Assert.Throws<InvalidOperationException>(testCode: () => ordinary.ConvergeOver(samples: 1));
+    }
+
     private sealed class Target : ICaptureRequestTarget {
         private readonly CaptureRequestSlot m_slot = new();
 

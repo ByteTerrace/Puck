@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.Maths;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 using Puck.SignedDistance;
 using Puck.Text;
 using Puck.Physics.Motion;
@@ -163,19 +164,20 @@ public static partial class WorldDefinitionValidator {
     }
     // The kit assignment policy (SIM-AFFECTING): hash needs nothing more; table needs a non-empty cycle whose every
     // entry resolves to a declared kit name.
-    private static void ValidateAssignment(WorldRowAssignment assignment, HashSet<string> kitNames, List<string> errors) {
+    private static void ValidateAssignment(WorldDefinition definition, WorldRowAssignment assignment, HashSet<string> kitNames, List<string> errors) {
         if (assignment is null) {
-            errors.Add(item: "assignment is required.");
+            errors.Add(item: "kits.assignment is required.");
 
             return;
         }
 
         ValidateRowAssignment(
             assignment: assignment,
+            definition: definition,
             errors: errors,
             rowNames: kitNames,
             rowNoun: "kit",
-            section: "assignment"
+            section: "kits.assignment"
         );
     }
     // The editor/authoring policy row: every field finite/positive with a sane ceiling. The BOOT-CONSUMED
@@ -639,7 +641,7 @@ public static partial class WorldDefinitionValidator {
         var drawnLeftToRight = !row.Closed;
 
         for (var index = 0; (index < knots.Count); index++) {
-            drawnLeftToRight &= ((MathF.Cos(x: knots[index].TangentYaw) > 0f) && ((index == 0) || (knots[index].Position.Value.X > knots[index - 1].Position.Value.X)));
+            drawnLeftToRight &= ((MathF.Cos(x: knots[index].TangentYaw) > 0f) && ((index == 0) || (knots[index].Position.Value.X > knots[(index - 1)].Position.Value.X)));
         }
         if (!drawnLeftToRight) {
             errors.Add(item: $"{path} '{name}' is not drawn left to right; a driver curve is open, each knot further along X than the last, each tangent pointing toward +X.");
@@ -1029,7 +1031,7 @@ public static partial class WorldDefinitionValidator {
                 producers: kit.Producers,
                 programs: programs,
                 programRows: programRows,
-                channelNames: allChannelNames,
+                channelNames: new HashSet<string>(collection: definition.Channels.Where(predicate: channel => (channel is { Shape: not ChannelShape.Relative })).Select(selector: channel => channel.Name), comparer: StringComparer.Ordinal),
                 path: $"{path}.producers",
                 errors: errors
             );
@@ -1089,7 +1091,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             // The pad map is the SAME channel-name vocabulary actions key off, resolved at the other destination a
-            // control application can carry a kit to: a screen's booted machine. Any declared channel may bind
+            // control application can carry a kit to: a screen's booted machine. Any declared level channel may bind
             // (a movement role reaches a stick, a composition channel reaches a button), unlike actions, which are
             // composition-only.
             if (kit.PadRaw is not null) {
@@ -1103,6 +1105,9 @@ public static partial class WorldDefinitionValidator {
                         continue;
                     }
 
+                    if (definition.Channels.Any(predicate: channel => ((channel is { Shape: ChannelShape.Relative }) && (channel.Name == channelName)))) {
+                        errors.Add(item: $"{path}.pad['{channelName}'] requires a held level, not relative displacement.");
+                    }
                     if (!Enum.IsDefined(value: element)) {
                         errors.Add(item: $"{path}.pad['{channelName}'] element '{element}' is not a defined WorldPadElement.");
                     }
@@ -1149,9 +1154,10 @@ public static partial class WorldDefinitionValidator {
     }
     // The look assignment policy (PRESENTATION-ONLY): a table needs a non-empty cycle whose every entry resolves to a
     // declared look name. Reuses the shared row-assignment gate verbatim.
-    private static void ValidateLookAssignment(WorldRowAssignment assignment, HashSet<string> lookNames, List<string> errors) {
+    private static void ValidateLookAssignment(WorldDefinition definition, WorldRowAssignment assignment, HashSet<string> lookNames, List<string> errors) {
         ValidateRowAssignment(
             assignment: assignment,
+            definition: definition,
             errors: errors,
             rowNames: lookNames,
             rowNoun: "look",
@@ -1710,7 +1716,7 @@ public static partial class WorldDefinitionValidator {
                                 continue;
                             }
 
-                            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(requiresField: requiresField, shape: solidShape)) {
+                            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(shape: solidShape)) {
                                 errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
                             }
 
@@ -2214,7 +2220,72 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The shared sequence/row-view gate for kit and look assignment.
-    private static void ValidateRowAssignment(WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+    // A selector reads a body's own register the way WorldPopulation.SyncBodySelections does: a state.body counter, whose
+    // value each case compares as a whole number, and every case's row declared in the table the assignment distributes.
+    private static void ValidateRowSelector(WorldDefinition definition, WorldRowSelector select, string path, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+        // A register is document-wide, so every body (props and pieces included) holds its initial value until something
+        // writes it: a case naming that value would select every body and re-kit the whole world.
+        float? initial = null;
+
+        if (string.IsNullOrEmpty(value: select.BodyState)) {
+            errors.Add(item: $"{path}.bodyState is required.");
+        } else if (definition.BodyState.FirstOrDefault(predicate: slot => string.Equals(
+            a: slot.Name,
+            b: select.BodyState,
+            comparisonType: StringComparison.Ordinal
+        )) is not { } slot) {
+            errors.Add(item: $"{path}.bodyState names register '{select.BodyState}', which state.body does not declare.");
+        } else if (slot.Kind != ActionStateKind.Counter) {
+            errors.Add(item: $"{path}.bodyState names register '{select.BodyState}', a {slot.Kind}; a selector reads a Counter.");
+        } else {
+            initial = slot.Initial;
+        }
+
+        if (select.Cases is not { Count: > 0 } cases) {
+            errors.Add(item: $"{path}.cases must name at least one value.");
+
+            return;
+        }
+
+        var values = new HashSet<long>();
+
+        for (var index = 0; (index < cases.Count); index++) {
+            if (cases[index] is not { } selectCase) {
+                errors.Add(item: $"{path}.cases[{index}] is required.");
+
+                continue;
+            }
+
+            if (!values.Add(item: selectCase.Value)) {
+                errors.Add(item: $"{path}.cases[{index}] repeats value {selectCase.Value}.");
+            }
+
+            if ((initial is { } born) && (born == selectCase.Value)) {
+                errors.Add(item: $"{path}.cases[{index}] value {selectCase.Value} is register '{select.BodyState}' initial value, which every body holds until it is written; the case would select every body. Leave the initial value to the sequence's own row and name only the values that deviate.");
+            }
+
+            RequireDeclared(
+                value: selectCase.Row,
+                declaredSet: rowNames,
+                path: $"{path}.cases[{index}].row",
+                field: "",
+                rowNoun: rowNoun,
+                errors: errors
+            );
+        }
+    }
+    private static void ValidateRowAssignment(WorldDefinition definition, WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
+        if (assignment.Select is { } select) {
+            ValidateRowSelector(
+                definition: definition,
+                errors: errors,
+                path: $"{section}.select",
+                rowNames: rowNames,
+                rowNoun: rowNoun,
+                select: select
+            );
+        }
+
         ValidateSequence(
             sequence: assignment.Sequence,
             path: $"{section}.sequence",
@@ -2276,7 +2347,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path, resolved beside the document (forward slashes, no empty or dot segments).");
             }
 
-            if (!IsValidAddonHash(hash: font.Hash)) {
+            if (!IsValidFontHash(hash: font.Hash)) {
                 errors.Add(item: $"{path}.hash '{font.Hash}' must match sha256-64/{{16 lowercase hex}}.");
             }
 

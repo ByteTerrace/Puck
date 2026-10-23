@@ -102,12 +102,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.envelope is required when playerWritable is true.");
         }
         if (
-            !state.PlayerWritable &&
-            (state.Envelope is not null)
-        ) {
-            errors.Add(item: $"{path}.envelope is admitted only when playerWritable is true.");
-        }
-        if (
             !float.IsFinite(f: state.Initial) ||
             ((state.Kind == ActionStateKind.Timer) && (state.Initial < 0f))
         ) {
@@ -160,6 +154,29 @@ public static partial class WorldDefinitionValidator {
             default:
                 errors.Add(item: $"{path}.envelope is an unknown envelope kind.");
                 break;
+        }
+    }
+    // bodies.scale names the register a body's size lives in: a state.body Counter whose Range envelope is the world's own
+    // scale envelope. WorldPopulation.SyncBodyScale reads the register as a multiplier, so it can never be zero or
+    // inverted, and the render capacity probe's worst case has to cover the largest live body.
+    private static void ValidateBodyScale(WorldDefinition definition, string name, List<string> errors) {
+        if (definition.BodyState.FirstOrDefault(predicate: slot => string.Equals(
+            a: slot.Name,
+            b: name,
+            comparisonType: StringComparison.Ordinal
+        )) is not { } register) {
+            errors.Add(item: $"bodies.scale names register '{name}', which state.body does not declare.");
+        } else if (register.Kind != ActionStateKind.Counter) {
+            errors.Add(item: $"bodies.scale names register '{name}', a {register.Kind}; a body's size is a Counter.");
+        } else if (register.Envelope is not ActionStateEnvelope.Range range) {
+            errors.Add(item: $"bodies.scale names register '{name}', which must declare a range envelope — the world's own body-scale envelope.");
+        } else {
+            if (range.Minimum <= 0f) {
+                errors.Add(item: $"bodies.scale names register '{name}', whose envelope minimum {range.Minimum} is not positive — a body's Scale is a multiplier, never zero or inverted.");
+            }
+            if (range.Maximum > definition.Authoring.MaxPlacementScale) {
+                errors.Add(item: $"bodies.scale names register '{name}', whose envelope maximum {range.Maximum} exceeds authoring.maxPlacementScale {definition.Authoring.MaxPlacementScale} — the render capacity probe's worst case would not cover the largest live body.");
+            }
         }
     }
     private static Dictionary<string, ActionStateSlot> ValidateActionState(WorldDefinition definition, List<string> errors) {
@@ -329,6 +346,9 @@ public static partial class WorldDefinitionValidator {
                 break;
             case WorldEffect.Pose:
                 errors.Add(item: $"{path} has no body-scope meaning — 'pose' teleports a body the world names, and is admissible only inside a world rule's own effects.");
+                break;
+            case WorldEffect.SetBodyState:
+                errors.Add(item: $"{path} has no body-scope meaning — 'setBodyState' writes a body the world names; a kit's action writes its own register with 'setState'.");
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown effect kind.");

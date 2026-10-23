@@ -1,6 +1,6 @@
 ---
 name: verification
-description: "Verifies a Puck change. Use for the landing bar, a failed or timed-out canary or test (flake or failure), GPU legs and what runs beside them, the puck CLI copy, coverage, branch bases."
+description: "Verifies Puck changes: landing bar, builds, stale DLLs, flaky tests, GPU/heavy leases, coverage, source-scan or regex laws versus type/compiler enforcement, and writing tests."
 ---
 
 # Verification
@@ -53,11 +53,20 @@ leave its closing brace unhit. Code that keeps its device work in a listed file
 reaches it from the CPU side through one expression (a conditional or `&&` over
 a helper there), not a guarded statement.
 
+GPU legs require the lead's grant.
+
+Judge performance by code, disassembly and load-independent counts; only
+  counts gate a change. Wall-clock and GPU timing are evidence
+  read beside those counts, never alone, and run on a quiet machine: the lead
+  keeps every agent's builds, tests and GPU legs off the machine while one
+  runs ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
+
+
 ## Run verbs from your own CLI copy
 
 Build `src/Puck.Cli` in Release in your worktree, copy
 `src/Puck.Cli/bin/Release/net11.0/` to a directory only your lane uses
-(`<scratchpad>/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
+(`<worktree>/.claude/scratch/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
 the worktree root. Never run the globally installed `puck` on PATH: it is
 another build of another head. Refresh the copy after a change the CLI reaches.
 A generator verb (`schema`, `registry`, `vocabulary`, `locks`, `baselines`,
@@ -66,20 +75,40 @@ reports drift. Restore a fresh worktree once
 (`dotnet restore Puck.slnx -nodeReuse:false`) before its first build with
 `--no-restore` or `puck references`: both fail on an unrestored tree.
 
+## Boot every World with `--devices none`
+
+A World you boot to verify a change passes `--devices none`: the stdin recipe,
+an MCP World with its own `--state-dir`, a scratch `.puck` world. Without it
+the World opens the owner's pads and reads the owner's keyboard and mouse
+through its window, so the owner's presses drive your run. The ruling, what the
+flag does and the verbs that pass it themselves are in
+[the `puck-world` skill](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device).
+Drive a verification World with scripted input only (`player.signal`, `body.*`,
+schedule rows); a stderr naming a `[gamepad]` or `[gameinput]` device means the
+flag was missed.
+
 ## Build before you test
 
 - A failed build leaves the previous binaries in place, so a test or run after
   it measures old code. Run only after a build that exited 0 following your
   last edit; never pass `--no-build` otherwise.
-- Pass `-nodeReuse:false` to every build and restore: a reused MSBuild node
+- The shared Claude and Codex environment sets `MSBUILDDISABLENODEREUSE=1`.
+  Keep the hook in all three tools until a probe establishes effective inheritance;
+  Antigravity has no project env block. Explicit command overrides still matter.
+  Pass `-nodeReuse:false` (or `-nr:false`) to build, msbuild, restore, pack and publish: a reused MSBuild node
   outlives the build and holds memory (`puck host load` counts them as
-  `reuseNodes`).
+  `reuseNodes`). Never pass it to `dotnet test`: Microsoft.Testing.Platform
+  has rejected it with `error: 1, total: 0` in the observed run; exact text
+  and exit status vary by version. Build with the flag,
+  then run `dotnet test <project> --no-build`.
 - Do not edit the source tree while a canary, parity or test run reads it.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
 - MSBuild rebuilds by file time. A file copied back over a mutant keeps its
   older time, so the build keeps the mutated assembly although `git diff` shows
   the source restored. Restore with `git restore` or touch the file, rebuild,
-  and confirm from the run that the fix is what executed. `puck laws prove
+  and confirm the test host loaded the freshly built assembly, using its
+  write time/path or a diagnostic in the output; `git diff` and exit 0 alone
+  prove neither. `puck laws prove
   <law> --fix <revision>` proves a law against its fix in its own clone and
   never touches your tree.
 
@@ -96,6 +125,18 @@ the skip exception, so a test that wraps a call which can skip reports
 **Skipped** instead of failing; catch it with `try`/`catch` and assert on it.
 
 ## What uses the GPU
+
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation.
+Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
+`gate` and `affected` hold the same heavy lease through each heavy suite and
+check host headroom after acquisition. When an ancestor already owns it,
+validated PID/start-time ancestry admits a serialized child lease, so a run
+does not wait on itself and siblings still exclude one another; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
+
+In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
+shell can split the colon-bearing switch before the lease receives it
+([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
+
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
 or offscreen `Puck.World` run, and any test run that can select a device law.
@@ -133,8 +174,8 @@ heavy build beside it.
   value, update the check; otherwise fix the code.
 
 Before stopping a hung test host or World process, capture its managed stacks
-with `dotnet-stack report -p <pid>` (a global tool:
-`dotnet tool install -g dotnet-stack`).
+with an existing `dotnet-stack report -p <pid>`. The optional installation is
+owner-only [machine setup](../../../docs/development/contributing.md#setting-up-a-machine).
 
 ## Branches
 
@@ -158,7 +199,7 @@ prune or repack objects another worktree on the machine still reads.
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, landings and machines. |
 | [`review-passes`](../review-passes/SKILL.md) | An optional review-and-fix pass and verifying its fixes. |
-| [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and registers. |
+| [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and structural completeness. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The emulator suites. |
 | [`rendering`](../rendering/SKILL.md) | Captures, parity and GPU counters for render work. |
 | [`puck-world`](../puck-world/SKILL.md) | Running `Puck.World`, stdin scripts, replays and `puck test` worlds. |

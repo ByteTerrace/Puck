@@ -1,26 +1,45 @@
 // The shape gallery: every authorable signed-distance construct, one prototype an exhibit, each held 1.2 m over a
 // labelled plinth so it reads from every side, underside included. The debug world expands `galleryPrototypes()` inside
 // its `prototypes` block, `galleryPlacements()` inside its `placements` block and `galleryState()` (the motion rows'
-// console controls) inside its `state.world` block. The rows stand on the open ground at +X/+Z, every exhibit 3 m from
-// the next, its label facing -Z, toward the origin:
+// console controls) inside its `state.world` block. The exhibits stand inside the gallery hall (hall.puck), four levels
+// of rows running along +X, every exhibit 2.6 m from the next and its label facing -Z:
 //
-//   z 14  each primitive at a uniform scale
-//   z 19  each primitive stretched unevenly, where an exact distance is hardest to keep
-//   z 24  each prism profile, extruded
-//   z 29  each prism profile, revolved
-//   z 34  sweeps, the per-shape facets and a domain fold
-//   z 39  every shape blend, a box and a sphere in two colours
-//   z 44  the domain folds, erosion and creation noise
-//   z 49  parameter forms: exponents, tapers, rounded and chamfered profiles, path holes, shears and closed strokes
-//   z 54  surfaces: palette channels, weathering, panels, trims, paints, text runs, volumes, a state-bound colour
-//   z 59  motion through the stamp pool: rotation, swing, slide, parent chains, moving blends and cuts, moving folds
-//   z 64  motion II: paints and an inset on moving surfaces, twist and bend, a radial pulse, cells, a volume, IK, frames
+//   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved
+//   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
+//   level 2  form and surface: parameter forms, palette channels and wear, warps II
+//   level 3  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames
 //
-// shapes.md beside this file holds the coverage table, the operator camera line that frames each exhibit and the
-// console controls the motion rows answer to.
+// A sign stands at the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
+// and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
+// to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it, and the gallery.* commands
+// (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
+// the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
+// to. This file is a library: debug.puck and hall.puck expand its templates and lets.
 
-let galleryX = 14
-let gallerySpacing = 3
+// The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
+let galleryStorey = 4.5
+let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
+
+// The axis of the painting wing's endless fall (paintings.puck): a painting in level 0's floor under its twin in the
+// ceiling at (fallX, fallZ). A body that falls out of the ceiling twin needs 2.2 m of air over it, so level 1's slab is
+// holed over the ceiling twin, `fallHole` either side of the axis (hall.puck), and a rail stands round the hole.
+let fallX = 66
+let fallZ = 22.6
+let fallHole = 1
+
+// One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
+// degrees about up from the world's, so the row negates x and z. The hall's shell (hall.puck) and the painting wing's
+// (paintings.puck) are written with it.
+template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
+let galleryX = 23
+let gallerySpacing = 2.6
 
 let uniformRow = ["shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone", "shape-cone", "shape-superellipsoid", "shape-plane"]
 let stretchedRow = ["shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz", "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"]
@@ -30,14 +49,49 @@ let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "sh
 let foldRow = ["shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped", "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m", "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"]
 let formRow = ["shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle", "shape-polygon-3", "shape-prism-rounding", "shape-prism-chamfer", "shape-cylinder-chamfer", "shape-revolve-solid", "shape-path-holes", "shape-path-shear", "shape-path-closed-stroke", "shape-path-stroke-ramp", "shape-sweep-braid"]
 let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color"]
+let glassRow = ["shape-glass"]
 let motionRow = ["motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend", "motion-carve", "motion-mirror", "motion-polar"]
 let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume", "motion-ik", "motion-frames"]
+let warpRow = ["shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere", "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"]
 
-let foldZ = 44
-let surfaceZ = 54
-let motionZB = 64
+let foldZ = 33
+let surfaceZ = 25
+let motionZB = 30
+let warpZ = 33
+let glassZ = 37
+
+// The levels, in walking order: the board over each lift door names its level and what it shows.
+let galleryLevels = [
+  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
+  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
+  { level: 2, title: "LEVEL 2  FORM AND SURFACE", what: "forms, surfaces, warps II" }
+  { level: 3, title: "LEVEL 3  MOTION AND GLASS", what: "motion through the stamp pool, glass" }
+]
+
+// Every row, in walking order: its sign's title, its level, the z it stands on, its exhibit names and what it shows.
+let galleryRows = [
+  { title: "PRIMITIVES", level: 0, z: 16, names: uniformRow, what: "each primitive at a uniform scale" }
+  { title: "STRETCHED", level: 0, z: 22, names: stretchedRow, what: "each primitive scaled unevenly" }
+  { title: "EXTRUDED", level: 0, z: 28, names: extrudeRow, what: "each prism profile, extruded" }
+  { title: "REVOLVED", level: 0, z: 34, names: revolveRow, what: "each prism profile, revolved" }
+  { title: "SWEEPS AND FACETS", level: 1, z: 17, names: facetRow, what: "sweeps, rounding, shells, warps, relief" }
+  { title: "BLENDS", level: 1, z: 25, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
+  { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
+  { title: "FORMS", level: 2, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
+  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
+  { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
+  { title: "MOTION", level: 3, z: 20, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
+  { title: "MOTION II", level: 3, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
+  { title: "GLASS", level: 3, z: glassZ, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost" }
+]
+
+// A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
+// `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to any exhibit by name.
+let gallerySpawns = reduce(galleryRows, [], (spawns, row) => concat(spawns, map(row.names, (name, index) => { id: name, position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)], yawDegrees: 180 })))
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
+// The hex wallpapers' clip: a clockwise pointy-top hexagon of inradius 0.45 (circumradius 0.45 / cos 30 degrees).
+let galleryHexClip = [[0, 0.519615], [0.45, 0.259808], [0.45, -0.259808], [0, -0.519615], [-0.45, -0.259808], [-0.45, 0.259808]]
 
 // Slot 0 the exhibit, slot 1 the plinth, slot 2 the label, slot 3 an exhibit's own second material (a blend's tool,
 // a palette channel under test) and slots past it whatever else an exhibit appends.
@@ -50,10 +104,11 @@ let galleryPalette = [
 ]
 let accent = { color: "#D9822B", roughness: 0.45, specular: 0.3 }
 
-// The palette, the plinth beneath the exhibit and the plinth's label. Expanded after the exhibit's own shapes, so an
-// exhibit's subtraction or intersection never reaches the plinth. `extra` appends palette slots from 3 on, and `runs`
-// text runs after the label.
-template exhibit(label, extra = [], runs = []) {
+// The palette, the plinth beneath the exhibit, the plinth's label and its plaque. Expanded after the exhibit's own
+// shapes, so an exhibit's subtraction or intersection never reaches the plinth. `extra` appends palette slots from 3 on,
+// `runs` text runs after the label, and `note` is the plaque: what the exhibit demos and what to look for, in small
+// type under the label (each non-whitespace glyph charges the stamp budget, so a note stays under ~120 glyphs).
+template exhibit(label, extra = [], runs = [], note = "") {
   name: label
   schema: "puck.creation.v1"
   palette: concat(galleryPalette, extra)
@@ -62,30 +117,167 @@ template exhibit(label, extra = [], runs = []) {
     position [0, 0.15, 0]
     scale [0.6, 0.15, 0.25]
   }
-  textRuns: concat([{ text: label, position [0, 0.15, 0.25], rotation [0, 0, 0, 1], emHeight: 0.1, depth: 0.006, mode: "emboss", material: 2, align: "center" }], runs)
+  textRuns: concat(
+    [{ text: label, position [0, 0.19, 0.25], rotation [0, 0, 0, 1], emHeight: 0.085, depth: 0.006, mode: "emboss", material: 2, align: "center" }],
+    ((note == "") ? [] : [{ text: note, position [0, 0.085, 0.25], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.004, mode: "emboss", material: 2, align: "center", maxWidth: 1.12, lineSpacing: 1.15 }]),
+    runs
+  )
 }
 
-template galleryRow(names, z) {
-  for (name, index) in names {
-    placement $"{name}" {
-      prototype: name
-      position [(galleryX + (gallerySpacing * index)), 0, z]
+// A row's sign: a post and a board at the row's west end, facing the way the plinths face, naming the row and what it
+// shows.
+template signPrototypes() {
+  for (row, index) in galleryRows {
+    prototype $"gallery-sign-{index}" {
+      document {
+        name: $"gallery-sign-{index}"
+        schema: "puck.creation.v1"
+        palette: galleryPalette
+        shape Box "post" {
+          material: 1
+          position [0, 0.8, 0]
+          scale [0.03, 0.8, 0.03]
+        }
+        shape Box "board" {
+          material: 2
+          position [0, 1.74, 0]
+          scale [0.46, 0.15, 0.015]
+        }
+        textRuns [
+          { text: row.title, position [0, 1.78, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }
+          { text: row.what, position [0, 1.665, 0.015], rotation [0, 0, 0, 1], emHeight: 0.032, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 0.88 }
+        ]
+      }
+    }
+  }
+  // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
+  prototype "gallery-map" {
+    document {
+      name: "gallery-map"
+      schema: "puck.creation.v1"
+      palette: galleryPalette
+      shape Box "post-left" {
+        material: 1
+        position [-0.6, 0.75, 0]
+        scale [0.03, 0.75, 0.03]
+      }
+      shape Box "post-right" {
+        material: 1
+        position [0.6, 0.75, 0]
+        scale [0.03, 0.75, 0.03]
+      }
+      shape Box "board" {
+        material: 2
+        position [0, 1.54, 0]
+        scale [0.72, 0.66, 0.015]
+      }
+      textRuns: concat(
+        [{ text: "SHAPE GALLERY", position [0, 2.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
+        [{ text: "stairs and lift at the north-west corner: stand on CALL, or gallery.lift <level>", position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
+        map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
+        map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
+        [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
+        [{ text: "PAINTING WING east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
+      )
     }
   }
 }
 
+// Each row's sign stands 2.3 m west of its first exhibit on the row's level, and the map board in the lobby left of the
+// entrance (places.puck's `gallery` spawn stands outside it, facing in).
+template gallerySignPlacements() {
+  for (row, index) in galleryRows {
+    placement $"gallery-sign-{index}" {
+      prototype: $"gallery-sign-{index}"
+      position [(galleryX - 2.3), galleryFloor[row.level], row.z]
+    }
+  }
+  placement "gallery-map" {
+    prototype: "gallery-map"
+    position [12.4, galleryFloor[0], 16]
+  }
+}
+
+// The gallery's console commands, composed from existing verbs (docs/reference/commands.md): walk to an exhibit's spawn
+// point, isolate an exhibit's shape, flag one that looks wrong (world.flag writes the record and its capture into the
+// package's git-ignored flags folder), cycle the debug views, and slice an exhibit's field into the package's slices
+// folder. world.debug-view and world.slice.save exist only in a rendered World, so a headless host refuses those two
+// commands when they run.
+let galleryCommands = [
+  {
+    name: "gallery.go"
+    help: "Walks a body to an exhibit's spawn point (its prototype name, or gallery for the entrance) and returns the view to the chase camera."
+    parameters [
+      { name: "exhibit", kind: Spawn, default: "gallery" }
+      { name: "body", kind: Body, default: "0" }
+    ]
+    lines [
+      "body.pose spawn:{exhibit} {body}"
+      "view.override camera auto"
+      "view.override layout play"
+    ]
+  }
+  {
+    name: "gallery.isolate"
+    help: "Draws one exhibit's named shape alone (its subject by default); gallery.isolate off restores every shape."
+    parameters [
+      { name: "exhibit", kind: Text }
+      { name: "shape", kind: Text, default: "subject" }
+    ]
+    lines [
+      "view.isolate {exhibit} {shape}"
+    ]
+  }
+  {
+    name: "gallery.flag"
+    help: "Flags an exhibit that looks wrong (near, the default, names the one the seat stands at): world.flag writes worlds/debug/flags/<exhibit>.json (the note, the seat's pose and camera) and captures the view to <exhibit>.png beside it, for an agent to read back."
+    parameters [
+      { name: "exhibit", kind: Text, default: "near" }
+      { name: "note", kind: Text, default: "looks-wrong" }
+    ]
+    lines [
+      "world.flag {exhibit} {note}"
+    ]
+  }
+  {
+    name: "gallery.view"
+    help: "Steps every camera to the next debug view (off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow, indirect, then off again), or selects one by name."
+    parameters [
+      { name: "view", kind: Choice, values ["next", "off", "depth", "normals", "raydir", "material-id", "visibility", "motion", "sky-cost", "ao", "shadow", "indirect"], default: "next" }
+    ]
+    lines [
+      "world.debug-view {view}"
+    ]
+  }
+  {
+    name: "gallery.slice"
+    help: "Cuts an exhibit's field (near, the default, names the one the seat stands at) on a plane through its placement and writes the distance diagnostic to worlds/debug/slices/<exhibit>-<axis>.png: by default the level plane through the exhibit's middle, 1.2 m over its floor; an x or z cut wants offset 0 to pass through its centre."
+    parameters [
+      { name: "exhibit", kind: Text, default: "near" }
+      { name: "axis", kind: Choice, values ["y", "x", "z"], default: "y" }
+      { name: "offset", kind: Number, default: "1.2" }
+    ]
+    lines [
+      "world.slice.save {exhibit} {axis} offset {offset}"
+    ]
+  }
+]
+
 template galleryPlacements() {
-  galleryRow(names: uniformRow, z: 14)
-  galleryRow(names: stretchedRow, z: 19)
-  galleryRow(names: extrudeRow, z: 24)
-  galleryRow(names: revolveRow, z: 29)
-  galleryRow(names: facetRow, z: 34)
-  galleryRow(names: map(blendExhibits, entry => entry.id), z: 39)
-  galleryRow(names: foldRow, z: foldZ)
-  galleryRow(names: formRow, z: 49)
-  galleryRow(names: surfaceRow, z: surfaceZ)
-  galleryRow(names: motionRow, z: 59)
-  galleryRow(names: motionRowB, z: motionZB)
+  for row in galleryRows {
+    for (name, index) in row.names {
+      placement $"{name}" {
+        prototype: name
+        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
+      }
+    }
+  }
+  // The noisy sphere over the NOISE plinth (the fold row's last exhibit): a separate creation keeps the noise off the plinth.
+  placement "shape-noise-subject" {
+    prototype: "shape-noise-subject"
+    position [(galleryX + (gallerySpacing * (length(foldRow) - 1))), galleryFloor[1], foldZ]
+  }
+  gallerySignPlacements()
 }
 
 // The gallery's motion controls. Every driver in the motion rows reads `galleryClock`, gallery seconds advancing at the
@@ -120,9 +312,10 @@ template galleryState() {
 
   table galleryInputs {
     probe = "[0.3, 1.35, 0.05]"
-    reach = $"[{reachX + 0.35}, 1.45, {motionZB - 0.25}]"
+    reach = $"[{reachX + 0.35}, {galleryFloor[3] + 1.45}, {motionZB - 0.25}]"
     tint = "#D9822B"
   }
+
 }
 
 // The one driver every motion exhibit runs on: the gallery clock times `cadence` radians a gallery second, gated on
@@ -146,20 +339,20 @@ template clockDriver(key, cadence = 1, ease = 0.3) {
 // Every shape blend: the box first, then the sphere in the accent colour blended into it, so a seam's material winner
 // shows. The intersection family's sphere is larger and nearer the box's centre, so the two overlap enough to read.
 let blendExhibits = [
-  { id: "shape-blend-union", label: "UNION", blend: "Union", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-blend-subtraction", label: "SUBTRACTION", blend: "Subtraction", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-blend-intersection", label: "INTERSECTION", blend: "Intersection", smooth: 0, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4] }
-  { id: "shape-blend-xor", label: "XOR", blend: "Xor", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-smooth-union", label: "SMOOTH UNION", blend: "SmoothUnion", smooth: 0.15, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-smooth-subtraction", label: "SMOOTH SUBTRACT", blend: "SmoothSubtraction", smooth: 0.1, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-smooth-intersection", label: "SMOOTH INTERSECT", blend: "SmoothIntersection", smooth: 0.1, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4] }
-  { id: "shape-chamfer-union", label: "CHAMFER UNION", blend: "ChamferUnion", smooth: 0.1, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-chamfer-subtraction", label: "CHAMFER SUBTRACT", blend: "ChamferSubtraction", smooth: 0.08, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-chamfer-intersection", label: "CHAMFER INTERSECT", blend: "ChamferIntersection", smooth: 0.08, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4] }
-  { id: "shape-groove-union", label: "GROOVE UNION", blend: "GrooveUnion", smooth: 0.05, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-pipe-union", label: "PIPE UNION", blend: "PipeUnion", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-groove-subtraction", label: "GROOVE SUBTRACT", blend: "GrooveSubtraction", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
-  { id: "shape-pipe-subtraction", label: "PIPE SUBTRACT", blend: "PipeSubtraction", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28] }
+  { id: "shape-blend-union", label: "UNION", blend: "Union", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface" }
+  { id: "shape-blend-subtraction", label: "SUBTRACTION", blend: "Subtraction", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp" }
+  { id: "shape-blend-intersection", label: "INTERSECTION", blend: "Intersection", smooth: 0, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4], note: "only where both overlap: a box with spherical corners, the sphere's colour on its own faces" }
+  { id: "shape-blend-xor", label: "XOR", blend: "Xor", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "either but not both: the overlap is cut away, leaving a void you can see into from the seam" }
+  { id: "shape-smooth-union", label: "SMOOTH UNION", blend: "SmoothUnion", smooth: 0.15, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step" }
+  { id: "shape-smooth-subtraction", label: "SMOOTH SUBTRACT", blend: "SmoothSubtraction", smooth: 0.1, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "the carve's rim rounded over 0.1 m into the box" }
+  { id: "shape-smooth-intersection", label: "SMOOTH INTERSECT", blend: "SmoothIntersection", smooth: 0.1, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4], note: "the intersection's edges rounded over 0.1 m" }
+  { id: "shape-chamfer-union", label: "CHAMFER UNION", blend: "ChamferUnion", smooth: 0.1, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet" }
+  { id: "shape-chamfer-subtraction", label: "CHAMFER SUBTRACT", blend: "ChamferSubtraction", smooth: 0.08, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "the carve's rim bevelled at 45 degrees" }
+  { id: "shape-chamfer-intersection", label: "CHAMFER INTERSECT", blend: "ChamferIntersection", smooth: 0.08, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4], note: "the intersection's edges bevelled at 45 degrees" }
+  { id: "shape-groove-union", label: "GROOVE UNION", blend: "GrooveUnion", smooth: 0.05, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a round groove cut along the seam curve, 0.05 m: a recessed line following the join" }
+  { id: "shape-pipe-union", label: "PIPE UNION", blend: "PipeUnion", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a round bead laid along the seam curve, 0.04 m: a raised weld following the join" }
+  { id: "shape-groove-subtraction", label: "GROOVE SUBTRACT", blend: "GrooveSubtraction", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a groove cut along the carve's rim" }
+  { id: "shape-pipe-subtraction", label: "PIPE SUBTRACT", blend: "PipeSubtraction", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a bead laid along the carve's rim" }
 ]
 
 template blendPrototypes() {
@@ -178,7 +371,7 @@ template blendPrototypes() {
           scale: entry.radius
           smooth: entry.smooth
         }
-        exhibit(label: entry.label, extra: [accent])
+        exhibit(label: entry.label, extra: [accent], note: entry.note)
       }
     }
   }
@@ -208,7 +401,7 @@ template foldPrototypes() {
         rotation [0, 0, 0.258819, 0.965926]
         scale [0.08, 0.25, 0.08]
       }
-      exhibit(label: "SYMMETRY")
+      exhibit(label: "SYMMETRY", note: "one tilted capsule mirrored across x = 0: a V, the pair exactly symmetric")
     }
   }
   prototype "shape-repeat" {
@@ -221,7 +414,7 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.1, 0.1, 0.1]
       }
-      exhibit(label: "REPEAT 5")
+      exhibit(label: "REPEAT 5", note: "one sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each")
     }
   }
   prototype "shape-repeat-grid" {
@@ -234,7 +427,7 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.07, 0.07, 0.07]
       }
-      exhibit(label: "REPEAT 3X3")
+      exhibit(label: "REPEAT 3X3", note: "one box on a 3 by 3 lattice in x and z")
     }
   }
   // Four copies: the symmetry fold keeps author +X, and the repeat lays three cells from engine x -0.375 to 0.125,
@@ -250,11 +443,12 @@ template foldPrototypes() {
         position [0.125, 1.2, 0]
         scale [0.09, 0.09, 0.09]
       }
-      exhibit(label: "REPEAT EVEN")
+      exhibit(label: "REPEAT EVEN", note: "an even count from a symmetry over an odd repeat: four spheres, the middle gap closed")
     }
   }
   // An unbounded lattice clipped by an intersection: the creation-wide scope keeps the clip off every other placement.
-  // The sphere sits in the lattice's central cell, at the creation origin; a shape authored off it is never reached.
+  // The sphere sits in the lattice's central cell, at the creation origin; a shape authored off it is never reached. The
+  // clip box's faces lie on cell walls (0.09 + 0.18k), so it cuts no bead and leaves no sliver for the bake to fold.
   prototype "shape-repeat-clipped" {
     document {
       shape Sphere "lattice" {
@@ -265,13 +459,13 @@ template foldPrototypes() {
         position [0, 0, 0]
         scale [0.06, 0.06, 0.06]
       }
-      shape Sphere "clip" {
+      shape Box "clip" {
         blend: Intersection
         material: exhibitMaterial
-        position [0, 1.2, 0]
+        position [0, 1.26, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "REPEAT CLIPPED")
+      exhibit(label: "REPEAT CLIPPED", note: "an unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut")
     }
   }
   prototype "shape-polar-mirror" {
@@ -285,7 +479,7 @@ template foldPrototypes() {
         rotation [0, 0, 0.258819, 0.965926]
         scale [0.05, 0.25, 0.1]
       }
-      exhibit(label: "POLAR MIRROR")
+      exhibit(label: "POLAR MIRROR", note: "five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls")
     }
   }
   prototype "shape-polar-z" {
@@ -298,7 +492,7 @@ template foldPrototypes() {
         position [0, 1.5, 0]
         scale [0.04, 0.12, 0.04]
       }
-      exhibit(label: "POLAR Z")
+      exhibit(label: "POLAR Z", note: "eight copies about z through an origin above the plinth: a wheel facing you")
     }
   }
   prototype "shape-polar-stride" {
@@ -311,7 +505,7 @@ template foldPrototypes() {
         position [0, 1.2, 0.32]
         scale [0.12, 0.12, 0.12]
       }
-      exhibit(label: "POLAR STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }, { color: "#C23B3B", roughness: 0.45 }, { color: "#8E5BD9", roughness: 0.45 }, { color: "#E3C547", roughness: 0.45 }])
+      exhibit(label: "POLAR STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }, { color: "#C23B3B", roughness: 0.45 }, { color: "#8E5BD9", roughness: 0.45 }, { color: "#E3C547", roughness: 0.45 }], note: "six sectors, each striding the palette one row: six colours, one sphere")
     }
   }
   // Each wallpaper tile sits inside its group's fundamental region of the cell (`SdfWallpaperFold.Fold`), in the
@@ -328,7 +522,7 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.07, 0.03, 0.02]
       }
-      exhibit(label: "WALLPAPER PMM")
+      exhibit(label: "WALLPAPER PMM", note: "a tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images")
     }
   }
   prototype "shape-wallpaper-p4m" {
@@ -342,10 +536,12 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.07, 0.03, 0.02]
       }
-      exhibit(label: "WALLPAPER P4M")
+      exhibit(label: "WALLPAPER P4M", note: "square symmetry with mirrors through the 4-fold centres: eight images per cell")
     }
   }
-  // A hex group carries no limit: an intersection inside the creation-wide scope bounds the lattice.
+  // A hex group carries no limit: an intersection inside the creation-wide scope bounds the lattice. The clip is a
+  // pointy-top hexagonal prism of inradius 0.45 stood upright, its flat faces 1.5 cells out on the lattice's mirror
+  // planes, so every cut face is a tile's own flat section rather than a sliver a cell thin.
   prototype "shape-wallpaper-p3m1" {
     document {
       shape Box "subject" {
@@ -357,13 +553,18 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.06, 0.03, 0.02]
       }
-      shape Cylinder "clip" {
+      shape Prism "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.5, 0.1, 0.5]
+        rotation [0.707107, 0, 0, 0.707107]
+        profile {
+          kind: "Convex"
+          vertices: galleryHexClip
+        }
+        scale [1, 1, 0.1]
       }
-      exhibit(label: "WALLPAPER P3M1")
+      exhibit(label: "WALLPAPER P3M1", note: "a hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases")
     }
   }
   prototype "shape-wallpaper-p6m" {
@@ -377,13 +578,18 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.06, 0.03, 0.02]
       }
-      shape Cylinder "clip" {
+      shape Prism "clip" {
         blend: Intersection
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.5, 0.1, 0.5]
+        rotation [0.707107, 0, 0, 0.707107]
+        profile {
+          kind: "Convex"
+          vertices: galleryHexClip
+        }
+        scale [1, 1, 0.1]
       }
-      exhibit(label: "WALLPAPER P6M")
+      exhibit(label: "WALLPAPER P6M", note: "the richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly")
     }
   }
   prototype "shape-wallpaper-stride" {
@@ -396,7 +602,7 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.13, 0.04, 0.13]
       }
-      exhibit(label: "WALLPAPER STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }])
+      exhibit(label: "WALLPAPER STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }], note: "p4m with a material stride: cells alternate colour by parity, a checkerboard")
     }
   }
   // A static placement supplies no render lanes, so the lane reads zero: halfway through this from/to window.
@@ -413,23 +619,32 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "ERODE")
+      exhibit(label: "ERODE", note: "a lane erodes the sphere, here halfway through")
     }
   }
-  // Creation noise displaces the whole creation's field, the plinth and its label included.
+  // Creation noise displaces every shape and text run of the creation it sits in, with no per-shape or per-group
+  // scope, so the plinth and label stay clean by living in a second prototype: "shape-noise" is the bare exhibit
+  // (plinth, label and plaque) and "shape-noise-subject" the noisy sphere, placed at the same spot by galleryPlacements().
   prototype "shape-noise" {
     document {
+      exhibit(label: "NOISE", note: "fBm noise lumps the sphere; the plinth stays clean")
+    }
+  }
+  prototype "shape-noise-subject" {
+    document {
+      name: "shape-noise-subject"
+      schema: "puck.creation.v1"
+      palette: galleryPalette
       noise {
-        frequency: 5
-        amplitude: 0.025
+        frequency: 4
+        amplitude: 0.12
         seed: 11
       }
       shape Sphere "subject" {
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.45, 0.45, 0.45]
+        scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "NOISE")
     }
   }
 }
@@ -742,8 +957,9 @@ template formPrototypes() {
 }
 
 // The static paint's world-space plane: a static placement shares one palette and draws an unparented paint in world
-// space, so the stripe names its own exhibit's place in the surface row (index 12).
+// space, so the stripe names its own exhibit's place in the surface row (index 12, on level 2).
 let paintX = (galleryX + (gallerySpacing * 12))
+let paintY = (galleryFloor[2] + 1.2)
 
 // Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
 // colour, each on slot 3.
@@ -786,7 +1002,7 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "EMISSIVE", extra: [{ color: "#FFB347", emissive: 3 }])
+      exhibit(label: "EMISSIVE", extra: [{ color: "#FFB347", emissive: 300 }])
     }
   }
   prototype "shape-wrap-soften" {
@@ -907,7 +1123,7 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, 1.2, surfaceZ], rotation [0, 0, 0.258819, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
+      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, paintY, surfaceZ], rotation [0, 0, 0.258819, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
     }
   }
   prototype "shape-text-engrave" {
@@ -954,7 +1170,7 @@ template surfacePrototypes() {
           speed: 1.2
           seed: 7
           steps: 40
-          intensity: 30
+          intensity: 3000
           pulseAmplitude: 0.2
           pulseFrequency: 3
           ramp [
@@ -1011,6 +1227,50 @@ template surfacePrototypes() {
         scale [0.45, 0.45, 0.45]
       }
       exhibit(label: "STATE COLOR", extra: [{ color: "state.galleryInputs.tint", roughness: 0.45, specular: 0.3 }])
+    }
+  }
+  // Glass: slot 4 an orange acrylic whose colour is reached 12 cm in, so the box holding the sphere reads clear orange
+  // and deepest through its middle; slot 5 one window glass twice, as an 8 mm pane and a 6 cm block, which the same
+  // depth tints faintly and deeply; slot 6 a frosted pane. Glass slots bake and draw apart from the opaque shapes: the
+  // sphere and rods are ordinary shapes seen through them, shifted by the refraction and blurred by the frost.
+  prototype "shape-glass" {
+    document {
+      shape Sphere "core" {
+        material: accentMaterial
+        position [-0.38, 1.2, 0]
+        scale [0.1, 0.1, 0.1]
+      }
+      shape Cylinder "rod" {
+        material: accentMaterial
+        position [0.2, 1.2, 0.14]
+        scale [0.015, 0.3, 0.015]
+      }
+      shape Cylinder "frost-rod" {
+        material: accentMaterial
+        position [0.46, 1.2, 0.1]
+        scale [0.015, 0.3, 0.015]
+      }
+      shape Box "shell" {
+        material: 4
+        position [-0.38, 1.2, 0]
+        scale [0.18, 0.18, 0.18]
+      }
+      shape Box "thin" {
+        material: 5
+        position [-0.05, 1.2, 0]
+        scale [0.1, 0.22, 0.004]
+      }
+      shape Box "thick" {
+        material: 5
+        position [0.2, 1.2, 0]
+        scale [0.08, 0.22, 0.03]
+      }
+      shape Box "frost" {
+        material: 6
+        position [0.46, 1.2, 0]
+        scale [0.1, 0.22, 0.004]
+      }
+      exhibit(label: "GLASS", extra: [accent, { color: "#F58220", roughness: 0.05, glass { depth: 0.12, ior: 1.49 } }, { color: "#C8F0DC", roughness: 0, glass { depth: 0.01, ior: 1.5 } }, { color: "#F0F0F0", roughness: 0.7, glass { depth: 0.01, ior: 1.5 } }], note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods.")
     }
   }
 }
@@ -1458,7 +1718,7 @@ template motionPrototypesB() {
           speed: 1.2
           seed: 7
           steps: 40
-          intensity: 30
+          intensity: 3000
           ramp [
             {
               density: 0
@@ -2121,7 +2381,7 @@ template galleryPrototypes() {
           radiusEnd: 0.08
         }
       }
-      exhibit(label: "SWEEP")
+      exhibit(label: "SWEEP", note: "a tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable")
     }
   }
   prototype "shape-sweep-tapered" {
@@ -2138,7 +2398,7 @@ template galleryPrototypes() {
           bulge: 0.06
         }
       }
-      exhibit(label: "SWEEP TAPER")
+      exhibit(label: "SWEEP TAPER", note: "the radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch")
     }
   }
   prototype "shape-sweep-strands" {
@@ -2157,7 +2417,7 @@ template galleryPrototypes() {
           twist: 1.5
         }
       }
-      exhibit(label: "SWEEP STRANDS")
+      exhibit(label: "SWEEP STRANDS", note: "three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced")
     }
   }
   prototype "shape-rounding" {
@@ -2168,7 +2428,7 @@ template galleryPrototypes() {
         rounding: 0.12
         scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "ROUNDING")
+      exhibit(label: "ROUNDING", note: "a cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact")
     }
   }
   prototype "shape-chamfer" {
@@ -2179,7 +2439,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "CHAMFER")
+      exhibit(label: "CHAMFER", note: "a box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round")
     }
   }
   prototype "shape-onion" {
@@ -2196,7 +2456,7 @@ template galleryPrototypes() {
         position [0, 1.45, 0.35]
         scale [0.35, 0.3, 0.35]
       }
-      exhibit(label: "ONION")
+      exhibit(label: "ONION", note: "a 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even")
     }
   }
   prototype "shape-dilate" {
@@ -2207,7 +2467,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.3, 0.3, 0.3]
       }
-      exhibit(label: "DILATE")
+      exhibit(label: "DILATE", note: "a 0.3 box inflated by 0.1: rounded by the inflation, 0.4 across, no creases")
     }
   }
   prototype "shape-flare" {
@@ -2225,7 +2485,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.25, 0.5, 0.25]
       }
-      exhibit(label: "FLARE")
+      exhibit(label: "FLARE", note: "a cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here")
     }
   }
   prototype "shape-shear" {
@@ -2241,7 +2501,7 @@ template galleryPrototypes() {
           driver: 1
         }
       }
-      exhibit(label: "SHEAR")
+      exhibit(label: "SHEAR", note: "a box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z")
     }
   }
   prototype "shape-bumps" {
@@ -2263,7 +2523,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "BUMPS")
+      exhibit(label: "BUMPS", note: "two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring")
     }
   }
   prototype "shape-cells-f1" {
@@ -2280,7 +2540,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "CELLS F1")
+      exhibit(label: "CELLS F1", note: "worley F1 relief, amplitude 0.18: raised cells with creased walls, like chitin")
     }
   }
   prototype "shape-cells-f2" {
@@ -2297,7 +2557,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "CELLS F2 F1")
+      exhibit(label: "CELLS F2 F1", note: "F2 minus F1 relief: ridges along the cell walls, hollows at their centres")
     }
   }
   prototype "shape-polar-fold" {
@@ -2310,7 +2570,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0.35]
         scale [0.1, 0.3, 0.06]
       }
-      exhibit(label: "POLAR FOLD")
+      exhibit(label: "POLAR FOLD", note: "one box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors")
     }
   }
 
@@ -2320,4 +2580,170 @@ template galleryPrototypes() {
   surfacePrototypes()
   motionPrototypes()
   motionPrototypesB()
+  warpPrototypes()
+  signPrototypes()
+}
+
+// Warps II: the ISA ops no earlier row reaches. A domain warp and a sine relief, an elongation, the two lattices with
+// no finite copy set (a jittered repeat and a log-spherical Droste fold, each clipped by an intersection inside the
+// creation scope) and the two pop-only blends, which compose through a scope the shape opens for itself.
+template warpPrototypes() {
+  prototype "shape-warp" {
+    document {
+      shape Sphere "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.42, 0.42, 0.42]
+        warp {
+          frequency [9, 7, 11]
+          amplitude: 0.04
+        }
+      }
+      exhibit(label: "DOMAIN WARP", note: "a sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases")
+    }
+  }
+  prototype "shape-displace" {
+    document {
+      shape Box "subject" {
+        displace {
+          frequency [26, 26, 26]
+          amplitude: 0.022
+        }
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.36, 0.36, 0.36]
+      }
+      exhibit(label: "SINE RELIEF", note: "a box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face")
+    }
+  }
+  prototype "shape-elongate" {
+    document {
+      shape Sphere "subject" {
+        elongate [0.28, 0, 0.12]
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.16, 0.16, 0.16]
+      }
+      exhibit(label: "ELONGATE", note: "a sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere")
+    }
+  }
+  // A jittered lattice of spheres, each cell's copy displaced and recoloured by its hash, clipped by a box whose faces
+  // lie on cell walls, so no copy is cut into a sliver; the tumbled boxes' lattice (spacing 0.2) is clipped the same way.
+  prototype "shape-jitter" {
+    document {
+      shape Sphere "lattice" {
+        domain [
+          jitter(spacing: [0.18, 0.18, 0.18], amount: 0.06, seed: 7, materialVariants: 3)
+        ]
+        material: accentMaterial
+        position [0, 0, 0]
+        scale [0.045, 0.045, 0.045]
+      }
+      shape Box "clip" {
+        blend: Intersection
+        material: exhibitMaterial
+        position [0, 1.26, 0]
+        scale [0.45, 0.45, 0.45]
+      }
+      exhibit(label: "JITTER", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }], note: "a repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall")
+    }
+  }
+  prototype "shape-jitter-tumble" {
+    document {
+      shape Box "lattice" {
+        domain [
+          jitter(spacing: [0.2, 0.2, 0.2], amount: 0.05, seed: 19, tumble: 1, flavor: Blue, materialVariants: 2)
+        ]
+        material: accentMaterial
+        position [0, 0, 0]
+        scale [0.035, 0.035, 0.035]
+      }
+      shape Box "clip" {
+        blend: Intersection
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "JITTER TUMBLE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }], note: "boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped")
+    }
+  }
+  // A Droste fold: a sphere nine-tenths of a metre from the fold's centre repeats inward as halving copies, each shell
+  // turned a little further, clipped to the inner half metre so the zoom reads.
+  prototype "shape-log-sphere" {
+    document {
+      shape Sphere "shell" {
+        domain [
+          logSphere(shellRatio: 2, twist: 0.6, origin: [0, 1.2, 0])
+        ]
+        material: accentMaterial
+        position [0.9, 1.2, 0]
+        scale [0.07, 0.07, 0.07]
+      }
+      shape Sphere "clip" {
+        blend: Intersection
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "LOG SPHERE", extra: [accent], note: "self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward")
+    }
+  }
+  prototype "shape-stairs-union" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.32, 0.32, 0.32]
+      }
+      shape Sphere "tool" {
+        blend: StairsUnion
+        material: accentMaterial
+        position [0.22, 1.42, 0.16]
+        scale [0.28, 0.28, 0.28]
+        smooth: 0.2
+        steps: 4
+      }
+      exhibit(label: "STAIRS UNION", extra: [accent], note: "a union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet")
+    }
+  }
+  prototype "shape-stairs-subtraction" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.32, 0.32, 0.32]
+      }
+      shape Sphere "tool" {
+        blend: StairsSubtraction
+        material: accentMaterial
+        position [0.22, 1.42, 0.16]
+        scale [0.28, 0.28, 0.28]
+        smooth: 0.15
+        steps: 3
+      }
+      exhibit(label: "STAIRS SUBTRACT", extra: [accent], note: "a carve whose rim steps three times over 0.15 m: terraces into the cut")
+    }
+  }
+  // A static placement reads lane 0, halfway through the morph's -1..1 window: the box and the sphere at equal weight.
+  prototype "shape-morph" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.34, 0.34, 0.34]
+      }
+      shape Sphere "tool" {
+        blend: Morph
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.42, 0.42, 0.42]
+        morph {
+          lane: 0
+          from: -1
+          to: 1
+        }
+      }
+      exhibit(label: "MORPH", extra: [accent], note: "the box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge")
+    }
+  }
 }

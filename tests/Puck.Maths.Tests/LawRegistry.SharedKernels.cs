@@ -13,12 +13,6 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.3,
         NeighborhoodFraction: 0.3
     );
-    private static readonly Domain FloatProjection = new(
-        Key: "float-projection",
-        Block: 512,
-        EdgeFraction: 0.4,
-        NeighborhoodFraction: 0.3
-    );
     private static readonly Domain PlaneDoors = new(
         Key: "plane-doors-and-clamp",
         Block: 512,
@@ -173,21 +167,16 @@ internal static partial class LawRegistry {
             id: "scalar.wrap-angle-residue-and-range",
             width: 1
         ),
-        SweptCase(
-            claim: (left, right) => SharedKernelClaims.WrapAngleResidueAndRange(
-                deep: true,
-                left: left,
-                right: right
-            ),
-            domain: AngleWrap,
+        Case(
             id: "deep.scalar-wrap-angle-residue-and-range",
-            width: 1
-        ),
-        SweptCase(
-            claim: SharedKernelClaims.FloatProjectionThroughDouble,
-            domain: FloatProjection,
-            id: "scalar.float-projection-through-double",
-            width: 1
+            run: () => {
+                const string Id = "deep.scalar-wrap-angle-residue-and-range";
+                // The complete band is independent of the sampled operands. Check it once, preserving every
+                // Deep sample as well, instead of repeating the same band for each sample.
+                Laws.Claim(lawId: Id, claim: () => SharedKernelClaims.WrapAngleResidueAndRange(deep: true, left: [0L], right: [0L]));
+                Laws.SweptClaim(lawId: Id, domain: AngleWrap, tier: Tier.Deep, width: 1,
+                    claim: (left, right) => SharedKernelClaims.WrapAngleResidueAndRange(deep: false, left: left, right: right));
+            }
         ),
         SweptCase(
             claim: SharedKernelClaims.PlaneDoorsAndClamp,

@@ -1321,8 +1321,8 @@ internal static partial class LawRegistry {
             id: "quaternion.exp-log-seam"
         ),
 
-        // These two cases are SinCosRaw's full-width gate, and the coverage manifest credits FixedQ4816.SinCosRaw to
-        // both, so the ratchet notices if either disappears. The reference is Oracles.EncloseSinCos carried past the
+        // These two cases are SinCosRaw's full-width gate, and the law declaration binds FixedQ4816.SinCosRaw to
+        // both, so both bindings remain explicit. The reference is Oracles.EncloseSinCos carried past the
         // signed carrier by the
         // angle-addition identity, with the envelope derived from |c - 2^64/2pi| <= 1/2 rather than fitted to what the
         // subject happens to do. Proved by masking the top angle bit — the exact defect the member exists to avoid —

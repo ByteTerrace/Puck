@@ -537,6 +537,71 @@ public sealed partial class SdfProgramBuilder {
             round: round,
             shapeName: "screen-slab"
         );
+        AddScreenSurface(
+            halfHeight: halfExtents.Y,
+            halfWidth: halfExtents.X,
+            screenIndex: screenIndex,
+            worldOrigin: worldOrigin,
+            worldRight: worldRight,
+            worldUp: worldUp
+        );
+
+        // The screen-instance sentinel: ScreenMaterialId flags "screen shading" (as the flat-material overload), the
+        // +1+screenIndex offset tells the shader WHICH declared surface (and thus which screen source) a hit belongs
+        // to — decoded back by subtracting the same offset (KEEP IN SYNC with shade/sdf-environment.hlsli's screen shading).
+        return Shape(
+            blend: blend,
+            dimensions: new Vector4(
+                value: halfExtents,
+                w: round
+            ),
+            material: ((ScreenMaterialId + 1) + screenIndex),
+            shape: SdfShapeType.ScreenSlab,
+            smooth: smooth
+        );
+    }
+    /// <summary>Declares a screen surface with no slab of its own: a shape elsewhere in the program names the surface's
+    /// screen material (<see cref="ScreenMaterialId"/> + 1 + <paramref name="screenIndex"/>), such as a box a body
+    /// carries on a dynamic transform, and the renderer re-poses the surface's frame every frame through its
+    /// screen-surface transform seam (<c>Puck.SdfVm.ISdfFrameSource.ScreenSurfaceTransforms</c>). The frame given here
+    /// is the baseline the program packs.</summary>
+    /// <param name="worldOrigin">The face's world-space center.</param>
+    /// <param name="worldRight">The unit world-space axis the UV's U increases along.</param>
+    /// <param name="worldUp">The unit world-space axis the UV's V increases against — V = 0 at the top.</param>
+    /// <param name="halfWidth">The face's half-width, in world units.</param>
+    /// <param name="halfHeight">The face's half-height, in world units.</param>
+    /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A half-extent is not positive and finite, or the frame or index is
+    /// refused as <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/> refuses
+    /// it.</exception>
+    public SdfProgramBuilder ScreenSurface(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int screenIndex) {
+        if (
+            !float.IsFinite(f: halfWidth) ||
+            !float.IsFinite(f: halfHeight) ||
+            !(halfWidth > 0f) ||
+            !(halfHeight > 0f)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(halfWidth),
+                message: $"A screen surface's half-width and half-height must be positive and finite; got {halfWidth} and {halfHeight}."
+            );
+        }
+
+        AddScreenSurface(
+            halfHeight: halfHeight,
+            halfWidth: halfWidth,
+            screenIndex: screenIndex,
+            worldOrigin: worldOrigin,
+            worldRight: worldRight,
+            worldUp: worldUp
+        );
+
+        return this;
+    }
+    // The surface half of a sampled screen: its frame, refused unless finite, unit-normalizable and orthogonal, and its
+    // index, refused outside the screen table or past its capacity.
+    private void AddScreenSurface(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int screenIndex) {
         RequireFinite(
             value: worldOrigin,
             paramName: nameof(worldOrigin),
@@ -580,27 +645,13 @@ public sealed partial class SdfProgramBuilder {
         }
 
         m_screenSurfaces.Add(item: new SdfScreenSurface(
-            HalfHeight: halfExtents.Y,
-            HalfWidth: halfExtents.X,
+            HalfHeight: halfHeight,
+            HalfWidth: halfWidth,
             Origin: worldOrigin,
             Right: Vector3.Normalize(value: worldRight),
             ScreenIndex: screenIndex,
             Up: Vector3.Normalize(value: worldUp)
         ));
-
-        // The screen-instance sentinel: ScreenMaterialId flags "screen shading" (as the flat-material overload), the
-        // +1+screenIndex offset tells the shader WHICH declared surface (and thus which screen source) a hit belongs
-        // to — decoded back by subtracting the same offset (KEEP IN SYNC with shade/sdf-environment.hlsli's screen shading).
-        return Shape(
-            blend: blend,
-            dimensions: new Vector4(
-                value: halfExtents,
-                w: round
-            ),
-            material: ((ScreenMaterialId + 1) + screenIndex),
-            shape: SdfShapeType.ScreenSlab,
-            smooth: smooth
-        );
     }
     /// <summary>Adds a <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>
     /// screen slab that derives the screen's world-space right/up axes from the slab's static orientation.</summary>

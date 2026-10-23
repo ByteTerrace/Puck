@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -19,22 +18,17 @@ internal static unsafe class Win32D3D11 {
     public static void CreateMultithreadedDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE driverType, D3D11_CREATE_DEVICE_FLAG flags, out ID3D11Device* device, out ID3D11DeviceContext* context) {
         ID3D11Device* createdDevice;
         ID3D11DeviceContext* createdContext;
-        D3D_FEATURE_LEVEL granted;
         ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
-        // Software is the NULL HMODULE (no software rasterizer); the generated wrapper wants a non-null SafeHandle.
-        using var noSoftwareModule = new SafeFileHandle(
-            ownsHandle: false,
-            preexistingHandle: 0
-        );
 
+        // Software is the NULL HMODULE: no software rasterizer.
         ThrowIfFailed(
             hr: PInvoke.D3D11CreateDevice(
                 DriverType: driverType,
                 Flags: flags,
                 SDKVersion: PInvoke.D3D11_SDK_VERSION,
-                Software: noSoftwareModule,
+                Software: HMODULE.Null,
                 pAdapter: adapter,
-                pFeatureLevel: &granted,
+                pFeatureLevel: out _,
                 pFeatureLevels: levels,
                 ppDevice: &createdDevice,
                 ppImmediateContext: &createdContext
@@ -43,16 +37,11 @@ internal static unsafe class Win32D3D11 {
         );
 
         try {
-            var multithreadIid = ID3D10Multithread.IID_Guid;
-
             ThrowIfFailed(
-                hr: ((IUnknown*)createdDevice)->QueryInterface(
-                    ppvObject: out var multithread,
-                    riid: in multithreadIid
-                ),
+                hr: ((IUnknown*)createdDevice)->QueryInterface<ID3D10Multithread>(ppvObject: out var multithread),
                 operation: "QueryInterface(ID3D10Multithread)"
             );
-            _ = ((ID3D10Multithread*)multithread)->SetMultithreadProtected(bMTProtect: true);
+            _ = multithread->SetMultithreadProtected(bMTProtect: true);
             _ = ((IUnknown*)multithread)->Release();
         } catch {
             _ = ((IUnknown*)createdContext)->Release();
@@ -76,14 +65,9 @@ internal static unsafe class Win32D3D11 {
     // shared textures can be opened by a render device on the same adapter.
     public static IDXGIAdapter1* FindAdapterByLuid(long adapterLuid) {
         ThrowIfFailed(
-            hr: PInvoke.CreateDXGIFactory1(
-                ppFactory: out var factoryPointer,
-                riid: IDXGIFactory1.IID_Guid
-            ),
+            hr: PInvoke.CreateDXGIFactory1<IDXGIFactory1>(ppFactory: out var factory),
             operation: "CreateDXGIFactory1"
         );
-
-        var factory = ((IDXGIFactory1*)factoryPointer);
 
         try {
             for (var index = 0u; ; index++) {

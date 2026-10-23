@@ -55,7 +55,7 @@ public sealed class RuleLatch {
 
     private ulong m_sweep;
 
-    private readonly List<KeyValuePair<LatchKey, bool>> m_hashScratch = [];
+    private readonly List<HashEntry> m_hashScratch = [];
 
     /// <summary>Gets how many bound entries the latch holds across every rule.</summary>
     public int Count {
@@ -83,10 +83,14 @@ public sealed class RuleLatch {
     }
 
     /// <summary>Folds the latch into a state hash, in compiled order with bindings sorted, so two hosts holding the
-    /// same latch hash the same regardless of insertion order.</summary>
+    /// same latch hash the same regardless of insertion order. A key-bound entry folds its key's name, never its
+    /// interned ordinal: an ordinal is arena layout, and a restored arena interns the same names in another order.</summary>
     /// <param name="hash">The running hash.</param>
     /// <param name="compiled">The family's compiled rules.</param>
-    public void AppendStateHash(ref Fnv1aHash hash, CompiledRule[] compiled) {
+    /// <param name="keyNames">The arena's interned key names by ordinal, for a family whose bindings are iteration keys
+    /// (<see cref="LatchKey.Left"/> an interned ordinal); <see langword="null"/> for a family bound to participant
+    /// indices, which are simulation identities and fold as themselves.</param>
+    public void AppendStateHash(ref Fnv1aHash hash, CompiledRule[] compiled, IReadOnlyList<CellName>? keyNames = null) {
         ArgumentNullException.ThrowIfNull(argument: compiled);
 
         hash.Add(value: ((uint)compiled.Length));
@@ -104,38 +108,54 @@ public sealed class RuleLatch {
             }
 
             m_hashScratch.Clear();
-            foreach (var pair in bindings) {
-                m_hashScratch.Add(item: pair);
+            foreach (var (binding, held) in bindings) {
+                m_hashScratch.Add(item: new HashEntry(
+                    Binding: binding,
+                    Held: held,
+                    Left: LeftIdentity(
+                        binding: binding,
+                        keyNames: keyNames
+                    )
+                ));
             }
 
             var ordered = CollectionsMarshal.AsSpan(list: m_hashScratch);
 
             ordered.Sort(comparison: static (left, right) => {
-                var result = left.Key.Left.CompareTo(value: right.Key.Left);
+                var result = left.Left.CompareTo(value: right.Left);
 
                 if (result != 0) {
                     return result;
                 }
-                result = left.Key.Right.CompareTo(value: right.Key.Right);
+                result = left.Binding.Right.CompareTo(value: right.Binding.Right);
                 if (result != 0) {
                     return result;
                 }
-                result = left.Key.LeftGeneration.CompareTo(value: right.Key.LeftGeneration);
-                return ((result != 0) ? result : left.Key.RightGeneration.CompareTo(value: right.Key.RightGeneration));
+                result = left.Binding.LeftGeneration.CompareTo(value: right.Binding.LeftGeneration);
+                return ((result != 0) ? result : left.Binding.RightGeneration.CompareTo(value: right.Binding.RightGeneration));
             });
             hash.Add(value: ((uint)ordered.Length));
 
-            foreach (var (binding, held) in ordered) {
-                hash.Add(value: binding.Left);
-                hash.Add(value: binding.Right);
-                hash.Add(value: binding.LeftGeneration);
-                hash.Add(value: binding.RightGeneration);
-                hash.Add(value: ((byte)(held
+            foreach (var entry in ordered) {
+                hash.Add(value: entry.Left);
+                hash.Add(value: entry.Binding.Right);
+                hash.Add(value: entry.Binding.LeftGeneration);
+                hash.Add(value: entry.Binding.RightGeneration);
+                hash.Add(value: ((byte)(entry.Held
                     ? 1
                     : 0)));
             }
         }
     }
+    // The layout-free identity of a binding's left side: the key name's own digest for a key-bound entry, the index
+    // itself for a participant or an unbound (-1) entry.
+    private static ulong LeftIdentity(LatchKey binding, IReadOnlyList<CellName>? keyNames) => (
+        ((keyNames is not null) && (binding.Left >= 0) && (binding.Left < keyNames.Count))
+            ? Fnv1aHash.Compute(values: keyNames[binding.Left].Value.AsSpan())
+            : unchecked((ulong)((long)binding.Left))
+    );
+
+    private readonly record struct HashEntry(LatchKey Binding, bool Held, ulong Left);
     /// <summary>Opens a sweep over one rule's bindings; entries the sweep does not <see cref="Touch"/> are closed by
     /// <see cref="EndSweep(Dictionary{LatchKey, bool})"/>.</summary>
     public void BeginSweep() => m_sweep++;

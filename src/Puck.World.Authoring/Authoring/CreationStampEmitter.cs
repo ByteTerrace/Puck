@@ -233,6 +233,15 @@ public static class CreationStampEmitter {
                 );
             }
 
+            // The warp and the elongation read creation units like the rest of this chain (KEEP IN SYNC with
+            // WorldStampPool.EmitShape, whose chain without a Scale op converts them by hand).
+            if (shape.Warp is { } warp) {
+                sheared = sheared.DomainWarp(amplitude: warp.Amplitude, frequency: warp.Frequency);
+            }
+            if (shape.Elongate is { } elongate) {
+                sheared = sheared.Elongate(extents: elongate);
+            }
+
             return sheared;
         }
 
@@ -289,22 +298,32 @@ public static class CreationStampEmitter {
             // Lipschitz factor would fold into the whole program's step scale. A primitive never does — every one is
             // 1-Lipschitz, a non-uniformly scaled sphere or ellipsoid included (the exact exponent-2 superellipsoid
             // gauge), so no primitive opens a scope for its shape alone.
+            // A pop-only blend (morph, stairs) composes at a scope's pop alone, so its shape opens its own scope even
+            // inside the creation's.
             var ownScope = (
-                !inScope &&
-                (wantsDilate || wantsOnion || (panel is not null) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null))
+                (!inScope &&
+                (wantsDilate || wantsOnion || (panel is not null) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null))) ||
+                ShapeScope.IsPopOnly(blend: blend)
             );
 
             if (ownScope) {
                 var scoped = AppendPrimitive(
-                    chain: ApplyErode(target: chain.PushField(
-                        compose: blend,
-                        smooth: smooth
+                    chain: ApplyErode(target: ShapeScope.Open(
+                        blend: blend,
+                        chain: chain,
+                        morph: shape.Morph,
+                        smooth: smooth,
+                        steps: shape.Steps
                     )),
                     shape: shape,
                     scale: shapeScale,
                     material: material,
                     detail: (shape.Detail ?? false)
                 );
+
+                if (shape.Displace is not null) {
+                    EmitDisplace(builder: builder, frame: in frame, shape: shape, stampScale: stampScale);
+                }
 
                 if (wantsDilate) {
                     scoped = scoped.Dilate(radius: dilate);
@@ -329,24 +348,7 @@ public static class CreationStampEmitter {
                 if (shape.Cells is { } cells) {
                     // Relief samples the shape's rigid frame, independently of the primitive's residual
                     // scale or panel offset. Frequency and amplitude convert inversely, preserving its bound.
-                    // A mirrored copy samples the relief through the stamp's reflection, like the shape it rides.
-                    var cellOrigin = builder.ResetPoint()
-                        .Translate(offset: StampedPosition(
-                        frame: frame,
-                        local: MirroredShapePosition(
-                            frame: frame,
-                            shape: shape
-                        )
-                    ).ToVector3());
-                    var cellChain = ((frame.ReflectionAlignment is { } alignment)
-                        ? Reflect(
-                            alignment: alignment,
-                            chain: cellOrigin.Rotate(rotation: frame.Rotation)
-                        ).Rotate(rotation: shape.Rotation)
-                        : cellOrigin.Rotate(rotation: (frame.Rotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize())
-                    );
-
-                    _ = cellChain
+                    _ = ReliefChain(builder: builder, frame: in frame, shape: shape)
                         .CellDisplace(
                         (cells.Frequency / stampScale),
                         (cells.Amplitude * stampScale),
@@ -370,6 +372,10 @@ public static class CreationStampEmitter {
                 detail: (shape.Detail ?? false)
             );
 
+            if (shape.Displace is not null) {
+                EmitDisplace(builder: builder, frame: in frame, shape: shape, stampScale: stampScale);
+            }
+
             if (wantsDilate) {
                 afterShape = afterShape.Dilate(radius: dilate);
             }
@@ -392,6 +398,34 @@ public static class CreationStampEmitter {
             shape: shape,
             shapeScale: shapeScale
         );
+    }
+    // A relief's own chain: the shape's rigid frame under the stamp, in world units, independently of the primitive's
+    // residual scale or panel offset. A mirrored copy samples the relief through the stamp's reflection, like the shape
+    // it rides.
+    private static SdfProgramBuilder ReliefChain(SdfProgramBuilder builder, in StampFrame frame, ShapeDocument shape) {
+        var origin = builder.ResetPoint()
+            .Translate(offset: StampedPosition(
+            frame: frame,
+            local: MirroredShapePosition(
+                frame: frame,
+                shape: shape
+            )
+        ).ToVector3());
+
+        return ((frame.ReflectionAlignment is { } alignment)
+            ? Reflect(
+                alignment: alignment,
+                chain: origin.Rotate(rotation: frame.Rotation)
+            ).Rotate(rotation: shape.Rotation)
+            : origin.Rotate(rotation: (frame.Rotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize()));
+    }
+    // The sine relief on the shape's rigid frame (KEEP IN SYNC with WorldStampPool.EmitShape's relief): frequency and
+    // amplitude convert inversely with the stamp scale, like a cellular relief's.
+    private static void EmitDisplace(SdfProgramBuilder builder, in StampFrame frame, ShapeDocument shape, float stampScale) {
+        var displace = shape.Displace!;
+
+        _ = ReliefChain(builder: builder, frame: in frame, shape: shape)
+            .Displace(amplitude: (displace.Amplitude * stampScale), frequency: (displace.Frequency.Value / stampScale));
     }
     // A primitive dilated by its contact margin inside the field scope the caller just opened, so the dilation applies
     // before the authored blend; pops that scope.
@@ -1090,7 +1124,7 @@ public static class CreationStampEmitter {
             ) ?? 0f)),
             shape.Flare,
             shape.Shear,
-            ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
+            ShapeWarpReach.PointReach(shape: shape)
         );
 
         // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged beside the
@@ -1401,7 +1435,7 @@ public static class CreationStampEmitter {
             ) ?? 0f)),
             shape.Flare,
             shape.Shear,
-            ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
+            ShapeWarpReach.PointReach(shape: shape)
         );
 
         return (

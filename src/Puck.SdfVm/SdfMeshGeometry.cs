@@ -49,6 +49,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private const float OtherSlot = -2f;
 
     private readonly XxHash128 m_hash = new();
+    // Everything m_hash takes but the poses of other slots and the steps they round to.
+    private readonly XxHash128 m_form = new();
     private readonly List<int> m_materials = [];
     private readonly SortedDictionary<int, DynamicTransform> m_poses = [];
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
@@ -90,6 +92,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
     /// <summary>Gets the geometry of everything appended so far.</summary>
     public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: m_hash.GetCurrentHashAsUInt128());
+    /// <summary>Gets the form of everything appended so far: the geometry without the poses of the slots besides the
+    /// group's own, or the steps they round to. Two groups of one form are one creation's shapes standing in different
+    /// relative poses, whose skinned mesh carries each member through its own slot (<see cref="SdfMesh.Members"/>).</summary>
+    public UInt128 Form => m_form.GetCurrentHashAsUInt128();
 
     /// <summary>Appends one instance of a program: its instructions, each shape's material by its place among the
     /// group's materials, each other slot it reads by that slot's pose in the instance's frame, and its bound.</summary>
@@ -108,13 +114,13 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         var count = (range.End - range.First);
         var ownSlot = (range.IsDynamic ? range.Slot : -1);
 
-        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in bound)));
-        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
+        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in bound)));
+        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
         // A declared detail refines the lattice, so the mesh depends on it.
         if (range.Detail > 0f) {
             var detail = range.Detail;
 
-            m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in detail)));
+            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in detail)));
         }
         m_chainSlot = -1;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
@@ -143,7 +149,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// group of the segments no instance owns, bakes over a box that reach wide, so the same instructions under another
     /// reach mesh another surface.</summary>
     /// <param name="reach">The reach, in world units.</param>
-    public void AppendReach(float reach) => m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in reach)));
+    public void AppendReach(float reach) => Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in reach)));
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
     /// <param name="program">The program.</param>
@@ -179,7 +185,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
                         m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
-                        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
+                        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
                         Keep(orientationSteps: m_orientationSteps, pose: pose, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
                     }
                     break;
@@ -200,18 +206,23 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         if (!table.IsEmpty) {
             instruction = (instruction with { Data0 = (instruction.Data0 with { X = 0f }) });
-            m_hash.Append(source: MemoryMarshal.AsBytes(span: table));
+            Hash(source: MemoryMarshal.AsBytes(span: table));
         }
 
         var words = new InstructionWords(instruction: instruction);
 
-        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<InstructionWords>(reference: in words)));
+        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<InstructionWords>(reference: in words)));
+    }
+    // Hashes bytes into the geometry and its form.
+    private void Hash(ReadOnlySpan<byte> source) {
+        m_hash.Append(source: source);
+        m_form.Append(source: source);
     }
     // Appends the lanes of the slot the chain rides, which a lane erosion or a morph reads; zero under none.
     private void AppendLanes(IReadOnlyList<DynamicTransform> transforms) {
         var lanes = new Rounded4(steps: PositionSteps, value: (((m_chainSlot >= 0) && (m_chainSlot < transforms.Count)) ? transforms[m_chainSlot].Lanes : Vector4.Zero));
 
-        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Rounded4>(reference: in lanes)));
+        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Rounded4>(reference: in lanes)));
     }
     // Keeps a slot's rounded pose as the bake reads it: its position, its orientation, renormalized in double precision
     // so the same rounded components always turn alike, and its lanes rounded as AppendLanes rounds them; the steps are

@@ -6,8 +6,10 @@ namespace Puck.SignedDistance;
 /// words, its paints in the program's paint table (see <see cref="SdfProgram"/>).</summary>
 /// <param name="Albedo">The linear-RGB base color; every component must be finite and non-negative when admitted to
 /// a builder or program. Also the metallic reflectance tint — see <see cref="Metal"/>.</param>
-/// <param name="Emissive">The self-illumination strength: <c>albedo * emissive</c> adds to the shaded color, so an
-/// emissive surface glows through shadow and ambient falloff. Must be finite and non-negative; 0 = none.</param>
+/// <param name="Emissive">The self-illumination, a luminance in nits (candela per square metre) the albedo tints:
+/// <c>albedo * emissive</c> adds to the shaded luminance, so a white emissive surface shows exactly it and glows through
+/// shadow and ambient falloff (an LED indicator about 300, a lit diffuser about 2,500). Must be finite and
+/// non-negative; 0 = none.</param>
 /// <param name="Specular">The finite, non-negative dielectric reflectance at normal incidence (GGX <c>f0</c> before
 /// the <see cref="Metal"/> mix). The GGX term is skipped entirely when both <paramref name="Specular"/> and
 /// <see cref="Metal"/> are zero, so a plain lambert material pays no specular cost.</param>
@@ -52,12 +54,26 @@ namespace Puck.SignedDistance;
 /// at shading time, read from the shaded surface's own frame slot (an inhabited body's look lanes). A surface with
 /// no frame slot, and the irradiance volume's trace of static draws, read the lane as zero. Null keeps the static
 /// emissive.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null) {
+/// <param name="Glass">The glass response, or <see langword="null"/> for an opaque material. A glass material's
+/// <paramref name="Albedo"/> is its tint, each channel in [0, 1], the colour light takes on through
+/// <see cref="SdfGlass.Depth"/> of it, and its <paramref name="Roughness"/> is its frost. A shape carrying one bakes
+/// into a group of its own and draws in the glass pass over the opaque image; inside an opaque group (a mixed dynamic
+/// group) it shades opaque with the tint as albedo.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null, SdfGlass? Glass = null) {
+    /// <summary>Gets whether the material is glass: it carries a <see cref="Glass"/> response.</summary>
+    public bool IsGlass => (Glass is not null);
+    /// <summary>Gets whether the glass response, when present, is admissible with this material's albedo as its tint
+    /// (<see cref="SdfGlass.IsValid"/>, <see cref="SdfGlass.IsTint"/>); an opaque material always is.</summary>
+    public bool IsGlassValid => ((Glass is not { } glass) || (glass.IsValid && SdfGlass.IsTint(tint: Albedo)));
+
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,
     /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>shade/sdf-material.hlsli</c>
     /// (0.018) — the two constants together fix the default highlight width.</summary>
     public const float DefaultRoughness = 0.20204833f;
+    /// <summary>The faintest emissive, in nits, an authoring door admits above zero: a fraction of a nit shows under no
+    /// exposure a world renders at, so a value below it is a relative weight rather than a luminance.</summary>
+    public const float MinimumVisibleEmissive = 1f;
 
     /// <summary>Returns whether an emissive lane is absent or names one of the four render lanes.</summary>
     /// <param name="lane">The lane, or <see langword="null"/> for a static emissive.</param>

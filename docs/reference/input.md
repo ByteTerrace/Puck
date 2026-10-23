@@ -102,6 +102,12 @@ power then its accessories when it reports them: `battery N%`, `charging N%`,
 lines on stderr. Bindings are data in `Puck.World`; they are not hard-coded in
 this project.
 
+`--devices none` opens no pad and drops the window's keyboard and mouse events
+before a seat sees them, so a World started for a test or an agent is never
+driven by the person at the machine; scripted input still reaches every seat. It
+is the flag agents and the `puck` verbs boot Worlds with
+([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
+
 ## The gamepad pipeline
 
 ### Per-device I/O and coalescing
@@ -222,7 +228,12 @@ A window captured into a pane, such as an editor, can take the keyboard.
 - The reserved chord, Control and Alt held with Escape pressed, returns focus to
   the game whenever a source has it, and that Escape reaches neither the game
   nor the source. While the game has focus the chord has nothing to return, so
-  its Escape is the game's like any other key.
+  its Escape is the game's like any other key, unless the host claims the chord
+  (`SourceFocus.ClaimsChord`). A fired chord is reported once to the host
+  (`SourceFocus.TakeChord`). The World claims it while a local seat frames a
+  window it may open, and answers it by leaving: it returns the keyboard, closes
+  the window's source and leaves the seat's engagement, so the chord is one step
+  out whoever has the keyboard.
 
 A world document never creates a passthrough source: the world validator
 refuses a screen whose `input` is `Passthrough`. Focus sits inside the input the
@@ -272,19 +283,32 @@ the pointer, which is the World's. On Win32 the change applies at once to a
 pointer resting over the client area, and `WM_SETCURSOR` keeps it as the pointer
 moves.
 
+The policy also moves the cursor for a pad driving the pointer
+(`IWindowCursorPolicy.TryTakeWarp`): the pump hands the client point to
+`INativeWindowCursor.WarpPointer`, which on Win32 moves the cursor only for the
+foreground window and never while the pointer is locked, rebases the
+window-message fallback so the move reads as no relative motion, and reports
+the new position with the next pump of events, as a mouse's move would.
+
 The same policy locks the pointer for a drag that reads only its motion
 (`IWindowCursorPolicy.LocksPointer`; the World's is any seat holding
 `player.orbit` or `player.steer`). While `INativeWindowCursor.LocksPointer` is
-set, the Win32 window hides the cursor, holds the mouse capture, confines the
-cursor to its client area, freezes the reported pointer position, and after
-each pump of its events moves the cursor back to the client area's centre, so
-the drag's relative motion never ends at a window or screen edge. Raw relative
-input sees no motion from that move; the window-message fallback and
-absolute-mode input (a Remote Desktop session's mouse) rebase on it: an
-absolute report nearer the centre than the last report is the first after the
-move, and one nearer the last report was sent before the device followed it.
-Clearing the lock frees the cursor where the drag began; losing focus or the
-capture ends it without moving the cursor.
+set, the Win32 window hides the cursor, holds the mouse capture (so the cursor
+may roam outside the client area and every mouse message still arrives; it is
+not confined, since confining it pins a Remote Desktop session's cursor and stops
+its motion), freezes the reported pointer position, and, after a pump of its
+events leaves the cursor off the centre, moves it back there, so the drag's
+relative motion never ends at a window or screen edge. Raw relative input sees
+no motion from that move, and the window-message fallback rebases on it. An
+absolute-mode device (a Remote Desktop session's mouse) reports where its own
+cursor is and puts the cursor straight back after any move, so the lock does
+not hold a cursor an absolute report moved last (`Win32AbsolutePointer`): it
+stays shown and its position is reported as it moves, so it never hides through
+a drag and reappears somewhere else, and the drag ends where the device's
+cursor meets the edge of its screen.
+Clearing the lock frees a relative device's cursor
+where the drag began; losing focus or the capture ends it without moving the
+cursor.
 
 A source's window is an `ISourcePassthroughWindow`. On Windows a window
 capture's feed supplies it (`INativeImageCaptureFeed.Window`,
@@ -305,8 +329,20 @@ or per-monitor-aware window each receives its own units. Keys outside `KeyCode`,
 or Home, never reach the engine, so they never reach a source either.
 
 The World host opens a passthrough source only through `source.passthrough`,
-which only its own console may run as typed text (see
-[the World guide](../../src/Puck.World/README.md)). A recorded run on real
+which only its own console may run as typed text, or on the local user's own
+press on an engaged window capture's framed picture: a physical click, or a
+local pad's bound press (see
+[the World guide](../../src/Puck.World/README.md)). A pad drives such a window
+the way a controller's desktop mode does, through verbs a world's binding page
+names and that act only for a local pad's own control
+(`WorldPassthroughPad.IsLocalPad`): the left stick moves the system cursor
+across the framed picture at the screen route's `padPointer` feel, integrated
+exactly over each frame so its speed does not depend on the frame rate, the
+right stick turns the wheel, its buttons press pointer buttons (back and
+forward are the fourth and fifth), and its d-pad presses arrow keys on a window
+the local user has opened. Its presses take the same door a physical press does
+(the router above), so a drag, a release going where its press went and a
+revocation behave as a mouse's do. A recorded run on real
 hardware, in which a click reaches a captured editor window at the mapped point,
 is [deferred to the end](../plans/rendering.md#deferred-to-the-end) of the
 rendering programme.

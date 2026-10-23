@@ -108,6 +108,11 @@ public sealed class SdfSky {
     public const int MaxInfinityViews = 8;
     /// <summary>The most field runs above a stack's lowest run: the runs the sky pass's upper images hold.</summary>
     public const int MaxUpperFieldRuns = 2;
+    /// <summary>The luminance, in nits, a sky colour of one shows at unless its layer authors one: a clear day's sky, about
+    /// a third of a white surface's under the pinned sun (<see cref="SdfLights.DefaultSunIlluminance"/>), so a pale
+    /// horizon stop shows about 7,000 nits and the sky lights the ground about a fifth as brightly as the sun does, as a
+    /// clear sky does.</summary>
+    public const float DefaultLuminance = 10000f;
     /// <summary>The default look's one layer's detail label.</summary>
     public const string DefaultGradientLabel = "gradient";
 
@@ -150,13 +155,21 @@ public sealed class SdfSky {
 
     /// <summary>Initializes a new instance of the <see cref="SdfSky"/> class with the default look an unauthored world
     /// renders, as data the kernels read like any authored sky: one gradient layer, seen by the camera and the lighting,
-    /// from <see cref="DefaultGroundColor"/> below to <see cref="DefaultZenithColor"/> above, and the default atmosphere's
+    /// from <see cref="DefaultGroundColor"/> below to <see cref="DefaultZenithColor"/> above at
+    /// <see cref="DefaultLuminance"/>, and the default atmosphere's
     /// fog (<see cref="SdfAtmosphere.Default"/>).</summary>
     public SdfSky() {
+        var gradient = DefaultGradient;
+
+        for (var index = 0; (index < gradient.Count); index++) {
+            var (color, elevation) = gradient.Stop(index: index);
+
+            gradient.SetStop(color: (color * DefaultLuminance), elevation: elevation, index: index);
+        }
         m_block = new SdfSkyBlock { Ambient = 1f, Reflection = 1f };
         _ = Add(
             label: DefaultGradientLabel,
-            parameters: DefaultGradient,
+            parameters: gradient,
             visibility: SdfSkyVisibility.Both
         );
     }
@@ -513,15 +526,17 @@ public sealed class SdfSky {
                 }
             case SdfSkyLayerKind.Clouds: {
                     ref var clouds = ref PayloadOf<SdfSkyClouds>(layer: ref layer);
+                    // The silver lining shows the light's colour at the cloud's own luminance.
+                    var lining = SdfPhotometry.LuminanceOf(color: clouds.Color);
 
                     if (lights.ShadowSlots[0] >= 0) {
                         var key = lights[lights.ShadowSlots[0]];
 
                         clouds.LightDirection = SdfLights.UnitDirection(direction: key.Direction);
-                        clouds.LightColor = key.Color;
+                        clouds.LightColor = (key.Color * lining);
                     } else {
                         clouds.LightDirection = SdfLights.DefaultSunDirection;
-                        clouds.LightColor = Vector3.One;
+                        clouds.LightColor = new Vector3(value: lining);
                     }
 
                     return true;

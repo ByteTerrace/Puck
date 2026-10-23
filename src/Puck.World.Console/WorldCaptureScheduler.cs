@@ -141,6 +141,7 @@ public sealed class WorldCaptureScheduler {
     private readonly WorldServer m_server;
     private readonly IWorldEngineReadiness? m_readiness;
     private readonly IWorldCaptureSources? m_sources;
+    private readonly Func<int>? m_stillSamples;
     private readonly string m_worldFile;
 
     private readonly WorkCounterSet m_work = new(
@@ -173,9 +174,12 @@ public sealed class WorldCaptureScheduler {
     /// <param name="sources">The source instance each screen reads, which a row naming a screen captures, and the images
     /// deterministic sources state they show, which a capture of one is held to; <see langword="null"/> for a boot that
     /// composes no renderer, where a row naming a screen captures nothing.</param>
+    /// <param name="stillSamples">The temporal samples an ordinary settled still armed outside the schedule converges
+    /// over (<see cref="FrameCaptureRequest.ConvergeOver"/>), read as it arms: positive under lockstep presentation, zero
+    /// to observe the next normal sample; <see langword="null"/> is always zero.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, IWorldCaptureSources? sources = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, IWorldCaptureSources? sources = null, Func<int>? stillSamples = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -188,6 +192,7 @@ public sealed class WorldCaptureScheduler {
         m_captureTarget = captureTarget;
         m_readiness = readiness;
         m_sources = sources;
+        m_stillSamples = stillSamples;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
         if (server.Definition.Captures is not { Rows: { } rows }) {
@@ -220,6 +225,7 @@ public sealed class WorldCaptureScheduler {
     );
     private bool UnscheduledAwaitsFrame => (
         (m_unscheduled is { } unscheduled) &&
+        (unscheduled.Request.Mode == FrameCaptureMode.Settled) &&
         (m_lastPublishedTick == unscheduled.Tick) &&
         !unscheduled.Request.Completion.IsCompleted
     );
@@ -228,10 +234,12 @@ public sealed class WorldCaptureScheduler {
     public IReadOnlyList<WorldCaptureManifestEntry> Entries => m_landed;
 
     /// <summary>Arms a capture requested outside the schedule (<c>world.screenshot</c>) on the render chain's target, for
-    /// the frame of the last published tick. The host holds for it as for a scheduled capture (<see cref="AwaitsFrame"/>,
-    /// <see cref="HoldsClock"/>, from the same budgets), and <see cref="Drain"/> refuses it by name when the run ends
-    /// before a frame serves it. It writes no manifest entry: its outcome is its request's own, a refusal an
-    /// <see cref="OperationCanceledException"/> naming why no frame served it.</summary>
+    /// the frame of the last published tick. The host holds for a settled one as for a scheduled capture
+    /// (<see cref="AwaitsFrame"/>, <see cref="HoldsClock"/>, from the same budgets); a presented one
+    /// (<see cref="FrameCaptureMode.Presented"/>) holds nothing, so the frames it reads are the ones the running world
+    /// presents. <see cref="Drain"/> refuses either by name when the run ends before its frames are served. It writes no
+    /// manifest entry: its outcome is its request's own, a refusal an <see cref="OperationCanceledException"/> naming
+    /// why no frame served it.</summary>
     /// <param name="request">The unserved request.</param>
     /// <param name="target">The render chain's capture target.</param>
     /// <exception cref="ArgumentNullException"><paramref name="request"/> or <paramref name="target"/> is
@@ -242,10 +250,57 @@ public sealed class WorldCaptureScheduler {
         ArgumentNullException.ThrowIfNull(argument: request);
         ArgumentNullException.ThrowIfNull(argument: target);
 
+        // An ordinary still under lockstep converges over a fresh sequence of temporal samples, so it never carries the
+        // history the frames before it built, whose count follows the display rather than the ticks.
+        if (
+            (request.Mode == FrameCaptureMode.Settled) &&
+            (request.Converge == 0) &&
+            ((m_stillSamples?.Invoke() ?? 0) is > 0 and var samples)
+        ) {
+            request.ConvergeOver(samples: samples);
+        }
+
         target.RequestCapture(request: request);
         m_unscheduled = new Unscheduled(
             Request: request,
             Tick: m_lastPublishedTick
+        );
+
+        if (
+            (request.Mode == FrameCaptureMode.Settled) &&
+            (m_lastPublishedTick is { } tick)
+        ) {
+            Stamp(
+                request: request,
+                tick: tick
+            );
+        }
+    }
+
+    // Records the tick a settled capture is held at and the state hashes of that tick (the capture scope world.state.hash
+    // reads by default, and the tick-free pose scope), and narrates the still once it lands, with the tick its frame shows.
+    private void Stamp(FrameCaptureRequest request, ulong tick) {
+        var stamp = string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"tick={tick} hash={ToHex(hash: ComputeStateHash(server: m_server, tick: tick))} pose={ToHex(hash: WorldStateHashComposition.Hash(scope: WorldStateHashScope.Pose, server: m_server, tick: tick))}"
+        );
+
+        request.StateStamp = stamp;
+        request.StateTick = tick;
+        _ = request.Completion.ContinueWith(
+            continuationAction: static (completed, state) => {
+                var (stamp, tick) = ((string Stamp, ulong Tick))state!;
+                var result = completed.Result;
+
+                if (result.Succeeded) {
+                    Console.Error.WriteLine(value: string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"[still] {result.Path} {stamp} shown={TickText(tick: result.Tick)}{((result.Tick == tick) ? string.Empty : " (the frame shows another tick)")}"
+                    ));
+                }
+            },
+            scheduler: TaskScheduler.Default,
+            state: (stamp, tick)
         );
     }
 

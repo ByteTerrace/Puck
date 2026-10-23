@@ -64,10 +64,15 @@ public sealed class WorldTransferTurnRecoveryLawTests {
             sourceSlot: 0,
             arrival: (mapped ? WorldPortalArrival.Mapped : WorldPortalArrival.Spawn),
             counterpart: (mapped ? "arrival/door" : null),
-            sourceFrame: WindowCrossingFixtures.Frame(face: WindowCrossingFixtures.Face(
+            // The arrival door's own size, so the pair is a rigid one: a mapped pair of two sizes is refused between
+            // worlds.
+            sourceFrame: (WindowCrossingFixtures.Frame(face: WindowCrossingFixtures.Face(
                 origin: Vector3.Zero,
                 yawDegrees: 0f
-            ))
+            )) with {
+                HalfHeight = FixedQ4816.One,
+                HalfWidth = FixedQ4816.One,
+            })
         );
 
         host.DrainPendingTransfers();
@@ -129,5 +134,71 @@ public sealed class WorldTransferTurnRecoveryLawTests {
 
         AbortAndCheck(destination: rowB, owner: host, source: rowA);
         AbortAndCheck(destination: restoredB, owner: restoredHost, source: restoredA);
+    }
+    // A mapped pair of two sizes between two worlds: a transfer carries the body's size register unchanged and
+    // cannot apply the pair's scale to it, so the crossing is refused by name and the body stays where it stood.
+    [Fact]
+    public void AMappedPairOfTwoSizesBetweenWorldsIsRefusedAndTheBodyStays() {
+        using var stateRoot = new TemporaryDirectory(prefix: "puck-scaled-refusal-");
+        using var host = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None,
+            admitsSpawn: true,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: Guid.NewGuid(),
+            resolver: new WorldSessionResolver(),
+            seats: WorldEmbodiedSeats.None,
+            stateRoot: new WorldStateRoot(path: stateRoot.RootPath)
+        );
+        var door = PortalFixtures.BuildDoorCreation();
+        var document = Fixtures.BuildDocument() with {
+            CreationsRaw = [door],
+            PlacementRowsRaw = [new WorldPlacement(
+                Id: "arrival",
+                PrototypeId: door.Id,
+                Position: new Vector3(x: 10f, y: 0f, z: 0f),
+                YawDegrees: 270f,
+                Scale: 1f,
+                FaceSources: [new WorldPlacementFace(Face: "door", Source: new WorldScreenSource.None())]
+            )],
+        };
+        using var rowA = HostRow.Build(name: "row-a");
+        using var rowB = HostRow.Build(definition: document, name: "row-b");
+        var narration = new RecordingNarrationSink();
+
+        host.Admit(row: rowA.Instance);
+        host.Admit(row: rowB.Instance);
+        using var lease = host.AttachNarrationSink(sink: narration);
+        Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+        host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+
+        // A 3 m face onto the door's 2 m.
+        _ = host.EnqueueTransfer(
+            actingPrincipal: Principal.Console,
+            destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
+            scope: WorldInstanceHost.TransferScope.Body,
+            sourceInstance: "row-a",
+            sourceSlot: 0,
+            arrival: WorldPortalArrival.Mapped,
+            counterpart: "arrival/door",
+            sourceFrame: WindowCrossingFixtures.Frame(face: WindowCrossingFixtures.Face(
+                origin: Vector3.Zero,
+                yawDegrees: 0f
+            ))
+        );
+        host.DrainPendingTransfers();
+
+        Assert.True(condition: rowA.Server.Population.IsActive(index: 0));
+        Assert.Contains(
+            collection: narration.Narrations,
+            filter: line => line.Text.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "carries a traveller's size only within one world"
+            )
+        );
     }
 }

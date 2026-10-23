@@ -12,7 +12,8 @@ namespace Puck.SdfVm;
 /// <param name="InstanceMaskWordCount">The live program's instance-mask width, which a bake lattice's mask uses.</param>
 /// <param name="MeshDraws">The frame's mesh draws.</param>
 /// <param name="DebugMode">The debug view mode; zero renders the final image.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode);
+/// <param name="Exposures">The views' exposures, or <see langword="null"/> to expose every view by one.</param>
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
 /// the frame's levers, its light count and shadow slots, and its curvature shading, each at the offset the generated
@@ -32,6 +33,7 @@ public static partial class SdfFrameBlock {
     private static readonly int DebugMode = Offset(member: SdfWorldPackage.DebugMode);
     private static readonly int DisableAmbientOcclusion = Offset(member: SdfWorldPackage.DisableAmbientOcclusion);
     private static readonly int GeometryOnly = Offset(member: SdfWorldPackage.GeometryOnly);
+    private static readonly int ScreenFidelity = Offset(member: SdfWorldPackage.ScreenFidelity);
     private static readonly int DisableScreenLights = Offset(member: SdfWorldPackage.DisableScreenLights);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
     private static readonly int FarDistance = Offset(member: SdfWorldPackage.FarDistance);
@@ -52,7 +54,17 @@ public static partial class SdfFrameBlock {
     private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
-    private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
+    private static readonly int LightMask = Offset(member: SdfWorldPackage.LightMask);
+    private static readonly int Exposure = Offset(member: SdfWorldPackage.Exposure);
+    private static readonly int ToonBands = Offset(member: SdfWorldPackage.ToonBands);
+    private static readonly int ToonShadow = Offset(member: SdfWorldPackage.ToonShadow);
+    private static readonly int ToonOutline = Offset(member: SdfWorldPackage.ToonOutline);
+    private static readonly int ToonInk = Offset(member: SdfWorldPackage.ToonInk);
+    private static readonly int ExposeShare = Offset(member: SdfWorldPackage.ExposeShare);
+    private static readonly int AirLight = Offset(member: SdfWorldPackage.AirLight);
+    private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
+    private static readonly int LocalAdaptation = Offset(member: SdfWorldPackage.LocalAdaptation);
+    private static readonly int SkyPeakLuminance = Offset(member: SdfWorldPackage.SkyPeakLuminance);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
@@ -131,8 +143,8 @@ public static partial class SdfFrameBlock {
             x: camera.Near,
             y: SdfWorldPackage.MinimumNear
         );
-    /// <summary>Writes a view's values into a pass block: its render extent, the frame's bound screens,
-    /// instance-mask width and mesh draws the tables packed, the view's camera and quality
+    /// <summary>Writes a view's values into a pass block: its render extent, the frame's bound screens and mesh draws the
+    /// tables packed, the view's camera and quality
     /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, its
     /// light count and shadow slots (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
     /// node writes it.</summary>
@@ -158,7 +170,6 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: ViewportCount, value: 1u);
         WriteUInt32(block: block, offset: ViewBase, value: 0u);
         WriteUInt32(block: block, offset: ScreenCount, value: tables.ScreenCount);
-        WriteUInt32(block: block, offset: InstanceMaskWordCount, value: tables.InstanceMaskWordCount);
         WriteUInt32(block: block, offset: MeshDraws, value: tables.MeshDraws);
         WriteVector3(block: block, offset: ViewPosition, value: camera.Position);
         WriteVector3(block: block, offset: ViewRight, value: camera.Right);
@@ -176,6 +187,29 @@ public static partial class SdfFrameBlock {
         var curvature = lights.Curvature;
 
         WriteUInt32(block: block, offset: LightCount, value: ((uint)lights.Count));
+        var mask = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: lights);
+
+        for (var word = 0; (word < 4); word++) {
+            WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
+        }
+        WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
+        var toon = frame.Toon;
+        WriteSingle(block: block, offset: ToonBands, value: toon.Enabled ? 1f : 0f);
+        WriteSingle(block: block, offset: ToonBands + 4, value: toon.Threshold);
+        WriteSingle(block: block, offset: ToonBands + 8, value: toon.Softness);
+        WriteSingle(block: block, offset: ToonBands + 12, value: toon.SpecularSize);
+        WriteVector3(block: block, offset: ToonShadow, value: toon.ShadowTint);
+        WriteSingle(block: block, offset: ToonShadow + 12, value: MathF.Pow(2f, toon.Exposure));
+        WriteSingle(block: block, offset: ToonOutline, value: toon.OutlineWidth * (float)snapshot.RenderGrid);
+        WriteSingle(block: block, offset: ToonOutline + 4, value: toon.OutlineDistance);
+        WriteSingle(block: block, offset: ToonOutline + 8, value: toon.OutlineNormal);
+        WriteSingle(block: block, offset: ToonOutline + 12, value: toon.Shoulder);
+        WriteVector3(block: block, offset: ToonInk, value: toon.OutlineTint);
+        WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
+        WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
+        WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
+        WriteSingle(block: block, offset: LocalAdaptation, value: ((frame.Exposure.Mode == SdfExposureMode.Auto) ? Math.Clamp(value: frame.Exposure.Local, min: 0f, max: 1f) : 0f));
+        WriteSingle(block: block, offset: SkyPeakLuminance, value: (tables.Exposures?.SkyPeakLuminance ?? 0f));
         for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
             WriteUInt32(block: block, offset: (ShadowSlots + (slot * sizeof(int))), value: unchecked((uint)lights.ShadowSlots[slot]));
         }
@@ -209,6 +243,7 @@ public static partial class SdfFrameBlock {
         WriteFlag(block: block, offset: DisableAmbientOcclusion, value: quality.DisableAmbientOcclusion);
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
+        WriteSingle(block: block, offset: ScreenFidelity, value: Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity));
     }
 
     // The offset a pass-block member lies at.

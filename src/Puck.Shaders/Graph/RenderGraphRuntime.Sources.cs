@@ -490,7 +490,7 @@ public sealed partial class RenderGraphRuntime {
                 return FrameRender.Refused(reason: (Fault ?? "it has no conversion graph"));
             }
             if (m_region.Bind(node: node) is not { } region) {
-                return FrameRender.Waiting(reason: "its conversion graph is building");
+                return FrameRender.Waiting(reason: $"source '{name}' conversion graph is building");
             }
 
             var written = Upload.Write(

@@ -59,13 +59,12 @@ host tool.
   safety or deletion safety. Route those questions to `symbol-analysis`, whose
   verbs are `puck references` and `puck declarations`.
 - Quote patterns for the active shell; do not silently rewrite regex syntax.
-- The walk has no extension filter, so it reads `.puck` DSL sources by
-  default. A cartridge `.puck` source and its committed `.cartridge.json` twin
-  can each hold a fact the other lacks: a `let`/template name or unexpanded
-  `for`/lambda body exists only in `.puck`; a lowered default or basis-merged
-  value exists only in the compiled JSON. Search both before concluding a value
-  is absent. A world `.puck` source compiles into `bin/`, which the walk
-  skips, so only the source is searched.
+- The walk reads `.puck` DSL sources by default. The owner's ruling removes
+  committed cartridge JSON twins: search the authored source and its imported
+  modules. If the question concerns lowered defaults or expanded values, compile
+  into a lane scratch directory and inspect that fresh output explicitly; ignored
+  generated output is outside the default walk. An empty source search cannot
+  establish that a generated value is absent.
 
 ## Load the full reference selectively
 

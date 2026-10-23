@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.World;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.Cli.Test;
 
@@ -147,7 +148,7 @@ public static partial class TestCommand {
 
         return 0;
     }
-    private static TestWorldRun RunWorldCaptured(string world, string artifact, string worldDirectory, bool reproduce) {
+    private static TestWorldRun RunWorldCaptured(TestWorld world, string artifact, string worldDirectory, bool reproduce) {
         using var output = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
         using var error = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
         var verdict = RunWorld(
@@ -155,7 +156,7 @@ public static partial class TestCommand {
             error: error,
             output: output,
             reproduce: reproduce,
-            world: world,
+            test: world,
             worldDirectory: worldDirectory
         );
 
@@ -166,8 +167,9 @@ public static partial class TestCommand {
         );
     }
     // One world: one ordinary run, or two plus a byte comparison for explicit reproducibility qualification.
-    private static int RunWorld(string world, string artifact, string worldDirectory, TextWriter output, TextWriter error, bool reproduce) {
-        var name = Path.GetFileNameWithoutExtension(path: Path.GetFileNameWithoutExtension(path: world));
+    private static int RunWorld(TestWorld test, string artifact, string worldDirectory, TextWriter output, TextWriter error, bool reproduce) {
+        var name = test.Name;
+        var world = test.Path;
 
         output.WriteLine(value: $"test {name}: {world}");
         output.WriteLine(value: $"  artifacts: {worldDirectory.Replace(newChar: '/', oldChar: '\\')}");
@@ -265,6 +267,7 @@ public static partial class TestCommand {
 
         var reported = Report(
             error: error,
+            expectations: test.Expectations,
             name: name,
             output: output,
             reading: first!
@@ -278,8 +281,13 @@ public static partial class TestCommand {
             )
         );
     }
-    private static int Report(string name, TestReading reading, TextWriter output, TextWriter error) {
-        var total = reading.Worlds.Sum(selector: static world => world.Verdicts.Count);
+    private static int Report(string name, TestReading reading, IReadOnlyList<WorldTestForeign> expectations, TextWriter output, TextWriter error) {
+        // An expectation about a sibling document is judged by the instance a crossing started. A run that started none
+        // has nothing to read it from, and the claim failed: the crossing it judges never happened.
+        var unjudged = expectations
+            .Where(predicate: expectation => !reading.Worlds.Any(predicate: world => (world.Document == expectation.Document)))
+            .ToList();
+        var total = (reading.Worlds.Sum(selector: static world => world.Verdicts.Count) + unjudged.Count);
 
         if (total == 0) {
             error.WriteLine(value: $"ERROR: {name} declares no verdict row — a test world with nothing to answer is a usage error, not a pass.");
@@ -287,7 +295,11 @@ public static partial class TestCommand {
             return 2;
         }
 
-        var failures = 0;
+        var failures = unjudged.Count;
+
+        foreach (var expectation in unjudged) {
+            error.WriteLine(value: $"  {expectation.Document}/{expectation.Row}: fail gate=\"{expectation.Gate}\" — the run started no instance of '{expectation.Document}', so the crossing this claim judges never happened.");
+        }
 
         foreach (var (world, verdict) in reading.Verdicts) {
             var line = $"  {world.Label}{verdict.Name}: {WorldVerdict.Describe(status: verdict.Judged)} gate=\"{verdict.Gate}\" saw=[{string.Join(

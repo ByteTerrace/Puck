@@ -73,7 +73,7 @@ before it, the rule a shape's `parent` follows.
 | Signal | Behavior |
 |---|---|
 | `planarTravel`, `travel`, `time` | integrate |
-| `speed`, `verticalSpeed`, `turnRate` | set directly; `speed` is ground speed (vertical travel reads zero, and so never trips `moving`), `turnRate` is positive turning left |
+| `speed`, `verticalSpeed`, `turnRate` | set directly; `speed` is ground speed in m/s read per frame (vertical travel reads zero, and so never trips `moving`; a read is capped at 60 m/s, never by the frame's length), `turnRate` is positive turning left |
 | `travelDirection` | set directly: eased planar travel off the facing, (−π, π], 0 forward, π backpedal, positive left; holds at rest |
 | `lateralAcceleration`, `forwardAcceleration` | set directly: eased planar acceleration across (positive left) and along (positive forward) the facing, m/s² |
 | `state.<row>[.<key>]` | set directly: the cell's numeric value at the frame's tick, times the cadence, is the phase (a cycle-trait clock, a counter, an `hp` cell) |
@@ -108,6 +108,16 @@ delta. They control gate weights independently of phase cadence and the shared
 movement-speed filter (`CreationAnimationLawTests`).
 
 ## Chains and effectors
+
+When every surface effector reports `target=none`, check the presentation query
+field before changing probe reach or geometry. `WorldFramePresenter` builds the
+field used by camera clearance and limb probes; `WorldPlacementStamper.Queryable`
+excludes unsupported placements individually, as the motion CLI's camera check
+does. The log names each excluded placement and reports a combined-field failure
+as `[world.presentation-field: unavailable; ...]`. An excluded prop has no query
+surface, but cannot remove the supported floor and other placements. `body.rig`
+reads the last packed rig; a read scheduled before a screenshot is not a read of
+the new frame that screenshot will compose.
 
 `chains` groups shape **ids** root to tip. `kind` is `limb` or `spine`; null
 resolves to `limb` when there are exactly three shapes, and a `limb` with any
@@ -178,6 +188,18 @@ Every part of the moth's motion is a driver, a swing or an effector in
 | Jump: legs tucked and arms open in the air, tighter rising and reaching for the ground falling | `air` (`verticalSpeed` through `body-air`, `Airborne`, `linear` swings with a phase offset, so the peak pose is amplitude × phase) | thighs, shins, boots, upper arms, forearms |
 | Landing give: a crouch that springs back past rest | `land` (`verticalSpeed` through the underdamped `body-land`, `Grounded`): still the fall's speed a beat after touchdown | pelvis pitch and drop, thighs, shins, boots, forearms |
 
+### Judging motion
+
+Judge a change to any driver, swing or effector above with `puck motion`, never
+with one-off captures: it runs the walk, run, stops, turns, jumps and flight
+(suited and out of the suit) on exact ticks through the `motion` layout's four
+cameras riding body 0, and writes a contact sheet per scenario and camera with
+every frame labelled by tick. Read `<scenario>/sheet.png` first, then the
+camera's own sheet for the part you changed; `puck motion --reproduce` shows
+that a repeat stills the same poses. Add a case by editing
+`worlds/debug/motion.scenarios.json`
+([the verb](../../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
+
 The root shape is the pelvis, so a swing on it carries the whole body; the
 upper body undoes part of it through the torso and helmet, and each thigh's
 stride swing sits between yaw swings that turn the stride plane without
@@ -208,7 +230,7 @@ the motion vocabulary scales a shape over time.
 | `cameras` | `{ id, shapeId, position, yaw, pitch, fov, focus, feed }` | rides the anchored shape's live pose. `position` converts to the engine frame; `yaw` and `pitch` do not |
 | `parts` | `{ id, shapeId }` | publishes one shape's dynamic transform as a named anchor other things can attach to |
 | `behavior` | `{ locomotion, faces, sounds }` | a face is `{ name, shapeId, defaultSource }` with a source of `none`, `test`, `camera:<name>`, or `feed:<name>`; a sound carries an inline `puck.synth.v1` patch with `level` capped at 8 |
-| `textRuns` | `{ text, position, rotation, emHeight, depth, mode, material, font, maxWidth, align, tracking, lineSpacing, shapeId }` | local +X advances, +Y is ascent, +Z is the relief normal. `mode` is `emboss` (default) or `engrave`; engrave forces the creation-wide scope. Each non-whitespace glyph charges the shape budget |
+| `textRuns` | `{ text, position, rotation, emHeight, depth, mode, material, font, maxWidth, align, tracking, lineSpacing, shapeId }` | local +X advances, +Y is ascent, +Z is the relief normal. `mode` is `emboss` (default) or `engrave`; engrave forces the creation-wide scope. Each non-whitespace glyph charges the shape budget. `position` is the first line's baseline; `\n` breaks a line. An embossed run bakes alone, refined toward `min(depth, 0.1 × emHeight)` but no finer than 1.875 mm along the run (a 15 mm cell over `MaxDetailRefinement` 8, `SdfMeshPathBake.OwnFinal`), so a stroke (about a tenth of the em) needs an em near 40 mm and a relief of 2 mm or less to span two cells; smaller lettering drops strokes (`worlds/debug/devices.md`) |
 | `noise` | `{ frequency, amplitude, octaves, gain, lacunarity, seed }` | frequency in (0, 8], amplitude in (0, 4], octaves 1 to 8. Static stamps only — framed, attached, inhabited, and body-look placements refuse it. Forces the creation-wide scope. Render only |
 | `volumes` | see `surface.md` | up to 64 |
 

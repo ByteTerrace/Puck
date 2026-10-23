@@ -1,22 +1,27 @@
+import "inputs"
 // Physical chess: a table of 32 rigid piece bodies whose every settled arrangement is judged against the last legal
 // board (the tabletop primitive), with captures, promotion, castling, en passant, check, the draw limits and a
-// one-ply computer opponent. The debug world imports this file whole. The table stands on the open ground at
-// (-6, 0, -12), ahead and left of the spawn, White's back rank on its -Z side. chess.md beside this file says how to
-// move a piece, read the game and set the opponent.
+// one-ply computer opponent. The debug world imports this file whole. The table stands in the gallery hall's lobby
+// (hall.puck), in the games corner west of the entrance with the desktop computer (desktop.puck): its board's centre
+// at (12.2, 0.85, 20) on the level 0 floor, White's back rank on its -Z side, toward the entrance, and Black's on +Z,
+// toward the desk. chess.md beside this file says how to move a piece,
+// read the game and set the opponent.
 
-// The Moth basis seats eight bodies; the 32 pieces take the rest.
+// The Moth basis seats eight bodies; the 32 pieces and the board cursor take the rest.
 bodies {
-  capacity: 40
+  capacity: 41
 }
 
 // The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
 grants: map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" })
 
-// The table's placement, and the ticks the physics must rest before an arrangement is judged (one second at the
-// debug world's 30 Hz).
-let chessTable = [-6, -0.5, -12]
-let chessSettleTicks = 30
+// The table's placement, its creation's floor 0.5 m under its origin on the lobby's floor (y 0.05), and the ticks the
+// physics must stay at rest before an arrangement is judged (0.3 s at the debug world's 30 Hz). The rigid solver's own
+// resting latch has already held each piece still before `physics(quiescent)` reads 1, so the hold only has to outlast
+// a piece that is touched, knocked or dropped beside another settling.
+let chessTable = [12.2, -0.45, 20]
+let chessSettleTicks = 9
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
 let pieceLooks = concat(
@@ -25,7 +30,7 @@ let pieceLooks = concat(
 )
 
 looks {
-  rows: map(pieceLooks, name => {
+  rows: map(concat(pieceLooks, ["boardCursor"]), name => {
     motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
     name: name
     scale: 1
@@ -34,11 +39,20 @@ looks {
   )
 }
 
+// The board reads as a real one from each side. The `chessBoard` grid is world-axis-aligned, cell = 8 * row + column,
+// its rows running +Z and its columns +X; a rank is a row (rank 1 on the -Z side, White's), and a file runs the other
+// way, column = 7 - file, so the a-file lies on +X. Seated at White's -Z edge and looking +Z, the camera's right is -X
+// (forward crossed with up), so a1 is dark at White's left, h1 light at her right, and the queen on her colour (d1,
+// light) left of the king; from Black's +Z edge a8 is light at Black's right and h8 dark at his left. The kings start
+// in column 3 and the queens in column 4, so the castling rules below name kingside by a falling column. Piece n
+// stands on file n % 8 (piece 4 the white king on e1, piece 12 the e2 pawn), at column 7 - n % 8.
 let boardCoords = [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7]
 let backRankTypes = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"]
-let squareTypes = ["boardSquareDark", "boardSquareLight"]
+// Cell (row, column) is light when row + column is even: column 0 of rank 1 is h1.
+let squareTypes = ["boardSquareLight", "boardSquareDark"]
 let backRankCodes = [4, 2, 3, 5, 6, 3, 2, 4]
-let initialBoard = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 32), i => 0), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
+let backRankByColumn = map(range(0, 8), column => backRankCodes[7 - column])
+let initialBoard = concat(backRankByColumn, map(range(0, 8), i => 1), map(range(0, 32), i => 0), map(range(0, 8), i => -1), map(backRankByColumn, code => -code))
 let initialPieceCodes = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
 
 template piecePlacement(name, prototypeName, x, z) {
@@ -177,6 +191,33 @@ kits {
         rollingFriction: 0.15
       }
     }
+    // The board cursor: volumeless and overlapping, so it touches no piece, and posed by the rules every tick.
+    {
+      bodyContact: Overlap
+      bodyMotionProgram: "walk"
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "held"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "boardCursor"
+    }
   ]
 }
 
@@ -198,25 +239,57 @@ placements {
       topology: "chessBoard"
       turn: "turn"
       verdict: "verdict"
+      // The context button within 2.5 m of the board's centre sits the seat down at the table and the next press
+      // stands it up; seated, the camera looks down on the board from the seat's side and the pointer picks squares
+      // on their tops, 6 cm above the board's frame.
+      engage {
+        channel: "interact"
+        radius: 2.5
+        pitch: 62
+        margin: 0.12
+        surface: 0.06
+      }
     }
     position: chessTable
     solid
   }
 
-  for i in range(0, 8) {
-    piecePlacement($"piece{i}", $"piece_white_{backRankTypes[i]}", boardCoords[i], -0.7)
+  // The square cursor a seated player moves (body 40 in the debug world, before the pieces so they keep 8 to 39): the
+  // rules pose it on the cursor's square while the seat sits at the table and park it inside the tabletop otherwise.
+  placement "boardCursor" {
+    prototype: "boardCursor"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "boardCursor"
+      look: "boardCursor"
+      source: "Idle"
+    }
+    parent: "chessTable"
+    position [0, 1.25, 0]
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{8 + i}", "piece_white_pawn", boardCoords[i], -0.5)
+    piecePlacement($"piece{i}", $"piece_white_{backRankTypes[i]}", boardCoords[7 - i], -0.7)
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{16 + i}", "piece_black_pawn", boardCoords[i], 0.5)
+    piecePlacement($"piece{8 + i}", "piece_white_pawn", boardCoords[7 - i], -0.5)
   }
 
   for i in range(0, 8) {
-    piecePlacement($"piece{24 + i}", $"piece_black_{backRankTypes[i]}", boardCoords[i], 0.7)
+    piecePlacement($"piece{16 + i}", "piece_black_pawn", boardCoords[7 - i], 0.5)
+  }
+
+  for i in range(0, 8) {
+    piecePlacement($"piece{24 + i}", $"piece_black_{backRankTypes[i]}", boardCoords[7 - i], 0.7)
   }
 
   for r in range(0, 8) {
@@ -246,10 +319,17 @@ prototypes {
         scale [1, 0.05, 1]
       }
 
+      // The pedestal stands on the floor 0.5 m under the creation's origin.
       shape Cylinder "leg" {
         material: 0
-        position [0, 0.6, 0]
-        scale [0.08, 0.6, 0.08]
+        position [0, 0.855, 0]
+        scale [0.08, 0.355, 0.08]
+      }
+
+      shape Cylinder "foot" {
+        material: 0
+        position [0, 0.52, 0]
+        scale [0.45, 0.02, 0.45]
       }
     }
   }
@@ -265,6 +345,41 @@ prototypes {
 
   squareProto("boardSquareLight", "light")
   squareProto("boardSquareDark", "dark")
+
+  // A square's outline, one cell across: four flat bars around the square the cursor stands on.
+  prototype "boardCursor" {
+    document {
+      name: "boardCursor"
+      palette [
+        {
+          color: "state.boardColors.cursor"
+          roughness: 0.4
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "near" {
+        material: 0
+        position [0, 0, -0.088]
+        scale [0.1, 0.004, 0.012]
+      }
+      shape Box "far" {
+        material: 0
+        position [0, 0, 0.088]
+        scale [0.1, 0.004, 0.012]
+      }
+      shape Box "left" {
+        material: 0
+        position [-0.088, 0, 0]
+        scale [0.012, 0.004, 0.1]
+      }
+      shape Box "right" {
+        material: 0
+        position [0.088, 0, 0]
+        scale [0.012, 0.004, 0.1]
+      }
+    }
+  }
 }
 
 rule "tabletop-settle-hold-advance" {
@@ -358,30 +473,34 @@ rules "" when settleHold == chessSettleTicks {
     boardChanged = setBitCount(changed)
   }
 
+  // The square a castling king passes over, f1 (cell 2) or d1 (cell 4), or f8 (58) or d8 (60), attacked by a pawn,
+  // knight or king standing on the mask's cells or by a slider; kingside runs toward column 0.
   rule "tabletop-castle-transit-attacked" {
     when move[kind] == MoveKind.Castle
     castleTransitAttacked[wk] = 0
     castleTransitAttacked[wq] = 0
     castleTransitAttacked[bk] = 0
     castleTransitAttacked[bq] = 0
-    if turn == TurnColor.White and move[to] > move[from] {
-      castleTransitAttacked[wk] = ((board(mask, lastLegal, -1, -1) & 0x5000) != 0) | ((board(mask, lastLegal, -2, -2) & 0x508800) != 0) | ((board(mask, lastLegal, -6, -6) & 0x7050) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[5] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[5] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[5]
+    if turn == TurnColor.White and move[to] < move[from] {
+      castleTransitAttacked[wk] = ((board(mask, lastLegal, -1, -1) & 0xA00) != 0) | ((board(mask, lastLegal, -2, -2) & 0xA1100) != 0) | ((board(mask, lastLegal, -6, -6) & 0xE0A) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[2] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[2] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[2]
     } else if turn == TurnColor.White {
-      castleTransitAttacked[wq] = ((board(mask, lastLegal, -1, -1) & 0x1400) != 0) | ((board(mask, lastLegal, -2, -2) & 0x142200) != 0) | ((board(mask, lastLegal, -6, -6) & 0x1C14) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[3] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[3] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[3]
-    } else if move[to] > move[from] {
-      castleTransitAttacked[bk] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x5000)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x508800)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x7050)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[61] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[61] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[61]
+      castleTransitAttacked[wq] = ((board(mask, lastLegal, -1, -1) & 0x2800) != 0) | ((board(mask, lastLegal, -2, -2) & 0x284400) != 0) | ((board(mask, lastLegal, -6, -6) & 0x3828) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[4] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[4] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[4]
+    } else if move[to] < move[from] {
+      castleTransitAttacked[bk] = ((board(mask, lastLegal, 1, 1) & byteSwap(0xA00)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0xA1100)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0xE0A)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[58] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[58] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[58]
     } else {
-      castleTransitAttacked[bq] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x1400)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x142200)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x1C14)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[59] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[59] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[59]
+      castleTransitAttacked[bq] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x2800)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x284400)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x3828)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[60] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[60] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[60]
     }
   }
 
+  // The king starts in column 3; a rising column (direction 1) castles queenside with the column-7 rook, a falling one
+  // kingside with the column-0 rook. A right's bit names its rook's column: 1 column 0, 2 column 7, Black's two above.
   rule "tabletop-castle-legal" {
     local sign = 1 - 2 * turn
-    local home = 4 + 56 * turn
+    local home = 3 + 56 * turn
     local direction = move[to] > move[from] ? 1 : -1
-    local rook = home + (direction == 1 ? 3 : -4)
+    local rook = home + (direction == 1 ? 4 : -3)
     local right = (direction == 1 ? 2 : 1) << (2 * turn)
-    local attacked = turn == TurnColor.White ? (direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : (direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
+    local attacked = turn == TurnColor.White ? (direction == 1 ? castleTransitAttacked[wq] : castleTransitAttacked[wk]) : (direction == 1 ? castleTransitAttacked[bq] : castleTransitAttacked[bk])
     castleLegal = 0
     if move[kind] == MoveKind.Castle {
       castleLegal = (move[kind] == MoveKind.Castle) & (move[from] == home) & (move[to] == home + 2 * direction) & ((castleRights & right) == 0) & (lastLegal[(rook)] == PieceKind.Rook * local(sign)) & ((direction == 1 ? match(chessRayEmpty, lastLegal, E, cell)[move[from]] : match(chessRayEmpty, lastLegal, W, cell)[move[from]]) == rook) & (previousInCheck[turn[$value]] == 0) & (attacked == 0)
@@ -461,8 +580,8 @@ rules "" when settleHold == chessSettleTicks {
   rule "tabletop-advance-turn" {
     when verdict == 1 and move[kind] != MoveKind.Illegal
     local lostRooks = ((board(mask, lastLegal, 4, 4) & ~board(mask, board, 4, 4)) & 0x81) | ((board(mask, lastLegal, -4, -4) & ~board(mask, board, -4, -4)) & (0x81 << 56))
-    local lostKings = ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 4)) | ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 60))
-    local lostRights = parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 4) | (1 << 60)), 5) * 3)
+    local lostKings = ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 3)) | ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 59))
+    local lostRights = parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 3) | (1 << 59)), 5) * 3)
     transaction {
       // A pawn move, capture or lost castling right makes every earlier position unreachable.
       historyReset = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | ((lostRights & ~castleRights) != 0)
@@ -648,7 +767,7 @@ for i in range(0, 32) {
   rule $"chess-ai-place-{i}" {
     gate: compareValue(kind: Int, comparison: Equal, left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] >= 0), right: 1)
     mode: Level
-    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: pieceCell[$"piece{i}"], offset: [0, 0.3, 0])
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: pieceCell[$"piece{i}"], offset: [0, 0.08, 0])
   }
   rule $"chess-ai-capture-{i}" {
     gate: compareValue(kind: Int, comparison: Equal, left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] < 0), right: 1)
@@ -667,6 +786,248 @@ rule "chess-ai-finish" {
   settleHold = 0
 }
 
+// ---- Playing at the table --------------------------------------------------------------------------------------
+// Seat 1 sits down with the context button (the board's engage block) and plays with the board page below: the cursor
+// follows the pointer, the movement keys, the d-pad or the stick, one square a press, up the board being away from the
+// side the seat sits on. The pick button lifts the side to move's piece under the cursor, which then hovers over the
+// cursor; the next press puts it down there, or a release away from the square it left does (a drag). Pressing on the
+// square it left, the cancel button or standing up puts it back. A put-down hands the move to the computer's own apply
+// path (ai[from], ai[to], ai[pending]): it takes a captured piece beside the board, moves a castling rook, lifts the
+// pawn an en-passant capture takes and queens a pawn on the last rank, then the settled arrangement is judged as ever.
+// An arrangement judged illegal is put back as it stood before the put-down.
+
+// The seated seat's buttons this tick, each 1 while held past half way.
+rule "chess-play-buttons" {
+  mode: Level
+  play[pickNow] = 0
+  play[cancelNow] = 0
+  play[aheadNow] = 0
+  play[behindNow] = 0
+  play[rightNow] = 0
+  play[leftNow] = 0
+  if board(engaged, board, 1) == 1 and channel(1, confirm) >= 0.5 {
+    play[pickNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, cancel) >= 0.5 {
+    play[cancelNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, forward) >= 0.5 {
+    play[aheadNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, forward) <= -0.5 {
+    play[behindNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, strafe) >= 0.5 {
+    play[rightNow] = 1
+  }
+  if board(engaged, board, 1) == 1 and channel(1, strafe) <= -0.5 {
+    play[leftNow] = 1
+  }
+}
+
+// The press images: each binary is this tick's press on a rising edge, and each step is +1 or -1 on a rising edge.
+rule "chess-play-edges" {
+  mode: Level
+  local pick = play[pickNow]
+  local cancel = play[cancelNow]
+  local ahead = play[aheadNow]
+  local behind = play[behindNow]
+  local rightward = play[rightNow]
+  local leftward = play[leftNow]
+  play[pickEdge] = pick & (play[pickDown] == 0)
+  play[releaseEdge] = (pick == 0) & (play[pickDown] == 1)
+  play[cancelEdge] = cancel & (play[cancelDown] == 0)
+  play[stepAhead] = (ahead & (play[aheadDown] == 0)) - (behind & (play[behindDown] == 0))
+  play[stepRight] = (rightward & (play[rightDown] == 0)) - (leftward & (play[leftDown] == 0))
+  play[pickDown] = pick
+  play[cancelDown] = cancel
+  play[aheadDown] = ahead
+  play[behindDown] = behind
+  play[rightDown] = rightward
+  play[leftDown] = leftward
+}
+
+// The pointer moves the cursor whenever it moves onto another square.
+rule "chess-play-point" {
+  local pointed = board(pointer, board, 1)
+  when board(engaged, board, 1) == 1
+  mode: Level
+  if pointed >= 0 and pointed != play[pointer] {
+    play[cursor] = pointed
+  }
+  play[pointer] = pointed
+}
+
+// A step moves the cursor one square in the seat's own frame: from the -Z side up the board is +row and right is
+// -column, toward the h-file (the camera's right is its forward crossed with up), and each other side turns both a
+// quarter.
+rule "chess-play-step" {
+  when play[stepAhead] != 0 or play[stepRight] != 0
+  mode: Level
+  local seatSide = board(side, board, 1)
+  local cursorColumn = play[cursor] % 8 + play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  local cursorRow = play[cursor] / 8 + play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  play[cursor] = clamp(cursorRow, 0, 7) * 8 + clamp(cursorColumn, 0, 7)
+}
+
+// A press lifts the side to move's piece under the cursor, once the board has rested and while no answer is moving.
+rule "chess-play-lift" {
+  when (((play[pickEdge] == 1) & (play[held] < 0) & (play[judging] == 0) & (pieceCell[$each] == play[cursor]) & (pieceCode[$each] * (1 - 2 * turn) > 0) & (aiSide != turn) & (ai[pending] == 0) & (settleHold == chessSettleTicks)) == 1 : Int)
+  mode: Level
+  forEach: pieceCode
+  play[held] = pieceOrdinal[$each]
+  play[from] = play[cursor]
+  play[lifted] = 1
+}
+
+// A put-down: a fresh press on another square, or the release of the lifting press away from the square the piece
+// left. A square holding a piece of the side to move takes nothing.
+rule "chess-play-put" {
+  local press = (play[pickEdge] == 1) & (play[lifted] == 0)
+  local drop = (play[releaseEdge] == 1) & (play[lifted] == 1)
+  local open = (play[cursor] != play[from]) & (board[play[cursor]] * (1 - 2 * turn) <= 0)
+  when (((play[held] >= 0) & (press | drop) & open & (pieceOrdinal[$each] == play[held])) == 1 : Int)
+  mode: Level
+  forEach: pieceCode
+  pieceCell[$each] = play[from]
+  ai[from] = play[from]
+  ai[to] = play[cursor]
+  ai[mover] = pieceCode[$each]
+  ai[pending] = 1
+  play[held] = -1
+  play[judging] = 1
+}
+
+// What the put-down is judged against, captured the tick it is made.
+rule "chess-play-before" {
+  when play[judging] == 1 and ai[pending] == 1
+  mode: Level
+  forEach: pieceCode
+  playBefore[$each] = pieceCell[$each]
+  playBeforeCode[$each] = pieceCode[$each]
+}
+
+// Putting the piece back: the cancel button, a press on the square it left, or standing up from the table.
+rule "chess-play-cancel" {
+  local back = (play[pickEdge] == 1) & (play[lifted] == 0) & (play[cursor] == play[from])
+  when (((play[held] >= 0) & ((play[cancelEdge] == 1) | back | (board(engaged, board, 1) == 0))) == 1 : Int)
+  mode: Level
+  play[returning] = play[held]
+  play[held] = -1
+}
+
+rule "chess-play-release" {
+  when play[releaseEdge] == 1
+  mode: Level
+  play[lifted] = 0
+}
+
+// The verdict on a put-down: an illegal arrangement is put back as it stood before it.
+rule "chess-play-judged" {
+  when play[judging] == 1 and ai[pending] == 0 and settleHold == chessSettleTicks
+  mode: Level
+  play[judging] = 0
+  play[revert] = verdict == 0
+}
+
+rule "chess-play-revert-codes" {
+  when play[revert] == 1
+  mode: Level
+  forEach: pieceCode
+  pieceCode[$each] = playBeforeCode[$each]
+}
+
+for i in range(0, 32) {
+  // The held piece hovers over the cursor, out of the board's band, so the board never rests while it is up.
+  rule $"chess-play-hold-{i}" {
+    when play[held] == i
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: play[cursor], offset: [0, 0.6, 0])
+  }
+  rule $"chess-play-return-{i}" {
+    when play[returning] == i
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: play[from], offset: [0, 0.3, 0])
+  }
+  rule $"chess-play-revert-{i}" {
+    when play[revert] == 1 and playBefore[$"piece{i}"] >= 0 and pieceCell[$"piece{i}"] != playBefore[$"piece{i}"]
+    mode: Level
+    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: playBefore[$"piece{i}"], offset: [0, 0.3, 0])
+  }
+}
+
+rule "chess-play-settled" {
+  mode: Level
+  play[returning] = -1
+  play[revert] = 0
+}
+
+// The cursor stands on its square while the seat sits at the table, and rests inside the tabletop otherwise.
+rule "chess-play-cursor-shown" {
+  when board(engaged, board, 1) == 1
+  mode: Level
+  poseCell(key: `placement:boardCursor`, topology: chessBoard, expression: play[cursor], offset: [0, 0.066, 0])
+}
+
+rule "chess-play-cursor-parked" {
+  when board(engaged, board, 1) == 0
+  mode: Level
+  poseCell(key: `placement:boardCursor`, topology: chessBoard, expression: play[cursor], offset: [0, 0, 0])
+}
+
+// The board consumes shared movement, confirm, cancel, and leave actions.
+
+
+// The board page, which the seat's controls switch to while it sits at a tabletop.
+bindingOverlays [
+  {
+    id: "tabletop"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      contexts [
+        { family: "engagement", state: "tabletop", group: "tabletop" }
+      ]
+      chords [
+        {
+          chord []
+          group: "tabletop"
+          page {
+            id: "board"
+            label: "Board"
+            entries [
+              { channel: "forward", id: "boardUp", scale: 1, sources ["keyboard.w", "keyboard.arrowUp", "gamepad.dpadUp"] }
+              { channel: "forward", id: "boardDown", scale: -1, sources ["keyboard.s", "keyboard.arrowDown", "gamepad.dpadDown"] }
+              { channel: "strafe", id: "boardLeft", scale: -1, sources ["keyboard.a", "keyboard.arrowLeft", "gamepad.dpadLeft"] }
+              { channel: "strafe", id: "boardRight", scale: 1, sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"] }
+              { command: "player.move.strafe", id: "boardStick", sources ["gamepad.leftStick"] }
+              { channel: "confirm", id: "confirm", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
+              { channel: "cancel", id: "cancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
+              { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+// Where each piece could move, as (column, row) steps on the `chessBoard` grid: the search tries only these cells and
+// the judging rules still decide every move. A pawn steps, double-steps and takes (en passant included) forward, the
+// king steps and castles two columns, and the bishop, rook and queen slide to the edge or the first piece. Each side's
+// patterns apply only on its own turn, so the side not to move offers no candidate.
+let orthogonalSteps = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+let diagonalSteps = [[1, 1], [1, -1], [-1, 1], [-1, -1]]
+let knightSteps = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]
+let kingSteps = concat(orthogonalSteps, diagonalSteps, [[2, 0], [-2, 0]])
+let chessMoves = concat(
+  map([1, -1], sign => { codes [sign], turn: (1 - sign) / 2, offsets [[0, sign], [0, 2 * sign], [1, sign], [-1, sign]] }),
+  map([1, -1], sign => { codes [2 * sign], turn: (1 - sign) / 2, offsets: knightSteps }),
+  map([1, -1], sign => { codes [3 * sign, 5 * sign], turn: (1 - sign) / 2, offsets: diagonalSteps, range: 0 }),
+  map([1, -1], sign => { codes [4 * sign, 5 * sign], turn: (1 - sign) / 2, offsets: orthogonalSteps, range: 0 }),
+  map([1, -1], sign => { codes [6 * sign], turn: (1 - sign) / 2, offsets: kingSteps })
+)
+
 search {
   jobs [
     {
@@ -679,6 +1040,9 @@ search {
       revision: aiRevision
       depth: 1
       best: aiBest
+      shapes [
+        relocate(displace: true, codes: pieceCode, moves: chessMoves)
+      ]
       // The score is from the side that just moved. One ply, automatic queen
       // promotion, material first, then central occupation and pawn progress.
       "score": (2 * turn - 1) * ai[evaluation]
@@ -824,6 +1188,54 @@ state {
       cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
     }
 
+    // Seat 1 at the table: the cursor's square, the piece it holds (its ordinal, -1 for none) and the square it
+    // left, the last pointed square, this tick's presses (the *Edge and step keys) and last tick's buttons (*Down),
+    // whether the held piece was lifted by the press still down, whether a put-down awaits its verdict, and the piece
+    // being put back or the arrangement being restored this tick.
+    table play {
+      cursor = 11
+      held = -1
+      from = -1
+      pointer = -1
+      pickNow = 0
+      cancelNow = 0
+      aheadNow = 0
+      behindNow = 0
+      rightNow = 0
+      leftNow = 0
+      pickEdge = 0
+      releaseEdge = 0
+      cancelEdge = 0
+      stepAhead = 0
+      stepRight = 0
+      pickDown = 0
+      cancelDown = 0
+      aheadDown = 0
+      behindDown = 0
+      rightDown = 0
+      leftDown = 0
+      lifted = 0
+      judging = 0
+      returning = -1
+      revert = 0
+    }
+    row {
+      name: "playBefore"
+      kind: "Int"
+      capacity: 32
+      min: -1
+      max: 63
+      cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
+    }
+    row {
+      name: "playBeforeCode"
+      kind: "Int"
+      capacity: 32
+      min: -6
+      max: 6
+      cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
+    }
+
     slot turn = 0 bounds(0..1)
 
     slot verdict = 1 bounds(0..1)
@@ -915,6 +1327,7 @@ state {
     table boardColors {
       light = "#F0D9B5"
       dark = "#8B5A2B"
+      cursor = "#3FA9F5"
     }
 
     slot castleRights = 0 bounds(0..15)

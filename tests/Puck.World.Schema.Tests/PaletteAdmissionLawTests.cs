@@ -70,6 +70,15 @@ public sealed class PaletteAdmissionLawTests {
 
         Assert.Contains(expectedSubstring: "emissive lane", actualString: refused.Message, comparisonType: StringComparison.Ordinal);
     }
+    // An emissive is a luminance in nits: a fraction of a nit shows under no exposure, so it is a relative weight from
+    // before emissives were nits and is refused by name; zero and a visible value are admitted.
+    [Fact]
+    public void AnEmissiveBelowOneNitIsRefusedAsARelativeWeight() {
+        AssertRefusesNaming(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 0.8f, Specular: null, Roughness: null), needle: "nit");
+        AssertRefusesNaming(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: -1f, Specular: null, Roughness: null), needle: "emissive");
+        AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 0f, Specular: null, Roughness: null));
+        AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 300f, Specular: null, Roughness: null));
+    }
     [Fact]
     public void IndirectPaletteInputsAreAdmittedBeforeStamping() {
         var entry = new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null);

@@ -399,7 +399,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
-        const int Rows = 7;
+        // A screen's seven mapping rows, then its ripple's rows, all zero for a screen that does not ripple.
+        const int Rows = (7 + SdfScreenRipple.Rows);
         const float Border = 0.03f;
         using var rig = new Rig(slots: 1);
         var mapping = new SourceMapping(
@@ -727,6 +728,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
             expected.Add(item: unchecked((uint)SdfProgram.NoDynamicTransformSlot));
             expected.Add(item: 0u);
+            // The identity carry (rotation, translation, a scale of one) and the clip plane that clips nothing.
+            expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
         }
         // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {
@@ -819,7 +822,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray()[(arena * sizeof(uint))..],
             actual: landedWords[(arena * sizeof(uint))..((int)bytes)]
         );
-        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: ((words + SdfMeshRecord.VertexWords + 1) * sizeof(uint)), value: landedWords));
+        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: (((words + SdfMeshRecord.VertexWords) + 1) * sizeof(uint)), value: landedWords));
     }
 
     // One 64×64 view looking at the origin, at the given time, carrying the given transforms.
@@ -1023,6 +1026,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         private SdfWorldPipelines m_pipelines = null!;
         private GpuPassPipeline m_shadowRaster = null!;
+        private GpuPassPipeline m_glassRaster = null!;
+        private GpuPassPipeline m_occlusion = null!;
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
@@ -1054,6 +1059,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
             m_shadowRaster.Dispose();
+            m_glassRaster.Dispose();
+            m_occlusion.Dispose();
         }
         // Moves one slot to a pose no earlier frame gave it.
         public void Move(int slot) {
@@ -1080,6 +1087,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
             m_shadowRaster.Dispose();
+            m_glassRaster.Dispose();
+            m_occlusion.Dispose();
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
@@ -1149,6 +1158,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 device: Gpu,
                 ledger: ledger
             );
+            m_glassRaster = SdfTestPipelines.GlassRaster(
+                device: Gpu,
+                ledger: ledger
+            );
+            m_occlusion = SdfTestPipelines.Occlusion(
+                device: Gpu,
+                ledger: ledger
+            );
             // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
             m_pipelines = ((m_brickPoolVoxelCapacity == 0)
                 ? SdfTestPipelines.Build(
@@ -1174,6 +1191,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 ),
                 pipelines: m_pipelines,
                 shadowRaster: m_shadowRaster,
+                glassRaster: m_glassRaster,
+                occlusion: m_occlusion,
                 meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!
             );

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 
 namespace Puck.Maths;
@@ -104,7 +103,8 @@ public static class FixedSymmetricSolve {
     /// <param name="invD">The inverse's (1,1) entry on success; zero on refusal.</param>
     /// <param name="invE">The inverse's (1,2) = (2,1) entry on success; zero on refusal.</param>
     /// <param name="invF">The inverse's (2,2) entry on success; zero on refusal.</param>
-    /// <returns><see langword="false"/> under the same conditions as <see cref="TryInvertSymmetric2"/>; every
+    /// <returns><see langword="false"/> when <paramref name="outputFractionShift"/> is negative or under the other
+    /// refusal conditions of <see cref="TryInvertSymmetric2"/>; every
     /// <see langword="out"/> parameter is zero in that case.</returns>
     public static bool TryInvertSymmetric3(
         long a,
@@ -121,10 +121,10 @@ public static class FixedSymmetricSolve {
         out long invE,
         out long invF
     ) {
-        Debug.Assert(
-            condition: (outputFractionShift >= 0),
-            message: "TryInvertSymmetric3 requires a non-negative output fraction shift."
-        );
+        if (outputFractionShift < 0) {
+            invA = invB = invC = invD = invE = invF = 0L;
+            return false;
+        }
 
         var groupMax = Max(
             v0: FusedArithmetic.RawMagnitude(value: a),
@@ -169,9 +169,9 @@ public static class FixedSymmetricSolve {
             return false;
         }
 
-        var fractionBitCount = (outputFractionShift + shift);
+        var combinedFractionBitCount = ((long)outputFractionShift + shift);
 
-        if (fractionBitCount < 0) {
+        if (combinedFractionBitCount is < 0 or > 127) {
             invA = 0L;
             invB = 0L;
             invC = 0L;
@@ -181,6 +181,7 @@ public static class FixedSymmetricSolve {
             return false;
         }
 
+        var fractionBitCount = ((int)combinedFractionBitCount);
         var sa = FixedVectorMath.ScaleRaw(
             shift: shift,
             value: a
@@ -298,13 +299,13 @@ public static class FixedSymmetricSolve {
     /// caller's own scale.</param>
     /// <param name="x">The first solution component on success; zero on refusal.</param>
     /// <param name="y">The second solution component on success; zero on refusal.</param>
-    /// <returns><see langword="false"/> when the matrix is exactly singular or a result does not fit the raw
-    /// carrier; both <paramref name="x"/> and <paramref name="y"/> are zero in that case.</returns>
+    /// <returns><see langword="false"/> when <paramref name="outputFractionShift"/> is negative, the matrix is exactly
+    /// singular or a result does not fit the raw carrier; both <paramref name="x"/> and <paramref name="y"/> are zero.</returns>
     public static bool TrySolveSymmetric2(long a, long b, long d, long rhsX, long rhsY, int outputFractionShift, out long x, out long y) {
-        Debug.Assert(
-            condition: (outputFractionShift >= 0),
-            message: "TrySolveSymmetric2 requires a non-negative output fraction shift."
-        );
+        if (outputFractionShift < 0) {
+            x = y = 0L;
+            return false;
+        }
 
         var groupMax = Max(
             v0: FusedArithmetic.RawMagnitude(value: a),
@@ -426,8 +427,8 @@ public static class FixedSymmetricSolve {
     /// <param name="x">The first solution component on success; zero on refusal.</param>
     /// <param name="y">The second solution component on success; zero on refusal.</param>
     /// <param name="z">The third solution component on success; zero on refusal.</param>
-    /// <returns><see langword="false"/> when the matrix is exactly singular or a result does not fit the raw
-    /// carrier; every <see langword="out"/> parameter is zero in that case.</returns>
+    /// <returns><see langword="false"/> when <paramref name="outputFractionShift"/> is negative, the matrix is exactly
+    /// singular or a result does not fit the raw carrier; every <see langword="out"/> parameter is zero in that case.</returns>
     public static bool TrySolveSymmetric3(
         long a,
         long b,
@@ -443,10 +444,10 @@ public static class FixedSymmetricSolve {
         out long y,
         out long z
     ) {
-        Debug.Assert(
-            condition: (outputFractionShift >= 0),
-            message: "TrySolveSymmetric3 requires a non-negative output fraction shift."
-        );
+        if (outputFractionShift < 0) {
+            x = y = z = 0L;
+            return false;
+        }
 
         var groupMax = Max(
             v0: FusedArithmetic.RawMagnitude(value: a),
@@ -1100,13 +1101,13 @@ public static class FixedSymmetricSolve {
     /// <param name="invB">The inverse's (0,1) = (1,0) entry on success; zero on refusal.</param>
     /// <param name="invD">The inverse's (1,1) entry on success; zero on refusal.</param>
     /// <returns><see langword="false"/> when the matrix is exactly singular, a result does not fit the raw carrier,
-    /// or the entries are large enough that <paramref name="outputFractionShift"/> plus the internal preconditioning
-    /// shift would be negative (see remarks); every <see langword="out"/> parameter is zero in that case.</returns>
+    /// <paramref name="outputFractionShift"/> is negative, or it plus the internal preconditioning shift is outside
+    /// [0, 127] (see remarks); every <see langword="out"/> parameter is zero in that case.</returns>
     public static bool TryInvertSymmetric2(long a, long b, long d, int outputFractionShift, out long invA, out long invB, out long invD) {
-        Debug.Assert(
-            condition: (outputFractionShift >= 0),
-            message: "TryInvertSymmetric2 requires a non-negative output fraction shift."
-        );
+        if (outputFractionShift < 0) {
+            invA = invB = invD = 0L;
+            return false;
+        }
 
         var groupMax = Max(
             v0: FusedArithmetic.RawMagnitude(value: a),
@@ -1139,15 +1140,16 @@ public static class FixedSymmetricSolve {
         }
 
         var shift = Symmetric2Shift(rawMagnitude: groupMax);
-        var fractionBitCount = (outputFractionShift + shift);
+        var combinedFractionBitCount = ((long)outputFractionShift + shift);
 
-        if (fractionBitCount < 0) {
+        if (combinedFractionBitCount is < 0 or > 127) {
             invA = 0L;
             invB = 0L;
             invD = 0L;
             return false;
         }
 
+        var fractionBitCount = ((int)combinedFractionBitCount);
         var sa = FixedVectorMath.ScaleRaw(
             shift: shift,
             value: a

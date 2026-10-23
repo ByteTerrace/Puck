@@ -38,13 +38,13 @@ public sealed class WorldBodyStampCensus {
 
         return WorldGaitDrivers.LiveBodyScale(
             reads: reads,
-            scaleRow: definition.Population.ScaleRow
+            scaleRow: m_scaleRow
         );
     }
     // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
     // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
     // look). The uniform scale folds the placement scale, the look scale, and the body's own live scale (see
-    // LiveBodyScale) — the same bodies.scaleRow cell WorldPopulation.SyncBodyScale reads server-side.
+    // LiveBodyScale) — the same bodies.scale register WorldPopulation.SyncBodyScale reads server-side.
     private WorldStampPool.BodyStamp? ResolveStampCreation(IWorldStampSource source, WorldDefinition definition, int index) {
         var look = source.Look(index: index);
         var liveScale = LiveBodyScale(
@@ -110,7 +110,10 @@ public sealed class WorldBodyStampCensus {
 
         var definition = source.Definition;
 
-        m_scaleRow = definition.Population.ScaleRow;
+        m_scaleRow = ((definition.Population.Scale is { } scale)
+            ? WorldBodyStateReads.BindingRow(slot: scale)
+            : null
+        );
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (!source.IsActive(index: index)) {

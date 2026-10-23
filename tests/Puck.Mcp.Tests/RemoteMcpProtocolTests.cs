@@ -60,21 +60,22 @@ public sealed class RemoteMcpProtocolTests {
         );
 
         request.Headers.Accept.ParseAdd(input: "application/json, text/event-stream");
-        if (failure != "missing") {
-            request.Headers.Add(
+        request.Headers.Add(
             name: "MCP-Protocol-Version",
             value: ((failure == "version")
-            ? "2099-01-01"
-            : "2026-07-28")
+                ? "2099-01-01"
+                : "2026-07-28")
         );
-        }
         request.Headers.Add(
             name: "Mcp-Method",
             value: ((failure == "method")
-            ? "tools/call"
-            : method)
+                ? "tools/call"
+                : method)
         );
-        var body = """{"jsonrpc":"2.0","id":1,"method":"METHOD","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"raw-http","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}""".Replace(
+        var body = ((failure == "missing")
+            ? """{"jsonrpc":"2.0","id":1,"method":"METHOD","params":{}}"""
+            : """{"jsonrpc":"2.0","id":1,"method":"METHOD","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"raw-http","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}"""
+        ).Replace(
             comparisonType: StringComparison.Ordinal,
             newValue: method,
             oldValue: "METHOD"

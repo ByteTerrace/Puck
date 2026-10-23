@@ -16,7 +16,7 @@ namespace Puck.World;
 /// State-backed control contexts are published separately by <see cref="WorldSeatBindings.SyncSeat"/> from the
 /// seat's routed definition. <see cref="WorldSeatBindings.SetContextState"/> short-circuits on an unchanged value.
 /// </summary>
-internal static class WorldSeatContextSync {
+public static class WorldSeatContextSync {
     // The roster family's single value — the joined/claimed/pending booleans the roster already publishes, made one
     // state (claimed before pending/active: an exclusive claim overrides the participant's own lifecycle for gestures).
     private static string RosterStateOf(PlayerRoster roster, int slot) {
@@ -34,6 +34,21 @@ internal static class WorldSeatContextSync {
         );
     }
 
+    // Whether a declared screen shows a capture of a desktop window or a whole monitor; -1 is no screen.
+    private static bool ShowsCapture(int screen, IReadOnlyList<WorldScreen> screens) {
+        if (screen < 0) {
+            return false;
+        }
+
+        foreach (var row in screens) {
+            if (row.Index == screen) {
+                return WorldImageProducerSettings.IsPassthroughCapture(source: row.Source);
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Publishes roster, engagement, and layout state, and the resolved perception anchor, for every
     /// local seat.</summary>
     /// <param name="seatBindings">The per-seat binding resolver the states publish into.</param>
@@ -42,7 +57,9 @@ internal static class WorldSeatContextSync {
     /// <param name="anchor">The per-seat perception anchor the resolved possession target publishes into.</param>
     /// <param name="activeLayout">The window composer's active layout selection (window-wide, so every seat
     /// publishes the same value) — an authored layout name, or <see cref="WorldViewComposer"/>'s <c>builtin</c>.</param>
-    public static void Publish(WorldSeatBindings seatBindings, PlayerRoster roster, IWorldGrantsView grants, WorldPerceptionAnchor anchor, string activeLayout) {
+    /// <param name="screens">The screens the delivered document declares, which say whether a captured screen shows a
+    /// window or monitor capture (the engagement family's <c>passthrough</c> state).</param>
+    public static void Publish(WorldSeatBindings seatBindings, PlayerRoster roster, IWorldGrantsView grants, WorldPerceptionAnchor anchor, string activeLayout, IReadOnlyList<WorldScreen> screens) {
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
             var principal = roster.PrincipalOf(slot: slot);
             var applications = grants.Applications(principal: principal);
@@ -50,6 +67,7 @@ internal static class WorldSeatContextSync {
             var holdsOwn = false;
             var possessed = -1;
             var screen = -1;
+            string? tabletop = null;
             var composed = false;
 
             foreach (var application in applications) {
@@ -71,8 +89,22 @@ internal static class WorldSeatContextSync {
                     (screen < 0)
                 ) {
                     screen = application.Target.Value;
+                } else if (
+                    (application.Target.Kind == GrantSubjectKind.Placement) &&
+                    (tabletop is null)
+                ) {
+                    tabletop = application.Target.Id;
                 }
             }
+
+            // A seat sits at a tabletop only while captured there; a mirrored set still walks its avatar.
+            var seated = (holdsOwn
+                ? null
+                : tabletop);
+            // A seat captured on a capture's screen is at the window or desktop the local user may open.
+            var framed = (holdsOwn
+                ? -1
+                : screen);
 
             seatBindings.SetContextState(
                 slot: slot,
@@ -85,9 +117,16 @@ internal static class WorldSeatContextSync {
             seatBindings.SetContextState(
                 family: WorldContextFamilies.Engagement,
                 slot: slot,
-                state: (composed
+                state: ((seated is not null)
+                ? WorldContextFamilies.EngagementTabletop
+                : (ShowsCapture(
+                    screen: framed,
+                    screens: screens
+                )
+                ? WorldContextFamilies.EngagementPassthrough
+                : (composed
                 ? WorldContextFamilies.EngagementEngaged
-                : WorldContextFamilies.EngagementNone)
+                : WorldContextFamilies.EngagementNone)))
             );
             seatBindings.SetContextState(
                 family: WorldContextFamilies.Layout,
@@ -108,9 +147,11 @@ internal static class WorldSeatContextSync {
             // A seat captured on a screen (no own-body application beside it) engages that screen; a mirrored one
             // still walks its avatar and engages nothing the camera or overlay would frame.
             anchor.PublishEngagedScreen(
-                screenIndex: (holdsOwn
-                ? -1
-                : screen),
+                screenIndex: framed,
+                slot: slot
+            );
+            anchor.PublishEngagedTabletop(
+                placementId: seated,
                 slot: slot
             );
         }

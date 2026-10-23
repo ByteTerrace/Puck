@@ -1,64 +1,54 @@
-using System.Globalization;
 using Puck.Maths;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
-    /// <summary>Resyncs every active body's live <see cref="WorldBody.Scale"/> wholesale from
-    /// <c>bodies.scaleRow</c> — called from the same <c>WorldServer.Install</c>/<c>InstallRuntimeStateValue</c>
-    /// choke points <c>WorldGrants.SyncState</c> is, never per tick. Every active body first resets to
-    /// <see cref="FixedQ4816.One"/> (so a removed cell, an un-named body, or a freshly admitted slot never inherits
-    /// a stale or a previous occupant's value), then the row's own cells overwrite the bodies they key by 0-based
-    /// index. A world authoring no <see cref="WorldBodiesDefaults.ScaleRow"/> is a no-op past the reset.</summary>
+    // Whether the last scale pass had a register to read, so the pass after a document drops bodies.scale still returns
+    // every body to one, and a document without one costs nothing per tick.
+    private bool m_scaling;
+
+    /// <summary>Resyncs every body's live <see cref="WorldBody.Scale"/> from the <c>state.body</c> Counter register
+    /// <c>bodies.scale</c> names: an active body takes the register's value, and every other body, or every body of a
+    /// document naming none, is one. The register is the body's own state, so a shrunk body keeps its size across a
+    /// crossing, a checkpoint restore and a replay. Called once a tick after the world rules, from the same choke points
+    /// <see cref="SyncBodyCells"/> is, and by a crossing that wrote the register. A body whose scale moves rederives its
+    /// collider volumes and broadphase radius.</summary>
     /// <param name="definition">The live document.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public void SyncBodyScale(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var slot = -1;
+        var scaling = (
+            (definition.Population.Scale is { } name) &&
+            WorldBodyStateReads.TryResolveSlot(
+            definition: definition,
+            kind: out var kind,
+            name: name,
+            slot: out slot
+        ) &&
+            (kind == ActionStateKind.Counter)
+        );
+
+        if (!scaling && !m_scaling) {
+            return;
+        }
+
+        m_scaling = scaling;
+
         for (var index = 0; (index < m_entries.Length); index++) {
-            if (m_entries[index].Body is { } resident) {
-                resident.SetScale(value: FixedQ4816.One);
-            }
-        }
-
-        if (definition.Population.ScaleRow is not { } scaleRow) {
-            return;
-        }
-
-        if (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: scaleRow
-        ) is not { } row) {
-            return;
-        }
-
-        foreach (var cell in (row.Cells ?? [])) {
-            if (
-                !int.TryParse(
-                s: cell.Key,
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var bodyIndex
-            ) ||
-                (bodyIndex < 0) ||
-                (bodyIndex >= m_entries.Length) ||
-                (m_entries[bodyIndex].Body is not { } body)
-            ) {
+            if (m_entries[index].Body is not { } body) {
                 continue;
             }
 
-            if (
-                WorldStateReader.TryRead(
-                definition: definition,
-                rowName: row.Name,
-                key: cell.Key.Value,
-                tick: 0UL,
-                engineTick: 0UL,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) &&
-                (raw is { } bits)
-            ) {
-                body.SetScale(value: FixedQ4816.FromRawBits(value: bits));
-            }
+            body.SetScale(value: ((scaling && m_entries[index].Active)
+                ? m_actionStateLane.Counter(
+                    ordinal: index,
+                    slot: slot
+                )
+                : FixedQ4816.One
+            ));
         }
     }
 }

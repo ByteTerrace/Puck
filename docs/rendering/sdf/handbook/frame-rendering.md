@@ -24,6 +24,11 @@ tables the upload wrote. The passes finish that view's own output image:
    upload → mask → bake → shadow-near → shadow-far → shadow-second → mesh → pyramid → surface → views → sky → composite
 ```
 
+A view of a program that holds a glass shape runs three more passes between
+views and the sky, `glass-clear → glass → glass-shade`
+([glass after the opaque image](#glass-after-the-opaque-image)); any other view
+runs the chain as it stands and pays nothing for them.
+
 The render graph plans the view's passes like any other graph: the package
 declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
@@ -47,9 +52,11 @@ frame with no pending bake skips both, so a settled scene evaluates no field on
 the GPU at all.
 
 **shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`,
-`sdf-mesh-shadow.frag.hlsl`) draw every mesh draw from the light cameras
+`sdf-mesh-shadow.frag.hlsl`) draw the opaque mesh draws from the light cameras
 `SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades)) into
-their depth alone. A frame with no mesh draw, or whose view has no cascade,
+their depth alone, each draw whose box lies in the cascade's light box and,
+swept along the light, may shadow a receiver the view shows
+(what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
 skips them; `shadow-second` runs only while a second stable shadow slot holds a
 directional light, and a view whose world holds one stable slot has no
 `shadow-second` at all.
@@ -60,6 +67,32 @@ the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Th
 stored as floats, so a region holds at most 2^24 draws and a mesh at most 2^24 triangles, each refused by name past
 that. A frame with no mesh draws skips the pass, its target's and depth's barriers included. The target and its depth
 attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
+
+**What a raster pass draws.** Each staged draw carries a world box, its mesh's
+position bounds through its matrix and carry (`SdfMeshBox`), and every raster
+pass skips the draws whose box it cannot show (`SdfMeshCull`): the mesh and
+glass passes those wholly outside the view's frustum or past the frame's far
+distance, the cascades those outside their light box or whose shadows reach no
+receiver the view shows. The tests keep a pixel margin past the temporal jitter,
+a thousandth of the near distance before the near plane and the shadow filter's
+reach, so the cull changes no pixel; a skinned draw, whose vertices the GPU
+places from its members' slots, has no box and is always drawn. Each nested
+view culls by its own camera, a portal window by the frustum fitted through its
+glass.
+
+The mesh pass then skips what the view's own depth hides
+(`SdfMeshOcclusion`). It draws in two phases: first, through a counted indirect
+draw, the draws its previous frame found visible and every draw with no box;
+then the occlusion kernel (`sdf-mesh-occlusion.comp.hlsl`) builds a pyramid of
+the farthest forward depth the first phase wrote (the target's fourth channel),
+tests each box the box cull kept against it, keeps the verdict as the next
+frame's visible set and writes the second phase's draws, the visible ones the
+first phase missed, which draw over the first's target and depth. Together the
+phases draw everything a pixel shows in the frame it shows it. Each phase keeps
+the staged draw order, glass never occludes, and the cascades keep the box cull.
+`world.cull frustum` keeps the box cull alone, `world.cull off` draws every
+draw, and `gpu.vertices` counts the vertices each pass's draws ask for, the
+GPU's indirect draws included.
 
 **pyramid** (`sdf-mesh-pyramid.comp.hlsl`) reduces the mesh target into the
 depth pyramid the surface pass's occlusion reads (`frame/sdf-mesh-pyramid.hlsli`):
@@ -155,6 +188,22 @@ Temporal sampling renders the geometry again while a sample is owed. Once
 lit history converges, visual edits leave its sample count and ring standing.
 `world.cadence off` forces active passes to render for measurement.
 
+The cadence also rates changing work by its size on screen (`world.rates`,
+`SdfUpdateRates`), presentation only and only where the drop is barely
+perceptible (`SdfUpdateRateTiers`): the far cascade stands between 30 Hz
+refreshes ([the shadow cascades](#the-shadow-cascades)); a footprint showing a
+nested portal or session view asks for it at 30 Hz at or below 120 display
+pixels high and 15 Hz at or below 60, and one showing a screen's source at 30
+Hz once the screen stands at or below its image's height on the display and 15
+Hz at or below half of it (`RenderGraphFootprint.Refresh`, which the scheduler
+honours as it does a root's refresh, the most frequent demand winning); and a
+body's pose evaluation runs at 30 Hz at or below 30 pixels per metre and 15 Hz
+at or below 15, its root followed every frame and its parts riding the root
+rigidly between packs (`WorldStampPool.Rates`). The machine behind a rated
+screen and the simulation behind a rated body run at full rate. Each tier
+bounds the step a held update jumps by on screen to two pixels for the speed it
+is sized for. `world.counters sdf.rates` counts what each lever held.
+
 ## What each pass costs
 
 The passes scale with different things. `mask` and `bake` scale with the
@@ -164,7 +213,11 @@ scale with the triangles drawn and the fragments they cover. `surface` and
 `views` scale with the render grid's pixels: every pixel runs the same fixed
 occlusion and shadow filter taps, and a hit pixel's lighting scales with the
 lights and volumes it reads. `composite` scales with the output's pixels and
-`sky` with the uncovered ones.
+`sky` with the uncovered ones. In a view with glass, `glass` scales with the
+glass draws' fragments (every face of each, front and back) and `glass-shade`
+with the render grid's pixels, a copy for every pixel no glass covers and a
+refracted read, up to eight for a frosted pane, for every pixel glass does;
+`glass-clear` is one buffer clear.
 
 Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`; on the
 baked-mesh path only `bake` evaluates shapes, so a settled frame counts none.
@@ -525,6 +578,68 @@ reaches views and the resolve, while a change of a kind's colour, the fog's, the
 medium's or the gradient the fog and the haze in-scatter, reaches only the
 composite.
 
+## Glass after the opaque image
+
+The opaque chain draws one surface a pixel, so a surface that transmits what
+lies behind it is a contract of its own, run once the opaque image exists. A
+palette slot that declares `glass` (`SdfGlass`: the slot's `color` as its tint,
+a `depth` over which light through it takes on that colour, an index of
+refraction `ior`, and the slot's `roughness` as its frost) makes every shape in
+it glass. Glass shapes bake into groups of their own
+([the bake](#the-bake): `SdfMeshBakeGroup.Glass`, never merged with an opaque
+instance), so a glass draw is glass whole, and the mesh pass, the shadow
+cascades and the irradiance volume's trace leave it out: glass casts no shadow
+and neither blocks nor bounces the probes' rays.
+
+A view of a program with a glass shape runs the glass fragment
+(`SdfWorldPackage.WithGlass`), three passes between views and the sky, and
+every later pass reads the image the last of them writes in the lit image's
+place:
+
+| Pass | Does |
+|---|---|
+| `glass-clear` | Zeroes the **glass sums**, two words a render-grid pixel: a signed distance sum and a face count. |
+| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, and its face count, with atomics, so the sums hold the distance the ray travels through glass whatever order the faces draw in. |
+| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read where the ray bent by Snell's law leaves the glass and carries on, parallel to the pixel's ray, to the opaque hit's depth, and absorbed over the distance through the glass by Beer–Lambert; the sky reflects by Fresnel from the environment map under the sky's reflection gain, and each light adds its highlight through the one GGX lobe; frost spreads the read over a disc of taps whose radius grows with the roughness and the distance behind the glass. |
+
+The distance through the glass is the sums' matched distance plus the opaque
+hit's distance for each unmatched front face, never more than the distance from
+the nearest front face to the opaque hit: a hollow shell absorbs over both its
+walls, a solid holding an opaque object over the glass before it, and a thin
+pane over its thickness alone. Absorption is `exp(−σ · distance)` per channel
+with `σ = −ln(tint) / depth`, so light through one depth of the glass is the
+tint and light through two is the tint squared: thicker reads deeper, never a
+stacked blend. The glass pixel's coverage is the light behind's, darkened by
+the glass's luminous transmittance, so the sky the composite puts behind a
+clear pane shows through at the pixel's own direction. The reflection and the
+highlights pass through the atmosphere over the glass's own distance; the light
+behind carries the atmosphere over the opaque hit's distance already, and the
+composite's in-scatter and media composite at the opaque hit's distance.
+
+In a temporal view the glass pass raises a pixel's reactivity to one where its
+refracted read comes from a pixel away or more
+([temporal reconstruction](#temporal-reconstruction)): the resolve's history
+follows the opaque hit the visibility record names, not what the glass shows
+there, so such a pixel resolves its own sample as a reactive screen does. A
+flat pane that bends nothing keeps its history and its edges resolve like any
+other, and a frosted pane's taps turn by a pattern fixed per pixel, so its blur
+converges over the history rather than flickering. Captures, the capture gate
+and its taint rules see glass as any surface: the glass passes read nothing
+external. A debug view's image passes through the glass pass unshaded, and the
+pick reads the visibility record, the opaque hit behind the glass.
+
+The limits: one glass layer a pixel, the nearest front face before the opaque
+hit, so glass seen through glass shades as the opaque image behind the nearer
+pane; the sky seen through glass is not refracted and is darkened rather than
+tinted; refraction reads a screen-space neighbour, so what lies off screen or
+behind a nearer surface reads the pixel's own sample; an eye inside a glass
+solid sees no front face, so the pixel passes through untinted; the glass
+surface reads no occlusion and no cascade; and tinted shadows and glass in the
+irradiance volume are open items ([open items](../../../plans/open-items.md)).
+A world with no glass shape allocates and runs none of this; `world.budget`
+prints the glass storages' bytes and the glass draw count, and
+`world.counters gpu` the three passes' work.
+
 ## Temporal reconstruction
 
 A view whose quality asks for it (`SdfViewQuality.Temporal`) reconstructs over
@@ -533,9 +648,13 @@ gathered into its output. It runs `SdfWorldPackage.TemporalFragment`, the
 reduced fragment's passes at its render ceiling, native or reduced, so a native
 view gains a `resolve` pass too. In `Puck.World`, `world.temporal` turns it on
 for the world's own views; the quality presets carry it, off at `low` and on at
-`medium` and `high`. A camera view never reconstructs (its quality restriction,
+`medium` and `high`. The world's own views are every view the presentation lays
+out at `WorldFramePresenter.ViewQuality()`: seat views, the operator pose, and
+layout slots that name a camera alike, so a named-camera slot reconstructs and
+its settled still converges over a jitter period. A camera view a screen films
+never reconstructs (its quality restriction,
 `WorldScreenBinder.CameraViewQuality`, does not ask), and neither does a session
-view.
+view (`WorldSessionSceneEmitter.ReducedQuality`).
 
 Each view's history is its own fragment's: two versions at the output extent,
 one allocation a frame slot each, that the next frame reads through
@@ -548,16 +667,25 @@ demands nothing of its writer, and device loss starts from none.
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds four words per output pixel: the visibility
-  identity of the nearest of the render samples the resolve read; that sample's
-  ray distance and the samples' summed weight, capped at one jitter period of
-  full-weight samples, as two half floats; and the weighted mean of the samples'
-  surface transport, two words.
+- The **history surface** holds six words per output pixel
+  (`SdfWorldPackage.HistorySurfaceWords`): the visibility identity of the
+  pixel's receiver, the nearest of the render samples the resolve read that is
+  not a sub-pixel feature; that sample's ray distance and the samples' summed
+  weight, capped at one jitter period of full-weight samples (four periods
+  while the pixel carries a feature), as two half floats; the weighted mean of
+  the samples' surface transport, two words; and the feature the pixel's
+  footprint last showed, its YCoCg as three half floats with the frames the
+  memory has left, zero for none.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
-extent, which only the resolve reads: one where a screen covers the pixel, and,
-since the material model cannot tell steady emission from animated, the share of
-the pixel's color it emits after material layers.
+extent, which only the resolve reads: one where a display screen's picture covers the
+pixel (its bezel band and an opening, a portal's window, are zero and keep their
+history like any surface, so the face's jittered edge resolves like any edge),
+zero for every other surface. Emission is not reactive: an emission that changes
+is a shading change the clip below shows at once, and a steady one, a power light
+smaller than a pixel, needs the history the resolve gathers over the jitter.
+Under a temporal view a screen reads its image along the pixel's unjittered ray,
+so the image holds still while the jitter moves.
 Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
@@ -575,12 +703,45 @@ spatial path at this frame's sample grid and its history restarts. Surviving
 history is clamped component by component to the 3x3's YCoCg box, so correcting
 chroma leaves an already valid luminance alone, including when a chroma interval
 has zero width. It is weighted down by the reactivity and joined by this frame's
-samples. The transport history is clamped to the 3x3's
+samples. The reactivity the resolve reads is the pixel's own sample's, the tap
+nearest its center, so a steady pixel beside a screen keeps its history. A
+reactive pixel shows the spatial path by its reactivity, on the
+unjittered grid, whatever weight it gathered: this frame's samples alone gather a
+weight that swings about one sample's as the jitter moves, and blending by it
+would switch a whole screen between the two filters frame by frame. The transport history is clamped to the 3x3's
 range, as coverage is, and joined with the same weights.
 Non-finite history colors or transports are rejected before clipping. History
 writes stay within the half-float range; a non-finite accumulation stores zero
 weight, so a bright transient cannot contaminate later history after its source
 recovers.
+
+A detail smaller than a render sample (a device's power light, a thin bright
+trim, a glint on a glossy part, a label's stroke) is hit by the jitter in some
+positions of the period and missed in others; in a missed frame no sample in the
+whole image holds it, so the 3x3 box alone would clip its history to the
+background each time and the detail would flicker. The resolve tells such a
+**sub-pixel feature** by its shape rather than by the pixel's past: over a 5x5
+luma window it marks a render sample whose two neighbours in at least three of
+the four directions through it (across, down, the two diagonals) lie half its
+luma below it, or it below them, so a dot and a line thinner than a sample
+count and the corner of a sweeping edge, which keeps a neighbour on its own
+side, never does (`sdfResolveFeature`). The most contrasting unreactive feature
+in a pixel's 3x3 is written to its history surface for one jitter period, by
+which time the jitter has come round to it; an accepted history carries its
+memory on, one frame shorter, and a restarted one drops it. While the memory
+lives and the pixel's history moved less than 0.05 output pixels to reach it,
+the clip box widens to the feature's color, so the mean the jitter gathers over
+the feature (the coverage a supersampled image would give it) survives the
+frames that miss it, and the history saturates at four periods rather than one,
+so that mean pulses by about a fifth over the period rather than doubling. A
+feature is never the pixel's receiver, so the frame the jitter leaves it does
+not reject the history the surface under it carries. The memory is one point
+added to the box, not a tolerance: a shadow sweeping behind a power light is
+still clipped to the lit neighbourhood, because the widening runs toward the
+feature's color alone. What it cannot tell is a sub-pixel feature that turns
+off from one the jitter missed, so such a light fades over a period rather than
+at once; and under camera or surface motion the memory is unused, so the
+feature flickers as it did, hidden by the motion.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a
@@ -600,8 +761,14 @@ a new epoch while a spatial view's still output stands without a render.
 
 A plain capture (`converge: 0`) observes the next normal temporal sample and
 keeps clean color history. An explicit converging capture starts its
-sample sequence at zero; any capture also discards retained tainted history
-before recording filled inputs.
+sample sequence at zero. On every frame a capture waits, any capture also
+discards retained state that read unfilled external content before recording
+filled inputs: a tainted temporal history restarts, and a tainted sky
+environment or screen emission is projected again from the capture gate's
+fills, so taint that returns after a reload or a lights change never holds the
+capture. A presented capture, which holds no frame, also skips the period of
+renders a restarted history takes to converge, so its frames show the steady
+image the display settles back to.
 
 The [`temporal-standing` canary](../../../../experimental/tests/Puck.World.Canaries/temporal-standing/canary.json)
 checks this through the real World's GPU counters. A camera pan starts another
@@ -720,15 +887,23 @@ samples cannot resolve the surface (`SdfSampledLattice.Refine`):
   well under the distance (a fifth of it on the Moth's shins), and a test in
   world units misses every sheet such a field holds. A solid's edge or corner
   that a line crosses near its tip, or grazes, is as thin along the line, but
-  the lines beside it cross its body two samples thick or more, which a sheet
-  thinner than a cell cannot: such a cell does not refine, and the contour's
-  tangent planes keep the edge sharp at the lattice's own spacing. An acute rim
-  (a cone's foot) or a cut tilted against the lattice would otherwise refine in
-  patches along its length, and the merged cells around each patch cut the
-  crease at the coarse spacing;
-- a crossed cell whose outside corners report different materials;
+  the lines beside it either cross its body two samples thick or more, which a
+  sheet thinner than a cell cannot, or see it along one direction alone, where
+  a sheet spans both directions across the line that caught it
+  (`ThinBeside`: a line beside it on each cross axis must cross the same sheet
+  or gap thinly within the window): such a cell does not refine, and the
+  contour's tangent planes keep the edge sharp at the lattice's own spacing. An
+  acute rim (a cone's foot), a cut tilted against the lattice or a box turned
+  off every axis would otherwise refine in patches along its edges and at its
+  corners, and the merged cells around each patch cut the crease at the coarse
+  spacing or fold its fine vertices into slivers along it;
 - a crossed cell whose corner signs hold more than one surface patch, two sheets
   in one cell.
+
+A cell whose outside corners report different materials is not refined for
+that: the material cut searches each boundary along the mesh's own edges, and
+a seam between two materials refined along a concave crease merges its fine
+cells into collinear vertices whose quads fold.
 
 Each such cell is measured again as a points lattice at a fine spacing: the cell
 split into as many parts as bring it to 5 mm (`FineCell`), at most four along
@@ -903,6 +1078,22 @@ mesh replaces the skinned one when it lands (`SdfMeshSettle`). A pose still
 changing never rebakes, and a residency starts at most two such rebakes at once
 and four a second; `world.counters sdf.mesh-settle` counts them.
 
+A body straddling a portal whose counterpart stands in the same world is drawn
+on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding
+the body's slots is clipped to the front of the glass it straddles, and gains a
+copy carried through the pair's rigid motion and clipped to the front of the
+counterpart's glass. The draw record ends with that carry, a rotation
+quaternion and a translation every resolved world position and normal goes
+through last (words 33 to 39), and the world-space clip plane (words 40 to 43,
+`dot(n, x) + d`, all zeros for none), which the mesh and shadow vertex stages
+write to `SV_ClipDistance0`. Vulkan devices are created with
+`shaderClipDistance` for it. Only stamp-pool bodies are covered: a catalog
+avatar or a prototype mesh draw is still drawn whole on one side. The frame
+that carries a body through such a door reseats its slots' history, so
+reprojection never reads the 6 m jump as motion. A chase camera whose boom
+passes through a same-world door's glass stands past the counterpart's glass
+instead (`WorldPortalStraddle.CarryBoom`), looking back through it at the body.
+
 The tables keep each mesh at the words it was first placed at
 (`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a
 frame whose bodies moved packs only its draw records (`SdfMeshRegion.WriteDraws`),
@@ -938,7 +1129,12 @@ a group whose bound passes the reach is keyed by the reach too. A dynamic group'
 it is offset along world axes by the body's pose when the program was emitted.
 The key is taken when a program arrives, from that frame's transforms, so a
 group whose shapes move against one another afterwards (a part follower) keeps
-the mesh of the pose it was keyed at. A program rebuild keeps every group whose geometry held, and every
+the mesh of the pose it was keyed at. A program rebuild keeps every group whose geometry held, and a dynamic
+group whose form held (`SdfMeshGeometryBuilder.Form`: its geometry without the other slots' poses), so a body
+standing in another pose when something else in the world changes keeps its skinned mesh and bakes again only
+through the settle rebake. A geometry whose bake found no surface is recorded as such and never baked again in the
+run. A responding static placement registers the palette of every creation it can show
+(`WorldPlacementStamper.EmitStatic`), so a response changes no other group's material ids. Every
 meshed group is stored by its geometry in an `SdfMeshLibrary` every residency of
 a presentation shares (`WorldScreenBinder.MeshLibrary`), so geometry that comes
 back (a body that left the world and returned, an instance at another index) or
@@ -946,11 +1142,16 @@ arrives from another world (a body crossing between the debug world and the
 garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
 The World's library also keeps every mesh it stores between runs, in the
-`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to a gibibyte by
-the caches' one retention, `CacheRetention`), keyed by the group's geometry and
-the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s build
-and the hash of the bake's own sources in `Puck.SdfVm` (their list is
-`PuckMeshBakeSource` in its project). A program's group the store holds loads
+`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to
+8 GiB, six of the debug world's sets, a set at a time: each bake identity's entries are one directory, removed whole,
+least recently used first, by the caches' one retention, `CacheRetention`), keyed by the group's
+geometry and the bake's identity (`SdfMeshBakeIdentity`): the bake kernels'
+bytecode and the code the bake runs, the IL of every method its own code reaches
+across the `Puck` assemblies with the layouts of the types they name
+(`SdfMeshBakeClosure`), so an edit outside what the bake runs, or a build in
+another checkout, keeps every entry. A start that bakes groups logs why in one
+line (`[sdf.mesh-bake] miss … identity … unchanged` or `… new since …: … changed`,
+naming the kernel or the code members that differ). A program's group the store holds loads
 from disk on the thread pool instead of baking, so an unchanged world reboots
 without baking and a changed creation bakes only its own groups; an entry that
 fails its checksum, names another key or is no mesh is refused by name
@@ -1005,6 +1206,18 @@ the fit snaps to that size's texels. The tier and whether the world holds a
 second stable slot choose the view's fragment (`SdfWorldPackage.WithShadows`),
 so changing either rebuilds the view's graph once; the slot count is the
 world's configured policy, so a handoff between lights allocates nothing.
+
+The far cascade refreshes at 30 Hz (`world.rates shadow-far`,
+`SdfUpdateRates.ShadowFar`): a view holds its far cascade's depth and fit for
+the frames a 30 Hz period spans at the display's rate (`SdfWorldPasses.Rates`),
+so `shadow-far` stands between refreshes whatever forces the frame's other
+passes, and every pass of the view reads that depth through the camera it was
+drawn from, so a static caster's shadow is exact on a held frame and only a
+dynamic caster beyond the near cascade lags, by under one of the far cascade's
+texels at walking speed. A hold ends early when the fit no longer covers what
+the view shows: the light's direction, the cascade's extent or texels change,
+the camera cuts, turns past half a degree or moves half a metre, or a capture
+converges. A display at or below 30 Hz holds nothing.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and

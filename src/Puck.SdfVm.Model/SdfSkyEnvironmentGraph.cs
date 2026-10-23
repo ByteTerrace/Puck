@@ -75,7 +75,7 @@ public static class SdfSkyEnvironmentGraph {
             new ShaderPipelineResource(Name: ScreensInput, Kind: ShaderPipelineResourceKind.Buffer,
                 SizeBytes: SdfScreenEmission.Bytes, StrideBytes: (sizeof(float) * 4),
                 Initialization: ShaderPipelineInitialization.External)],
-        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.Composite)
+        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.GlassShade or SdfWorldPackage.Parts.Composite)
             ? pass with { Inputs = [.. pass.Inputs, new ResourceReference(Input), new ResourceReference(MapInput), new ResourceReference(ScreensInput)],
                 InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead] }
             : pass))],

@@ -1,0 +1,130 @@
+// Noclip (noclip.puck), each scenario booted in the whole debug world: `puck test worlds/debug/noclip-tests.puck
+// --reproduce`. The wall is the 4 m reference cube (debug.puck), spanning x -14 to -10 and z 4 to 8 from the ground to
+// 4 m. A headless seat's camera faces -Z, so `body.fly -1 …` from the pose at z 1 walks her +Z into it.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+
+test "noclip off, the cube stops her" {
+  when {
+    ticks 30
+    seat1: body.pose -12 0.05 1 180 0 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 3
+    ticks 100
+  }
+  expect {
+    bodyState(body, 0, noclip) == 0
+    bodyPosition(body, 0, z) < 4
+    bodyPosition(body, 0, z) > 3
+  }
+}
+
+test "noclip on, she walks through the cube and out past it" {
+  when {
+    ticks 30
+    seat1: body.pose -12 0.05 1 180 0 0
+    ticks 10
+    seat1: body.press noclip 1 0.2 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 2
+    ticks 70
+  }
+  expect {
+    bodyState(body, 0, noclip) == 1
+    bodyState(body, 0, form) == 3
+    bodyPosition(body, 0, z) > 9
+  }
+}
+
+// Switched off a metre into the cube, she steps out of its nearest face onto the ground beside it, never down through
+// the floor its shallowest push would take her.
+test "noclip switched off inside the cube, she steps out beside it onto the ground" {
+  when {
+    ticks 30
+    seat1: body.pose -12 0.05 1 180 0 0
+    ticks 10
+    seat1: body.press noclip 1 0.2 0
+    ticks 10
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 32
+    seat1: body.press noclip 1 0.2 0
+    ticks 30
+  }
+  expect {
+    bodyState(body, 0, noclip) == 0
+    bodyPosition(body, 0, z) < 4
+    bodyPosition(body, 0, z) > 3
+    bodyPosition(body, 0, y) > -0.1
+    bodyPosition(body, 0, y) < 0.5
+  }
+}
+
+test "noclip on, she sinks through the floor" {
+  when {
+    ticks 30
+    seat1: body.press noclip 1 0.2 0
+    ticks 10
+    seat1: body.press rise -1 1 0
+    ticks 40
+  }
+  expect {
+    bodyPosition(body, 0, y) < -2
+  }
+}
+
+// In the suit noclip holds flight mode on, so switching it off in the open air leaves her hovering where she is.
+test "in the suit, noclip switched off in the air leaves her hovering" {
+  when {
+    ticks 30
+    seat1: body.press noclip 1 0.2 0
+    ticks 10
+    seat1: body.press rise 1 1 0
+    ticks 40
+    seat1: body.press noclip 1 0.2 0
+    ticks 45
+  }
+  expect {
+    bodyState(body, 0, noclip) == 0
+    bodyState(body, 0, flightFuel) > 0
+    bodyPosition(body, 0, y) > 3
+  }
+}
+
+test "out of the suit, noclip flies her" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.press noclip 1 0.2 0
+    ticks 10
+    seat1: body.press rise 1 1 0
+    ticks 40
+  }
+  expect {
+    bodyState(body, 0, suit) == 0
+    bodyState(body, 0, form) == 2
+    bodyPosition(body, 0, y) > 3
+  }
+}
+
+// Out of the suit she has no flight pack, so switching noclip off in the air drops her back onto the ground.
+test "out of the suit, noclip switched off in the air drops her onto the ground" {
+  when {
+    ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
+    seat1: body.press noclip 1 0.2 0
+    ticks 10
+    seat1: body.press rise 1 1 0
+    ticks 40
+    seat1: body.press noclip 1 0.2 0
+    ticks 90
+  }
+  expect {
+    bodyState(body, 0, form) == 0
+    bodyState(body, 0, flightFuel) == 0
+    bodyPosition(body, 0, y) > -0.1
+    bodyPosition(body, 0, y) < 0.5
+  }
+}

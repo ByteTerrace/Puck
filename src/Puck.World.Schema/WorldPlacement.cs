@@ -348,8 +348,29 @@ public enum WorldBoardEnforcement : byte {
 /// <param name="Enforcement">What the engine itself does once <paramref name="Verdict"/> refuses a move.</param>
 /// <param name="Accept">The <paramref name="Verdict"/> value the judge writes to accept a move — any other value is
 /// a refusal.</param>
+/// <param name="Engage">How a seat sits down at the table, or <see langword="null"/> for a table no seat engages:
+/// the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and
+/// the surface the seat's pointer meets.</param>
 public sealed record WorldPlacementBoard(string Topology, string Occupancy, string? Turn = null, string? Verdict = null,
-    string? Move = null, string? Plan = null, WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record, long Accept = 1L);
+    string? Move = null, string? Plan = null, WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record, long Accept = 1L,
+    WorldTabletopEngage? Engage = null);
+/// <summary>A tabletop's engagement: a seat standing within <paramref name="Radius"/> of the board's centre presses
+/// <paramref name="Channel"/> (its context button) and sits down at the table. The seat is captured (its avatar
+/// stands still) on a <c>control placement:&lt;id&gt;</c> application, its camera eases to a view of the whole board
+/// from the side it stands on, and the same button leaves. While engaged, the world's rules read the seat's channels
+/// as play (<c>channel(...)</c>), and the board reads where the seat points
+/// (<c>board(pointer, &lt;row&gt;, &lt;seat&gt;)</c>), whether the seat sits at it (<c>board(engaged, …)</c>) and from
+/// which side (<c>board(side, …)</c>), so the game itself stays document rules.</summary>
+/// <param name="Channel">The declared channel whose press engages and leaves the table.</param>
+/// <param name="Radius">How near the board's centre, on the ground plane in world units, a seat must stand to
+/// engage. Positive.</param>
+/// <param name="Pitch">The board view's elevation above the horizontal, in degrees: 90 looks straight down, smaller
+/// leans toward the seat's side. In (0, 90].</param>
+/// <param name="Margin">World units of room the board view leaves around the board's footprint. Non-negative.</param>
+/// <param name="Surface">The height above the topology's origin, in world units, of the plane a pointer ray meets
+/// when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.</param>
+public sealed record WorldTabletopEngage(string Channel, double Radius = 2.5, double Pitch = 60, double Margin = 0.1,
+    double Surface = 0);
 /// <summary>A placement's grip facet — overrides the world's <see cref="WorldCollision.DefaultHold"/> hold
 /// policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides;
 /// absent, the row's colliders fall back to the world default. Requires <see cref="WorldPlacement.Solid"/> (nothing
@@ -485,7 +506,8 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.</param>
 /// <param name="Holding">Which of <paramref name="Respond"/>'s entries held at the last response sweep, one bit per
 /// entry in authored order (bit <c>i</c> for entry <c>i</c>); 0 while none holds, and always 0 on a row without
-/// <paramref name="Respond"/>. The response sweep writes it; the row shows the lowest set bit's entry, else its own
+/// <paramref name="Respond"/>. The response sweep writes it, and a booting document's state entries are settled into
+/// it before admission (<see cref="WorldStateSettlement.SettleResponses"/>); the row shows the lowest set bit's entry, else its own
 /// authored <paramref name="PrototypeId"/> (<see cref="ShownPrototypeId"/>). Refused on a row without
 /// <paramref name="Respond"/> and with a bit at or past its entry count. A reader whose disclosure withholds a cell an
 /// entry reads is handed the mask without that entry's bit (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted

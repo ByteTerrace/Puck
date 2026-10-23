@@ -14,9 +14,11 @@ namespace Puck.DirectX;
 public sealed class DirectXCommandBufferState {
     /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; the recorder resets it when a recording begins.</summary>
     public DirectXBufferStates BufferStates { get; } = new();
+
     /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
     /// call.</summary>
     internal List<D3D12_RESOURCE_BARRIER> PendingBarriers { get; } = [];
+
     /// <summary>Gets or sets how many runs of barriers are open on the command list.</summary>
     internal int BarrierDepth { get; set; }
 
@@ -38,16 +40,19 @@ public sealed class DirectXCommandBufferState {
 /// <see cref="IGpuPipeline.DescriptorSetLayoutHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXPipelineLayout : IDisposable {
+public sealed partial class DirectXPipelineLayout : IDisposable {
     public nint PsoHandle;
     public nint RootSignatureHandle;
+
     public byte[] RootSignatureBlob = [];
     public int DescriptorTableParamIndex = -1;
     public int RootConstantsParamIndex = -1;
+
     public uint RootConstantsCount;
     /// <summary>The total number of heap slots this set's descriptor table occupies once bindings are packed, so
     /// <c>AllocateSet</c> can hand each set from a shared pool its own non-overlapping heap region.</summary>
     public uint DescriptorSlotCount;
+
     /// <summary>Maps each binding index to the base heap slot it was packed to (indexed by <c>GpuComputeBinding.Binding</c>;
     /// an array binding occupies <c>Count</c> consecutive slots from there). Heap slots are packed in binding-list order
     /// rather than equated to the binding index, so an array binding never collides with a later binding regardless of
@@ -84,8 +89,14 @@ public sealed class DirectXPipelineLayout : IDisposable {
         return layout;
     }
 
+    // The layout's draw command signature, created on its first counted indirect draw.
+    private nint m_drawSignature;
+
+    private readonly Lock m_drawSignatureLock = new();
+
     /// <inheritdoc/>
     public void Dispose() {
+        DirectXConstants.Release(pointer: ref m_drawSignature);
         DirectXConstants.Release(pointer: ref PsoHandle);
         DirectXConstants.Release(pointer: ref RootSignatureHandle);
 

@@ -278,7 +278,8 @@ public static partial class WorldDefinitionValidator {
     private static WorldChannelTable? CompilableChannelTable(IReadOnlyList<WorldChannel> channels) {
         if (
             (channels is null) ||
-            (channels.Count > ChannelLimits.MaxChannels)
+            (channels.Count(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))) > ChannelLimits.MaxAxes) ||
+            (channels.Count(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))) > ChannelLimits.MaxButtons)
         ) {
             return null;
         }
@@ -625,7 +626,7 @@ public static partial class WorldDefinitionValidator {
         definition: definition,
         value: value
     );
-    private static bool IsValidAddonHash(string hash) => AssetContentHash.TryParse(
+    private static bool IsValidFontHash(string hash) => AssetContentHash.TryParse(
         hash: out _,
         text: hash
     );
@@ -839,6 +840,7 @@ public static partial class WorldDefinitionValidator {
             farDistance: definition.Render.FarDistance,
             errors: errors
         );
+        ValidateExposure(exposure: definition.Render.Exposure, errors: errors);
         ValidateRenderResolution(definition: definition, errors: errors);
 
         ValidateTimeline(
@@ -947,55 +949,12 @@ public static partial class WorldDefinitionValidator {
 
         ValidatePopulationCapacityRow(definition.Population, definition.State, errors);
 
-        if (definition.Population.ScaleRow is { } scaleRow) {
-            if (WorldDefinitionRows.FindStateRow(
-                rows: definition.State,
-                name: scaleRow
-            ) is not { } scaleStateRow) {
-                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which the document does not declare.");
-            } else if (
-                (scaleStateRow.Kind != CellKind.Fixed) ||
-                !scaleStateRow.IsKeyed ||
-                (scaleStateRow.Field is not null) ||
-                (scaleStateRow.Min is null) ||
-                (scaleStateRow.Max is null)
-            ) {
-                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which must be a keyed kind=Fixed row declaring both min and max — the world's own body-scale envelope.");
-            } else {
-                var scaleMin = ((float)FixedQ4816.FromRawBits(value: scaleStateRow.Min.Value));
-                var scaleMax = ((float)FixedQ4816.FromRawBits(value: scaleStateRow.Max.Value));
-
-                if (scaleMin <= 0f) {
-                    errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose min {scaleMin} is not positive — a body's Scale is a multiplier, never zero or inverted.");
-                }
-                if (scaleMax > definition.Authoring.MaxPlacementScale) {
-                    errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose max {scaleMax} exceeds authoring.maxPlacementScale {definition.Authoring.MaxPlacementScale} — the render capacity probe's worst case would not cover the largest live body.");
-                }
-                foreach (var cell in (scaleStateRow.Cells ?? [])) {
-                    if (
-                        (cell.Advance is not null) ||
-                        (cell.Cycle is not null) ||
-                        (cell.Dynamics is not null)
-                    ) {
-                        errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose cell '{cell.Key}' declares an advance/cycle/dynamics trait — WorldPopulation.SyncBodyScale resyncs it at tick 0 only, so a value-over-time cell would read its base value forever instead of progressing.");
-                    }
-                    // The SAME parse WorldPopulation.SyncBodyScale runs at every resync: a key that fails it is
-                    // silently skipped there rather than read, so an author typo (a non-integer key, or an index
-                    // outside the authored population) would otherwise author a cell nothing ever reads.
-                    if (
-                        !int.TryParse(
-                        s: cell.Key,
-                        style: NumberStyles.Integer,
-                        provider: CultureInfo.InvariantCulture,
-                        result: out var scaleBodyIndex
-                    ) ||
-                        (scaleBodyIndex < 0) ||
-                        (scaleBodyIndex >= definition.Population.Capacity)
-                    ) {
-                        errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose cell key '{cell.Key}' is not a 0-based body index inside 0..{(definition.Population.Capacity - 1)}.");
-                    }
-                }
-            }
+        if (definition.Population.Scale is { } scaleName) {
+            ValidateBodyScale(
+                definition: definition,
+                errors: errors,
+                name: scaleName
+            );
         }
 
         var peerCapacity = Math.Max(
@@ -1182,14 +1141,12 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             programs: programs
         );
-        // Channels and target registers share one Drive-reach ordinal space, and every per-ordinal table below is
-        // sized by ChannelLimits.MaxChannels. An over-budget count cannot be collected and walked past: the first
-        // compile that indexes one of those tables by an authored count faults out of its own array before the
-        // collected refusals are raised. This is a gate, not another collected error.
-        var declaredOrdinals = (definition.Channels.Count + definition.TargetRegisters.Count);
-
-        if (declaredOrdinals > ChannelLimits.MaxChannels) {
-            errors.Add(item: $"channels and targetRegisters declare {declaredOrdinals} shared Drive-reach ordinals; the maximum is {ChannelLimits.MaxChannels}.");
+        if (definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) {
+            errors.Add(item: $"targetRegisters declares {definition.TargetRegisters.Count} rows; the maximum is {WorldTargetRegisterTable.MaxRegisters}.");
+        }
+        if ((definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) ||
+            (definition.Channels.Count(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))) > ChannelLimits.MaxAxes) ||
+            (definition.Channels.Count(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))) > ChannelLimits.MaxButtons)) {
             RefuseCollected(errors: errors);
         }
         var kitNames = ValidateKits(
@@ -1208,6 +1165,7 @@ public static partial class WorldDefinitionValidator {
 
         ValidateAssignment(
             assignment: definition.Assignment,
+            definition: definition,
             kitNames: kitNames,
             errors: errors
         );
@@ -1509,6 +1467,7 @@ public static partial class WorldDefinitionValidator {
 
         ValidateLookAssignment(
             assignment: definition.LookAssignment,
+            definition: definition,
             lookNames: lookNames,
             errors: errors
         );
@@ -1663,6 +1622,10 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
+        ValidateCommands(
+            definition: definition,
+            errors: errors
+        );
         ValidateVerdicts(
             definition: definition,
             errors: errors
@@ -1810,6 +1773,9 @@ public static partial class WorldDefinitionValidator {
                 if (!Enum.IsDefined(value: screen.Filter)) {
                     errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
                 }
+                if ((screen.Luminance is { } luminance) && (!float.IsFinite(f: luminance) || (luminance <= 0f) || (luminance > SdfScreenEmission.MaxLuminance))) {
+                    errors.Add(item: $"{path}.luminance {luminance} is not a display's peak luminance; a screen shows a white picture at a luminance in (0, {SdfScreenEmission.MaxLuminance}] nits.");
+                }
 
                 // The declared source and each magazine entry cross the same source gate (a magazine entry could
                 // otherwise name an undeclared camera).
@@ -1825,6 +1791,7 @@ public static partial class WorldDefinitionValidator {
 
                 ValidateRoute(
                     route: screen.Route,
+                    source: screen.Source,
                     path: $"{path}.route",
                     channelNames: allChannelNames,
                     padKits: padKits,
@@ -1838,6 +1805,14 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     deferred: deferredSink
                 );
+                if (screen.Carry is { } carry) {
+                    ValidateCarry(
+                        carry: carry,
+                        definition: definition,
+                        errors: errors,
+                        path: $"{path}.carry"
+                    );
+                }
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin. The effective
                 // per-axis extent must stay positive (a margin that inverts the box is rejected by name).

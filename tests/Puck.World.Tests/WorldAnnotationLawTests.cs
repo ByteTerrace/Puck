@@ -78,6 +78,19 @@ public sealed class WorldAnnotationLawTests {
         Assert.True(condition: registry.Submit(line: "view.annotate add 0.5 0.5 0.1").IsError);
         Assert.Equal(expected: AnnotationWriter.MaxCircles, actual: annotations.Count);
     }
+    // --devices none: the window's keys, text and pointer never reach a seat, whichever filters follow.
+    [Fact]
+    public void ADeviceFreeBootConsumesEveryWindowEvent() {
+        var open = new WorldWindowInputFilters();
+        var closed = new WorldWindowInputFilters { ConsumesEveryEvent = true };
+
+        foreach (var kind in Enum.GetValues<WindowInputKind>()) {
+            var inputEvent = new WindowInputEvent(Kind: kind);
+
+            Assert.False(condition: open.Intercept(inputEvent: in inputEvent));
+            Assert.True(condition: closed.Intercept(inputEvent: in inputEvent));
+        }
+    }
     [Fact]
     public void AnnotateModeKeepsTheDragAndWithholdsThePointer() {
         var annotations = new WorldAnnotations();

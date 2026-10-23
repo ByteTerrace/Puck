@@ -39,11 +39,13 @@ public sealed partial class WorldMachineHost {
             MountedContent(lease: lease)
         );
     }
+
     // The content path a lease mounted: the prepared asset of its configuration's content field, which a boot whose
     // authored content file is absent leaves out.
     private static string? MountedContent(MachineLease lease) => lease.Assets.Values.FirstOrDefault(
         predicate: static asset => (asset.Role == MachineFieldRole.ContentPath)
     )?.Path;
+
     /// <inheritdoc/>
     public IMachineVideoOutput? VideoOutput(string instance, string output) =>
         ((m_instances.TryGetValue(
@@ -71,7 +73,21 @@ public sealed partial class WorldMachineHost {
             : null
         );
     /// <inheritdoc/>
-    public IReadOnlyList<WorldMachine> CaptureInstances() => [.. m_instances.Values.Select(selector: static instance => instance.Declaration)];
+    /// <remarks>A machine running the folder default it booted reports its authored declaration, so a capture of the
+    /// session never writes the default's name into a document.</remarks>
+    public IReadOnlyList<WorldMachine> CaptureInstances() => [.. m_instances.Values.Select(selector: static instance => Documented(
+        declaration: instance.Declaration,
+        folderBoot: instance.FolderBoot
+    ))];
+
+    // The form of a machine's declaration the world document holds: one running the folder default the machine booted
+    // carries its authored content there, so the default's name never enters the document, a capture or a replay.
+    private static WorldMachine Documented(WorldMachine declaration, FolderDefaultBoot? folderBoot) => (
+        ((folderBoot is { } boot) && JsonElement.DeepEquals(element1: declaration.Configuration, element2: boot.Configuration))
+            ? (declaration with { Configuration = boot.Authored })
+            : declaration
+    );
+
     /// <summary>Resolves a prepared content symbol for a named machine without coupling the lookup to a display.</summary>
     public bool TryResolveSymbol(string instance, string symbol, out int address) {
         if (m_instances.TryGetValue(
@@ -217,7 +233,8 @@ public sealed partial class WorldMachineHost {
                                 oldLease: live.Lease,
                                 replacementLease: lease,
                                 replacementBindings: bindings,
-                                operation: null
+                                operation: null,
+                                folderBoot: live.FolderBoot
                             );
                             refusal = default;
                             return true;
@@ -243,7 +260,8 @@ public sealed partial class WorldMachineHost {
                         oldLease: live.Lease,
                         replacementLease: null,
                         replacementBindings: live.Bindings,
-                        operation: runtime.Operation
+                        operation: runtime.Operation,
+                        folderBoot: live.FolderBoot
                     );
                     refusal = default;
                     return true;
@@ -324,16 +342,18 @@ public sealed partial class WorldMachineHost {
 
         if (prepared.ReplacementLease is { } replacement) {
             m_instances[prepared.Current.Name] = new MachineInstance(
-                prepared.Candidate,
+                prepared.HostCandidate,
                 replacement,
                 prepared.ReplacementBindings
-            );
+            ) {
+                FolderBoot = live.FolderBoot,
+            };
             m_nextInstanceGeneration = Math.Max(
                 val1: m_nextInstanceGeneration,
                 val2: (replacement.Generation + 1)
             );
         } else {
-            m_instances[prepared.Current.Name] = live with { Declaration = prepared.Candidate };
+            m_instances[prepared.Current.Name] = live with { Declaration = prepared.HostCandidate };
         }
         m_instanceRevision++;
         prepared.Committed = true;
@@ -431,7 +451,7 @@ public sealed partial class WorldMachineHost {
                     port.SetState(state: in input);
                 }
             }
-            if (runtime is IQueuedMachineRuntime queued) {
+            if ((runtime is IQueuedMachineRuntime queued) && !(SynchronousSteps?.Invoke() ?? false)) {
                 var submitted = queued.Submit(deltaTicks: stepTicks);
 
                 if (
@@ -444,7 +464,7 @@ public sealed partial class WorldMachineHost {
                     AnyEverPumped = true;
                 }
             } else if (runtime.Advance(deltaTicks: stepTicks)) {
-                lease.CompletedSteps++;
+                if (runtime is not IQueuedMachineRuntime) { lease.CompletedSteps++; }
                 AnyEverPumped = true;
             }
         }
@@ -561,8 +581,35 @@ public sealed partial class WorldMachineHost {
         );
 
         try {
-            foreach (var declaration in candidate.Machines) {
-                preparing = declaration.Name;
+            foreach (var authored in candidate.Machines) {
+                preparing = authored.Name;
+
+                WorldMachine declaration;
+                FolderDefaultBoot? folderBoot;
+                string? folderNarration = null;
+
+                // A row the candidate shares with the current document is one nothing changed, so its machine keeps
+                // what it runs, a swap the document adopted included. A reload re-reads every row, so it decides the
+                // folder default afresh.
+                if (
+                    !directoryChanged &&
+                    (current?.Machines.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: authored.Name, comparisonType: StringComparison.Ordinal)) is { } standing) &&
+                    ReferenceEquals(objA: standing, objB: authored) &&
+                    m_instances.TryGetValue(key: authored.Name, value: out var untouched)
+                ) {
+                    declaration = untouched.Declaration;
+                    folderBoot = untouched.FolderBoot;
+                } else {
+                    declaration = WithFolderDefault(
+                        declaration: authored,
+                        documentDirectory: candidate.DocumentDirectory,
+                        narration: out folderNarration
+                    );
+                    folderBoot = (ReferenceEquals(objA: declaration, objB: authored)
+                        ? null
+                        : new FolderDefaultBoot(Authored: authored.Configuration, Configuration: declaration.Configuration)
+                    );
+                }
                 if (
                     m_instances.TryGetValue(
                     key: declaration.Name,
@@ -606,10 +653,16 @@ public sealed partial class WorldMachineHost {
                                 declaration: declaration,
                                 lease: live.Lease
                             )
-                        )
+                        ) {
+                            FolderBoot = folderBoot,
+                        }
                     );
                     continue;
                 }
+                if ((folderNarration is not null) && (m_narrationHub is { HasNarrationSink: true })) {
+                    m_narrationHub.Narrate(channel: "machine", text: folderNarration);
+                }
+
                 var engine = Catalog.Engines[declaration.Engine];
                 var request = PrepareCreation(
                     engine,
@@ -649,7 +702,9 @@ public sealed partial class WorldMachineHost {
                             declaration: declaration,
                             lease: lease
                         )
-                    )
+                    ) {
+                        FolderBoot = folderBoot,
+                    }
                 );
             }
             foreach (var live in m_instances.Values) {
@@ -682,6 +737,39 @@ public sealed partial class WorldMachineHost {
             reason = $"Machine '{preparing}' preparation refused: {exception.Message}";
             return false;
         }
+    }
+    // The declaration a machine boots: as authored, or, for a machine preferring a folder default whose folders name one
+    // it can mount, as authored with the default as its content. The narration names the deciding folder, never the
+    // default's file, so no content name reaches a log.
+    private WorldMachine WithFolderDefault(WorldMachine declaration, string? documentDirectory, out string? narration) {
+        narration = null;
+
+        if (
+            !declaration.PreferFolderDefault ||
+            !WorldMachineContentFolder.TryList(
+                catalog: Catalog,
+                documentDirectory: documentDirectory,
+                entries: out var entries,
+                folders: out var folders,
+                machine: declaration,
+                reason: out _
+            )
+        ) {
+            return declaration;
+        }
+        if (WorldMachineContentFolder.TryDefault(entries: entries, entry: out var entry, folders: folders, refusal: out var refusal)) {
+            narration = $"[machine: '{declaration.Name}' boots the default its folder '{entry.Folder}' names]";
+            return (declaration with {
+                Configuration = MachineOperationValidation.ReplaceContent(
+                    configuration: declaration.Configuration,
+                    path: entry.ContentPath
+                ),
+            });
+        }
+        if (refusal is not null) {
+            narration = $"[machine: '{declaration.Name}' {refusal}; it boots its authored content]";
+        }
+        return declaration;
     }
     // An operation mounts content only from the machine's authored contentFolders: every content path the operation's
     // configuration names that the machine's current declaration does not already name must be a file directly in one
@@ -776,10 +864,10 @@ public sealed partial class WorldMachineHost {
                     return;
                 }
                 if (!TryReadContent(
-                    path,
-                    documentDirectory,
-                    out var source,
-                    out var fault
+                    content: out var source,
+                    contentPath: path,
+                    documentDirectory: documentDirectory,
+                    fault: out var fault
                 )) {
                     throw new ArgumentException(message: $"configuration.{site.Path}: {fault}");
                 }
@@ -794,6 +882,7 @@ public sealed partial class WorldMachineHost {
                     compilation: out content,
                     content: source,
                     contentPath: path,
+                    documentDirectory: documentDirectory,
                     engine: engine,
                     fault: out fault
                 )
@@ -929,7 +1018,12 @@ public sealed partial class WorldMachineHost {
     }
 
     internal sealed record MachineInstance(WorldMachine Declaration, MachineLease Lease,
-        IReadOnlyDictionary<string, MachineMemoryAddress> Bindings);
+        IReadOnlyDictionary<string, MachineMemoryAddress> Bindings) {
+        // The authored and booted configurations of a machine that booted its folders' default in place of its authored
+        // content, or null for one that booted as authored.
+        public FolderDefaultBoot? FolderBoot { get; init; }
+    }
+    internal sealed record FolderDefaultBoot(JsonElement Authored, JsonElement Configuration);
     internal sealed class MachineLease(IMachineRuntime runtime, ulong generation,
         IReadOnlyDictionary<string, PreparedMachineAsset> assets) {
         public IMachineRuntime Runtime { get; } = runtime;
@@ -975,6 +1069,9 @@ public sealed partial class WorldMachineHost {
         internal IReadOnlyDictionary<string, MachineMemoryAddress> ReplacementBindings { get; }
         internal MachineLease? ReplacementLease { get; }
         internal ulong Revision { get; }
+        // The declaration the host keeps for the machine once the operation commits; Candidate is the form the
+        // document holds (Documented).
+        internal WorldMachine HostCandidate { get; }
 
         public WorldMachine Candidate { get; }
         public WorldMachine Current { get; }
@@ -982,11 +1079,13 @@ public sealed partial class WorldMachineHost {
 
         internal PreparedMachineOperation(WorldMachineHost owner, ulong revision, WorldMachine current, WorldMachine candidate,
             ulong generation, MachineLease oldLease, MachineLease? replacementLease,
-            IReadOnlyDictionary<string, MachineMemoryAddress> replacementBindings, IMachinePreparedOperation? operation) {
+            IReadOnlyDictionary<string, MachineMemoryAddress> replacementBindings, IMachinePreparedOperation? operation,
+            FolderDefaultBoot? folderBoot) {
             Owner = owner;
             Revision = revision;
-            Current = current;
-            Candidate = candidate;
+            Current = Documented(declaration: current, folderBoot: folderBoot);
+            Candidate = Documented(declaration: candidate, folderBoot: folderBoot);
+            HostCandidate = candidate;
             Generation = generation;
             OldLease = oldLease;
             ReplacementLease = replacementLease;

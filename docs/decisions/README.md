@@ -6,11 +6,15 @@ contracts belong in the subsystem guides; proposed changes belong in
 
 - [Engine design decisions](engine-design.md): document ownership, the paths a
   document names, simulation and presentation boundaries, composition, the one
-  acting identity and what a grant names, and verification policy.
+  acting identity and what a grant names, portals as planes a body passes
+  through, and verification policy.
 - [State and the authoring language](state-and-language.md): the rebuilt
   state substrate, its ceilings as prices, the language as a projection with
   modules, records, pools, and tests as worlds, the costing model, and the
   acceptance games.
+- [Input channels](input-channels.md): typed packed input, shared action names,
+  authoritative modes and slot allocation, authored switch continuity, timed input
+  history, and the live-document migration.
 - [Runtime and delivery](runtime-and-delivery.md): products and their
   manifests, the ROM ledger, compiled worlds, release pairs, the runtime's
   ownership boundaries, the presentation view and its two transports, and

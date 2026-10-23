@@ -136,7 +136,7 @@
           "default": 0
         },
         "temporal": {
-          "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.",
+          "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. The world\u0027s own views include every layout slot that names a camera; the camera views screens film and session views never do.",
           "type": "boolean",
           "default": false
         },
@@ -474,7 +474,7 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
+              "description": "The lights, at most SdfLights.MaxLights, in authored order; each view shades only those that can reach what it shows (SdfLightSelection). Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
               "type": [
                 "array",
                 "null"
@@ -490,7 +490,7 @@
                 ],
                 "anyOf": [
                   {
-                    "description": "A Lambert directional light.",
+                    "description": "A Lambert directional light, such as the sun.",
                     "properties": {
                       "$type": {
                         "const": "directional"
@@ -556,7 +556,7 @@
                         ]
                       },
                       "color": {
-                        "description": "The light\u0027s colour.",
+                        "description": "The light\u0027s colour, scaled to unit luminance so the light gives exactly its illuminance. Refused beside Temperature. Absent is white, or the temperature\u0027s.",
                         "default": null,
                         "title": "BindableColor",
                         "anyOf": [
@@ -605,8 +605,8 @@
                           }
                         ]
                       },
-                      "weight": {
-                        "description": "The diffuse weight. Absent is the pinned sun weight.",
+                      "illuminance": {
+                        "description": "The illuminance on a surface facing the light, in lux: a clear midday sun gives about 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun\u0027s.",
                         "default": null,
                         "title": "BindableScalar",
                         "anyOf": [
@@ -730,6 +730,59 @@
                         ],
                         "default": null
                       },
+                      "temperature": {
+                        "description": "The light\u0027s colour as a black body\u0027s at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "lightName": {
                         "type": [
                           "string",
@@ -793,7 +846,7 @@
                     "title": "WorldRenderLightDirectional"
                   },
                   {
-                    "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+                    "description": "A view-dependent silhouette brighten: luminance \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
                     "properties": {
                       "$type": {
                         "const": "rim"
@@ -848,8 +901,8 @@
                           }
                         ]
                       },
-                      "weight": {
-                        "description": "The strength. Absent is zero, which adds nothing.",
+                      "luminance": {
+                        "description": "The luminance the brighten adds at a silhouette, in nits. Absent is zero, which adds nothing.",
                         "default": null,
                         "title": "BindableScalar",
                         "anyOf": [
@@ -1025,7 +1078,7 @@
                     "title": "WorldRenderLightRim"
                   },
                   {
-                    "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
+                    "description": "A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world\u0027s brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An anchored light moves with its anchor, lights through every wall and bounces nothing.",
                     "properties": {
                       "$type": {
                         "const": "point"
@@ -1064,59 +1117,6 @@
                                       },
                                       "minItems": 3,
                                       "maxItems": 3
-                                    },
-                                    "ease": {
-                                      "type": "string",
-                                      "enum": [
-                                        "Linear",
-                                        "Smooth",
-                                        "Step"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "at",
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              }
-                            },
-                            "required": [
-                              "clock",
-                              "keys"
-                            ],
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "radius": {
-                        "description": "The falloff radius. Absent is the engine default.",
-                        "default": null,
-                        "title": "BindableScalar",
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "clock": {
-                                "type": "string"
-                              },
-                              "keys": {
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "at": {
-                                      "type": "number"
-                                    },
-                                    "value": {
-                                      "type": "number"
                                     },
                                     "ease": {
                                       "type": "string",
@@ -1291,7 +1291,7 @@
                         "title": "WorldAnchor"
                       },
                       "color": {
-                        "description": "The light\u0027s colour.",
+                        "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
                         "default": null,
                         "title": "BindableColor",
                         "anyOf": [
@@ -1340,8 +1340,765 @@
                           }
                         ]
                       },
-                      "weight": {
-                        "description": "The strength. Absent is the engine default.",
+                      "intensity": {
+                        "description": "The luminous intensity, in candela. Refused beside Power; absent with it is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "power": {
+                        "description": "The luminous power, in lumens, emitted alike in every direction: a 60 W incandescent bulb gives about 800. Refused beside Intensity.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "temperature": {
+                        "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]: a warm bulb about 2,700. Refused beside Color.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "lightName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bounce": {
+                        "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightPoint"
+                  },
+                  {
+                    "description": "A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full strength inside the inner angle and smoothly to none at the outer, with the point light\u0027s windowed falloff, range, and tracing and occlusion by the irradiance volume while unanchored.",
+                    "properties": {
+                      "$type": {
+                        "const": "spot"
+                      },
+                      "position": {
+                        "description": "The world-space position, or the offset in the anchor\u0027s frame.",
+                        "default": null,
+                        "title": "BindableVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "direction": {
+                        "description": "The direction the light shines along, any nonzero length; in the anchor\u0027s frame when an anchor is authored. Absent is straight down.",
+                        "default": null,
+                        "title": "BindableDirection",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "anchor": {
+                        "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+                            "properties": {
+                              "$type": {
+                                "const": "entity"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "index"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntity"
+                          },
+                          {
+                            "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+                            "properties": {
+                              "$type": {
+                                "const": "entityPart"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index.",
+                                "type": "integer"
+                              },
+                              "partId": {
+                                "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "partId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntityPart"
+                          },
+                          {
+                            "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+                            "properties": {
+                              "$type": {
+                                "const": "placement"
+                              },
+                              "placementId": {
+                                "description": "The referenced Id (must resolve).",
+                                "type": "string"
+                              },
+                              "shapeId": {
+                                "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "placementId",
+                              "shapeId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorPlacement"
+                          },
+                          {
+                            "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                            "properties": {
+                              "$type": {
+                                "const": "group"
+                              },
+                              "indices": {
+                                "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/2/properties/anchor/anyOf/3/properties/indices"
+                              },
+                              "smoothRate": {
+                                "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "indices",
+                              "smoothRate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorGroup"
+                          },
+                          {
+                            "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                            "properties": {
+                              "$type": {
+                                "const": "seat"
+                              },
+                              "number": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorSeat"
+                          },
+                          {
+                            "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                            "properties": {
+                              "$type": {
+                                "const": "recentSpeaker"
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorRecentSpeaker"
+                          }
+                        ],
+                        "default": null,
+                        "title": "WorldAnchor"
+                      },
+                      "angle": {
+                        "description": "The cone\u0027s outer half angle, in (0, \u03C0/2] radians. Absent is 45 degrees.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "innerAngle": {
+                        "description": "The half angle inside which the light is at full strength, in [0, Angle] radians. Absent is three quarters of Angle.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "color": {
+                        "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "intensity": {
+                        "description": "The luminous intensity along the aim, in candela. Refused beside Power; absent with it is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "power": {
+                        "description": "The luminous power, in lumens, emitted alike across the outer cone. Refused beside Intensity.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "temperature": {
+                        "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]. Refused beside Color.",
                         "default": null,
                         "title": "BindableScalar",
                         "anyOf": [
@@ -1461,10 +2218,10 @@
                       }
                     },
                     "additionalProperties": false,
-                    "title": "WorldRenderLightPoint"
+                    "title": "WorldRenderLightSpot"
                   },
                   {
-                    "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+                    "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the lights table\u0027s capacity.",
                     "properties": {
                       "$type": {
                         "const": "occluder"
@@ -2862,6 +3619,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -3302,6 +4111,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -3816,6 +4677,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -4550,6 +5463,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -5144,6 +6109,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -5595,6 +6612,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -5944,6 +7013,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -6272,6 +7393,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -6727,6 +7900,58 @@
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
                       },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
                         "type": [
@@ -7110,6 +8335,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -7500,6 +8777,58 @@
                         },
                         "additionalProperties": false,
                         "title": "WorldRenderSkyMask"
+                      },
+                      "luminance": {
+                        "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "transform": {
                         "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
@@ -8099,6 +9428,59 @@
                   "additionalProperties": false,
                   "default": null,
                   "title": "WorldRenderAirHeight"
+                },
+                "luminance": {
+                  "description": "The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky\u0027s own.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 }
               },
               "additionalProperties": false,
@@ -8478,6 +9860,59 @@
                               },
                               "value": {
                                 "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "luminance": {
+                  "description": "The luminance, in nits, a Color of one in-scatters at. Absent is SdfSky.DefaultLuminance.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
                               },
                               "ease": {
                                 "type": "string",
@@ -9045,6 +10480,172 @@
           "description": "The boot sky field grid fraction, one or one half, independent of view render scale.",
           "type": "number",
           "default": 1
+        },
+        "exposure": {
+          "description": "The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day\u0027s.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "mode": {
+              "description": "Manual or automatic. Absent is manual.",
+              "enum": [
+                "Manual",
+                "Auto"
+              ],
+              "default": "Manual",
+              "title": "SdfExposureMode"
+            },
+            "ev100": {
+              "description": "The manual exposure value at ISO 100, in [\u22126, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "minimum": {
+              "description": "The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [\u22126, 20]; absent is \u22126.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "maximum": {
+              "description": "The highest EV100 an automatic exposure adapts to, at or above Minimum. In [\u22126, 20]; absent is 20.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "compensation": {
+              "description": "The stops an automatic exposure brightens the metered image by, in [\u221210, 10]. Absent is zero.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "adaptation": {
+              "description": "The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "local": {
+              "description": "The share of the local adaptation, in [0, 1]: how far each surface\u0027s exposure moves from the view\u0027s toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderExposure"
+        },
+        "toon": {
+          "description": "Optional cel shading and its tuning. Absent is off.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Whether the world boots with cel shading on; absent is off.",
+              "type": "boolean",
+              "default": false
+            },
+            "threshold": {
+              "description": "Diffuse band threshold in [0, 1].",
+              "type": "number",
+              "default": 0.45
+            },
+            "softness": {
+              "description": "Full terminator width in [0.001, 0.5].",
+              "type": "number",
+              "default": 0.08
+            },
+            "shadowTint": {
+              "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+              "default": null,
+              "title": "DocumentVector3",
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                }
+              ]
+            },
+            "outlineWidth": {
+              "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+              "type": "number",
+              "default": 1.5
+            },
+            "outlineDistance": {
+              "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+              "type": "number",
+              "default": 12
+            },
+            "outlineNormal": {
+              "description": "Crease normal cosine in [0, 0.95].",
+              "type": "number",
+              "default": 0.65
+            },
+            "outlineTint": {
+              "description": "Outline multiplier, three linear RGB values in [0, 1].",
+              "default": null,
+              "title": "DocumentVector3",
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                }
+              ]
+            },
+            "specularSize": {
+              "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
+              "type": "number",
+              "default": 0.025
+            },
+            "exposure": {
+              "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
+              "type": "number",
+              "default": 0.5
+            },
+            "shoulder": {
+              "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
+              "type": "number",
+              "default": 0.65
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderToon"
         }
       },
       "additionalProperties": false,
@@ -9260,6 +10861,11 @@
                       "null"
                     ],
                     "default": null
+                  },
+                  "ripple": {
+                    "description": "Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
+                    "type": "boolean",
+                    "default": false
                   }
                 },
                 "required": [
@@ -9417,6 +11023,63 @@
                   "string",
                   "null"
                 ]
+              },
+              "display": {
+                "description": "How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "fill": {
+                    "description": "The matte colour around the framed picture, as #RRGGBB, or null for black.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldScreenDisplay"
+              },
+              "padPointer": {
+                "description": "How a local pad\u0027s sticks drive the pointer over this screen\u0027s framed picture while a seat engaged on it frames a window capture (WorldScreenPadPointer). Only an engageable screen showing a window capture may author it. null (the default) moves and scrolls nothing from a stick; a pad\u0027s buttons still click and press keys. Omitted from the wire when null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "speed": {
+                    "description": "The pointer\u0027s speed at full deflection before any boost, in heights of the framed picture per second. Positive.",
+                    "type": "number"
+                  },
+                  "curve": {
+                    "description": "The exponent the deflection\u0027s length is raised to; 1 is a linear response. At least 1.",
+                    "type": "number",
+                    "default": 1
+                  },
+                  "boost": {
+                    "description": "The speed\u0027s multiplier once a deflection has been held for RampSeconds, rising linearly from 1 while it is held and back to 1 once the stick rests. At least 1.",
+                    "type": "number",
+                    "default": 1
+                  },
+                  "rampSeconds": {
+                    "description": "How long a held deflection takes to reach Boost; 0 applies it at once. Non-negative.",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "scrollSpeed": {
+                    "description": "The wheel\u0027s speed at full deflection of the scrolling stick, in wheel notches per second, its deflection raised to Curve too. Non-negative; 0 scrolls nothing.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "speed"
+                ],
+                "additionalProperties": false,
+                "title": "WorldScreenPadPointer"
               }
             },
             "additionalProperties": false,
@@ -9570,6 +11233,11 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "ripple": {
+                          "description": "Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "required": [
@@ -9681,6 +11349,51 @@
             ],
             "default": "Nearest",
             "title": "GpuSamplerFilter"
+          },
+          "luminance": {
+            "description": "The display\u0027s peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld\u0027s unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world\u0027s own luminance whatever this says.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "carry": {
+            "description": "The body that carries the screen\u0027s picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "look": {
+                "description": "The look row whose wearer carries the picture; a creation look.",
+                "type": "string"
+              },
+              "pose": {
+                "description": "The look\u0027s Poses frame that holds while the body carries it.",
+                "type": "string"
+              },
+              "shape": {
+                "description": "The name of the ungrouped box in the look\u0027s creation that shows the picture.",
+                "type": "string"
+              },
+              "camera": {
+                "description": "The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture\u0027s front face whose axes are the picture\u0027s: \u002BX its right, \u002BY its up and \u002BZ its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "look",
+              "pose",
+              "shape"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldScreenCarry"
           }
         },
         "required": [
@@ -11536,7 +13249,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         }
@@ -11561,7 +13274,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         },
@@ -11613,7 +13326,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   }
@@ -11638,7 +13351,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   },
@@ -11719,7 +13432,7 @@
                                               "WheelOpen",
                                               "ConsoleOpen",
                                               "SeatCameraApplication",
-                                              "ScreenEngaged"
+                                              "ScreenFramed"
                                             ],
                                             "title": "OverlayFact"
                                           }
@@ -11744,7 +13457,7 @@
                                               "WheelOpen",
                                               "ConsoleOpen",
                                               "SeatCameraApplication",
-                                              "ScreenEngaged"
+                                              "ScreenFramed"
                                             ],
                                             "title": "OverlayFact"
                                           },
@@ -12921,7 +14634,7 @@
           "additionalProperties": false,
           "title": "WorldObserverDisclosure"
         },
-        "scaleRow": {
+        "scale": {
           "type": [
             "string",
             "null"
@@ -13163,7 +14876,8 @@
             "enum": [
               "Bipolar",
               "Unipolar",
-              "Binary"
+              "Binary",
+              "Relative"
             ],
             "title": "ChannelShape"
           },
@@ -13209,6 +14923,35 @@
             ],
             "default": "World",
             "title": "ChannelFrame"
+          },
+          "relative": {
+            "description": "Required units, sensitivity and limit for Relative channels; absent on levels.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "unit": {
+                "description": "An authored unit name shared by producers and consumers.",
+                "type": "string"
+              },
+              "sensitivity": {
+                "description": "Units per device sample, applied before host quantization.",
+                "type": "number"
+              },
+              "maximumPerStep": {
+                "description": "The positive absolute displacement limit in authored units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "unit",
+              "sensitivity",
+              "maximumPerStep"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldRelativeChannel"
           }
         },
         "required": [
@@ -21781,6 +23524,53 @@
           "additionalProperties": false,
           "title": "WorldSequence"
         },
+        "select": {
+          "description": "The per-body selector, or null for the sequence alone.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "bodyState": {
+              "description": "The state.body counter whose value selects.",
+              "type": "string"
+            },
+            "cases": {
+              "description": "The value-to-row mapping, each value at most once.",
+              "type": "array",
+              "items": {
+                "description": "One case of a WorldRowSelector: the row a body\u0027s register value selects.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "value": {
+                    "description": "The register value, a whole number; a counter holding a fraction matches no case.",
+                    "type": "integer"
+                  },
+                  "row": {
+                    "description": "The kit or look row name the value selects.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "row"
+                ],
+                "additionalProperties": false,
+                "title": "WorldRowSelectorCase"
+              }
+            }
+          },
+          "required": [
+            "bodyState",
+            "cases"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRowSelector"
+        },
         "rows": {
           "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
           "type": "array",
@@ -22500,14 +24290,19 @@
                 "default": true
               },
               "text": {
-                "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+                "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and a chord hint\u0027s label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
                 "type": "boolean",
                 "default": true
               },
               "modifiers": {
-                "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text\u0027s, not this one\u0027s.",
+                "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.",
                 "type": "boolean",
                 "default": true
+              },
+              "declaredModifiersOnly": {
+                "description": "Whether the modifier row (and the chord hints it places) keeps to the modifiers the binding document DECLARES in its modifiers section \u2014 the page-holding triggers an author named \u2014 and leaves out the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a shoulder). false draws every one. It shapes only what Modifiers draws, so it does nothing while that is off.",
+                "type": "boolean",
+                "default": false
               },
               "pageLabel": {
                 "description": "Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page\u0027s name.",
@@ -22877,7 +24672,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       }
@@ -22902,7 +24697,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       },
@@ -23558,6 +25353,11 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "ripple": {
+                          "description": "Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "required": [
@@ -24057,6 +25857,45 @@
                 "description": "The Verdict value the judge writes to accept a move \u2014 any other value is a refusal.",
                 "type": "integer",
                 "default": 1
+              },
+              "engage": {
+                "description": "How a seat sits down at the table, or null for a table no seat engages: the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and the surface the seat\u0027s pointer meets.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "channel": {
+                    "description": "The declared channel whose press engages and leaves the table.",
+                    "type": "string"
+                  },
+                  "radius": {
+                    "description": "How near the board\u0027s centre, on the ground plane in world units, a seat must stand to engage. Positive.",
+                    "type": "number",
+                    "default": 2.5
+                  },
+                  "pitch": {
+                    "description": "The board view\u0027s elevation above the horizontal, in degrees: 90 looks straight down, smaller leans toward the seat\u0027s side. In (0, 90].",
+                    "type": "number",
+                    "default": 60
+                  },
+                  "margin": {
+                    "description": "World units of room the board view leaves around the board\u0027s footprint. Non-negative.",
+                    "type": "number",
+                    "default": 0.1
+                  },
+                  "surface": {
+                    "description": "The height above the topology\u0027s origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "channel"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldTabletopEngage"
               }
             },
             "required": [
@@ -24317,7 +26156,7 @@
             "default": null
           },
           "holding": {
-            "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
+            "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
             "type": "integer",
             "default": 0
           }
@@ -26886,6 +28725,10 @@
         "sequence": {
           "$ref": "#/properties/assignment/properties/sequence"
         },
+        "select": {
+          "$ref": "#/properties/assignment/properties/select",
+          "default": null
+        },
         "rows": {
           "$ref": "#/properties/assignment/properties/rows"
         }
@@ -26994,7 +28837,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         }
@@ -27019,7 +28862,7 @@
                             "WheelOpen",
                             "ConsoleOpen",
                             "SeatCameraApplication",
-                            "ScreenEngaged"
+                            "ScreenFramed"
                           ],
                           "title": "OverlayFact"
                         },
@@ -27216,7 +29059,7 @@
                         "WheelOpen",
                         "ConsoleOpen",
                         "SeatCameraApplication",
-                        "ScreenEngaged"
+                        "ScreenFramed"
                       ],
                       "title": "OverlayFact"
                     }
@@ -27241,7 +29084,7 @@
                         "WheelOpen",
                         "ConsoleOpen",
                         "SeatCameraApplication",
-                        "ScreenEngaged"
+                        "ScreenFramed"
                       ],
                       "title": "OverlayFact"
                     },
@@ -27491,7 +29334,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       }
@@ -27516,7 +29359,7 @@
                           "WheelOpen",
                           "ConsoleOpen",
                           "SeatCameraApplication",
-                          "ScreenEngaged"
+                          "ScreenFramed"
                         ],
                         "title": "OverlayFact"
                       },
@@ -27959,7 +29802,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   }
@@ -27984,7 +29827,7 @@
                                       "WheelOpen",
                                       "ConsoleOpen",
                                       "SeatCameraApplication",
-                                      "ScreenEngaged"
+                                      "ScreenFramed"
                                     ],
                                     "title": "OverlayFact"
                                   },
@@ -39614,7 +41457,7 @@
                           "const": "setVerticalVelocity"
                         },
                         "velocity": {
-                          "description": "The vertical velocity, in world units per second.",
+                          "description": "The vertical velocity, in world units per second at the body\u0027s authored size; a body whose live scale (bodies.scale) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.",
                           "type": "number"
                         },
                         "key": {
@@ -39877,7 +41720,7 @@
                           ]
                         },
                         "speed": {
-                          "description": "The overlay\u0027s speed, in world units per second.",
+                          "description": "The overlay\u0027s speed, in world units per second at the body\u0027s authored size, times the body\u0027s live scale.",
                           "type": "number"
                         },
                         "durationSeconds": {
@@ -40811,7 +42654,7 @@
                               "default": null
                             },
                             "holding": {
-                              "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
+                              "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
                               "type": "integer",
                               "default": 0
                             }
@@ -41737,6 +43580,11 @@
                               "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                             }
                           ]
+                        },
+                        "glide": {
+                          "description": "Whether the body moves there as continuous motion, which a client interpolates and which keeps the body\u0027s attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.",
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "required": [
@@ -42859,6 +44707,973 @@
                       ],
                       "additionalProperties": false,
                       "title": "WorldEffectSetIdentityFact"
+                    },
+                    {
+                      "description": "Writes one state.body counter of a world-addressed body: the register a kit\u0027s own setState writes, in the arena\u0027s participant lane, settled through the register\u0027s envelope. The register is the body\u0027s, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.",
+                      "properties": {
+                        "$type": {
+                          "const": "setBodyState"
+                        },
+                        "key": {
+                          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+                          "title": "StateChannelRef",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "channel": {
+                                  "type": "string"
+                                },
+                                "arguments": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "zone"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "zone": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "expression"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "expression": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "binding",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "pool",
+                                "slot",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "pool": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "state": {
+                          "description": "The state.body counter.",
+                          "type": "string"
+                        },
+                        "value": {
+                          "description": "The literal value.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "expression": {
+                          "description": "A bounded fixed-point expression evaluated at fire time.",
+                          "default": null,
+                          "title": "ExpressionProgram",
+                          "type": "object",
+                          "required": [
+                            "instructions"
+                          ],
+                          "properties": {
+                            "instructions": {
+                              "description": "The postfix instructions, in evaluation order.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "title": "ExpressionInstruction",
+                                "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                "required": [
+                                  "op"
+                                ],
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Add",
+                                          "Subtract",
+                                          "Multiply",
+                                          "Divide",
+                                          "Minimum",
+                                          "Maximum",
+                                          "Clamp",
+                                          "Remainder",
+                                          "BitAnd",
+                                          "BitOr",
+                                          "BitXor",
+                                          "BitNot",
+                                          "ShiftLeft",
+                                          "ShiftRight",
+                                          "ShiftRightLogical",
+                                          "Equal",
+                                          "NotEqual",
+                                          "Less",
+                                          "LessOrEqual",
+                                          "Greater",
+                                          "GreaterOrEqual",
+                                          "Select",
+                                          "SetBitCount",
+                                          "LeadingZeroCount",
+                                          "TrailingZeroCount",
+                                          "LowestSetBit",
+                                          "ClearLowestSetBit",
+                                          "RotateLeft",
+                                          "RotateRight",
+                                          "ByteSwap",
+                                          "ReverseBits",
+                                          "Negate",
+                                          "Absolute",
+                                          "ParallelBitExtract",
+                                          "ParallelBitDeposit",
+                                          "BitField",
+                                          "BitInsert",
+                                          "Sign",
+                                          "Pair",
+                                          "PairX",
+                                          "PairY",
+                                          "PairSwap",
+                                          "PairMaximum",
+                                          "PairMinimum",
+                                          "PairSum",
+                                          "PairDifference",
+                                          "PairTranslate",
+                                          "PairScale",
+                                          "MortonIndex",
+                                          "MortonX",
+                                          "MortonY",
+                                          "HilbertIndex",
+                                          "HilbertX",
+                                          "HilbertY",
+                                          "HexIndex",
+                                          "HexQ",
+                                          "HexR",
+                                          "HexRadius",
+                                          "HexEuclideanSquared",
+                                          "HexDistance",
+                                          "HexNeighbor",
+                                          "HexRotate",
+                                          "HexMirror",
+                                          "HexSwap",
+                                          "HexAdd",
+                                          "HexSubtract",
+                                          "HexMultiply",
+                                          "HexScale",
+                                          "HexTranslate",
+                                          "Layer",
+                                          "LayerOffset",
+                                          "LayerStart",
+                                          "LayerSize",
+                                          "SquareRoot",
+                                          "Sine",
+                                          "Cosine",
+                                          "SquareIndex",
+                                          "SquareX",
+                                          "SquareY",
+                                          "SquareRadius",
+                                          "SquareLength",
+                                          "SquareEuclideanSquared",
+                                          "SquareDistance",
+                                          "SquareChebyshev",
+                                          "SquareNeighbor",
+                                          "SquareRotate",
+                                          "SquareMirror",
+                                          "SquareSwap",
+                                          "SquareAdd",
+                                          "SquareSubtract",
+                                          "SquareMultiply",
+                                          "SquareScale",
+                                          "SquareTranslate",
+                                          "GreatestCommonDivisor",
+                                          "LeastCommonMultiple",
+                                          "FloorModulo",
+                                          "FloorDivide",
+                                          "FloorDivideModulo",
+                                          "DivideRemainder",
+                                          "Power",
+                                          "ModularPower",
+                                          "ModularInverse",
+                                          "ExtendedGreatestCommonDivisor",
+                                          "CycleForward",
+                                          "CycleDistance",
+                                          "SmallestMissing",
+                                          "IsPrime",
+                                          "PrimeAt",
+                                          "BinomialCoefficient",
+                                          "Factorial",
+                                          "SubsetRank",
+                                          "SubsetAt",
+                                          "SubsetMember",
+                                          "ArrangementRank",
+                                          "ArrangementAt",
+                                          "ArrangementMember",
+                                          "Floor",
+                                          "Ceiling",
+                                          "Round",
+                                          "ReplicationMask",
+                                          "RepeatBits",
+                                          "IsAbsent",
+                                          "Coalesce",
+                                          "Member"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Argument"
+                                        ]
+                                      },
+                                      "index": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "BoardShift",
+                                          "BoardRay",
+                                          "BoardImage"
+                                        ]
+                                      },
+                                      "topology": {
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "topology",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Call"
+                                        ]
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Constant"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "All",
+                                          "Any",
+                                          "Count",
+                                          "Sum"
+                                        ]
+                                      },
+                                      "family": {
+                                        "type": "string"
+                                      },
+                                      "binder": {
+                                        "type": "string"
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "family",
+                                      "binder",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Operand"
+                                        ]
+                                      },
+                                      "name": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      },
+                                      "key": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Dot",
+                                          "Similarity",
+                                          "Identical"
+                                        ]
+                                      },
+                                      "left": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      },
+                                      "right": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "left",
+                                      "right"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "subprograms": {
+                              "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "instructions"
+                                ],
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "arity": {
+                                    "type": "integer"
+                                  },
+                                  "instructions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "title": "ExpressionInstruction",
+                                      "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                      "required": [
+                                        "op"
+                                      ],
+                                      "anyOf": [
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Add",
+                                                "Subtract",
+                                                "Multiply",
+                                                "Divide",
+                                                "Minimum",
+                                                "Maximum",
+                                                "Clamp",
+                                                "Remainder",
+                                                "BitAnd",
+                                                "BitOr",
+                                                "BitXor",
+                                                "BitNot",
+                                                "ShiftLeft",
+                                                "ShiftRight",
+                                                "ShiftRightLogical",
+                                                "Equal",
+                                                "NotEqual",
+                                                "Less",
+                                                "LessOrEqual",
+                                                "Greater",
+                                                "GreaterOrEqual",
+                                                "Select",
+                                                "SetBitCount",
+                                                "LeadingZeroCount",
+                                                "TrailingZeroCount",
+                                                "LowestSetBit",
+                                                "ClearLowestSetBit",
+                                                "RotateLeft",
+                                                "RotateRight",
+                                                "ByteSwap",
+                                                "ReverseBits",
+                                                "Negate",
+                                                "Absolute",
+                                                "ParallelBitExtract",
+                                                "ParallelBitDeposit",
+                                                "BitField",
+                                                "BitInsert",
+                                                "Sign",
+                                                "Pair",
+                                                "PairX",
+                                                "PairY",
+                                                "PairSwap",
+                                                "PairMaximum",
+                                                "PairMinimum",
+                                                "PairSum",
+                                                "PairDifference",
+                                                "PairTranslate",
+                                                "PairScale",
+                                                "MortonIndex",
+                                                "MortonX",
+                                                "MortonY",
+                                                "HilbertIndex",
+                                                "HilbertX",
+                                                "HilbertY",
+                                                "HexIndex",
+                                                "HexQ",
+                                                "HexR",
+                                                "HexRadius",
+                                                "HexEuclideanSquared",
+                                                "HexDistance",
+                                                "HexNeighbor",
+                                                "HexRotate",
+                                                "HexMirror",
+                                                "HexSwap",
+                                                "HexAdd",
+                                                "HexSubtract",
+                                                "HexMultiply",
+                                                "HexScale",
+                                                "HexTranslate",
+                                                "Layer",
+                                                "LayerOffset",
+                                                "LayerStart",
+                                                "LayerSize",
+                                                "SquareRoot",
+                                                "Sine",
+                                                "Cosine",
+                                                "SquareIndex",
+                                                "SquareX",
+                                                "SquareY",
+                                                "SquareRadius",
+                                                "SquareLength",
+                                                "SquareEuclideanSquared",
+                                                "SquareDistance",
+                                                "SquareChebyshev",
+                                                "SquareNeighbor",
+                                                "SquareRotate",
+                                                "SquareMirror",
+                                                "SquareSwap",
+                                                "SquareAdd",
+                                                "SquareSubtract",
+                                                "SquareMultiply",
+                                                "SquareScale",
+                                                "SquareTranslate",
+                                                "GreatestCommonDivisor",
+                                                "LeastCommonMultiple",
+                                                "FloorModulo",
+                                                "FloorDivide",
+                                                "FloorDivideModulo",
+                                                "DivideRemainder",
+                                                "Power",
+                                                "ModularPower",
+                                                "ModularInverse",
+                                                "ExtendedGreatestCommonDivisor",
+                                                "CycleForward",
+                                                "CycleDistance",
+                                                "SmallestMissing",
+                                                "IsPrime",
+                                                "PrimeAt",
+                                                "BinomialCoefficient",
+                                                "Factorial",
+                                                "SubsetRank",
+                                                "SubsetAt",
+                                                "SubsetMember",
+                                                "ArrangementRank",
+                                                "ArrangementAt",
+                                                "ArrangementMember",
+                                                "Floor",
+                                                "Ceiling",
+                                                "Round",
+                                                "ReplicationMask",
+                                                "RepeatBits",
+                                                "IsAbsent",
+                                                "Coalesce",
+                                                "Member"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Argument"
+                                              ]
+                                            },
+                                            "index": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "BoardShift",
+                                                "BoardRay",
+                                                "BoardImage"
+                                              ]
+                                            },
+                                            "topology": {
+                                              "type": "string"
+                                            },
+                                            "index": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "topology",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Call"
+                                              ]
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Constant"
+                                              ]
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "value"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "All",
+                                                "Any",
+                                                "Count",
+                                                "Sum"
+                                              ]
+                                            },
+                                            "family": {
+                                              "type": "string"
+                                            },
+                                            "binder": {
+                                              "type": "string"
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "family",
+                                            "binder",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Operand"
+                                              ]
+                                            },
+                                            "name": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            },
+                                            "key": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Dot",
+                                                "Similarity",
+                                                "Identical"
+                                              ]
+                                            },
+                                            "left": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            },
+                                            "right": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "left",
+                                            "right"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "state"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectSetBodyState"
                     }
                   ],
                   "title": "ActionEffect"

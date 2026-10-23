@@ -112,7 +112,7 @@ public static class BindingProfile {
         separator: ',',
         values: (activator.Sequence ?? [])
     )}";
-    private static (FrozenDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
+    private static (FrozenDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, Func<ChannelRef, bool>? channelIsRelative, ref int nextActivatorIndex) {
         var entries = (page.Entries ?? []);
         // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
         // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
@@ -210,6 +210,11 @@ public static class BindingProfile {
                 );
             }
 
+            var relative = ((entry.Channel is { } destination) && (channelIsRelative?.Invoke(destination) ?? false));
+
+            if (relative && ((entry.Mode == BindingEntryMode.Toggle) || (entry.Activator is not null))) {
+                throw new ArgumentException(message: $"Page '{page.Id}' relative channel {entry.Channel} cannot toggle or use a held/sequence activator.", paramName: nameof(page));
+            }
             string effectiveCommand;
             CommandValue? effectiveValue;
             float? channelScale;
@@ -402,6 +407,7 @@ public static class BindingProfile {
                 list.Add(item: new CommandBinding(
                     ActivateOn: entry.ActivateOn,
                     ChannelScale: channelScale,
+                    Relative: relative,
                     Command: effectiveCommand,
                     Value: effectiveValue,
                     Component: component,
@@ -426,6 +432,8 @@ public static class BindingProfile {
         string group,
         IReadOnlyList<BindingChordCommandView> hints,
         IReadOnlyList<BindingModifierDefinition> modifiers,
+        int declaredModifierCount,
+        FrozenDictionary<string, BindingPageOpenerView> openers,
         BindingPageDefinition page,
         HashSet<int> required,
         Func<ChannelRef, string> channelCommandName
@@ -479,7 +487,8 @@ public static class BindingProfile {
                 Id: modifier.Id,
                 Label: modifier.Label,
                 Required: required.Contains(item: modifierIndex),
-                Sources: modifier.Sources
+                Sources: modifier.Sources,
+                Declared: (modifierIndex < declaredModifierCount)
             );
         }
 
@@ -491,8 +500,56 @@ public static class BindingProfile {
             Icon: page.Icon,
             Label: page.Label,
             Modifiers: modifierViews.ToImmutableArray(),
+            Openers: openers,
             PageId: page.Id
         );
+    }
+    // The pages one more held modifier opens from the page at `rowIndex`: a page row of the same group whose members are
+    // this row's plus exactly one, keyed by each source of that extra modifier (first page in profile order wins).
+    private static FrozenDictionary<string, BindingPageOpenerView> OpenersOf(
+        int rowIndex,
+        IReadOnlyList<BindingModifierDefinition> modifiers,
+        BindingPageDefinition?[] effectivePages,
+        int[] rowGroups,
+        int[][] rowHelds,
+        int[][] rowChords
+    ) {
+        var members = new HashSet<int>(collection: [.. rowHelds[rowIndex], .. rowChords[rowIndex]]);
+        var openers = new Dictionary<string, BindingPageOpenerView>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        for (var other = 0; (other < effectivePages.Length); other++) {
+            if (
+                (other == rowIndex) ||
+                (rowGroups[other] != rowGroups[rowIndex]) ||
+                (effectivePages[other] is not { } opened)
+            ) {
+                continue;
+            }
+
+            var otherMembers = new HashSet<int>(collection: [.. rowHelds[other], .. rowChords[other]]);
+
+            if (
+                (otherMembers.Count != (members.Count + 1)) ||
+                !otherMembers.IsSupersetOf(other: members)
+            ) {
+                continue;
+            }
+
+            otherMembers.ExceptWith(other: members);
+
+            foreach (var source in modifiers[otherMembers.Single()].Sources) {
+                _ = openers.TryAdd(
+                    key: source,
+                    value: new BindingPageOpenerView(
+                        Icon: opened.Icon,
+                        Label: opened.Label,
+                        PageId: opened.Id
+                    )
+                );
+            }
+        }
+
+        return openers.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase);
     }
     // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
     // a modal page source-level overrides instead of forcing it to duplicate a resting page's unrelated controls.
@@ -782,7 +839,8 @@ public static class BindingProfile {
     /// <returns>The compiled profile.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="document"/> is invalid.</exception>
-    public static CompiledBindingProfile Compile(BindingProfileDocument document, Func<ChannelRef, string>? channelCommandName = null) {
+    /// <param name="channelIsRelative">Resolves displacement destinations, which cannot toggle or carry held samples.</param>
+    public static CompiledBindingProfile Compile(BindingProfileDocument document, Func<ChannelRef, string>? channelCommandName = null, Func<ChannelRef, bool>? channelIsRelative = null) {
         ArgumentNullException.ThrowIfNull(document);
 
         channelCommandName ??= ChannelCommandName;
@@ -804,6 +862,7 @@ public static class BindingProfile {
         // Declared modifiers first, then one implicit modifier per raw source a row names (appended in first-use
         // order), so every member resolves to a modifier index.
         var modifiers = new List<BindingModifierDefinition>(collection: (document.Modifiers ?? []));
+        var declaredModifierCount = modifiers.Count;
 
         for (var modifierIndex = 0; (modifierIndex < modifiers.Count); modifierIndex++) {
             var modifier = modifiers[modifierIndex];
@@ -1645,6 +1704,9 @@ public static class BindingProfile {
 
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
+                    Action: ((command.Channel is ChannelRef.Name named)
+                    ? named.Value
+                    : command.Command),
                     Chord: rowChords[rowIndex].Select(selector: index => modifiers[index].Id).ToImmutableArray(),
                     Command: effectiveCommand,
                     Held: rowHelds[rowIndex].Select(selector: index => modifiers[index].Id).ToImmutableArray(),
@@ -1670,6 +1732,7 @@ public static class BindingProfile {
             if (effectivePages[rowIndex] is { } page) {
                 var (table, activators) = BuildTable(
                     channelCommandName: channelCommandName,
+                    channelIsRelative: channelIsRelative,
                     nextActivatorIndex: ref nextActivatorIndex,
                     page: page
                 );
@@ -1687,6 +1750,15 @@ public static class BindingProfile {
                         group: groupNames[groupIndex],
                         hints: hintsByGroup[groupIndex],
                         modifiers: modifiers,
+                        declaredModifierCount: declaredModifierCount,
+                        openers: OpenersOf(
+                            effectivePages: effectivePages,
+                            modifiers: modifiers,
+                            rowChords: rowChords,
+                            rowGroups: rowGroups,
+                            rowHelds: rowHelds,
+                            rowIndex: rowIndex
+                        ),
                         page: page,
                         // Held AND chord: both lists are members the player must be holding for this page to be the
                         // selected one, so both belong in the "required" set the bar renders chips from. Passing the

@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/40be05242b8b3b81ade50c3f5d8669a488168cd0b9c0e9d1f40e6a099524a889). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/3446217f8520e7ca6860c32a9d2739f05cf91bfc4d1da01a5be6e9bb5868da8b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -18,14 +18,20 @@ struct PlaceFrame {
 struct PlacePass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] uint compareMode;
-    [[vk::offset(12)]] uint letterbox;
-    [[vk::offset(16)]] float4 rect;
-    [[vk::offset(32)]] uint sharpen;
-    [[vk::offset(36)]] float sharpness;
-    [[vk::offset(40)]] uint tonemap;
-    [[vk::offset(44)]] float wipe;
-    [[vk::offset(48)]] uint workCounterRow;
-    [[vk::offset(52)]] uint workCounterRowDetail;
+    [[vk::offset(12)]] uint _pad12;
+    [[vk::offset(16)]] float4 crop;
+    [[vk::offset(32)]] float fidelity;
+    [[vk::offset(36)]] uint letterbox;
+    [[vk::offset(40)]] uint _pad40;
+    [[vk::offset(44)]] uint _pad44;
+    [[vk::offset(48)]] float4 letterboxColor;
+    [[vk::offset(64)]] float4 rect;
+    [[vk::offset(80)]] uint sharpen;
+    [[vk::offset(84)]] float sharpness;
+    [[vk::offset(88)]] uint tonemap;
+    [[vk::offset(92)]] float wipe;
+    [[vk::offset(96)]] uint workCounterRow;
+    [[vk::offset(100)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<PlacePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> base : register(t1, space3);

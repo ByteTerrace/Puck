@@ -232,9 +232,9 @@ public sealed partial class SdfSurfaceTransportLawTests {
         // whose history is rejected or holds less than one sample's weight, and an unaccepted temporal pixel, every pixel
         // of an epoch's first frame, writes exactly those values.
         Assert.Single(collection: Regex.Matches(input: main, pattern: @"\bsdfResolveSpatial\("));
-        Assert.Contains(actualString: main, expectedSubstring: "if (!accepted || (total < 1.0)) {");
-        Assert.Contains(actualString: main, expectedSubstring: "resolved = (accepted ? lerp(spatial, accumulated, total) : spatial);");
-        Assert.Contains(actualString: main, expectedSubstring: "transportWord = (accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, total)) : spatialWord);");
+        Assert.Contains(actualString: main, expectedSubstring: "if (shown < 1.0) {");
+        Assert.Contains(actualString: main, expectedSubstring: "resolved = lerp(spatial, accumulated, shown);");
+        Assert.Contains(actualString: main, expectedSubstring: "transportWord = ((shown > 0.0) ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, shown)) : spatialWord);");
         Assert.Contains(actualString: main, expectedSubstring: "transportRW[((id.y * extent.x) + id.x)] = transportWord;");
         // A pixel copied whole carries its sample's distance, read where a native view's composite reads it.
         Assert.Matches(actualString: resolve, expectedRegexPattern: @"float t = \(sdfVisibilityHit\(visibility\) \? visibility\.t : 0\.0\);\s*color = [^;]+;\s*transport = sdfSampleTransport\(color\.a, t, origin, direction\);\s*word = sdfTransportSampleWord\(t\);");
@@ -272,7 +272,7 @@ public sealed partial class SdfSurfaceTransportLawTests {
         Assert.Contains(actualString: resolve, expectedSubstring: "transportSum += (weight * transport);");
         Assert.Contains(actualString: resolve, expectedSubstring: "rowTransport += (wx[x] * sdfUnpackTransport(");
         Assert.Contains(actualString: resolve, expectedSubstring: "transport += (wy[y] * rowTransport);");
-        Assert.Contains(actualString: resolve, expectedSubstring: "lerp(spatialTransport, accumulatedTransport, total)");
+        Assert.Contains(actualString: resolve, expectedSubstring: "lerp(spatialTransport, accumulatedTransport, shown)");
         // No nearest-sample distance survives anywhere the composite reads from.
         Assert.DoesNotContain(actualString: ((resolve + composite) + sky), expectedSubstring: "surfaceDistance");
         // The composite clips each share at its own end.

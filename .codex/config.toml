@@ -1,6 +1,41 @@
+# The owner's ruling: Codex runs with the same rights as the Claude agents in this checkout, and its approval
+# requests go to the automatic reviewer rather than a person (Codex's counterpart of Claude Code's auto mode). A
+# permission profile carries it; a lane launched with `codex exec` (no --sandbox flag) runs under it. Under MXC
+# (prefer_mxc) the profile gives shell commands network access and makes the shared leases under .claude/leases/ and
+# the repository's .git writable, so a lane commits on its own branch directly. Codex takes absolute paths only, so
+# these name this machine's checkout. Shared git state is guarded twice: .claude/hooks/agent-policy.ps1 (registered
+# in hooks.json) refuses a lane's pushes and shared-state git, and .codex/rules/git.rules repeats what a prefix rule
+# can express.
+default_permissions = "puck"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+# Live web search for research, as the Claude agents have; Codex defaults to cached results.
+web_search = "live"
+
+# MXC is the Windows sandbox that enforces a profile's network permission without administrator setup.
+[features]
+prefer_mxc = true
+
+# A reused MSBuild node outlives the build and holds memory on the shared machine; every build a lane starts,
+# puck verbs included, runs without one.
+[shell_environment_policy]
+set = { MSBUILDDISABLENODEREUSE = "1" }
+
+[permissions.puck]
+extends = ":workspace"
+
+[permissions.puck.filesystem]
+'D:\Source\ByteTerrace\Puck\.git' = "write"
+'D:/Source/ByteTerrace/Puck/.git/**' = "write"
+'D:\Source\ByteTerrace\Puck\.claude\leases' = "write"
+
+[permissions.puck.network]
+enabled = true
+
 [mcp_servers.puck]
 command = "pwsh"
 args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/hooks/puck-mcp.ps1"]
 startup_timeout_sec = 600
-tool_timeout_sec = 120
+# A world.reload or a capture can outlast two minutes; the same operation budget as Antigravity's.
+tool_timeout_sec = 600
 enabled = true

@@ -46,8 +46,8 @@ public static class WorldWireCodec {
         fromWire: WorldWireTags.TryFromWire,
         reader: ref reader
     );
-    /// <summary>Reads an intent in <see cref="WriteIntent"/>'s layout: <see cref="ChannelLimits.MaxChannels"/> raw
-    /// <see cref="FixedQ4816"/> lanes, one per ordinal, then the pointer-ray flag byte (<c>0</c> absent, <c>1</c>
+    /// <summary>Reads an intent in <see cref="WriteIntent"/>'s layout: 32 raw 64-bit numeric lanes,
+    /// one packed 64-bit button word, then the pointer-ray flag byte (<c>0</c> absent, <c>1</c>
     /// present) and, when present, the ray's origin and direction as six raw <see cref="FixedQ4816"/> values.</summary>
     /// <param name="reader">The reader.</param>
     /// <returns>The decoded intent; every lane reads zero, and the ray absent, once a refusal has latched. An undeclared
@@ -55,10 +55,11 @@ public static class WorldWireCodec {
     public static PlayerIntent ReadIntent(ref WireReader reader) {
         var channels = default(ChannelValues);
 
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            channels[ordinal] = reader.ReadFixed();
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
+            channels.Axes[ordinal] = reader.ReadInt64();
         }
 
+        channels.Buttons = reader.ReadUInt64();
         var flag = reader.ReadByte();
         SourceRay? ray = null;
 
@@ -93,6 +94,20 @@ public static class WorldWireCodec {
                 : ray
             )
         );
+    }
+    /// <summary>Reads the two independent channel support banks.</summary>
+    public static ChannelMask ReadChannelMask(ref WireReader reader) => new(Axes: reader.ReadUInt32(), Buttons: reader.ReadUInt64());
+    /// <summary>Writes the two independent channel support banks.</summary>
+    public static void WriteChannelMask(WireWriter writer, ChannelMask mask) {
+        writer.WriteUInt32(value: mask.Axes);
+        writer.WriteUInt64(value: mask.Buttons);
+    }
+    /// <summary>Reads channel reach and its independent target-register reach.</summary>
+    public static ChannelReachMask ReadChannelReach(ref WireReader reader) => new(Bits: ReadChannelMask(reader: ref reader), Registers: reader.ReadUInt64());
+    /// <summary>Writes channel reach and its independent target-register reach.</summary>
+    public static void WriteChannelReach(WireWriter writer, ChannelReachMask reach) {
+        WriteChannelMask(writer: writer, mask: reach.Bits);
+        writer.WriteUInt64(value: reach.Registers);
     }
     /// <summary>Reads the intent-source union: one discriminant byte (<c>0</c> live, <c>1</c> idle, <c>2</c>
     /// producer), followed by the producer name for <c>2</c>. A producer name that reads back blank latches the
@@ -487,8 +502,8 @@ public static class WorldWireCodec {
 
         return true;
     }
-    /// <summary>Writes an intent: the whole channel vector as <see cref="ChannelLimits.MaxChannels"/> raw
-    /// <see cref="FixedQ4816"/> lanes, one per ordinal, unconditionally, then one flag byte for the pointer ray and,
+    /// <summary>Writes an intent: 32 raw 64-bit numeric lanes and one packed button word,
+    /// then one flag byte for the pointer ray and,
     /// only when the ray is present, its origin and direction as six raw <see cref="FixedQ4816"/> values, so an absent
     /// ray costs one byte. The vector's capacity is what is wire-shaped, not a document's declared channel count, so no
     /// codec needs the world's channel table to decode. Every intent path shares this layout: submission, held
@@ -499,10 +514,11 @@ public static class WorldWireCodec {
     public static void WriteIntent(WireWriter writer, PlayerIntent intent) {
         ArgumentNullException.ThrowIfNull(argument: writer);
 
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            writer.WriteFixed(value: intent[ordinal]);
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
+            writer.WriteInt64(value: intent.Channels.Axes[ordinal]);
         }
 
+        writer.WriteUInt64(value: intent.Channels.Buttons);
         if (intent.SourceRay is not { } ray) {
             writer.WriteByte(value: 0);
 

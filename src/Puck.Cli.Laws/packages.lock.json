@@ -4,14 +4,22 @@
     "net11.0": {
       "Microsoft.Build.Framework": {
         "type": "Direct",
-        "requested": "[17.*, )",
-        "resolved": "17.14.28",
-        "contentHash": "wRcyTzGV0LRAtFdrddtioh59Ky4/zbvyraP0cQkDzRSRkhgAQb0K88D/JNC6VHLIXanRi3mtV1jU0uQkBwmiVg=="
+        "requested": "[18.*, )",
+        "resolved": "18.11.0",
+        "contentHash": "g0Uuh7+iNZ0rX3tWiG2z8mWP/gOWn967UcbtlTwmal85yYttp5miVljm744u/0LsAuC3gIKIiHWR6Zg1OIDnvA==",
+        "dependencies": {
+          "Microsoft.NET.StringTools": "[18.11.0]"
+        }
       },
       "FSharp.Core": {
         "type": "Transitive",
         "resolved": "11.0.100",
         "contentHash": "ijfOz8ihqkFNdKUY57l8YTrbJNfQW/6tFYAUU57ByZzmTxxf1o12cQaCqDOjNqAz4h86AKS7IwQkNhYcrjLeCQ=="
+      },
+      "Microsoft.NET.StringTools": {
+        "type": "Transitive",
+        "resolved": "18.11.0",
+        "contentHash": "46dxu08YSKeHQXbBlz/HYfVnSMJnfF1nM4v3tmfHVqIdBaz5eF8GrxWz6nl8mM3fGHZIOcp/Pr8I2zZCdb6CLA=="
       },
       "Resharp": {
         "type": "Transitive",

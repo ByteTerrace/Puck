@@ -480,11 +480,11 @@ public sealed partial class WorldPersistence {
             );
         }
     }
-    /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
-    /// against state this record graph cannot represent — see <see cref="TryCaptureCheckpoint"/>.</summary>
+    /// <summary>Whether this server's live state is outside what a checkpoint can capture: a pumped addon guest, or a
+    /// stepped machine on a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
     private bool AnyUncapturableStateEverLatched() => (Host.AnyAddonEverPumped ||
-        (Host.AnyMachineEverPumped && (Host.Machines is not IWorldMachineCheckpointHost)) || Host.AnyScreenOpEverApplied);
+        (Host.AnyMachineEverPumped && (Host.Machines is not IWorldMachineCheckpointHost)));
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
     /// <see cref="WorldReplaySnapshot.Drive"/> already follows for an offline rehydration (population, machine
@@ -532,13 +532,14 @@ public sealed partial class WorldPersistence {
         return (server, population);
     }
     /// <summary>Captures a full simulation-state image of this server and every subsystem it owns, under
-    /// <see cref="WorldServer.AuthorityGate"/>. Refuses by name (returns <see langword="false"/>) when this server has ever
-    /// pumped an addon, stepped a machine without durable checkpoint support, or applied a screen operation.
-    /// Supported machine hosts drain accepted steps and capture their complete runtime images; unsupported
-    /// runtime state, including live coupled links and enabled rewind history, refuses capture by name —
-    /// or when <see cref="WorldDocument.Pending"/> or <see cref="WorldTick.Ordered"/> is non-empty at the moment of the call, which the
-    /// caller must retry at the NEXT master boundary rather than treat as a hard refusal (a live console submission
-    /// landed in the window between this boundary and the last drain).</summary>
+    /// <see cref="WorldServer.AuthorityGate"/>: the sessions it admitted, the screen slots and links a screen operation
+    /// moves, and the machine cores included. Refuses by name (returns <see langword="false"/>) when this server has
+    /// ever pumped an addon or stepped a machine without durable checkpoint support. Supported machine hosts drain
+    /// accepted steps and capture their complete runtime images; unsupported runtime state, a live coupled link or
+    /// enabled rewind history, refuses capture by name — or when <see cref="WorldDocument.Pending"/> or
+    /// <see cref="WorldTick.Ordered"/> is non-empty at the moment of the call, which the caller must retry at the NEXT
+    /// master boundary rather than treat as a hard refusal (a live console submission landed in the window between
+    /// this boundary and the last drain).</summary>
     /// <param name="hostRow">This row's own slice of the host engine's cross-instance tables — supplied by
     /// <see cref="WorldInstanceHost"/>, which owns that state.</param>
     /// <param name="checkpoint">The captured image, on success.</param>
@@ -556,7 +557,7 @@ public sealed partial class WorldPersistence {
             }
             if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
-                reason = "a checkpoint cannot capture pumped addon guests, a stepped machine without durable checkpoint support, or applied screen operations";
+                reason = "a checkpoint cannot capture pumped addon guests or a stepped machine without durable checkpoint support";
 
                 return false;
             }
@@ -790,14 +791,14 @@ public sealed partial class WorldPersistence {
             entries: server.MachineBindings
         );
 
-        var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
-
+        // A checkpoint with no machine section came from a host without checkpoint support, which ran no machine.
         if (Host.Machines is IWorldMachineCheckpointHost machineHost) {
-            machineHost.RestoreCheckpoint(checkpoint: machineCheckpoint);
-        } else if (
-            (machineCheckpoint.Instances.Count != 0) ||
-            machineCheckpoint.AnyEverPumped
-        ) {
+            if (checkpoint.Machines is { } machineCheckpoint) {
+                machineHost.RestoreCheckpoint(checkpoint: machineCheckpoint);
+            } else if (Host.Machines.InstanceNames.Any()) {
+                throw new InvalidOperationException(message: "the checkpoint carries no machine section, and this host runs machines");
+            }
+        } else if (checkpoint.Machines is { } machines && ((machines.Instances.Count != 0) || machines.AnyEverPumped)) {
             throw new InvalidOperationException(message: "checkpoint contains machine state that this host cannot restore");
         }
 
@@ -871,11 +872,10 @@ public sealed partial class WorldPersistence {
             defaults: Host.Document.Definition.PlayerDefaults,
             tick: Host.Tick.CompletedTick
         );
-        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — bodies.scaleRow is document
-        // state, not part of WorldPopulationCheckpoint, so it needs the same catch-up every other admission door
-        // gives a freshly minted body. m_definition is already the checkpoint's own restored document (set above),
-        // so this reads the SAME cells the live server had when it captured.
-        Host.Population.SyncBodyScale(definition: Host.Document.Definition);
+        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — a body's size is its register,
+        // which the arena restored, so it needs the same catch-up every other admission door gives a freshly minted
+        // body.
+        Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership

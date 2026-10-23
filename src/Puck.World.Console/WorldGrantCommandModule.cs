@@ -617,7 +617,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         ushort? budget = null;
         ushort? eventBudget = null;
         ChannelDeclaredMask? namedChannels = null;
-        ChannelDeclaredMask? namedRegisters = null;
+        ulong? namedRegisters = null;
         long? ceiling = null;
         long? holdCeiling = null;
         MutationKindMask? kindMask = null;
@@ -891,7 +891,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                     return false;
                 }
 
-                var mask = default(ChannelDeclaredMask);
+                var mask = 0UL;
 
                 foreach (var name in token[10..].ToString().Split(
                     options: StringSplitOptions.None,
@@ -904,7 +904,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                         error = CommandResult.Error(output: $"[{verb}: registers:<> names '{name}', which names no declared target register]");
                         return false;
                     }
-                    mask = mask.With(ordinal: targets.ReachOrdinal(index: targetIndex));
+                    mask = new ChannelReachMask(Bits: default, Registers: mask).WithRegister(index: targetIndex).Registers;
                 }
                 namedRegisters = mask;
                 continue;
@@ -966,10 +966,10 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         }
 
         var reachedBits = ((ceiling is null)
-            ? (namedChannels?.Bits ?? 0UL)
-            : 0UL) | (namedRegisters?.Bits ?? 0UL);
-        var reach = (((ceiling is null) && (reachedBits != 0UL))
-            ? new ChannelReachMask(Bits: reachedBits)
+            ? (namedChannels?.Bits ?? default)
+            : default);
+        var reach = (((ceiling is null) && (!reachedBits.IsEmpty || (namedRegisters is not null)))
+            ? new ChannelReachMask(Bits: reachedBits, Registers: (namedRegisters ?? 0UL))
             : (ChannelReachMask?)null
         );
         var consent = (((ceiling is not null) && (namedChannels is { } consented))

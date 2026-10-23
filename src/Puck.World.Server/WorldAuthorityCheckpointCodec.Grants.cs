@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Networking;
 using Puck.World.Protocol;
 
@@ -71,7 +72,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             subject: application.Target
         );
         writer.WriteString(value: (application.Kit ?? string.Empty));
-        writer.WriteUInt64(value: application.Reach.Bits);
+        WorldWireCodec.WriteChannelReach(writer, application.Reach);
     }
     private static ControlApplication ReadControlApplication(ref WireReader reader) {
         var target = WorldWireCodec.ReadSubject(reader: ref reader);
@@ -79,13 +80,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "control application kit",
             maxBytes: MaxStringBytes
         );
-        var reach = reader.ReadUInt64();
+        var reach = WorldWireCodec.ReadChannelReach(reader: ref reader);
 
         return new ControlApplication(
             Kit: ((kit.Length == 0)
             ? null
             : kit),
-            Reach: new ChannelReachMask(Bits: reach),
+            Reach: reach,
             Target: target
         );
     }
@@ -201,7 +202,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     subject: row.Subject,
                     writer: w
                 );
-                w.WriteUInt64(value: row.Bits);
+                WorldWireCodec.WriteChannelReach(reach: row.Reach, writer: w);
             }
         );
         writer.WriteArray(
@@ -273,9 +274,64 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteInt32(value: row.Epoch);
             }
         );
+        writer.WriteArray(
+            items: section.Sessions,
+            writeItem: static (w, session) => {
+                WritePrincipal(
+                    principal: session.Session,
+                    writer: w
+                );
+                w.WriteArray(
+                    items: session.Templates,
+                    writeItem: WriteAdmissionGrant
+                );
+                w.WriteOptional(
+                    value: session.BodyIndex,
+                    writeValue: static (w2, v) => w2.WriteInt32(value: v)
+                );
+                w.WriteInt32(value: session.BodyGeneration);
+                w.WriteBoolean(value: session.ObserverEnded);
+                WorldWireCodec.WriteIntent(
+                    intent: session.Input,
+                    writer: w
+                );
+            }
+        );
         writer.WriteInt32(value: section.Revision);
 
         return writer.ToArray();
+    }
+    private static WorldSessionCheckpoint ReadSession(ref WireReader reader) {
+        var session = WorldWireCodec.ReadPrincipal(reader: ref reader);
+
+        if (
+            !reader.Failed &&
+            (session.Kind != PrincipalKind.Session)
+        ) {
+            reader.Fail(
+                detail: $"grants session {session.Describe()} is not a session principal",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        var templates = reader.ReadArray(
+            field: "grants session templates",
+            readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r),
+            maximum: MaxCollectionCount
+        );
+        var bodyIndex = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadInt32());
+        var bodyGeneration = reader.ReadInt32();
+        var observerEnded = reader.ReadBoolean();
+        var input = WorldWireCodec.ReadIntent(reader: ref reader);
+
+        return new WorldSessionCheckpoint(
+            BodyGeneration: bodyGeneration,
+            BodyIndex: bodyIndex,
+            Input: input,
+            ObserverEnded: observerEnded,
+            Session: session,
+            Templates: templates
+        );
     }
     private static bool TryDecodeGrants(byte[] bytes, out string reason, out WorldGrantsCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
@@ -329,9 +385,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "grants channel reach",
             readItem: static (ref WireReader r) => {
                 var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
-                var bits = r.ReadUInt64();
+                var reach = WorldWireCodec.ReadChannelReach(reader: ref r);
 
-                return (grantee, capability, subject, bits);
+                return (grantee, capability, subject, reach);
             },
             maximum: MaxCollectionCount
         );
@@ -416,6 +472,22 @@ public static partial class WorldAuthorityCheckpointCodec {
             },
             maximum: MaxCollectionCount
         );
+        var sessions = reader.ReadArray(
+            field: "grants sessions",
+            readItem: static (ref WireReader r) => ReadSession(reader: ref r),
+            maximum: MaxCollectionCount
+        );
+
+        if (
+            !reader.Failed &&
+            (sessions.Select(selector: static session => session.Session.Index).Distinct().Count() != sessions.Length)
+        ) {
+            reader.Fail(
+                detail: "grants sessions hold one ordinal twice",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
         var revision = reader.ReadInt32();
 
         if (!reader.TryFinish(failure: out var failure)) {
@@ -438,6 +510,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Revision: revision,
             SeededSections: seededSections,
             SessionEpochs: sessionEpochs,
+            Sessions: sessions,
             WriteMasks: writeMasks
         );
         reason = string.Empty;

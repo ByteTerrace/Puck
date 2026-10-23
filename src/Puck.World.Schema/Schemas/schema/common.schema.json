@@ -329,7 +329,7 @@
       "title": "WorldShadowMode"
     },
     "WorldRenderLightDirectional": {
-      "description": "A Lambert directional light.",
+      "description": "A Lambert directional light, such as the sun.",
       "properties": {
         "$type": {
           "const": "directional"
@@ -341,12 +341,12 @@
         },
         "color": {
           "$ref": "#/$defs/BindableColor",
-          "description": "The light\u0027s colour.",
+          "description": "The light\u0027s colour, scaled to unit luminance so the light gives exactly its illuminance. Refused beside Temperature. Absent is white, or the temperature\u0027s.",
           "default": null
         },
-        "weight": {
+        "illuminance": {
           "$ref": "#/$defs/BindableScalar",
-          "description": "The diffuse weight. Absent is the pinned sun weight.",
+          "description": "The illuminance on a surface facing the light, in lux: a clear midday sun gives about 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun\u0027s.",
           "default": null
         },
         "angularRadius": {
@@ -367,6 +367,11 @@
           ],
           "default": null
         },
+        "temperature": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The light\u0027s colour as a black body\u0027s at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.",
+          "default": null
+        },
         "lightName": {
           "type": [
             "string",
@@ -382,7 +387,7 @@
       "title": "WorldRenderLightDirectional"
     },
     "WorldRenderLightRim": {
-      "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+      "description": "A view-dependent silhouette brighten: luminance \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
       "properties": {
         "$type": {
           "const": "rim"
@@ -392,9 +397,9 @@
           "description": "The rim\u0027s colour.",
           "default": null
         },
-        "weight": {
+        "luminance": {
           "$ref": "#/$defs/BindableScalar",
-          "description": "The strength. Absent is zero, which adds nothing.",
+          "description": "The luminance the brighten adds at a silhouette, in nits. Absent is zero, which adds nothing.",
           "default": null
         },
         "power": {
@@ -608,7 +613,7 @@
       "title": "WorldAnchor"
     },
     "WorldRenderLightPoint": {
-      "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
+      "description": "A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world\u0027s brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An anchored light moves with its anchor, lights through every wall and bounces nothing.",
       "properties": {
         "$type": {
           "const": "point"
@@ -618,11 +623,6 @@
           "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
           "default": null
         },
-        "radius": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The falloff radius. Absent is the engine default.",
-          "default": null
-        },
         "anchor": {
           "$ref": "#/$defs/WorldAnchor",
           "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
@@ -630,12 +630,95 @@
         },
         "color": {
           "$ref": "#/$defs/BindableColor",
-          "description": "The light\u0027s colour.",
+          "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
           "default": null
         },
-        "weight": {
+        "intensity": {
           "$ref": "#/$defs/BindableScalar",
-          "description": "The strength. Absent is the engine default.",
+          "description": "The luminous intensity, in candela. Refused beside Power; absent with it is the engine default.",
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the light by, unique among the lights.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "power": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous power, in lumens, emitted alike in every direction: a 60 W incandescent bulb gives about 800. Refused beside Intensity.",
+          "default": null
+        },
+        "temperature": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]: a warm bulb about 2,700. Refused beside Color.",
+          "default": null
+        },
+        "lightName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightPoint"
+    },
+    "WorldRenderLightSpot": {
+      "description": "A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full strength inside the inner angle and smoothly to none at the outer, with the point light\u0027s windowed falloff, range, and tracing and occlusion by the irradiance volume while unanchored.",
+      "properties": {
+        "$type": {
+          "const": "spot"
+        },
+        "position": {
+          "$ref": "#/$defs/BindableVector3",
+          "description": "The world-space position, or the offset in the anchor\u0027s frame.",
+          "default": null
+        },
+        "direction": {
+          "$ref": "#/$defs/BindableDirection",
+          "description": "The direction the light shines along, any nonzero length; in the anchor\u0027s frame when an anchor is authored. Absent is straight down.",
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
+          "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+          "default": null
+        },
+        "angle": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "The cone\u0027s outer half angle, in (0, \u03C0/2] radians. Absent is 45 degrees.",
+          "default": null
+        },
+        "innerAngle": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "The half angle inside which the light is at full strength, in [0, Angle] radians. Absent is three quarters of Angle.",
+          "default": null
+        },
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
+          "default": null
+        },
+        "intensity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous intensity along the aim, in candela. Refused beside Power; absent with it is the engine default.",
+          "default": null
+        },
+        "power": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous power, in lumens, emitted alike across the outer cone. Refused beside Intensity.",
+          "default": null
+        },
+        "temperature": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]. Refused beside Color.",
           "default": null
         },
         "name": {
@@ -658,10 +741,10 @@
         }
       },
       "additionalProperties": false,
-      "title": "WorldRenderLightPoint"
+      "title": "WorldRenderLightSpot"
     },
     "WorldRenderLightOccluder": {
-      "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+      "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the lights table\u0027s capacity.",
       "properties": {
         "$type": {
           "const": "occluder"
@@ -726,6 +809,9 @@
         },
         {
           "$ref": "#/$defs/WorldRenderLightPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightSpot"
         },
         {
           "$ref": "#/$defs/WorldRenderLightOccluder"
@@ -957,6 +1043,10 @@
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
         },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
+        },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
           "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
@@ -1057,6 +1147,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -1180,6 +1274,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -1380,6 +1478,10 @@
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
         },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
+        },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
           "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
@@ -1488,6 +1590,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -1599,6 +1705,10 @@
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
         },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
+        },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
           "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
@@ -1703,6 +1813,10 @@
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
         },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
+        },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
           "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
@@ -1783,6 +1897,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -1881,6 +1999,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -2002,6 +2124,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -2129,6 +2255,10 @@
         "mask": {
           "$ref": "#/$defs/WorldRenderSkyMask",
           "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "luminance": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient\u0027s stops, a disc\u0027s, the stars\u0027, the clouds\u0027, an aurora\u0027s, a noise\u0027s, a pattern\u0027s, a panel\u0027s, a panorama\u0027s image, a view\u0027s fallback), so the sky is as bright beside its lights as the real one: a clear sky\u0027s horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day\u0027s sky beside the pinned sun."
         },
         "transform": {
           "$ref": "#/$defs/WorldRenderSkyTransform",
@@ -2343,6 +2473,11 @@
             "null"
           ],
           "default": null
+        },
+        "ripple": {
+          "description": "Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -3320,7 +3455,7 @@
         "WheelOpen",
         "ConsoleOpen",
         "SeatCameraApplication",
-        "ScreenEngaged"
+        "ScreenFramed"
       ],
       "title": "OverlayFact"
     },
@@ -6596,7 +6731,7 @@
           "const": "setVerticalVelocity"
         },
         "velocity": {
-          "description": "The vertical velocity, in world units per second.",
+          "description": "The vertical velocity, in world units per second at the body\u0027s authored size; a body whose live scale (bodies.scale) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.",
           "type": "number"
         },
         "key": {
@@ -6654,7 +6789,7 @@
           "description": "The unit direction in the body\u0027s own frame."
         },
         "speed": {
-          "description": "The overlay\u0027s speed, in world units per second.",
+          "description": "The overlay\u0027s speed, in world units per second at the body\u0027s authored size, times the body\u0027s live scale.",
           "type": "number"
         },
         "durationSeconds": {
@@ -7635,6 +7770,44 @@
       ],
       "title": "WorldBoardEnforcement"
     },
+    "WorldTabletopEngage": {
+      "description": "A tabletop\u0027s engagement: a seat standing within Radius of the board\u0027s centre presses Channel (its context button) and sits down at the table. The seat is captured (its avatar stands still) on a control placement:\u003Cid\u003E application, its camera eases to a view of the whole board from the side it stands on, and the same button leaves. While engaged, the world\u0027s rules read the seat\u0027s channels as play (channel(...)), and the board reads where the seat points (board(pointer, \u003Crow\u003E, \u003Cseat\u003E)), whether the seat sits at it (board(engaged, \u2026)) and from which side (board(side, \u2026)), so the game itself stays document rules.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "channel": {
+          "description": "The declared channel whose press engages and leaves the table.",
+          "type": "string"
+        },
+        "radius": {
+          "description": "How near the board\u0027s centre, on the ground plane in world units, a seat must stand to engage. Positive.",
+          "type": "number",
+          "default": 2.5
+        },
+        "pitch": {
+          "description": "The board view\u0027s elevation above the horizontal, in degrees: 90 looks straight down, smaller leans toward the seat\u0027s side. In (0, 90].",
+          "type": "number",
+          "default": 60
+        },
+        "margin": {
+          "description": "World units of room the board view leaves around the board\u0027s footprint. Non-negative.",
+          "type": "number",
+          "default": 0.1
+        },
+        "surface": {
+          "description": "The height above the topology\u0027s origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false,
+      "title": "WorldTabletopEngage"
+    },
     "WorldPlacementBoard": {
       "description": "A placement\u0027s board facet \u2014 the tabletop primitive. Anchors a state.lattices Grid topology (which already carries its own world-space origin/cellSize frame) to this placement, so a chess set, a checkers board, or a card table is one placement/body carrying one topology \u2014 carriable as a unit once an attachment primitive picks it up. A topology is carried by at most one placement (validated). Occupancy is the only row the engine reads; Turn/Verdict/ Move/Plan are author-named convenience bindings world.tabletop echoes together \u2014 ordinary declared rows, never engine-interpreted, so this facet stays a reusable primitive rather than a chess-specific feature.",
       "type": [
@@ -7691,6 +7864,11 @@
           "description": "The Verdict value the judge writes to accept a move \u2014 any other value is a refusal.",
           "type": "integer",
           "default": 1
+        },
+        "engage": {
+          "$ref": "#/$defs/WorldTabletopEngage",
+          "description": "How a seat sits down at the table, or null for a table no seat engages: the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and the surface the seat\u0027s pointer meets.",
+          "default": null
         }
       },
       "required": [
@@ -8034,7 +8212,7 @@
           "default": null
         },
         "holding": {
-          "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
+          "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
           "type": "integer",
           "default": 0
         }
@@ -8112,6 +8290,11 @@
         "offset": {
           "$ref": "#/$defs/DocumentVector3",
           "description": "The displacement from the cell centre, in world units."
+        },
+        "glide": {
+          "description": "Whether the body moves there as continuous motion, which a client interpolates and which keeps the body\u0027s attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -8197,6 +8380,41 @@
       ],
       "additionalProperties": false,
       "title": "WorldEffectSetIdentityFact"
+    },
+    "WorldEffectSetBodyState": {
+      "description": "Writes one state.body counter of a world-addressed body: the register a kit\u0027s own setState writes, in the arena\u0027s participant lane, settled through the register\u0027s envelope. The register is the body\u0027s, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.",
+      "properties": {
+        "$type": {
+          "const": "setBodyState"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        },
+        "state": {
+          "description": "The state.body counter.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The literal value.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "A bounded fixed-point expression evaluated at fire time.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "state"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectSetBodyState"
     },
     "ActionEffect": {
       "description": "An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns \u2014 every one addresses a state row and nothing else; a document project appends its own derived arms (a participant\u0027s kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.",
@@ -8297,6 +8515,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSetIdentityFact"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectSetBodyState"
         }
       ],
       "title": "ActionEffect"
@@ -8335,6 +8556,55 @@
       "additionalProperties": false,
       "title": "ActionTrigger"
     },
+    "WorldRowSelectorCase": {
+      "description": "One case of a WorldRowSelector: the row a body\u0027s register value selects.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "value": {
+          "description": "The register value, a whole number; a counter holding a fraction matches no case.",
+          "type": "integer"
+        },
+        "row": {
+          "description": "The kit or look row name the value selects.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "row"
+      ],
+      "additionalProperties": false,
+      "title": "WorldRowSelectorCase"
+    },
+    "WorldRowSelector": {
+      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment\u0027s sequence gives it. The register is body state, so the choice is the body\u0027s and goes where the body goes: a kit action or a rule\u0027s setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment\u0027s selector changes only what a body wears; the kit assignment\u0027s selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "bodyState": {
+          "description": "The state.body counter whose value selects.",
+          "type": "string"
+        },
+        "cases": {
+          "description": "The value-to-row mapping, each value at most once.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldRowSelectorCase"
+          }
+        }
+      },
+      "required": [
+        "bodyState",
+        "cases"
+      ],
+      "additionalProperties": false,
+      "title": "WorldRowSelector"
+    },
     "DocumentIdentifierList": {
       "type": "array",
       "items": {
@@ -8343,7 +8613,7 @@
       }
     },
     "WorldRowAssignment": {
-      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row).",
+      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.",
       "type": [
         "object",
         "null"
@@ -8352,6 +8622,11 @@
         "sequence": {
           "$ref": "#/$defs/WorldSequence",
           "description": "The sequence that selects a row."
+        },
+        "select": {
+          "$ref": "#/$defs/WorldRowSelector",
+          "description": "The per-body selector, or null for the sequence alone.",
+          "default": null
         },
         "rows": {
           "$ref": "#/$defs/DocumentIdentifierList",
@@ -8803,6 +9078,22 @@
         "high",
         null
       ]
+    },
+    "ChannelMask": {
+      "description": "Independent support masks for the numeric and button banks.",
+      "type": "object",
+      "properties": {
+        "axes": {
+          "description": "One bit per numeric lane.",
+          "type": "integer"
+        },
+        "buttons": {
+          "description": "One bit per button lane.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "title": "ChannelMask"
     },
     "ShapeNonNullable50": {
       "anyOf": [
@@ -9275,7 +9566,7 @@
       "title": "ActionStateEnvelopeSet"
     },
     "ActionStateEnvelope": {
-      "description": "The authored values a player-writable durable slot admits in this world.",
+      "description": "The authored values a slot admits in this world: a player-writable durable slot\u0027s input, a rule\u0027s or a kit\u0027s write, and a value carried in from another world all settle through it.",
       "type": [
         "object",
         "null"

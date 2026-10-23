@@ -184,6 +184,7 @@ A job declares one or more shapes. Without any, it uses `relocate` with
 | Shape | `.puck` spelling | What one candidate does |
 |---|---|---|
 | Relocate | `relocate(displace: true)` | Moves the token onto any other cell. With `displace: true` the token standing there leaves the board; with `false` both stay and your judge decides. |
+| Relocate with moves | `relocate(codes: pieceCode, moves: [{ codes [2], turn: 0, offsets [[1, 2], [2, 1]] }])` | Moves the token onto a cell one of its move patterns reaches: each offset stepped up to `range` times (1 by default, 0 to the edge), a ray ending on the first occupied cell, which it still reaches. `codes` and `turn` limit which tokens and turns a pattern applies to. |
 | Drop | `drop()` | Puts a token that is off the board onto an empty cell. It's the only shape that walks off-board tokens. |
 | Jump | `jump(over: ["N", "E"], maxHops: 1)` | Steps two cells along a direction, over an occupied cell onto an empty one. The jumped token leaves the board. With `maxHops` above 1, one candidate is a whole chain of 1 to `maxHops` hops that never revisits a cell and evicts nothing. `["any"]` tries every direction the topology declares. |
 | Promote | `promote(codes: pieceCode, to: [5, 4])` | Relocates the token, evicting the occupant, and changes its code in the `codes` row to each offered value in turn: one candidate per cell and code. |
@@ -201,7 +202,10 @@ A job runs over either a board or a set of zones:
 
 The shape only proposes a change. Your judge rules decide whether it's legal,
 so a geometric move can be tried and rejected without ever becoming a real
-move. Field detail for each shape, including which topologies support `tandem`
+move. A plain `relocate` tries every token on every cell, and each try runs
+the whole judge; when the judge is costly, author `moves` so the walk judges
+only the cells a piece could reach. A pattern that reaches more than the rules
+allow only costs judge runs, and one that reaches less hides legal moves. Field detail for each shape, including which topologies support `tandem`
 and the refusals, is in the
 [world schema guide](../../../src/Puck.World.Schema/README.md#the-search-sectionwhat-the-board-would-be).
 

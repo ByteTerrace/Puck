@@ -11,7 +11,7 @@
         <RootNamespace>Puck.Transpiler</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Parlot" Version="[1.5.*, )" />
+        <PackageReference Include="Parlot" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- Puck.State is the one engine the LANGUAGE itself reads: an operand span is handed to

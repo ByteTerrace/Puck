@@ -333,8 +333,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "1.5.12",
-        "contentHash": "jS8FebSXj3GKkBMDGnRboeA8/goF1AB7HPhqChiznU5R1KPTeU6JlJXP1FXd8MQ4A/+p8xR8rn7ICgznPqPLKQ=="
+        "resolved": "2.0.0",
+        "contentHash": "wkWsCyotLwtERMwQvjYOdeq7Md2ERfbCq+jP35jCoeTd/AG/QDqTN4W7tPiMK9EI/p9uDHrAmBwnKwnu2Oy+qQ=="
       },
       "System.ClientModel": {
         "type": "Transitive",
@@ -471,7 +471,8 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Assets": {
@@ -511,6 +512,13 @@
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.GamingBricks.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",
         "dependencies": {
@@ -535,6 +543,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )"
         }
       },
@@ -682,7 +691,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
-          "Parlot": "[1.5.*, )"
+          "Parlot": "[2.*, )"
         }
       },
       "puck.launcher": {

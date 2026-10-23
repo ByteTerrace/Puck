@@ -55,7 +55,8 @@ includes the instance generation and complete binding declaration.
 
 Content providers own format recognition, validation, compilation, and exported
 symbols. The host reads and pins input bytes, asks the selected provider to prepare
-recognized source, and mounts the resulting image. `PreparedMachineAsset` retains
+recognized source with its resolved path for import resolution, and mounts the
+resulting image. `PreparedMachineAsset` retains
 the exact host-read source bytes separately from that executable image;
 `PreparedMachineContent` carries the image, canonical source identity, addresses,
 and any provider-verified format marker independently of cartridge schemas. Provider
@@ -118,6 +119,18 @@ mounts nothing: the server refuses `screen.insert` and `forge.play` onto it by
 name. A declaration whose content file
 is absent boots its machine with no cartridge rather than refusing the world;
 an operation naming absent content is refused.
+
+A folder may name a default in its own `folder.json`
+(`WorldMachineContentFolder.SettingsFile`, schema `puck.content-folder.v1`),
+which `machine.default <instance> <name>|none` writes and the listing never
+shows as content. A declaration setting `preferFolderDefault` boots the first
+folder's default, in authored order, when the folder holds it and the engine
+mounts it, and its authored content otherwise; each preparation (boot, reload,
+a machine-affecting mutation) decides it afresh, refusing a bad default on
+stderr by folder rather than by file name. The host runs the default while the
+document, `CaptureInstances` and an operation plan's `Current` and `Candidate`
+keep the authored configuration, so a default's name never reaches a saved
+document or a replay tape.
 
 The host checks its selected content-admission policy against the exact source and
 executable bytes during preparation. The local default permits content and assets;

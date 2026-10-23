@@ -61,15 +61,13 @@ public static unsafe class DirectXRootSignatures {
     public static nint Create(ID3D12Device* device, byte[] serialized) {
         ArgumentNullException.ThrowIfNull(argument: serialized);
 
-        void* rootSig;
-        var rootSigIid = ID3D12RootSignature.IID_Guid;
+        ID3D12RootSignature* rootSig;
 
         fixed (byte* bytes = serialized) {
             device->CreateRootSignature(
                 0,
                 bytes,
                 ((nuint)serialized.Length),
-                in rootSigIid,
                 out rootSig
             );
         }

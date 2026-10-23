@@ -107,8 +107,9 @@ internal sealed class TerminalCommandModule(
             name: TerminalCommandNames.Console
         );
         yield return CommandDefinition.Verb(
-            // Bindable: leaving is UI navigation, not authority. No engine-default page names it today.
-            bindability: CommandBindability.Bindable,
+            // Unbindable: ending the host process belongs to whoever runs the host, never to a document, so neither a
+            // binding row nor an authored command (which calls only what a binding may name) reaches it.
+            bindability: CommandBindability.Unbindable,
             description: "Ends the session once the work queued ahead of it in the same session has run — every earlier line, its pending mutations, and any world.wait — and exits the host without taking another step.",
             handler: _ => {
                 terminal.RequestExit();

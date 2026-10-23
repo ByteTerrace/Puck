@@ -11,17 +11,30 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshRasterPass"/>).
 /// </summary>
 public static class SdfWorldInterfaces {
-    private static readonly SdfKernelInterfaces Recorded = new(stamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value));
+    private static readonly SdfKernelInterfaces Recorded = new(
+        fieldStamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Field),
+        stamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value)
+    );
 
     /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set:
     /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Value"/>.</summary>
     public static string Stamp => Recorded.Stamp;
+    /// <summary>Gets the stamp the mesh bake's interface carries for this build's field instruction set:
+    /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Field"/>.</summary>
+    public static string FieldStamp => Recorded.FieldStamp;
     /// <summary>Gets <see cref="SdfKernelInterfaces.WorldParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout WorldParameters => Recorded.WorldParameters;
+    /// <summary>Gets <see cref="SdfKernelInterfaces.MeshBakeParameters"/> for this build's field instruction set.</summary>
+    public static ShaderPipelineParameterLayout MeshBakeParameters => Recorded.MeshBakeParameters;
+    /// <summary>Gets the layout of <see cref="SdfKernelInterfaces.MeshBake"/> for this build's field instruction
+    /// set.</summary>
+    public static ShaderInterfaceLayout MeshBakeLayout => Recorded.MeshBakeParameters.Layout;
     /// <summary>Gets <see cref="SdfKernelInterfaces.ResolveParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout ResolveParameters => Recorded.ResolveParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.SkyParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout SkyParameters => Recorded.SkyParameters;
+    /// <summary>Gets <see cref="SdfKernelInterfaces.GlassParameters"/> for this build's instruction set.</summary>
+    public static ShaderPipelineParameterLayout GlassParameters => Recorded.GlassParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.EnvironmentParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout EnvironmentParameters => Recorded.EnvironmentParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.World"/> for this build's instruction set.</summary>

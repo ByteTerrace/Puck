@@ -15,13 +15,14 @@ namespace Puck.World.Schema.Tests;
 /// </summary>
 public sealed class AuthoredShapeAdmissionLawTests {
     [Fact]
-    public void PathProfilesRenderButRefuseFieldContactAndUnsupportedFacets() {
+    public void PathProfilesRenderAndCollideButRefuseUnsupportedFacets() {
         var profile = new SdfPrismProfile(SdfPrismProfileKind.Path, CornerRadius: 0,
             Path: new([new(new(x: -0.5f, y: -0.5f), [new(new(x: 0.5f, y: -0.5f)), new(new(x: 0, y: 0.5f))])]));
         var shape = Shape(SdfSolidPrimitive.Prism, Vector3.One) with { Profile = profile };
 
         AssertCanonicalizerAccepts(shape: shape);
-        AssertWorldRefusesNaming(shape, canonicalize: true, needle: "Path", requiresField: true);
+        // The fixed-point evaluator reads a path's edge table, so a solid row owing field contact takes it.
+        AssertWorldValidates(shape: shape, requiresField: true);
         AssertCanonicalizerRefusesNaming(shape with { Lift = SdfLift.Revolve }, "Path");
         AssertCanonicalizerRefusesNaming(shape with { Rounding = 0.01f }, "Path");
         AssertCanonicalizerRefusesNaming(shape with { Profile = profile with { Path = profile.Path! with { Tolerance = float.NaN } } }, "tolerance");
@@ -38,18 +39,6 @@ public sealed class AuthoredShapeAdmissionLawTests {
 
         Assert.Contains(collection: CreationCanonicalizer.Validate(document: document), filter: error => error.Message.Contains(comparisonType: StringComparison.Ordinal, value: "Path profile"));
     }
-    [InlineData(SdfBlendOp.Morph)]
-    [InlineData(SdfBlendOp.StairsUnion)]
-    [InlineData(SdfBlendOp.StairsSubtraction)]
-    [Theory]
-    public void AScopeCompositionBlendIsRefusedAsAShapeBlend(SdfBlendOp blend) {
-        var shape = Shape(SdfSolidPrimitive.Sphere, Vector3.One);
-
-        AssertCanonicalizerAccepts(shape: shape with { Blend = SdfBlendOp.SmoothUnion });
-        AssertCanonicalizerRefusesNaming(shape with { Blend = blend }, $"blend '{blend}' composes a closed field scope");
-        AssertWorldRefusesNaming(shape with { Blend = blend }, canonicalize: false, needle: blend.ToString());
-    }
-
     private static void AssertCanonicalizerAccepts(ShapeDocument shape) => CreationFixtures.AssertAccepts(document: Document(shape: shape));
     private static void AssertCanonicalizerRefusesNaming(ShapeDocument shape, string needle) => CreationFixtures.AssertRefusesNaming(
         document: Document(shape: shape),

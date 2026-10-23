@@ -24,7 +24,7 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 | Mesh bake | `src/Puck.SdfVm` (`SdfMeshPathBake`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshRegionArena`); `src/Puck.SignedDistance/Baking` (`SdfSampledLattice`, `SdfDualContouring`) | [mesh bake](references/mesh-bake.md) |
 | GPU engine | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldPipelines`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, and under `passes/` one `*.comp.hlsl` wrapper per dispatch plus the stage modules | [kernels](references/kernels.md) |
-| Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
+| Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfRenderHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
 | Cameras and views | `src/Puck.SdfVm/Views`; `WorldViewInstances`, `WorldScreenBinder.*` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`); `CreationStampEmitter` | `puck-world` skill |
 | Shader packages, pipelines, render graph | `src/Puck.Shaders` (`RenderGraphRuntime`, `ShaderPipelineRenderNode`, `ShaderPipelineCompiler`), `build/Shaders.targets` | [shaders reference](../../../docs/reference/shaders.md), [runtime contracts](references/runtime-contracts.md) |
@@ -39,11 +39,16 @@ Find the existing mechanism before adding one: `puck references`,
 A view is a chain of separate dispatches: `mask` → `bake` (only while the
 residency's bake is pending: `sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
 `mapCore` call site) → `shadow-near`, `shadow-far`, `shadow-second` (graphics,
-the cascades) → `mesh` (graphics) → `pyramid` (the occlusion's depth pyramid
-from the mesh target) → `surface` (each pixel's visibility record from the mesh
+the cascades) → `mesh` (graphics, in two occlusion phases with the occlusion
+kernel between them, `SdfMeshOcclusion`) → `pyramid` (the ambient occlusion's
+depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
-`resolve` (reduced or temporal views) → `sky` → `composite`. The surface and
+`resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
+program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
+`glass` (graphics, the glass draws alone) → `glass-shade` after `views`
+(`SdfWorldPackage.WithGlass`), and every later pass reads `glassLit` in the
+lit image's place. The surface and
 views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
@@ -55,27 +60,147 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   over a 4×4 window (`sdfViewsFilter`, `passes/sdf-views-stage.hlsli`) before
   shading. A wrong occlusion or shadow value (a dark band, a missing crease,
   acne) is the estimate's, so an edit to the views lighting code changes
-  nothing; the window and the pattern's tile are a pair. `world.debug-view ao`
+  nothing; the window and the pattern's tile are a pair. A side turned from a
+  light is never queried and stores full visibility, so the window's shadow
+  average leaves out neighbours whose normal turns away, and a lit band along a
+  crease is that average's. A sunlit spot on a wall's top under a slab is the
+  filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
+  light's cone over the point, and the penumbra is the nearest in-cone
+  blocker's. `world.debug-view ao`
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
+- **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
+  applied in `SdfWorldPassRecorder.RecordMeshDraws`): a view's frustum, a
+  cascade's light box and the receivers it shadows. A box is the mesh's
+  position bounds through the draw's matrix and carry, so a draw whose vertex
+  stage moves vertices any other way (members' slots, a displacement) must have
+  no box (`SdfMeshBox.TryOf` returns false) or it vanishes while visible. A
+  missing object that `world.cull off` brings back is the cull's;
+  `gpu.vertices` in `world.counters gpu` counts what each pass draws.
+- **The mesh pass also culls by occlusion** (`SdfMeshOcclusion`,
+  `passes/sdf-mesh-occlusion.comp.hlsl`, the default `world.cull occlusion`):
+  phase one draws the previous frame's visible set through a counted indirect
+  draw (`IGpuRecorder.DrawIndirectCount`), the kernel builds a farthest-depth
+  pyramid from the target's fourth channel (forward depth) and tests every kept
+  box, phase two draws the newly visible over phase one's target and depth. The
+  recorder moves the mesh target between the phases itself and returns it in
+  its attachment layout. The early occlusion dispatch binds a sampled filler;
+  only the late set binds the target after its transition. Vulkan requires the
+  descriptor's image layout even when the selected kernel branch never samples
+  it, and rewriting one shared set changes both recorded dispatches.
+  Draws a kernel issues are counted on the GPU past the
+  counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
+  `gpu.vertices` include them. An object `world.cull frustum` brings back is the
+  occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
+  (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
+  the draw there.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
+- **Cel shading is an optional material response, not a whole-image filter.**
+  `world.toon` and `render.toon` feed `SdfFrame.Toon` through the generated pass
+  block. `shade/sdf-toon.hlsli` shapes lights; `sdf-toon-outline.hlsli` reads
+  depth/normal edges in views, before temporal resolve. Keep screen pictures,
+  portal pictures, sky and self-emission out of both the banding and ink. Nested
+  worlds take the live enable override but retain their own document tuning.
+  The tuning belongs to the lighting cadence signature, never the bake closure.
+- **The frame shades luminance in nits, and each view's composite applies its
+  exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
+  A light record carries illuminance or intensity over π; emission, sky layers
+  and displays are nits. A new constant meant as a display colour (an outline,
+  a grid, a placeholder glass) is divided by `passGroup.exposure` or it vanishes
+  outdoors and blows out indoors. A window's view and a sky layer's view publish
+  nits under the window share of their exposure (`SdfViewSnapshot.Unexposed`,
+  `SdfPhotometry.WindowAdaptation`), and the opening applies the rest of the
+  viewer's. A point or spot light's falloff is exactly zero at its range, each
+  view shades only the lights its frustum may reach (`SdfLightSelection`, the
+  pass block's `lightMask`), and a static one is occluded by the irradiance
+  volume's visibility bits (`SdfLight.IsTraced`, `sdfMeshLightVisibility`): a
+  fixture that lights through a slab is an anchored light or a volume that
+  holds no probe there. `world.exposure` reads each view's EV and meter.
+- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and the
+  gather feeds the indirect light, the reflection and every traced light's
+  visibility; a probe artefact (a band along a wall) shows in
+  `world.debug-view indirect` apart from the direct light. The volume a view
+  reads is filtered over the neighbours each probe sees
+  (`SdfMeshIrradiance.Filter`), and a probe lights only what lies within its
+  depth cube along one axis (`sdfMeshProbeDepthVisibility`): a leak through a
+  wall off the axes, or a storey the 2 m lattice straddles, is the lattice's
+  coarseness. The depth's fade (`SdfMeshIrradianceProbe.DepthFade`, metres)
+  stays thinner than the thinnest floor: a wall pixel where it meets a floor or
+  ceiling is pushed along the wall, level with that surface, and a softer fade
+  draws the far side's light along every junction as a bright line. Debug a
+  probe artefact by splitting the gather in a scratch edit of the `indirect`
+  case in `debug/sdf-debug-views.hlsli` (each corner's share, or magenta where
+  no probe answers) and `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in
+  `sdfLightStage`) reads the same gather's indirect light as part of each
+  surface's illumination, so a surface lit wrongly by the volume is also
+  exposed wrongly by it. A nested
+  world's views read their own volume at their own authored tier.
+- **Glass is a material, a group and a pass, never a blend.** A palette slot's
+  `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
+  their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances
+  apart from the opaque ones) and draw in the glass raster pass over the opaque
+  image (`passes/sdf-mesh-glass.frag.hlsl`, `passes/sdf-glass.comp.hlsl`). The
+  mesh pass, the cascades and the irradiance trace skip glass draws
+  (`SdfMeshDraw.Glass`). Thickness is the glass sums, signed ray distances the
+  raster accumulates with atomics (`frame/sdf-glass.hlsli`): never read a glass
+  shape's thickness from its mesh. One glass layer a pixel; glass through glass
+  is the opaque image. The handbook's
+  [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
+  states the limits.
 - **Camera history uses the camera's sample grid.** The first recorder can be
   a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
   `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's
   `world.debug-view motion` stays stationary with shadows both on and off.
-- **A capture holds its residency's frame.** Under `world.debug-view motion`
-  the held frame keeps the motion it was presented with
-  (`SdfWorldTables.HoldsFrame`, the `held` argument of
+- **A settled capture holds its residency's frame.** Under
+  `world.debug-view motion` the held frame keeps the motion it was presented
+  with (`SdfWorldTables.HoldsFrame`, the `held` argument of
   `SdfTemporalHistory.Prepare`); every other view settles it as a still frame,
   so a temporal view converges over the held renders. Settling motion history
-  on a held upload makes every capture of the motion view read still.
+  on a held upload makes every capture of the motion view read still. A frame
+  held for a settled capture also culls by box rather than by the occlusion
+  test and rates no work (`WorldFramePresenter.CullOf`/`RatesOf`), so the still
+  owes nothing to earlier frames' visible set or rated updates; under
+  `world.lockstep` every frame also presents the completed tick and advances
+  presentation by the ticks completed, and its frames (`SdfFrame.TickLocked`)
+  have the residency trace the irradiance window to the end before rendering
+  (`SdfMeshIrradiance.Stage`; the asynchronous trace otherwise lands probes at
+  wall-clock moments as the window follows the first view's camera) and adapt
+  exposure over the frame's own presentation time
+  (`SdfViewExposures.SecondsOf`); an ordinary settled still under lockstep
+  converges over one fresh jitter period (`FrameCaptureRequest.ConvergeOver`),
+  since without it a temporally resolved view's still depends on how many
+  frames the display rendered before the hold (five stills of one paused tick
+  differed by up to 141 levels on 12-17% of pixels). Together these make stills
+  of one tick repeat across Worlds to a 1-level per-render residue.
+- **A named-camera layout slot reconstructs; a screen's camera does not.**
+  `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
+  dresses: seat views, the operator pose and `views.layouts` slots that name a
+  camera. A camera view a screen films and a session view take a reduced
+  quality (`WorldScreenBinder.CameraViewQuality`,
+  `WorldSessionSceneEmitter.ReducedQuality`) whose `Temporal` is off, and
+  `SdfViewQuality.Restrict` ANDs it, so they never jitter.
+- **A settled capture cannot show what changes between frames.** Flicker
+  (jitter moiré on a screen, a still scene whose pixels change), ghosting and
+  trails show only in a presented capture (`FrameCaptureMode.Presented`:
+  `puck_capture_frame` with `mode: "presented"`, `frames: 8`, or
+  `world.screenshot <path.png> presented 8`), which holds and settles nothing
+  and reports each frame's changed pixels and luma change against the one
+  before. A still scene with `world.temporal on` that changes in a presented
+  burst is flickering; a clean settled still proves nothing about it.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
   with its own shader; it reloads with `pipeline.reload`, not
   `world.shaders.reload`.
 
 ## Editing kernels
 
+- **Check screen eligibility before reading a screen table.** A material is
+  not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
+  source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal
+  ray helpers need that check before their own table reads too; a later sample
+  function's guard cannot protect them. An ordinary material becomes a huge
+  unsigned index otherwise, which can lose the Vulkan device while Direct3D 12
+  returns zero for the out-of-bounds read.
 - **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
   the only GPU kernel that walks the field, and it does so through one rolled
   `[loop]` over its samples. Every call site is a full inlined copy of the
@@ -89,6 +214,19 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `passes/sdf-world.hlsli` itself. The shader cache keys, and a reload
   recompiles, by include closure, so routing a stage module through another
   wrapper makes an edit to it recompile both kernels.
+- **The bake kernels include `passes/sdf-bake-world.hlsli`, never
+  `sdf-world.hlsli`.** Their compiled bytecode keys the stored meshes
+  (`SdfMeshBakeIdentity`), so their closure holds only what the bake reads:
+  their own interface (`isa/sdf-mesh-bake.interface.hlsli`: a pass block of
+  `SdfWorldPackage.BakeValues` alone, stamped with the field's fingerprint), the
+  field interpreter and the field's generated vocabulary (`isa/sdf-isa.hlsli`).
+  A light, exposure, view, pass-block value, pass resource or World table goes
+  in `isa/sdf-render.hlsli`, the world interface or after
+  `SdfWorldPackage.FieldTables`, and leaves the bake's bytecode byte for byte as
+  it was on both backends. SPIR-V orders its constants by first use in the whole
+  source, dead code included, so a lighting, screen or view module in the
+  closure would move a stored mesh's key. Add to the bake's closure only what
+  the bake reads, and check with `puck mesh identity --against`.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:
@@ -141,7 +279,10 @@ GPU parity pass alone does not finish it:
    add the enum member and regenerate. Give the instruction a call in
    `SdfEncodingProbe` that passes every field it packs
    (`SdfEncodingProbeLawTests` refuses one that is missing). Regenerating also
-   rewrites `SdfIsaFingerprint.cs`.
+   rewrites `SdfIsaFingerprint.cs`. `sdf-isa.hlsli` is the field's vocabulary
+   alone, and its fingerprint keys the bake: a constant only the renderer reads
+   (a light, the exposure, the visibility record, mesh records, the debug views)
+   is declared in `SdfIsaHlsl.DeclareRender`, which writes `isa/sdf-render.hlsli`.
 4. **Every GPU call site.** `mapCore` (rigid-leaf fast paths included) and the
    compiled part walk in `sdf-parts.hlsli`; a blend also needs `blendShape` and
    the material-winner rules in `sdfComposeCandidate`.
@@ -153,7 +294,7 @@ GPU parity pass alone does not finish it:
    and the stamp emitters or refuse the value there, then `puck schema`.
 
 When two lanes both add an instruction, the merge conflicts in generated files
-(`sdf-isa.hlsli`, `SdfIsaFingerprint.cs`): resolve the C# model, then
+(`sdf-isa.hlsli`, `sdf-render.hlsli`, `SdfIsaFingerprint.cs`): resolve the C# model, then
 regenerate with `puck shaders generate` or a build of `Puck.SdfVm`. Never
 hand-merge a generated file; `puck shaders generate --check` (and CI) only
 compares and fails naming the file that drifted, it writes nothing.
@@ -177,8 +318,9 @@ compares and fails naming the file that drifted, it writes nothing.
   GPU cost.
 - **Unbounded is a state, not a number** (`SdfBoundAlgebra.Unbounded`); bounds
   compose through the set operations in `SdfBoundAlgebra`.
-- **`SdfShapeType.Path` is presentation-only;** the fixed-point evaluator
-  refuses it.
+- **Deterministic versus presentation geometry:** use
+  [sdf-authoring](../sdf-authoring/SKILL.md#render-only-versus-deterministic);
+  the fixed-point evaluator supports `SdfShapeType.Path` through `SdfPathSolid`.
 
 ## Capacity and emission
 
@@ -204,15 +346,26 @@ wrong. The contracts that bite most often:
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.
   A per-pixel field view would put a second interpreter copy in a pixel kernel.
+- **Winding is one contract across three places.** The bake winds outward
+  faces counter-clockwise (`SdfDualContouring`), both backends declare a
+  counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two
+  pipeline factories), and the opaque mesh pass culls back faces
+  (`SdfMeshRasterPass.Description`; the shadow and glass pipelines cull
+  nothing). A mesh not from the bake is drawn in both windings
+  (`WorldPlacementStamper.MeshOf`). Probe facing with `SV_IsFrontFace` in the
+  mesh fragment stage and `world.debug-view depth`, on both backends.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes
   it.
 - **Baked meshes persist across runs** (`SdfMeshStore`), keyed by geometry and
-  the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s
-  build, and the `PuckMeshBakeSource` files listed in `Puck.SdfVm.csproj`. A
-  new `Puck.SdfVm` file the bake's CPU code reads joins that list, or the World
-  keeps drawing meshes baked before the edit.
+  the bake's identity: the bake kernels' bytecode and the IL of every method
+  the bake's code reaches, across the `Puck` assemblies, read from the build
+  (`SdfMeshBakeClosure`). No list names the bake's files: code it calls is
+  covered, code it does not call is not, a checkout's path is not, and a miss
+  logs the part that changed (`[sdf.mesh-bake] miss …`). `puck mesh identity
+  --build <dir> --against <dir>` names the members that differ between two
+  builds before any boot.
 - **`puck mesh audit --world <file>` checks a bake without a GPU or a person
   looking**, against the CPU field; `--cpu` bakes offline so a contour or field
   change shows with no boot. Run it before calling a bake change done.
@@ -225,9 +378,21 @@ the verdict alone.
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
+world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at 30 or 15 Hz
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
 world.budget           # program words, instances, scopes, segments
 ```
+
+`world.counters gpu` runs to hundreds of kilobytes in a world with many graph
+instances, past the 1 MiB an MCP result carries, so ask for what you need:
+`world.counters gpu summary` (one `draws vertices texels dispatches` line per
+node), `node sdf:world` (a node and the nodes under it), `pass sdf.world$mesh`
+(a pass label, or its prefix by whole segments, in every node that has it; it
+drops the lifetime, owned-bytes and outside lines) and `counter vertices` (a
+count-name prefix). They combine, and `--json` takes them too. A text reading
+past `WorldCountersCommandModule.GpuTextBudget` characters prints the summary
+under a note. A pass label is not a node name: `node sdf.world$mesh` is refused
+with a hint to use `pass`.
 
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 `world.indirect`, `world.render-scale`) and isolate the raster with
@@ -241,6 +406,32 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 ## Seeing a change
 
+- A lockstep frame waits for its composition's program build and its mesh bake.
+  A completed mesh is still pending until `Dress` includes it: a load can finish
+  between dressing and preparation, and testing only the worker would certify
+  the partial mesh list. `IRenderGraphPackageFactory.WaitingOf` keeps a rendered
+  package incomplete while its bake passes and readbacks continue. The host
+  holds that tick; exposure adapts once the complete frame supplies its meter.
+  A capture freezes the authored frame, then dresses newly completed meshes.
+- Lockstep irradiance waits for both the current static scene's build and its
+  probe trace (`SdfMeshIrradiance.Stage`). Waiting only for the trace can render
+  no volume on the first frame, or the preceding scene on a replacement frame.
+  The CPU irradiance law compares the first staging of each against a completed
+  trace; looping staging calls until a write appears would hide that defect.
+- An image source owns its extent even when a buffer graph consumes it. Propagate
+  its demand without multiplying by the buffer consumer's zero pixel footprint
+  (`RenderGraphScheduler`), or a cold conversion can finish building and never
+  install. A package whose last frame is incomplete cannot stand unchanged
+  (`RenderGraphRuntime.WithUnchanged`): its pending sources still need renders.
+  A retained "building" reason alone does not prove a worker is still building;
+  inspect the live schedule and completed build as well.
+- Screen-light reproduction must compare source bytes, not just graph publication
+  numbers. `MachineVideoSourceUpload` numbers uploads, while a queued machine's
+  video read takes its latest completed native frame. Equal publications can
+  therefore feed different images to `ScreenEmission`. Lockstep uses the existing
+  synchronous machine advance before rendering. A fence wait, readback or GPU
+  validation can mask this worker race by changing pacing; diagnose the CPU
+  video bytes and native frame version before changing GPU barriers.
 - Build: `dotnet build src/Puck.SdfVm -c Release -nodeReuse:false` runs DXC
   (needs `dxc` on `PATH`). A Windows build of one project builds DXIL only, and
   a World run of it refuses `--backend vulkan`; run Vulkan from a solution
@@ -248,11 +439,13 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   `tests/` builds SPIR-V (`tests/Directory.Build.rsp`). Shader outputs come
   from the per-user shader cache; never copy bytecode between trees.
 - Run it and look: `dotnet run --project src/Puck.World -c Release -- --world worlds/debug
-  --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
+  --devices none --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
   looked at. A boot bakes the groups the mesh store does not hold (the whole
-  debug world takes 15 to 20 s on an RTX 4070, longer on a slower card; a
-  reboot of an unchanged world loads them instead) and then traces the
+  debug world, about 1,275 groups, 845 of them dynamic, and 44 M triangles,
+  takes several minutes on an RTX 4070, longer on a slower card; a reboot of an unchanged world loads them
+  in seconds instead, and a boot with an empty `--cache-dir` bakes all of
+  them) and then traces the
   irradiance volume (about 2 s): a script that captures the finished image
   waits on `world.wait 2400` or longer and checks for `[sdf.mesh-gi] done` in
   the log before the capture line.
@@ -261,6 +454,17 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   parity (`puck parity --world <file>`) needs a parity world with its contract
   beside it, and none exists while the debug world is the one live world; until
   one does, compare the two backends' captures and counts yourself.
+- Capture fixtures in a sandbox without a desktop monitor must replace both
+  the debug desktop graph and its screen producer with `source.color`, and
+  remove that screen's `padPointer`. Offscreen hosting alone still tries to
+  open the authored capture source. Use a private copy of the whole package
+  with the same entry filenames: a renamed wrapper changes document identity,
+  so garden/night back-references can instantiate another debug world. Keep
+  device-machine screens intact and disclose the desktop substitution in the
+  capture report. After a suit change, allow its rule to run and wait for
+  `world.wait bakes` before capturing; a tick wait alone can show the old mesh
+  stretched over the new rig. Clear an operator camera with
+  `view.override camera auto` before switching to a following motion layout.
 - GPU captures, device faults and the validation layers:
   [kernels](references/kernels.md#captures-faults-and-validation).
 

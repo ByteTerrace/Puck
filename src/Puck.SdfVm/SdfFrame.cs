@@ -1,4 +1,5 @@
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SignedDistance;
@@ -54,6 +55,20 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The quality the view renders at. Each view's pass block carries its own, so views of one frame, and of
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
+
+    /// <summary>The view's screen fidelity, from 0 to 1, which its pass block carries
+    /// (<c>SdfWorldPackage.ScreenFidelity</c>): the share of a screen's own pixels that reaches the view untouched, past
+    /// the CRT glass's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
+    /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
+    public float ScreenFidelity { get; init; }
+
+    /// <summary>Whether the view publishes the luminance it shades for a window: a window's view of the world beyond its
+    /// glass, or a sky layer's view of another world, whose consumer shows it in its own scene. Such a view applies the
+    /// window share of its exposure (<see cref="SdfPhotometry.WindowAdaptation"/>) and the consumer the rest of its own,
+    /// so the window shows the world beyond at an exposure between the two. The default, <see langword="false"/>,
+    /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, so its output is display-referred before
+    /// the tonemap.</summary>
+    public bool Unexposed { get; init; }
 }
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
 /// <param name="Layer">The infinity layer's unique authored name.</param>
@@ -127,6 +142,11 @@ public sealed record SdfFrame(
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
     public SdfProgramDelta? ProgramDelta { get; internal set; }
 
+    /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
+    /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's
+    /// <see cref="ISdfSceneEmitter.SlotClips"/>), and the mesh bake's dressing clips each draw in a range and adds its
+    /// carried copy (<see cref="SdfSlotClip.Apply"/>). Empty when no body straddles a portal.</summary>
+    public IReadOnlyList<SdfSlotClip> SlotClips { get; set; } = [];
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
     /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore
@@ -172,12 +192,31 @@ public sealed record SdfFrame(
     /// carries it as <c>farDistance</c> (<see cref="SdfFrameBlock"/>), which the cadence signature folds, so a change
     /// re-renders.</summary>
     public float FarDistance { get; init; } = DefaultFarDistance;
+    /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
+    /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
+    public SdfExposure Exposure { get; init; } = SdfExposure.Default;
+    /// <summary>The optional opaque-material cel response, applied before temporal reconstruction.</summary>
+    public SdfToon Toon { get; init; } = SdfToon.Default;
 
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. The pass block carries it as <c>disableScreenLights</c>
     /// (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and screen lights stay on.</summary>
     public bool DisableScreenLights { get; init; }
+    /// <summary>Engine-bench lever: how much of the mesh draws the raster passes skip. The default,
+    /// <see cref="SdfMeshCullLevel.Occlusion"/>, skips what the box cull (<see cref="SdfMeshCull"/>) and the mesh pass's
+    /// occlusion test (<see cref="SdfMeshOcclusion"/>) find no pixel of; every level changes no pixel, so the lever
+    /// measures each one's saving and checks it shows the same image. The cadence signature folds it, so a change
+    /// re-renders.</summary>
+    public SdfMeshCullLevel MeshCull { get; init; }
+    /// <summary>Which work the frame's views update less often when it is far or small on screen
+    /// (<see cref="SdfUpdateRates"/>, <c>world.rates</c>); the default, <see cref="SdfUpdateRates.None"/>, updates
+    /// everything every frame. The residency reads <see cref="SdfUpdateRates.ShadowFar"/>; the host reads the rest
+    /// before it composes the frame.</summary>
+    public SdfUpdateRates UpdateRates { get; init; }
+    /// <summary>The counters the frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), or
+    /// <see langword="null"/> to count nothing.</summary>
+    public WorkCounterSet? RateCounts { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
     /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
     /// passes and re-composites from the retained views output — pixel-identical to a
@@ -192,6 +231,12 @@ public sealed record SdfFrame(
     /// <summary>The indirect-light tier the frame asks for, which sizes the irradiance volume
     /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
+    /// <summary>Whether the frame belongs to lockstep presentation (<c>world.lockstep</c>), whose frames must render the
+    /// same image for the same tick on every run: the residency finishes tracing the irradiance volume's window before it
+    /// renders the frame, rather than taking whatever probes an asynchronous trace has landed by then, and adapts each
+    /// view's exposure by the frame's own presentation time (<see cref="Time"/>) since the last frame it staged rather
+    /// than by the host frame's interval. Default <see langword="false"/>.</summary>
+    public bool TickLocked { get; init; }
 
     /// <summary>The independent origins the irradiance volume admits; the default admits all five categories.</summary>
     public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;
@@ -210,6 +255,7 @@ public sealed record SdfFrame(
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }
+
     /// <summary>The default far distance, 40 world units, which an unauthored <c>render.farDistance</c> resolves to.</summary>
     public const float DefaultFarDistance = 40f;
 }

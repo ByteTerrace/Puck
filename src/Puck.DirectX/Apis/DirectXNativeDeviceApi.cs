@@ -20,12 +20,10 @@ namespace Puck.DirectX.Apis;
 [SupportedOSPlatform("windows8.1")]
 public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
     private static DirectXDevice CreateDevice(IUnknown* adapter, DirectXFeatureLevel minimumFeatureLevel) {
-        void* device;
         var result = PInvoke.D3D12CreateDevice(
             MinimumFeatureLevel: ((D3D_FEATURE_LEVEL)minimumFeatureLevel),
             pAdapter: adapter,
-            ppDevice: &device,
-            riid: ID3D12Device.IID_Guid
+            ppDevice: out ID3D12Device* device
         );
 
         result.ThrowIfFailed(operation: "D3D12CreateDevice");
@@ -105,14 +103,7 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
         var factory = DxgiInterop.CreateFactory();
 
         try {
-            void* adapterPointer;
-
-            factory->EnumWarpAdapter(
-                ppvAdapter: out adapterPointer,
-                riid: IDXGIAdapter1.IID_Guid
-            );
-
-            var adapter = ((IDXGIAdapter1*)adapterPointer);
+            factory->EnumWarpAdapter(ppvAdapter: out IDXGIAdapter1* adapter);
 
             try {
                 return CreateDevice(

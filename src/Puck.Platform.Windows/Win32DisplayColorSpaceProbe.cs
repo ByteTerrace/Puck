@@ -76,14 +76,11 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
         }
 
         public static IDisplayAdapterOutputs? TryOpen() {
-            if (PInvoke.CreateDXGIFactory1(
-                ppFactory: out var factoryPointer,
-                riid: IDXGIFactory1.IID_Guid
-            ).Failed) {
+            if (PInvoke.CreateDXGIFactory1<IDXGIFactory1>(ppFactory: out var factory).Failed) {
                 return null;
             }
 
-            return new DxgiAdapterOutputs(factory: ((IDXGIFactory1*)factoryPointer));
+            return new DxgiAdapterOutputs(factory: factory);
         }
 
         public bool IsCurrent => ((m_factory is not null) && m_factory->IsCurrent());
@@ -116,12 +113,7 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
                             }
 
                             try {
-                                var output6Iid = IDXGIOutput6.IID_Guid;
-
-                                if (((IUnknown*)output)->QueryInterface(
-                                    ppvObject: out var output6,
-                                    riid: in output6Iid
-                                ).Failed) {
+                                if (((IUnknown*)output)->QueryInterface<IDXGIOutput6>(ppvObject: out var output6).Failed) {
                                     continue;
                                 }
 
@@ -129,7 +121,7 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
                                 var matches = false;
 
                                 try {
-                                    matches = (((nint)((IDXGIOutput6*)output6)->GetDesc1().Monitor.Value) == monitorHandle);
+                                    matches = (((nint)output6->GetDesc1().Monitor.Value) == monitorHandle);
                                 } finally {
                                     if (!matches) {
                                         _ = ((IUnknown*)output6)->Release();
@@ -137,7 +129,7 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
                                 }
 
                                 if (matches) {
-                                    return new DxgiAdapterOutput(output: ((IDXGIOutput6*)output6));
+                                    return new DxgiAdapterOutput(output: output6);
                                 }
                             } finally {
                                 _ = ((IUnknown*)output)->Release();

@@ -15,7 +15,8 @@ bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previ
 }
 
 // Where a draw's index `k` stood in the preceding consumed frame: under the draw's previous matrix, or, for a vertex
-// riding a member, under that member's slot's previous transform.
+// riding a member, under that member's slot's previous transform; then under the draw's carry, as its current position
+// is (sdfMeshWorldPosition).
 float3 sdfMeshPreviousPosition(uint draw, uint record, uint k) {
     float3 object = sdfMeshObjectPosition(record, k);
     uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
@@ -23,14 +24,14 @@ float3 sdfMeshPreviousPosition(uint draw, uint record, uint k) {
     if (entry != 0u) {
         uint slot = sdfMeshMemberSlot(record, entry);
 
-        return (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz);
+        return sdfMeshCarryPoint(record, (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz));
     }
 
     uint previousMatrix = (4u * draw);
 
-    return ((object.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
+    return sdfMeshCarryPoint(record, ((object.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
         (object.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +
-        (object.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz);
+        (object.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz));
 }
 // Returns the point carried by the same mesh triangle in the preceding consumed frame.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {

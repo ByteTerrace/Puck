@@ -17,7 +17,7 @@ subject names them:
   authored, never both, never neither. `NeighbourKey` (computed, never
   serialized) folds whichever arm was authored into the one opaque string
   every `IWorldNeighbourResolver` call site resolves against. This is what a
-  portal facet's `destination` resolves against (the debug world's portal frame
+  portal facet's `destination` resolves against (the debug world's garden painting
   names the garden this way).
 - **`Gravity`** (`WorldGravity.cs`) — an acceleration field, deliberately not
   geometry. `uniform` is an authored acceleration vector. `attractors` names a
@@ -52,7 +52,14 @@ subject names them:
   active local-seat party) or `Body` (one seat). It is the world-scope default
   a placement face's own `WorldPlacementPortal` facet falls back to when it
   authors no `Travel`; a null section resolves every facet to `Body`. A door
-  may lie at any orientation (a shape turned a quarter about +X lays it flat;
+  fires when a body's origin passes through its glass, within the opening
+  (`WorldFaceAperture.Box`'s slab is `[-Depth, 0]` behind the glass, entered
+  only from the front), never on a band in front of it; while a body stands in
+  the opening, pushes out of the door from this world's geometry behind the
+  glass are taken back (`WorldPortalHoleContactField`), so a door on the ground
+  drops a body that walks onto it
+  ([decision](../../../../docs/decisions/engine-design.md#a-portal-is-a-plane-a-body-passes-through)).
+  A door may lie at any orientation (a shape turned a quarter about +X lays it flat;
   `WorldFaceCatalog` snaps such a quarter-turn frame to exact axes); a mapped
   pair is refused at the crossing, by name, unless it maps world up onto itself
   (`WorldFrameIsometry.PreservesWorldUp`: two walls, or a floor and a ceiling).
@@ -67,8 +74,16 @@ subject names them:
   same way: the mirrors' interpolation endpoints, `IWorldStampSource.Carries`
   for the stamp pool's followers, gait drivers and effectors and for the
   catalog avatars, while the chase boom is translation-invariant and turns
-  through `CrossView` for a turning pair. The debug world's loop shaft
-  (`worlds/debug/loop.puck`) is the live example.
+  through `CrossView` for a turning pair. The debug world's endless fall
+  (`worlds/debug/paintings.puck`: a painting in the floor under its twin in the
+  ceiling) and its pair of paintings facing each other are the live examples.
+  A window's session source may author `ripple: true` (refused off
+  `projection: window`): the opening shimmers and rings from every body that
+  touches or passes through it, presentation only (`WorldOpeningRipples`
+  contacts, `sdfOpeningRipple` in `shade/sdf-environment.hlsli`). A wall
+  painting is a thin rim shape with its centre carved out, face 0, because the
+  glass fills the face shape a centimetre short of its faces, and the wall
+  behind it holds nothing back while a body stands in the opening.
 - **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
   field, `RateHz` (required in an authored section), the authoritative
   server's fixed step rate in Hz. Read through
@@ -160,10 +175,14 @@ Engine facts those worlds exercised, which hold for any world:
   [rig](../../sdf-authoring/references/rig.md) and
   [surface](../../sdf-authoring/references/surface.md). All of it is
   presentation-only except the shapes' contact geometry.
-- **Body scale.** `Server.WorldBody.Scale` (a body's cell of the keyed
-  `bodies.scaleRow`) scales collider volumes, move speed and turn rate, hold
-  probes, standoff and reach, a hold's own gravity and vertical envelope, and a
-  pull's rate; the client multiplies the same cell into the rendered rig and
+- **Body scale.** `Server.WorldBody.Scale` (the body's own `state.body` Counter
+  register that `bodies.scale` names, with a `range` envelope; the debug world's
+  is `size`, `worlds/debug/size.puck`, imported by every world a body can walk
+  into so the size crosses with the body) scales collider volumes, move speed
+  and turn rate, hold probes, standoff and reach, a hold's own gravity and
+  vertical envelope, and a pull's rate; a scaled portal pair's in-place crossing
+  writes the register (`WorldServer.TryApplyInPlaceCrossing`), and the client
+  multiplies the same register into the rendered rig and
   the seat chase camera's orbit distance and look-at height
   (`Client.WorldFramePresenter.ResolveCamera`). A rigid body's mass, inertia,
   bounding radius, centre of mass and rest threshold scale with it
@@ -388,7 +407,7 @@ here".
   (`entity`/`entityPart`/`placement`/`group`/`seat`/`recentSpeaker`), `WorldCameraProgramOp`
   (`anchor`/`offset`/`lookAt`/`orbit`/`path`/`dynamics`/`clampPitch`/`fieldOfView`/`blend`/`selectProgram`) and
   `WorldCameraSubject` (`reference`/`placement`/`worldPoint`), `WorldSpeakerSource`
-  (`none`/`machine`/`tune`/`synth`); `grep JsonPolymorphic src/Puck.World.Schema`
+  (`none`/`machine`/`tune`/`synth`); `puck search -M 0 JsonPolymorphic src/Puck.World.Schema`
   lists the rest. A state row is not a `$type` union: its `kind` member picks the
   `CellKind`. `$type` failures do NOT all surface as
   `JsonException` — `WorldJsonPayload.IsParseFailure` is the complete set;

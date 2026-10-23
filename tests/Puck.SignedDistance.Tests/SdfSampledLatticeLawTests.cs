@@ -260,23 +260,24 @@ public sealed class SdfSampledLatticeLawTests {
     // A turned box of two materials, split across the middle: the cells the seam crosses refine and the cells around them
     // merge their fine vertices, and the box's edges stay sharp through both, where a merged vertex at its fine vertices'
     // mean once cut a notch into every edge it crossed.
+    // A seam between two materials refines no cell by itself: the material cut places the boundary on the mesh's own
+    // edges, and refining the seam's cells merged them into collinear vertices whose quads folded.
     [Fact]
-    public void ASeamBetweenTwoMaterialsKeepsTheBoxSharpWhereItsCellsMerge() {
-        var contour = Bake(field: static point => Box(point: point, turn: 0.3f), material: static point => ((point.X < 0f) ? 1 : 2), refine: true, regions: []);
-        var rotation = Quaternion.CreateFromAxisAngle(angle: 0.3f, axis: Vector3.UnitY);
-        var worst = 0f;
+    public void ASeamBetweenTwoMaterialsRefinesNoCell() {
+        var count = ((Samples * Samples) * Samples);
+        var values = new float[count];
+        var materials = new int[count];
 
-        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
-            var point = Position(contour: contour, vertex: vertex);
-            var local = Vector3.Abs(value: (Vector3.Transform(value: point, rotation: rotation) - new Vector3(x: 0.004f, y: 0.007f, z: -0.003f)));
+        for (var index = 0; (index < count); index++) {
+            var point = (Origin + (new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples))) * Cell));
 
-            if (MathF.Min(local.X, MathF.Min(local.Y, local.Z)) > (0.05f - Cell)) {
-                continue;
-            }
-            worst = MathF.Max(worst, MathF.Abs(Box(point: point, turn: 0.3f)));
+            values[index] = Box(point: point, turn: 0f);
+            materials[index] = ((point.X < 0f) ? 1 : 2);
         }
 
-        Assert.True(condition: (worst <= (0.05f * Cell)), userMessage: $"a vertex lies {worst} from the box, {(worst / Cell)} cells");
+        var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: materials, origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
+
+        Assert.Empty(collection: lattice.Refine(factor: Factor));
     }
 
     // A tilted disc thinner than the fine cell, which the fine samples alone catch in places and step over in others,
@@ -326,6 +327,25 @@ public sealed class SdfSampledLatticeLawTests {
         Assert.True(condition: (refined.MeasuredCells > (plain.MeasuredCells + 50)), userMessage: $"{refined.MeasuredCells} cells measured with the region, {plain.MeasuredCells} without");
     }
 
+    // A refinement over the fine-sample budget splits each cell into fewer fine cells rather than none, and refuses only
+    // when even two a side are over it. Every cell of a lattice on the surface is measured: at 32 cells a side, eight a
+    // cell would measure 257³ samples, past the budget, and four 129³, within it.
+    [Fact]
+    public void ARefinementOverItsBudgetSplitsCoarserOrRefuses() {
+        static SdfSampledLattice OnTheSurface(int samples) {
+            var count = ((samples * samples) * samples);
+
+            return new(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: samples, samplesY: samples, samplesZ: samples, values: new float[count]);
+        }
+        static SdfLatticeRegion[] Whole(int samples) => [new SdfLatticeRegion(High: (Origin + new Vector3(value: (samples * Cell))), Low: Origin)];
+
+        var fits = OnTheSurface(samples: Samples);
+        var fine = fits.Refine(factor: 8, regions: Whole(samples: Samples));
+
+        Assert.Equal(expected: 4, actual: fits.Refinement);
+        Assert.Equal(expected: ((129 * 129 * 129) - (Samples * Samples * Samples)), actual: fine.Length);
+        Assert.Empty(collection: OnTheSurface(samples: 90).Refine(factor: 3, regions: Whole(samples: 90)));
+    }
     // A speck apart from the surface, as a sheet thinning to a knife edge leaves, is dropped; a surface that small on its
     // own is the whole part and stays.
     [Fact]

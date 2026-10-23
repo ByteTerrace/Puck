@@ -97,6 +97,10 @@ for the instance. `NativeFragment` has eleven passes, `sdf.world$mask` through
 `sdf.world$views`, then `sdf.world$sky` and `sdf.world$composite`; `Fragment`,
 which a view below a native ceiling runs, puts `sdf.world$resolve` between views
 and the sky.
+A view of a program with a glass shape runs the fragment with the glass passes
+(`SdfWorldPackage.WithGlass`): `glass-clear`, `glass` and `glass-shade` after
+`views`, chosen by `SdfWorldPasses.FragmentOf` (a bit of the render-extent
+revision, so a program gaining its first glass shape rebuilds the view).
 `world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
 under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels`):
@@ -140,6 +144,9 @@ of its passes. The upload and the view's passes, in order:
 | `pyramid` | `sdf-mesh-pyramid.comp` | Reduces the mesh target into the occlusion's depth pyramid (`frame/sdf-mesh-pyramid.hlsli`): levels one to four, each texel one actual pixel's ray parameter and coordinate; skips a frame with no mesh draws. |
 | `surface` | `sdf-world-surface.comp` | Writes every pixel's whole visibility record from the mesh target, misses included: the hit, its frame slot and normal, the screen-space ambient occlusion and the stable slots' cascade soft shadows into K, each one 4×4-tile tap pattern's estimate per pixel (`sdfMeshPattern`), unfiltered. Calls no field query. |
 | `views` | `sdf-world-views.comp` | Gathers each group's records with a two-pixel apron into group-shared memory and averages the occlusion and K over each pixel's 4×4 window (`sdfViewsFilter`), then materials and their paints (`sdfApplyPaints`, each one primitive through `evaluateShape` at the hit), lighting through the one light interface, the irradiance volume and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. Calls no field query: a paint evaluates one shape, never the program. |
+| `glass-clear` | none (a buffer clear) | Only in a glass fragment (`SdfWorldPackage.WithGlass`, a view of a program with a glass shape): zeroes the glass sums, two words a render-grid pixel; counts no kernel work. |
+| `glass` | `sdf-mesh.vert`, `sdf-mesh-glass.frag` | Only in a glass fragment: draws the glass draws alone into the glass target (the nearest glass front face's ray parameter, draw plus one and triangle) through a depth of its own, every face before the pixel's opaque hit (the visibility record, read in the fragment stage) accumulating its signed ray distance and face count into the glass sums with atomics (`RenderGraphPortAccess.FragmentWrite`); back faces and faces behind the opaque hit write the far depth. Skips a frame with no glass draw once its target holds a clear. |
+| `glass-shade` | `sdf-glass.comp` | Only in a glass fragment: writes `glassLit` from the lit image (or `currentColor`), every pixel copied but those the glass target holds a front face at before the opaque hit, which it shades as glass (refraction into the lit image, Beer–Lambert absorption over the sums' distance, Fresnel sky and light highlights, frost); raises the reactivity in a temporal view. Every later pass reads `glassLit` in the lit image's place. |
 | `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the stack's lowest field run's offset, then each upper field run's scale and offset, the base's alpha marking an evaluated texel. Each layer counts `gpu.sky.evaluations` in its own detail row (`SdfSkyDetails`). Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
 | `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's atmosphere transmittance) plus each atmosphere kind's in-scatter colour by the surface transport's weight for it (the fog's and the haze's sky from the environment map the residency's upload renders, `sdfSkyEnvironment`, filtered bilinearly along the pixel's ray, evaluating no sky layer; each kind counted once a pixel in the `atmosphere` detail row), the sky's layers in their authored order (each field run's summary filtered from the texels the sky evaluated, each point layer evaluated at the pixel), through the haze and the medium, beneath it by its coverage, then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
@@ -239,8 +246,10 @@ transitions each buffer it copied into, once.
 ## Registers and bindings
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
-includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
-`isa/sdf-bricks.interface.hlsli`, both generated from `SdfKernelInterfaces` and
+but the bake's includes `isa/sdf-world.interface.hlsli` (through `passes/sdf-world.hlsli`),
+the mesh bake's two `isa/sdf-mesh-bake.interface.hlsli` (through
+`passes/sdf-bake-world.hlsli`) and the brick baker
+`isa/sdf-bricks.interface.hlsli`, all generated from `SdfKernelInterfaces` and
 owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
 interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
 binding by member name. A binding's
@@ -259,8 +268,8 @@ full binding map is in
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow`
-selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with) (`DebugViewModes.Names` is the list, a sync pair with
+`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow|indirect`
+selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with; `indirect` is the irradiance volume's light alone, exposed, which shows a probe artefact apart from the direct light) (`DebugViewModes.Names` is the list, a sync pair with
 `frame/sdf-debug-modes.hlsli` and `debug/sdf-debug-views.hlsli`); `depth`
 isolates the raster. To see what a shadow cascade sees, place a camera at the
 shaded point looking along the sun direction under `material-id`.

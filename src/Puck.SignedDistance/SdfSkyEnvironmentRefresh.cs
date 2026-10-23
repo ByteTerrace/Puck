@@ -56,7 +56,10 @@ public sealed class SdfSkyEnvironmentRefresh {
         if (!m_hasRendered) {
             return true;
         }
-        var changed = (SdfSkyEnvironment.IrradianceDifference(coefficients: m_candidate, other: m_rendered) >= SdfSkyEnvironment.DisplayCode);
+        // A display code of the sky's own brightness: the irradiance the rendered sky gives an upward surface shown as
+        // display white, or the absolute code for a sky dimmer than that unit.
+        var white = Math.Max(val1: 1d, val2: MathF.Max(x: Brightest(irradiance: SdfSkyEnvironment.Irradiance(coefficients: m_rendered, normal: Vector3.UnitY)), y: Brightest(irradiance: SdfSkyEnvironment.Irradiance(coefficients: m_rendered, normal: -Vector3.UnitY))));
+        var changed = (SdfSkyEnvironment.IrradianceDifference(coefficients: m_candidate, other: m_rendered) >= (SdfSkyEnvironment.DisplayCode * white));
 
         Skipped = (Projected && !changed);
         return changed;
@@ -87,4 +90,6 @@ public sealed class SdfSkyEnvironmentRefresh {
         }
         return false;
     }
+
+    private static float Brightest(Vector3 irradiance) => MathF.Max(x: irradiance.X, y: MathF.Max(x: irradiance.Y, y: irradiance.Z));
 }

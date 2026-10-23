@@ -95,6 +95,17 @@ maps each question to its wing and README section.
   and presentation out (`ToVector3`, `ToQuaternion`,
   `FixedPosition.ToRenderRelative`) are the two boundaries; presentation seams
   are one-way, and nothing they return flows back into state.
+- **Outbound precision needs an exact oracle.** The `FixedQ4816` float cast rounds
+  its raw directly to single precision before exact binary scaling; routing it
+  through double can manufacture a tie. The decimal-backed `Half` conversion
+  is correctly rounded at the current Q16/Q32 scales, pinned at every Half
+  midpoint by `scalar.half-midpoints-vs-exact-oracle`; do not assume that proof covers
+  a future finer carrier. Generic `FixedQ3232`/`UFixedQ4816` peers round to the
+  target grid before applying checked, saturating or width-truncating policy.
+- **Generic peers support both hooks.** Verify `TryConvertFrom*` and
+  `TryConvertTo*` directly through the derived-interface adapter in the Maths
+  suite. `Create*` falls back to the other operand's hook and can conceal a
+  missing half of the conversion contract.
 - **Gate `PDEP`/`PEXT` on `BitManipulation.HasFastParallelBits`**, never
   `Bmi2.IsSupported`: AMD before Zen 3 (the Steam Deck's Zen 2 included) and
   Hygon's licensed Zen 1 run them in microcode at up to hundreds of cycles.
@@ -126,23 +137,22 @@ Build the test project (`dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.cs
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 ```
 
-`dotnet test` forwards switches it does not know, `-nodeReuse:false` among them,
-to the test host, which then exits 5; pass it to the build step only. The run is
+`dotnet test` can forward unknown switches to its test host; pass
+`-nodeReuse:false` to the build step only. See the observed refusal in
+[verification](../verification/SKILL.md#build-before-you-test). The run is
 the Default tier. A rounding change or a new value
 kernel also earns Deep (`--explicit on --filter-trait tier=Deep`). Exhaustive
 takes tens of minutes: run it only when the member's waiver or the coverage
-manifest names it as the gate of record, and narrow it to one law with
+law declaration names it as the gate of record, and narrow it to one law with
 `--explicit on --filter-display-name '<law-id>*'`. No tier measures time;
 `puck bench` does. Report the exact commands you ran and where any failure came
 from.
 
 A new public Maths member lands with its classification (a law case or a
 precise waiver) in the same change, and CI requires 100% line coverage of live
-`src/`, so new code lands with a test that reaches it. Authoring the case, the
-waiver and the generated registers belongs to
-[`maths-laws`](../maths-laws/SKILL.md); never hand-edit the generated
-`coverage-manifest.json`, `leg-ledger.md`, `frontier.json` or `RESULTS.md`,
-which `puck baselines maths-ledger` regenerates.
+`src/`, so new code lands with a test that reaches it. Authoring the case and waiver belongs to
+[`maths-laws`](../maths-laws/SKILL.md). The owner rules out recorded Maths
+registers and coverage ratchets; completeness is checked from the current declarations.
 
 ## Route adjacent work
 

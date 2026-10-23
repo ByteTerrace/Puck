@@ -24,11 +24,17 @@ public static class WorldSpawnPointDefaults {
 /// so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the
 /// population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The
 /// kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is
-/// presentation-only (it selects the appearance row).</summary>
+/// presentation-only (it selects the appearance row). A <see cref="Select"/> overrides the sequence for each body whose
+/// own <c>state.body</c> register maps to a row, and follows that register as the simulation writes it.</summary>
 /// <param name="Sequence">The sequence that selects a row.</param>
 /// <param name="Rows">An authored row-name view whose entries may be literals or Text state-cell references, or empty
 /// to select from every declared row in declaration order.</param>
-public sealed record WorldRowAssignment(WorldSequence Sequence, IReadOnlyList<DocumentIdentifier> Rows) {
+/// <param name="Select">The per-body selector, or <see langword="null"/> for the sequence alone.</param>
+public sealed record WorldRowAssignment(
+    WorldSequence Sequence,
+    IReadOnlyList<DocumentIdentifier> Rows,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldRowSelector? Select = null
+) {
     private readonly IReadOnlyList<DocumentIdentifier> m_rows = (Rows ?? []);
 
     /// <summary>Gets the inert assignment policy — the index sequence (row 0 of whatever it selects) over every

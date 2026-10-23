@@ -59,7 +59,11 @@ irradiance volume and diagnostics, shading hits only into the lit image,
 premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
 coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
 order, the lit image over them by its coverage, the atmosphere's in-scatter and
-the bounded media, into the output). The surface and views kernels call no
+the bounded media, into the output). A view of a program with a glass shape runs
+`glass-clear` (a buffer clear), `sdf-mesh-glass.frag` (the glass draws into the
+glass target and the glass sums) and `sdf-glass.comp` (the lit image written
+again with each glass pixel shaded) between views and the sky
+(`SdfWorldPackage.WithGlass`). The surface and views kernels call no
 field query. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
@@ -323,7 +327,8 @@ pipelines and retires the old ones. A failed load or pipeline build keeps the
 previous kernels, and so do kernels that do not read this host's interface.
 `SdfWorldPipelines.PrepareReload` reflects each changed kernel and holds it to
 its interface's layout (`SdfKernelSet.InterfaceMismatch`), whose pass block
-carries the instruction set's stamp (`SdfWorldInterfaces.Stamp`): a kernel compiled
+carries the instruction set's stamp (`SdfWorldInterfaces.Stamp`, or for the two
+bake kernels the field's, `SdfWorldInterfaces.FieldStamp`): a kernel compiled
 against another instruction set, or binding anything where the host does not
 place it, refuses the reload. Reflecting DXIL needs the `dxcompiler.dll` beside
 the `dxc` on the path.
@@ -357,7 +362,9 @@ portal crossing's two program rebuilds leave the crossing frame. The build also
 measures the words its program differs in from the one held (`SdfProgramDelta`),
 which the adopting frame carries so its upload copies only them, and the
 adopting frame repacks the transform table but owes only the rows the repack
-changed. A converging capture waits for the build instead. Its table persists across
+changed. A converging capture or tick-locked dresser waits for the build instead,
+so replacement geometry reaches exposure and lighting on the same tick in each
+run. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
 repacked, so every residency's tables consuming the frame stage only what moved
 since they last uploaded.
@@ -436,7 +443,11 @@ The kernels read the instruction set from
 `Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` (in
 `Puck.SdfVm.Model`) generates from `Puck.SignedDistance`: every opcode, shape,
 blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
-constants. It is checked in and never edited by hand. This project references
+constants, all the field interpreter and the mesh bake read. What the renderer
+alone reads (lights, exposure, the visibility record, mesh records, the debug
+views) is in `isa/sdf-render.hlsli` (`SdfRenderHlsl`), which includes it, so a
+renderer constant leaves the bake kernels, and the stored meshes they key, as
+they were. Both are checked in and never edited by hand. This project references
 `Puck.Shaders.Generator` as a build-only reference, so building it writes every
 declaration the model has changed before its kernels compile
 ([generated declarations](../../docs/reference/shaders.md#generated-declarations));
@@ -468,10 +479,21 @@ capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
 
-A capture freezes its dependency closure even when it requests no additional
-convergence samples. While it converges, each frozen residency hands its frame
+A presented capture (`FrameCaptureRequest.Presented`) is the exception to
+everything below: it freezes nothing, holds no residency frame and settles no
+temporal history, and the render-graph runtime reads back the image each frame
+presents for its instance, so its frames carry the jitter, history and motion
+the display showed. Use it for flicker, ghosting and trails; a settled capture
+cannot show them.
+
+A settled capture freezes its dependency closure even when it requests no
+additional convergence samples. While it converges, each frozen residency hands its frame
 source the held frame (`ISdfFrameSource.PresentHeldFrame`), so the World still
-places its views and keeps them scheduled. The runtime waits for the required source's
+places its views and keeps them scheduled. It freezes the authored frame, then
+dresses it with any meshes that finish while it waits. Under lockstep, the
+package reports its meshes as pending until they reach that dressed frame;
+recording and readbacks continue, but the host holds the tick and exposure
+adapts only when the complete geometry supplies its meter. The runtime waits for the required source's
 completed view fence before forwarding the capture or counting samples.
 Retained source and temporal-history taint remain independent of newer clean
 graph inputs.

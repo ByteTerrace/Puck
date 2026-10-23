@@ -3,15 +3,17 @@ using System.Numerics;
 namespace Puck.World.Protocol;
 
 /// <summary>
-/// The rigid motion an in-place portal crossing carries a body through, <c>x → Rotation·x + Translation</c>, in
-/// presentation float: the single-precision mirror of the <see cref="WorldFrameIsometry"/> the simulation moved the body
-/// by. A presentation consumer that latched a world-space pose or rate for the body (an interpolation endpoint, a
+/// The motion an in-place portal crossing carries a body through, <c>x → Scale·(Rotation·x) + Translation</c>, in
+/// presentation float: the single-precision mirror of the <see cref="WorldFrameIsometry"/> map the simulation moved the
+/// body by. A presentation consumer that latched a world-space pose or rate for the body (an interpolation endpoint, a
 /// follower, an animation driver's last position, a planted foot) carries it through this so it continues across the
 /// crossing instead of seeing a jump.
 /// </summary>
 /// <param name="Rotation">The unit rotation.</param>
-/// <param name="Translation">The translation applied after the rotation, world units.</param>
-public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Translation) {
+/// <param name="Translation">The translation applied after the rotation and scale, world units.</param>
+/// <param name="Scale">The uniform scale applied to a point after the rotation: the pair's
+/// <see cref="WorldFrameIsometry.Scale"/>, one for a pair of faces of one size.</param>
+public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Translation, float Scale = 1f) {
     /// <summary>Gets the carry that moves nothing.</summary>
     public static WorldPoseCarry Identity => new(
         Rotation: Quaternion.Identity,
@@ -20,8 +22,8 @@ public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Transl
 
     /// <summary>Returns the carry a mapped portal pair that maps world up onto itself
     /// (<see cref="WorldFrameIsometry.PreservesWorldUp"/>) moves a traveller by: the pair's turn about up
-    /// (<see cref="WorldFrameIsometry.YawDelta"/>) and the translation that takes the source face's origin to the
-    /// destination face's.</summary>
+    /// (<see cref="WorldFrameIsometry.YawDelta"/>), its scale (<see cref="WorldFrameIsometry.Scale"/>) and the
+    /// translation that takes the source face's origin to the destination face's.</summary>
     /// <param name="source">The face the traveller entered.</param>
     /// <param name="destination">Its counterpart.</param>
     /// <returns>The carry.</returns>
@@ -33,20 +35,25 @@ public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Transl
             )),
             axis: Vector3.UnitY
         );
+        var scale = ((float)WorldFrameIsometry.Scale(
+            destination: in destination,
+            source: in source
+        ));
 
         return new WorldPoseCarry(
             Rotation: rotation,
-            Translation: (destination.Origin.ToVector3() - Vector3.Transform(
+            Scale: scale,
+            Translation: (destination.Origin.ToVector3() - (Vector3.Transform(
                 rotation: rotation,
                 value: source.Origin.ToVector3()
-            ))
+            ) * scale))
         );
     }
     /// <summary>Carries a world-space attitude.</summary>
     /// <param name="attitude">The attitude.</param>
     /// <returns>The carried attitude.</returns>
     public Quaternion Attitude(Quaternion attitude) => Quaternion.Normalize(value: (Rotation * attitude));
-    /// <summary>Carries a world-space direction or rate, which the translation does not move.</summary>
+    /// <summary>Carries a world-space direction, which only the rotation moves.</summary>
     /// <param name="direction">The direction.</param>
     /// <returns>The carried direction.</returns>
     public Vector3 Direction(Vector3 direction) => Vector3.Transform(
@@ -56,12 +63,13 @@ public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Transl
     /// <summary>Carries a world-space point.</summary>
     /// <param name="point">The point.</param>
     /// <returns>The carried point.</returns>
-    public Vector3 Point(Vector3 point) => (Direction(direction: point) + Translation);
+    public Vector3 Point(Vector3 point) => ((Direction(direction: point) * Scale) + Translation);
     /// <summary>Returns this carry followed by <paramref name="later"/>.</summary>
     /// <param name="later">The carry applied after this one.</param>
     /// <returns>The composed carry.</returns>
     public WorldPoseCarry Then(WorldPoseCarry later) => new(
         Rotation: Quaternion.Normalize(value: (later.Rotation * Rotation)),
+        Scale: (later.Scale * Scale),
         Translation: later.Point(point: Translation)
     );
 }

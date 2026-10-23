@@ -3,17 +3,15 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldGrants {
-    /// <summary>Captures every table this class owns, leaving out every row a session holds: a session is the screen
-    /// observing through it, which a restore cannot bring back, so it re-admits instead. The epoch each session ordinal
-    /// last carried is captured, so a restored world never reissues a retired session principal.</summary>
+    /// <summary>Captures every table this class owns: every grantee's rows, the sessions it admitted with the rows they
+    /// hold and the input their viewers last forwarded, and the epoch each session ordinal last carried, so a restored
+    /// world never reissues a retired session principal. A restored session has no observer of its own: a replay re-drive
+    /// keeps it until the tape ends it, and a live restore ends what nothing observes
+    /// (<see cref="WorldServer.EndUnobservedSessions"/>).</summary>
     public WorldGrantsCheckpoint Capture() {
         var grantees = new List<WorldGrantsGranteeCheckpoint>(capacity: m_byGrantee.Count);
 
         foreach (var (grantee, grants) in m_byGrantee) {
-            if (IsSessionGrantee(grantee: grantee)) {
-                continue;
-            }
-
             grantees.Add(item: new WorldGrantsGranteeCheckpoint(
                 Grantee: grantee,
                 Drive: [.. (grants.For(capability: WorldCapability.Drive) ?? [])],
@@ -30,10 +28,7 @@ public sealed partial class WorldGrants {
         // A principal may have composed an application set without holding any capability row of its own, so the
         // application table is swept separately rather than assumed to be a subset of the capability table.
         foreach (var (principal, applications) in m_applications) {
-            if (
-                !m_byGrantee.ContainsKey(key: principal) &&
-                !IsSessionGrantee(grantee: principal)
-            ) {
+            if (!m_byGrantee.ContainsKey(key: principal)) {
                 grantees.Add(item: new WorldGrantsGranteeCheckpoint(
                     Applications: [.. applications],
                     Control: [],
@@ -48,27 +43,28 @@ public sealed partial class WorldGrants {
 
         return new WorldGrantsCheckpoint(
             Grantees: grantees,
-            Exclusive: [.. m_exclusive.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Value)).Select(selector: static pair => (pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            Budgets: [.. m_budgets.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            EventBudgets: [.. m_eventBudgets.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            HoldCeilings: [.. m_holdCeilings.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            ChannelReach: [.. m_channelReach.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            PoolCeilings: [.. m_poolCeilings.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
-            KindMasks: [.. m_kindMasks.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            WriteMasks: [.. m_writeMasks.Where(predicate: static pair => !IsSessionGrantee(grantee: pair.Key.Grantee)).Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            SeededSections: [.. m_seededSections.Where(predicate: static key => !IsSessionGrantee(grantee: key.Grantee)).Select(selector: static key => (key.Grantee, key.Capability, key.Subject))],
+            Exclusive: [.. m_exclusive.Select(selector: static pair => (pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            Budgets: [.. m_budgets.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            EventBudgets: [.. m_eventBudgets.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            HoldCeilings: [.. m_holdCeilings.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            ChannelReach: [.. m_channelReach.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            PoolCeilings: [.. m_poolCeilings.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
+            KindMasks: [.. m_kindMasks.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            WriteMasks: [.. m_writeMasks.Select(selector: static pair => (pair.Key.Grantee, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            SeededSections: [.. m_seededSections.Select(selector: static key => (key.Grantee, key.Capability, key.Subject))],
             DriveGates: [.. m_driveGates.Select(selector: static pair => (pair.Key, pair.Value))],
             SessionEpochs: [.. m_sessionEpochs.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
+            Sessions: CaptureSessions(),
             Revision: m_revision
         );
     }
     /// <summary>Restores every table this class owns from a previously captured checkpoint — a wholesale replace,
-    /// never a merge onto whatever the boot-seed constructor already installed. No checkpoint holds a session, so every
-    /// live session ends here, its epoch still retired; its screen admits a new one.</summary>
+    /// never a merge onto whatever the boot-seed constructor already installed. The sessions it admits afterwards are
+    /// the checkpoint's, each as it stood, with the retired epochs kept; a live session the checkpoint does not hold
+    /// ends here, and its screen admits a new one.</summary>
     public void Restore(WorldGrantsCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
-        m_sessions.Clear();
         m_applications.Clear();
         m_byGrantee.Clear();
         m_exclusive.Clear();
@@ -147,7 +143,7 @@ public sealed partial class WorldGrants {
             m_holdCeilings[(row.Grantee, row.Capability, row.Subject)] = row.Ceiling;
         }
         foreach (var row in checkpoint.ChannelReach) {
-            m_channelReach[(row.Grantee, row.Capability, row.Subject)] = new ChannelReachMask(Bits: row.Bits);
+            m_channelReach[(row.Grantee, row.Capability, row.Subject)] = row.Reach;
         }
         foreach (var row in checkpoint.PoolCeilings) {
             m_poolCeilings[(row.Grantee, row.Capability, row.Subject)] = RestoreCeilings(rows: row.Ceilings);
@@ -179,6 +175,7 @@ public sealed partial class WorldGrants {
             );
         }
 
+        RestoreSessions(sessions: checkpoint.Sessions);
         m_revision = checkpoint.Revision;
     }
 
@@ -186,7 +183,7 @@ public sealed partial class WorldGrants {
         var rows = new List<(int, long)>();
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if ((ceilings.Support.Bits & (1UL << ordinal)) != 0UL) {
+            if (ceilings.Support.Contains(ordinal: ordinal)) {
                 rows.Add(item: (ordinal, ceilings[ordinal]));
             }
         }
@@ -199,7 +196,7 @@ public sealed partial class WorldGrants {
         foreach (var row in rows) {
             ceilings = ceilings.WithCeiling(
                 ceiling: row.Ceiling,
-                channels: new ChannelConsentMask(Bits: (1UL << row.Ordinal))
+                channels: new ChannelConsentMask(Bits: default(ChannelMask).With(ordinal: row.Ordinal))
             );
         }
 

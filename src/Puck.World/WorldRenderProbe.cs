@@ -39,6 +39,13 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
         kinds: SdfMeshSettle.Kinds,
         name: SdfMeshSettle.SourceName
     );
+    /// <summary>The <c>sdf.mesh-gi</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshIrradiance"/>):
+    /// registered with the probe before the renderer exists, and pointed at the world residency's irradiance volume when
+    /// the render factory stores the residency.</summary>
+    public ForwardingWorkCounterSource MeshIrradiance { get; } = new(
+        kinds: SdfMeshIrradiance.Kinds,
+        name: SdfMeshIrradiance.SourceName
+    );
 
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }

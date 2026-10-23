@@ -12,24 +12,25 @@ public sealed partial class WorldInstanceHost {
     private static bool TryResolvePortalCounterpartFrame(in PendingTransfer transfer, in WorldFaceFrame sourceFrame, WorldDefinition destinationDefinition, string targetName, out WorldFaceFrame frame, out string reason) {
         frame = default;
 
-        if (!WorldPortalCounterpart.TryResolve(
+        var counterpartRow = default(WorldFaceRow);
+
+        // A validated destination declares every face a placement row overrides, so a counterpart that resolves to a
+        // placement face also derives a catalog row; the catalog is read for the frame.
+        if (
+            !WorldPortalCounterpart.TryResolve(
             definition: destinationDefinition,
             counterpart: transfer.Counterpart,
             placement: out var counterpartPlacement,
             face: out var counterpartFace,
             reason: out var counterpartReason
-        )) {
-            reason = $"mapped arrival's {counterpartReason} in '{targetName}'";
-
-            return false;
-        }
-
-        if (!WorldFaceCatalog.For(definition: destinationDefinition).TryFind(
+        ) ||
+            !WorldFaceCatalog.For(definition: destinationDefinition).TryFind(
             placementId: counterpartPlacement!.Id,
             faceName: counterpartFace!.Face,
-            out var counterpartRow
-        )) {
-            reason = $"mapped arrival's counterpart '{transfer.Counterpart}' names no DECLARED creation face in '{targetName}'";
+            out counterpartRow
+        )
+        ) {
+            reason = $"mapped arrival's {((counterpartReason.Length > 0) ? counterpartReason : $"counterpart '{transfer.Counterpart}' names no declared creation face")} in '{targetName}'";
 
             return false;
         }
@@ -77,39 +78,52 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        var refusals = new List<(int Slot, string Reason)>();
         var crossed = source.Server.ExecuteAuthorityOperation(operation: () => {
-            var moved = new List<(int Slot, WorldBodyTransferState State, FixedVector3 Position)>(capacity: members.Length);
+            var moved = new List<(int Slot, WorldBodyTransferState State, FixedVector3 Position, FixedQ4816 Scale)>(capacity: members.Length);
 
             foreach (var slot in members) {
-                if (
-                    source.Server.ApplyInPlaceCrossing(crossing: new WorldInPlaceCrossing(
+                if (!source.Server.TryApplyInPlaceCrossing(
+                    crossing: new WorldInPlaceCrossing(
                         Destination: counterpartFrame,
                         Slot: slot,
                         Source: sourceFrame
-                    )) &&
-                    (source.Server.Population.EntryBody(index: slot) is { } body)
-                ) {
-                    moved.Add(item: (slot, body.CaptureTransferState(), body.FixedPosition));
+                    ),
+                    reason: out var refusal
+                )) {
+                    refusals.Add(item: (slot, refusal));
+                } else if (source.Server.Population.EntryBody(index: slot) is { } body) {
+                    moved.Add(item: (slot, body.CaptureTransferState(), body.FixedPosition, body.Scale));
                 }
             }
 
             return moved;
         });
+
+        if (m_narration.HasNarrationSink) {
+            foreach (var (slot, refusal) in refusals) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} body:{slot} did not cross {border} -> {counterpart} ({refusal})]"
+                );
+            }
+        }
         var localSeats = source.Server.Population.LocalSeatCount;
         var turn = WorldFrameIsometry.YawDelta(
             destination: in counterpartFrame,
             source: in sourceFrame
         );
 
-        foreach (var (slot, state, position) in crossed) {
-            // A turning pair turns the seat's view with its body, as a mapped arrival does; a pair that keeps the
-            // heading leaves the chase boom as it was, and the camera rides the carried body.
+        foreach (var (slot, state, position, scale) in crossed) {
+            // A turning pair turns the view of the seat routed to the body, as a mapped arrival does; a pair that
+            // keeps the heading leaves the chase boom as it was, and the camera rides the carried body.
             if (
                 (turn != FixedQ4816.Zero) &&
-                (FollowedRosterSlot(
-                    instance: source,
-                    slot: slot
-                ) is { } rosterSlot)
+                TryFindFollowedRosterSlot(
+                instanceName: sourceName,
+                instanceSlot: slot,
+                rosterSlot: out var rosterSlot
+            )
             ) {
                 m_seats.CrossView(
                     slot: rosterSlot,
@@ -123,7 +137,7 @@ public sealed partial class WorldInstanceHost {
 
                 m_narration.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} '{sourceName}' {TravellerName(index: slot, localSeatCount: localSeats)} crossed {border} -> {counterpart} in place, at ({Format(value: ((double)position.X))}, {Format(value: ((double)position.Y))}, {Format(value: ((double)position.Z))}) moving ({Format(value: ((double)planar.X))}, {Format(value: ((double)state.VerticalVelocity))}, {Format(value: ((double)planar.Z))}) m/s]"
+                    text: $"[world.transfer: transfer={transferId} '{sourceName}' {TravellerName(index: slot, localSeatCount: localSeats)} crossed {border} -> {counterpart} in place, at ({Format(value: ((double)position.X))}, {Format(value: ((double)position.Y))}, {Format(value: ((double)position.Z))}) moving ({Format(value: ((double)planar.X))}, {Format(value: ((double)state.VerticalVelocity))}, {Format(value: ((double)planar.Z))}) m/s, scale {Format(value: ((double)scale))}]"
                 );
             }
         }
@@ -131,22 +145,6 @@ public sealed partial class WorldInstanceHost {
         static string Format(double value) => value.ToString(
             format: "0.00",
             provider: CultureInfo.InvariantCulture
-        );
-    }
-    // The local roster seat whose view follows an instance's body: the seat routed to it, or, in the boot world, the
-    // local seat at its own index.
-    private int? FollowedRosterSlot(WorldInstance instance, int slot) {
-        if (TryFindFollowedRosterSlot(
-            instanceName: instance.Name,
-            instanceSlot: slot,
-            rosterSlot: out var routed
-        )) {
-            return routed;
-        }
-
-        return ((ReferenceEquals(objA: instance, objB: Boot) && (slot < instance.Server.Population.LocalSeatCount))
-            ? slot
-            : null
         );
     }
 }

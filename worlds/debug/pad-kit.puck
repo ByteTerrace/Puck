@@ -1,0 +1,87 @@
+// What the bar's pages and the play wheel's rings share: the twelve controls of the standard bar by the pad button and the
+// keyboard key that press each, and the rings the garden and the debug world both draw. A library: it emits no document,
+// and controls.puck (every Moth world) and pad.puck (the debug world alone) import it.
+//
+//   import "pad-kit"
+//
+// The pad sources are the bar's slot set. The keyboard keys are the owner's rule made a layout: every control the bar
+// shows has a keyboard equivalent, so the d-pad is the arrow keys, the face diamond is the I, J, K, L diamond (I north, J
+// west, K south, L east), the shoulders are U and O and the stick presses N and M. Under a held page modifier (Z for the
+// left trigger, X for the right) each key does what its plate shows. The resting page keeps N and M for the stick
+// presses (run on/off and fly) and gives the face buttons their own keys (avatars/moth.puck).
+
+let padUp = ["gamepad.dpadUp", "keyboard.arrowUp"]
+let padRight = ["gamepad.dpadRight", "keyboard.arrowRight"]
+let padDown = ["gamepad.dpadDown", "keyboard.arrowDown"]
+let padLeft = ["gamepad.dpadLeft", "keyboard.arrowLeft"]
+let padLeftShoulder = ["gamepad.leftShoulder", "keyboard.u"]
+let padLeftStick = ["gamepad.leftStickPress", "keyboard.n"]
+let padNorth = ["gamepad.buttonNorth", "keyboard.i"]
+let padWest = ["gamepad.buttonWest", "keyboard.j"]
+let padSouth = ["gamepad.buttonSouth", "keyboard.k"]
+let padEast = ["gamepad.buttonEast", "keyboard.l"]
+let padRightShoulder = ["gamepad.rightShoulder", "keyboard.o"]
+let padRightStick = ["gamepad.rightStickPress", "keyboard.m"]
+
+// The page modifiers: the triggers, and Z and X for the keyboard. A binding document validates its chords against its own
+// modifier list, so each overlay that adds entries to a trigger page declares the pair again (they merge by id).
+let padModifiers = [
+  { id: "lt", label: "LT", pressThreshold: 0.55, releaseThreshold: 0.35, sources ["gamepad.leftTrigger", "keyboard.z"] }
+  { id: "rt", label: "RT", pressThreshold: 0.55, releaseThreshold: 0.35, sources ["gamepad.rightTrigger", "keyboard.x"] }
+]
+
+// view.override takes an Axis1D from a binding; its text names the layout or camera, so the value is never read.
+let neverRead = { kind: "Axis1D", raw [0, 0, 0, 0] }
+
+// The three rings of the play wheel. A sector's id names its label and icon (`state.wheelLabels`, `state.wheelIcons`),
+// and it carries no source, since the wheel commits it. Act and View go to every Moth world; Places goes to the debug
+// world alone, which declares the wheel again with it (pad.puck), since a later layer's wheel replaces the earlier one
+// whole.
+let actRing = {
+  id: "play-acts"
+  label: "Act"
+  entries [
+    { id: "console", command: "console", sources: null }
+    { id: "build", command: "player.build", sources: null }
+    { id: "where", command: "body.where", sources: null }
+    { id: "channels", command: "body.channels", sources: null }
+    { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
+    { id: "suit", command: "body.press", text: "suit 1 0.2", sources: null }
+    { id: "stop", command: "body.stop", sources: null }
+    { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
+  ]
+}
+
+let viewRing = {
+  id: "play-views"
+  label: "View"
+  entries [
+    { id: "play", command: "view.override", text: "layout play", value: neverRead, sources: null }
+    { id: "threeQuarter", command: "view.override", text: "layout three-quarter", value: neverRead, sources: null }
+    { id: "front", command: "view.override", text: "layout front", value: neverRead, sources: null }
+    { id: "rear", command: "view.override", text: "layout rear", value: neverRead, sources: null }
+    { id: "wide", command: "view.override", text: "layout flight-stage", value: neverRead, sources: null }
+    { id: "face", command: "view.override", text: "layout face", value: neverRead, sources: null }
+    { id: "desktop", command: "view.override", text: "layout desktop", value: neverRead, sources: null }
+    { id: "autoCamera", command: "view.override", text: "camera auto", value: neverRead, sources: null }
+  ]
+}
+
+let placesRing = {
+  id: "play-places"
+  label: "Places"
+  entries [
+    { id: "goStage", command: "debug.go", text: "stage", sources: null }
+    { id: "goHero", command: "debug.go", text: "hero", sources: null }
+    { id: "goGallery", command: "debug.go", text: "gallery", sources: null }
+    { id: "goPortals", command: "debug.go", text: "portals", sources: null }
+    { id: "goChess", command: "debug.go", text: "chess", sources: null }
+    { id: "goDesktop", command: "debug.go", text: "desktop", sources: null }
+    { id: "goDevices", command: "debug.go", text: "devices", sources: null }
+    { id: "goWonderland", command: "debug.go", text: "wonderland", sources: null }
+  ]
+}
+
+// The ring lists the wheel rows name: the garden's and the night field's, and the debug world's.
+let mothRings = [actRing, viewRing]
+let debugRings = [actRing, viewRing, placesRing]

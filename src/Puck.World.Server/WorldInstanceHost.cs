@@ -210,6 +210,21 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     public string ResolveReferenceDocument(WorldInstance source, string neighbourKey) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        // A reference naming the source's own document id is the source itself, wherever its file lies: a world
+        // composed into a generated file (a `puck test` scenario) still names itself by its id, as presentation
+        // decides a same-world door (WorldPortalStraddle).
+        if (
+            (source.SourcePath is { Length: > 0 } ownPath) &&
+            (source.Server.Definition.DocumentId is { Length: > 0 } ownId) &&
+            string.Equals(
+            a: neighbourKey,
+            b: ownId,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return CanonicalDocumentIdentity(documentPath: ownPath);
+        }
+
         var documentPath = (neighbourKey.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: WorldReference.OwnerKeyPrefix

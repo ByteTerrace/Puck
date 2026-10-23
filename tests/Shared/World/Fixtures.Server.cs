@@ -13,6 +13,25 @@ using Puck.World.Machines;
 namespace Puck.World.Testing;
 
 internal static partial class Fixtures {
+    /// <summary>Writes one body's <see cref="BodyScaleRegister"/> register directly into its arena lane; the next
+    /// simulation step resyncs the body's live scale from it.</summary>
+    /// <param name="server">The server whose body is written.</param>
+    /// <param name="body">The 0-based body index.</param>
+    /// <param name="value">The scale to store.</param>
+    public static void WriteBodyScale(WorldServer server, int body, FixedQ4816 value) {
+        Assert.True(condition: WorldBodyStateReads.TryResolveSlot(
+            definition: server.Definition,
+            kind: out _,
+            name: BodyScaleRegister,
+            slot: out var slot
+        ));
+        server.Population.ActionStateLane.Write(
+            ordinal: body,
+            raw: value.Value,
+            slot: slot
+        );
+    }
+
     /// <summary>Builds a FRESH, isolated, in-process <see cref="WorldServer"/> over <paramref name="definition"/>
     /// (<see cref="BuildDocument"/>'s own output when omitted) — the same construction shape
     /// <see cref="Puck.World.WorldReplaySnapshot.Drive"/> uses to rehydrate an authoritative world for offline

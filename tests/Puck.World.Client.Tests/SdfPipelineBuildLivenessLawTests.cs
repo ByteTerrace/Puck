@@ -194,14 +194,15 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
-        // cache lists only the pass pipelines (the region copy, the mesh pass and the shadow cascades' pass), released
-        // after the set, the held creations can return: no canceled build starts another.
+        // cache lists only the pass pipelines (the region copy, the mesh pass, its occlusion kernel, the shadow cascades'
+        // pass and the glass pass), released after the set, the held creations can return: no canceled build starts
+        // another.
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         TestLiveness.Until(
             reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
-            step: () => (cache.Pipelines.SharedPipelines <= 3)
+            step: () => (cache.Pipelines.SharedPipelines <= 5)
         );
         driver.Open();
         loss.Join();
@@ -251,7 +252,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (10, "building (0 of 10 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
+            expected: (11, "building (0 of 11 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
         );
 
         var release = new Thread(start: last.Dispose);
@@ -333,11 +334,9 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             m_open.Dispose();
         }
         public void Enter(GpuComputePipelineDescription description) {
-            // The device's region-copy pipeline builds beside the set, so the driver lets it pass uncounted.
-            if (ReferenceEquals(
-                objA: description,
-                objB: GpuRegion.CopyPipeline
-            )) {
+            // The device's region-copy pipeline and the mesh pass's occlusion kernel build beside the set, so the driver
+            // lets them pass uncounted.
+            if (ReferenceEquals(objA: description, objB: GpuRegion.CopyPipeline) || ReferenceEquals(objA: description, objB: SdfMeshRasterPass.OcclusionDescription)) {
                 return;
             }
 

@@ -36,6 +36,8 @@ public interface IAuthenticator {
 }
 /// <summary>Requires an authenticated transport identity to be pinned before disclosing a credential.</summary>
 public interface IRemoteIdentityVerifier {
+    /// <summary>Gets whether this instance has an explicit remote transport pin. A verifier-only server has none.</summary>
+    bool HasRemoteIdentityPin { get; }
     /// <summary>Checks the remote transport's authenticated public-key fingerprint.</summary>
     /// <param name="keyHash">The SHA-256 fingerprint established by the peer handshake.</param>
     /// <returns>Whether this credential may be presented to that peer.</returns>

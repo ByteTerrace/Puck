@@ -50,7 +50,7 @@ internal enum ShareFlavor {
 /// <summary>
 /// One leg of one gate statement: what stands against what, what the two share, and where the evidence the leg leans on
 /// lives. Legs are materialized from the <c>laws/*.json</c> declarations by <see cref="LegText.ToLeg"/>, and
-/// <c>LegLedgerTests.LawLegsAreDeclared</c> rejects the illegal combinations: a flavorless shared-substrate leg, a
+/// <c>LawLegTests.LawLegsAreDeclared</c> rejects the illegal combinations: a flavorless shared-substrate leg, a
 /// flavored classical leg, a delegation twin with nothing cited, a relative canary with no absolute sibling.
 /// </summary>
 /// <param name="Kind">The leg kind.</param>
@@ -64,9 +64,7 @@ internal enum ShareFlavor {
 /// <param name="Absolute">For a relative divergence canary, the statement carrying the ABSOLUTE sibling; empty
 /// otherwise.</param>
 internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Subject, string Against, string Shared, string Citation, string Absolute) {
-    /// <summary>The prefix a doc-divergence leg opens its citation with. It is the ONE spelling the ledger's doc-gap
-    /// register keys on: a second spelling would empty the register silently, which is the exact failure this register
-    /// exists to prevent.</summary>
+    /// <summary>The prefix identifying a documented claim that differs from observed behavior.</summary>
     public const string DocGapMarker = "DOC GAP:";
 
     /// <summary>Gets what the XML doc claims, for a doc-gap leg; empty for every other leg.</summary>
@@ -75,7 +73,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
             ? Citation[DocGapMarker.Length..].Trim()
             : ""
         );
-    /// <summary>Gets the sharing flavor as the kebab-cased token the tool labels and the ledger use; empty when the leg
+    /// <summary>Gets the sharing flavor as the kebab-cased token diagnostics use; empty when the leg
     /// is not shared-substrate.</summary>
     public string FlavorToken =>
         Flavor switch {
@@ -105,7 +103,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// <summary>Gets whether this leg is a faithful-carriage check of a transcription.</summary>
     public bool IsTranscription =>
         (Flavor == ShareFlavor.Transcription);
-    /// <summary>Gets the leg kind as the kebab-cased token the tool labels and the ledger use.</summary>
+    /// <summary>Gets the leg kind as the kebab-cased token diagnostics use.</summary>
     public string KindToken =>
         Kind switch {
             LegKind.PresentedTwin => "presented-twin",

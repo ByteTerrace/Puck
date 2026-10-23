@@ -172,6 +172,13 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             value: 0L
         )
     );
+    RuleFact IWorldFacts.Read(EngagedOperand operand) => Record(
+        operand: nameof(EngagedOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
     RuleFact IWorldFacts.Read(BodyStateOperand operand) => Record(
         operand: nameof(BodyStateOperand),
         fact: RuleFact.Finite(
@@ -219,6 +226,14 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
         fact: RuleFact.Finite(
             kind: CellKind.Int,
             value: -1L
+        )
+    );
+    // No seat sits at a board here: not engaged, and no pointed cell or side.
+    RuleFact IWorldFacts.Read(BoardSeatOperand operand) => Record(
+        operand: nameof(BoardSeatOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: ((operand.Facet == BoardSeatFacet.Engaged) ? 0L : -1L)
         )
     );
     // No body reference ever resolves, and a $pair: key over two unresolved bodies names no cell — the invalid

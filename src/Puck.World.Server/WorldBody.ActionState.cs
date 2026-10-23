@@ -304,6 +304,28 @@ public sealed partial class WorldBody {
         Array.Clear(array: m_durableInputPresent);
         m_durableInputTick = 0;
     }
+    /// <summary>Writes one register a world rule's <c>setBodyState</c> addresses, settled through the register's
+    /// envelope as a kit action's write is. The lane write joins the firing's journal scope, so a rewound firing
+    /// rewinds it.</summary>
+    /// <param name="slot">The register's slot in the world's register file.</param>
+    /// <param name="requested">The requested value, in raw counter bits.</param>
+    /// <param name="rule">The firing effect's authored spelling, for the read-back.</param>
+    internal void ApplyRuleState(int slot, long requested, string rule) => ApplyRawState(
+        reason: rule,
+        requested: requested,
+        slot: slot,
+        writer: "rule"
+    );
+    /// <summary>Writes one register a crossing through a scaled portal pair addresses: the body's size, which the caller
+    /// has already checked against the register's envelope.</summary>
+    /// <param name="slot">The register's slot in the world's register file.</param>
+    /// <param name="requested">The new value, in raw counter bits.</param>
+    internal void ApplyCrossingState(int slot, long requested) => ApplyRawState(
+        reason: "scaled portal crossing",
+        requested: requested,
+        slot: slot,
+        writer: "crossing"
+    );
     private void ApplyRawState(int slot, long requested, string writer, string reason) {
         var definition = m_actionStateDefinitions[slot];
         var effective = (definition.Envelope?.Clamp(
@@ -395,8 +417,10 @@ public sealed partial class WorldBody {
         m_transferHeldChannels = default;
         m_hasTransferHeldChannels = false;
     }
-    // The stored values are not re-seeded here: a re-declared register file carries them across by name inside the
-    // arena's own relayout, so only the read-back register (what was requested, who wrote it, why) is rebuilt.
+    // The stored values are not re-seeded here: they live in the arena's slot lanes, which a kit recompile leaves
+    // alone and a re-declared register file carries across by name inside the arena's own relayout. Only the
+    // read-back register (what was requested, who wrote it, why) is rebuilt, and a slot declared again under the same
+    // name, kind and lifetime keeps its read-back so it still describes the value the lane holds.
     private void CompileActionState(CompiledActionStateSlot[]? state) {
         var previousDefinitions = m_actionStateDefinitions;
         var previousRequested = m_actionStateRequested;
@@ -423,20 +447,18 @@ public sealed partial class WorldBody {
             var definition = m_actionStateDefinitions[slot];
             var preserved = -1;
 
-            if (definition.Lifetime == ActionStateLifetime.Durable) {
-                for (var prior = 0; (prior < previousDefinitions.Length); prior++) {
-                    if (
-                        (previousDefinitions[prior].Lifetime == ActionStateLifetime.Durable) &&
-                        (previousDefinitions[prior].Kind == definition.Kind) &&
-                        string.Equals(
-                        a: previousDefinitions[prior].Name,
-                        b: definition.Name,
-                        comparisonType: StringComparison.Ordinal
-                    )
-                    ) {
-                        preserved = prior;
-                        break;
-                    }
+            for (var prior = 0; (prior < previousDefinitions.Length); prior++) {
+                if (
+                    (previousDefinitions[prior].Lifetime == definition.Lifetime) &&
+                    (previousDefinitions[prior].Kind == definition.Kind) &&
+                    string.Equals(
+                    a: previousDefinitions[prior].Name,
+                    b: definition.Name,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    preserved = prior;
+                    break;
                 }
             }
 

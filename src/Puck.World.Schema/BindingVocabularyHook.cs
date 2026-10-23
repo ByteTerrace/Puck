@@ -29,6 +29,8 @@ public static class BindingVocabularyHook {
     /// <para>The seat-mode family list is the identical parameter for the identical reason, extended to the
     /// document's AUTHORED per-seat mode families (<see cref="WorldSeatModeFamily"/>): a <c>contexts</c> row naming
     /// one is only checkable against that same document's own declared families, never a process-global or another
-    /// world's.</para></remarks>
-    public static Action<BindingProfileDocument, WorldChannelTable, IReadOnlyList<WorldSeatModeFamily>, List<string>>? VocabularyCheck { get; set; }
+    /// world's.</para>
+    /// <para>The authored command set is the same per-document parameter again: a binding row naming one of the
+    /// document's own <c>commands</c> is checked against that document's set, never the live world's.</para></remarks>
+    public static Action<BindingProfileDocument, WorldChannelTable, IReadOnlyList<WorldSeatModeFamily>, AuthoredCommandSet, List<string>>? VocabularyCheck { get; set; }
 }

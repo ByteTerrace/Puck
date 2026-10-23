@@ -32,7 +32,8 @@ public sealed class LocalControlClient : IControlSession {
             request.Operation,
             request.Command,
             request.TimeoutMilliseconds,
-            cancellationToken
+            cancellationToken,
+            request.Capture
         );
 
     /// <summary>Reads a private host capability and proves both peers know its secret. Connects only to IPv4 loopback.</summary>
@@ -107,8 +108,10 @@ public sealed class LocalControlClient : IControlSession {
     /// <param name="command">One console line, or null for capture.</param>
     /// <param name="timeoutMilliseconds">Deadline from 1..120000 milliseconds, on the attachment's clock.</param>
     /// <param name="cancellationToken">Cancels queued work; dispatched effects cannot be undone.</param>
+    /// <param name="capture">How a capture reads the frame, or <see langword="null"/> for one settled frame and for
+    /// exec.</param>
     /// <returns>The correlated console result or completed PNG.</returns>
-    public async Task<ControlResponse> ExecuteAsync(string operation, string? command, int timeoutMilliseconds = 30_000, CancellationToken cancellationToken = default) {
+    public async Task<ControlResponse> ExecuteAsync(string operation, string? command, int timeoutMilliseconds = 30_000, CancellationToken cancellationToken = default, ControlCapture? capture = null) {
         ObjectDisposedException.ThrowIf(
             condition: (Volatile.Read(location: ref m_disposed) != 0),
             instance: this
@@ -127,6 +130,7 @@ public sealed class LocalControlClient : IControlSession {
         }
         try {
             var request = new ControlRequest(
+                Capture: capture,
                 Command: command,
                 Id: checked((m_sequence + 1)),
                 Operation: operation,

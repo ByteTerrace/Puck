@@ -218,7 +218,7 @@ public sealed class HistoryRefusalLawTests {
 
         harness.Steps(count: 10);
         harness.Submit(mutation: new WorldMutation.UpsertAddon(
-            Addon: new WorldAddonRow(Enabled: true, Fuel: 1000UL, Hash: "sha256-64/0000000000000000", ModulePath: "absent.wasm", Name: "guest"),
+            Addon: new WorldAddonRow(Enabled: true, Fuel: 1000UL, Hash: "sha256/0000000000000000000000000000000000000000000000000000000000000000", ModulePath: "absent.wasm", Name: "guest"),
             Principal: Principal.Console
         ));
 
@@ -228,7 +228,8 @@ public sealed class HistoryRefusalLawTests {
         Assert.Contains(actualString: refusal, expectedSubstring: "an addon edit requires guest state");
     }
     // A session admitted before the history switched on records no session event at all, so only the live session
-    // itself — which no authority checkpoint captures — can stop the history taking a keyframe and refuse the seek.
+    // itself — whose observer's view the history does not rewind — can stop the history taking a keyframe and refuse
+    // the seek.
     [Fact]
     public void ALiveSessionAtTheKeyframeRefusesWithNoSessionEventRecorded() {
         using var harness = new WorldHistoryHarness(on: false, seats: 0);
@@ -241,11 +242,11 @@ public sealed class HistoryRefusalLawTests {
         harness.Steps(count: 8);
 
         Assert.Null(@object: harness.History.OldestTick);
-        Assert.Contains(expectedSubstring: "live session input and grants are not captured", actualString: harness.History.Status().Waiting);
+        Assert.Contains(expectedSubstring: "a live session observes this world from another authority", actualString: harness.History.Status().Waiting);
         Assert.False(condition: harness.History.TrySeek(
             documentPath: null, refusal: out var refusal, report: out _, target: 1UL
         ));
-        Assert.Contains(actualString: refusal, expectedSubstring: "live session input and grants are not captured");
+        Assert.Contains(actualString: refusal, expectedSubstring: "a live session observes this world from another authority");
 
         // The control: once the session ends, the next tick takes the first keyframe.
         harness.Fixture.Server.ApplyServerEvent(serverEvent: new WorldServerEvent.SessionEnded(RevokedGrants: [], Session: session));

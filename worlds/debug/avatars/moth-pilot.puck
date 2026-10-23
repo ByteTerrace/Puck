@@ -1,0 +1,1320 @@
+// The Moth out of her suit: the 1.68 m pilot of the concept pack's off-suit turnaround (sheet 04), a grounded, athletic
+// working woman in a charcoal undersuit with full sleeves, straight-cut work trousers, soft knee and elbow pads, a
+// contact harness, lavender shoulder patches and flat ankle boots, her hands bare. Her head is the suited Moth's own
+// (the moth-head library at the same 0.68 scale), so one head model serves both forms.
+//
+// suit.puck wears her through the `moth-pilot` look when the body's suit register is 0. Every coordinate is in the author
+// frame (+Y up, +Z her front, +X her left), with her soles at Y = 0. A template's `side` is 1 for her left and -1 for
+// her right: it mirrors X, the Y and Z of a rotation's vector part, and the sign of a swing about a sideways-tilting axis.
+//
+// She rides the suited Moth's drivers and dynamics; her stride curve (`pilot-stride`) is her own, scaled to her 0.85 m
+// hip. While `pilotHold` holds 1 for her body, the `hold` driver bends her arms in front of her and the `hold` frame
+// seats the handheld (75 x 133 x 27.5 mm) in her hands.
+
+import "moth-head"
+
+// What an importer binds: the creation its look wears, and the cell its look's hold pose reads, which the importer's
+// rules write.
+exports {
+  reads [$"moth-pilot", pilotHold]
+  actions [pilotHold]
+}
+
+let pilotHeadScale = 0.68
+// Her eyes sit 1.527 m up: the suited Moth's eye line less the 0.208 m footbed of sheet 05.
+let pilotHeadAt = [0, 1.527, 0.095]
+
+let pilotSoftness = 2.2
+// The plait's lobes down her braid's core, alternating either side of it, and the half-angle each leans by.
+let braidLobes = [
+  [-0.112, 1.335, 0.0904]
+  [-0.1278, 1.313, 0.0951]
+  [-0.102, 1.291, 0.0994]
+  [-0.1187, 1.269, 0.1032]
+  [-0.0938, 1.247, 0.1065]
+  [-0.1113, 1.225, 0.1094]
+  [-0.089, 1.203, 0.1104]
+  [-0.1095, 1.181, 0.1107]
+  [-0.0881, 1.159, 0.1106]
+  [-0.1088, 1.137, 0.1102]
+  [-0.0876, 1.115, 0.1095]
+]
+let braidTwist = 0.247404
+let braidUntwist = 0.9689124
+let diagonal = 0.7071068
+
+// Her joints on her left side, each a swing pivot: hip (0.09, 0.86, 0), knee (0.1, 0.475, 0.012), ankle
+// (0.105, 0.085, -0.005), shoulder (0.172, 1.355, -0.015), elbow (0.212, 1.068, -0.032); her spine turns about
+// (0, 0.96, 0) and her neck about (0, 1.36, -0.005).
+
+// The stride's radians per metre, π(1.5 + 0.6v)/v: 1.8 steps a second and 0.28 m steps at 0.5 m/s, 4.5 and 1.1 m at
+// 5 m/s, the suited Moth's rate scaled by her 1.03 m hip over this 0.85 m one.
+curves [
+  {
+    name: "pilot-stride"
+    knots [
+      { position [0.5, 0, 11.30973], tangentYaw: -1.517794, curvature: 0.011211 }
+      { position [0.75, 0, 8.16814], tangentYaw: -1.451992, curvature: 0.037198 }
+      { position [1, 0, 6.59734], tangentYaw: -1.361692, curvature: 0.084305 }
+      { position [1.5, 0, 5.02655], tangentYaw: -1.125339, curvature: 0.223377 }
+      { position [2, 0, 4.24115], tangentYaw: -0.866984, curvature: 0.319267 }
+      { position [2.5, 0, 3.76991], tangentYaw: -0.646045, curvature: 0.307064 }
+      { position [3, 0, 3.45575], tangentYaw: -0.482348, curvature: 0.242702 }
+      { position [4, 0, 3.06305], tangentYaw: -0.286426, curvature: 0.129987 }
+      { position [5, 0, 2.82743], tangentYaw: -0.18631, curvature: 0.071551 }
+    ]
+  }
+]
+
+state {
+  world {
+    // 1 while her body holds the handheld up in front of her: `world.state.cell.set pilotHold 0 1`.
+    table pilotHold {
+      "0" = 0
+    }
+  }
+}
+
+let undersuit = 0 // charcoal undersuit: torso and sleeves, with the harness straps and lavender shoulder patches painted
+let trousers = 1 // charcoal work trousers, with the knee pads' straps painted
+let skin = 2 // #B76B3C her skin
+let hair = 3 // #171210 hair, lids and brows
+let eyeWhite = 4 // #FFF8E9 the eyes' whites
+let lip = 5 // #754137 the nostrils
+let iris = 6 // #89481D
+let pupil = 7 // #120D13
+let glint = 8 // #FFF8EF catchlights
+let pad = 9 // soft rubber knee and elbow pads
+let leather = 10 // flat ankle boots
+let sole = 11 // boot soles
+let belt = 12 // the belt
+let ochre = 13 // the belt buckle, harness plate and braid tie
+let collarKnit = 14 // the undersuit's high collar
+let strap = 15 // the harness's front straps, with their ochre buckles painted
+let brickGlass = 16 // the Humble Gaming Brick's see-through atomic-orange shell, the devices' own glass
+let sleeve = 17 // the undersuit's sleeves, with the lavender shoulder patches painted
+let brickLens = 18 // the brick's dark screen lens and its picture's box
+let brickKeys = 19 // the d-pad and the speaker's slots
+let brickButtons = 20 // the smoked A and B buttons
+let brickRubber = 21 // select and start
+let brickBoard = 22 // the pale green board under the face
+let brickChip = 23 // the processor
+let brickCartridge = 24 // the cartridge down its slot
+let brickCell = 25 // the two AA cells in the battery bay
+let brickLed = 26 // the red power light
+
+// Authored darker than the sheet reads: the studio's light lifts a charcoal about half again, as it lifts the suit's
+// lavender #744080 to the owner's dusty #B186B6.
+let fabric = "#1C1D21"
+let padStrap = "#151519"
+let strapGrey = "#3A3C44"
+let patchLavender = "#8C6A94"
+let ochreTone = "#C98F35"
+
+// One arm: sleeve, shoulder patch, elbow pad, cuff and the bare hand with its four fingers and thumb. Its upper arm
+// swings at the shoulder and its forearm at the elbow, on the suited Moth's drivers; `hold` brings both forward and in.
+template pilotArm(name, side, baseId, handGroup) {
+  shape Sweep $"upperArm-{name}" {
+    id: baseId
+    position [side * 0.172, 1.355, -0.015]
+    material: sleeve
+    parent: "torso"
+    curve {
+      a [0, 0, 0]
+      b [side * 0.02, -0.14, -0.01]
+      c [side * 0.04, -0.287, -0.017]
+      radiusStart: 0.05
+      radiusEnd: 0.04
+      bulge: 0.005
+    }
+    swings [
+      {
+        driver: "run"
+        axis [0, 0, 1]
+        amplitude: -0.06 * side
+        pivot [side * 0.172, 1.355, -0.015]
+        wave: "constant"
+      }
+      {
+        driver: "gait"
+        axis [0.990, side * 0.138, 0]
+        amplitude: 0.5
+        pivot [side * 0.172, 1.355, -0.015]
+        wave: "sine"
+        phase: 3.1415927 * (1 + side) / 2
+      }
+      // The arms open 0.45 rad from the sides at the jump's peak, 0.6 on the way up and 0.3 coming down.
+      {
+        driver: "air"
+        axis [0, 0, 1]
+        amplitude: 0.03 * side
+        pivot [side * 0.172, 1.355, -0.015]
+        wave: "linear"
+        phase: 15
+      }
+      {
+        driver: "air"
+        axis [0.990, side * 0.138, 0]
+        amplitude: -0.015
+        pivot [side * 0.172, 1.355, -0.015]
+        wave: "linear"
+        phase: 8
+      }
+      // Holding the handheld: the upper arm forward a little and turned in, so the bent forearm points to her middle.
+      {
+        driver: "hold"
+        axis [1, 0, 0]
+        amplitude: -0.25
+        pivot [side * 0.172, 1.355, -0.015]
+        wave: "constant"
+      }
+      {
+        driver: "hold"
+        axis [0, 1, 0]
+        amplitude: -0.5 * side
+        pivot [side * 0.172, 1.355, -0.015]
+        wave: "constant"
+      }
+    ]
+  }
+
+  // The deltoid under the sleeve; the lavender patch over it is paint.
+  shape Superellipsoid $"deltoid-{name}" {
+    id: baseId + 1
+    position [side * 0.182, 1.325, -0.016]
+    scale [0.05, 0.066, 0.056]
+    material: sleeve
+    parent: $"upperArm-{name}"
+    exponent: pilotSoftness
+  }
+
+  shape Sweep $"forearm-{name}" {
+    id: baseId + 2
+    position [side * 0.212, 1.068, -0.032]
+    material: sleeve
+    parent: $"upperArm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * 0.005, -0.115, 0.008]
+      c [side * 0.01, -0.233, 0.022]
+      radiusStart: 0.041
+      radiusEnd: 0.03
+      bulge: 0.005
+    }
+    swings [
+      {
+        driver: "run"
+        axis [1, 0, 0]
+        amplitude: -1.1
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "constant"
+      }
+      {
+        driver: "gait"
+        axis [1, 0, 0]
+        amplitude: 0.18
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "sine"
+        phase: 0.5 + 3.1415927 * (1 + side) / 2
+      }
+      // The elbows bend 0.36 rad at the jump's peak, 0.51 rising and 0.21 falling, and a little further on landing.
+      {
+        driver: "air"
+        axis [1, 0, 0]
+        amplitude: -0.03
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "linear"
+        phase: 12
+      }
+      {
+        driver: "land"
+        axis [1, 0, 0]
+        amplitude: 0.05
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "linear"
+      }
+      // Holding: the forearm turns a little palm-up, then the elbow bends, so the palms face each other in front of
+      // her chest with the thumbs up, 11 cm apart round the handheld's 75 mm. Swings compose in list order, then the
+      // parent's delta.
+      {
+        driver: "hold"
+        axis [0, 1, 0]
+        amplitude: 0.15 * side
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "constant"
+      }
+      {
+        driver: "hold"
+        axis [1, 0, 0]
+        amplitude: -1.5
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "constant"
+      }
+    ]
+  }
+
+  shape Superellipsoid $"elbowPad-{name}" {
+    id: baseId + 3
+    position [side * 0.218, 1.062, -0.066]
+    scale [0.04, 0.05, 0.022]
+    material: pad
+    parent: $"forearm-{name}"
+    exponent: 2.6
+  }
+
+  shape Superellipsoid $"cuff-{name}" {
+    id: baseId + 4
+    position [side * 0.222, 0.846, -0.01]
+    scale [0.033, 0.013, 0.033]
+    material: collarKnit
+    parent: $"forearm-{name}"
+    exponent: 2.4
+  }
+
+  // The bare hand hangs palm in, its fingers curling a little toward the palm.
+  shape Sweep $"wrist-{name}" {
+    id: baseId + 5
+    position [side * 0.222, 0.845, -0.01]
+    material: skin
+    group: handGroup
+    parent: $"forearm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * 0.001, -0.02, 0.002]
+      c [side * 0.002, -0.04, 0.004]
+      radiusStart: 0.024
+      radiusEnd: 0.023
+    }
+  }
+
+  shape Superellipsoid $"palm-{name}" {
+    id: baseId + 6
+    position [side * 0.224, 0.777, -0.006]
+    scale [0.017, 0.05, 0.041]
+    material: skin
+    blend: "SmoothUnion"
+    smooth: 0.01
+    group: handGroup
+    parent: $"forearm-{name}"
+    exponent: 2.6
+  }
+
+  shape Sweep $"thumb-{name}" {
+    id: baseId + 7
+    position [side * 0.214, 0.79, 0.022]
+    material: skin
+    blend: "SmoothUnion"
+    smooth: 0.006
+    group: handGroup
+    parent: $"forearm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * -0.014, -0.024, 0.016]
+      c [side * -0.02, -0.052, 0.012]
+      radiusStart: 0.0105
+      radiusEnd: 0.0085
+    }
+  }
+
+  shape Sweep $"finger-{name}-0" {
+    id: baseId + 8
+    position [side * 0.222, 0.735, 0.024]
+    material: skin
+    parent: $"forearm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * -0.002, -0.038, 0.002]
+      c [side * -0.014, -0.068, 0.004]
+      radiusStart: 0.0082
+      radiusEnd: 0.0068
+    }
+  }
+
+  shape Sweep $"finger-{name}-1" {
+    id: baseId + 9
+    position [side * 0.222, 0.735, 0.0035]
+    material: skin
+    parent: $"forearm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * -0.002, -0.042, 0]
+      c [side * -0.016, -0.076, 0]
+      radiusStart: 0.0084
+      radiusEnd: 0.007
+    }
+  }
+
+  shape Sweep $"finger-{name}-2" {
+    id: baseId + 10
+    position [side * 0.222, 0.735, -0.0165]
+    material: skin
+    parent: $"forearm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * -0.002, -0.04, -0.001]
+      c [side * -0.015, -0.071, -0.003]
+      radiusStart: 0.008
+      radiusEnd: 0.0066
+    }
+  }
+
+  shape Sweep $"finger-{name}-3" {
+    id: baseId + 11
+    position [side * 0.222, 0.737, -0.036]
+    material: skin
+    parent: $"forearm-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * -0.002, -0.031, -0.002]
+      c [side * -0.012, -0.056, -0.006]
+      radiusStart: 0.007
+      radiusEnd: 0.0058
+    }
+  }
+}
+
+// One leg: the trouser thigh and shin, the knee pad and the flat ankle boot. The thigh's stride swings sit between
+// the yaw swings that turn the stride plane to the travel direction, as the suited Moth's do; the boot is the foot
+// effector's tip, its origin on the sole's top so the standoff is its rest height.
+template pilotLeg(name, side, baseId) {
+  shape Sweep $"thigh-{name}" {
+    id: baseId
+    position [side * 0.088, 0.92, 0]
+    material: trousers
+    parent: "pelvis"
+    curve {
+      a [0, 0, 0]
+      b [side * 0.008, -0.222, 0.018]
+      c [side * 0.012, -0.445, 0.012]
+      radiusStart: 0.088
+      radiusEnd: 0.06
+      bulge: 0.004
+    }
+    swings [
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: 0.7
+        pivot [side * 0.09, 0.86, 0]
+        wave: "sine"
+      }
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: -0.5
+        pivot [side * 0.09, 0.86, 0]
+        wave: "linear"
+      }
+      {
+        driver: "gait"
+        axis [1, 0, 0]
+        amplitude: 0.7
+        pivot [side * 0.09, 0.86, 0]
+        wave: "sine"
+        phase: 3.1415927 * (1 - side) / 2
+      }
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: 0.5
+        pivot [side * 0.09, 0.86, 0]
+        wave: "linear"
+      }
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: -0.7
+        pivot [side * 0.09, 0.86, 0]
+        wave: "sine"
+      }
+      // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
+      {
+        driver: "air"
+        axis [1, 0, 0]
+        amplitude: -0.06
+        pivot [side * 0.09, 0.86, 0]
+        wave: "linear"
+        phase: 13.3
+      }
+      // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
+      {
+        driver: "land"
+        axis [1, 0, 0]
+        amplitude: 0.1
+        pivot [side * 0.09, 0.86, 0]
+        wave: "linear"
+      }
+    ]
+  }
+
+  shape Sweep $"shin-{name}" {
+    id: baseId + 1
+    position [side * 0.1, 0.475, 0.012]
+    material: trousers
+    parent: $"thigh-{name}"
+    curve {
+      a [0, 0, 0]
+      b [side * 0.003, -0.13, -0.008]
+      c [side * 0.005, -0.265, -0.018]
+      radiusStart: 0.058
+      radiusEnd: 0.063
+    }
+    swings [
+      {
+        driver: "gait"
+        axis [1, 0, 0]
+        amplitude: 1.25
+        pivot [side * 0.1, 0.475, 0.012]
+        wave: "halfSine"
+        phase: 2.0424 + 3.1415927 * (1 + side) / 2
+      }
+      // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, and takes twice the hip's fold on landing.
+      {
+        driver: "air"
+        axis [1, 0, 0]
+        amplitude: 0.05
+        pivot [side * 0.1, 0.475, 0.012]
+        wave: "linear"
+        phase: 24
+      }
+      {
+        driver: "land"
+        axis [1, 0, 0]
+        amplitude: -0.2
+        pivot [side * 0.1, 0.475, 0.012]
+        wave: "linear"
+      }
+    ]
+  }
+
+  shape Prism $"kneePad-{name}" {
+    id: baseId + 2
+    position [side * 0.1, 0.468, 0.07]
+    scale [0.054, 0.07, 0.017]
+    material: pad
+    parent: $"shin-{name}"
+    profile {
+      kind: "RoundedRectangle"
+      cornerRadius: 0.65
+    }
+    rounding: 0.01
+  }
+
+  shape Prism $"boot-{name}" {
+    id: baseId + 3
+    position [side * 0.105, 0.025, 0.04]
+    rotation [0, -diagonal, 0, diagonal]
+    scale [0.13, 0.13, 0.055]
+    material: leather
+    parent: $"shin-{name}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.12
+      vertices [[-1, 0], [-1, 0.62], [-0.4, 0.78], [0.35, 0.55], [0.78, 0.41], [1, 0.24], [1, 0]]
+    }
+    swings [
+      {
+        driver: "gait"
+        pivot [side * 0.105, 0.085, -0.005]
+        axis [1, 0, 0]
+        amplitude: 0.2
+        phase: 3.1415927 * (1 - side) / 2
+        wave: "sine"
+      }
+      {
+        driver: "gait"
+        pivot [side * 0.105, 0.085, -0.005]
+        axis [1, 0, 0]
+        amplitude: -0.25
+        phase: 2.0424 + 3.1415927 * (1 + side) / 2
+        wave: "halfSine"
+      }
+      {
+        driver: "air"
+        pivot [side * 0.105, 0.085, -0.005]
+        axis [1, 0, 0]
+        amplitude: 0.02
+        phase: 12.5
+        wave: "linear"
+      }
+      {
+        driver: "land"
+        pivot [side * 0.105, 0.085, -0.005]
+        axis [1, 0, 0]
+        amplitude: 0.1
+        wave: "linear"
+      }
+    ]
+  }
+
+  shape Superellipsoid $"bootShaft-{name}" {
+    id: baseId + 4
+    position [side * 0.105, 0.12, -0.008]
+    scale [0.058, 0.09, 0.066]
+    material: leather
+    parent: $"boot-{name}"
+    exponent: 3
+  }
+
+  shape Prism $"sole-{name}" {
+    id: baseId + 5
+    position [side * 0.105, 0.0125, 0.04]
+    rotation [diagonal, 0, 0, diagonal]
+    scale [0.054, 0.135, 0.0125]
+    material: sole
+    parent: $"boot-{name}"
+    profile {
+      kind: "RoundedRectangle"
+      cornerRadius: 0.7
+    }
+  }
+}
+
+prototypes {
+  prototype "moth-pilot" {
+    document {
+      schema: "puck.creation.v1"
+      name: "moth-pilot"
+      frames [
+        // Holding: the handheld leaves its rest inside her chest for her hands, its screen toward her eyes. A frame poses
+        // each shape it names, not the shapes riding it, so every part of the brick is posed with the shell: its rest
+        // offset from the shell's centre turned by the shell's 30 degrees and added to the shell's held place.
+        {
+          name: "hold"
+          transforms [
+            { id: 230, position [0, 1.2, 0.3378], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 243, position [0, 1.16238, 0.33196], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 244, position [0, 1.19594, 0.33084], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 245, position [0.002, 1.18528, 0.3233], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 246, position [0, 1.24241, 0.36834], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 247, position [0, 1.17584, 0.33165], rotation [0.183, -0.183, 0.68299, 0.68299] }
+            { id: 248, position [0, 1.16199, 0.32365], rotation [0.183, -0.183, 0.68299, 0.68299] }
+            { id: 249, position [0, 1.23267, 0.34321], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 257, position [0, 1.23297, 0.34269], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 250, position [0.0335, 1.24479, 0.35021], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 251, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 252, position [0.0215, 1.18394, 0.31462], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 253, position [-0.0262, 1.18812, 0.31738], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 254, position [-0.0132, 1.18137, 0.31348], rotation [0.2588, 0, 0, 0.9659] }
+            { id: 255, position [0.0085, 1.16556, 0.30446], rotation [0.25267, -0.056, 0.20902, 0.94301] }
+            { id: 256, position [-0.0085, 1.16556, 0.30446], rotation [0.25267, -0.056, 0.20902, 0.94301] }
+          ]
+        }
+        // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face.
+        {
+          name: "blink"
+          transforms: map(mothBlinkPose, row => { id: row[0], position: map([row[1], row[2], row[3]], (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale), rotation [0, 0, 0, 1] })
+        }
+      ]
+      palette [
+        // The undersuit: the harness straps over her shoulders and across her back, and the lavender patches where
+        // her shoulders meet her sleeves, are paint. A paint is placed in its parent shape's own frame: the torso's
+        // origin is (0, 1.205, -0.008).
+        {
+          color: fabric
+          roughness: 0.82
+          specular: 0.03
+          sheen: 0.25
+          paints [
+            { parent: "torso", type: "Box", position [0.068, 0.18, -0.027], scale [0.016, 0.05, 0.07], color: strapGrey }
+            { parent: "torso", type: "Box", position [-0.068, 0.18, -0.027], scale [0.016, 0.05, 0.07], color: strapGrey }
+            { parent: "torso", type: "Box", position [0.045, 0.105, -0.122], rotation [0, 0, -0.2588, 0.9659], scale [0.016, 0.085, 0.1], color: strapGrey }
+            { parent: "torso", type: "Box", position [-0.045, 0.105, -0.122], rotation [0, 0, 0.2588, 0.9659], scale [0.016, 0.085, 0.1], color: strapGrey }
+            { parent: "torso", type: "Box", position [0.045, -0.075, -0.112], rotation [0, 0, 0.2079, 0.9781], scale [0.016, 0.1, 0.1], color: strapGrey }
+            { parent: "torso", type: "Box", position [-0.045, -0.075, -0.112], rotation [0, 0, -0.2079, 0.9781], scale [0.016, 0.1, 0.1], color: strapGrey }
+            { parent: "torso", type: "Box", position [0.19, 0.17, -0.008], scale [0.075, 0.048, 0.08], color: patchLavender }
+            { parent: "torso", type: "Box", position [-0.19, 0.17, -0.008], scale [0.075, 0.048, 0.08], color: patchLavender }
+          ]
+        }
+        // The trousers, the knee pads' straps painted round each leg above and below its pad, in the shin's frame
+        // (origin at the knee) and the thigh's (origin at the hip).
+        {
+          color: fabric
+          roughness: 0.85
+          specular: 0.03
+          sheen: 0.2
+          paints [
+            { parent: "shin-left", type: "Box", position [0, -0.08, -0.012], scale [0.08, 0.009, 0.09], color: padStrap }
+            { parent: "shin-right", type: "Box", position [0, -0.08, -0.012], scale [0.08, 0.009, 0.09], color: padStrap }
+            { parent: "thigh-left", type: "Box", position [0.012, -0.37, 0], scale [0.08, 0.009, 0.09], color: padStrap }
+            { parent: "thigh-right", type: "Box", position [-0.012, -0.37, 0], scale [0.08, 0.009, 0.09], color: padStrap }
+          ]
+        }
+        {
+          color: "#B76B3C"
+          roughness: 0.62
+          specular: 0.04
+          wrap: 0.15
+          fill: "#4B2318"
+          // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it.
+          paints [
+            {
+              parent: "face"
+              type: "Sweep"
+              curve {
+                a: map([-0.05808, -0.088389, 0.1068], v => v * pilotHeadScale)
+                b: map([0, -0.1141765, 0.1082], v => v * pilotHeadScale)
+                c: map([0.05808, -0.0862981, 0.1078], v => v * pilotHeadScale)
+                radiusStart: 0.0015
+                radiusEnd: 0.0015
+              }
+              color: "#754137"
+            }
+          ]
+        }
+        {
+          color: "#171210"
+          roughness: 0.32
+          specular: 0.1
+          coat: 0.05
+          sheen: 0.3
+        }
+        {
+          color: "#FFF8E9"
+          roughness: 0.22
+          specular: 0.04
+          // Where each eye's upper lid and lash meet its white, in the eye's frame.
+          paints [
+            { parent: "eye-left", type: "Sweep", curve { a: map([-0.047, 0, 0.027], v => v * pilotHeadScale), b: map([0, 0.066, 0.052], v => v * pilotHeadScale), c: map([0.047, 0.004, 0.027], v => v * pilotHeadScale), radiusStart: 0.0045 * pilotHeadScale, radiusEnd: 0.0045 * pilotHeadScale }, color: "#171210" }
+            { parent: "eye-left", type: "Sweep", curve { a: map([0.04, 0.017, 0.03], v => v * pilotHeadScale), b: map([0.05, 0.023, 0.023], v => v * pilotHeadScale), c: map([0.059, 0.023, 0.016], v => v * pilotHeadScale), radiusStart: 0.0035 * pilotHeadScale, radiusEnd: 0.0035 * pilotHeadScale }, color: "#171210" }
+            { parent: "eye-right", type: "Sweep", curve { a: map([0.047, 0, 0.027], v => v * pilotHeadScale), b: map([0, 0.066, 0.052], v => v * pilotHeadScale), c: map([-0.047, 0.004, 0.027], v => v * pilotHeadScale), radiusStart: 0.0045 * pilotHeadScale, radiusEnd: 0.0045 * pilotHeadScale }, color: "#171210" }
+            { parent: "eye-right", type: "Sweep", curve { a: map([-0.04, 0.017, 0.03], v => v * pilotHeadScale), b: map([-0.05, 0.023, 0.023], v => v * pilotHeadScale), c: map([-0.059, 0.023, 0.016], v => v * pilotHeadScale), radiusStart: 0.0035 * pilotHeadScale, radiusEnd: 0.0035 * pilotHeadScale }, color: "#171210" }
+          ]
+        }
+        {
+          color: "#754137"
+          roughness: 0.6
+          specular: 0.04
+        }
+        {
+          color: "#89481D"
+          roughness: 0.25
+          specular: 0.04
+        }
+        {
+          color: "#120D13"
+          roughness: 0.25
+          specular: 0.04
+        }
+        {
+          color: "#FFF8EF"
+          roughness: 0.2
+          specular: 0.04
+          emissive: 1200
+        }
+        {
+          color: "#1A1B1F"
+          roughness: 0.5
+          specular: 0.08
+          coat: 0.1
+        }
+        {
+          color: "#0F0F12"
+          roughness: 0.45
+          specular: 0.08
+          coat: 0.15
+        }
+        {
+          color: "#070708"
+          roughness: 0.8
+          specular: 0.03
+        }
+        {
+          color: "#111114"
+          roughness: 0.5
+          specular: 0.06
+          coat: 0.1
+        }
+        {
+          color: ochreTone
+          roughness: 0.42
+          specular: 0.04
+          metal: 0.2
+        }
+        {
+          color: "#1D1E22"
+          roughness: 0.85
+          specular: 0.03
+          sheen: 0.3
+        }
+        // The front straps, each with its ochre buckle high on her chest.
+        {
+          color: strapGrey
+          roughness: 0.7
+          specular: 0.04
+          paints [
+            { parent: "torso", type: "Box", position [0.068, 0.095, 0.078], scale [0.02, 0.015, 0.04], color: ochreTone }
+            { parent: "torso", type: "Box", position [-0.068, 0.095, 0.078], scale [0.02, 0.015, 0.04], color: ochreTone }
+          ]
+        }
+        // The Humble Gaming Brick's shell: the same atomic-orange acrylic glass as the device in the gallery
+        // (devices.puck), so the board, cells and cartridge read through a saturated orange.
+        { color: "#FF4F10", roughness: 0.06, glass { depth: 0.009, ior: 1.49 } }
+        // The sleeves, the lavender patch over each shoulder's cap.
+        {
+          color: fabric
+          roughness: 0.82
+          specular: 0.03
+          sheen: 0.25
+          paints [
+            { parent: "upperArm-left", type: "Box", position [0.018, 0.02, -0.001], scale [0.075, 0.048, 0.08], color: patchLavender }
+            { parent: "upperArm-right", type: "Box", position [-0.018, 0.02, -0.001], scale [0.075, 0.048, 0.08], color: patchLavender }
+          ]
+        }
+        // The brick's opaque parts, after its device: the lens, the keys, buttons, rubber, board, processor, cartridge,
+        // cells and power light.
+        { color: "#17181C", specular: 0.05, roughness: 0.08, coat: 0.6 }
+        { color: "#2A2624", roughness: 0.4, specular: 0.04 }
+        { color: "#2E2522", roughness: 0.25, specular: 0.05, coat: 0.4 }
+        { color: "#5E5E64", roughness: 0.75 }
+        { color: "#8CC79A", roughness: 0.5, specular: 0.04 }
+        { color: "#151617", roughness: 0.6, specular: 0.04 }
+        { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
+        { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
+        { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
+      ]
+
+      // The whole body rides the pelvis, which turns her hips into a diagonal, trails a turn, leans into her planar
+      // acceleration and drops into a landing, as the suited Moth's does at her own height.
+      shape Superellipsoid "pelvis" {
+        id: 120
+        position [0, 0.93, -0.008]
+        scale [0.155, 0.105, 0.108]
+        material: trousers
+        group: 43
+        exponent: 2.4
+        swings [
+          { driver: "gait", axis [0, 1, 0], amplitude: 0.08, pivot [0, 0.96, 0], wave: "sine", phase: 0 }
+          { driver: "run", axis [1, 0, 0], amplitude: 0.1, pivot [0, 0, 0], wave: "constant", phase: 0 }
+          { driver: "gait", axis [0, 0, 1], amplitude: 0.05, pivot [0, 0.96, 0], wave: "sine", phase: 0 }
+          { driver: "heading", axis [0, 1, 0], amplitude: 0.7, pivot [0, 0.96, 0], wave: "sine" }
+          { driver: "trail", axis [0, 1, 0], amplitude: -0.12, pivot [0, 0.96, 0], wave: "linear" }
+          { driver: "lean", axis [0, 0, 1], amplitude: -0.016, pivot [0, 0, 0], wave: "linear" }
+          { driver: "surge", axis [1, 0, 0], amplitude: 0.006, pivot [0, 0, 0], wave: "linear" }
+          { driver: "land", axis [1, 0, 0], amplitude: -0.02, pivot [0, 0, 0], wave: "linear" }
+        ]
+        slides [
+          { driver: "bob", axis [0, 1, 0], amplitude: 0.018, phase: -1.5708, wave: "sine" }
+          { driver: "land", axis [0, 1, 0], amplitude: 0.021, wave: "linear" }
+        ]
+      }
+
+      // The tops of her thighs, riding the pelvis and blended into it, so her hips flow into her legs; each thigh
+      // swings out of its own below them.
+      shape Superellipsoid "hip-left" {
+        id: 135
+        position [0.088, 0.845, -0.006]
+        scale [0.088, 0.1, 0.097]
+        material: trousers
+        blend: "SmoothUnion"
+        smooth: 0.05
+        group: 43
+        parent: "pelvis"
+        exponent: 2.2
+      }
+
+      shape Superellipsoid "hip-right" {
+        id: 136
+        position [-0.088, 0.845, -0.006]
+        scale [0.088, 0.1, 0.097]
+        material: trousers
+        blend: "SmoothUnion"
+        smooth: 0.05
+        group: 43
+        parent: "pelvis"
+        exponent: 2.2
+      }
+
+      shape Superellipsoid "belt" {
+        id: 121
+        position [0, 1.0, -0.004]
+        scale [0.142, 0.022, 0.104]
+        material: belt
+        parent: "pelvis"
+        exponent: 3
+      }
+
+      shape Box "beltBuckle" {
+        id: 122
+        position [0, 1.0, 0.1]
+        scale [0.026, 0.018, 0.008]
+        material: ochre
+        parent: "pelvis"
+      }
+
+      shape Box "beltTab-left" {
+        id: 123
+        position [0.105, 1.0, 0.068]
+        rotation [0, 0.4226, 0, 0.9063]
+        scale [0.013, 0.016, 0.006]
+        material: ochre
+        parent: "pelvis"
+      }
+
+      shape Box "beltTab-right" {
+        id: 124
+        position [-0.105, 1.0, 0.068]
+        rotation [0, -0.4226, 0, 0.9063]
+        scale [0.013, 0.016, 0.006]
+        material: ochre
+        parent: "pelvis"
+      }
+
+      // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail; the
+      // waist, chest, shoulders and upper back blend into one torso that rides it.
+      shape Superellipsoid "torso" {
+        id: 125
+        position [0, 1.205, -0.008]
+        scale [0.148, 0.165, 0.112]
+        material: undersuit
+        group: 40
+        parent: "pelvis"
+        exponent: 2.3
+        swings [
+          { driver: "gait", axis [0, 1, 0], amplitude: -0.16, pivot [0, 0.96, 0], wave: "sine", phase: 0 }
+          { driver: "bob", axis [1, 0, 0], amplitude: -0.025, pivot [0, 0.96, 0], wave: "sine", phase: -1.0708 }
+          { driver: "heading", axis [0, 1, 0], amplitude: -0.4, pivot [0, 0.96, 0], wave: "sine" }
+          { driver: "trail", axis [0, 1, 0], amplitude: 0.08, pivot [0, 0.96, 0], wave: "linear" }
+        ]
+        slides [
+          { driver: "breath", axis [0, 1, 0], amplitude: 0.003, phase: 0, wave: "sine" }
+        ]
+      }
+
+      shape Superellipsoid "waist" {
+        id: 126
+        position [0, 1.05, -0.004]
+        scale [0.122, 0.11, 0.092]
+        material: undersuit
+        blend: "SmoothUnion"
+        smooth: 0.05
+        group: 40
+        parent: "torso"
+        exponent: 2.2
+      }
+
+      shape Superellipsoid "chest" {
+        id: 127
+        position [0, 1.218, 0.045]
+        scale [0.118, 0.062, 0.07]
+        material: undersuit
+        blend: "SmoothUnion"
+        smooth: 0.035
+        group: 40
+        parent: "torso"
+        exponent: 2.2
+      }
+
+      shape Superellipsoid "trapezius" {
+        id: 128
+        position [0, 1.335, -0.022]
+        scale [0.168, 0.058, 0.082]
+        material: undersuit
+        blend: "SmoothUnion"
+        smooth: 0.045
+        group: 40
+        parent: "torso"
+        exponent: 2.3
+      }
+
+      // The harness: two flat front straps from her shoulders to her belt, each in two runs that bridge her chest.
+      shape Box "strapUpper-left" {
+        id: 129
+        position [0.068, 1.312, 0.075]
+        rotation [-0.2124, 0, 0, 0.9772]
+        scale [0.016, 0.076, 0.003]
+        material: strap
+        parent: "torso"
+      }
+
+      shape Box "strapUpper-right" {
+        id: 130
+        position [-0.068, 1.312, 0.075]
+        rotation [-0.2124, 0, 0, 0.9772]
+        scale [0.016, 0.076, 0.003]
+        material: strap
+        parent: "torso"
+      }
+
+      shape Box "strapLower-left" {
+        id: 131
+        position [0.068, 1.127, 0.103]
+        rotation [0.0399, 0, 0, 0.9992]
+        scale [0.016, 0.113, 0.003]
+        material: strap
+        parent: "torso"
+      }
+
+      shape Box "strapLower-right" {
+        id: 132
+        position [-0.068, 1.127, 0.103]
+        rotation [0.0399, 0, 0, 0.9992]
+        scale [0.016, 0.113, 0.003]
+        material: strap
+        parent: "torso"
+      }
+
+      // The harness's ochre plate between her shoulder blades, where the painted back straps cross.
+      shape Box "harnessPlate" {
+        id: 134
+        position [0, 1.245, -0.12]
+        scale [0.03, 0.028, 0.006]
+        material: ochre
+        parent: "torso"
+      }
+
+      // The undersuit's high collar carries her head: it keeps to the facing whatever the hips do and looks ahead
+      // into a turn.
+      shape Superellipsoid "collar" {
+        id: 133
+        position [0, 1.37, -0.004]
+        scale [0.06, 0.04, 0.056]
+        material: collarKnit
+        parent: "torso"
+        exponent: 2.6
+        swings [
+          { driver: "gait", axis [0, 1, 0], amplitude: 0.08, pivot [0, 1.36, -0.005], wave: "sine", phase: 0.3 }
+          { driver: "heading", axis [0, 1, 0], amplitude: -0.3, pivot [0, 1.36, -0.005], wave: "sine" }
+          { driver: "trail", axis [0, 1, 0], amplitude: 0.07, pivot [0, 1.36, -0.005], wave: "linear" }
+          // Holding the handheld, she looks down at it.
+          { driver: "hold", axis [1, 0, 0], amplitude: 0.3, pivot [0, 1.36, -0.005], wave: "constant" }
+        ]
+      }
+
+      mothHead(pilotHeadScale, pilotHeadAt, "collar", skin, lip, eyeWhite, iris, pupil, glint, hair)
+
+      // The braid roots under the lock beside her right cheek as one smooth tapering root, which a core carries over her
+      // right collarbone onto her chest; the plait's lobes alternate down the core to an ochre tie and a short tassel.
+      // It rides her head, so it sways a little as she walks.
+      shape Sweep "braid-0" {
+        id: 220
+        position [-0.12, 1.478, 0.03]
+        material: hair
+        parent: "collar"
+        curve {
+          a [0, 0, 0]
+          b [-0.03, -0.068, 0.03]
+          c [-0.005, -0.133, 0.058]
+          radiusStart: 0.01
+          radiusEnd: 0.016
+        }
+      }
+
+      shape Sweep "braid-1" {
+        id: 221
+        position [-0.125, 1.345, 0.088]
+        material: hair
+        parent: "collar"
+        curve {
+          a [0, 0, 0]
+          b [0.015, -0.058, 0.014]
+          c [0.025, -0.125, 0.022]
+          radiusStart: 0.012
+          radiusEnd: 0.011
+        }
+      }
+
+      shape Sweep "braid-2" {
+        id: 222
+        position [-0.1, 1.22, 0.11]
+        material: hair
+        parent: "collar"
+        curve {
+          a [0, 0, 0]
+          b [0.002, -0.07, 0.002]
+          c [0.002, -0.135, -0.002]
+          radiusStart: 0.011
+          radiusEnd: 0.009
+        }
+      }
+
+      for (lobe, i) in braidLobes {
+        shape Superellipsoid $"braidLobe-{i}" {
+          id: 231 + i
+          position: lobe
+          rotation: ((i % 2) == 0) ? [0, 0, braidTwist, braidUntwist] : [0, 0, -braidTwist, braidUntwist]
+          scale [0.0125, 0.02, 0.0135]
+          material: hair
+          parent: "collar"
+          exponent: pilotSoftness
+        }
+      }
+
+      shape Cylinder "braidTie" {
+        id: 223
+        position [-0.098, 1.082, 0.108]
+        scale [0.017, 0.008, 0.017]
+        material: ochre
+        parent: "collar"
+        rounding: 0.003
+      }
+
+      shape Superellipsoid "braidTassel" {
+        id: 224
+        position [-0.098, 1.05, 0.107]
+        scale [0.014, 0.03, 0.013]
+        material: hair
+        parent: "collar"
+        exponent: pilotSoftness
+      }
+
+      pilotArm("left", 1, 140, 41)
+      pilotArm("right", -1, 160, 42)
+      pilotLeg("left", 1, 180)
+      pilotLeg("right", -1, 200)
+
+      // The handheld is the Humble Gaming Brick of the gallery, a faithful simplified copy: 75 x 133 x 23 mm of orange
+      // glass with the battery bay 4.5 mm proud of its back, 27.5 mm in all. It rests hidden inside her chest, and the
+      // hold frame seats it in her hands; every part rides it. In its frame (its centre at rest, (0, 1.17, -0.005)) the
+      // face is its -Z side, toward her eyes when held, so the d-pad on the face's left as she looks at it lies at +X.
+      shape Prism "handheld" {
+        id: 230
+        position [0, 1.17, -0.00725]
+        scale [0.0375, 0.0665, 0.0115]
+        material: brickGlass
+        parent: "torso"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.24
+        }
+        rounding: 0.0022
+      }
+
+      shape Prism "brickBay" {
+        id: 243
+        position [0, 1.1345, 0.0065]
+        scale [0.029, 0.021, 0.00225]
+        material: brickGlass
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.3
+        }
+        rounding: 0.0015
+      }
+
+      shape Box "brickBoard" {
+        id: 244
+        position [0, 1.163, -0.01125]
+        scale [0.034, 0.054, 0.0006]
+        material: brickBoard
+        parent: "handheld"
+      }
+
+      shape Box "brickChip" {
+        id: 245
+        position [0.002, 1.15, -0.01245]
+        scale [0.0075, 0.0075, 0.0006]
+        material: brickChip
+        parent: "handheld"
+      }
+
+      shape Box "brickCartridge" {
+        id: 246
+        position [0, 1.222, -0.002]
+        scale [0.0285, 0.023, 0.0038]
+        material: brickCartridge
+        parent: "handheld"
+      }
+
+      shape Cylinder "brickCell-upper" {
+        id: 247
+        position [0, 1.146, -0.0005]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.00725, 0.02525, 0.00725]
+        material: brickCell
+        parent: "handheld"
+        rounding: 0.001
+      }
+
+      shape Cylinder "brickCell-lower" {
+        id: 248
+        position [0, 1.13, -0.0005]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.00725, 0.02525, 0.00725]
+        material: brickCell
+        parent: "handheld"
+        rounding: 0.001
+      }
+
+      shape Prism "brickLens" {
+        id: 249
+        position [0, 1.201, -0.0189]
+        scale [0.0285, 0.0245, 0.0006]
+        material: brickLens
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.16
+        }
+      }
+
+      // The screen's picture on the lens, the device's own glass: 160 by 144 pixels at 0.275 mm, 44 by 39.6 mm, its face
+      // 1 mm proud of the lens. While she holds the brick its screen row's `carry` names this box, so it shows the live
+      // game (devices.puck).
+      shape Box "brickPicture" {
+        id: 257
+        position [0, 1.201, -0.0195]
+        scale [0.022, 0.0198, 0.001]
+        material: brickLens
+        parent: "handheld"
+      }
+
+      shape Sphere "brickLed" {
+        id: 250
+        position [0.0335, 1.215, -0.0189]
+        scale [0.0011, 0.0011, 0.0011]
+        material: brickLed
+        parent: "handheld"
+      }
+
+      shape Box "brickDpad-across" {
+        id: 251
+        position [0.0215, 1.1445, -0.0193]
+        scale [0.0105, 0.0036, 0.0016]
+        material: brickKeys
+        parent: "handheld"
+        chamfer: 0.0007
+      }
+
+      shape Box "brickDpad-down" {
+        id: 252
+        position [0.0215, 1.1445, -0.0193]
+        scale [0.0036, 0.0105, 0.0016]
+        material: brickKeys
+        parent: "handheld"
+        chamfer: 0.0007
+      }
+
+      shape Prism "brickButton-a" {
+        id: 253
+        position [-0.0262, 1.1495, -0.019]
+        scale [0.0048, 0.0048, 0.0014]
+        material: brickButtons
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0009
+      }
+
+      shape Prism "brickButton-b" {
+        id: 254
+        position [-0.0132, 1.1417, -0.019]
+        scale [0.0048, 0.0048, 0.0014]
+        material: brickButtons
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0009
+      }
+
+      shape Prism "brickSelect" {
+        id: 255
+        position [0.0085, 1.1235, -0.0189]
+        rotation [0, 0, 0.2164, 0.9763]
+        scale [0.0052, 0.0017, 0.0009]
+        material: brickRubber
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0006
+      }
+
+      shape Prism "brickStart" {
+        id: 256
+        position [-0.0085, 1.1235, -0.0189]
+        rotation [0, 0, 0.2164, 0.9763]
+        scale [0.0052, 0.0017, 0.0009]
+        material: brickRubber
+        parent: "handheld"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        rounding: 0.0006
+      }
+
+      drivers [
+        // Her pace in metres per second, the X every gait curve reads.
+        { name: "pace", cadence: 1, signal: "speed", dynamics: "gait-pace", "when" ["always"] }
+        // The one stride cycle her feet plant on and every gait driver rides, its length opening with her pace.
+        { name: "stride", cadence: 1, signal: "planarTravel", cadenceBy { driver: "pace", curve: "pilot-stride" }, "when" ["Grounded", "moving"] }
+        // The stride swings, half their amplitude at a walk and whole at a run.
+        { name: "gait", cadence: 1, signal: "driver.stride", weightBy { driver: "pace", curve: "moth-gait" }, "when" ["Grounded", "moving"] }
+        // What only a run has: the forward lean and the bent elbows, and at twice the stride's rate, the bob.
+        { name: "run", cadence: 1, signal: "driver.stride", weightBy { driver: "pace", curve: "moth-run" }, "when" ["Grounded", "moving"] }
+        { name: "bob", cadence: 2, signal: "driver.stride", weightBy { driver: "pace", curve: "moth-run" }, "when" ["Grounded", "moving"] }
+        { name: "breath", cadence: 1.7, signal: "time", "when" ["still"] }
+        // Twice the travel direction off the facing: a sine of it peaks on the diagonals and vanishes on a pure
+        // strafe or backpedal, and half of it, linear, is the direction itself.
+        { name: "heading", cadence: 2, signal: "travelDirection", blendInSeconds: 0.12, blendOutSeconds: 0.3, "when" ["Grounded", "moving"] }
+        { name: "trail", cadence: 1, signal: "turnRate", dynamics: "body-turn", "when" ["always"] }
+        { name: "lean", cadence: 1, signal: "lateralAcceleration", dynamics: "body-lean", "when" ["Grounded"] }
+        { name: "surge", cadence: 1, signal: "forwardAcceleration", dynamics: "body-lean", "when" ["Grounded"] }
+        // Her vertical speed, eased: it poses her in the air, tucked rising and reaching for the ground falling.
+        { name: "air", cadence: 1, signal: "verticalSpeed", dynamics: "body-air", blendInSeconds: 0.06, blendOutSeconds: 0.04, "when" ["Airborne"] }
+        // The same speed through an underdamped response that lags it: the landing's crouch and spring back up.
+        { name: "land", cadence: 1, signal: "verticalSpeed", dynamics: "body-land", blendInSeconds: 0, blendOutSeconds: 0.08, "when" ["Grounded"] }
+        // Her arms come up to hold the handheld while her body's pilotHold cell is set.
+        { name: "hold", cadence: 1, signal: "time", blendInSeconds: 0.2, blendOutSeconds: 0.2, "when" ["state.pilotHold.$body"] }
+      ]
+
+      effectors [
+        {
+          name: "foot-left"
+          chain ["thigh-left", "shin-left"]
+          tip: "boot-left"
+          // The sole stays flat on the ground however far the planted boot sits from its rest offset.
+          align: 1
+          "when" ["Grounded"]
+          target {
+            kind: "surface"
+            direction [0, -1, 0]
+            reach: 0.35
+            standoff: 0.025
+          }
+          plant {
+            driver: "stride"
+            swingWeight: 0
+            window [0, 3.1415925]
+            // At rest the boot holds its spot and steps once its stance point drifts 8 cm.
+            replant {
+              distance: 0.08
+              seconds: 0.2
+              height: 0.06
+            }
+          }
+        }
+        {
+          name: "foot-right"
+          chain ["thigh-right", "shin-right"]
+          tip: "boot-right"
+          align: 1
+          "when" ["Grounded"]
+          target {
+            kind: "surface"
+            direction [0, -1, 0]
+            reach: 0.35
+            standoff: 0.025
+          }
+          plant {
+            driver: "stride"
+            swingWeight: 0
+            window [3.1415925, 6.28]
+            replant {
+              distance: 0.08
+              seconds: 0.2
+              height: 0.06
+            }
+          }
+        }
+      ]
+    }
+  }
+}

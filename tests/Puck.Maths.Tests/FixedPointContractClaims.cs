@@ -7,7 +7,7 @@ namespace Puck.Maths.Tests;
 /// Fast exact and structural fixed-point contract claims (
 /// <c>fixed-point</c>) for the narrow slice of that stage's checks that no existing law already pins. The
 /// declarations in <see cref="LawRegistry"/> invoke these methods as Default-tier laws, so every assertion
-/// participates in both the ordinary test gate and the mechanically generated public-member coverage ledger.
+/// participates in both the ordinary test gate and the structural public-member law-completeness check.
 /// </summary>
 internal static class FixedPointContractClaims {
     // FusedArithmetic.RawMagnitude, the one implementation: every fast-path gate in the fixed-point family

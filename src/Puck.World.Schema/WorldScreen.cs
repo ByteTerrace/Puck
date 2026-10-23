@@ -136,12 +136,18 @@ public abstract record WorldScreenSource {
     /// <param name="Fallback">The colour the face shows, as <c>#RRGGBB</c>, when the screen is as many screens deep as
     /// the presentation nests (<c>views.nestingDepth</c>), so two portals facing each other end on it; or
     /// <see langword="null"/> for black. Omitted from the wire when null.</param>
+    /// <param name="Ripple">Whether the opening ripples like an event horizon: its image is refracted by slow
+    /// interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through
+    /// sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the
+    /// contact and the clock; nothing in the simulation depends on it). Requires <see cref="WorldScreenProjection.Window"/>.
+    /// Omitted from the wire when false.</param>
     public sealed record Session(
         string Destination,
         [property: JsonPropertyName("camera"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CameraName = null,
         WorldScreenProjection Projection = WorldScreenProjection.Camera,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fallback = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fallback = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Ripple = false
     ) : WorldScreenSource;
     /// <summary>Authored reading text on the screen face, rendered through the engine's glyph-decal tier
     /// (<c>Puck.SdfVm.SdfWorldTables.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed
@@ -359,19 +365,78 @@ public enum WorldPadElement : byte {
 /// screen drives; the machine's other ports hold neutral input unless another screen routes to them.
 /// <see langword="null"/> (the default) resolves only a machine with a sole input port, and a screen showing a machine
 /// with several is refused by name until its route names one. Omitted from the wire when null.</param>
+/// <param name="Display">How the window shows this screen to a seat engaged on it once its camera has framed the
+/// picture: what surrounds the matte (<see cref="WorldScreenDisplay"/>). <see langword="null"/> (the default) is
+/// <see cref="WorldScreenDisplay.Neutral"/>: a black matte. Omitted from the wire when null.</param>
+/// <param name="PadPointer">How a local pad's sticks drive the pointer over this screen's framed picture while a seat
+/// engaged on it frames a window capture (<see cref="WorldScreenPadPointer"/>). Only an engageable screen showing a
+/// window capture may author it. <see langword="null"/> (the default) moves and scrolls nothing from a stick; a pad's
+/// buttons still click and press keys. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Channels = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceDestination? Input = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplay? Display = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(
         Engageable: false,
         EngageRadius: 0f
     );
 }
+/// <summary>How the window shows a screen a seat engages once its camera has framed the picture: the seat's own camera
+/// on the in-world screen, panned and zoomed until the picture fills the matte a desktop emulator would show it in, with
+/// the fill colour around it. The scale, the matte and the screen's fidelity follow from the screen row, its source and
+/// the window (<c>Puck.World.Client.WorldScreenFraming</c>), so this authors only what surrounds the picture; an
+/// emulator-style border or filler image around the matte lands here as further members. Presentation only; nothing
+/// here reaches the simulation.</summary>
+/// <param name="Fill">The matte colour around the framed picture, as <c>#RRGGBB</c>, or <see langword="null"/> for
+/// black.</param>
+public sealed record WorldScreenDisplay(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null) {
+    /// <summary>The fill colour an unauthored <see cref="Fill"/> shows.</summary>
+    public const string DefaultFill = "#000000";
+
+    /// <summary>Gets the display an engaged screen shows that authors none: a black matte.</summary>
+    public static WorldScreenDisplay Neutral { get; } = new();
+}
+/// <summary>How a local pad's sticks drive the pointer over an engaged window capture's framed picture, the way a
+/// controller's desktop mode does: one stick moves the pointer and the other turns the wheel. A stick's deflection (its
+/// length clamped to 1) is raised to <see cref="Curve"/>, so a small tilt places the pointer finely, and a held deflection
+/// speeds up from <see cref="Speed"/> to <see cref="Speed"/> times <see cref="Boost"/> over <see cref="RampSeconds"/>.
+/// Every speed is per second and integrated exactly over each frame's interval, so the distance covered does not depend
+/// on the frame rate. Presentation only: nothing here reaches the simulation, and nothing here sends the window input,
+/// which only the local user's own pad does (<c>Puck.World.Client.WorldSourcePassthrough</c>).</summary>
+/// <param name="Speed">The pointer's speed at full deflection before any boost, in heights of the framed picture per
+/// second. Positive.</param>
+/// <param name="Curve">The exponent the deflection's length is raised to; 1 is a linear response. At least 1.</param>
+/// <param name="Boost">The speed's multiplier once a deflection has been held for <paramref name="RampSeconds"/>, rising
+/// linearly from 1 while it is held and back to 1 once the stick rests. At least 1.</param>
+/// <param name="RampSeconds">How long a held deflection takes to reach <paramref name="Boost"/>; 0 applies it at once.
+/// Non-negative.</param>
+/// <param name="ScrollSpeed">The wheel's speed at full deflection of the scrolling stick, in wheel notches per second,
+/// its deflection raised to <paramref name="Curve"/> too. Non-negative; 0 scrolls nothing.</param>
+public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float Boost = 1f, float RampSeconds = 0f, float ScrollSpeed = 0f);
+/// <summary>A body that holds a screen's device carries its picture: while a body wearing <see cref="Look"/> holds that
+/// look's <see cref="Pose"/> frame, the screen's own slab is not drawn and its source shows on the face of the look's
+/// box <see cref="Shape"/>, riding the body's hands every frame, and a seat engaged on the screen frames the picture
+/// there. The box's face is its front (author <c>-Z</c>, the side a body holding it looks at) and its half-extents are
+/// the picture's. A seat engaged on a carried screen starts on <paramref name="Camera"/>, a view that shows the body
+/// holding the device, and a bound control toggles between that view and the framed picture (<c>player.frame</c>).
+/// Presentation only: the simulation's screen row, its engage radius and its pointer mapping keep the authored
+/// frame.</summary>
+/// <param name="Look">The look row whose wearer carries the picture; a creation look.</param>
+/// <param name="Pose">The look's <see cref="WorldLookMotion.Poses"/> frame that holds while the body carries it.</param>
+/// <param name="Shape">The name of the ungrouped box in the look's creation that shows the picture.</param>
+/// <param name="Camera">The name of a <see cref="WorldDefinition.Cameras"/> row whose rig frames the body holding the
+/// device, or <see langword="null"/> for none (a seat engaged on the carried screen then starts on the framed picture, as
+/// at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its
+/// right, +Y its up and +Z its normal, toward the body looking at it (<c>offset</c> and <c>lookAt</c> without
+/// <c>worldAxes</c> read in those axes).</param>
+public sealed record WorldScreenCarry(string Look, string Pose, string Shape, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null);
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
@@ -403,6 +468,14 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// crisp, as an emulator or a pixel-art source wants; <c>Linear</c> blends between source pixels, as a camera or a
 /// desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted
 /// from the wire when <c>Nearest</c>.</param>
+/// <param name="Luminance">The display's peak luminance, in nits: a white picture shows at it, and the light the
+/// picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld's unlit panel far
+/// less, a desktop monitor about 250. In <c>(0, SdfScreenEmission.MaxLuminance]</c>; absent is
+/// <c>SdfScreenEmission.DefaultLuminance</c>. A screen whose source is a window onto another world shows that world's
+/// own luminance whatever this says.</param>
+/// <param name="Carry">The body that carries the screen's picture while it holds the device (see
+/// <see cref="WorldScreenCarry"/>), or <see langword="null"/> for a screen that stays where it is authored. Omitted from
+/// the wire when null.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -416,5 +489,7 @@ public sealed record WorldScreen(
     WorldScreenRoute Route,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null
 );

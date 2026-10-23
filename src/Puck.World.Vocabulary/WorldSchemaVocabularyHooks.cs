@@ -26,6 +26,7 @@ public static class WorldSchemaVocabularyHooks {
     public static void Install(Func<string, bool> probeKindCheck) {
         ArgumentNullException.ThrowIfNull(argument: probeKindCheck);
 
+        AuthoredCommandVocabularyHook.Check = WorldAffordances.ValidateCommands;
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
         ContextFamilyVocabularyHook.ReservedFamilyNames = WorldContextFamilies.Families;
         GamepadFamilyVocabularyHook.IsKnownFamilyName = GamepadFamilyCatalog.IsKnownName;

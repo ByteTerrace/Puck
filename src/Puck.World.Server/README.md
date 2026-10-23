@@ -391,7 +391,13 @@ arrival loads its carried registers into the lane through
 envelope — a range clamps to its nearest admitted value, a closed set has none
 to clamp to and settles the register to its authored initial, narrated by name
 on `body.arrival`. A register the arrival does not name keeps what this
-authority's own birth put there. `BodyActionStateLaneLawTests` pins all of it.
+authority's own birth put there. A world rule writes a `state.body` Counter
+with `setBodyState` (`WorldBodyStateEffect`, `WorldRuleHost.FireBodyState`),
+settled through the body's envelope like a kit action's write and rewound with
+the firing's journal scope. A kit recompile (`WorldBody.RecompileKit`) leaves
+the lanes alone and keeps the read-back of every slot declared again under the
+same name, kind and lifetime. `BodyActionStateLaneLawTests` pins the lanes and
+`RowSelectorLawTests` the rule write, the recompile and the crossing.
 
 A cell write or removal composes through an arena, not through the row list:
 the write's row record decides its kind and its cycle from the candidate built
@@ -638,7 +644,9 @@ sorted `WorldDeadlineTable`, so a tick with nothing due pays four front
 comparisons and walks none of the four collections. Then
 `SweepPlacementResponses` (`WorldTick.Responses.cs`—right after `StepFields`, so it reads this
 tick's own lattice writes: the first `WorldPlacementResponse` entry whose
-condition holds at a placement's coupled cell becomes its prototype) and
+condition holds at a placement's coupled cell becomes its prototype; a booting
+document is born with its state entries settled,
+`WorldStateSettlement.SettleResponses`, so its first frame already shows them) and
 `SweepPlacementDeals` (`WorldTick.Deals.cs`—right after the response
 sweep, so the rule frame has folded and a cell a rule wrote this tick deals on
 this tick: each placement carrying a `WorldPlacementDeal` is a template whose
@@ -746,22 +754,42 @@ peers. The client reserves 128 full-detail catalog rigs and represents later
 active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
 action-state machinery—including its live `Scale` multiplier (`WorldBody.Scale.cs`),
-1 unless `bodies.scaleRow` names a keyed `state.world` row carrying this
-body's cell; `WorldPopulation.SyncBodyScale` resyncs every active body's
-`Scale` wholesale from that row at the same `Install`/admission choke points
+1 unless `bodies.scale` names a `state.body` Counter register carrying this
+body's size; `WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs
+every active body's `Scale` from that register once a tick after the world
+rules, and at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
 every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
-`WorldPopulation.Restore` rebuilds every body at the constructed default, and
-a detached-seat/peer transfer restore), so a reused population slot—or a
+`WorldPopulation.Restore` rebuilds every body at the constructed default, a
+detached-seat/peer transfer restore, and an escrow landing that has loaded a
+traveller's carried registers), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
-previous occupant's value nor sits at the unscaled default the row itself
-disagrees with. `Scale` multiplies the kit's
+previous occupant's value nor sits at the unscaled default the register itself
+disagrees with. An in-place crossing through a pair of two sizes writes the
+register (`WorldServer.TryApplyInPlaceCrossing`), refusing by name a size outside
+the register's envelope, and a crossing to another world carries it by name in
+the commit's action continuity. The same resync resolves each body's kit and look from the kit
+and look assignments' `select` registers (`WorldPopulation.SyncBodySelections`,
+which also runs once a tick right after the world rules and when an escrow
+landing has loaded a traveller's carried registers): the selection outranks the
+entry's `KitIndex`/`LookIndex` and the seat kit in `ResolveKitIndex`, a body
+whose kit moves recompiles in place with its slot-lane registers untouched, and
+a moved kit or look bumps `Revision` so the client re-latches the stamp
+([schema](../Puck.World.Schema/README.md#kit-and-look-selected-by-a-bodys-register)).
+A crossing of a portal pair of two sizes writes the row:
+`WorldServer.TryApplyInPlaceCrossing` multiplies the body's cell by the pair's
+scale (`WorldFrameIsometry.Scale`, the counterpart face's width over the
+source's) and publishes it before the next step, refusing a world with no row
+or a size outside the row's envelope. `Scale` multiplies the kit's
 shared collider volumes about the body's own root (never mutated in place—
 a per-call scratch span, scaled only when `Scale != 1`), the resolved move
-speed and turn rate, hold probe height/standoff/reach, a hold's own gravity
+speed, authored launch and impulse velocities (`setVerticalVelocity`,
+`planarImpulse`), a screen's or tabletop's engage radius
+(`WorldBody.EngageReach`), hold probe height/standoff/reach, a hold's own gravity
 fall/rise and its vertical-channel envelope (including a medium's idle/settle
 target), a wall hold's travel speed, and a
-pull's own rate (`WorldBody.Hold.cs`)—a shrunk body's fall and depenetration stay
+pull's own rate (`WorldBody.Hold.cs`); a turn rate does not scale, an angle
+being the same at every size—a shrunk body's fall and depenetration stay
 proportionally gentle rather than free-falling one tick of full-scale gravity
 into a collider whose own contact skin margin it can no longer absorb; the
 client reads the same row live and folds it into the rendered rig and the
@@ -902,6 +930,22 @@ field resolves the retry against the other bodies too. The retry replaces the
 blocked step only when it lands grounded on a walkable surface, so a face
 steeper than `maxSlopeDegrees` is never stepped onto. `body.motion` echoes
 the body's effective `stepHeight=`, and `world.kits` the kit's.
+
+A body grounded on an attached solid rides it (the analytic provider only,
+which is the one that admits attach with solid). `WorldColliderSet` keeps the
+previous refresh's attached colliders and each attached row's resolved origin
+at its last two refreshes; right after `RefreshAttached`,
+`WorldPopulation.AdvanceSimulated` asks it, for every active grounded
+locomotion body (seats included, rigid and carried bodies excluded), whether
+the bottom of the body's bounds lay within two contact skins above an
+axis-aligned attached box of the previous refresh, overlapping it
+horizontally, and moves the body by that row's displacement
+(`WorldBody.RideAttachedSupport`) before any body advances. A rising platform
+lifts what stands on it without a push, and a falling one keeps it grounded
+instead of dropping it a tick at a time. Only translation rides: a platform
+that turns does not turn its rider. The debug world's gallery lift
+(`worlds/debug/hall.puck`) is the live case, and `AttachedPlatformRideLawTests`
+holds a rider grounded through a climb and a descent.
 
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position
@@ -1589,7 +1633,7 @@ and a document authoring arrivals alone still admits no connecting peer.
 The same listener routes a second dialect off the first eight bytes:
 `WorldFederationCodec.WireKey` opens an authority-to-authority connection
 instead of a player connection. That connection is a persistent authenticated
-lane—challenge/proof once (`Puck.Networking.IAuthenticator`), then framed requests
+lane—reciprocal challenge/proof once (`Puck.Networking.IAuthenticator`), then framed requests
 in order, request-then-response, until `Observe` or `IntentStream` takes it
 over and streams on it. The frame grammar, the bounded reader/writer, and the
 refusal vocabulary are the shared ones in
@@ -1598,6 +1642,31 @@ wire dialect: every leaf is Try-shaped and bounded before it allocates, and
 every refusal frame's text opens with a `WorldFederationRefusal` name.
 `WorldPeerHost.FederationRefusals` counts those names, so a refusal is read back
 by name rather than by sentence.
+
+The federation handshake authenticates the destination before a client sends
+operations. `Challenge` carries the server's fresh nonce. `Authenticate` carries
+the client's fresh nonce and its proof; `Authenticated` carries the destination
+namespace and its reciprocal proof. Both proofs bind the two nonces, the ordered
+client and server transport-key fingerprints, and their direction. The server's
+proof also binds the advertised namespace, which must equal its verified claim
+subject. A copied proof cannot cross to another transport, another direction, or
+another destination namespace. An expected namespace retained in recovery is
+checked again after proof verification.
+
+`WorldFederationCodec.BindProofChallenge` derives the authenticator's challenge
+with HKDF-SHA256, preserving the nonce's length. The input is the verifier's
+nonce; the context contains the protocol label, direction, client fingerprint,
+server fingerprint, destination namespace (empty for the client proof), and the
+prover's nonce, encoded with the bounded wire writer. Production nonces are
+32 random bytes; each decoded nonce has a 256-byte ceiling, and both peers enforce
+the authenticator's exact `ChallengeBytes` width before proving it.
+
+An Entra client authenticates its destination through its explicitly configured
+transport-key pin before presenting its bearer credential. That pin can replace
+the reciprocal attestation proof for this client. A verifier-only Entra server
+has no remote pin; its outbound federation still requires the ordinary
+destination proof. A server without a signing oracle can admit a pinned client,
+but cannot authenticate itself to an unpinned one.
 
 Two ingress disciplines meet in this class, and which one applies is decided by
 what the frame is:
@@ -1955,7 +2024,8 @@ machine through its provider operations, from a file in its `contentFolders`.
 (`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
 `Revoke` and checked against the ordinary grant table (`Control` over
 `screen:<n>`) before the host is touched; selection boots nothing. A content
-path ending in the .cartridge.json suffix names an authored `puck.cartridge.v1`
+path ending in `.puck` names authored cartridge source; its provider resolves
+imports and compiles it. A path ending in the .cartridge.json suffix names a `puck.cartridge.v1`
 document: the host compiles it through the engine's own forge, boots the
 compiled image, and records a `WorldMachineCartridge` (the source's canonical
 hash and the image's hash) on `WorldMachineState.Cartridge` for
@@ -1969,20 +2039,21 @@ before anything (re-)establishes), so a re-shape that moves a screen from
 one declared link to another within the SAME reconcile always succeeds
 rather than silently failing while the old link still owns the screen.
 Every op rides the replay tape (`WorldReplayEntry.ScreenOp`), and
-`replay.record` starts a tape from the boot image only while nothing has stepped:
-no world tick, no pumped addon (`WorldServer.AnyAddonEverPumped`) and no stepped
-machine (`AnyMachineEverPumped`). There it refuses once any screen op has
-applied (`AnyScreenOpEverApplied`), because screen ops apply synchronously,
-between fixed steps, and change live host state the definition never reflects.
-A named machine operation sets that latch too when it reaches its runtime
-commit barrier, even if the provider then faults. Past that point the tape
-starts from an authority checkpoint taken at the arm
-(`WorldReplaySnapshot.StartCheckpoint`). The checkpoint holds the machine cores
-and the named bindings' memo a checkpoint host captures, and the offline
-replay restores them into its fresh host. A state the checkpoint cannot
-capture refuses the arm by name (`ReplayRefusal.StartNotCheckpointable`): a
-pumped addon guest, a screen op, a stepped machine without checkpoint support,
-a coupled link or rewind history. `Puck.World.WorldScreenBinder`
+`replay.record` starts a tape from the boot image only while nothing has moved
+the live state off it: no world tick, no pumped addon
+(`WorldServer.AnyAddonEverPumped`), no stepped machine (`AnyMachineEverPumped`)
+and no screen op reaching host dispatch (`AnyScreenOpEverApplied`; a named
+machine operation sets that latch too when it reaches its runtime commit
+barrier, even if the provider then faults). Past that point the tape starts
+from an authority checkpoint taken at the arm
+(`WorldReplaySnapshot.StartCheckpoint`). The checkpoint holds the machine cores,
+every screen slot's selector and link membership, the link rows
+(`WorldMachineHostCheckpoint`), the named bindings' memo and the live sessions,
+and the offline replay and the live drive restore them into their hosts. A
+state the checkpoint cannot capture refuses the arm by name
+(`ReplayRefusal.StartNotCheckpointable`): a pumped addon guest, a stepped
+machine without checkpoint support, a coupled link or rewind history.
+`Puck.World.WorldScreenBinder`
 is a pure reader of this type's outputs for presentation (a machine source
 instance's upload writes an output's frames, `WriteFrame`, and the light
 lights the room) and still owns the genuinely presentation

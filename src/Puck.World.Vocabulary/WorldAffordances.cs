@@ -12,11 +12,15 @@ namespace Puck.World;
 /// </summary>
 /// <remarks><para>The command registry is ambient by necessity, not preference: the document validators are static
 /// and also run where no registry can exist (the offline replay rehydrator, a pre-container boot parse), so it is a
-/// lookup that is present once the composition root installs it and absent elsewhere. Absent means the command half
-/// of validation is skipped — structural validation still runs — never that it passed; the composition root's
-/// post-build sweep (<c>WorldSeatBindings.ValidateAffordancesLoudly</c>) re-covers the documents that entered
-/// before install. It is also genuinely process-scoped: there is exactly one console, so every world instance in this
-/// process dispatches through the same verb set.</para>
+/// lookup that is present once the composition root installs it and absent elsewhere. Where none is installed the
+/// command half judges by the generated <see cref="WorldConsoleVerbCatalog"/>, every verb any boot shape registers
+/// (<c>puck compile --validate</c>), except in a host that sets <see cref="DeferUnknownVerbsToRegistry"/>, which skips
+/// the half — never passes it — until its registry exists; the composition root's post-build sweep
+/// (<c>WorldSeatBindings.ValidateAffordancesLoudly</c>) re-covers the documents that entered before install. With a
+/// registry the same catalog answers for a verb only another shape registers, so a binding to a rendered-only verb
+/// (<c>world.debug-view</c>) validates in a headless boot as it does offline, stays inert there and is dropped from the
+/// seat's composition with a narrated line. It is also genuinely process-scoped: there is exactly one console, so every
+/// world instance in this process dispatches through the same verb set.</para>
 /// <para>The channel vocabulary is deliberately not ambient, and the asymmetry is the point. A channel table is a
 /// pure function of the document that declares it, so it is a required parameter of <see cref="Validate"/>: a
 /// document's binding overlays are always checked against that document's own channels. Holding it in a static
@@ -30,6 +34,11 @@ namespace Puck.World;
 /// dead — and a source explicitly marked unaddressable is refused for that reason instead, never both.</para></remarks>
 public static class WorldAffordances {
     private static volatile CommandRegistry? Registry;
+
+    /// <summary>Gets or sets whether a catalog check before any registry is installed leaves a line calling a verb the
+    /// catalog lacks to the registry: true in a host that re-validates its documents once its registry exists (the
+    /// World), false where the catalog is the last word (<c>puck compile --validate</c>, the silo).</summary>
+    public static bool DeferUnknownVerbsToRegistry { get; set; }
 
     /// <summary>Whether the command vocabulary has been installed — validators skip the command half (never the
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
@@ -135,6 +144,57 @@ public static class WorldAffordances {
         }
     }
 
+    // A document's own authored commands answer for it; with them supplied, the live world's authored names answer
+    // nothing, so a document that drops a command is judged without it. A verb the registry lacks is judged by the
+    // catalog's facts (every verb any boot shape registers), so the document validates the same in every shape.
+    private static CommandMetadata? Lookup(AuthoredCommandSet? commands, string name, CommandRegistry? registry) {
+        if (commands is not null) {
+            if (commands.TryGet(command: out var authored, name: name)) {
+                return CommandRegistry.AuthoredMetadata(name: authored!.Name);
+            }
+
+            if (registry?.NamesAuthoredCommand(name: name) ?? false) {
+                return null;
+            }
+        }
+
+        return (registry is null)
+            ? WorldConsoleVerbCatalog.Lookup(name: name)
+            : registry.MetadataForDocument(name: name);
+    }
+
+    /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set against the
+    /// installed registry, appending each refusal (<see cref="ValidateCommandsAgainst"/>).</summary>
+    /// <param name="commands">The document's compiled authored commands.</param>
+    /// <param name="errors">The list refusal lines are appended to.</param>
+    public static void ValidateCommands(AuthoredCommandSet commands, List<string> errors) => ValidateCommandsAgainst(
+        commands: commands,
+        errors: errors,
+        registry: Registry
+    );
+    /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set, appending each
+    /// refusal: against <paramref name="registry"/> when there is one (<see cref="CommandRegistry.CheckAuthored"/>),
+    /// otherwise against the generated <see cref="WorldConsoleVerbCatalog"/>, every verb any boot shape registers, which
+    /// refuses a clash, an operator or unbindable line and a line calling a verb no shape registers.</summary>
+    /// <param name="commands">The document's compiled authored commands.</param>
+    /// <param name="registry">The live registry, or <see langword="null"/> where none exists.</param>
+    /// <param name="errors">The list refusal lines are appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="commands"/> is <see langword="null"/>.</exception>
+    public static void ValidateCommandsAgainst(AuthoredCommandSet commands, CommandRegistry? registry, List<string> errors) {
+        ArgumentNullException.ThrowIfNull(argument: commands);
+
+        if (registry is not null) {
+            registry.CheckAuthored(errors: errors, set: commands);
+
+            return;
+        }
+
+        commands.CheckAgainst(
+            errors: errors,
+            refuseUnknown: !DeferUnknownVerbsToRegistry,
+            registered: WorldConsoleVerbCatalog.Lookup
+        );
+    }
     /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
     /// after the container is built.</summary>
     /// <param name="registry">The live command registry.</param>
@@ -174,9 +234,29 @@ public static class WorldAffordances {
     /// compiled table, never another world's.</param>
     /// <param name="seatModes">The AUTHORED per-seat mode families THIS document's world declares — the same
     /// per-document rule as <paramref name="channels"/>.</param>
+    /// <param name="commands">The authored commands THIS document declares, which its rows may name in place of the
+    /// live world's; <see langword="null"/> resolves an authored name against the live world's set.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
-    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, List<string> errors) {
+    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, AuthoredCommandSet? commands, List<string> errors) => ValidateAgainst(
+        channels: channels,
+        commands: commands,
+        document: document,
+        errors: errors,
+        registry: Registry,
+        seatModes: seatModes
+    );
+    /// <summary>Runs the vocabulary check over <paramref name="document"/> against <paramref name="registry"/> rather
+    /// than the installed one (<see cref="Validate"/>).</summary>
+    /// <param name="document">The binding document to check.</param>
+    /// <param name="channels">The channel table THIS document is authored against.</param>
+    /// <param name="seatModes">The authored per-seat mode families THIS document's world declares.</param>
+    /// <param name="commands">The authored commands THIS document declares, or <see langword="null"/> for the
+    /// registry's live set.</param>
+    /// <param name="errors">The list refusal lines are appended to.</param>
+    /// <param name="registry">The registry the command half reads, or <see langword="null"/> to skip that half.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
+    public static void ValidateAgainst(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, AuthoredCommandSet? commands, List<string> errors, CommandRegistry? registry) {
         ArgumentNullException.ThrowIfNull(argument: channels);
         ValidateContexts(
             document: document,
@@ -188,19 +268,12 @@ public static class WorldAffordances {
         // channel half — a pure function of the document's own table, needing no registry at all — conditional on
         // whether a container happened to exist yet, so one document was refused as world.instance.start and admitted
         // as --world. Whether a document is valid must not depend on which door it walked through.
-        var registry = Registry;
-
         errors.AddRange(collection: BindingVocabularyCheck.Validate(
             document: document,
             lookups: new BindingVocabularyLookups(
-                Command: ((registry is null)
+                Command: ((registry is null) && DeferUnknownVerbsToRegistry
             ? null
-            : name => (registry.TryGetMetadata(
-                        metadata: out var metadata,
-                        name: name
-                    )
-                ? metadata
-                : null)),
+            : name => Lookup(commands: commands, name: name, registry: registry)),
                 SourceKind: SourceKind,
                 Channel: reference => channels.TryGetOrdinal(
                     ordinal: out _,

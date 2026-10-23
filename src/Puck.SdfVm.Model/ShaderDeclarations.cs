@@ -9,7 +9,8 @@ namespace Puck.SdfVm;
 public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// <summary>
 /// The one list of every HLSL declaration the C# model owns, and the generator the kernel builds and
-/// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>), the sky's kind table
+/// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>) and <c>sdf-render.hlsli</c>
+/// (<see cref="SdfRenderHlsl"/>), the sky's kind table
 /// (<c>sdf-sky-kinds.hlsli</c> and <c>sky/sdf-sky-kind-table.hlsli</c>, <see cref="SdfSkyKindsHlsl"/>), the R2 dither's
 /// increments (<see cref="ShaderLowDiscrepancyHlsl"/>), the instruction
 /// set's recorded
@@ -36,7 +37,7 @@ public static class ShaderDeclarations {
     /// <param name="packages">The engine packages whose declared interfaces are owned includes.</param>
     /// <param name="problems">Receives one line per include no generator owns and per package whose include is missing or
     /// named twice.</param>
-    /// <returns>The owned files, <c>sdf-isa.hlsli</c>, the fingerprint's record and the sky's kind table first, then the
+    /// <returns>The owned files, <c>sdf-isa.hlsli</c>, <c>sdf-render.hlsli</c>, the fingerprints' record and the sky's kind table first, then the
     /// includes in path order.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public static IReadOnlyList<ShaderDeclaration> Of(IReadOnlyList<string> files, RenderGraphPackageCatalog packages, List<string> problems) {
@@ -53,7 +54,8 @@ public static class ShaderDeclarations {
         // instruction set, described afresh: the stamp its kernels' interfaces carry and the record the host reads, both
         // from this run's model rather than the recorded value, so one run brings every file level.
         var fingerprint = SdfIsaHlsl.DescribeFingerprint();
-        var kernelInterfaces = new SdfKernelInterfaces(stamp: SdfIsaHlsl.StampOf(fingerprint: fingerprint)).Includes;
+        var field = SdfIsaHlsl.DescribeFieldFingerprint();
+        var kernelInterfaces = new SdfKernelInterfaces(fieldStamp: SdfIsaHlsl.StampOf(fingerprint: field), stamp: SdfIsaHlsl.StampOf(fingerprint: fingerprint)).Includes;
         var kernelIncludes = kernelInterfaces
             .Select(selector: static include => ShaderFrameInterface.IncludeFileName(interfaceName: include.Interface.Name))
             .ToHashSet(comparer: StringComparer.Ordinal);
@@ -103,7 +105,8 @@ public static class ShaderDeclarations {
 
         return [
             new ShaderDeclaration(Generate: SdfIsaHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfIsaHlsl.FileName}"),
-            new ShaderDeclaration(Generate: () => SdfIsaHlsl.GenerateFingerprintSource(fingerprint: fingerprint), Path: SdfIsaHlsl.FingerprintSourcePath),
+            new ShaderDeclaration(Generate: SdfRenderHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfRenderHlsl.FileName}"),
+            new ShaderDeclaration(Generate: () => SdfIsaHlsl.GenerateFingerprintSource(field: field, fingerprint: fingerprint), Path: SdfIsaHlsl.FingerprintSourcePath),
             new ShaderDeclaration(Generate: SdfSkyKindsHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfSkyKindsHlsl.FileName}"),
             new ShaderDeclaration(Generate: SdfSkyKindsHlsl.GenerateTable, Path: $"{SdfKernelInterfaces.KernelDirectory}/sky/{SdfSkyKindsHlsl.TableFileName}"),
             new ShaderDeclaration(Generate: ShaderLowDiscrepancyHlsl.Generate, Path: ShaderLowDiscrepancyHlsl.Path),

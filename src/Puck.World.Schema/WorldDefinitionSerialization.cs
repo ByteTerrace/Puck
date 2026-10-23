@@ -296,6 +296,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.Pose))]
 [JsonSerializable(typeof(WorldEffect.PoseCell))]
 [JsonSerializable(typeof(WorldEffect.SetIdentityFact))]
+[JsonSerializable(typeof(WorldEffect.SetBodyState))]
 [JsonSerializable(typeof(WorldIdentityFacts))]
 [JsonSerializable(typeof(WorldPredicate.Now))]
 [JsonSerializable(typeof(WorldPredicate.Recently))]
@@ -341,7 +342,7 @@ namespace Puck.World;
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
     // so this context and Puck.Commands.BindingProfileJsonContext read the shape off the TYPE rather than each
     // repeating a registration the other could drift from.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(PrincipalJsonConverter), typeof(GranteeJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<Puck.SignedDistance.SdfIndirectTier>), typeof(StrictEnumConverter<Puck.Commands.SourceFit>) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(PrincipalJsonConverter), typeof(GranteeJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<Puck.SignedDistance.SdfIndirectTier>), typeof(StrictEnumConverter<Puck.Commands.SourceFit>) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -548,36 +549,6 @@ public static class WorldJsonVocabulary {
     }
 }
 
-/// <summary>The shared shape behind a plain 64-bit lane's wire form: a bare JSON number, round-tripped through the
-/// closed subclass's own <c>Bits</c> constructor/property.</summary>
-internal abstract class BitMaskJsonConverter<T> : JsonConverter<T>, IJsonSchemaTypeConverter where T : struct {
-    private static readonly string[] AcceptedSchemaTypes = ["integer"];
-
-    /// <inheritdoc/>
-    public IReadOnlyList<string> SchemaTypes => AcceptedSchemaTypes;
-
-    /// <summary>Builds <typeparamref name="T"/> from its raw bit lane.</summary>
-    protected abstract T Create(ulong bits);
-    /// <summary>Reads back <paramref name="value"/>'s raw bit lane.</summary>
-    protected abstract ulong GetBits(T value);
-
-    /// <inheritdoc/>
-    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => Create(bits: reader.GetUInt64());
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteNumberValue(value: GetBits(value: value));
-}
-internal sealed class ChannelReachMaskJsonConverter : BitMaskJsonConverter<ChannelReachMask> {
-    /// <inheritdoc/>
-    protected override ChannelReachMask Create(ulong bits) => new(Bits: bits);
-    /// <inheritdoc/>
-    protected override ulong GetBits(ChannelReachMask value) => value.Bits;
-}
-internal sealed class ChannelConsentMaskJsonConverter : BitMaskJsonConverter<ChannelConsentMask> {
-    /// <inheritdoc/>
-    protected override ChannelConsentMask Create(ulong bits) => new(Bits: bits);
-    /// <inheritdoc/>
-    protected override ulong GetBits(ChannelConsentMask value) => value.Bits;
-}
 /// <summary>
 /// Reads and writes a <see cref="MutationKindMask"/> as the same comma-separated kind-name token
 /// <c>world.grant</c>'s <c>verbs:&lt;name,…&gt;</c> takes (<c>"UpsertStateRow,RemoveStateRow"</c>) rather than the

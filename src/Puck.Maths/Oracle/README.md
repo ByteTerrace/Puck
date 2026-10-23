@@ -45,7 +45,7 @@ same kernel, and the files that do that reading are most of what follows.
 
 The folder is an organizational unit only: every public type lives flat in
 `namespace Puck.Maths`. Verification lives in `tests/Puck.Maths.Tests` (the law
-registry and the coverage ratchet—the `presented.*` law families carry the
+registry and the structural law-completeness check—the `presented.*` law families carry the
 acceptance checks), and each one's declaration states what it reaches and what
 it does not.
 

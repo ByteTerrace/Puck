@@ -161,7 +161,7 @@ public sealed class ControlTests {
         FrameCaptureRequest? armed = null;
         using var session = new ConsoleControlSession(
             source,
-            path => armed = new(path: path)
+            request => armed = request
         );
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
         var operation = session.ExecuteAsync(
@@ -190,7 +190,7 @@ public sealed class ControlTests {
         var calls = 0;
         using var queued = new ConsoleControlSession(
             source,
-            path => { calls++; return new(path: path); }
+            _ => calls++
         );
         using var cancelled = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
         var pending = queued.ExecuteAsync(
@@ -336,7 +336,7 @@ public sealed class ControlTests {
         FrameCaptureRequest? armed = null;
         using var session = new ConsoleControlSession(
             source,
-            path => armed = new(path: path)
+            request => armed = request
         );
         // The holding line answers when its hold ends, so the call waits out the hold while human input answers.
         var hold = session.ExecuteAsync(

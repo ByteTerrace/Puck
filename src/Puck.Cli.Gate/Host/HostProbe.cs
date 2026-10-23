@@ -78,8 +78,11 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
             _ = CloseHandle(handle: process);
         }
     }
-    // The id of the process that started another one, or -1 when it cannot be read.
-    private static unsafe int ParentId(int processId) {
+
+    /// <summary>Reads a process's parent id, or -1 when it cannot be read.</summary>
+    /// <param name="processId">The process to inspect.</param>
+    /// <returns>The parent process id, or -1.</returns>
+    public static unsafe int ParentId(int processId) {
         if (OperatingSystem.IsLinux()) {
             try {
                 // pid (comm) state ppid …: the name may hold spaces and parentheses, so read after its last ')'.
@@ -113,6 +116,7 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
             _ = CloseHandle(handle: process);
         }
     }
+
     // Busy and total CPU time since boot, in the platform's ticks.
     private static (ulong Idle, ulong Total)? CpuTimes() {
         if (OperatingSystem.IsWindows()) {

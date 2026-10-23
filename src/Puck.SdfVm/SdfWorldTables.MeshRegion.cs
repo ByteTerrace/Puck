@@ -40,8 +40,10 @@ public sealed partial class SdfWorldTables {
     // renders.
     private long m_meshRevision;
     private ulong m_meshRegionBytes;
-    // The draws the frame being rendered rasterizes, from its staged draw list.
+    // The draws the frame being rendered rasterizes, from its staged draw list, and how many of them are glass.
     private uint m_meshDrawCount;
+    private uint m_glassDrawCount;
+    private SdfMeshBox?[] m_meshDrawBoxes = [];
 
     // The draw records, and one mesh's words, as the next write sends them.
     private uint[] m_meshDrawWords = [];
@@ -50,16 +52,25 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the words the mesh region's draw records and meshes take for the draws the latest frame staged; zero
     /// before a frame draws a mesh.</summary>
     public int MeshRegionWords => m_meshArena.Words;
+    /// <summary>The most bytes one mesh region holds, a whole number of words (<see cref="GpuRegion"/> counts its bytes in an
+    /// <see cref="int"/>): the baked meshes a frame draws must fit it, and a frame that needs more throws.</summary>
+    public const ulong MostMeshRegionBytes = (((ulong)int.MaxValue / sizeof(uint)) * sizeof(uint));
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
     /// needs more. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
-    /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view.</summary>
+    /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
     public uint MeshDrawCount => m_meshDrawCount;
+    /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass (<see cref="SdfMeshDraw.Glass"/>): the glass pass
+    /// draws them, and the mesh pass and the shadow cascades draw the rest.</summary>
+    public uint GlassDrawCount => m_glassDrawCount;
+    /// <summary>Gets the opaque draws the latest frame's mesh pass and shadow cascades rasterize.</summary>
+    public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
-    // One more for every new draw list the region packs, which the view's cadence signature follows.
-    internal long MeshRevision => m_meshRevision;
+    // The world box of each staged draw, by its index in MeshDraws, or null for a draw no host box bounds
+    // (SdfMeshBox.TryOf), which every pass draws.
+    internal ReadOnlySpan<SdfMeshBox?> MeshDrawBoxes => m_meshDrawBoxes.AsSpan(length: ((int)m_meshDrawCount), start: 0);
 
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
@@ -134,6 +145,16 @@ public sealed partial class SdfWorldTables {
 
         m_meshDraws = staged;
         m_meshDrawCount = ((uint)staged.Count);
+        m_glassDrawCount = 0;
+        if (m_meshDrawBoxes.Length < staged.Count) {
+            m_meshDrawBoxes = new SdfMeshBox?[Math.Max(val1: staged.Count, val2: (2 * m_meshDrawBoxes.Length))];
+        }
+        for (var index = 0; (index < staged.Count); index++) {
+            var draw = staged[index];
+
+            if (draw.Glass) { m_glassDrawCount++; }
+            m_meshDrawBoxes[index] = (SdfMeshBox.TryOf(box: out var box, draw: in draw) ? box : null);
+        }
         m_meshRevision++;
         m_meshStaged = ReferenceEquals(objA: staged, objB: draws);
     }
@@ -173,10 +194,11 @@ public sealed partial class SdfWorldTables {
         );
         _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (placement.VertexWord * sizeof(uint)));
     }
-    // Grows the region to twice the need without waiting for the device (GpuRegion.Grow): the next upload clears the new
-    // buffer and copies the words the old one held into it on the GPU, so every placed mesh stands where it was written
-    // and nothing it held is staged again, and the old buffer is disposed once that upload completes (Retire). The
-    // region keeps its reserved copy sets, so growing takes no descriptor range.
+    // Grows the region to twice the need, or to the most a region holds (GpuRegion counts its bytes in an int) when twice
+    // is past that, without waiting for the device (GpuRegion.Grow): the next upload clears the new buffer and copies the
+    // words the old one held into it on the GPU, so every placed mesh stands where it was written and nothing it held is
+    // staged again, and the old buffer is disposed once that upload completes (Retire). The region keeps its reserved
+    // copy sets, so growing takes no descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
@@ -184,9 +206,7 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        var grown = (2UL * bytes);
-
-        grown = (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint));
+        var grown = ((bytes <= MostMeshRegionBytes) ? Math.Min(val1: ((((2UL * bytes) + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint)), val2: MostMeshRegionBytes) : throw new InvalidOperationException(message: $"The baked meshes need {bytes} bytes of mesh region, past the {MostMeshRegionBytes} one region holds."));
 
         Retire(replaced: m_meshRegion.Grow(byteCount: checked((int)grown)));
         m_seedMeshHistory = true;

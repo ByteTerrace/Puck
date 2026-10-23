@@ -276,12 +276,11 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                         preexistingHandle: declaredOutput.SharedTargetHandles[index]
                     );
 
-                    device1->OpenSharedResource1(
+                    device1->OpenSharedResource1<ID3D11Texture2D>(
                         hResource: handle,
-                        ppResource: out var opened,
-                        returnedInterface: ID3D11Texture2D.IID_Guid
+                        ppResource: out var opened
                     );
-                    outputTargets[index] = ((ID3D11Texture2D*)opened);
+                    outputTargets[index] = opened;
 
                     var description = default(D3D11_TEXTURE2D_DESC);
 

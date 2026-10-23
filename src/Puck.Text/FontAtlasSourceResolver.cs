@@ -31,7 +31,7 @@ public sealed class FontAtlasSourceResolver(
 
     private readonly IAssetSource m_assetSource = (assetSource ?? throw new ArgumentNullException(paramName: nameof(assetSource)));
     private readonly IFontAtlasGenerator m_fontAtlasGenerator = (fontAtlasGenerator ?? throw new ArgumentNullException(paramName: nameof(fontAtlasGenerator)));
-    private readonly ContentAddressedLruCache<FontAtlas> m_fontAtlasCache = new(
+    private readonly ContentAddressedLruCache<AssetContentHash, FontAtlas> m_fontAtlasCache = new(
         capacity: MaxCachedFonts,
         getWeight: static atlas => ((atlas.ImageData is { } image)
         ? image.RgbaPixels.Length

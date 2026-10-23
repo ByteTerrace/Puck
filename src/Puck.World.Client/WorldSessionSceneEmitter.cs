@@ -211,6 +211,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
     /// records. <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
+    /// <summary>The host's live cel-shading override, or null to follow this world's document default.</summary>
+    public Func<bool?>? ToonOverride { get; init; }
     /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
     /// destination's resolved sky and the frame dimensions after its cameras have been dressed.</summary>
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
@@ -524,6 +526,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
+            // A window shows the luminance beyond its glass, which the view looking through it exposes.
+            Unexposed = (m_windowFit is not null),
         });
         Film?.Invoke(obj: m_views);
 
@@ -552,15 +556,21 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
+            // The destination's own authored tier: its views read its own irradiance volume, which also meters its
+            // exposure and occludes its fixtures, as a seat presented there would.
+            IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
+            Exposure = environment.Exposure,
+            Toon = WorldRenderToon.Resolve(m_mirror.Definition.Render.Toon, ToonOverride?.Invoke()),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
+            SlotClips = m_pool.SlotClips,
         };
     }
     /// <inheritdoc/>
@@ -826,7 +836,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 builder: builder,
                 creations: definition.Creations,
                 definition: definition,
-                placements: definition.Placements
+                placements: WorldPlacementStamper.Queryable(definition: definition, placements: definition.Placements)
             );
             m_dressedFieldProgram = program;
 

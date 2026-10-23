@@ -252,7 +252,7 @@ allocates only the returned string; `TryFormat` allocates nothing at all.
 | `Pi` / `HalfPi` / `Tau` | The nearest raws to π, π/2 and 2π (205887, 102944, 411775). `Tau`'s raw is odd, so `Tau != Pi + Pi`. |
 | `FromDegrees(double)` / `FromDegrees(FixedQ4816)` | The nearest raw to the exact `degrees·π/180`, one rounding of the exact rational against `PiQ189` (π at 189 fraction bits, extending `PiQ61`); never the double product, which rounds twice. |
 | `WrapAngle` | The residue modulo `Tau`'s raw in `[−Pi, −Pi + Tau)`, the closed raw interval `[−205887, 205887]`, by a floored modulo. |
-| `(float)` | `(float)(double)value`, the single-precision presentation seam. |
+| `(float)` | Rounds the raw directly to single precision, then scales by the exact power of two. Ties go to even; no intermediate double rounding. |
 | `Abs` / `Sign` / `CopySign` | The magnitude, `-1`/`0`/`1`, and the magnitude carrying another value's sign. |
 | `Min` / `Max` / `Clamp` | Ordinary order; `Clamp` refuses an inverted range. |
 | `Lerp(from, to, amount)` | `from + (to − from)·amount`—exactly `from` at zero and exactly `to` at one, extrapolating outside `[0, 1]`, and wrapping like the operators do. |
@@ -270,6 +270,34 @@ allocates only the returned string; `TryFormat` allocates nothing at all.
 
 `SinCos` inverts `Atan2`—`SinCos(Atan2(y, x))` recovers the unit direction—
 and `Exp2` inverts `Log2`.
+
+The generic peer conversions also connect `FixedQ3232` and `UFixedQ4816`.
+Unsigned Q16 to signed Q32 widens exactly by sixteen bits before the target's
+range policy. Signed Q32 to unsigned Q16 rounds once, ties to even, before
+that policy: checked throws for a negative rounded raw, saturating clamps it
+to zero, and truncating retains its low sixty-four bits. A negative value
+within half a Q16 raw of zero rounds to zero in every mode. Values on the
+shared grid round-trip exactly wherever both carriers can represent them.
+Both operands implement every direct `INumberBase` from/to hook; conversions
+do not depend on `Create*` falling back to the opposite operand's hook.
+
+Outbound `Half` conversions use the decimal boundary and are correctly rounded
+for these carriers. Every binary16 midpoint is an exact decimal (at most 25
+fractional digits); Q32's adjacent raws are at least `2⁻³²` away from a
+midpoint, beyond the decimal and binary64 intermediate errors throughout
+Half's finite range. `scalar.half-midpoints-vs-exact-oracle` compares every midpoint
+and its adjacent raws against exact integer distances, including underflow,
+overflow and negative zero. This bound is specific to the Q16 and Q32 scales;
+a finer carrier needs its own proof.
+
+`FixedPointRounding.RoundRational` rejects a negative fraction bit count and
+a zero denominator before handling a zero numerator. `ScaleDecimalWide`
+inherits that shift refusal through the same rounder; its denominator is
+always a positive power of ten. Symmetric inversion refuses a negative
+output shift before internal preconditioning and clears all outputs. Symmetric
+solves do the same in Debug and Release. Inversion computes the combined output
+and preconditioning shift in a wide integer and refuses counts outside `[0, 127]`
+before narrowing it for division.
 
 ---
 
@@ -1378,27 +1406,12 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-The bare command is the Default tier, which takes about half a minute on an
-idle machine; the tests README owns that figure, and a contended machine
-measures longer. Nothing records it for you. The suite's machine-written
-[`RESULTS.md`](../../../tests/Puck.Maths.Tests/RESULTS.md) deliberately carries
-no duration at all—every figure in it is machine-independent, so it stays
-meaningful across the machines this engine is tested on, and a wall time would
-have been the one line that did not. Time your own run if you need the number,
-on an idle machine, and compare it only against that same machine. Deep is the
-exhaustive tier, and it is the one that has to pass before a rounding change
-lands.
+The bare command runs Default; Deep adds domains and finite carriers Default
+does not reach. Run Deep for a rounding change. No run writes recorded registers.
 
-**Where doc-versus-code divergences are tracked.** They are not tracked by
-hand. A law that pins what a kernel *does* where the member's own XML doc says
-otherwise must be declared as a structural leg whose citation opens `DOC GAP:`, and the ledger derives a
-register from those declarations on every run—a register here being a table
-the test run rebuilds from scratch rather than one anyone edits. That one is
-**Register: behaviour pinned as observed against its own XML doc**, in
-[`tests/Puck.Maths.Tests/leg-ledger.md`](../../../tests/Puck.Maths.Tests/leg-ledger.md).
-A row cannot go stale, and a divergence cannot be closed by editing the
-register: closing one means correcting the doc (or the code) and re-spelling
-the leg, after which the row drops out by itself.
+**Documentation and code disagreements.** A structural law leg with a
+`DOC GAP:` citation names the member's documented claim. Close that mismatch
+by correcting the code or documentation and updating the authored leg.
 
 **What a change here means.** Rule 4 governs: determinism pins the mapping,
 not the values. A deliberate correction to any value path is *expected* to

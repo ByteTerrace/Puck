@@ -80,18 +80,41 @@ while the host stops is written as a separate line.
 `Release/` owns launcher-side release verification, staging, and update
 application. A launcher-based program — the desktop client or a
 player-hosted headless authority — updates itself from a signed
-`puck.release.v1` manifest: per-RID file lists addressed by content hash (so
+`puck.release.manifest.v1` manifest: per-RID file lists addressed by content hash (so
 an unchanged file costs nothing to restage), a signature chain rooted at the
 publisher, a deterministic staged rollout bucket, revocation, and a
 minimum-supported version. `IUpdateStager` stages a new version side by side
-with the running one; `IUpdateApplier` swaps to it only after one health-gated
-boot succeeds, and rolls back on failure. `IReleaseVerifier` checks the
-signature chain — `PlaceholderReleaseVerifier` refuses every manifest at
-build time, standing in until a real signing chain replaces it. The
+with the running one; `IUpdateApplier` rechecks its files and swaps the current
+pointer for the next launch. `AddSelfUpdate` selects `AttestationReleaseVerifier`
+for a configured trust anchor; `PlaceholderReleaseVerifier` refuses every
+manifest when the anchor is a placeholder. The
 [launcher stub](../Puck.Launcher.Stub/README.md) selects the installed
 version to start and handles the health-based rollback decision. The
 [release guide](../../docs/development/ci.md) owns the shared publishing
 workflow and its environment requirements.
+
+Staging rebuilds the inactive version directory from the manifest's complete
+file set, so a retry cannot inherit files omitted by a replacement manifest.
+Cached objects are still reused and rehashed. Direct stager callers hold the
+install lease and exclude the current version, as `UpdateService` does.
+
+`UpdateService` holds the install root's persistent `update.lock` lease across
+verification, staging and activation. Rollout exclusion and staging failure
+do not consume a sequence. Before activation it writes `install-intent.json`
+and reserves the replay mark with the full signed-manifest SHA-256 pin. An
+interrupted install resumes that exact local intent; a network response cannot
+replace it, and a different manifest at the same sequence or a newer replay
+mark/current pointer refuses recovery. Recovery rehashes active content without
+restaging over it. Low-level applier callers must hold the same external lease.
+
+Recovery checks the current configured trust policy at the intent's original
+verification instant: removing trust refuses recovery; signature expiry alone
+does not cancel already-authorized local work. Newly published revocations do
+not replace that intent. A malformed intent or changed trust/replay state fails
+closed and may require operator inspection before further updates. Protect the
+install root from untrusted local writers. Flushed atomic file replacement and
+process-interruption recovery do not establish power-loss durability across
+filesystems.
 
 ## Verification
 

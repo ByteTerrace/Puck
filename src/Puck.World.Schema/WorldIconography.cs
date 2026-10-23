@@ -7,9 +7,9 @@ namespace Puck.World;
 /// takes for the bar's own slot/bank ceilings.</summary>
 public static class WorldIconCapacity {
     /// <summary>The most badge-mapping rows one world authors.</summary>
-    public const int MaxBadges = 32;
+    public const int MaxBadges = 64;
     /// <summary>The most icon rows one world authors.</summary>
-    public const int MaxIcons = 128;
+    public const int MaxIcons = 256;
     /// <summary>The most characters a <see cref="WorldIconRow.Label"/> carries — the ONE declaration of the label
     /// arity the whole draw path is cut for.</summary>
     /// <remarks>KEEP IN SYNC with the two shapes that carry a resolved label downstream, neither of which can grow

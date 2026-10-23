@@ -69,7 +69,11 @@ public readonly partial record struct FixedQ4816(long Value)
 
     // Log2 interval tables over the Q62 mantissa [1, 2), 128 intervals d_i = 1 + i/128: round(2^124 / d_i) and
     // log2(d_i) at Q61 (exact squaring).
-    internal static ReadOnlySpan<ulong> Log2InverseTableQ62 => [
+    // Every kernel table here and in FixedQ4816.Trigonometry.cs is a static array behind its span, never a span over
+    // constant data: unoptimized code (a Debug build) allocates a field stub on each read of such a span, so every
+    // body's step would allocate in the per-tick allocation laws.
+    internal static ReadOnlySpan<ulong> Log2InverseTableQ62 => Log2InverseTableQ62Entries;
+    private static readonly ulong[] Log2InverseTableQ62Entries = [
         4611686018427387904UL, 4575936514408570944UL, 4540737002759274244UL, 4506074888234394288UL,
         4471937957262921604UL, 4438314363599290614UL, 4405192614617206356UL, 4372561558212634457UL,
         4340410370284600380UL, 4308728542764274830UL, 4277505872164533708UL, 4246732448623781667UL,
@@ -103,7 +107,8 @@ public readonly partial record struct FixedQ4816(long Value)
         2380225041768974402UL, 2370665905055042778UL, 2361183241434822607UL, 2351776136887273513UL,
         2342443691899625602UL, 2333185021180654750UL, 2323999253380730912UL, 2314885530818453536UL,
     ];
-    internal static ReadOnlySpan<ulong> Log2TableQ61 => [
+    internal static ReadOnlySpan<ulong> Log2TableQ61 => Log2TableQ61Entries;
+    private static readonly ulong[] Log2TableQ61Entries = [
         0UL, 25888288430367045UL, 51576665303060812UL, 77068194442068270UL,
         102365869772888179UL, 127472617432724975UL, 152391297801646934UL, 177124707458234458UL,
         201675581063062223UL, 226046593173187413UL, 250240359990654796UL, 274259441047877187UL,
@@ -138,7 +143,8 @@ public readonly partial record struct FixedQ4816(long Value)
         2253454079647176014UL, 2266628862310854103UL, 2279751673310229346UL, 2292822921068607810UL,
     ];
     // Exp2 interval table: round(2^(i/128) · 2^62) for i = 0..127.
-    internal static ReadOnlySpan<ulong> Exp2TableQ62 => [
+    internal static ReadOnlySpan<ulong> Exp2TableQ62 => Exp2TableQ62Entries;
+    private static readonly ulong[] Exp2TableQ62Entries = [
         4611686018427387904UL, 4636727017470743990UL, 4661903986662671290UL, 4687217664307630838UL,
         4712668792719003884UL, 4738258118240859931UL, 4763986391269842979UL, 4789854366277176597UL,
         4815862801830788490UL, 4842012460617555202UL, 4868304109465667592UL, 4894738519367117769UL,
@@ -174,7 +180,8 @@ public readonly partial record struct FixedQ4816(long Value)
     ];
     // Atan2 interval tables over z = min/max ∈ [0, 1] at Q62, 128 intervals z_i = i/128: atan(z_i) and the Taylor
     // coefficients f'(z_i), f''(z_i)/2, f'''(z_i)/6, all at Q61 (cubic truncation ≤ 2⁻³¹ over h ≤ 2⁻⁷).
-    internal static ReadOnlySpan<long> AtanTableQ61 => [
+    internal static ReadOnlySpan<long> AtanTableQ61 => AtanTableQ61Entries;
+    private static readonly long[] AtanTableQ61Entries = [
         0L, 18014032019027246L, 36025865417378412L, 54033303184007600L,
         72034151524184360L, 90026221460299152L, 108007330423874208L, 125975303835894848L,
         143927976672616096L, 161863195014048544L, 179778817572385696L, 197672717197702720L,
@@ -208,7 +215,8 @@ public readonly partial record struct FixedQ4816(long Value)
         1736648616087014656L, 1746199037308969472L, 1755675253952136448L, 1765077811113634304L,
         1774407255248205824L, 1783664133920824576L, 1792848995568082432L, 1801962389268170496L,
     ];
-    internal static ReadOnlySpan<long> AtanDerivative1TableQ61 => [
+    internal static ReadOnlySpan<long> AtanDerivative1TableQ61 => AtanDerivative1TableQ61Entries;
+    private static readonly long[] AtanDerivative1TableQ61Entries = [
         2305843009213693952L, 2305702280314748960L, 2305280196665679870L, 2304577067221201837L,
         2303593406277875714L, 2302329932534411708L, 2300787567780582321L, 2298967435219202928L,
         2296870857426870240L, 2294499353960349937L, 2291854638616668388L, 2288938616356083715L,
@@ -242,7 +250,8 @@ public readonly partial record struct FixedQ4816(long Value)
         1227226216961966012L, 1217693210731898846L, 1208229879204207551L, 1198836412368138918L,
         1189512967977240608L, 1180259672684468797L, 1171076623154282756L, 1161963887151513601L,
     ];
-    internal static ReadOnlySpan<long> AtanDerivative2TableQ61 => [
+    internal static ReadOnlySpan<long> AtanDerivative2TableQ61 => AtanDerivative2TableQ61Entries;
+    private static readonly long[] AtanDerivative2TableQ61Entries = [
         0L, -18012199687536641L, -36011211273273984L, -53983870787100684L,
         -71917062439894656L, -89797742508502864L, -107612962975364630L, -125349894843084393L,
         -142995851046030832L, -160538308883226427L, -177964931899377307L, -195263591143857369L,
@@ -276,7 +285,8 @@ public readonly partial record struct FixedQ4816(long Value)
         -612337405552748114L, -607885010405016900L, -603419399822595149L, -598942673700503891L,
         -594456858555880445L, -589963908992830165L, -585465709182649482L, -580964074355950085L,
     ];
-    internal static ReadOnlySpan<long> AtanDerivative3TableQ61 => [
+    internal static ReadOnlySpan<long> AtanDerivative3TableQ61 => AtanDerivative3TableQ61Entries;
+    private static readonly long[] AtanDerivative3TableQ61Entries = [
         -768614336404564651L, -768332904372634080L, -767489123379437524L, -766084536973569699L,
         -764121711881703485L, -761604229260812848L, -758536672518407239L, -754924611767253013L,
         -750774584999134641L, -746094076079612633L, -740891489682332020L, -735176123297099281L,
@@ -316,12 +326,11 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <returns>The real value of <paramref name="value"/> as a <see cref="double"/>; precision may be lost for large magnitudes.</returns>
     public static explicit operator double(FixedQ4816 value) =>
         (value.Value * RawOneInverse);
-    /// <summary>Converts a <see cref="FixedQ4816"/> to the nearest <see cref="float"/>, through the
-    /// <see cref="double"/> conversion: the presentation seam every single-precision readback takes.</summary>
+    /// <summary>Converts a <see cref="FixedQ4816"/> to the nearest <see cref="float"/>, rounding once with ties to even.</summary>
     /// <param name="value">The value to convert.</param>
-    /// <returns><c>(float)(double)value</c>; precision is lost above 2²⁴ raw units of magnitude.</returns>
+    /// <returns>The nearest single-precision value; precision is lost above 2²⁴ raw units of magnitude.</returns>
     public static explicit operator float(FixedQ4816 value) =>
-        ((float)((double)value));
+        MathF.ScaleB(x: ((float)value.Value), n: -FractionBitCount);
     /// <summary>Returns the negation of <paramref name="value"/>, wrapping only at <see cref="MinValue"/>.</summary>
     /// <param name="value">The value to negate.</param>
     /// <returns>The arithmetic negation of <paramref name="value"/>.</returns>

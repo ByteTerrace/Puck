@@ -12,6 +12,7 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldAuthorityEndpoint : IDisposable {
     private readonly Func<IWorldAdjacencySource?> m_adjacencies;
+    private readonly Func<int, bool>? m_drivesDevice;
     private readonly WorldSessionMirror m_mirror;
     private readonly Func<ulong> m_nextInputTick;
     private readonly IDisposable m_observationLease;
@@ -82,7 +83,8 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
         Func<IWorldAdjacencySource?> adjacencies,
         Func<ulong> nextInputTick,
         bool clockOwnedHere,
-        WorldAuthorityRouteDescription? seed = null
+        WorldAuthorityRouteDescription? seed = null,
+        Func<int, bool>? drivesDevice = null
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: identity);
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -100,6 +102,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
         m_adjacencies = adjacencies;
         m_nextInputTick = nextInputTick;
         ClockOwnedHere = clockOwnedHere;
+        m_drivesDevice = drivesDevice;
         m_mirror = new WorldSessionMirror(placeholder: definition());
         if (seed is { } route) {
             m_mirror.SeedRoute(route: in route);
@@ -145,6 +148,12 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <see cref="WorldSessionMirror.FollowState"/>).</summary>
     /// <returns>The authority's state mirror.</returns>
     public WorldStateMirror FollowState() => m_mirror.FollowState();
+    /// <summary>Returns whether this authority holds body <paramref name="index"/>'s participant captured on a device
+    /// (a machine screen or a tabletop), whose controls are the seat's own rather than camera-relative movement. An
+    /// authority constructed without the read (a remote one) answers <see langword="false"/>.</summary>
+    /// <param name="index">The 0-based body index a seat's submission drives.</param>
+    /// <returns><see langword="true"/> when the participant drives a device.</returns>
+    public bool DrivesDevice(int index) => (m_drivesDevice?.Invoke(arg: index) ?? false);
     /// <summary>Attaches an ordinary observation sink.</summary>
     public IDisposable Observe(IClientSink sink) => m_observe(sink);
     /// <summary>Atomically seeds a newly discovered committed route before publishing its new seat epoch.</summary>

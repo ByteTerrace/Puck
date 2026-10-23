@@ -13,7 +13,7 @@ namespace Puck.World;
 /// shell's post-step, then finish the seat intents. The host-work clock a <c>world.wait</c> counts in lives here. Also
 /// the <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IWorldSimulationClock {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -27,6 +27,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private readonly Action<ulong> m_publishStep = tick => {
         waitGate.PublishTick(tick: tick);
         captureScheduler.PublishTick(tick: (server.NextInputTick - 1UL));
+        tickScript.PublishTick(tick: (server.NextInputTick - 1UL));
         scheduleRunner.PublishTick(tick: (server.NextInputTick - 1UL));
     };
 

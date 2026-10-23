@@ -158,6 +158,7 @@ public sealed partial class WorldScreenBinder {
         var emitter = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains,
             onlyPrototypes: ((planned.Spec.Kind == InfinityViewKind.Far) ? new HashSet<string>(collection: (prototypes ?? []), comparer: StringComparer.Ordinal) : null)) {
             SkyLayers = SkyLayers,
+            ToonOverride = ToonOverride,
         };
         var entry = new InfinityEntry(emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root);
         var scene = new WorldInfinityViewScene(emitter, () => entry.Views, planned.Spec) {
@@ -300,6 +301,7 @@ public sealed partial class WorldScreenBinder {
         public IReadOnlyList<int> Screens => AllScreens;
 
         public bool Emits(int screen) => WorldScreenBinder.Emits(entry.Screens, screen);
+        public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: entry.Screens?.RowOf(screen: screen));
         public SourceMapping? MappingOf(int screen) => (((entry.Screens is { } screens) && screens.Mappings.TryGet(mapping: out var mapping, screen: screen)) ? mapping : null);
         public string? ReadOf(int view, int screen) => entry.Screens?.InstanceOf(screen: screen);
     }

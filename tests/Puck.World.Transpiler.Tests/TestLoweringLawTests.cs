@@ -26,6 +26,7 @@ public class TestLoweringLawTests {
 
         return compilation;
     }
+    private static string[] RowNames(JsonObject world) => [.. world["state"]!["world"]!.AsArray().Select(selector: static row => row!["name"]!.GetValue<string>())];
     private static JsonObject OneWorld(string source) => Assert.Single(collection: Green(source: source).TestWorlds).Json;
     public static TheoryData<string, string> InadmissibleLines() => new() {
         { "given {\n        hp = notALiteral\n    }\n    expect {\n        hp == 1\n    }", "from something other than a literal" },
@@ -174,6 +175,83 @@ public class TestLoweringLawTests {
         Assert.Equal(
             actual: fold["state"]!.GetValue<string>(),
             expected: "expect$1$fixed"
+        );
+    }
+    // A line addressed by name in a test about one world is a claim about a sibling document a crossing starts: the
+    // world the run boots carries no row or rule for it, and the claim lowers into the sibling once it is composed,
+    // where it passes the verdict on every tick it holds rather than on one export tick.
+    [Fact]
+    public void ALineAddressedToASiblingDocumentLowersIntoThatDocumentAndNotTheBootedWorld() {
+        var compilation = Green(source: """
+            schema: "puck.world.definition.v1"
+            documentId: "kinds"
+
+            state {
+              world {
+                slot hp = 3
+              }
+            }
+
+            test "a sibling claim" {
+              expect {
+                hp == 3
+                garden {
+                  hp == 5
+                  speed > 1.0
+                }
+              }
+            }
+            """);
+        var test = Assert.Single(collection: compilation.TestWorlds);
+
+        Assert.Equal(
+            actual: RowNames(world: test.Json),
+            expected: ["hp", "expect$1"]
+        );
+
+        var claims = test.Foreign;
+
+        Assert.Equal(
+            actual: claims.Select(selector: static claim => (claim.Document, claim.Row)),
+            expected: [("garden", "expect$2"), ("garden", "expect$3")]
+        );
+
+        var garden = new JsonObject {
+            ["state"] = new JsonObject {
+                ["world"] = new JsonArray(new JsonObject { ["kind"] = "Int", ["name"] = "hp" }, new JsonObject { ["kind"] = "Fixed", ["name"] = "speed" }),
+            },
+        };
+
+        foreach (var claim in claims) {
+            Assert.True(
+                condition: claim.TryApply(reason: out var reason, world: garden),
+                userMessage: reason
+            );
+        }
+
+        Assert.False(condition: claims[0].TryApply(reason: out var duplicate, world: garden));
+        Assert.Contains(
+            actualString: duplicate!,
+            expectedSubstring: "already declares 'expect$2'"
+        );
+        Assert.Equal(
+            actual: RowNames(world: garden),
+            expected: ["hp", "speed", "expect$2", "expect$3", "expect$3$fixed"]
+        );
+
+        var rule = garden["rules"]!.AsArray().OfType<JsonObject>().Single(predicate: static candidate => (candidate["name"]!.GetValue<string>() == "expect$3"));
+
+        Assert.Equal(
+            actual: rule["gate"]!["$type"]!.GetValue<string>(),
+            expected: "compareState"
+        );
+        Assert.Equal(
+            actual: rule["gate"]!["state"]!.GetValue<string>(),
+            expected: "speed"
+        );
+        Assert.Equal(
+            actual: rule["effects"]!.AsArray().OfType<JsonObject>().Select(selector: static effect => effect["state"]!.GetValue<string>()),
+            expected: ["expect$3", "expect$3$fixed"]
         );
     }
     [Fact]

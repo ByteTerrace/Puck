@@ -19,6 +19,14 @@ integration, and [Puck.Attestation](../Puck.Attestation/README.md) for signed
 claims. The [resource project](../Puck.Azure.Resources/README.md) describes the
 infrastructure those services use.
 
+`attest-keys` derives the subject from the authenticated request. Renewal verifies
+the issuing signature and matches the binding's subject, algorithm and public key
+against that caller and the selected stored key. A public binding copied into a
+different caller's storage cannot renew its original subject. An expired binding
+can renew when those checks pass; expiry alone is not key revocation.
+Key material is streamed with a byte limit before parsing: 4 KiB for a public PEM
+and the attestation wire limit for a binding. A larger caller-owned blob is refused.
+
 ## Configuration and deployment
 
 Follow [CI and releases](../../docs/development/ci.md) for shared deployment

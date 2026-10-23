@@ -171,7 +171,8 @@ public abstract record WorldReplayEntry {
     /// <summary>One body an in-place crossing moved through a portal pair standing in this world
     /// (<see cref="WorldServer.CrossingTap"/>), at the position among the tick's authority entries where the authority
     /// applied it. A re-drive applies the recorded crossing through the same
-    /// <see cref="WorldServer.ApplyInPlaceCrossing"/>; one the shadow cannot apply leaves its body in place, and the
+    /// <see cref="WorldServer.TryApplyInPlaceCrossing"/>, which writes a scaled pair's body size into its row as live
+    /// play does; one the shadow cannot apply leaves its body in place, and the
     /// tick's hash reports the divergence.</summary>
     /// <param name="Value">The crossing.</param>
     internal sealed record Crossing(WorldInPlaceCrossing Value) : WorldReplayEntry;
@@ -218,10 +219,19 @@ public readonly record struct WorldReplayTickInput(IReadOnlyList<WorldReplayEntr
 /// tick <c>Tick</c> is its first live tick. Never greater than the child's own <see cref="WorldReplaySnapshot.TickCount"/>,
 /// which <see cref="WorldReplaySnapshot.Read"/> refuses by name.</param>
 public readonly record struct WorldReplayForkProvenance(string ParentName, int Tick);
-/// <summary>The two replay traces computed in one re-drive: diagnostic poses and the verification boundary.</summary>
+/// <summary>One machine core's image digest at a tape's end: the FNV-1a fold of the bytes its runtime's checkpoint
+/// captures once every accepted step has completed, so two hosts that re-derived the same core state digest the
+/// same.</summary>
+/// <param name="Name">The declared machine name.</param>
+/// <param name="Digest">The fold of the core's checkpoint image.</param>
+public readonly record struct WorldReplayMachineDigest(string Name, ulong Digest);
+/// <summary>The traces computed in one re-drive: diagnostic poses, the verification boundary, and the machine cores'
+/// digests at the end.</summary>
 /// <param name="Pose">The historical pose-only trace used by trajectory inspection.</param>
 /// <param name="Authoritative">The authoritative state-system trace used for replay verdicts.</param>
-public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Authoritative);
+/// <param name="Machines">Each machine core's digest after the last tick, in name order; empty when the shadow's host
+/// cannot capture its cores.</param>
+public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Authoritative, IReadOnlyList<WorldReplayMachineDigest> Machines);
 /// <summary>
 /// A deterministic world-state recording: the server starting state captured at record-start plus the per-tick
 /// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
@@ -339,6 +349,19 @@ public sealed partial class WorldReplaySnapshot {
     /// latches, body action state, live fields, and poses. Replay verdicts compare this trace;
     /// <see cref="RecordedHashes"/> remains the population-only diagnostic trace.</summary>
     public required ulong[] RecordedAuthoritativeHashes { get; init; }
+    /// <summary>Gets the live session's per-tick authoritative trace read one component at a time
+    /// (<see cref="WorldStateHashComposition.AuthoritativeComponents"/>): one row per recorded tick, each one digest
+    /// per component of <see cref="WorldStateHashComposition.Authoritative"/> in its order, so a verdict or a live
+    /// drive names the components that differ at the first divergent tick. Empty for a tape that recorded none (a
+    /// history branch's draft, or a fork whose parent recorded none); otherwise exactly <see cref="TickCount"/>
+    /// rows.</summary>
+    public IReadOnlyList<ulong[]> RecordedComponentHashes { get; init; } = [];
+    /// <summary>Gets the live machine cores' digests at the tape's end (<see cref="MachineDigests"/> over the live
+    /// host as the recording stopped), in name order: what a re-drive's cores must digest to after its last tick.
+    /// Machine cores are outside the per-tick authoritative hash, so this is the one place a tape pins them. Empty
+    /// when the recording ran no machine, its host could not capture (a live coupled link), or the tape is a history
+    /// branch's draft or a fork's.</summary>
+    public IReadOnlyList<WorldReplayMachineDigest> RecordedMachineDigests { get; init; } = [];
     /// <summary>Gets the live session's per-tick population hash trace — one entry per recorded tick, sampled off the live
     /// population after each tick's server step, so the last entry is the state the running world actually reached. A
     /// replay recomputes this diagnostic trace by re-driving the recording through a fresh world
@@ -553,7 +576,10 @@ public sealed partial class WorldReplaySnapshot {
                 case WorldReplayEntry.Crossing crossing:
                     // A crossing the shadow cannot apply leaves its body where it stood, which the tick's own hash
                     // then reports as the divergence it is.
-                    _ = server.ExecuteAuthorityOperation(operation: () => server.ApplyInPlaceCrossing(crossing: crossing.Value));
+                    _ = server.ExecuteAuthorityOperation(operation: () => server.TryApplyInPlaceCrossing(
+                        crossing: crossing.Value,
+                        reason: out _
+                    ));
 
                     break;
                 default:
@@ -1887,8 +1913,79 @@ public sealed partial class WorldReplaySnapshot {
 
         return new WorldReplayHashTraces(
             Authoritative: authoritativeHashes,
+            Machines: MachineDigests(machines: machines),
             Pose: poseHashes
         );
+    }
+    /// <summary>Digests every machine core a host runs, in name order: each runtime's checkpoint image, captured once
+    /// its accepted steps have completed, folded by FNV-1a.</summary>
+    /// <param name="machines">The machine host.</param>
+    /// <returns>One digest per machine, or empty when the host has no checkpoint support or refuses capture (a live
+    /// coupled link).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="machines"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<WorldReplayMachineDigest> MachineDigests(IWorldMachineHost machines) {
+        ArgumentNullException.ThrowIfNull(argument: machines);
+
+        if (machines is not IWorldMachineCheckpointHost host) {
+            return [];
+        }
+
+        WorldMachineHostCheckpoint checkpoint;
+
+        try {
+            checkpoint = host.CaptureCheckpoint();
+        } catch (InvalidOperationException) {
+            return [];
+        }
+
+        var digests = new List<WorldReplayMachineDigest>(capacity: checkpoint.Instances.Count);
+
+        foreach (var instance in checkpoint.Instances) {
+            var hash = Fnv1aHash.Create();
+
+            hash.Add(values: instance.RuntimeState);
+            digests.Add(item: new WorldReplayMachineDigest(
+                Digest: hash.Value,
+                Name: instance.Name
+            ));
+        }
+
+        return digests;
+    }
+    /// <summary>Names the first way a re-drive's machine cores disagree with a recording's: a recorded machine the
+    /// re-drive does not run, a core whose image digests differently, or a machine the re-drive runs that the
+    /// recording did not.</summary>
+    /// <param name="recorded">The recording's digests.</param>
+    /// <param name="replayed">The re-drive's or the live host's digests.</param>
+    /// <returns>The disagreement, or <see langword="null"/> when every core matches.</returns>
+    public static string? DescribeMachineDivergence(IReadOnlyList<WorldReplayMachineDigest> recorded, IReadOnlyList<WorldReplayMachineDigest> replayed) {
+        ArgumentNullException.ThrowIfNull(argument: recorded);
+        ArgumentNullException.ThrowIfNull(argument: replayed);
+
+        foreach (var expected in recorded) {
+            var found = false;
+
+            foreach (var actual in replayed) {
+                if (!string.Equals(a: actual.Name, b: expected.Name, comparisonType: StringComparison.Ordinal)) {
+                    continue;
+                }
+
+                found = true;
+                if (actual.Digest != expected.Digest) {
+                    return $"machine '{expected.Name}' core image 0x{actual.Digest:X16} differs from the recorded 0x{expected.Digest:X16} at the tape's end";
+                }
+            }
+            if (!found) {
+                return $"machine '{expected.Name}' is recorded but does not run in the re-drive";
+            }
+        }
+        foreach (var actual in replayed) {
+            if (!recorded.Any(predicate: expected => string.Equals(a: expected.Name, b: actual.Name, comparisonType: StringComparison.Ordinal))) {
+                return $"machine '{actual.Name}' runs in the re-drive but was not recorded";
+            }
+        }
+
+        return null;
     }
     /// <summary>Returns the deterministic per-tick population hash: every active body's fixed-point pose, rigid
     /// velocity/contact/rest residue, and carry relationship folded in index order, so two runs with identical input

@@ -2,6 +2,7 @@ using Puck.Commands;
 using Xunit;
 
 using Puck.Launcher;
+using Puck.SdfVm;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -16,6 +17,35 @@ namespace Puck.World.Presentation.Tests;
 /// </summary>
 public sealed class SessionLeverLawTests {
     private const string KnobName = "law-knob";
+
+    [Fact]
+    public void ToonReloadFollowsTheDocumentUntilTheSessionOverridesIt_AndTuningStillReloads() {
+        var render = Fixtures.BuildDocument().Render with { Toon = null };
+        var settings = new WorldRenderSettings(defaults: render);
+        Assert.False(condition: settings.Toon);
+        Assert.Null(@object: settings.ToonOverride);
+
+        render = render with { Toon = new WorldRenderToon(Enabled: true, OutlineWidth: 2f) };
+        Assert.True(condition: settings.ResolveToon(render).Enabled);
+        Assert.True(condition: settings.Toon);
+
+        var sink = WorldSessionLevers.Compose(
+            audio: new RecordingAudioLever(),
+            bindingBar: new WorldBindingBarVisibility(),
+            pacing: new PresentPacingControl(initialTargetHertz: null),
+            settings: settings
+        );
+        sink.Apply(lever: Lever(name: WorldSessionLevers.Toon, a: 0));
+        render = render with { Toon = render.Toon with { OutlineWidth = 3f } };
+        var resolved = settings.ResolveToon(render);
+        Assert.False(condition: resolved.Enabled);
+        Assert.False(condition: settings.ToonOverride);
+        Assert.Equal(expected: 3f, actual: resolved.OutlineWidth);
+
+        // A nested world keeps its own tuning and document default until the same live override reaches it.
+        Assert.True(condition: WorldRenderToon.Resolve(render.Toon).Enabled);
+        Assert.False(condition: WorldRenderToon.Resolve(render.Toon, settings.ToonOverride).Enabled);
+    }
 
     private static WorldSessionLever BarLever(double a, int seat) => new(
         A: a,
@@ -274,14 +304,39 @@ public sealed class SessionLeverLawTests {
         );
     }
     [Fact]
+    public void TheCullLeverSelectsTheMeshCullLevelByItsNumber() {
+        var settings = new WorldRenderSettings(defaults: Fixtures.BuildDocument().Render);
+        var sink = WorldSessionLevers.Compose(
+            audio: new RecordingAudioLever(),
+            bindingBar: new WorldBindingBarVisibility(),
+            pacing: new PresentPacingControl(initialTargetHertz: null),
+            settings: settings
+        );
+
+        Assert.Equal(
+            expected: SdfMeshCullLevel.Occlusion,
+            actual: settings.Cull
+        );
+        sink.Apply(lever: Lever(
+            a: ((double)SdfMeshCullLevel.Off),
+            name: WorldSessionLevers.Cull
+        ));
+        Assert.Equal(
+            expected: SdfMeshCullLevel.Off,
+            actual: settings.Cull
+        );
+    }
+    [Fact]
     public void TheShippedCompositionRegistersExactlyTheTokensTheVerbsSpeak() {
         var sink = ComposeShipped(visibility: new WorldBindingBarVisibility());
         string[] expected = [
             WorldSessionLevers.AmbientOcclusion,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
+            WorldSessionLevers.Cull,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
+            WorldSessionLevers.Rates,
             WorldSessionLevers.RenderScale,
             WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
@@ -291,6 +346,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.SkySolo,
             WorldSessionLevers.TargetHertz,
             WorldSessionLevers.Temporal,
+            WorldSessionLevers.Toon,
             WorldSessionLevers.UpscaleSharpness,
         ];
 

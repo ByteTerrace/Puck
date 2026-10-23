@@ -1026,3 +1026,23 @@ infrastructure plan and outputs, and SCM restoration snapshot. Live checks cover
 container versions, the primary world QUIC endpoint, website/docs routes, official
 manifest and engine media types, and API dependency health. These checks do not
 replace interactive browser or GPU qualification.
+
+## Repository automation
+
+Every repository operation is a verb on the one `puck` root
+(`src/Puck.Cli/PuckRootCommand.cs`). Write automation as a verb, never as a
+script, and never as inline PowerShell in a workflow. Workflows orchestrate
+`puck` verbs and the bash composite actions under `.github/actions/`, and every
+CI job installs the run's own candidate CLI. Formatting of PR branches is
+appended by CI; install no Git hooks and change no Git configuration during
+builds. `.claude/hooks/` holds shared harness policies, registered in
+`.claude/settings.json`, `.codex/hooks.json` and `.agents/hooks.json`, and the MCP launcher the checkout's MCP
+configurations start (`puck-mcp.ps1`); they run inside the agent's harness
+rather than as repository automation, so the script rule does not cover them.
+[C# file apps](../../docs/development/contributing.md#c-file-apps) owns the
+conventions for `src/Puck.Azure.Resources/bootstrap.cs`, the one file-based app.
+
+The [agent command hooks](../../.claude/hooks/README.md) guard physical-device
+isolation, MSBuild node cleanup, commit attribution and shared Git state in
+Claude and Antigravity, and in Codex once each current hook is trusted. They
+cover supported activated tool paths. The prose reminder remains Claude-only.

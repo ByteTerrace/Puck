@@ -56,10 +56,9 @@ public static unsafe class DirectXDescriptorHeaps {
 
         device->CreateDescriptorHeap(
             pDescriptorHeapDesc: in description,
-            ppvHeap: out var heap,
-            riid: ID3D12DescriptorHeap.IID_Guid
+            ppvHeap: out ID3D12DescriptorHeap* heap
         );
 
-        return ((ID3D12DescriptorHeap*)heap);
+        return heap;
     }
 }

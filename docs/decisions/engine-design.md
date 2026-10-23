@@ -138,14 +138,30 @@ in-session operation is a planned integration task, not evidence that an
 underlying library is absent. The [reference-game design](../game/design.md)
 and the [play programme](../plans/play.md) own that experience.
 
+The owner's ruling: console commands are easy to author and compose for safe
+operations, and a new one does not need C# work. A world document authors
+them in its `commands` section from existing verbs: a namespaced name, help
+text, typed parameters with defaults, and the console lines they expand to
+([commands reference](../reference/commands.md#document-authored-commands)).
+The console answers them beside the engine's verbs, in `help`, from a binding
+row or wheel sector, and typed at any console, and `world.reload` changes them
+with the document. Their safety is data rather than trust: an authored command
+runs each line under its caller's own principal and session policy, calls only
+what a binding may name (never an operator verb, never `quit`, never an
+unbindable verb), never takes an engine verb's name, and runs on the
+simulation tick its line applies on, so replay sees what its lines submitted.
+A new C# verb is for an operation no composition of existing verbs can
+express.
+
 ## One live world while the campaign runs
 
 While the current engine campaign is in progress, the debug world
 ([`debug.puck`](../../worlds/debug/debug.puck)) is the only
 live world, and the World boots it when no `--world` is given. Its own
 dependencies stay live with it: the Moth avatar it takes as its basis, the
-quality presets that avatar imports, the skies it imports, the garden its
-portal frame opens onto ([`garden.puck`](../../worlds/debug/garden.puck)), and the shipped
+quality presets that avatar imports, the skies it imports, the garden and the
+night field its painting wing opens onto ([`garden.puck`](../../worlds/debug/garden.puck),
+[`night.puck`](../../worlds/debug/night.puck)), and the shipped
 fonts, schemas and audio assets live code reads.
 
 Every other world is quarantined in [`experimental/`](../../experimental/README.md),
@@ -162,6 +178,86 @@ keep their verbs and wait, unrun, until the owner calls for qualification; the
 [open items](../plans/open-items.md#quarantined-gates) record what each covered.
 A quarantined world returns by being rewritten or re-admitted under the gate,
 never by building it in place.
+
+## A portal is a plane a body passes through
+
+A door fires when the body's origin passes through its glass, from the side the
+glass faces and within the opening. The test is swept, so no speed tunnels past
+it. A door does not fire when the body enters a band in front of the glass.
+While a body stands in a door's opening, contact with this world's geometry
+behind the glass is ignored, so a door laid on solid ground lets a body walk
+onto it and drop through, and a door on a wall lets a body walk into it. The
+crossing then maps the body through the pair's isometry: it comes out just
+through the counterpart's glass, moving as it went in. Every door follows this
+rule, a door onto another world as much as a pair standing in one world.
+
+A pair standing in one world carries the body in place rather than
+transferring it. The body keeps its index and state. Its every point and
+direction, its previous position included, moves through the isometry, and
+presentation carries what it latched the same way, so the crossing reads as
+continuous motion, never a teleport. A body straddling a door is drawn on both
+sides of it, each copy clipped by its own glass, and a chase camera whose boom
+reaches through a door's glass stands past the counterpart's glass, looking
+back through it at the body.
+
+Why: a door that fires early moves the body, and the camera that follows it,
+to the far side before it has reached the glass. A floor door also needs the
+ground under it to give way, or a falling body stops on it in the same step it
+passes through.
+
+## The engine has no reference body size
+
+A world's length unit is the metre, and content is authored at the size the
+real thing has: a handheld console is its real millimetres, a door its real
+height. An avatar is content too, authored at whatever size its author chose.
+The Moth stands 2.06 m because she wears a suit. The engine holds no scale
+derived from an avatar's proportions and no notion of a "normal" body:
+movement, reach, camera framing and engagement read each body's own authored
+or current size. A world that wants an object to read well in a body's hands
+authors that body at a matching size, for example a Moth out of her suit,
+rather than rescaling the object.
+
+Why: the owner's ruling. The debug world's sizing follows the owner's choices
+for the Moth, which are an author's choices and not the engine's.
+
+## A derived product is a cache, never the truth
+
+A baked mesh, an irradiance volume, a compiled shader or any other product
+derived from a document and the engine's code may be built ahead of time and
+shipped with a package (`world prepare`, the deploy) or served by its identity,
+so a fresh machine draws its first frame without deriving everything itself.
+Every such product is only a shortcut to a result the engine can always derive
+again:
+
+- Its identity is computed from its inputs, the code that derives it included,
+  at the moment it is needed. The code is the code the derivation runs, read
+  from the build (for the mesh bake, the methods its call graph reaches and its
+  kernels' bytecode), never a whole assembly's or a checkout's identity, so an
+  edit elsewhere keeps the product. Nothing records an expected identity to compare
+  against, so there is no step that accepts a new one: a change to the deriving
+  code invalidates what it changes, and the cost is a derivation.
+- A missing, stale or corrupt product is derived again and counted, never
+  refused. No test, CI step, review or gate compares against a shipped product,
+  and no change waits on one.
+- Products are never committed. The pipeline builds them from the same commit
+  as the code that reads them, into git-ignored caches or the deploy.
+- Deleting every cache is always safe and yields the same picture, only
+  slower. Counters show hits, misses and derivation time, as evidence for a
+  performance decision, never as a gate.
+
+Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
+never again becomes a slave to a recorded artifact, as it did with the deleted
+ledgers and the bake derivation fingerprint.
+
+The owner explicitly includes compiled cartridge JSON twins in this decision.
+Only their authored sources are committed; consumers compile those sources,
+and semantic compile/decompile round trips compare results produced in the run.
+The owner also includes the Maths coverage ratchet, its numeric floor and all
+recorded Maths registers in the no-recorded-ledgers ruling. The structural checks
+hold declaration/binding parity, member-reference resolution and waiver reasons;
+they read no recorded file and write no register. The retired ratchet
+grandfathered uncovered public members, so whole-public-surface completeness
+requires that remaining API to be classified in authored declarations first.
 
 ## Verification must match the claim
 

@@ -13,6 +13,8 @@
         "--",
         "--world",
         "worlds/debug",
+        "--devices",
+        "all",
         "--control"
       ]
     },

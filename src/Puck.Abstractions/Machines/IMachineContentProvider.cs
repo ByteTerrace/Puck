@@ -1,21 +1,22 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>A provider-owned transformation from authored content into an executable machine image.</summary>
-/// <remarks>The caller owns reading and pinning the input bytes. Preparation does not read files, boot a machine,
+/// <remarks>The caller owns reading and pinning the input bytes. Preparation may resolve source imports beside that path; it does not boot a machine,
 /// or mutate an existing instance. The provider owns content recognition, validation, compilation, and symbols.</remarks>
 public interface IMachineContentProvider {
     /// <summary>Gets the identifier of the engine that executes the prepared image.</summary>
     string EngineId { get; }
 
     /// <summary>Determines whether this provider recognizes the named authored content format.</summary>
-    /// <param name="contentPath">The content's logical path, used for format selection only.</param>
+    /// <param name="contentPath">The content's path, used for format selection.</param>
     /// <returns>True when the provider prepares this format; false for an ordinary native image.</returns>
     bool Recognizes(string contentPath);
     /// <summary>Validates and prepares one recognized content image.</summary>
     /// <param name="content">The complete immutable input bytes.</param>
+    /// <param name="contentPath">The resolved input path, used to resolve source imports.</param>
     /// <returns>The executable image and provider-owned source and symbol metadata.</returns>
     /// <exception cref="MachineContentException">The content cannot be prepared.</exception>
-    PreparedMachineContent Prepare(ReadOnlyMemory<byte> content);
+    PreparedMachineContent Prepare(ReadOnlyMemory<byte> content, string contentPath);
 }
 /// <summary>An addressable symbol exported by a content provider.</summary>
 /// <param name="Space">The provider-defined address space.</param>

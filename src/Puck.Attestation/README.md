@@ -1,7 +1,7 @@
 # Puck.Attestation
 
 Puck.Attestation provides offline-verifiable claims and key-bound identities:
-deterministic CBOR envelopes, Ed25519 signatures, and trust-root pinning.
+deterministic CBOR envelopes, ECDSA P-256/SHA-256 signatures, and trust-root pinning.
 
 ## Documentation
 

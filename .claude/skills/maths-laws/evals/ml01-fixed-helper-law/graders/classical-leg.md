@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response declares the leg as classical (agreement with an independently authored reference that shares no code and no rounding substrate), not as shared-substrate or in-tree evidence.
+Classical

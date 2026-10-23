@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Puck.Assets;
 using Puck.Assets.Documents;
 
 namespace Puck.Launcher.Release;
@@ -36,6 +37,9 @@ public sealed record UpdateApplyOutcome(bool Applied, string Detail);
 /// <param name="applier">Swaps the install's <c>current</c> pointer to a staged version.</param>
 /// <param name="options">The resolved operational configuration.</param>
 public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifier, IUpdateStager stager, IUpdateApplier applier, UpdateOptions options) {
+    // This is local authorization state, protected by the same install-root ownership as the replay store.
+    // Store before reserving the sequence; after a process interruption either side of that write can resume.
+    private sealed record InstallIntent(ReleaseManifest Manifest, DateTimeOffset VerifiedAt, string InstalledVersion, string Rid);
     private readonly IUpdateApplier m_applier = applier;
     private readonly UpdateOptions m_options = options;
     private readonly IReleaseSource m_source = source;
@@ -45,7 +49,7 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <summary>Gets the resolved operational configuration this service checks against.</summary>
     public UpdateOptions Options => m_options;
 
-    private async Task<UpdateCheckResult> FetchAndVerifyAsync(bool advanceSequence, CancellationToken cancellationToken, DateTimeOffset now) {
+    private async Task<UpdateCheckResult> FetchAndVerifyAsync(CancellationToken cancellationToken, DateTimeOffset now) {
         var fetch = await m_source.TryGetLatestManifestAsync(
             channel: m_options.Channel,
             cancellationToken: cancellationToken
@@ -87,8 +91,16 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             );
         }
 
+        if (!string.Equals(a: manifest.Channel, b: m_options.Channel, comparisonType: StringComparison.Ordinal)) {
+            return new UpdateCheckResult(
+                Detail: $"manifest names channel '{manifest.Channel}', expected '{m_options.Channel}'",
+                Manifest: null,
+                Outcome: UpdateCheckOutcome.Refused
+            );
+        }
+
         var verified = m_verifier.Verify(
-            advanceSequence: advanceSequence,
+            advanceSequence: false,
             installedVersion: m_options.InstalledVersion,
             manifest: manifest,
             now: now
@@ -124,55 +136,87 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         );
     }
 
-    /// <summary>Re-verifies the tracked channel — committing the manifest's sequence to the durable replay
-    /// high-water mark this time, unlike <see cref="CheckAsync"/> — and, only when a verified, in-rollout newer
-    /// version is found, stages and applies this process's runtime identifier's payload. Refuses without staging,
-    /// applying, or committing anything when the re-verification does not report
-    /// <see cref="UpdateCheckOutcome.Available"/>.</summary>
+    /// <summary>Under an exclusive install-root lease, resumes a pending local install or checks the tracked
+    /// channel. Rollout and staging precede a durable exact-manifest intent and replay reservation; the pointer
+    /// changes only after reservation. Process interruption resumes that intent, even after signature expiry,
+    /// using the current trust policy at its original authorization instant. No network response can replace a
+    /// pending intent. The filesystem must protect the install root from untrusted local writers.</summary>
     /// <param name="now">The check instant, captured once by the caller.</param>
     /// <param name="cancellationToken">Cancels the fetch/stage.</param>
     public async Task<UpdateApplyOutcome> ApplyAsync(DateTimeOffset now, CancellationToken cancellationToken) {
-        var check = await FetchAndVerifyAsync(
-            advanceSequence: true,
-            cancellationToken: cancellationToken,
-            now: now
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (check.Outcome != UpdateCheckOutcome.Available) {
-            return new UpdateApplyOutcome(
-                Applied: false,
-                Detail: $"re-verification reported {check.Outcome}: {check.Detail}"
-            );
+        try {
+            var root = Path.GetFullPath(path: m_options.CacheRoot);
+            Directory.CreateDirectory(path: root);
+            // Never unlink this file: a persistent inode makes process exit release the only writer lease.
+            using var lease = new FileStream(path: Path.Combine(path1: root, path2: "update.lock"),
+                mode: FileMode.OpenOrCreate, access: FileAccess.ReadWrite, share: FileShare.None);
+            return await ApplyUnderLeaseAsync(root: root, now: now, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) {
+            return new UpdateApplyOutcome(Applied: false, Detail: $"install is busy or unavailable; any pending intent is retained: {error.Message}");
         }
+    }
 
-        var manifest = check.Manifest!;
+    private async Task<UpdateApplyOutcome> ApplyUnderLeaseAsync(string root, DateTimeOffset now, CancellationToken cancellationToken) {
+        var intentPath = Path.Combine(path1: root, path2: "install-intent.json");
+        var recovering = File.Exists(path: intentPath);
         var rid = CurrentRid();
-        var staged = await m_stager.StageAsync(
-            cancellationToken: cancellationToken,
-            manifest: manifest,
-            rid: rid
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        InstallIntent intent;
 
-        if (!staged.Staged) {
-            return new UpdateApplyOutcome(
-                Applied: false,
-                Detail: (staged.RefusalReason ?? "staging refused")
-            );
+        if (recovering) {
+            intent = JsonSerializer.Deserialize<InstallIntent>(json: File.ReadAllText(path: intentPath), options: DocumentJsonOptions.Shared)
+                ?? throw new JsonException(message: "install intent deserialized to null");
+            if (intent.Manifest is null || string.IsNullOrWhiteSpace(value: intent.InstalledVersion) ||
+                intent.Rid != rid || intent.Manifest.App != m_options.App || intent.Manifest.Channel != m_options.Channel || intent.VerifiedAt > now) {
+                return new UpdateApplyOutcome(Applied: false, Detail: "pending install intent does not match this app, channel, runtime or authorization time");
+            }
+            // A changed current trust policy still refuses the intent. Time alone does not revoke local work
+            // already authorized while its signature was valid; no fresh network verification uses this instant.
+            var resumed = m_verifier.ReserveInstall(manifest: intent.Manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
+            if (!resumed.Accepted) {
+                return new UpdateApplyOutcome(Applied: false, Detail: $"pending install refused: {resumed.RefusalReason}");
+            }
+        } else {
+            var check = await FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now).ConfigureAwait(continueOnCapturedContext: false);
+            if (check.Outcome != UpdateCheckOutcome.Available) {
+                return new UpdateApplyOutcome(Applied: false, Detail: $"re-verification reported {check.Outcome}: {check.Detail}");
+            }
+            intent = new InstallIntent(Manifest: check.Manifest!, VerifiedAt: now, InstalledVersion: m_options.InstalledVersion, Rid: rid);
         }
 
-        var applied = m_applier.Apply(
-            cacheRoot: m_options.CacheRoot,
-            manifest: manifest,
-            rid: rid
-        );
+        var manifest = intent.Manifest;
+        var currentPath = Path.Combine(path1: root, path2: "current");
+        var current = File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null;
+        var alreadyCurrent = recovering && current == manifest.Version;
+        if (!alreadyCurrent && !string.IsNullOrEmpty(value: current) &&
+            !ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: current)) {
+            return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
+        }
 
+        // Never restage the running directory, including when an interrupted apply already swapped current.
+        // The applier rehashes it below without modifying its files or last-good pointer.
+        if (!alreadyCurrent) {
+            var staged = await m_stager.StageAsync(cancellationToken: cancellationToken, manifest: manifest, rid: rid).ConfigureAwait(continueOnCapturedContext: false);
+            if (!staged.Staged) {
+                return new UpdateApplyOutcome(Applied: false, Detail: staged.RefusalReason ?? "staging refused");
+            }
+        }
+
+        if (!recovering) {
+            AtomicFile.WriteAllText(path: intentPath, contents: JsonSerializer.Serialize(value: intent, options: DocumentJsonOptions.Shared));
+            var reserved = m_verifier.ReserveInstall(manifest: manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
+            if (!reserved.Accepted) {
+                return new UpdateApplyOutcome(Applied: false, Detail: $"install reservation refused: {reserved.RefusalReason}");
+            }
+        }
+
+        var applied = m_applier.Apply(cacheRoot: root, manifest: manifest, rid: rid, recoverInterruptedApply: recovering);
         if (!applied.Applied) {
-            return new UpdateApplyOutcome(
-                Applied: false,
-                Detail: (applied.RefusalReason ?? "apply refused")
-            );
+            return new UpdateApplyOutcome(Applied: false, Detail: applied.RefusalReason ?? "apply refused");
         }
 
+        // If interrupted before deletion, recovery rehashes the now-current version and completes this cleanup.
+        // The replay mark remains, so a later response with the same sequence is still refused.
+        File.Delete(path: intentPath);
         return new UpdateApplyOutcome(
             Applied: true,
             Detail: $"version {manifest.Version} applied, replacing {(applied.PreviousVersion ?? "(first install)")} — takes effect at the stub's next launch"
@@ -186,7 +230,6 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <param name="cancellationToken">Cancels the fetch.</param>
     public Task<UpdateCheckResult> CheckAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
         FetchAndVerifyAsync(
-            advanceSequence: false,
             cancellationToken: cancellationToken,
             now: now
         );

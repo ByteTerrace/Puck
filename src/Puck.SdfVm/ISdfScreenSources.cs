@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -22,11 +23,26 @@ public interface ISdfScreenSources {
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>Whether the bound image participates in the shared emission reduction.</returns>
     bool Emits(int screen);
+    /// <summary>Returns the luminance a screen's picture shows at: the peak luminance of a white picture on a display, in
+    /// nits. A screen drawn as an opening shows the luminance beyond it as it is, whatever this says.</summary>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <returns>The peak luminance, in nits; <see cref="SdfScreenEmission.DefaultLuminance"/> unless the screen's row
+    /// authors one.</returns>
+    float LuminanceOf(int screen) => SdfScreenEmission.DefaultLuminance;
     /// <summary>Returns the mapping a screen publishes, which the screen shading draws its face from.</summary>
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>The screen's surface mapping, or <see langword="null"/> when it publishes none: it then shades as unbound
     /// glass.</returns>
     SourceMapping? MappingOf(int screen);
+    /// <summary>Returns the ripple a screen shows this frame, for an opening that opts in.</summary>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <param name="ripple">The screen's clock and contacts, or <see langword="default"/> when it does not ripple.</param>
+    /// <returns><see langword="true"/> when the screen ripples; the default is a screen that never does.</returns>
+    bool TryRippleOf(int screen, out SdfScreenRipple ripple) {
+        ripple = default;
+
+        return false;
+    }
     /// <summary>Returns the name of the render-graph instance a screen samples in one view of the residency's frame.</summary>
     /// <param name="view">The view's index in the residency's frame (<see cref="SdfWorldView.View"/>).</param>
     /// <param name="screen">The program-declared screen index.</param>

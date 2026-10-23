@@ -99,7 +99,7 @@ public sealed class PathProfileLawTests {
             [new(new(x: 0.5f, y: 0), ArcCenter: Vector2.Zero)], Closed: true)], Stroke: new(0.1f, 0.05f)).Compile());
     }
     [Fact]
-    public void PackedTablesAreOwnedAndBudgetedAndContactIsExplicitlyRefused() {
+    public void PackedTablesAreOwnedAndBudgetedAndReadByTheEvaluator() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -114,7 +114,10 @@ public sealed class PathProfileLawTests {
         Assert.Equal(-0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[offset]));
         Assert.Equal(1f, program.StepScale);
         Assert.Throws<ArgumentException>(testCode: () => new SdfProgram(program.Instructions, [new SdfMaterial(Albedo: Vector3.One)]));
-        Assert.Contains("Path", Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: program)).Message);
+        // The contact reading takes the path through the program's own edge table: at the origin the extrusion's half-depth
+        // is the nearest face.
+        Assert.True(condition: new SdfFieldEvaluator(program: program).TryDistance(distance: out var distance, material: out _, position: Puck.Maths.FixedPosition.FromLocal(local: Puck.Maths.FixedVector3.Zero)));
+        Assert.Equal(expected: -0.04f, actual: ((float)(double)distance), tolerance: 1e-3f);
         builder.ReservePathTables(shapeCount: 2);
         var probe = builder.Build();
 

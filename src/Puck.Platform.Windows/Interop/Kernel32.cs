@@ -20,4 +20,6 @@ internal static partial class Kernel32 {
     public static partial bool SetWaitableTimer(SafeWaitHandle timerHandle, in long dueTime, int period, nint completionRoutine, nint completionRoutineArgument, [MarshalAs(UnmanagedType.Bool)] bool resume);
     [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial nint GetModuleHandle(string? moduleName);
+    [LibraryImport("kernel32.dll")]
+    public static partial uint GetCurrentThreadId();
 }

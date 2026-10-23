@@ -228,8 +228,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
     }
     /// <inheritdoc/>
-    /// <remarks>A window feed's window is created with the feed, over the handle it captures; a monitor feed has
-    /// none.</remarks>
+    /// <remarks>Created with the feed over the handle it captures: a window feed's window
+    /// (<see cref="Win32PassthroughWindow"/>), and a monitor feed's desktop (<see cref="Win32DesktopPassthrough"/>).</remarks>
     public ISourcePassthroughWindow? Window { get; }
     /// <inheritdoc/>
     public DisplayOutput Output => m_display.Output;
@@ -370,6 +370,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                 windowHandle: targetHandle
             );
             Window = new Win32PassthroughWindow(windowHandle: targetHandle);
+        } else {
+            Window = new Win32DesktopPassthrough(
+                monitorHandle: targetHandle,
+                title: "Desktop"
+            );
         }
         allocatePixels ??= static length => GC.AllocateUninitializedArray<byte>(length: length);
         m_displayProbe = ((openOutputs is null)
@@ -1025,24 +1030,14 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             m_context = context;
             m_device = device;
 
-            var device1Iid = ID3D11Device1.IID_Guid;
-
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var device1,
-                    riid: in device1Iid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<ID3D11Device1>(ppvObject: out var device1),
                 operation: "QueryInterface(ID3D11Device1)"
             );
-            m_device1 = ((ID3D11Device1*)device1);
-
-            var dxgiIid = IDXGIDevice.IID_Guid;
+            m_device1 = device1;
 
             Win32D3D11.ThrowIfFailed(
-                hr: ((IUnknown*)device)->QueryInterface(
-                    ppvObject: out var dxgiDevice,
-                    riid: in dxgiIid
-                ),
+                hr: ((IUnknown*)device)->QueryInterface<IDXGIDevice>(ppvObject: out var dxgiDevice),
                 operation: "QueryInterface(IDXGIDevice)"
             );
             try {
@@ -1082,10 +1077,9 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             preexistingHandle: sharedHandle
         );
 
-        m_device1->OpenSharedResource1(
+        m_device1->OpenSharedResource1<ID3D11Texture2D>(
             hResource: handle,
-            ppResource: out var texture,
-            returnedInterface: ID3D11Texture2D.IID_Guid
+            ppResource: out var texture
         );
 
         D3D11_TEXTURE2D_DESC description;
@@ -1093,7 +1087,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             ? DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT
             : DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM);
 
-        ((ID3D11Texture2D*)texture)->GetDesc(pDesc: &description);
+        texture->GetDesc(pDesc: &description);
         if (
             (description.Format != expectedFormat) ||
             (description.Width != ((uint)expectedWidth)) ||

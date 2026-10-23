@@ -1,8 +1,6 @@
 ---
-type: regex
+type: llm
 weight: 1
-match: contains
-flags: i
 ---
 
-puck\s+baselines\s+maths-ledger
+The response classifies affected public members through authored law declarations or reasoned waivers and runs the relevant tier without generating or committing recorded registers.

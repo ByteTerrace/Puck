@@ -7,7 +7,8 @@ namespace Puck.World.Authoring;
 
 /// <summary>One palette entry on the wire (mirrors <see cref="SdfMaterial"/> with document-doctrine nullability).</summary>
 /// <param name="Color">The base color as <c>#RRGGBB</c> (see <see cref="HexColor"/>).</param>
-/// <param name="Emissive">The emissive strength (null = 0 — optional members are nullable and normalized at load).</param>
+/// <param name="Emissive">The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and
+/// normalized at load).</param>
 /// <param name="Specular">The specular strength (null = the material default).</param>
 /// <param name="Roughness">The GGX roughness in [0, 1] (null = <see cref="SdfMaterial.DefaultRoughness"/>) — see
 /// <see cref="SdfMaterial"/> for the roughness-floor formula. A document still spelling <c>shininess</c> is an
@@ -32,7 +33,13 @@ namespace Puck.World.Authoring;
 /// <param name="EmissiveLane">The render lane in [0, 3] whose saturated value scales <paramref name="Emissive"/> at
 /// shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null
 /// keeps the emissive static.</param>
-public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PalettePaintDocument>? Paints = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null);
+/// <param name="Glass">The slot's glass (<see cref="PaletteGlassDocument"/>), whose tint is <paramref name="Color"/>
+/// and whose frost is <paramref name="Roughness"/>; null keeps the slot opaque.</param>
+public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PalettePaintDocument>? Paints = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassDocument? Glass = null) {
+    /// <summary>Gets whether the slot is glass.</summary>
+    [JsonIgnore]
+    public bool IsGlass => (Glass is not null);
+}
 /// <summary>The persisted form of a placed shape. <see cref="Position"/> and
 /// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
 /// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>
@@ -124,6 +131,19 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, System.Numerics.Vector3, SdfLift)"/>, so it needs no
 /// separate authored magnitude.</param>
 /// <param name="Cells">Shape-local cellular relief, evaluated after geometry within its own field scope.</param>
+/// <param name="Warp">The shape's cross-coupled sinusoidal domain warp (null = none) — see
+/// <see cref="ShapeWarpDocument"/>. Applied to the shape's own local point after <see cref="Bumps"/>, before
+/// <see cref="Elongate"/>. Render-only.</param>
+/// <param name="Displace">The shape's sine relief (null = none) — see <see cref="ShapeDisplaceDocument"/>. Added to
+/// the shape's own field inside its own scope. Render-only.</param>
+/// <param name="Elongate">The half-extents the primitive's cross-section is swept over, creation units (null = none):
+/// <see cref="SdfProgramBuilder.Elongate"/>, the capsule-from-sphere operator, applied last to the shape's own local
+/// point. Each component is clamped to [0, <see cref="MaxElongate"/>]. Render-only.</param>
+/// <param name="Steps">Only with a stairs <see cref="Blend"/> (<see cref="SdfBlendOp.StairsUnion"/>,
+/// <see cref="SdfBlendOp.StairsSubtraction"/>): the steps the seam takes over the blend radius
+/// <see cref="Smooth"/>, in [1, <see cref="ShapeScope.MaxSteps"/>] (null = <see cref="ShapeScope.DefaultSteps"/>).</param>
+/// <param name="Morph">Only with a <see cref="SdfBlendOp.Morph"/> <see cref="Blend"/>, and required by it: the lane
+/// and range the morph runs over — see <see cref="ShapeMorphDocument"/>.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
@@ -158,8 +178,15 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeShearDocument? Shear = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeErodeDocument? Erode = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCellsDocument? Cells = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCellsDocument? Cells = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeWarpDocument? Warp = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeDisplaceDocument? Displace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Elongate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Steps = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeMorphDocument? Morph = null
 ) {
+    /// <summary>The largest half-extent <see cref="Elongate"/> sweeps a cross-section over, per axis.</summary>
+    public const float MaxElongate = 2f;
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
     /// <see cref="SdfProgramBuilder.BendZ"/>'s remarks).</summary>
@@ -542,6 +569,39 @@ public sealed record CreationDocument(
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
+    /// <summary>Returns whether a shape's palette slot is glass (<see cref="PaletteEntryDocument.Glass"/>): the shape
+    /// bakes and draws apart from the creation's opaque shapes. A shape naming no slot, or one past the palette, reads
+    /// the slot the stampers resolve it to, the nearest within the palette.</summary>
+    /// <param name="shape">The shape.</param>
+    /// <returns><see langword="true"/> for a glass shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    public bool IsGlassShape(ShapeDocument shape) {
+        ArgumentNullException.ThrowIfNull(argument: shape);
+
+        var palette = (Palette ?? []);
+        var count = Math.Min(val1: palette.Count, val2: PaletteSize);
+
+        if (count == 0) { return false; }
+
+        return palette[Math.Clamp(value: (shape.Material ?? 0), max: (count - 1), min: 0)].IsGlass;
+    }
+    /// <summary>Gets whether any shape of the creation is glass (<see cref="IsGlassShape"/>).</summary>
+    [JsonIgnore]
+    public bool HasGlass => (Shapes ?? []).Any(predicate: IsGlassShape);
+
+    /// <summary>Returns whether any glass shape of the creation composes by something other than a plain union with
+    /// the glass shapes before it, so the glass shapes need a field scope of their own when they emit apart from the
+    /// opaque ones.</summary>
+    /// <returns><see langword="true"/> when a glass shape blends other than by union.</returns>
+    public bool GlassNeedsScope() {
+        foreach (var shape in (Shapes ?? [])) {
+            if (IsGlassShape(shape: shape) && ((shape.Blend ?? SdfBlendOp.Union) is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>The creation's total per-stamp shape budget: its authored shapes (a panelled shape counts as 2 — its
     /// eroded copy is a second emitted primitive; each of a shape's trims counts 2 more — the host's own eroded copy
     /// plus the reference's own dilated copy) plus every text run's expanded glyph count (a run counts as its

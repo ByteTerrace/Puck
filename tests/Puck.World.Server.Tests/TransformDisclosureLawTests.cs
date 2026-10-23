@@ -135,6 +135,100 @@ public sealed class TransformDisclosureLawTests {
             userMessage: handReason
         );
     }
+
+    [Fact]
+    public void AGrantedPeerTransferCannotPublishPrivateMembershipButCanReorderItsHand() {
+        using var fixture = Fixtures.FreshServer(definition: Table());
+        fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Budget: 4,
+            Capability: WorldCapability.Mutate, Exclusive: false,
+            KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State), Grantee: Dealer,
+            Subject: GrantSubject.Section(section: WorldSection.State)));
+        foreach (var row in new[] { "hand", "table" }) {
+            fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Capability: WorldCapability.Edit,
+                Exclusive: false, Grantee: Dealer, Subject: GrantSubject.State(name: row)));
+        }
+        var results = new List<WorldSubmissionResult>();
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: Dealer, OperationId: Guid.NewGuid(),
+            Payload: new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(Principal: Dealer,
+                Transform: new StateTransform.Transfer(From: "hand", To: "table", Selector: ZoneSelector.First)))), results.Add);
+        fixture.Step();
+        var refused = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+        Assert.False(refused.Applied);
+        Assert.Contains(nameof(RuleRefusal.TransformWidensAudience), refused.Detail);
+        Assert.Equal("a,b,c", Order(definition: fixture.Server.Definition, zone: "table"));
+        Assert.Equal("d,e,f", Order(definition: fixture.Server.Definition, zone: "hand"));
+        results.Clear();
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 2, CorrelationId: 2, Principal: Dealer, OperationId: Guid.NewGuid(),
+            Payload: new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(Principal: Dealer,
+                Transform: new StateTransform.Transfer(From: "hand", To: "hand", Selector: ZoneSelector.First)))), results.Add);
+        fixture.Step();
+        var applied = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+        Assert.True(applied.Applied, applied.Detail);
+        Assert.Equal("e,f,d", Order(definition: fixture.Server.Definition, zone: "hand"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AGrantedPeerCannotPublishLivePrivateCellsThroughAnOwnValueSort(bool confined) {
+        var definition = Table();
+        definition = definition with { StateRaw = definition.StateRaw! with {
+            World = definition.State.Select(row => row.Name.Value == "rank"
+                ? row with { Visibility = confined ? new StateVisibility(Readers: ["seat1"]) : null }
+                : row).ToArray(),
+        } };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        // An admitted peer needs a metered state mutation grant and edit over the written row. Edit covers
+        // an own-value sort's read/write row; no Observe grant over another row is involved in this attack.
+        fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Budget: 4,
+            Capability: WorldCapability.Mutate, Exclusive: false,
+            KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State), Grantee: Dealer,
+            Subject: GrantSubject.Section(section: WorldSection.State)));
+        fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Capability: WorldCapability.Edit,
+            Exclusive: false, Grantee: Dealer, Subject: GrantSubject.State(name: "rank")));
+        var arena = fixture.Server.Arena;
+        Assert.True(definition.StateCatalog.TryResolve(lane: StateLane.Document, name: "rank", handle: out var rank));
+        Assert.True(arena.TryWriteVisibility(rowOrdinal: rank.Ordinal,
+            key: arena.Keys.Intern(name: CellName.Parse(candidate: "a")), visibility: new StateVisibility(Readers: ["seat1"])));
+        Assert.True(fixture.Server.PublishArena());
+        var before = Order(definition: fixture.Server.Definition, zone: "rank");
+        var results = new List<WorldSubmissionResult>();
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: Dealer, OperationId: Guid.NewGuid(),
+            Payload: new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(Principal: Dealer,
+                Transform: new StateTransform.Sort(Row: "rank", By: [new SortKey(Row: "rank")])))), results.Add);
+        fixture.Step();
+
+        var result = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+        Assert.Equal(Dealer, result.Actor);
+        Assert.Equal(confined, result.Applied);
+        if (confined) {
+            Assert.Equal("b,e,c,f,a,d", Order(definition: fixture.Server.Definition, zone: "rank"));
+        } else {
+            Assert.Contains(nameof(RuleRefusal.TransformWidensAudience), result.Detail);
+            Assert.Equal(before, Order(definition: fixture.Server.Definition, zone: "rank"));
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ADecisionScoreCannotSelectAWiderAudienceTransform(bool confined, bool common) {
+        ActionEffect[] effects = [new ActionEffect.TransformState(Transform: new StateTransform.Transfer(
+            From: confined ? "hand" : "table", To: confined ? "hand" : "table", Selector: ZoneSelector.First))];
+        var rule = new WorldRule(Name: CellName.Parse(candidate: "choose"), Effects: common ? effects : [],
+            Decision: new WorldDecision(PeriodSeconds: 0.01m, ScoreKind: CellKind.Int,
+                Options: [new WorldDecisionOption(Name: CellName.Parse(candidate: "move"),
+                    Score: ExpressionProgram.Parse(text: "rank[d]"),
+                    Effects: common ? [] : effects) ]));
+        var valid = WorldDefinitionValidator.TryValidateLocally(definition: Table(rules: [rule]), reason: out var reason);
+        Assert.True(confined == valid, reason);
+        if (!confined) { Assert.True(reason.Contains(nameof(RuleRefusal.TransformWidensAudience), StringComparison.Ordinal), reason); }
+    }
     // The declarations alone decide: a public policy encloses every audience, no restricted policy encloses a public
     // one, and a restricted policy encloses a restricted audience only through readers it lists itself and its own
     // live reader row.

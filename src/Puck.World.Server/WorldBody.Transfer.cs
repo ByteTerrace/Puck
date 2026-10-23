@@ -67,6 +67,7 @@ public sealed partial class WorldBody {
             OverlayRemainingTicks: m_overlayRemaining,
             ChannelTimerTicks: Own(alias: alias, buffers: buffers, live: m_laneTimers),
             ChannelTimerValues: Own(alias: alias, buffers: buffers, live: m_channelTimerValues),
+            RelativeRemainders: Own(alias: alias, buffers: buffers, live: m_relativeRemainders),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
             PreviousChannelBit: Own(alias: alias, buffers: buffers, live: m_previousChannelBit),
@@ -285,10 +286,16 @@ public sealed partial class WorldBody {
                     : unchecked((long)register.TimerTicks)
                 );
 
+                m_actionStateRequested[slot] = carried;
+                m_actionStateLastWriter[slot] = "arrival";
+                m_actionStateLastReason[slot] = "carried across the crossing";
+
                 if (
                     (definition.Envelope is { } envelope) &&
                     !envelope.Contains(value: carried)
                 ) {
+                    m_actionStateLastReason[slot] = "carried across the crossing; settled by this world's envelope";
+
                     if (envelope.Values is null) {
                         carried = Math.Clamp(
                             max: envelope.Maximum,
@@ -409,6 +416,7 @@ public sealed partial class WorldBody {
             m_ordinaryAdvanceAdmitted = false;
         }
 
+        CopyClamped(source: state.RelativeRemainders, destination: m_relativeRemainders);
         var ticks = state.ChannelTimerTicks;
         var values = state.ChannelTimerValues;
         var timedCount = Math.Min(
@@ -695,11 +703,14 @@ public sealed partial class WorldBody {
         );
         m_asleepSinceTick = residue.AsleepSinceTick;
         m_sleepIdleTicks = residue.SleepIdleTicks;
+        // A stale observation must stay stale against every version the next step can present. Versions only grow,
+        // so the version just below the current one is never seen again; flipping the low bit would equal the next
+        // version whenever the current one is even, and a sleeping body would then skip the wake the live run took.
         m_lastContactFieldVersion = ((contactFieldVersion is not { } currentVersion)
             ? residue.LastContactFieldVersion
             : (residue.ContactFieldObservationCurrent
                 ? currentVersion
-                : currentVersion ^ 1UL
+                : unchecked((currentVersion - 1UL))
             )
         );
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;

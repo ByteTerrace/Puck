@@ -1,4 +1,6 @@
 using Puck.Assets;
+using Puck.Testing;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Addons;
 using Xunit;
 
@@ -63,6 +65,7 @@ public sealed class WasmModuleInspectorLawTests {
         Assert.True(condition: result.IsValid);
         Assert.Empty(collection: result.Imports);
         Assert.Empty(collection: result.Exports);
+        Assert.Equal(ContentPin.Compute(Header).ToString(), result.ContentHash);
     }
     [MemberData(nameof(Malformed))]
     [Theory]
@@ -75,6 +78,28 @@ public sealed class WasmModuleInspectorLawTests {
         );
         Assert.Empty(collection: result.Imports);
         Assert.Empty(collection: result.Exports);
+    }
+    [Fact]
+    public void AutoPinsRequireModuleBytesAndChangeWithTheirContent() {
+        using var directory = new TemporaryDirectory(prefix: "security-content-pin-producer-");
+        const string Source = """
+            schema: "puck.world.definition.v1"
+            addon "guest" {
+                modulePath: "security-content-producer.wasm"
+                hash: "auto"
+            }
+            """;
+        var missing = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains(missing.Diagnostics, diagnostic => diagnostic.Code == PuckDiagnosticCodes.AddonHash &&
+            diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Message.Contains("was not found", StringComparison.Ordinal));
+
+        foreach (var bytes in new[] { Header, Module(Section(0, [1, (byte)'x', 42])) }) {
+            _ = directory.WriteBytes(bytes: bytes, name: "security-content-producer.wasm");
+            var compiled = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
+                cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(ContentPin.Compute(bytes).ToString(), compiled.RequireJson()["addons"]![0]!["hash"]!.GetValue<string>());
+        }
     }
     [Fact]
     public void EveryTruncationOfAWellFormedModuleIsAnsweredWithoutThrowing() {

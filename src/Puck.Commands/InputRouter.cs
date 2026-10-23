@@ -474,7 +474,7 @@ public sealed partial class InputRouter : IDisposable {
         ) {
             m_lastInputTickBySlot[slot] = tick;
         }
-        var activeCommands = ModalityFor(slot: slot).ActiveCommands;
+        var modality = ModalityFor(slot: slot);
 
         var physicalControl = new HeldControlId(
             Device: signal.DeviceId,
@@ -633,7 +633,7 @@ public sealed partial class InputRouter : IDisposable {
                 signal: in signal
             );
             var controlId = physicalControl;
-            var sourceCommandActive = ((commandId < activeCommands.Length) && activeCommands[commandId]);
+            var sourceCommandActive = modality.IsActive(commandId: commandId);
 
             var memoIndex = IndexOfMemo(
                 commandId: commandId,
@@ -829,6 +829,10 @@ public sealed partial class InputRouter : IDisposable {
             // Channel destinations carry one contribution per physical control. Two keys sharing a destination
             // therefore remain independently owned: releasing one cannot erase the other's reassertion or later
             // focus-loss cancellation.
+            if (binding.Relative) {
+                // Each ordered sample already has its own entry. Never reassert it on another tick.
+                continue;
+            }
             if (isContribution) {
                 if (
                     active &&
@@ -1277,14 +1281,7 @@ public sealed partial class InputRouter : IDisposable {
         )
         );
     }
-    private bool IsSourceCommandActive(int slot, ushort commandId) {
-        var activity = ModalityFor(slot: slot).ActiveCommands;
-
-        return (
-            (commandId < activity.Length) &&
-            activity[commandId]
-        );
-    }
+    private bool IsSourceCommandActive(int slot, ushort commandId) => ModalityFor(slot: slot).IsActive(commandId: commandId);
     private CommandModality ModalityFor(int slot) {
         return (m_modalityBySlot.TryGetValue(
             key: slot,
@@ -1665,6 +1662,7 @@ public sealed partial class InputRouter : IDisposable {
             );
 
             return ScaleThroughChannel(
+                relative: binding.Relative,
                 channelScale: channelScale,
                 sample: componentSample
             );
@@ -1675,6 +1673,7 @@ public sealed partial class InputRouter : IDisposable {
         }
 
         return ScaleThroughChannel(
+            relative: binding.Relative,
             channelScale: channelScale,
             sample: signal.Value.AsAxis1D
         );
@@ -1682,7 +1681,10 @@ public sealed partial class InputRouter : IDisposable {
     // The one axis-through-channel conversion the component and Axis1D branches share: sample times the declared
     // scale in FixedQ4816 (nearest, ties to even), never a float multiply, so a channel's contribution rounds
     // identically regardless of which branch produced the sample.
-    private static CommandValue ScaleThroughChannel(double sample, double channelScale) {
+    private static CommandValue ScaleThroughChannel(double sample, double channelScale, bool relative) {
+        if (relative) {
+            return CommandValue.Axis(value: ((float)(sample * channelScale)));
+        }
         var s = FixedQ4816.FromDouble(value: sample);
         var k = FixedQ4816.FromDouble(value: channelScale);
 
@@ -1800,7 +1802,9 @@ public sealed partial class InputRouter : IDisposable {
             Slot: slot,
             Text: ((activation.Text is { Length: > 0 } text)
             ? $"{activation.Command} {text}"
-            : null)
+            : (m_registry.NamesAuthoredCommand(name: activation.Command)
+                ? activation.Command
+                : null))
         ));
 
         return true;
@@ -2050,7 +2054,7 @@ public sealed partial class InputRouter : IDisposable {
             List<ushort>? commandsToDrop = null;
 
             foreach (var (commandId, state) in held) {
-                if (!next.ActiveCommands[commandId]) {
+                if (!next.IsActive(commandId: commandId)) {
                     cancellations ??= [];
 
                     AppendCancellations(
@@ -2099,7 +2103,7 @@ public sealed partial class InputRouter : IDisposable {
         foreach (var (key, _) in m_toggleLatches) {
             if (
                 (key.Slot == slot) &&
-                !next.ActiveCommands[key.CommandId]
+                !next.IsActive(commandId: key.CommandId)
             ) {
                 (latchesToDrop ??= []).Add(item: key);
             }
@@ -2266,12 +2270,23 @@ public sealed partial class InputRouter : IDisposable {
 
     // A bound row's authored text payload rides the PRESS as a submitted line — "<command> <text>", dispatched by
     // the registry exactly as a typed line under the pressing seat's principal — so a wire-args verb is bindable
-    // with authored arguments. A release, or a row with no payload, carries no line.
-    private static string? TextLine(string command, string? text, CommandPhase phase, bool dispatch) =>
-        (((text is { Length: > 0 }) && dispatch && (phase == CommandPhase.Started))
-            ? $"{command} {text}"
+    // with authored arguments. A row naming a document-authored command carries its line even without a payload,
+    // since that line is how the registry's `run` learns which command was pressed. A release, or an engine verb's
+    // row with no payload, carries no line.
+    private string? TextLine(string command, string? text, CommandPhase phase, bool dispatch) {
+        if (!dispatch || (phase != CommandPhase.Started)) {
+            return null;
+        }
+
+        if (text is { Length: > 0 }) {
+            return $"{command} {text}";
+        }
+
+        return (m_registry.NamesAuthoredCommand(name: command)
+            ? command
             : null
         );
+    }
     private static bool IsActivity(in InputSignal signal) {
         if (signal.Posture) {
             return false;

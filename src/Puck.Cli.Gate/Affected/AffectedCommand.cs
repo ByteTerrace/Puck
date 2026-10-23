@@ -251,7 +251,6 @@ public static class AffectedCommand {
 
         return true;
     }
-
     /// <summary>The strict manifest check's shared printed and executed arguments.</summary>
     public static string[] CanaryCheckArguments(IReadOnlyList<string> ids) => ["canary", "--list", .. ids];
     /// <summary>Strictly loads and lists every prose-edited manifest through the root command, without a World.</summary>
@@ -310,8 +309,8 @@ public static class AffectedCommand {
     /// and takes none.</summary>
     public static string[] TestArguments(string suite) => ["test", "--project", $"tests/{suite}/{suite}.csproj", "-c", "Release", "--no-build"];
 
-    // A heavy suite waits while another process runs one, machine-wide, and for memory and disk headroom: two at once
-    // exhaust the memory. The waiting process's own runs never hold it back.
+    // The caller holds CliLease for the heavy suite throughout this admission and execution. Sampling also
+    // accounts for unleased heavy processes and memory/disk headroom; it is not mutual exclusion itself.
     internal static bool AdmitHeavySuite(string repositoryRoot, string suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
         var probe = new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars);
 

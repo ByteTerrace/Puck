@@ -151,6 +151,17 @@ public sealed partial class SdfWorldPassesLawTests {
         }
     }
 
+    // The frame's sphere in a glass material, so a view of it runs the glass fragment (SdfWorldPackage.WithGlass).
+    private static SdfProgram GlassProgram() {
+        var builder = new SdfProgramBuilder();
+
+        builder.Sphere(
+            material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Glass: new SdfGlass(Depth: 0.004f, Ior: 1.49f))),
+            radius: 1f
+        );
+
+        return builder.Build();
+    }
     private static SdfFrame Frame() {
         var builder = new SdfProgramBuilder();
 

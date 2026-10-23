@@ -50,8 +50,11 @@
       },
       "Microsoft.Build.Framework": {
         "type": "Transitive",
-        "resolved": "17.14.28",
-        "contentHash": "wRcyTzGV0LRAtFdrddtioh59Ky4/zbvyraP0cQkDzRSRkhgAQb0K88D/JNC6VHLIXanRi3mtV1jU0uQkBwmiVg=="
+        "resolved": "18.11.0",
+        "contentHash": "g0Uuh7+iNZ0rX3tWiG2z8mWP/gOWn967UcbtlTwmal85yYttp5miVljm744u/0LsAuC3gIKIiHWR6Zg1OIDnvA==",
+        "dependencies": {
+          "Microsoft.NET.StringTools": "[18.11.0]"
+        }
       },
       "Microsoft.Diagnostics.NETCore.Client": {
         "type": "Transitive",
@@ -67,6 +70,11 @@
         "type": "Transitive",
         "resolved": "10.0.10",
         "contentHash": "rfZA1RjR021RPqSmIPovfz2aOd79TGqJ9BengbjnzIISOVwjLmuSDnhCMmiY/1c6iYvGolQ1iNGzkav0u11XEA=="
+      },
+      "Microsoft.NET.StringTools": {
+        "type": "Transitive",
+        "resolved": "18.11.0",
+        "contentHash": "46dxu08YSKeHQXbBlz/HYfVnSMJnfF1nM4v3tmfHVqIdBaz5eF8GrxWz6nl8mM3fGHZIOcp/Pr8I2zZCdb6CLA=="
       },
       "Microsoft.Testing.Extensions.Telemetry": {
         "type": "Transitive",
@@ -264,7 +272,7 @@
       "puck.cli.laws": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Build.Framework": "[17.*, )",
+          "Microsoft.Build.Framework": "[18.*, )",
           "Puck.Cli.Core": "[1.0.0, )"
         }
       }

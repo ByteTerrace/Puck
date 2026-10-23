@@ -17,6 +17,53 @@ public sealed class SecondOrderFollowerTests {
     private const float StepSeconds = (1f / 240f);
     private const ulong TicksPerSecond = 50400UL;
 
+    /// <summary>Carrying a follower through a rigid motion commutes with stepping it: a follower carried mid-chase and
+    /// then stepped toward the carried targets reads exactly the carried values of the one that was never carried, so
+    /// a body moved through an in-place portal crossing keeps its ease rather than chasing the jump. An unseeded
+    /// follower carries nothing.</summary>
+    [Fact]
+    public void CarryingAFollowerCommutesWithSteppingIt() {
+        var response = SecondOrderResponse.Create(
+            dampingRatio: 0.6f,
+            frequencyHz: 2f,
+            initialResponse: 0.5f
+        );
+        var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: MathF.PI);
+        var translation = new Vector3(x: 1f, y: 6f, z: -2f);
+        var position = new SecondOrderFollower3();
+        var attitude = new SecondOrderFollower4();
+        var unseeded = new SecondOrderFollower3();
+
+        position.Seed(target: Vector3.Zero);
+        attitude.Seed(target: new Vector4(x: 0f, y: 0f, z: 0f, w: 1f));
+        unseeded.Carry(rotation: rotation, translation: translation);
+        Assert.False(condition: unseeded.Seeded);
+
+        for (var step = 0; (step < 10); step++) {
+            _ = position.Step(response: response, deltaSeconds: StepSeconds, target: new Vector3(x: step, y: 0f, z: 0f));
+            _ = attitude.Step(response: response, deltaSeconds: StepSeconds, target: new Vector4(x: 0f, y: (step * 0.01f), z: 0f, w: 1f));
+        }
+
+        var carriedPosition = position;
+        var carriedAttitude = attitude;
+
+        carriedPosition.Carry(rotation: rotation, translation: translation);
+        carriedAttitude.Carry(rotation: rotation);
+
+        for (var step = 10; (step < 20); step++) {
+            var target = new Vector3(x: step, y: 0f, z: 0f);
+            var turn = new Vector4(x: 0f, y: (step * 0.01f), z: 0f, w: 1f);
+            var turned = (rotation * new Quaternion(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W));
+            var plain = position.Step(response: response, deltaSeconds: StepSeconds, target: target);
+            var carried = carriedPosition.Step(response: response, deltaSeconds: StepSeconds, target: (Vector3.Transform(value: target, rotation: rotation) + translation));
+            var plainAttitude = attitude.Step(response: response, deltaSeconds: StepSeconds, target: turn);
+            var carriedTurn = carriedAttitude.Step(response: response, deltaSeconds: StepSeconds, target: new Vector4(x: turned.X, y: turned.Y, z: turned.Z, w: turned.W));
+            var expectedTurn = (rotation * new Quaternion(x: plainAttitude.X, y: plainAttitude.Y, z: plainAttitude.Z, w: plainAttitude.W));
+
+            Assert.True(condition: (Vector3.Distance(value1: carried, value2: (Vector3.Transform(value: plain, rotation: rotation) + translation)) < 1e-4f));
+            Assert.True(condition: (Vector4.Distance(value1: carriedTurn, value2: new Vector4(x: expectedTurn.X, y: expectedTurn.Y, z: expectedTurn.Z, w: expectedTurn.W)) < 1e-4f));
+        }
+    }
     [Fact]
     public void ALargeStepLandsNearTheTargetWithoutOvershootAtCriticalDamping() {
         var response = SecondOrderResponse.Create(

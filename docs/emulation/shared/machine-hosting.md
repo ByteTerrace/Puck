@@ -168,6 +168,13 @@ by skipping or deferring it.
 concrete host has one main job: turn loaded content into an
 `IQueuedMachineCore`.
 
+The World uses asynchronous submission for ordinary presentation. With
+`world.lockstep on`, `WorldMachineHost.SynchronousSteps` selects the existing
+synchronous `Advance` path, so a tick finishes its machine work before a screen
+reads the video frame. Without that boundary, two uploads at the same tick and
+with the same source publication number can contain different native frames;
+their screen-light reductions then illuminate the world differently too.
+
 This adapter template assumes a `MyMachineCore` implementation of `IQueuedMachineCore`.
 
 ```csharp

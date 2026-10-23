@@ -17,8 +17,9 @@ Creation authoring (shapes, profiles, panels, folds, contact tuning) belongs to
 
 **One live world.** The debug world, the asset package `worlds/debug/` (entry
 `debug.puck`, basis `avatars/moth`), is the only live world, with the
-garden (`garden.puck`) its portal frame opens onto; `debug.md` beside them is
-the portal demo and its inspection verbs. It boots on the Moth's seat chase
+garden (`garden.puck`) and the night field (`night.puck`) its painting wing's portals open onto
+(`paintings.puck`, in the gallery hall); `debug.md` and `paintings.md` beside them are the
+portal demo and its inspection verbs. It boots on the Moth's seat chase
 camera: the first authored `views` layout is what a boot shows, and the Moth's
 is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
 `view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
@@ -31,17 +32,19 @@ verdict fixtures are quarantined under `experimental/`; do not boot, repair or
 retarget them, and read the references' mentions of them as prior art
 ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
 
-**The live World is shared.** The World the owner pairs in runs the main
+## The live World is shared
+ The World the owner pairs in runs the main
 checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
-tools:
+tools (in Claude, ToolSearch `select:mcp__puck__puck_worlds,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
 `puck_worlds` lists the running Worlds, and `puck_exec`, `puck_capture_frame`
 and `puck_state_vector_write` take a `world` argument (attachment id or
 process id) that reaches exactly that World; name it whenever more than one
 runs. Reads and captures are free. A mutation (`world.row.set`, `world.reload`,
 `body.*`, `player.*`, `view.override`) changes what the owner sees: make one
 only when the task allows it, and restore what you changed. To run your own
-edits, boot your own World from your worktree with its own `--state-dir` (and
-`--control` to attach to it), name it on every call, and stop only that
+edits, boot your own World from your worktree with its own `--state-dir`,
+`--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)) and
+`--control` to attach to it, name it on every call, and stop only that
 process ([references/hosting-and-release.md](references/hosting-and-release.md)).
 
 ## The model
@@ -147,7 +150,9 @@ on the wire, `CommandContext.Principal` for console text); handlers read
 `context.Principal` and never construct a principal, which would launder an
 identity. A refusal distinguishes what a grant composes from whether the subject
 is legitimate for the actor. Client code never mutates local state before the
-server's verdict. [references/authority.md](references/authority.md)
+server's verdict. Trace the acting principal stamped at ingress when debugging
+a refusal; constructing a `Principal` in a test bypasses the path under investigation.
+[references/authority.md](references/authority.md)
 
 **Read through the caller's disclosure.** A console read-back reads the
 `WorldStateReadView` its acting principal is minted
@@ -168,6 +173,22 @@ never `import "skies.puck"` (PUCK121). A module library (a source emitting no
 document) hands its `let`s and templates to the compile; anything else is a
 document composed into the importer at load. A library imports only libraries
 ([composition](references/documents-composition.md#document-composition-basis-and-imports)).
+
+**A composed console operation is a `commands` row, not a C# verb.** The
+owner's ruling: console commands are easy to author and compose for safe
+operations, without C# work for each. A document's `commands` section names a
+command (`debug.go`), its typed parameters and the console lines it runs; the
+registry answers it beside the engine's verbs (`help`, bindings, wheel
+sectors, `run <name>`) and `world.reload` swaps the set. It runs each line
+under the caller's own principal and session policy, calls only what a binding
+may name, and never takes an engine verb's name
+([reference](../../../docs/reference/commands.md#document-authored-commands);
+code: `Puck.Commands/AuthoredCommand.cs`, `CommandRegistry.Authored.cs`,
+`Puck.World.Schema/WorldConsoleCommand.cs`). Write a C# verb only for what no
+composition of existing verbs expresses. The debug world's `places.puck`
+(`debug.go <place>`) is the live example. Adding, renaming or changing the
+bindability or audience of a C# verb owes `puck verbs` (regenerates the
+catalog `puck compile --validate` checks authored commands against).
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
@@ -218,8 +239,35 @@ Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
 ## Running it
 
 ```text
-dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
+dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
 ```
+
+### An agent's World opens no physical device
+
+The owner's ruling: any World an agent boots passes `--devices none`; a World the
+owner asked to play in passes `--devices all` explicitly, and the
+`world-devices` hook refuses a boot that names neither. Without the flag
+a windowed World opens every physical controller (GameInput, XInput, HID pads)
+and keeps reading them while its window is in the background, so the owner's
+pad presses drive the agent's test World (one boot opened the owner's Xbox pad
+as player 1). Focus gating is rejected: the owner's whole-desktop feature needs
+the pad read while another window is in front, so the default stays `all`, and
+the choice is the operator's per run, never a document member (a document must
+not decide whose hardware a run reads). `--devices none` opens no pad, registers
+no gamepad manager, arbiter or capture, and drops every OS key, text and pointer
+event the window receives before a seat sees it
+(`WorldWindowInputFilters.ConsumesEveryEvent`). A framed desktop screen claims no
+system-wide hotkey either (`WorldSourcePassthrough.ClaimsSystemChord`), so the
+owner's Control+Alt+Escape never reaches the World. stdin, the console,
+`player.signal`, `body.*`, schedule rows and MCP drive the World as before. The
+boot says `[world.host] physical input devices are off` on stderr; a stderr with
+a `[gamepad]` or `[gameinput]` line means the flag was missed. A headless or
+offscreen boot opens no device either way, and the flag is harmless there. The
+verbs that boot a windowed or offscreen World for you (`puck canary`, `puck
+parity`, `puck counters`, `puck verbs`, `puck docs citations`, `puck bench
+startup`) pass it themselves (`WorldDevices.NoneArguments`). The owner's own World
+(`.claude/launch.json`'s `debug-world`) explicitly passes `--devices all`. Never inject real input to
+check the flag: the owner may be holding the pad.
 
 - **Build first.** A failed build leaves the previous binaries in place, so a
   run after it exercises old code and shows nothing about the change, however
@@ -251,6 +299,11 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-af
 - **Capture both streams.** Read-back answers land on stdout; refusals,
   narration, boot lines, capture announcements and `[world.mutation: …]`
   echoes land on stderr.
+- **Narrow a large read.** An MCP result carries 1 MiB, and `world.counters gpu`
+  alone passes that in a world with many render-graph instances. Ask with
+  `summary`, `node <name>`, `pass <label>` or `counter <prefix>` (they combine;
+  [the rendering skill](../rendering/SKILL.md#performance-and-cost) names the
+  forms), and a source name (`world.counters state`) for the rest.
 - **The drain barrier.** A following immediate verb waits for pending
   simulation traffic, so write-then-read pairs need no polling.
   `world.wait <ticks>` holds the issuing session; a windowed script that reads
@@ -268,10 +321,33 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-af
 - **Screenshots arm, they do not capture.** `world.screenshot <path.png>`
   echoes `pending` on stdout; the file is announced on stderr
   (`[capture] … -> <path>`). Fence a frame with `world.wait` before reading it.
-  Two windowed captures are never byte-identical; compare by changed-pixel
-  count.
+  Compare windowed captures by changed-pixel count: outside the tick-exact
+  procedure below two are never byte-identical, and inside it stills of one
+  tick in fresh Worlds are, but for a 1-level residue on a few pixels.
+- **A capture is a settled still unless asked otherwise.** The ordinary capture
+  (`world.screenshot`, `puck_capture_frame`) holds presentation and lets
+  temporal views converge, so it never shows flicker, ghosting or trails. For
+  those, read what the display presented: `puck_capture_frame` with
+  `mode: "presented"` and `frames: 8` (optionally a `region`), or
+  `world.screenshot <path.png> presented 8`, which report each frame's changed
+  pixels and luma change against the one before
+  ([console](references/console.md#settled-stills-and-presented-bursts)).
+- **Capture motion on exact ticks.** `puck motion` does it for the Moth in one
+  command (scenario file `worlds/debug/motion.scenarios.json`, contact sheets,
+  `--reproduce`); the rest of this item is the procedure under it. Calls over MCP land wherever the World
+  has stepped to, so a script whose inputs and stills must land on exact ticks
+  is armed in one line with `world.at` and waited for with `world.wait until
+  <tick>`; `world.lockstep on` makes a windowed World's presentation repeat
+  with the ticks, and `view.reseed <body>` beside a `body.pose` restarts its
+  gait. Every settled still names its tick and state hashes
+  (`[still] … tick= hash= pose= shown=`), and `slots` writes each viewport of a
+  multi-camera layout. The procedure and what repeats:
+  [tick-exact debug capture](references/schedules-and-tests.md#tick-exact-debug-capture).
 - **A denial check needs a control.** Pair it with an actor who holds the grant
   and succeeds, and keep actor and target different (every seat is seeded wide).
+  For a fixture whose other player's row is `state:players$other`, inspect
+  `world.why peer:1:1 edit state:players$other`; the peer must be admitted and
+  must not own that target. Trace the actual ingress-stamped principal too.
 - **Pixels are not a replay proof.** `replay.verify` MATCH proves the hashed
   authoritative state trajectory, not the HUD or the image
   ([references/replay.md](references/replay.md)).
@@ -286,7 +362,7 @@ Smoke session:
 
 ```text
 printf 'world.status\nbody.where 0\nworld.grants console\n' |
-  dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 6 --state-dir "$TMP/puck-state"
+  dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds 6 --state-dir "$TMP/puck-state"
 ```
 
 ## Subsystem index
@@ -300,7 +376,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | HUD schema, overlay reservation, bindings, HUD verbs | [hud.md](references/hud.md) |
 | Camera rigs, seat control and seat camera feel, layouts, `world.view.*` and `view.override` | [views.md](references/views.md) |
 | Boundaries, federation, handoff, crossing logs | [adjacency-and-federation.md](references/adjacency-and-federation.md) |
-| `body.engage`, control applications, machines, a machine's `contentFolders` (shipped and local, which may be absent) and `machine.swap`, the debug world's device row | [engagement.md](references/engagement.md) |
+| `body.engage`, control applications, sitting at a tabletop (board `engage`, `board(pointer, …)` and its seat reads, the board view), machines, a machine's `contentFolders` (shipped and local, which may be absent), `machine.swap`, a folder's local boot default (`folder.json`, `machine.default`, `preferFolderDefault`), the debug world's device row | [engagement.md](references/engagement.md) |
 | Join, leave, park, resume | [session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape, verify semantics, `world.history` | [replay.md](references/replay.md) |
 | Addon rows, mount transaction, channels, fuel | [addons.md](references/addons.md) |
@@ -320,6 +396,40 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - `SdfProgramBuilder.MaxInstances` is 65536; `WorldRenderEnvelope.TryFit` is the
   apply-time capacity gate.
 - XInput caps at four pads locally; HID pads are uncapped.
+- The debug world uses the analytic contact provider (`collision.requirements`
+  empty): a body collides as its volumes' world box (the Moth is 0.7 m square
+  and 2.06 m tall) and a placement's primitive as its own box, so a box is
+  exact and every boolean carve collides as the uncarved shape. Build a doorway,
+  window or stairwell as a union of boxes around the opening, never a
+  subtraction, and keep 2.4 m of headroom over every tread and landing (her
+  height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
+  worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
+  and a lift.
+- Input has independent budgets of 32 numeric axes and 64 packed buttons. The
+  debug modules import one vocabulary in `worlds/debug/inputs.puck`; chess uses
+  shared `confirm` and `cancel`, independently of machine `select`. Resolve
+  names through `WorldChannelTable`: a declaration index is not a storage
+  address. Target-register reach has its own mask and budget. Relative input
+  shares the numeric bank as Q32.32 displacement: use the table's typed reader,
+  never a held-level reader. The host accumulates samples and drains once per
+  routed tick; rules read a Q48.16 projection with authoritative fractional
+  residue. Binding compilation must receive the routed channel shapes.
+  [Input channels](../../../docs/decisions/input-channels.md) owns this model
+  and the remaining authoritative-mode, release and timed-history steps.
+  Switching modes releases by default; declared same-meaning holds and toggles
+  may continue, while changed meanings and transition edges never cross the
+  epoch barrier.
+- A kit whose collider differs from the body's last one (a kit `select` by a
+  body register: the suit, noclip) steps the body to the nearest pose up its
+  axis or along world X or Z where the new volume is not embedded
+  (`WorldBody.EscapeEmbedding`), never down: the ordinary solve's shallowest
+  push from deep inside a box can be down through the floor. The debug world's
+  noclip (`worlds/debug/noclip.puck`) is a collider-less free-flight kit
+  selected through the `form` register (suit + 2 × noclip).
+- A moving floor is an attached solid placement riding a body (`attach` plus
+  `solid`, analytic provider only); a body grounded on it rides it. The gallery
+  lift moves its car body with a rule that `poseCell`s it along a box topology
+  of 1/16 m layers each tick, so its speed and floor stops are exact.
 
 ## Route adjacent work
 

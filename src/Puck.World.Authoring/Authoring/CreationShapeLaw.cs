@@ -33,7 +33,8 @@ public enum CreationShapeDistance {
 /// <param name="Gain">The certified distance gain in [0, 1]: the field is at least this times the distance.</param>
 /// <param name="StepScale">The smallest step scale the lowering's warps or blends bake (1/L), one for an isometric
 /// field.</param>
-/// <param name="CpuRefusal">Why <see cref="SdfFieldEvaluator"/> refuses the render lowering, or <see langword="null"/>
+/// <param name="CpuRefusal">Why <see cref="SdfFieldEvaluator"/> refuses the render lowering read as the renderer draws
+/// it (<see cref="SdfFieldReading.Render"/>, what the mesh audit measures a bake against), or <see langword="null"/>
 /// when it interprets it.</param>
 /// <param name="Contact">What deterministic contact makes of the shape on a solid placement: <c>admitted</c>,
 /// <c>omitted (…)</c> or <c>refused (…)</c>.</param>
@@ -97,6 +98,9 @@ public sealed record CreationShapeLaw(
         if (shape.Flare is not null) { facets.Add(item: "flare"); }
         if (shape.Shear is not null) { facets.Add(item: "shear"); }
         if (shape.Bumps is { Count: > 0 }) { facets.Add(item: "bumps"); }
+        if (shape.Warp is not null) { facets.Add(item: "warp"); }
+        if (shape.Displace is not null) { facets.Add(item: "displace"); }
+        if (shape.Elongate is not null) { facets.Add(item: "elongate"); }
         if (shape.Erode is not null) { facets.Add(item: "erode"); }
         if (shape.Cells is not null) { facets.Add(item: "cells"); }
         if (shape.Panel is not null) { facets.Add(item: "panel"); }
@@ -134,20 +138,16 @@ public static partial class CreationShapeLaws {
     );
 
     /// <summary>The refusals a solid placement owes a shape before any contact compiler sees it, as the clause that follows
-    /// "whose shape N": a revolved lift on every solid row, and a profile no deterministic field interprets where field
-    /// contact is required. A detail shape owes none, since it reaches no contact compiler. Domain folds that cannot expand
-    /// are refused through <see cref="ShapeDomainOps.TryExpand"/>.</summary>
+    /// "whose shape N": a revolved lift on every solid row. A detail shape owes none, since it reaches no contact
+    /// compiler. Domain folds that cannot expand are refused through <see cref="ShapeDomainOps.TryExpand"/>, and a
+    /// lowering the fixed-point field cannot interpret by the evaluator itself.</summary>
     /// <param name="shape">The authored shape.</param>
-    /// <param name="requiresField">Whether the world requires deterministic field contact.</param>
     /// <returns>The refusal clauses, in the order the validator reports them.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
-    public static IEnumerable<string> SolidRefusals(ShapeDocument shape, bool requiresField) {
+    public static IEnumerable<string> SolidRefusals(ShapeDocument shape) {
         ArgumentNullException.ThrowIfNull(shape);
 
         if (shape.Detail == true) { yield break; }
-        if (requiresField && (shape.Profile?.Kind == SdfPrismProfileKind.Path)) {
-            yield return $"uses profile {shape.Profile!.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.";
-        }
         // Both contact compilers read a per-axis-scaled local box off SdfSolidGeometry.GetLocalBounds. A revolve reads
         // scale.z as a radial offset rather than an extent, so that box would not describe the solid a body stands on.
         if (shape.Lift is SdfLift.Revolve) {
@@ -255,7 +255,7 @@ public static partial class CreationShapeLaws {
         return new CreationShapeLaw(
             Contact: contact,
             ContactOmits: omits,
-            CpuRefusal: CpuRefusal(program: posed),
+            CpuRefusal: CpuRefusal(program: posed, reading: SdfFieldReading.Render),
             Distance: distance,
             Failure: null,
             Gain: ((distance == CreationShapeDistance.Exact) ? 1f : gain),
@@ -286,7 +286,7 @@ public static partial class CreationShapeLaws {
         if (authored.Detail == true) { return ("omitted (detail)", []); }
         if (authored.Type == SdfSolidPrimitive.Sweep) { return ("omitted (a sweep is not a closed solid)", []); }
 
-        var refusals = SolidRefusals(requiresField: true, shape: authored).ToList();
+        var refusals = SolidRefusals(shape: authored).ToList();
 
         if (!ShapeDomainOps.TryExpand(domain: authored.Domain, frames: out _, refusal: out var fold, subject: authored.Position)) {
             refusals.Add(item: $"carries {fold}");
@@ -313,10 +313,12 @@ public static partial class CreationShapeLaws {
         }
         return ("admitted", dropped);
     }
-    // Why the fixed-point evaluator refuses a program, in its own words up to the first sentence, or null.
-    private static string? CpuRefusal(SdfProgram program) {
+    // Why the fixed-point evaluator refuses a program, in its own words up to the first sentence, or null. The render
+    // lowering is read as the renderer draws it (the reading the mesh audit measures against); the contact lowering as
+    // clearance.
+    private static string? CpuRefusal(SdfProgram program, SdfFieldReading reading = SdfFieldReading.Contact) {
         try {
-            _ = new SdfFieldEvaluator(program: program);
+            _ = new SdfFieldEvaluator(program: program, reading: reading);
             return null;
         } catch (ArgumentException exception) {
             return Sentence(exception: exception);

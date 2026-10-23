@@ -35,7 +35,7 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
     float Coverage = 0.55f, float Softness = 0.18f, float Scatter = 0f, float Spread = 0f, float Fade = 1f,
     float? NoiseScale = null, float NoiseDepth = 1f) {
     /// <summary>The Henyey-Greenstein anisotropy a bounded medium scatters the bodies' light by: mildly forward, as a
-    /// cloud's droplets scatter. SdfIsaHlsl generates it into the kernels as <c>SDF_VOLUME_SCATTER_ANISOTROPY</c>, read by
+    /// cloud's droplets scatter. SdfRenderHlsl generates it into the kernels as <c>SDF_VOLUME_SCATTER_ANISOTROPY</c>, read by
     /// <c>shade/shade-volumes.hlsli</c>.</summary>
     public const float ScatterAnisotropy = 0.3f;
     /// <summary>The lattice period, in noise cells, of the time-advected noise the bounded media and the sky's cloud layer

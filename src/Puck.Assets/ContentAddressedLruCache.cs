@@ -1,11 +1,12 @@
 namespace Puck.Assets;
 
-/// <summary>A fixed-capacity, least-recently-used cache keyed by <see cref="AssetContentHash"/>. Reading or
+/// <summary>A fixed-capacity, least-recently-used cache keyed by a content identity. Reading or
 /// writing an entry marks it most-recently-used. Both entry capacity and optional retained weight are enforced
 /// by least-recently-used eviction. Values larger than the weight budget are not retained.</summary>
+/// <typeparam name="TKey">The content identity type. Security-sensitive callers use <see cref="ContentPin"/>.</typeparam>
 /// <typeparam name="TValue">The cached value type.</typeparam>
-public sealed class ContentAddressedLruCache<TValue> {
-    private readonly OrderedDictionary<AssetContentHash, (TValue Value, long Weight)> m_entries = [];
+public sealed class ContentAddressedLruCache<TKey, TValue> where TKey : notnull {
+    private readonly OrderedDictionary<TKey, (TValue Value, long Weight)> m_entries = [];
     private readonly Func<TValue, long>? m_getWeight;
     private readonly Action<TValue>? m_onEvicted;
 
@@ -56,7 +57,7 @@ public sealed class ContentAddressedLruCache<TValue> {
     /// <param name="valueFactory">The factory invoked to produce the value on a cache miss.</param>
     /// <returns>The cached or newly produced value.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="valueFactory"/> is <see langword="null"/>.</exception>
-    public TValue GetOrAdd(AssetContentHash hash, Func<TValue> valueFactory) {
+    public TValue GetOrAdd(TKey hash, Func<TValue> valueFactory) {
         ArgumentNullException.ThrowIfNull(valueFactory);
 
         if (TryGet(
@@ -80,7 +81,7 @@ public sealed class ContentAddressedLruCache<TValue> {
     /// <param name="hash">The content hash to cache under.</param>
     /// <param name="value">The value to cache.</param>
     /// <exception cref="ArgumentOutOfRangeException">The weight selector returns a negative weight.</exception>
-    public void Set(AssetContentHash hash, TValue value) {
+    public void Set(TKey hash, TValue value) {
         var weight = (m_getWeight?.Invoke(value) ?? 0);
 
         ArgumentOutOfRangeException.ThrowIfNegative(weight);
@@ -120,7 +121,7 @@ public sealed class ContentAddressedLruCache<TValue> {
     /// <param name="hash">The content hash to look up.</param>
     /// <param name="value">When this method returns <see langword="true"/>, the cached value.</param>
     /// <returns><see langword="true"/> if an entry was found; otherwise <see langword="false"/>.</returns>
-    public bool TryGet(AssetContentHash hash, out TValue value) {
+    public bool TryGet(TKey hash, out TValue value) {
         if (!m_entries.TryGetValue(
             key: hash,
             value: out var entry

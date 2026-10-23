@@ -15,7 +15,7 @@ public sealed partial class GpuKernelCounters {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: rows, other: 1);
         if (rows <= m_rows[slot]) { return; }
-        var size = checked((((ulong)rows) * ((ulong)RowBytes)));
+        var size = SlotBytesOf(rows: rows);
         IGpuBuffer? counter = null;
         IGpuReadbackBuffer? readback = null;
 

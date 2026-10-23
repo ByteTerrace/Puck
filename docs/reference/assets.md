@@ -26,7 +26,7 @@ validating the byte structure under explicit allocation ceilings.
 magic and header, then content-hashed, 8-byte-aligned chunks, written with the
 same canonical primitives (`CanonicalBinaryWriterExtensions`,
 `CanonicalBinaryReader`) the automatic-sequence codec uses. `WasmModuleDeclarations` reads a WebAssembly binary's exports, imports and
-linear-memory declarations from its sections without compiling it, so the
+memory and table declarations from its sections without compiling it, so the
 scripting host and the world transpiler agree on one reader of a module's
 boundary ([scripting](scripting.md#loading-ticking-faulting)). `Documents/` holds the
 document value types the audio and synthesizer-patch families share (names,
@@ -51,7 +51,7 @@ parameters, return values, and exceptions.
   archive, an embedded resource, or another source.
 - *Identity by content:* `AssetContentHash` gives equal payloads the same small
   key even when their paths differ.
-- *Bounded reuse:* `ContentAddressedLruCache<TValue>` retains recently used
+- *Bounded reuse:* `ContentAddressedLruCache<TKey, TValue>` retains recently used
   decoded values and evicts the least recently used value at a fixed capacity.
 - *One pin grammar:* `ContentPin` (`sha256/<hex64>`) and `AssetContentHash`
   (`sha256-64/<hex16>`) are the only code that computes, parses, and prints a
@@ -91,7 +91,7 @@ flowchart LR
     Path(["📄 Asset path"]) --> Source["📥 IAssetSource"]
     Source --> Bytes["🧱 ReadOnlyMemory&lt;byte&gt;"]
     Bytes --> SessionHash["🔎 AssetContentHash<br/>64-bit session identity"]
-    SessionHash --> Cache["🧠 ContentAddressedLruCache&lt;T&gt;<br/>caller-decoded value"]
+    SessionHash --> Cache["🧠 ContentAddressedLruCache&lt;TKey, TValue&gt;<br/>caller-decoded value"]
     Bytes --> Store["💾 ContentAddressedStore<br/>full SHA-256 object"]
     Store --> Ref["🔖 Named or derived ref"]
     Store --> Petname["🏷️ ContentPetname<br/>human-readable label"]
@@ -111,10 +111,10 @@ using System.Text;
 using Puck.Assets;
 
 var source = new FileSystemAssetSource();
-var decodedText = new ContentAddressedLruCache<string>(capacity: 128);
+var decodedText = new ContentAddressedLruCache<ContentPin, string>(capacity: 128);
 
 var bytes = source.Read(path: "assets/dialogue/intro.txt");
-var hash = AssetContentHash.Compute(content: bytes.Span);
+var hash = ContentPin.Compute(content: bytes.Span);
 
 var text = decodedText.GetOrAdd(
     hash: hash,
@@ -157,10 +157,14 @@ the same pin and keeps the existing object.
 
 ```csharp
 bool Exists(string path);
-ReadOnlyMemory<byte> Read(string path);
+ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue);
 ```
 
-`Read` returns the complete payload. The interface is synchronous, so it is a
+`Read` returns the complete payload within the caller's byte ceiling. Every implementation
+must enforce that ceiling during reading, before buffering an oversized body. The filesystem
+source checks its opened handle's length before allocating, reads exactly those bytes and
+refuses a file that grows during the read. A size violation throws `InvalidDataException`.
+The interface is synchronous, so it is a
 good boundary for local assets that a loader needs in full before decoding.
 Implementations for remote or streamed data should usually perform that work
 outside the loading hot path and expose the resulting local bytes through this
@@ -207,8 +211,10 @@ must arrive through a trusted or signed channel.
 
 ## Caching decoded values
 
-`ContentAddressedLruCache<TValue>` maps `AssetContentHash` values to whatever a
-consumer produced from the bytes. Reading, adding, or replacing an entry marks
+`ContentAddressedLruCache<TKey, TValue>` maps content identities to whatever a
+consumer produced from the bytes. Security-sensitive callers, including the WASM compiler
+cache, use `ContentPin` so equal short hashes cannot substitute one value for another.
+Reading, adding, or replacing an entry marks
 it most recently used. When the cache exceeds its fixed capacity, it removes
 the least recently used entry.
 
@@ -222,8 +228,8 @@ the least recently used entry.
 
 The optional eviction callback runs whenever a value leaves the cache: capacity
 eviction, replacement under an existing hash, and `Clear` all use the same
-path. It is the natural place to dispose native handles or return pooled
-buffers. The cache is not thread-safe; a caller that shares one instance across
+path. Use disposal callbacks only when eviction also ends every consumer's ownership;
+the WASM cache deliberately leaves live guests' module handles intact. The cache is not thread-safe; a caller that shares one instance across
 threads must synchronize access.
 
 ## Persisting objects and refs
@@ -397,10 +403,10 @@ surface.
 
 | Type | Role |
 |---|---|
-| `IAssetSource` | Supplies complete byte payloads by opaque path. |
+| `IAssetSource` | Supplies complete byte payloads by opaque path, enforcing the caller's byte ceiling before buffering an oversized source. |
 | `FileSystemAssetSource` | Reads an `IAssetSource` from the local file system. |
 | `AssetContentHash` | Holds the compact 64-bit SHA-256-derived identity used for process-lifetime caching. |
-| `ContentAddressedLruCache<TValue>` | Retains a fixed number of decoded values by content identity. |
+| `ContentAddressedLruCache<TKey, TValue>` | Retains decoded values by the caller's content identity type under entry and optional weight limits. |
 | `ContentAddressedStore` | Persists immutable objects under full SHA-256 addresses and manages named and derived refs. |
 | `AtomicFile` | Replaces one file atomically through a temporary file beside it, leaving nothing behind on failure. `world.save`, the forge console's cartridge and draft writes, an owned world's synced basis-chain and tip documents, and the `.puck` compile cache's persisted entries all write through it. |
 | `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
@@ -410,7 +416,7 @@ surface.
 | `QrMatrix` | The resolved module grid—placement, masking, and a B8G8R8A8 raster. |
 | `QrErrorCorrectionLevel` / `QrErrorCorrection` | The four EC levels and their one canonical letter spelling/parse. |
 | `QrCapacityTable` / `QrReedSolomon` | The version/level block-and-capacity tables and the standard's Reed–Solomon binding. |
-| `WasmBinaryFormat` / `WasmModuleDeclarations` / `WasmImport` / `WasmMemoryDeclaration` | The WebAssembly preamble, and a module's exports, imports and memories read from its binary without compiling it. |
+| `WasmBinaryFormat` / `WasmModuleDeclarations` / `WasmImport` / `WasmMemoryDeclaration` / `WasmTableDeclaration` | The WebAssembly preamble, and a module's exports, imports, memories and tables read from its binary without compiling it. |
 | `ChunkContainer` / `ContainerChunk` / `ChunkCode` / `ChunkInput` | The shared chunk container, one keyed and content-hashed chunk, its four-character code, and one input a chunk's derivation read. |
 | `CanonicalBinaryWriterExtensions` / `CanonicalBinaryReader` | Write and read the canonical binary primitives the automatic-sequence codec and the chunk container share. |
 

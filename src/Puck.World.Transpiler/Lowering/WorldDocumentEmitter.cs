@@ -763,6 +763,7 @@ public static partial class WorldDocumentEmitter {
         if (hashed) {
             ResolveAddonHash(
                 addon: rowObj,
+                isAddon: true,
                 scope: scope,
                 span: block.Span
             );
@@ -784,6 +785,7 @@ public static partial class WorldDocumentEmitter {
 
         ResolveAddonHash(
             addon: cartObj,
+            isAddon: false,
             scope: scope,
             span: block.Span
         );
@@ -1276,7 +1278,7 @@ public static partial class WorldDocumentEmitter {
         }
         array.AppendNode(item: obj);
     }
-    private static void ResolveAddonHash(JsonObject addon, DocumentScope scope, SourceSpan span = default) {
+    private static void ResolveAddonHash(JsonObject addon, bool isAddon, DocumentScope scope, SourceSpan span = default) {
         var sourcePath = (addon["modulePath"]?.ToString() ?? (addon["source"]?.ToString() ?? (addon["path"]?.ToString() ?? (addon["rom"]?.ToString() ?? (addon["name"]?.ToString() ?? "addon")))));
         var hashToken = addon["hash"]?.ToString();
 
@@ -1307,6 +1309,10 @@ public static partial class WorldDocumentEmitter {
         if (wasmBytes is not null) {
             // Inspect WebAssembly binary
             var inspection = WasmModuleInspector.Inspect(wasmBytes: wasmBytes);
+
+            if (!isAddon) {
+                inspection = inspection with { ContentHash = WorldDefinitionFileSource.ComputeContentHash(content: wasmBytes) };
+            }
 
             // Collect declared capability requests
             var declaredCapabilities = new List<string>();
@@ -1349,7 +1355,13 @@ public static partial class WorldDocumentEmitter {
             b: "auto",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            addon["hash"] = WorldDefinitionFileSource.ComputeContentHash(content: Encoding.UTF8.GetBytes(s: sourcePath));
+            if (isAddon) {
+                scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.AddonHash,
+                    message: $"Cannot compute the addon content pin: module '{sourcePath}' was not found. Auto pins require the module bytes.",
+                    span: span);
+            } else {
+                addon["hash"] = WorldDefinitionFileSource.ComputeContentHash(content: Encoding.UTF8.GetBytes(s: sourcePath));
+            }
         }
     }
 

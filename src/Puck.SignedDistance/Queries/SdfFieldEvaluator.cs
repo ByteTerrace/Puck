@@ -15,26 +15,25 @@ namespace Puck.SignedDistance.Queries;
 // updating this file's mirror in the SAME change (and vice versa) — a divergence is silent (both sides compile and
 // run; only the ANSWER differs).
 //
-// THE EXCLUDED-OPS RULE (asserted once at construction, never per query): this evaluator is WARP-FREE — it rejects
-// any program containing an op that needs runtime trigonometry not implemented in fixed point (RotatePlane/LogSphere/CellJitter/RepeatPolar/Displace/DomainWarp/NoiseDisplace/AxialProfile/Shear/GaussianPush), the one op needing a per-frame dynamic-transform
-// buffer this evaluator's signature has no seam for (TransformDynamic — see the constructor's remarks), and
-// WallpaperFold, whose 17-group parity-keyed cell logic has no fixed-point implementation. It also rejects a
-// NON-UNIFORM Scale: the renderer's min-axis correction is deliberately a safe sphere-tracing lower bound, not
-// Euclidean surface distance, while this evaluator's query and contact consumers require physical clearance.
-// Scalable primitives must bake anisotropy into a native shape spelling (CreationGeometry does this for boxes,
-// spheres/ellipsoids, axially symmetric cylinders/cones, and planes). It
-// similarly rejects
-// two shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D), one needing texture
-// sampling (Glyph), and SampledRegion, whose brick pool is an engine
-// resource this evaluator cannot access — every other shape in <see cref="SdfShapeType"/> is supported. The constructor
-// throws <see cref="ArgumentException"/> naming the FIRST
-// disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
-// for part of the program.
+// THE EXCLUDED-OPS RULE (asserted once at construction, never per query): read for contact, this evaluator is
+// WARP-FREE — it rejects any program containing a warp, fold or relief whose value is not physical clearance (every op
+// in RenderWarpOps) and the one op needing a per-frame dynamic-transform buffer this evaluator's signature has no seam
+// for (TransformDynamic — see the constructor's remarks). It also rejects a NON-UNIFORM Scale: the renderer's min-axis
+// correction is deliberately a safe sphere-tracing lower bound, not Euclidean surface distance, while this evaluator's
+// query and contact consumers require physical clearance. Scalable primitives must bake anisotropy into a native shape
+// spelling (CreationGeometry does this for boxes, spheres/ellipsoids, axially symmetric cylinders/cones, and planes).
+// Both readings reject two shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D), one
+// needing texture sampling (Glyph), and SampledRegion, whose brick pool is an engine resource this evaluator cannot
+// access — every other shape in <see cref="SdfShapeType"/> is supported, a Path through the program's own edge table
+// (SdfFieldEvaluator.Path.cs). The constructor throws <see cref="ArgumentException"/> naming the FIRST disqualifying instruction's op
+// or shape, rather than silently constructing an evaluator that would answer wrong for part of the program.
 //
-// THE RENDER READING (SdfFieldReading.Render) lifts two of those refusals for a consumer that measures what the renderer
-// draws rather than clearance (the baked-mesh audit): a non-uniform Scale reads as mapCore's minimum-axis lower bound,
-// and AxialProfile and RotatePlane are interpreted (WarpPoint, WarpBounds), so their mapCore cases are a sync pair with
-// this file too. A contact reading never admits them.
+// THE RENDER READING (SdfFieldReading.Render) lifts the warp refusals for a consumer that measures what the renderer
+// draws rather than clearance (the baked-mesh audit, the CPU bake): a non-uniform Scale reads as mapCore's minimum-axis
+// lower bound, a Sweep takes every strand, and every op in RenderWarpOps is interpreted (WarpPoint and WarpBounds for
+// AxialProfile and RotatePlane, SdfFieldEvaluator.RenderOps.cs for the rest), so their mapCore cases are a sync pair
+// with this evaluator too. A LaneErode reads every lane as zero, the value a static placement's bake reads. A contact
+// reading never admits any of them.
 //
 // THE CULL (SdfFieldEvaluator.Cull.cs): both walkers skip an instance, or a chain of shapes inside one, whose
 // certificate (SdfFieldEvaluator.Certificates.cs), derived from the compiled fixed-point stream, proves it cannot move
@@ -353,6 +352,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var instructions = program.Instructions;
         var convexPolygonProfiles = program.ConvexPolygonProfiles;
         var sweepCurves = program.SweepCurves;
+        var paths = program.Paths;
         var compiled = new CompiledInstruction[instructions.Count];
 
         for (var index = 0; (index < instructions.Count); index++) {
@@ -397,10 +397,13 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             // declaration is refused HERE, at compile time, rather than by IsSupportedShape (which is purely
             // type-keyed and cannot see the instruction's own Data0.y).
             var isSweep = ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep));
+            // Path's Data0.x is a packed table offset as well; its edges are the program's own table (SdfProgram.Paths).
+            var isPath = ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.Path));
 
             if (
                 isSweep &&
-                !instruction.Detail
+                !instruction.Detail &&
+                (reading == SdfFieldReading.Contact)
             ) {
                 var strands = ((int)MathF.Round(x: instruction.Data0.Y));
 
@@ -413,6 +416,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             }
 
             compiled[index] = new CompiledInstruction(
+                Aux: ((instruction.Op == SdfOp.GaussianPush)
+                ? FixedQ4816.FromDouble(value: BitConverter.UInt32BitsToSingle(value: instruction.Shape))
+                : FixedQ4816.Zero),
                 Blend: instruction.Blend,
                 ConvexPolygonVertices: (isConvexPolygon
                 ? CompileConvexPolygonVertices(
@@ -421,7 +427,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                     )
                 : null),
                 Data0W: FixedQ4816.FromDouble(value: instruction.Data0.W),
-                Data0X: ((isConvexPolygon || isSweep)
+                Data0X: ((isConvexPolygon || isSweep || isPath)
                 ? FixedQ4816.Zero
                 : FixedQ4816.FromDouble(value: instruction.Data0.X)),
                 Data0Y: FixedQ4816.FromDouble(value: instruction.Data0.Y),
@@ -438,6 +444,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 ? CompileSweepCurve(
                         instructionIndex: index,
                         sweepCurves: sweepCurves
+                    )
+                : null),
+                PathEdges: (isPath
+                ? CompilePathEdges(
+                        instructionIndex: index,
+                        paths: paths
                     )
                 : null)
             );
@@ -618,8 +630,15 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             SdfShapeType.Sweep => SdfSweep(
             p: p,
             curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")),
+            strands: Math.Clamp(value: ((int)((instruction.Data0Y + Half).Value >> FixedQ4816.FractionBitCount)), min: 1, max: SdfProgramBuilder.MaxSweepStrands),
             twist: instruction.Data0Z,
             strandOffset: instruction.Data0W
+        ),
+            SdfShapeType.Path => SdfPathSolid(
+            p: p,
+            edges: (instruction.PathEdges ?? throw new UnreachableException(message: "Compile always attaches the edge table to a Path instruction.")),
+            stroke: (instruction.Data1Y > Half),
+            halfDepth: instruction.Data0W
         ),
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
         };
@@ -806,66 +825,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: inverseExponent
         )) - FixedQ4816.One) * minRadius);
     }
-    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli — the exact iq polygon SDF (running minimum squared
-    // distance to every edge segment, signed by one even/odd crossing-parity flip per edge).
-    private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) {
-        var count = vertices.Length;
-        var firstDelta = (p - vertices[0]);
-        var d = FixedVector2.Dot(
-            left: firstDelta,
-            right: firstDelta
-        );
-        var negate = false;
-        var previous = vertices[(count - 1)];
-
-        for (var i = 0; (i < count); i++) {
-            var vertex = vertices[i];
-            var e = (previous - vertex);
-            var w = (p - vertex);
-            var eDotE = FixedVector2.Dot(
-                left: e,
-                right: e
-            );
-            var t = FixedQ4816.Clamp(
-                value: (FixedVector2.Dot(
-                    left: w,
-                    right: e
-                ) / eDotE),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            );
-            var b = (w - (e * t));
-            var bDotB = FixedVector2.Dot(
-                left: b,
-                right: b
-            );
-
-            d = FixedQ4816.Min(
-                x: d,
-                y: bDotB
-            );
-
-            var c1 = (p.Y >= vertex.Y);
-            var c2 = (p.Y < previous.Y);
-            var c3 = (((e.X * w.Y) - (e.Y * w.X)) > FixedQ4816.Zero);
-
-            if (
-                (c1 && c2 && c3) ||
-                (!c1 && !c2 && !c3)
-            ) {
-                negate = !negate;
-            }
-
-            previous = vertex;
-        }
-
-        var distance = FixedQ4816.Sqrt(value: d);
-
-        return (negate
-            ? -distance
-            : distance
-        );
-    }
+    // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli: the edge-list core (SdfPolygon2D) walked from each
+    // vertex back to the one before it.
+    private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) =>
+        SdfPolygon2D(edges: new PolygonEdges(vertices: vertices), p: p);
     // KEEP IN SYNC with sdfConvexPolygonSolid in field/sdf-shapes.hlsli.
     private static FixedQ4816 SdfConvexPolygonSolid(FixedVector3 p, FixedVector2[] vertices, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
         if (lift > Half) {
@@ -1024,60 +987,68 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: SweepBulgeExponent
         )));
     }
-    // strands == 1 only (see the constructor's Compile-time refusal); the single strand still orbits when strandOffset > 0
-    // (an off-axis spiral tube), matching the render path's first strand. The sweep is the union of the spheres of
-    // radius r(t) about the strand's centre: a tube of one radius about the centreline reads its nearest parameter, and
-    // any other sweep the least gap over t (sdfSweep).
-    private static FixedQ4816 SdfSweep(FixedVector3 p, SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset) {
+    // The sweep is the union of the spheres of radius r(t) about each strand's centre: a tube of one radius about the
+    // centreline reads its nearest parameter, and any other sweep the least gap over t of each strand (sdfSweep). A
+    // contact reading admits one strand only (see the constructor's Compile-time refusal); that strand still orbits when
+    // strandOffset > 0 (an off-axis spiral tube), matching the render path's first strand.
+    private static FixedQ4816 SdfSweep(FixedVector3 p, SweepCurveFixed curve, int strands, FixedQ4816 twist, FixedQ4816 strandOffset) {
         if ((curve.RadiusStart == curve.RadiusEnd) && (curve.Bulge == FixedQ4816.Zero) && (strandOffset == FixedQ4816.Zero)) {
             return ((p - SdfBezierPoint(a: curve.A, b: curve.B, c: curve.C, t: SdfSweepClosestT(a: curve.A, b: curve.B, c: curve.C, p: p))).Length - curve.RadiusStart);
         }
 
         var spacing = (FixedQ4816.One / FixedQ4816.FromInteger(value: SweepSamples));
-        var nearest = FixedQ4816.Zero;
-        var best = SdfSweepGap(curve: curve, p: p, strandOffset: strandOffset, t: FixedQ4816.Zero, twist: twist);
+        var result = FarDistance;
 
-        for (var index = 1; (index <= SweepSamples); index++) {
-            var t = (spacing * FixedQ4816.FromInteger(value: index));
-            var gap = SdfSweepGap(curve: curve, p: p, strandOffset: strandOffset, t: t, twist: twist);
+        for (var strand = 0; (strand < strands); strand++) {
+            var phase = ((FixedQ4816.FromInteger(value: strand) * FixedQ4816.Tau) / FixedQ4816.FromInteger(value: strands));
+            var nearest = FixedQ4816.Zero;
+            var best = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: FixedQ4816.Zero, twist: twist);
 
-            if (gap < best) {
-                best = gap;
-                nearest = t;
+            for (var index = 1; (index <= SweepSamples); index++) {
+                var t = (spacing * FixedQ4816.FromInteger(value: index));
+                var gap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: t, twist: twist);
+
+                if (gap < best) {
+                    best = gap;
+                    nearest = t;
+                }
             }
+
+            var low = FixedQ4816.Max(x: (nearest - spacing), y: FixedQ4816.Zero);
+            var high = FixedQ4816.Min(x: (nearest + spacing), y: FixedQ4816.One);
+            var left = FixedQ4816.Lerp(amount: SweepGoldenLow, from: low, to: high);
+            var right = FixedQ4816.Lerp(amount: SweepGoldenHigh, from: low, to: high);
+            var leftGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: left, twist: twist);
+            var rightGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: right, twist: twist);
+
+            for (var round = 0; (round < SweepRounds); round++) {
+                best = FixedQ4816.Min(x: best, y: FixedQ4816.Min(x: leftGap, y: rightGap));
+                if (leftGap < rightGap) {
+                    high = right;
+                    right = left;
+                    rightGap = leftGap;
+                    left = FixedQ4816.Lerp(amount: SweepGoldenLow, from: low, to: high);
+                    leftGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: left, twist: twist);
+                } else {
+                    low = left;
+                    left = right;
+                    leftGap = rightGap;
+                    right = FixedQ4816.Lerp(amount: SweepGoldenHigh, from: low, to: high);
+                    rightGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: right, twist: twist);
+                }
+            }
+
+            result = FixedQ4816.Min(x: result, y: FixedQ4816.Min(x: best, y: FixedQ4816.Min(x: leftGap, y: rightGap)));
         }
 
-        var low = FixedQ4816.Max(x: (nearest - spacing), y: FixedQ4816.Zero);
-        var high = FixedQ4816.Min(x: (nearest + spacing), y: FixedQ4816.One);
-        var left = FixedQ4816.Lerp(amount: SweepGoldenLow, from: low, to: high);
-        var right = FixedQ4816.Lerp(amount: SweepGoldenHigh, from: low, to: high);
-        var leftGap = SdfSweepGap(curve: curve, p: p, strandOffset: strandOffset, t: left, twist: twist);
-        var rightGap = SdfSweepGap(curve: curve, p: p, strandOffset: strandOffset, t: right, twist: twist);
-
-        for (var round = 0; (round < SweepRounds); round++) {
-            best = FixedQ4816.Min(x: best, y: FixedQ4816.Min(x: leftGap, y: rightGap));
-            if (leftGap < rightGap) {
-                high = right;
-                right = left;
-                rightGap = leftGap;
-                left = FixedQ4816.Lerp(amount: SweepGoldenLow, from: low, to: high);
-                leftGap = SdfSweepGap(curve: curve, p: p, strandOffset: strandOffset, t: left, twist: twist);
-            } else {
-                low = left;
-                left = right;
-                leftGap = rightGap;
-                right = FixedQ4816.Lerp(amount: SweepGoldenHigh, from: low, to: high);
-                rightGap = SdfSweepGap(curve: curve, p: p, strandOffset: strandOffset, t: right, twist: twist);
-            }
-        }
-
-        return FixedQ4816.Min(x: best, y: FixedQ4816.Min(x: leftGap, y: rightGap));
+        return result;
     }
     // The gap from p to the sphere the strand sweeps at t (sdfSweepGap).
-    private static FixedQ4816 SdfSweepGap(FixedVector3 p, SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 t) =>
-        ((p - SdfSweepStrandPoint(curve: curve, strandOffset: strandOffset, t: t, twist: twist)).Length - SdfSweepRadiusAt(bulge: curve.Bulge, radiusEnd: curve.RadiusEnd, radiusStart: curve.RadiusStart, t: t));
-    // The strand's centre at t (sdfSweepStrandPoint): the centreline point, orbited by strandOffset across the tangent.
-    private static FixedVector3 SdfSweepStrandPoint(SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 t) {
+    private static FixedQ4816 SdfSweepGap(FixedVector3 p, SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 phase, FixedQ4816 t) =>
+        ((p - SdfSweepStrandPoint(curve: curve, phase: phase, strandOffset: strandOffset, t: t, twist: twist)).Length - SdfSweepRadiusAt(bulge: curve.Bulge, radiusEnd: curve.RadiusEnd, radiusStart: curve.RadiusStart, t: t));
+    // The strand's centre at t (sdfSweepStrandPoint): the centreline point, orbited by strandOffset across the tangent at
+    // the phase the twist reaches there from the strand's own.
+    private static FixedVector3 SdfSweepStrandPoint(SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 phase, FixedQ4816 t) {
         var basePoint = SdfBezierPoint(
             a: curve.A,
             b: curve.B,
@@ -1123,9 +1094,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             left: tangentDirection,
             right: u
         );
-        var phase = ((t * twist) * (SweepPi * FixedQ4816.FromInteger(value: 2L)));
-
-        var (sinPhase, cosPhase) = FixedQ4816.SinCos(angle: phase);
+        var (sinPhase, cosPhase) = FixedQ4816.SinCos(angle: (((t * twist) * FixedQ4816.Tau) + phase));
 
         return (basePoint + (((u * cosPhase) + (v * sinPhase)) * strandOffset));
     }
@@ -1395,16 +1364,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             : FixedQ4816.One
         );
 
-        return (sign * FixedQ4816.Sqrt(value: FixedQ4816.Min(
-            x: FixedVector2.Dot(
-                left: ca,
-                right: ca
-            ),
-            y: FixedVector2.Dot(
-                left: cb,
-                right: cb
-            )
-        )));
+        // The kernel roots the smaller squared length; each is rooted as a length here (see SdfConvexPolygon2D).
+        return (sign * FixedQ4816.Min(
+            x: ca.Length,
+            y: cb.Length
+        ));
     }
     // capChamfer is Data1Z — a cap-only bevel radius on the extrude's rims (KEEP IN SYNC with sdfTrapezoidSolid's
     // data1.z read in field/sdf-shapes.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.
@@ -1652,6 +1616,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         FixedQ4816 Data1Z,
         FixedQ4816 Data1W,
         bool Detail = false,
+        // Only for SdfOp.GaussianPush: the push's Z component, which the packed instruction carries as float bits in its
+        // Shape lane.
+        FixedQ4816 Aux = default,
         // Only for SdfShapeType.ConvexPolygon: the shape's own vertex list, pre-converted once (matching every other
         // baked lane above). Data0X carries no usable value for this shape (the packed program reinterprets it as a
         // table offset, not a float), so this field is what SdfConvexPolygon2D actually reads.
@@ -1659,7 +1626,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         // Only for SdfShapeType.Sweep (strands == 1 only — see the constructor's Compile-time refusal for strands >
         // 1): the curve's own control points and radius endpoints, pre-converted once. Data0X carries no usable
         // value for this shape either (a packed table offset, not a float).
-        SweepCurveFixed? SweepCurve = null
+        SweepCurveFixed? SweepCurve = null,
+        // Only for SdfShapeType.Path: the shape's own edge table at its scale, pre-converted once; Data0X is a packed
+        // table offset for this shape too.
+        PathEdgeFixed[]? PathEdges = null
     );
     // The compiled, fixed-point form of one SdfSweepCurve.
     private readonly record struct SweepCurveFixed(FixedVector3 A, FixedVector3 B, FixedVector3 C, FixedQ4816 RadiusStart, FixedQ4816 RadiusEnd, FixedQ4816 Bulge);

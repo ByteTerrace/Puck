@@ -43,6 +43,7 @@ public sealed partial class WorldReplayTape {
         public int DivergedAt { get; set; } = -1;
         public List<ulong> LiveHashes { get; } = [];
         public List<ulong> LiveAuthoritativeHashes { get; } = [];
+        public List<ulong[]> LiveComponentHashes { get; } = [];
         public List<bool> ExpectedMutationOutcomes { get; } = [];
         public Queue<bool> ReplayedMutationOutcomes { get; } = new();
     }
@@ -144,6 +145,22 @@ public sealed partial class WorldReplayTape {
             : $"first divergence at tick {drive.DivergedAt}"
         );
 
+        // A drive that reached the tape's end stands where the recording stopped, so the live cores are read against
+        // the digests the tape pins there; the capture drains every queued machine once.
+        if (
+            completed &&
+            (drive.Target == drive.Source.TickCount) &&
+            (drive.Source.RecordedMachineDigests.Count > 0)
+        ) {
+            var live = WorldReplaySnapshot.MachineDigests(machines: m_liveServer.Machines);
+
+            verdict += ((live.Count == 0)
+                ? "; machine cores not compared (the live host cannot capture them)"
+                : ((WorldReplaySnapshot.DescribeMachineDivergence(recorded: drive.Source.RecordedMachineDigests, replayed: live) is { } divergence)
+                    ? $"; {divergence}"
+                    : $"; machine cores matched ({drive.Source.RecordedMachineDigests.Count})"));
+        }
+
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
                 channel: "replay.drive",
@@ -181,10 +198,15 @@ public sealed partial class WorldReplayTape {
         m_ticks = prefix;
         m_liveHashes.Clear();
         m_liveAuthoritativeHashes.Clear();
+        m_liveComponentHashes.Clear();
         // The child's prefix hashes are what the live session reached while re-driving the parent — identical to
-        // the parent's on a matching drive, and the honest live trace on a diverged one.
+        // the parent's on a matching drive, and the honest live trace on a diverged one. A parent with no
+        // per-component trace leaves the child without one.
         m_liveHashes.AddRange(collection: drive.LiveHashes);
         m_liveAuthoritativeHashes.AddRange(collection: drive.LiveAuthoritativeHashes);
+        if (source.RecordedComponentHashes.Count == source.TickCount) {
+            m_liveComponentHashes.AddRange(collection: drive.LiveComponentHashes);
+        }
         m_forkedFrom = new WorldReplayForkProvenance(
             ParentName: drive.SourceName,
             Tick: drive.Target
@@ -260,8 +282,14 @@ public sealed partial class WorldReplayTape {
             tick: (m_liveServer.NextInputTick - 1UL)
         );
 
+        var liveComponents = WorldStateHashComposition.AuthoritativeComponents(
+            server: m_liveServer,
+            tick: (m_liveServer.NextInputTick - 1UL)
+        );
+
         drive.LiveHashes.Add(item: liveHash);
         drive.LiveAuthoritativeHashes.Add(item: liveAuthoritativeHash);
+        drive.LiveComponentHashes.Add(item: liveComponents);
         drive.Injected = false;
 
         try {
@@ -292,9 +320,13 @@ public sealed partial class WorldReplayTape {
         ) {
             drive.DivergedAt = tick;
             if (m_liveServer.Output.HasNarrationSink) {
+                var components = ((drive.Source.RecordedComponentHashes.Count == drive.Source.TickCount)
+                    ? $"; differing components: {string.Join(separator: ", ", values: WorldStateHashComposition.DifferingComponents(left: drive.Source.RecordedComponentHashes[tick], right: liveComponents))}"
+                    : string.Empty);
+
                 m_liveServer.Output.Narrate(
                     channel: "replay.drive",
-                    text: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}; the drive continues]"
+                    text: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}{components}; the drive continues]"
                 );
             }
         }
@@ -305,10 +337,11 @@ public sealed partial class WorldReplayTape {
             EndDrive(completed: true);
         }
     }
-    // Installs the tape's boot image into the running server through its own doors: a forced world.load of the
-    // embedded definition (solids, machines, addon plan, document grants, journal, base — the whole rebuild
-    // pipeline), then the complete authority checkpoint a fresh server reaches after the recorded seats join.
-    // This resets clocks, memory, decisions, latches, grants, and held input as well as the population image.
+    // Installs the tape's starting state into the running server through its own doors: a forced world.load of the
+    // embedded definition (solids, machines, addon plan, document grants, journal, base — the whole rebuild pipeline;
+    // an unchanged machine row keeps its running runtime), then the tape's start checkpoint, or the complete authority
+    // checkpoint a fresh server reaches after the recorded seats join. This resets clocks, memory, decisions, latches,
+    // grants, sessions, held input, screen slots and machine cores as well as the population image.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
         // A tape that starts from a checkpoint carries its whole starting authority state; one that starts from the
         // boot image has it rebuilt here, on a shadow with the recorded seats joined.
@@ -424,9 +457,11 @@ public sealed partial class WorldReplayTape {
     /// and arms the per-step injection that feeds one recorded tick ahead of each live step (or a burst per step
     /// when fast-forwarding). Refuses, leaving the session untouched, when the tape is busy, recorded nothing, its
     /// active seat set differs from the live one (join or leave to match — a seat cannot be respawned through the
-    /// session door), a screen machine or addon guest already holds state the rebuild door cannot reset, an
-    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline,
-    /// or the boot-image rebuild is rejected. The host tick thread owns this operation.</summary>
+    /// session door), the tape pins addons and a guest already holds state the rebuild door cannot reset, an
+    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline, or the
+    /// boot-image rebuild is rejected. A stepped machine and a moved screen selector are no obstacle: the start
+    /// checkpoint the reset installs restores the machine cores, the screen slots and the sessions over the running
+    /// host. The host tick thread owns this operation.</summary>
     /// <param name="name">The saved tape's name.</param>
     /// <param name="toTick">How many recorded ticks to drive (<c>1..TickCount</c>), or <see langword="null"/> for
     /// the whole tape.</param>
@@ -500,14 +535,6 @@ public sealed partial class WorldReplayTape {
                 separator: ", ",
                 values: liveSeats.Select(selector: static slot => (slot + 1))
             )}] joined — player.join/player.leave to match first";
-            return false;
-        }
-
-        if (
-            m_liveServer.AnyScreenOpEverApplied ||
-            ((definition.Screens.Count > 0) && m_liveServer.AnyMachineEverPumped)
-        ) {
-            refusal = "a screen or machine operation has applied, or the tape declares screens and a live machine has stepped — screen-owned state and memory observations are outside the checkpoint inventory, so the boot image cannot be reached in this session";
             return false;
         }
 

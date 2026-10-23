@@ -17,14 +17,16 @@ namespace Puck.World.Tests;
 public sealed class WorldSliceCommandModuleLawTests {
     private static readonly Vector3 CubePosition = new(x: 2f, y: 1f, z: 3f);
 
-    private static WorldDefinition Definition() {
+    private static readonly ShapeDocument Cube = new(Id: 0, Name: "cube", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero, Rotation: Quaternion.Identity,
+        Scale: new Vector3(value: 0.5f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0);
+
+    private static WorldDefinition Definition(params ShapeDocument[] shapes) {
         var canonical = CreationCanonicalizer.Canonicalize(
             document: new CreationDocument(
                 Schema: CreationDocument.CurrentSchema,
                 Name: "cube",
                 Palette: [new PaletteEntryDocument(Color: "#FFFFFF", Emissive: null, Specular: null, Roughness: null)],
-                Shapes: [new ShapeDocument(Id: 0, Name: "cube", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero, Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 0.5f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0)],
+                Shapes: ((shapes.Length > 0) ? shapes : [Cube]),
                 Frames: null
             ),
             source: "cube"
@@ -68,6 +70,17 @@ public sealed class WorldSliceCommandModuleLawTests {
         Assert.Equal(expected: new Vector2(x: CubePosition.X, y: CubePosition.Z), actual: Parse("cube-a", "y", "c.png").Centre);
         Assert.Equal(expected: CubePosition.Y, actual: Parse("cube-a", "y", "c.png").Offset);
     }
+    [Fact]
+    public void AnUnboundedLatticeFramesItsClipOrIsRefused() {
+        var lattice = (Cube with { Name = "lattice", Domain = [new ShapeDomainOp.Repeat(Spacing: new Vector3(value: 2f))] });
+        var clip = (Cube with { Id = 1, Name = "clip", Blend = SdfBlendOp.Intersection, Position = new Vector3(x: 0f, y: 1f, z: 0f) });
+        var clipped = WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "c.png"], definition: Definition(lattice, clip), refusal: out var refusal, request: out var request);
+
+        Assert.True(condition: clipped, userMessage: refusal);
+        Assert.True(condition: (float.IsFinite(f: request.Half) && (request.Half > 0f)), userMessage: $"{request.Half}");
+        Assert.False(condition: WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "c.png"], definition: Definition(lattice), refusal: out refusal, request: out _));
+        Assert.Contains(expectedSubstring: "placement 'cube-a' has no finite bound", actualString: refusal, comparisonType: StringComparison.Ordinal);
+    }
     [Theory]
     [InlineData("expected <x|y|z> <offset>", "y", "0")]
     [InlineData("finite numbers and a positive half", "y", "0", "0", "0", "-1", "s.png")]
@@ -103,7 +116,7 @@ public sealed class WorldSliceCommandModuleLawTests {
     [Fact]
     public void AHostWithNoRendererRefusesTheVerb() {
         using var row = HostRow.Build(definition: Definition(), name: "slice");
-        var registry = new CommandRegistry(modules: [new WorldSliceCommandModule(renderProbe: new WorldRenderProbe(), server: row.Server)]);
+        var registry = new CommandRegistry(modules: [new WorldSliceCommandModule(renderProbe: new WorldRenderProbe(), server: row.Server, source: new WorldDefinitionSource(Definition: row.Server.Definition, SourcePath: "worlds/test/test.puck"))]);
         var refused = registry.Submit(line: "world.slice cube-a y cube.png");
         var malformed = registry.Submit(line: "world.slice");
 
@@ -111,5 +124,39 @@ public sealed class WorldSliceCommandModuleLawTests {
         Assert.StartsWith(expectedStartString: "[world.slice: no renderer", actualString: refused.Output, comparisonType: StringComparison.Ordinal);
         Assert.True(condition: malformed.IsError, userMessage: malformed.Output);
         Assert.StartsWith(expectedStartString: "[world.slice: expected", actualString: malformed.Output, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
+    public void TheSaveFormNamesItsOwnPathAndRefusesWhatItCannotName() {
+        using var row = HostRow.Build(definition: Definition(), name: "slice-save");
+        var registry = new CommandRegistry(modules: [new WorldSliceCommandModule(renderProbe: new WorldRenderProbe(), server: row.Server, source: new WorldDefinitionSource(Definition: row.Server.Definition, SourcePath: "worlds/test/test.puck"))]);
+        var parsed = WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "slice.png", "offset", "1.2"], definition: row.Server.Definition, refusal: out var refusal, request: out var request);
+
+        Assert.True(condition: parsed, userMessage: refusal);
+        Assert.StartsWith(expectedStartString: "[world.slice: no renderer", actualString: registry.Submit(line: "world.slice.save cube-a y offset 1.2").Output, comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(expectedStartString: "[world.slice.save: expected", actualString: registry.Submit(line: "world.slice.save cube-a").Output, comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(expectedStartString: "[world.slice.save: placement", actualString: registry.Submit(line: "world.slice.save .. y").Output, comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(expectedStartString: "[world.slice: '", actualString: registry.Submit(line: "world.slice.save missing y").Output, comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: (request.Offset - 1.2f), actual: WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "slice.png"], definition: row.Server.Definition, refusal: out _, request: out var flat) ? flat.Offset : float.NaN, tolerance: 1e-5f);
+    }
+    [Fact]
+    public void NearNamesThePlacementOfTheSpawnPointNearestTheSeat() {
+        var definition = Definition();
+
+        using var row = HostRow.Build(definition: (definition with {
+            SpawnPointsRaw = [.. definition.SpawnPoints, new WorldSpawnPoint(Id: "cube-a", Position: (CubePosition - new Vector3(x: 0f, y: 1f, z: 2.8f))), new WorldSpawnPoint(Id: "unplaced", Position: Vector3.Zero)],
+        }), name: "slice-near");
+        var registry = new CommandRegistry(modules: [new WorldSliceCommandModule(renderProbe: new WorldRenderProbe(), server: row.Server, source: new WorldDefinitionSource(Definition: row.Server.Definition, SourcePath: "worlds/test/test.puck"))]);
+
+        // No seat body yet: nothing stands to be near.
+        Assert.StartsWith(expectedStartString: "[world.slice.save: 'near' names", actualString: registry.Submit(line: "world.slice.save near y").Output, comparisonType: StringComparison.Ordinal);
+        Assert.True(condition: row.Server.ApplySession(request: new Puck.World.Protocol.SessionRequest.Join(
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            IdentityName: null,
+            WireProtocolKey: Puck.World.Protocol.WorldProtocol.WireProtocolKey
+        )).Accepted);
+        row.Server.Body(index: 0)!.Pose(x: 2f, y: 0f, z: 0.5f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        // The nearest spawn point with a placement resolves, so the line reaches the renderer check.
+        Assert.StartsWith(expectedStartString: "[world.slice: no renderer", actualString: registry.Submit(line: "world.slice.save near y offset 1.2").Output, comparisonType: StringComparison.Ordinal);
     }
 }

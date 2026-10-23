@@ -72,6 +72,7 @@ export type WorldDefinition = {
   sets?: (CellSetRow | null)[] | null;
   editor?: WorldEditorDefaults | null;
   timeline?: WorldTimelineSection | null;
+  commands?: (WorldConsoleCommand | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -98,7 +99,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -555,7 +556,7 @@ export type ActionSpec = {
 };
 
 /**
- * The authored values a player-writable durable slot admits in this world.
+ * The authored values a slot admits in this world: a player-writable durable slot's input, a rule's or a kit's write, and a value carried in from another world all settle through it.
  */
 export type ActionStateEnvelope = ActionStateEnvelopeRange | ActionStateEnvelopeSet | null;
 
@@ -1073,17 +1074,45 @@ export type CellValueJsonConverterVectorShape = {
   value: number[];
 };
 
-export type ChannelConsentMask = number;
+export type ChannelConsentMask = {
+  /**
+   * The numeric and button banks, one bit per consented channel ordinal.
+   */
+  bits?: ChannelMask;
+};
 
 export type ChannelFrame = "World" | "Camera" | "Heading";
 
-export type ChannelReachMask = number;
+/**
+ * Independent support masks for the numeric and button banks.
+ */
+export type ChannelMask = {
+  /**
+   * One bit per numeric lane.
+   */
+  axes?: number;
+  /**
+   * One bit per button lane.
+   */
+  buttons?: number;
+};
+
+export type ChannelReachMask = {
+  /**
+   * The numeric and button reach banks.
+   */
+  bits?: ChannelMask;
+  /**
+   * Independent target-register reach.
+   */
+  registers?: number;
+};
 
 export type ChannelRef = unknown;
 
 export type ChannelRole = "MoveAdvance" | "MoveStrafe" | "Turn" | "MoveUp" | "Pitch" | "Roll" | "FaceX" | "FaceY" | "FaceZ" | "MoveX" | "MoveY" | "MoveZ";
 
-export type ChannelShape = "Bipolar" | "Unipolar" | "Binary";
+export type ChannelShape = "Bipolar" | "Unipolar" | "Binary" | "Relative";
 
 export type ClosedBitset256 = unknown;
 
@@ -1561,7 +1590,7 @@ export type MutationKindMask = string;
 /**
  * A presentation fact an overlay element's OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.
  */
-export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "ConsoleOpen" | "SeatCameraApplication" | "ScreenEngaged";
+export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "ConsoleOpen" | "SeatCameraApplication" | "ScreenFramed";
 
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
@@ -2000,6 +2029,8 @@ export type RulePoolIteration = {
 };
 
 export type SafeName = string;
+
+export type SdfExposureMode = "Manual" | "Auto";
 
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
@@ -3132,7 +3163,7 @@ export type WorldAddonRow = {
    */
   modulePath: string;
   /**
-   * The content-address integrity pin (sha256-64/{16 hex}). required — a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.
+   * The full content integrity pin (sha256/{64 lowercase hex}). Required — a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.
    */
   hash: string;
   /**
@@ -3451,13 +3482,17 @@ export type WorldBindingBarAuthoring = {
    */
   enabled?: boolean;
   /**
-   * Whether the bar draws the atlas text it composes — a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions' icons, and the modifier indicators all still draw.
+   * Whether the bar draws the atlas text it composes — a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page's name under the modifier indicators, and a chord hint's label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions' icons, and the modifier indicators all still draw.
    */
   text?: boolean;
   /**
-   * Whether the bar draws the modifier indicator row on its anchor line — one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text's, not this one's.
+   * Whether the bar draws the modifier indicator row on its anchor line — one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.
    */
   modifiers?: boolean;
+  /**
+   * Whether the modifier row (and the chord hints it places) keeps to the modifiers the binding document DECLARES in its modifiers section — the page-holding triggers an author named — and leaves out the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a shoulder). false draws every one. It shapes only what Modifiers draws, so it does nothing while that is off.
+   */
+  declaredModifiersOnly?: boolean;
   /**
    * Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page's name.
    */
@@ -3671,7 +3706,7 @@ export type WorldBodiesDefaults = {
   reconnectGraceSeconds?: number;
   capacityRow?: string | null;
   disclosure?: WorldObserverDisclosure | null;
-  scaleRow?: string | null;
+  scale?: string | null;
   sleepAfterSeconds?: number;
 };
 
@@ -4406,6 +4441,10 @@ export type WorldChannel = {
    * What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.
    */
   frame?: ChannelFrame;
+  /**
+   * Required units, sensitivity and limit for Relative channels; absent on levels.
+   */
+  relative?: WorldRelativeChannel | null;
 };
 
 export type WorldClock = {
@@ -4549,6 +4588,46 @@ export type WorldCollisionEvents = {
    */
   beginBudget?: number;
 };
+
+export type WorldConsoleCommand = {
+  /**
+   * The command's namespaced name (debug.go), unique within the document and never a registered verb's.
+   */
+  name: string;
+  /**
+   * The help text the listing shows before the command's usage, or null.
+   */
+  help?: string | null;
+  /**
+   * The parameters, in argument order; a required one never follows an optional one.
+   */
+  parameters?: (WorldConsoleCommandParameter | null)[] | null;
+  /**
+   * The console lines the command submits, in order. A {name} placeholder takes a parameter's argument and {{/}} stand for literal braces; the first token, the verb, is literal.
+   */
+  lines?: (string | null)[] | null;
+};
+
+export type WorldConsoleCommandParameter = {
+  /**
+   * The parameter's name, which a line's {name} placeholder substitutes.
+   */
+  name: string;
+  /**
+   * What an argument for it must be.
+   */
+  kind?: WorldConsoleCommandParameterKind;
+  /**
+   * The argument a caller who omits it gets, written as it would be typed; null makes the argument required.
+   */
+  default?: string | null;
+  /**
+   * The admitted values of a Choice parameter, each one plain token; no other kind carries any.
+   */
+  values?: (string | null)[] | null;
+};
+
+export type WorldConsoleCommandParameterKind = "Text" | "Number" | "Integer" | "Choice" | "Body" | "Spawn";
 
 export type WorldContactRequirement = "SmoothUnionContact" | "GradientDerivedUp";
 
@@ -5041,7 +5120,7 @@ export type WorldEffectPlanarImpulse = {
    */
   bodyDirection: DocumentVector3;
   /**
-   * The overlay's speed, in world units per second.
+   * The overlay's speed, in world units per second at the body's authored size, times the body's live scale.
    */
   speed: number;
   /**
@@ -5095,6 +5174,10 @@ export type WorldEffectPoseCell = {
    * The displacement from the cell centre, in world units.
    */
   offset: DocumentVector3;
+  /**
+   * Whether the body moves there as continuous motion, which a client interpolates and which keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.
+   */
+  glide?: boolean;
 };
 
 /**
@@ -5140,6 +5223,29 @@ export type WorldEffectScaleVerticalVelocity = {
 };
 
 /**
+ * Writes one state.body counter of a world-addressed body: the register a kit's own setState writes, in the arena's participant lane, settled through the register's envelope. The register is the body's, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds one like any body. Exactly one of Value and Expression is authored. A kit writes its own registers with setState, so this arm refuses in a kit.
+ */
+export type WorldEffectSetBodyState = {
+  $type?: "setBodyState";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+  /**
+   * The state.body counter.
+   */
+  state: string;
+  /**
+   * The literal value.
+   */
+  value?: number | null;
+  /**
+   * A bounded fixed-point expression evaluated at fire time.
+   */
+  expression?: ExpressionProgramNonNullable2;
+};
+
+/**
  * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's facts row, together. An owned identity's row is persisted; a visitor's is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.
  */
 export type WorldEffectSetIdentityFact = {
@@ -5168,7 +5274,7 @@ export type WorldEffectSetIdentityFact = {
 export type WorldEffectSetVerticalVelocity = {
   $type?: "setVerticalVelocity";
   /**
-   * The vertical velocity, in world units per second.
+   * The vertical velocity, in world units per second at the body's authored size; a body whose live scale (bodies.scale) is not one launches at this times its scale, so under the gravity that scales with it the jump rises the same number of its own heights.
    */
   velocity: number;
   /**
@@ -6553,6 +6659,10 @@ export type WorldMachine = {
    * The folders holding the content this device can swap to, in the order they are listed and searched, each relative to the declaring document (WorldDocumentPaths), or null for a device with no swappable content. A folder that does not exist on this machine is listed as absent, never refused, so a world can name a local folder that only some machines hold. machine.content lists the files in them the device's engine can mount (WorldMachineContentFolder) and machine.swap mounts one by name; nothing outside the folders is listed. Omitted from the wire when null.
    */
   contentFolders?: (string | null)[] | null;
+  /**
+   * Whether the device boots the default its ContentFolders name, when one names a file it can mount, in place of its configuration's authored content. A folder names its default in its own folder.json (SettingsFile), which the folder's owner writes (machine.default) and the boot and every world.reload read, so the default lives beside the content and no document names it. A device with no default set, or whose default is absent or unmountable, boots its authored content. Omitted from the wire when false.
+   */
+  preferFolderDefault?: boolean;
 };
 
 export type WorldMachineCable = {
@@ -7071,7 +7181,7 @@ export type WorldPlacement = {
    */
   spatial?: WorldPlacementSpatialVolumeList | null;
   /**
-   * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
+   * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document's state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
    */
   holding?: number;
 };
@@ -7130,6 +7240,10 @@ export type WorldPlacementBoard = {
    * The Verdict value the judge writes to accept a move — any other value is a refusal.
    */
   accept?: number;
+  /**
+   * How a seat sits down at the table, or null for a table no seat engages: the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and the surface the seat's pointer meets.
+   */
+  engage?: WorldTabletopEngage | null;
 };
 
 /**
@@ -7845,7 +7959,7 @@ export type WorldPrototype = {
        */
       color: string;
       /**
-       * The emissive strength (null = 0 — optional members are nullable and normalized at load).
+       * The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and normalized at load).
        */
       emissive?: number | null;
       /**
@@ -8085,6 +8199,19 @@ export type WorldPrototype = {
        * The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null keeps the emissive static.
        */
       emissiveLane?: number | null;
+      /**
+       * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
+       */
+      glass?: {
+        /**
+         * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
+         */
+        depth: number;
+        /**
+         * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
+         */
+        ior?: number | null;
+      } | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).
@@ -8221,6 +8348,50 @@ export type WorldPrototype = {
          * The parity-material stride (null = 0, geometric only).
          */
         materialStride?: number | null;
+      } | {
+        $type?: "jitter";
+        /**
+         * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
+         */
+        spacing: unknown;
+        /**
+         * The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.
+         */
+        amount: number;
+        /**
+         * The hash seed (null = 0).
+         */
+        seed?: number | null;
+        /**
+         * The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).
+         */
+        tumble?: number | null;
+        /**
+         * The hashed palette rows a copy's material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.
+         */
+        materialVariants?: number | null;
+        /**
+         * How the displacement is distributed over the cell (null = White).
+         */
+        flavor?: "White" | "Blue" | "Gaussian" | null;
+        /**
+         * The point the lattice folds around, creation units (null = the creation origin).
+         */
+        origin?: unknown;
+      } | {
+        $type?: "logSphere";
+        /**
+         * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
+         */
+        shellRatio: number;
+        /**
+         * The spin each shell turns about the fold's Z axis, in radians per shell (null = 0, concentric shells).
+         */
+        twist?: number | null;
+        /**
+         * The point the shells centre on, creation units (null = the creation origin).
+         */
+        origin?: unknown;
       } | null)[] | null;
       /**
        * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
@@ -8531,6 +8702,65 @@ export type WorldPrototype = {
         seed: number;
         mode: "F1" | "F2MinusF1";
         randomness: number;
+      } | null;
+      /**
+       * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
+       */
+      warp?: {
+        /**
+         * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+         */
+        frequency: unknown;
+        /**
+         * The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+         */
+        amplitude: number;
+        /**
+         * The farthest the warp carries any point: the amplitude on every axis at once.
+         */
+        reach?: number;
+      } | null;
+      /**
+       * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
+       */
+      displace?: {
+        /**
+         * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+         */
+        frequency: unknown;
+        /**
+         * The relief's height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+         */
+        amplitude: number;
+        /**
+         * The farthest the relief carries the surface outward.
+         */
+        reach?: number;
+      } | null;
+      /**
+       * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
+       */
+      elongate?: unknown;
+      /**
+       * Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).
+       */
+      steps?: number | null;
+      /**
+       * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
+       */
+      morph?: {
+        /**
+         * Which dynamic-slot lane drives the morph, in [0, 3].
+         */
+        lane: number;
+        /**
+         * The lane value where the field before the shape shows alone (t = 0).
+         */
+        from: number;
+        /**
+         * The lane value where the shape shows alone (t = 1); must differ from From.
+         */
+        to: number;
       } | null;
     } | null)[] | null;
     /**
@@ -9167,6 +9397,21 @@ export type WorldReference = {
   world?: SafeName | null;
 };
 
+export type WorldRelativeChannel = {
+  /**
+   * An authored unit name shared by producers and consumers.
+   */
+  unit: string;
+  /**
+   * Units per device sample, applied before host quantization.
+   */
+  sensitivity: number;
+  /**
+   * The positive absolute displacement limit in authored units.
+   */
+  maximumPerStep: number;
+};
+
 /**
  * An air kind's height profile: its density falls by a factor of e over each Falloff world units above Base, and rises as much below it, so a ray's optical depth through it has a closed form.
  */
@@ -9244,7 +9489,7 @@ export type WorldRenderDefaults = {
    */
   upscaleSharpness?: number;
   /**
-   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
+   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. The world's own views include every layout slot that names a camera; the camera views screens film and session views never do.
    */
   temporal?: boolean;
   /**
@@ -9315,6 +9560,14 @@ export type WorldRenderDefaults = {
    * The boot sky field grid fraction, one or one half, independent of view render scale.
    */
   skyFieldScale?: number;
+  /**
+   * The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day's.
+   */
+  exposure?: WorldRenderExposure | null;
+  /**
+   * Optional cel shading and its tuning. Absent is off.
+   */
+  toon?: WorldRenderToon | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -9326,6 +9579,37 @@ export type WorldRenderEnvironment = {
    * The reflection gain. Absent is one; zero disables reflection lookups.
    */
   reflection?: BindableScalar;
+};
+
+export type WorldRenderExposure = {
+  /**
+   * Manual or automatic. Absent is manual.
+   */
+  mode?: SdfExposureMode;
+  /**
+   * The manual exposure value at ISO 100, in [−6, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.
+   */
+  ev100?: number | null;
+  /**
+   * The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [−6, 20]; absent is −6.
+   */
+  minimum?: number | null;
+  /**
+   * The highest EV100 an automatic exposure adapts to, at or above Minimum. In [−6, 20]; absent is 20.
+   */
+  maximum?: number | null;
+  /**
+   * The stops an automatic exposure brightens the metered image by, in [−10, 10]. Absent is zero.
+   */
+  compensation?: number | null;
+  /**
+   * The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.
+   */
+  adaptation?: number | null;
+  /**
+   * The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.
+   */
+  local?: number | null;
 };
 
 export type WorldRenderFog = {
@@ -9341,6 +9625,10 @@ export type WorldRenderFog = {
    * The height fog's profile. Absent is a fog alike at every height.
    */
   height?: WorldRenderAirHeight | null;
+  /**
+   * The luminance, in nits, an authored Color of one in-scatters at. Absent is SdfSky.DefaultLuminance; a fog that reads the sky takes the sky's own.
+   */
+  luminance?: BindableScalar;
 };
 
 export type WorldRenderHaze = {
@@ -9418,10 +9706,10 @@ export type WorldRenderIndirectSources = {
 /**
  * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.
  */
-export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightOccluder | null;
+export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightSpot | WorldRenderLightOccluder | null;
 
 /**
- * A Lambert directional light.
+ * A Lambert directional light, such as the sun.
  */
 export type WorldRenderLightDirectional = {
   $type?: "directional";
@@ -9430,13 +9718,13 @@ export type WorldRenderLightDirectional = {
    */
   direction?: BindableDirection;
   /**
-   * The light's colour.
+   * The light's colour, scaled to unit luminance so the light gives exactly its illuminance. Refused beside Temperature. Absent is white, or the temperature's.
    */
   color?: BindableColor;
   /**
-   * The diffuse weight. Absent is the pinned sun weight.
+   * The illuminance on a surface facing the light, in lux: a clear midday sun gives about 100,000, an overcast day about 10,000, the full moon about 0.3. Absent is the pinned sun's.
    */
-  weight?: BindableScalar;
+  illuminance?: BindableScalar;
   /**
    * The light's angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
    */
@@ -9449,6 +9737,10 @@ export type WorldRenderLightDirectional = {
    * The unique identity a section key and the shadow allocator address. Required when Shadow is Always or Auto.
    */
   name?: string | null;
+  /**
+   * The light's colour as a black body's at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.
+   */
+  temperature?: BindableScalar;
   lightName?: string | null;
   /**
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
@@ -9457,7 +9749,7 @@ export type WorldRenderLightDirectional = {
 };
 
 /**
- * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.
+ * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the lights table's capacity.
  */
 export type WorldRenderLightOccluder = {
   $type?: "occluder";
@@ -9489,7 +9781,7 @@ export type WorldRenderLightOccluder = {
 };
 
 /**
- * A point light with inverse-square falloff and a soft core: intensity = weight / (1 + (distance / radius)^2). No shadow march in v1 — a point light never occludes and is never occluded.
+ * A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world's brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An anchored light moves with its anchor, lights through every wall and bounces nothing.
  */
 export type WorldRenderLightPoint = {
   $type?: "point";
@@ -9498,25 +9790,29 @@ export type WorldRenderLightPoint = {
    */
   position?: BindableVector3;
   /**
-   * The falloff radius. Absent is the engine default.
-   */
-  radius?: BindableScalar;
-  /**
    * An entity, entity part, or placement frame. A missing live target disables the light.
    */
   anchor?: WorldAnchor | null;
   /**
-   * The light's colour.
+   * The light's colour, scaled to unit luminance. Refused beside Temperature.
    */
   color?: BindableColor;
   /**
-   * The strength. Absent is the engine default.
+   * The luminous intensity, in candela. Refused beside Power; absent with it is the engine default.
    */
-  weight?: BindableScalar;
+  intensity?: BindableScalar;
   /**
    * The name a section key addresses the light by, unique among the lights.
    */
   name?: string | null;
+  /**
+   * The luminous power, in lumens, emitted alike in every direction: a 60 W incandescent bulb gives about 800. Refused beside Intensity.
+   */
+  power?: BindableScalar;
+  /**
+   * The light's colour as a black body's, in kelvin, in [1000, 40000]: a warm bulb about 2,700. Refused beside Color.
+   */
+  temperature?: BindableScalar;
   lightName?: string | null;
   /**
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
@@ -9525,7 +9821,7 @@ export type WorldRenderLightPoint = {
 };
 
 /**
- * A view-dependent silhouette brighten: weight · color · pow(1 − saturate(dot(normal, −rayDirection)), power), added after the material shade.
+ * A view-dependent silhouette brighten: luminance · color · pow(1 − saturate(dot(normal, −rayDirection)), power), added after the material shade.
  */
 export type WorldRenderLightRim = {
   $type?: "rim";
@@ -9534,9 +9830,9 @@ export type WorldRenderLightRim = {
    */
   color?: BindableColor;
   /**
-   * The strength. Absent is zero, which adds nothing.
+   * The luminance the brighten adds at a silhouette, in nits. Absent is zero, which adds nothing.
    */
-  weight?: BindableScalar;
+  luminance?: BindableScalar;
   /**
    * The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the engine default.
    */
@@ -9552,9 +9848,61 @@ export type WorldRenderLightRim = {
   bounce?: BindableScalar;
 };
 
+/**
+ * A spot light, such as a downlight: a point light whose light leaves in a cone about its aim, at full strength inside the inner angle and smoothly to none at the outer, with the point light's windowed falloff, range, and tracing and occlusion by the irradiance volume while unanchored.
+ */
+export type WorldRenderLightSpot = {
+  $type?: "spot";
+  /**
+   * The world-space position, or the offset in the anchor's frame.
+   */
+  position?: BindableVector3;
+  /**
+   * The direction the light shines along, any nonzero length; in the anchor's frame when an anchor is authored. Absent is straight down.
+   */
+  direction?: BindableDirection;
+  /**
+   * An entity, entity part, or placement frame. A missing live target disables the light.
+   */
+  anchor?: WorldAnchor | null;
+  /**
+   * The cone's outer half angle, in (0, π/2] radians. Absent is 45 degrees.
+   */
+  angle?: BindableAngle;
+  /**
+   * The half angle inside which the light is at full strength, in [0, Angle] radians. Absent is three quarters of Angle.
+   */
+  innerAngle?: BindableAngle;
+  /**
+   * The light's colour, scaled to unit luminance. Refused beside Temperature.
+   */
+  color?: BindableColor;
+  /**
+   * The luminous intensity along the aim, in candela. Refused beside Power; absent with it is the engine default.
+   */
+  intensity?: BindableScalar;
+  /**
+   * The luminous power, in lumens, emitted alike across the outer cone. Refused beside Intensity.
+   */
+  power?: BindableScalar;
+  /**
+   * The light's colour as a black body's, in kelvin, in [1000, 40000]. Refused beside Color.
+   */
+  temperature?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
+};
+
 export type WorldRenderLighting = {
   /**
-   * The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row's shadow slots by mode and tick-resolved luminance.
+   * The lights, at most SdfLights.MaxLights, in authored order; each view shades only those that can reach what it shows (SdfLightSelection). Shadow-capable directionals compete for the quality row's shadow slots by mode and tick-resolved luminance.
    */
   lights?: (WorldRenderLight | null)[] | null;
   /**
@@ -9605,6 +9953,10 @@ export type WorldRenderMedium = {
    * BindableColor's grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.
    */
   color?: BindableColor;
+  /**
+   * The luminance, in nits, a Color of one in-scatters at. Absent is SdfSky.DefaultLuminance.
+   */
+  luminance?: BindableScalar;
 };
 
 /**
@@ -9733,6 +10085,10 @@ export type WorldRenderSkyLayerAurora = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -9825,6 +10181,10 @@ export type WorldRenderSkyLayerClouds = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -9901,6 +10261,10 @@ export type WorldRenderSkyLayerFar = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -9944,6 +10308,10 @@ export type WorldRenderSkyLayerGradient = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10017,6 +10385,10 @@ export type WorldRenderSkyLayerNoise = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10077,6 +10449,10 @@ export type WorldRenderSkyLayerPanel = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10128,6 +10504,10 @@ export type WorldRenderSkyLayerPanorama = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10188,6 +10568,10 @@ export type WorldRenderSkyLayerPattern = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10253,6 +10637,10 @@ export type WorldRenderSkyLayerStars = {
    */
   mask?: WorldRenderSkyMask | null;
   /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
+  /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
   transform?: WorldRenderSkyTransform | null;
@@ -10312,6 +10700,10 @@ export type WorldRenderSkyLayerSunDisc = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10388,6 +10780,10 @@ export type WorldRenderSkyLayerView = {
    * Gets where the layer draws. Absent is everywhere.
    */
   mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the luminance, in nits, a colour of one shows at in this layer: every colour and brightness the layer carries scales by it (a gradient's stops, a disc's, the stars', the clouds', an aurora's, a noise's, a pattern's, a panel's, a panorama's image, a view's fallback), so the sky is as bright beside its lights as the real one: a clear sky's horizon about 7,000, a night sky well under one. Absent is SdfSky.DefaultLuminance, a clear day's sky beside the pinned sun.
+   */
+  luminance?: BindableScalar;
   /**
    * Gets the layer's own transform about the sky frame. Absent is none.
    */
@@ -10480,6 +10876,53 @@ export type WorldRenderSkyTwinkle = {
   rate?: BindableScalar;
 };
 
+export type WorldRenderToon = {
+  /**
+   * Whether the world boots with cel shading on; absent is off.
+   */
+  enabled?: boolean;
+  /**
+   * Diffuse band threshold in [0, 1].
+   */
+  threshold?: number;
+  /**
+   * Full terminator width in [0.001, 0.5].
+   */
+  softness?: number;
+  /**
+   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   */
+  shadowTint?: DocumentVector3;
+  /**
+   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   */
+  outlineWidth?: number;
+  /**
+   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   */
+  outlineDistance?: number;
+  /**
+   * Crease normal cosine in [0, 0.95].
+   */
+  outlineNormal?: number;
+  /**
+   * Outline multiplier, three linear RGB values in [0, 1].
+   */
+  outlineTint?: DocumentVector3;
+  /**
+   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+   */
+  specularSize?: number;
+  /**
+   * Reflected-light exposure compensation in stops, in [-4, 4].
+   */
+  exposure?: number;
+  /**
+   * Hue-preserving highlight compression in [0, 2]; zero disables it.
+   */
+  shoulder?: number;
+};
+
 export type WorldRigid = {
   /**
    * The body's mass, in the same units gravity.attractors masses use. Must be strictly positive after fixed-point compilation and yield representable room-scale mass/inertia properties — a rigid body with no compiled mass is not a rigid body, it is a decoration.
@@ -10508,7 +10951,7 @@ export type WorldRigid = {
 };
 
 /**
- * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row).
+ * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.
  */
 export type WorldRowAssignment = {
   /**
@@ -10516,9 +10959,41 @@ export type WorldRowAssignment = {
    */
   sequence: WorldSequence;
   /**
+   * The per-body selector, or null for the sequence alone.
+   */
+  select?: WorldRowSelector | null;
+  /**
    * Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   rows: DocumentIdentifierList;
+};
+
+/**
+ * A per-body row selector inside a WorldRowAssignment: each body's own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment's sequence gives it. The register is body state, so the choice is the body's and goes where the body goes: a kit action or a rule's setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment's selector changes only what a body wears; the kit assignment's selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.
+ */
+export type WorldRowSelector = {
+  /**
+   * The state.body counter whose value selects.
+   */
+  bodyState: string;
+  /**
+   * The value-to-row mapping, each value at most once.
+   */
+  cases: (WorldRowSelectorCase | null)[];
+};
+
+/**
+ * One case of a WorldRowSelector: the row a body's register value selects.
+ */
+export type WorldRowSelectorCase = {
+  /**
+   * The register value, a whole number; a counter holding a fraction matches no case.
+   */
+  value: number;
+  /**
+   * The kit or look row name the value selects.
+   */
+  row: string;
 };
 
 export type WorldRule = {
@@ -10668,6 +11143,40 @@ export type WorldScreen = {
    * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
    */
   filter?: GpuSamplerFilter;
+  /**
+   * The display's peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld's unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world's own luminance whatever this says.
+   */
+  luminance?: number | null;
+  /**
+   * The body that carries the screen's picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.
+   */
+  carry?: WorldScreenCarry | null;
+};
+
+export type WorldScreenCarry = {
+  /**
+   * The look row whose wearer carries the picture; a creation look.
+   */
+  look: string;
+  /**
+   * The look's Poses frame that holds while the body carries it.
+   */
+  pose: string;
+  /**
+   * The name of the ungrouped box in the look's creation that shows the picture.
+   */
+  shape: string;
+  /**
+   * The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its right, +Y its up and +Z its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).
+   */
+  camera?: string | null;
+};
+
+export type WorldScreenDisplay = {
+  /**
+   * The matte colour around the framed picture, as #RRGGBB, or null for black.
+   */
+  fill?: string | null;
 };
 
 export type WorldScreenMagazine = {
@@ -10683,6 +11192,29 @@ export type WorldScreenMagazine = {
    * Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle); when false the selector clamps at both ends.
    */
   wrap?: boolean;
+};
+
+export type WorldScreenPadPointer = {
+  /**
+   * The pointer's speed at full deflection before any boost, in heights of the framed picture per second. Positive.
+   */
+  speed: number;
+  /**
+   * The exponent the deflection's length is raised to; 1 is a linear response. At least 1.
+   */
+  curve?: number;
+  /**
+   * The speed's multiplier once a deflection has been held for RampSeconds, rising linearly from 1 while it is held and back to 1 once the stick rests. At least 1.
+   */
+  boost?: number;
+  /**
+   * How long a held deflection takes to reach Boost; 0 applies it at once. Non-negative.
+   */
+  rampSeconds?: number;
+  /**
+   * The wheel's speed at full deflection of the scrolling stick, in wheel notches per second, its deflection raised to Curve too. Non-negative; 0 scrolls nothing.
+   */
+  scrollSpeed?: number;
 };
 
 /**
@@ -10729,6 +11261,14 @@ export type WorldScreenRoute = {
    * The machine input port, by the provider's port name (controls-2), that a seat engaged on this screen drives; the machine's other ports hold neutral input unless another screen routes to them. null (the default) resolves only a machine with a sole input port, and a screen showing a machine with several is refused by name until its route names one. Omitted from the wire when null.
    */
   port?: string | null;
+  /**
+   * How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.
+   */
+  display?: WorldScreenDisplay | null;
+  /**
+   * How a local pad's sticks drive the pointer over this screen's framed picture while a seat engaged on it frames a window capture (WorldScreenPadPointer). Only an engageable screen showing a window capture may author it. null (the default) moves and scrolls nothing from a stick; a pad's buttons still click and press keys. Omitted from the wire when null.
+   */
+  padPointer?: WorldScreenPadPointer | null;
 };
 
 /**
@@ -10809,6 +11349,10 @@ export type WorldScreenSourceSession = {
    * The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.
    */
   fallback?: string | null;
+  /**
+   * Whether the opening ripples like an event horizon: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.
+   */
+  ripple?: boolean;
 };
 
 /**
@@ -10862,6 +11406,25 @@ export type WorldSearchChance = {
    * Negamax: the absolute ply (0 = root) whose move choice is replaced, 0..depth-1. Tree: the 1-based playout ply the chance draw replaces.
    */
   atDepth: number;
+};
+
+export type WorldSearchMove = {
+  /**
+   * The offsets along the topology's own axes (CompiledTopology.TryOffset): [dx, dz] on a grid or ring, [dq, dr] on a hex, plus a third layer step on a box. At least one, none all zero.
+   */
+  offsets: (number[] | null)[];
+  /**
+   * The token codes the pattern applies to; absent or empty, every token.
+   */
+  codes?: number[] | null;
+  /**
+   * The turn slot value the pattern applies on; absent, every turn.
+   */
+  turn?: number | null;
+  /**
+   * How many times each offset repeats: 1 (the default) for a leaper's one step, more for a short slide, and 0 to slide to the board's edge.
+   */
+  range?: number;
 };
 
 export type WorldSearchRow = {
@@ -10994,6 +11557,14 @@ export type WorldSearchShapeRelocate = {
    * Whether the token standing on the target leaves the board.
    */
   displace?: boolean;
+  /**
+   * An integer row keyed by the tokens holding each token's code, which a pattern naming codes reads; required when one does.
+   */
+  codes?: string | null;
+  /**
+   * The move patterns that narrow the targets tried; absent, every other cell is tried.
+   */
+  moves?: (WorldSearchMove | null)[] | null;
 };
 
 export type WorldSearchShapeTandem = {
@@ -11749,6 +12320,32 @@ export type WorldStorageDefaults = {
    * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see the storage extension documentation), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
    */
   discoveryEndpoint?: string | null;
+};
+
+/**
+ * A tabletop's engagement: a seat standing within Radius of the board's centre presses Channel (its context button) and sits down at the table. The seat is captured (its avatar stands still) on a control placement:<id> application, its camera eases to a view of the whole board from the side it stands on, and the same button leaves. While engaged, the world's rules read the seat's channels as play (channel(...)), and the board reads where the seat points (board(pointer, <row>, <seat>)), whether the seat sits at it (board(engaged, …)) and from which side (board(side, …)), so the game itself stays document rules.
+ */
+export type WorldTabletopEngage = {
+  /**
+   * The declared channel whose press engages and leaves the table.
+   */
+  channel: string;
+  /**
+   * How near the board's centre, on the ground plane in world units, a seat must stand to engage. Positive.
+   */
+  radius?: number;
+  /**
+   * The board view's elevation above the horizontal, in degrees: 90 looks straight down, smaller leans toward the seat's side. In (0, 90].
+   */
+  pitch?: number;
+  /**
+   * World units of room the board view leaves around the board's footprint. Non-negative.
+   */
+  margin?: number;
+  /**
+   * The height above the topology's origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.
+   */
+  surface?: number;
 };
 
 export type WorldTargetRegister = {

@@ -1,19 +1,48 @@
 // The on-screen controls of the worlds the Moth walks: the drawn cursor, the icons every badge and action draws, the
-// standard controller bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), and the play wheel.
-// The debug world and the garden import it beside the theme, so a seat keeps its bar and wheel through the portal:
+// standard controller bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), its five pages, and the
+// play wheel with its rings. The debug world, the garden and the night field import it beside the theme, so a seat keeps
+// its bar and wheel through the portal:
 //
 //   import "theme"
 //   import "controls"
 //
+// The bar shows the page the seat holds. Nothing held is the Moth's own controls (Move); holding the left trigger (Z) is
+// the View page, the right trigger (X) the Debug page, the left then the right trigger the Go page and the right then the
+// left trigger the Tour page, pressed in that order: the press order picks the page, so the two double squeezes are two
+// pages. Every page binds the bar's twelve controls; the Go and Tour pages bind the debug world's places and gallery
+// (pad.puck) and read empty elsewhere. The View page is the old look modifier's: camera layouts, autorun and autofly on the
+// stick presses, recenter, free look and the engaged screen's frame toggle. The suit toggle sits on the Debug page
+// (suit.puck), and so does noclip in the debug world (noclip.puck, the left stick's press, empty elsewhere). The Debug
+// page also holds the capture to the state root's screenshots folder, the history switch and the inspector toggle; the
+// render levers (quality, update rates) sit on the Tour page. LB on Move opens the play wheel and wears its
+// icon; RB on Move is the context button.
+//
 // Hold Tab (or LB) to open the play wheel, aim it with the mouse (or the right stick) and release to run the sector
-// under the pointer; releasing at the hub cancels. Every action icon is ordinary state: a plate's icon is
-// `state.barIcons.<entry id>`, a sector's label and icon `state.wheelLabels.<sector id>` and
-// `state.wheelIcons.<sector id>`, each naming a row of `icons`.
+// under the pointer; releasing at the hub cancels. The wheel has three rings, Act, View and Places (Places in the debug
+// world alone): the arrow keys or the d-pad's up and down, or the mouse wheel, step the ring while it is open. Every action
+// icon is ordinary state: a plate's icon is `state.barIcons.<entry id>`, a sector's label and icon
+// `state.wheelLabels.<sector id>` and `state.wheelIcons.<sector id>`, each naming a row of `icons`.
+
+import "pad-kit"
+
+// What an importer binds: the rows the play wheel reads its sectors' labels and icons from, which pad.puck's wheel names.
+exports {
+  bindings [wheelLabels, wheelIcons]
+}
 
 let mono = "jetbrains-mono-regular"
 
+let standardAnchor = { edge: "Bottom", inset: 3.6 }
+
+let standardPieces = [
+  { table: "left", at [0, 0] }
+  { table: "right", at [0, 0] }
+]
+
 // The cursor and the bar stay up while the seat is playing and fade a second after six seconds without input. Both
-// step aside while the seat is engaged on a screen, so the emulator view shows the screen alone.
+// step aside while the seat's view frames an engaged screen, so the framed screen shows its picture alone (the held view
+// of a carried screen shows the bar, whose Frame control switches to the picture), and the bar steps aside
+// while a wheel is open, whose hold page is no page of the bar's.
 let shownWhilePlaying = {
   $type: "all"
   predicates [
@@ -23,7 +52,8 @@ let shownWhilePlaying = {
       windowSeconds: 6
       fadeSeconds: 1
     }
-    { $type: "not", predicate { $type: "now", fact: ScreenEngaged } }
+    { $type: "not", predicate { $type: "now", fact: ScreenFramed } }
+    { $type: "not", predicate { $type: "now", fact: WheelOpen } }
   ]
 }
 
@@ -45,7 +75,7 @@ hud {
             windowSeconds: 3
             fadeSeconds: 0.5
           }
-          { $type: "not", predicate { $type: "now", fact: ScreenEngaged } }
+          { $type: "not", predicate { $type: "now", fact: ScreenFramed } }
         ]
       }
     }
@@ -61,6 +91,12 @@ icons {
     { name: "key.d", label: "D" }
     { name: "key.e", label: "E" }
     { name: "key.f", label: "F" }
+    { name: "key.g", label: "G" }
+    { name: "key.q", label: "Q" }
+    { name: "key.v", label: "V" }
+    { name: "key.b", label: "B" }
+    { name: "key.equals", label: "=" }
+    { name: "key.minus", label: "-" }
     { name: "key.1", label: "1" }
     { name: "key.2", label: "2" }
     { name: "key.3", label: "3" }
@@ -69,6 +105,9 @@ icons {
     { name: "key.f2", label: "F2" }
     { name: "key.f3", label: "F3" }
     { name: "key.f4", label: "F4" }
+    { name: "key.f6", label: "F6" }
+    { name: "key.z", label: "Z" }
+    { name: "key.x", label: "X" }
     { name: "key.space", glyph { font: mono, glyph: "U+2423" } }
     { name: "key.ctrl", glyph { font: mono, glyph: "U+2303" } }
     { name: "key.tab", glyph { font: mono, glyph: "U+21E5" } }
@@ -90,12 +129,16 @@ icons {
     { name: "pad.rb", label: "RB" }
     { name: "pad.r1", label: "R1" }
     { name: "pad.r", label: "R" }
-    { name: "pad.ls", label: "LS" }
-    { name: "pad.rs", label: "RS" }
     { name: "pad.l3", label: "L3" }
     { name: "pad.r3", label: "R3" }
     { name: "pad.back", label: "BK" }
     { name: "pad.minus", label: "-" }
+    { name: "pad.lt", label: "LT" }
+    { name: "pad.l2", label: "L2" }
+    { name: "pad.zl", label: "ZL" }
+    { name: "pad.rt", label: "RT" }
+    { name: "pad.r2", label: "R2" }
+    { name: "pad.zr", label: "ZR" }
 
     // Arrows, for the d-pad and for movement.
     { name: "arrow.up", glyph { font: mono, glyph: "U+2191" } }
@@ -130,6 +173,59 @@ icons {
     { name: "act.interact", glyph { font: mono, glyph: "U+25C7" } }
     { name: "act.desktop", glyph { font: mono, glyph: "U+25E8" } }
     { name: "act.play", glyph { font: mono, glyph: "U+25A0" } }
+    // The gallery's keys (hall.puck): the next and previous exhibit, flagging and slicing the one at hand, the debug view.
+    { name: "act.next", label: ">" }
+    { name: "act.prev", label: "<" }
+    { name: "act.flag", label: "!" }
+    { name: "act.view", label: "DV" }
+    { name: "act.slice", label: "SL" }
+    { name: "act.wheel", label: "WH" }
+    { name: "act.run", glyph { font: mono, glyph: "U+00BB" } }
+    { name: "act.autorun", label: "AR" }
+    { name: "act.fly", glyph { font: mono, glyph: "U+21D1" } }
+    { name: "act.autofly", label: "AF" }
+    { name: "act.frame", label: "FM" }
+    // The View page and ring: the chase view and the inspection layouts, the camera, the close-ups.
+    { name: "view.play", label: "PL" }
+    { name: "view.quarter", label: "3Q" }
+    { name: "view.front", label: "FR" }
+    { name: "view.rear", label: "RE" }
+    { name: "view.wide", label: "WD" }
+    { name: "view.auto", label: "AU" }
+    { name: "view.face", label: "FC" }
+    // The Debug page: the inspector panel, noclip, the frame comparison, stopping, the suit.
+    { name: "dbg.inspect", label: "IN" }
+    { name: "dbg.noclip", label: "NC" }
+    { name: "dbg.hold", label: "HO" }
+    { name: "dbg.split", label: "SP" }
+    { name: "dbg.clear", label: "CL" }
+    { name: "dbg.stop", label: "ST" }
+    { name: "dbg.suit", label: "SU" }
+    { name: "dbg.capture", label: "CP" }
+    { name: "dbg.history", label: "HI" }
+    { name: "dbg.quality", label: "QU" }
+    { name: "dbg.rates", label: "RA" }
+    // The Go page and the Places ring: the debug world's places.
+    { name: "go.stage", label: "SG" }
+    { name: "go.hero", label: "HR" }
+    { name: "go.gallery", label: "GL" }
+    { name: "go.portals", label: "PT" }
+    { name: "go.wonderland", label: "WL" }
+    { name: "go.devices", label: "DE" }
+    { name: "go.chess", label: "CS" }
+    { name: "go.desktop", label: "DK" }
+    { name: "go.level0", label: "L0" }
+    { name: "go.level1", label: "L1" }
+    { name: "go.level2", label: "L2" }
+    { name: "go.level3", label: "L3" }
+    // The Tour page: the gallery's lights and motion, and the paintings.
+    { name: "tour.lightsOff", label: "L-" }
+    { name: "tour.lightsOn", label: "L+" }
+    { name: "tour.motionOff", label: "M0" }
+    { name: "tour.motionOn", label: "M1" }
+    { name: "tour.garden", label: "PG" }
+    { name: "tour.night", label: "PN" }
+    { name: "tour.toon", label: "CE" }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -140,6 +236,12 @@ icons {
     { source: "keyboard.d", icon: "key.d" }
     { source: "keyboard.e", icon: "key.e" }
     { source: "keyboard.f", icon: "key.f" }
+    { source: "keyboard.g", icon: "key.g" }
+    { source: "keyboard.q", icon: "key.q" }
+    { source: "keyboard.v", icon: "key.v" }
+    { source: "keyboard.b", icon: "key.b" }
+    { source: "keyboard.equals", icon: "key.equals" }
+    { source: "keyboard.minus", icon: "key.minus" }
     { source: "keyboard.1", icon: "key.1" }
     { source: "keyboard.2", icon: "key.2" }
     { source: "keyboard.3", icon: "key.3" }
@@ -148,9 +250,22 @@ icons {
     { source: "keyboard.f2", icon: "key.f2" }
     { source: "keyboard.f3", icon: "key.f3" }
     { source: "keyboard.f4", icon: "key.f4" }
+    { source: "keyboard.f6", icon: "key.f6" }
     { source: "keyboard.space", icon: "key.space" }
     { source: "keyboard.controlLeft", icon: "key.ctrl" }
     { source: "keyboard.tab", icon: "key.tab" }
+    { source: "keyboard.z", icon: "key.z" }
+    { source: "keyboard.x", icon: "key.x" }
+    {
+      source: "gamepad.leftTrigger"
+      icon: "pad.lt"
+      overrides [{ family: "PlayStation5", icon: "pad.l2" }, { family: "SwitchPro", icon: "pad.zl" }]
+    }
+    {
+      source: "gamepad.rightTrigger"
+      icon: "pad.rt"
+      overrides [{ family: "PlayStation5", icon: "pad.r2" }, { family: "SwitchPro", icon: "pad.zr" }]
+    }
     { source: "mouse.button1", icon: "mouse.left" }
     { source: "mouse.button2", icon: "mouse.right" }
     {
@@ -214,6 +329,10 @@ state {
       steer = "act.steer"
       flight = "act.flight"
       rise = "act.rise"
+      run = "act.run"
+      runToggle = "act.run"
+      fly = "act.fly"
+      frame = "act.frame"
       descend = "act.descend"
       jump = "act.jump"
       interact = "act.interact"
@@ -226,6 +345,77 @@ state {
       jetpackAlone = "act.isolate"
       build = "act.build"
       respawn = "act.respawn"
+      galleryNext = "act.next"
+      galleryPrev = "act.prev"
+      galleryFlag = "act.flag"
+      galleryView = "act.view"
+      gallerySlice = "act.slice"
+
+      // A wheel's opener, keyed by the page it opens: a plate whose hold opens that page wears the icon (LB opens the play
+      // wheel).
+      "wheel-pad" = "act.wheel"
+
+      // The View page.
+      viewPlay = "view.play"
+      viewQuarter = "view.quarter"
+      viewFront = "view.front"
+      viewRear = "view.rear"
+      viewWide = "view.wide"
+      autorun = "act.autorun"
+      viewRecenter = "act.recenter"
+      viewIsolate = "act.isolate"
+      viewFace = "view.face"
+      viewFrame = "act.frame"
+      viewFreeLook = "act.look"
+      autofly = "act.autofly"
+
+      // The Debug page.
+      dbgWhere = "act.where"
+      dbgConsole = "act.console"
+      dbgCapture = "dbg.capture"
+      dbgHistory = "dbg.history"
+      dbgInspect = "dbg.inspect"
+      dbgNoclip = "dbg.noclip"
+      dbgDebugView = "act.view"
+      dbgHold = "dbg.hold"
+      dbgSplit = "dbg.split"
+      dbgClear = "dbg.clear"
+      dbgStop = "dbg.stop"
+      dbgSuit = "dbg.suit"
+
+      // The Go page.
+      goStage = "go.stage"
+      goHero = "go.hero"
+      goGallery = "go.gallery"
+      goPortals = "go.portals"
+      goWonderland = "go.wonderland"
+      goDevices = "go.devices"
+      goChess = "go.chess"
+      goDesktop = "go.desktop"
+      goLevel0 = "go.level0"
+      goLevel1 = "go.level1"
+      goLevel2 = "go.level2"
+      goLevel3 = "go.level3"
+
+      // The Tour page.
+      tourNext = "act.next"
+      tourPrev = "act.prev"
+      tourFlag = "act.flag"
+      tourQuality = "dbg.quality"
+      tourRates = "dbg.rates"
+      tourSlice = "act.slice"
+      tourLightsOff = "tour.lightsOff"
+      tourLightsOn = "tour.lightsOn"
+      tourMotionOff = "tour.motionOff"
+      tourMotionOn = "tour.motionOn"
+      tourGarden = "tour.garden"
+      tourNight = "tour.night"
+      tourToon = "tour.toon"
+    }
+
+    // The bar draws one bar that swaps its page in place as a trigger is held, rather than every page's bank at once.
+    table barModel {
+      model = "single"
     }
 
     // The play wheel's sector labels and icons, by sector id; `cancel` is the hub's label while nothing is hovered.
@@ -238,6 +428,22 @@ state {
       respawn = "Respawn"
       desktop = "Desktop"
       play = "Play"
+      suit = "Suit"
+      stop = "Stop"
+      threeQuarter = "Three-quarter"
+      front = "Front"
+      rear = "Rear"
+      wide = "Wide"
+      face = "Face"
+      autoCamera = "Chase camera"
+      goStage = "Stage"
+      goHero = "Hero"
+      goGallery = "Gallery"
+      goPortals = "Portals"
+      goChess = "Chess"
+      goDesktop = "Computer"
+      goDevices = "Devices"
+      goWonderland = "Wonderland"
       cancel = "Cancel"
     }
 
@@ -250,6 +456,22 @@ state {
       respawn = "act.respawn"
       desktop = "act.desktop"
       play = "act.play"
+      suit = "dbg.suit"
+      stop = "dbg.stop"
+      threeQuarter = "view.quarter"
+      front = "view.front"
+      rear = "view.rear"
+      wide = "view.wide"
+      face = "view.face"
+      autoCamera = "view.auto"
+      goStage = "go.stage"
+      goHero = "go.hero"
+      goGallery = "go.gallery"
+      goPortals = "go.portals"
+      goChess = "go.chess"
+      goDesktop = "go.desktop"
+      goDevices = "go.devices"
+      goWonderland = "go.wonderland"
     }
   }
 }
@@ -272,19 +494,24 @@ bindingOverlays [
         "gamepad.buttonEast"
         "gamepad.rightShoulder"
         "gamepad.rightStickPress"
+        "gamepad.back"
       ]
+      // One bank a page, in the order of the pages: Move, then the left trigger, the right trigger, left then right and
+      // right then left.
       banks [
-        {
-          id: "play"
-          pageId: "base"
-          alpha: 1
-        }
+        { id: "move", pageId: "base", alpha: 1 }
+        { id: "view", pageId: "pad-lt", alpha: 1 }
+        { id: "debug", pageId: "pad-rt", alpha: 1 }
+        { id: "go", pageId: "pad-lt-rt", alpha: 1 }
+        { id: "tour", pageId: "pad-rt-lt", alpha: 1 }
       ]
       iconRow: "state.barIcons"
-      // The standard bar shows the controller alone: no row of page-holding modifiers on its anchor line and no page
-      // name under it.
-      modifiers: false
-      pageLabel: false
+      // The modifier row on the anchor line lights the page-holding triggers (the two the pad-pages row declares) held, and
+      // the page's name sits under it; the wheel's openers and the mouse chord stay off it.
+      modifiers: true
+      declaredModifiersOnly: true
+      pageLabel: true
+      modelCell: "state.barModel.model"
       layout: "standard"
       visible: shownWhilePlaying
       layouts {
@@ -292,13 +519,17 @@ bindingOverlays [
         // left of centre with the left stick's press at its heart and LB above its outer point, and the face diamond
         // mirrored on the right with the right stick's press and RB; the two diamonds stand 1.33 pitches off centre.
         standard {
-          // The old engine bar's size: a 0.075 plate at 0.72 scale, its anchor 0.14 of the height above the bottom edge.
+          // The old engine bar's size: a 0.075 plate at 0.72 scale. Its plates stand 0.14 of the height above the bottom
+          // edge (each bank's own anchor), and the modifier row and the page's name hang below them on the layout's.
           buttonSize: 0.054
           anchor {
             edge: Bottom
-            inset: 2.6
+            inset: 1.5
           }
           tables {
+            toon [
+              { source: "gamepad.back", x: 0, y: 0, badge [0, 1] }
+            ]
             left [
               { source: "gamepad.dpadUp", x: -4.333, y: 1, badge [0, 1] }
               { source: "gamepad.dpadRight", x: -3.333, y: 0, badge [1, 0] }
@@ -316,13 +547,13 @@ bindingOverlays [
               { source: "gamepad.rightStickPress", x: 4.333, y: 0, badge [1, -1] }
             ]
           }
+          // Every page's bank stands in the same place: the bar swaps pages in place.
           banks {
-            play {
-              pieces [
-                { table: "left", at [0, 0] }
-                { table: "right", at [0, 0] }
-              ]
-            }
+            move { pieces: standardPieces, anchor: standardAnchor }
+            view { pieces: standardPieces, anchor: standardAnchor }
+            debug { pieces: standardPieces, anchor: standardAnchor }
+            go { pieces: standardPieces, anchor: standardAnchor }
+            tour { pieces: concat(standardPieces, [{ table: "toon", at [0, 0] }]), anchor: standardAnchor }
           }
         }
       }
@@ -330,7 +561,9 @@ bindingOverlays [
   }
 
   // The play wheel, held open on Tab or LB over the Moth's resting page so the seat keeps walking while it aims; and
-  // the build toggle again under an id, so its plate carries an icon.
+  // the keyboard's build toggle and respawn, whose pad doors are the wheel's Build and Respawn sectors (the pad's Back is
+  // a device's select, and the left stick's press is run). While it is open the arrow keys (Tab) or the d-pad (LB) step
+  // its ring, Up to the next and Down to the previous, and the mouse wheel steps it too.
   {
     id: "play-wheel"
     document {
@@ -342,20 +575,21 @@ bindingOverlays [
           group: "play"
           page {
             id: "base"
+            label: "Move"
             entries [
               {
                 command: "player.build"
                 id: "build"
                 label: "Build"
-                sources ["keyboard.f2", "gamepad.back"]
+                sources ["keyboard.f2"]
               }
-              // Back to the spawn from anywhere, a fall or a portal loop included: Backspace or the left stick's press.
+              // Back to the spawn from anywhere, a fall or a portal loop included.
               {
                 command: "body.pose"
                 id: "respawn"
                 label: "Respawn"
                 text: "spawn:stage"
-                sources ["keyboard.backspace", "gamepad.leftStickPress"]
+                sources ["keyboard.backspace"]
               }
             ]
           }
@@ -377,6 +611,20 @@ bindingOverlays [
                 activateOn: Completed
                 sources ["keyboard.tab"]
               }
+              {
+                command: "player.wheel.ring"
+                activateOn: Started
+                label: "Next ring"
+                sources ["keyboard.arrowUp"]
+                value { kind: "Axis1D", raw [1, 0, 0, 0] }
+              }
+              {
+                command: "player.wheel.ring"
+                activateOn: Started
+                label: "Previous ring"
+                sources ["keyboard.arrowDown"]
+                value { kind: "Axis1D", raw [-1, 0, 0, 0] }
+              }
             ]
           }
         }
@@ -397,6 +645,20 @@ bindingOverlays [
                 activateOn: Completed
                 sources ["gamepad.leftShoulder"]
               }
+              {
+                command: "player.wheel.ring"
+                activateOn: Started
+                label: "Next ring"
+                sources ["gamepad.dpadUp"]
+                value { kind: "Axis1D", raw [1, 0, 0, 0] }
+              }
+              {
+                command: "player.wheel.ring"
+                activateOn: Started
+                label: "Previous ring"
+                sources ["gamepad.dpadDown"]
+                value { kind: "Axis1D", raw [-1, 0, 0, 0] }
+              }
             ]
           }
         }
@@ -411,23 +673,91 @@ bindingOverlays [
           style {
             placement: ViewportCenter
           }
-          rings [
-            {
-              id: "play-acts"
-              label: "Act"
-              entries [
-                { id: "console", command: "console", sources: null }
-                { id: "build", command: "player.build", sources: null }
-                { id: "where", command: "body.where", sources: null }
-                { id: "channels", command: "body.channels", sources: null }
-                { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
-                { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
-                // view.override takes an Axis1D from a binding; its text names the layout, so the value is never read.
-                { id: "desktop", command: "view.override", text: "layout desktop", value { kind: "Axis1D", raw [0, 0, 0, 0] }, sources: null }
-                { id: "play", command: "view.override", text: "layout play", value { kind: "Axis1D", raw [0, 0, 0, 0] }, sources: null }
-              ]
-            }
-          ]
+          rings: mothRings
+        }
+      ]
+    }
+  }
+
+  // The bar's four trigger pages, each the Moth's resting page with the bar's twelve controls rebound: the left trigger
+  // (or Z) holds View, the right trigger (or X) holds Debug, and the two together hold Go when the left went down first
+  // and Tour when the right did. The debug world's places and gallery fill Go and Tour (pad.puck); the suit toggle joins
+  // Debug (suit.puck), and noclip joins it on the left stick's press in the debug world (noclip.puck). A page inherits `base`, so the sticks and the keyboard's movement keep working while it is held.
+  // Close-ups the View page has no plate for (head, boots, shoulder) are `view.override layout <name>`, and the chase
+  // camera and annotation are the play wheel's.
+  {
+    id: "pad-pages"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers: padModifiers
+      chords [
+        {
+          chord ["lt"]
+          group: "play"
+          page {
+            id: "pad-lt"
+            inherits: "base"
+            label: "View"
+            entries [
+              { command: "view.override", id: "viewPlay", label: "Chase", text: "layout play", value: neverRead, sources: padUp }
+              { command: "view.override", id: "viewQuarter", label: "Three-quarter", text: "layout three-quarter", value: neverRead, sources: padRight }
+              { command: "view.override", id: "viewFront", label: "Front", text: "layout front", value: neverRead, sources: padDown }
+              { command: "view.override", id: "viewRear", label: "Rear", text: "layout rear", value: neverRead, sources: padLeft }
+              { command: "view.override", id: "viewWide", label: "Wide", text: "layout flight-stage", value: neverRead, sources: padLeftShoulder }
+              // Autorun and autofly: each press switches her walking forward, or flying (flight mode on and climbing), on or
+              // off, and the latch outlives the page, so she keeps going with the trigger released.
+              { channel: "forward", id: "autorun", label: "Autorun", mode: Toggle, scale: 1, sources: padLeftStick }
+              { command: "player.look.recenter", id: "viewRecenter", label: "Recenter", sources: padNorth }
+              { command: "view.isolate", id: "viewIsolate", label: "Jetpack alone", text: "toggle moth pod* nozzle*", sources: padWest }
+              { command: "view.override", id: "viewFace", label: "Face", text: "layout face", value: neverRead, sources: padSouth }
+              { command: "player.frame", id: "viewFrame", label: "Frame", sources: padEast }
+              { command: "player.look.free", id: "viewFreeLook", label: "Free look", sources: padRightShoulder }
+              { channel: "rise", id: "autofly", label: "Autofly", mode: Toggle, scale: 1, sources: padRightStick }
+            ]
+          }
+        }
+        {
+          chord ["rt"]
+          group: "play"
+          page {
+            id: "pad-rt"
+            inherits: "base"
+            label: "Debug"
+            entries [
+              { command: "body.where", id: "dbgWhere", label: "Where", sources: padUp }
+              { command: "world.history", id: "dbgHistory", label: "History on", text: "on", sources: padRight }
+              { command: "console", id: "dbgConsole", label: "Console", sources: padDown }
+              { command: "world.screenshot", id: "dbgCapture", label: "Capture", sources: padLeft }
+              { command: "world.inspect", id: "dbgInspect", label: "Inspector", text: "toggle", sources: padLeftShoulder }
+              { command: "world.debug-view", id: "dbgDebugView", label: "Debug view", text: "next", sources: padNorth }
+              { command: "world.compare", id: "dbgHold", label: "Hold frame", text: "hold", value: neverRead, sources: padWest }
+              { command: "world.compare", id: "dbgSplit", label: "Compare", text: "split", value: neverRead, sources: padEast }
+              { command: "world.compare", id: "dbgClear", label: "Clear hold", text: "off", value: neverRead, sources: padRightShoulder }
+              { command: "body.stop", id: "dbgStop", label: "Stop", sources: padRightStick }
+            ]
+          }
+        }
+        {
+          chord ["lt", "rt"]
+          group: "play"
+          page {
+            id: "pad-lt-rt"
+            inherits: "base"
+            label: "Go"
+            entries []
+          }
+        }
+        {
+          chord ["rt", "lt"]
+          group: "play"
+          page {
+            id: "pad-rt-lt"
+            inherits: "base"
+            label: "Tour"
+            entries [
+              { command: "world.toon", id: "tourToon", label: "Toon shading", text: "toggle", sources ["gamepad.back", "keyboard.f6"] }
+            ]
+          }
         }
       ]
     }

@@ -37,7 +37,7 @@ public sealed partial class SdfWorldTables {
 
     internal bool SkyEnvironmentDemand => m_skyEnvironment.Demand;
     internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
-    internal bool SkyEnvironmentOwes => m_skyEnvironment.Owes;
+    internal bool SkyEnvironmentOwes => (m_skyEnvironment.Owes || m_skyEnvironment.Forced);
     internal bool SkyEnvironmentCanRecord => m_skyEnvironment.CanRecord;
     internal ReadOnlySpan<bool> SkyEnvironmentScreens => m_skyEnvironment.Screens;
 
@@ -62,6 +62,20 @@ public sealed partial class SdfWorldTables {
         return (known ? unchecked((ulong)(m_skyEnvironment.Renders + (m_skyEnvironment.Owes ? 1 : 0))) : null);
     }
     internal long SubmitSkyEnvironment(IGpuSubmissionFence fence) => m_skyEnvironment.Publish(fence: fence);
+    /// <summary>Makes each lighting source whose submission holds unfilled external content (the sky environment's
+    /// projection, the screen emission's reduction) derive itself again on its next recording, from whatever its sources
+    /// are then, the capture gate's fills while a capture is armed. The tainted submission stands, and stays reported as
+    /// tainted, until a new one replaces it.</summary>
+    /// <returns>Whether either source was tainted.</returns>
+    public bool ProjectTaintedSourcesAgain() {
+        var sky = (m_skyEnvironment.Submitted is { Tainted: true });
+        var screens = (m_screenEmission.Submitted is { Tainted: true });
+
+        m_skyEnvironment.Forced |= sky;
+        m_screenEmission.Forced |= screens;
+
+        return (sky || screens);
+    }
     internal void PollSkyEnvironment() => m_skyEnvironment.Poll();
     internal void WithdrawSkyEnvironment(long sequence) => m_skyEnvironment.Withdraw(sequence: sequence);
 
@@ -100,7 +114,7 @@ public sealed partial class SdfWorldTables {
         private readonly SdfSkyEnvironmentRefresh m_refresh = new();
         private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly byte[] m_renderedMappings = new byte[(MaxScreenSurfaces * ScreenMappingByteLength)];
+        private readonly byte[] m_renderedMappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
 
         private bool m_physical;
         private bool m_tainted;
@@ -127,6 +141,9 @@ public sealed partial class SdfWorldTables {
         public SdfEnvironmentSubmission? Submitted { get; private set; }
 
         public bool CanRecord { get; private set; } = true;
+        // Whether the next observation projects again whatever its sources' publications say: a tainted projection a
+        // capture discards (ProjectTaintedSourcesAgain), whose filled replacements may carry no known publication.
+        public bool Forced { get; set; }
 
         public void Prepare(bool physical) {
             var sky = m_tables.m_skyRecord[0];
@@ -167,15 +184,15 @@ public sealed partial class SdfWorldTables {
                     m_sources[screen] = input.Publication;
                     if ((input.Lease.ImageViewHandle != 0) && !input.Publication.IsKnown) { known = false; }
                 }
-                var offset = (screen * ScreenMappingByteLength);
+                var offset = (screen * ScreenMappingStride);
                 var different = ((m_sources[screen] != m_renderedSources[screen]) ||
                     !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
                         .SequenceEqual(other: m_renderedMappings.AsSpan(length: ScreenMappingByteLength, start: offset)));
 
                 changed |= different;
             }
-            CanRecord &= known;
-            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: (changed || !known));
+            CanRecord &= (known || Forced);
+            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: (changed || !known || Forced));
             return known;
         }
         public long Publish(IGpuSubmissionFence fence) {
@@ -184,6 +201,7 @@ public sealed partial class SdfWorldTables {
             m_sources.CopyTo(array: m_renderedSources, index: 0);
             m_tables.m_screenMappingRegion.Contents[..m_renderedMappings.Length].CopyTo(destination: m_renderedMappings);
             Owes = false;
+            Forced = false;
             Submitted = new SdfEnvironmentSubmission(Owner: m_tables, Sequence: ++Renders, Fence: fence, Tainted: m_tainted);
             return Renders;
         }

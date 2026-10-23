@@ -240,6 +240,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     );
                 }
 
+                // The extent the frame is composed at: the window's client area, or while the window has none (minimized,
+                // where WM_SIZE reports 0x0) the last one it had, so a World nobody can see still renders (see the frame
+                // body below). Read before Show, which a launch that starts minimized makes 0x0 at once.
+                var renderWidth = window.Width;
+                var renderHeight = window.Height;
+
                 window.Show();
 
                 var clock = TickClock.Start(time: m_time);
@@ -379,6 +385,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     return FixedTickConversion.PerRate(ratePerSecond: pumpRatePerSecond);
                 }
 
+                var holdingTick = false;
                 while (
                     window.IsOpen &&
                     !stoppingToken.IsCancellationRequested
@@ -515,6 +522,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         windowCursor.ShowsSystemCursor = cursorPolicy.ShowsSystemCursor;
                         windowCursor.LocksPointer = cursorPolicy.LocksPointer;
+
+                        if (cursorPolicy.TryTakeWarp(
+                            x: out var warpX,
+                            y: out var warpY
+                        )) {
+                            _ = windowCursor.WarpPointer(
+                                x: warpX,
+                                y: warpY
+                            );
+                        }
                     }
 
                     // Reassert after the whole raw batch: a release in this frame has already removed its control,
@@ -572,13 +589,25 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     var deltaTicks = clock.Sample();
                     // Re-resolved every iteration — see ResolveStepTicks' own remarks above.
                     var stepTicks = ResolveStepTicks(simulation: m_simulation);
+                    // Lockstep uses the same one-step clock as offscreen presentation. A wall-time accumulator also
+                    // produces extra zero-step frames, making presentation reseeds depend on display timing.
+                    var tickLocked = m_presentPacing.TickLocked;
 
                     if (pump is { } activePump) {
-                        fixedSteps += ((ulong)activePump.Advance(
-                            deltaTicks: deltaTicks,
-                            maxFrameTicks: maxFrameTicks,
-                            stepTicks: stepTicks
-                        ));
+                        if (tickLocked) {
+                            if (holdingTick) {
+                                activePump.Hold(intervalTicks: deltaTicks);
+                            } else if (activePump.TryStep(intervalTicks: deltaTicks, stepTicks: stepTicks)) {
+                                fixedSteps++;
+                            }
+                        } else {
+                            holdingTick = false;
+                            fixedSteps += ((ulong)activePump.Advance(
+                                deltaTicks: deltaTicks,
+                                maxFrameTicks: maxFrameTicks,
+                                stepTicks: stepTicks
+                            ));
+                        }
                     }
 
                     // Simulation-routed console handlers run while snapshots are applied above. Flush their real
@@ -587,8 +616,23 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     m_timeline.NoteSteps(steps: ((int)fixedSteps));
                     m_timeline.Mark(phase: HostFramePhase.Simulate);
 
-                    var width = window.Width;
-                    var height = window.Height;
+                    // A minimized window has no client area and nothing to present into, but the World behind it keeps
+                    // running: its frame is still composed, at the last extent the window had, so readiness, bakes and
+                    // captures progress whether or not anyone can see it. Only the presenter is skipped, and the timer
+                    // paces the iteration, since nothing was presented for the swap chain to pace.
+                    var presents = (
+                        (window.Width > 0) &&
+                        (window.Height > 0)
+                    );
+
+                    if (presents) {
+                        renderWidth = window.Width;
+                        renderHeight = window.Height;
+                    }
+
+                    var width = renderWidth;
+                    var height = renderHeight;
+                    var presented = false;
 
                     // The frame body (present-side GPU work) can surface a device-lost error (DXGI_ERROR_DEVICE_REMOVED /
                     // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the render root's own submit, or Present, all
@@ -601,12 +645,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         // recovers through the same policy a real loss does.
                         DeviceLossRecovery.CountFrame(faults: m_faults, rootHostContext: m_rootHostContext);
 
-                        // BeginFrame recreates presentation resources when the size changed and waits for the
-                        // previous frame's GPU work, so the render root can safely reuse its per-frame resources.
-                        m_presenter.BeginFrame(
-                            height: height,
-                            width: width
-                        );
+                        // BeginFrame recreates presentation resources when the size changed and waits for the frame queue
+                        // to accept another present. The render root keeps its own frames in flight, as the offscreen
+                        // host relies on, so an iteration that presents nothing skips it.
+                        if (presents) {
+                            m_presenter.BeginFrame(
+                                height: height,
+                                width: width
+                            );
+                        }
+
                         m_timeline.Mark(phase: HostFramePhase.Begin);
                         // The operator's gpu.capture brackets the frame's GPU work and its present.
                         m_gpuCapture?.BeginFrame();
@@ -616,18 +664,20 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             (height > 0)
                         ) {
                             var frameContext = new FrameContext(
-                                AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
+                                AccumulatorTicks: PresentPacingControl.AccumulatorOf(accumulatorTicks: (pump?.AccumulatorTicks ?? 0UL), tickLocked: tickLocked),
                                 DeltaTicks: (fixedSteps * stepTicks),
                                 DisplayHertz: displayHertz,
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
-                                FrameDeltaTicks: deltaTicks,
+                                FrameDeltaTicks: PresentPacingControl.FrameDeltaOf(simulates: (pump is not null), steppedTicks: (fixedSteps * stepTicks), tickLocked: tickLocked, wallTicks: deltaTicks),
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
                                 TargetHeight: height,
                                 TargetWidth: width
                             );
-                            // A windowed display presents whatever the root has, rendered for this frame or not.
-                            var surface = m_root.ProduceFrame(context: in frameContext).Surface;
+                            // A locked tick owes a rendered frame before the next tick may advance.
+                            var produced = m_root.ProduceFrame(context: in frameContext);
+                            var surface = produced.Surface;
+                            holdingTick = (tickLocked && OffscreenTickHostedService.HoldsTick(hasSimulation: (pump is not null), completion: produced.Render.Completion));
 
                             m_timeline.Mark(phase: HostFramePhase.Produce);
 
@@ -637,13 +687,18 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 surface: surface
                             );
 
-                            m_presenter.Present(surface: surface);
+                            if (presents) {
+                                m_presenter.Present(surface: surface);
+                                presented = true;
+                            }
+
                             m_timeline.Mark(phase: HostFramePhase.Present);
                         }
 
                         m_gpuCapture?.EndFrame();
                         deviceLoss.NoteFrameProduced();
                     } catch (DeviceLostException deviceLost) {
+                        holdingTick = (tickLocked && (pump is not null));
                         if (!deviceLoss.TryRecover(
                             deviceLost: deviceLost,
                             rebuild: ((m_presenter is IDeviceLostRecoverable recoverable)
@@ -716,7 +771,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // leads the target slightly (PresentPacingDecision.SwapChainTimerLead), so where the display
                     // refreshes at its fixed signal the wait ends at or after each grid point and the timer adds nothing,
                     // and where it shows frames as they arrive the wait ends at once and the grid holds the target.
+                    // An iteration that presented nothing (a minimized window) has no present for the swap chain to pace.
                     if (
+                        presented &&
                         (swapPacing is not null) &&
                         swapPacing.TryWaitForFrame(refreshesPerPresent: refreshesPerPresent) &&
                         !timerBoundsSwapChain

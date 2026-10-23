@@ -13,6 +13,12 @@ server are in [`Puck.World.Client.Tests`](../Puck.World.Client.Tests/README.md).
 Its fixtures come from [`tests/Shared/World`](../Shared/World/README.md), with the
 client vocabulary hooks and the Gaming Brick machine catalog.
 
+`AuthoredBindingAuthorityLawTests` installs the real command registry in an
+isolated child test host. The server refuses a bindings-only author's overlay
+naming the shipped unbindable `world.grant` destination without changing the
+document; the same mutation naming a bindable command applies. The child owns
+the process-wide registry, so it cannot change parallel laws' validation.
+
 `WorldRenderEnvelopeLawTests` exercises the real scene capacity probe without a
 GPU, including new per-shape placements within authored headroom.
 

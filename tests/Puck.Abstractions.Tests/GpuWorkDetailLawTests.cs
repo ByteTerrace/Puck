@@ -78,7 +78,7 @@ public sealed class GpuWorkDetailLawTests {
         counters.EnsureRows(rows: 2, slot: 0);
         Assert.Same(expected: grown, actual: counters.RowOf(row: 4, slot: 0).Buffer);
         Assert.Same(expected: other, actual: counters.RowOf(row: 0, slot: 1).Buffer);
-        Assert.Equal(expected: ((ulong)(12 * GpuKernelCounters.RowBytes)), actual: counters.TotalBytes);
+        Assert.Equal(expected: (2UL * (GpuKernelCounters.SlotBytesOf(rows: 5) + GpuKernelCounters.SlotBytesOf(rows: 1))), actual: counters.TotalBytes);
         var ledger = new GpuWorkLedger(framesInFlight: 1, name: "gpu.detail");
 
         ledger.Configure(revision: 1, passLabels: ["sky", "shadow"]);

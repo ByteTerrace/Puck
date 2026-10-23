@@ -50,8 +50,9 @@ out of the world's own exported state.
 That has three consequences worth knowing up front.
 
 - **A failing test is a world you can open.** `puck test --keep <dir>` writes
-  every generated world into `<dir>/generated`, so a failure is a
-  `*.world.json` you can boot, inspect with `world.state`, and step by hand.
+  every generated world into a directory of its own under `<dir>/generated`,
+  beside the documents it reaches, so a failure is a `*.world.json` you can
+  boot, inspect with `world.state`, and step by hand.
 - **A test can only ask for things the engine can do.** A `given` line writes a
   cell; a `when` step submits a command a seat could type. Anything else is
   refused when the source compiles, by name, on the line that wrote it.
@@ -160,6 +161,60 @@ verdicts are read from its own export and reported under its own name
   world's.** A world armed at boot counts from its own zero, so the exports of
   one host step carry ticks one apart; the lowering derives that, and the
   expectation is written as though both worlds were read at the same moment.
+
+## Crossing into another document
+
+A test world stands where the document it tests stands. `puck test` stages each
+generated world in a directory of its own, under the file name its `documentId`
+gives it, and composes beside it every document its `references` reach from the
+directory each was authored in, and every document those reach. A door onto a
+sibling (a painting onto `garden`) lands in the sibling staged there, and the
+sibling's way back names the test world's id, which resolves to the test world's
+own file, so the body comes home to the instance the run booted. A test of the
+debug world declares `documentId: "debug"` for that reason: under another id, the
+way back would start a second debug world and leave the booted one's body empty.
+
+An expectation outside any block reads the booted world, so it reads the traveller
+once she is home. One in a block named for the sibling document is judged in that
+document, in the instance the crossing starts:
+
+```puck
+expect {
+  bodyState(body, 0, suit) == 1
+  garden {
+    bodyState(body, 0, size) == 1 and bodyState(body, 0, suit) == 0
+  }
+}
+```
+
+The block names a document the world reaches through its `references` (a name no
+reference reaches is a usage error). Its lines lower into that document's staged
+copy, each as a verdict row `expect$<line>` (the line counted in the whole
+`expect` block) with a rule gated on the claim itself, and the run exports every
+instance it started whose document carries a verdict row, reporting each under the
+document's name (`garden/expect$1`).
+
+A traveller is in a sibling for a while, so a sibling's claim is not decided at the
+last tick: it passes when it held on any tick the instance ran, and reports the
+last tick it held on. A claim that never held reports `never evaluated`, and a
+claim about a document the run never started fails by name, so a verdict about the
+garden fails when the crossing does not happen. Two things follow from reading a
+body that may not be there yet:
+
+- An absent body's register reads `0`, so a claim that a register is `0` holds
+  before she arrives. Say she is present as well (`size == 1 and suit == 0`, with a
+  register she always holds above zero), and settle a refusal on what she brings
+  home, where the booted world reads her again.
+- The instance must outlive her visit to be exported. A destination whose
+  `durability` is `persisted` is retained when it empties (the garden's is); one
+  that is reaped on emptying leaves nothing to read.
+
+A step after the crossing lands in whichever world the seat is in, so a pose in the
+sibling's coordinates stands a body that never left far from any door. A claim that
+she left and came home needs a witness only where the booted world must tell her
+return from the pose she took beforehand: `worlds/debug/wonderland-tests.puck`
+latches `away`, a rule gated on a register she always holds above zero (an absent
+body reads `0`), for its `homeSmall` rule.
 
 ## The three blocks
 
@@ -317,9 +372,13 @@ Decompilation keeps those authored row names and sections. Generated
   expanded on its own, so the test's `given` and `expect` reach the module's own
   names and the arguments it was given, not the constants of the source the test
   sits in.
-- **A body, a pose, a position, a camera.** `expect` reads state rows, which is
-  what a rule reads. A claim about a body's position needs an operand a rule can
-  read it through.
+- **A camera.** `expect` reads what a rule reads: state rows and a body's
+  `bodyState` and `bodyPosition`, in the booted world or in a sibling document a
+  crossing starts ([crossing into another
+  document](#crossing-into-another-document)).
+- **A sibling's final state, or a sibling no crossing starts.** A sibling's claim
+  holds on any tick, not at the end, and a `given` or a step cannot address a
+  sibling document: it is reached through what crosses into it.
 - **A comparison of two expressions** folds no values into its report: a verdict
   row holds cells, so only the rows a gate compares are recorded beside it.
 

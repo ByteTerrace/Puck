@@ -34,10 +34,12 @@ public interface IBindingService {
     );
     /// <summary>
     /// Re-attests an EXISTING binding: verifies it was signed by this service's issuing key for
-    /// the configured domain and purpose, then re-signs the SAME subject and payload with a fresh validity window.
+    /// the configured domain and purpose and matches the authenticated caller's selected key,
+    /// then re-signs the SAME subject and payload with a fresh validity window.
     /// </summary>
     Task<BindingResult> ReattestAsync(
         byte[] existingBinding,
+        MintSubjectKeyBindingRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken
     );
@@ -133,6 +135,7 @@ public sealed class DefaultBindingService(IOptionsMonitor<IssuingKeyOptions> iss
     }
     public Task<BindingResult> ReattestAsync(
         byte[] existingBinding,
+        MintSubjectKeyBindingRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken
     ) {
@@ -197,6 +200,21 @@ public sealed class DefaultBindingService(IOptionsMonitor<IssuingKeyOptions> iss
         var notAfter = ToWholeSeconds(value: now.Add(timeSpan: options.SubjectBindingValidity));
 
         var keyBindingPayload = Codec.DecodeKeyBindingPayload(bytes: previous.PayloadBytes.Span);
+        var expectedId = KeyId.ForSubject(
+            algorithm: RegistryAlgorithmFor(keyType: request.KeyType),
+            domain: domain,
+            subject: request.SubjectId,
+            subjectPublicKeyInfo: request.PublicKey
+        );
+
+        // The caller owns the storage containing this public binding. A valid issuer signature alone
+        // cannot authorize renewal: another account's binding can be copied into that storage.
+        if (
+            (keyBindingPayload.TargetId != expectedId) ||
+            !keyBindingPayload.PublicKeySubjectPublicKeyInfo.Span.SequenceEqual(other: request.PublicKey)
+        ) {
+            throw new InvalidOperationException(message: "Cannot re-attest a binding for another subject or key.");
+        }
 
         var reattested = AttestationSigner.SignKeyBinding(
             codec: Codec,

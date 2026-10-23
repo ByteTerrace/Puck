@@ -5,7 +5,7 @@
 // of the lattice's mode word (SdfFrameBlock.WriteMeshBake). Each workgroup strides its words, then writes the summary
 // the walk skips empty words by.
 #define SDF_DYNAMIC_TRANSFORMS
-#include "sdf-world.hlsli"
+#include "sdf-bake-world.hlsli"
 
 [numthreads(64, 1, 1)]
 void CSMain(uint threadIndex : SV_GroupIndex, uint3 group : SV_GroupID) {

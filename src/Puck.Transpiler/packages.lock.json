@@ -10,9 +10,9 @@
       },
       "Parlot": {
         "type": "Direct",
-        "requested": "[1.5.*, )",
-        "resolved": "1.5.12",
-        "contentHash": "jS8FebSXj3GKkBMDGnRboeA8/goF1AB7HPhqChiznU5R1KPTeU6JlJXP1FXd8MQ4A/+p8xR8rn7ICgznPqPLKQ=="
+        "requested": "[2.*, )",
+        "resolved": "2.0.0",
+        "contentHash": "wkWsCyotLwtERMwQvjYOdeq7Md2ERfbCq+jP35jCoeTd/AG/QDqTN4W7tPiMK9EI/p9uDHrAmBwnKwnu2Oy+qQ=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",

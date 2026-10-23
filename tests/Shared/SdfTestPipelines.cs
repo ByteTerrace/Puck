@@ -43,6 +43,8 @@ internal static class SdfTestPipelines {
         return new(
             meshRaster: new SdfMeshRasterPass(
                 fragment: new byte[] { 1 },
+                glassFragment: new byte[] { 1 },
+                occlusion: new byte[] { 1 },
                 pipelines: pipelines,
                 shadowFragment: new byte[] { 1 },
                 shadowVertex: new byte[] { 1 },
@@ -81,6 +83,24 @@ internal static class SdfTestPipelines {
                 fragment: new byte[] { 1 },
                 vertex: new byte[] { 1 }
             ),
+            ledger: ledger
+        );
+    // Builds the glass pass pipeline from one-byte stages on the calling thread, as MeshRaster builds the mesh pass's.
+    public static GpuPassPipeline GlassRaster(IGpuDeviceContext device, GpuWorkLedger ledger) =>
+        GpuPassPipelineCache.Build(
+            device: device,
+            key: SdfMeshRasterPass.GlassKeyOf(
+                fragment: new byte[] { 1 },
+                vertex: new byte[] { 1 }
+            ),
+            ledger: ledger
+        );
+    // Builds the mesh pass occlusion kernel from a one-byte kernel on the calling thread, as MeshRaster builds the mesh
+    // pass's.
+    public static GpuPassPipeline Occlusion(IGpuDeviceContext device, GpuWorkLedger ledger) =>
+        GpuPassPipelineCache.Build(
+            device: device,
+            key: SdfMeshRasterPass.OcclusionKeyOf(occlusion: new byte[] { 1 }),
             ledger: ledger
         );
     // The build's own SPIR-V kernel set, whose bake mask kernel's generator word the caller chooses so two sets can differ

@@ -55,6 +55,22 @@ public sealed class GeneralWarpLawTests {
             rate: 1f
         ))));
     }
+    // A translate before a warp moves the warp's whole frame, so a shape stamped far from the world origin reads no
+    // wider than one at it; a translate between the warp and its shape widens what the warp reads.
+    [Fact]
+    public void ATranslateBeforeAWarpLeavesItsReachUnchangedAndOneAfterWidensIt() {
+        var far = new Vector3(x: 35f, y: 1.2f, z: 34f);
+        var local = Step(chain: static b => b.AxialProfile(amount: 0.8f, bulge: 0.2f, span: 1f, top: 0.5f));
+        var sheared = Step(chain: static b => b.Shear(linear: 0.3f, quadratic: 0.6f));
+        var twisted = Step(chain: static b => b.TwistY(rate: 1f));
+
+        Assert.True(condition: (local < 1f));
+        Assert.Equal(expected: local, actual: Step(chain: b => b.Translate(offset: far).AxialProfile(amount: 0.8f, bulge: 0.2f, span: 1f, top: 0.5f)));
+        Assert.Equal(expected: sheared, actual: Step(chain: b => b.Translate(offset: far).Shear(linear: 0.3f, quadratic: 0.6f)));
+        Assert.Equal(expected: twisted, actual: Step(chain: b => b.Translate(offset: far).TwistY(rate: 1f)));
+        Assert.True(condition: (Step(chain: b => b.AxialProfile(amount: 0.8f, bulge: 0.2f, span: 1f, top: 0.5f).Translate(offset: new Vector3(x: 2f, y: 0f, z: 0f))) < local));
+        Assert.True(condition: (Step(chain: b => b.Shear(linear: 0.3f, quadratic: 0.6f).Translate(offset: new Vector3(x: 0f, y: 2f, z: 0f))) < sheared));
+    }
     [Fact]
     public void AScaleUpstreamOfAWarpLeavesTheWarpsOwnReachUnchanged() {
         var unscaled = Step(chain: b => b.RotatePlane(

@@ -25,7 +25,7 @@ Primary code:
 - `Puck.World.Client/WorldCameraClearance.cs` and `WorldChaseBody.cs` — where the
   chase eye stands: out of the static field and out of the framed body's kit
   collider (see "Chase eye clearance" below).
-- `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
+- `Puck.World/WorldSeatViewInput.cs` — the pointer adapter that turns the seat camera; `WorldDragMotion.cs` decides what each pointer event's motion does to a drag (counted from the press, cut at the release).
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.
@@ -101,7 +101,8 @@ faces where the camera looks) are bound on both edges like any held command
 (a press row plus an `activateOn: Completed` row on the same source). The engine
 binds nothing by default: the Moth basis's `bindingOverlays` bind
 `mouse.button1 → player.orbit`, `mouse.button2 → player.steer`, the right stick
-to `player.look.steer` and its press to `player.look.recenter`. `player.steer` writes the camera's
+to `player.look.steer` and R to `player.look.recenter` (the pad's recenter is
+North on the bar's View page, `controls.puck`). `player.steer` writes the camera's
 facing into channels claiming the `FaceX`/`FaceY`/`FaceZ` roles and the sim's
 facing snap turns the body, so binding it needs those three channels declared and
 `seatControl.yawReference: World` (the validator refuses otherwise).
@@ -230,8 +231,10 @@ The standard right stick binds `player.look.steer`: horizontal input writes
 `FaceX`/`FaceZ`, vertical input only changes camera pitch, and neither writes
 `Turn`. Authors may bind `player.look` for free orbit, explicit bindings may
 still write `Turn`, and a drive kit may interpret its left-stick roles
-according to their own motion program. The standard left-stick press toggles
-the `run` channel; West and Left Shift remain ordinary hold-to-run sources.
+according to their own motion program. In the debug world the left-stick
+press (and N) toggles the `run` channel, West and Left Shift hold it, and the
+left trigger's page turns the stick presses into autorun and autofly
+([the Moth's controls](../../../../worlds/debug/avatars/moth.md#controls)).
 
 ## Camera programs and layouts
 
@@ -346,10 +349,13 @@ and it offers each event to `WorldAnnotationInput` and then
 `WorldSourcePassthrough` until one consumes it. A consumed event (a pointer
 button or relative motion in annotate mode, a key a focused passthrough source
 takes, a click or wheel over a passthrough pane) never reaches the observer,
-the held-input reassertion or the command router. Only `source.passthrough
-open`, run as typed text from the host's own console, makes a pane a
-passthrough source; never add a document field, binding or other principal's
-door to it. A new raw-event consumer that must withhold events from the game
+the held-input reassertion or the command router. Only the local user opens a
+passthrough source: `source.passthrough open`, run as typed text from the
+host's own console, or their own press on an engaged window capture's framed
+picture (a physical click, or a local pad's bound press, which
+`WorldPassthroughPad.IsLocalPad` admits); never add a document field, a
+scripted door or another principal's door to it. A binding page may only name
+which local pad control means which pointer act. A new raw-event consumer that must withhold events from the game
 joins that fan-out rather than registering a second capability.
 
 Annotate mode (`WorldAnnotations`, toggled by `view.annotate`) is a
@@ -370,8 +376,12 @@ observers, not the filters, so a scripted drag cannot draw; `view.annotate
 add` keeps an outline from text instead.
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
-motion only for camera steering and asks the active preference whether the
-pointer is armed. `WorldCursorFeed` asks that same adapter whether steering is
+motion only for camera steering, through `WorldDragMotion`: the router applies
+a drag's press and release at the next fixed tick, so the gate keeps the motion
+since the latest pointer press while a button stays down, the
+`player.orbit`/`player.steer` press edge turns the camera by it
+(`WorldDragMotion.Hold`), and a release that leaves no button down cuts the
+motion before the router applies it. `WorldCursorFeed` asks that same adapter whether steering is
 active, so pointer consumption and cursor visibility cannot disagree. This is
 the presentation projection: the same relative motion, wheel, and button
 events independently enter `Puck.Commands` through `InputSources.Mouse`. The
@@ -580,6 +590,12 @@ Free Cam do not alter the logical movement basis.
   probes ignore it. Session presentation only: no document field, nothing the
   simulation or a replay reads. Headless it records and echoes the isolation
   with nothing to draw.
+- `view.reseed [<body>]` — restarts a body's presentation-only animation (gait
+  driver phases and weights, foot plants, root and part followers) as for a new
+  occupant (`WorldStampPool.Reseed`). A `body.pose` teleport of the same
+  occupant keeps its gait phases so it never pops; pin `view.reseed` beside it
+  when a scripted motion must look the same on a repeat
+  ([tick-exact debug capture](schedules-and-tests.md#tick-exact-debug-capture)).
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).

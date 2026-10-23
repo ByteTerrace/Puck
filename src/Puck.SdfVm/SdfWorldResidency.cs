@@ -85,8 +85,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private bool m_glyphAtlasInitialized;
     private SdfGlyphAtlas? m_uploadedGlyphAtlas;
     // The last captured frame's mesh draw count, which MeshDrawCount reads from another thread: the count, never the list,
-    // which its producer may rewrite in place for the next frame.
+    // which its producer may rewrite in place for the next frame; and how many of those draws are glass.
     private int m_meshDrawCount;
+    private int m_glassDrawCount;
 
     // Each view's signature at its latest render, or null before one: the cadence compares this frame's against it.
     private ulong?[] m_renderedSignatures = [];
@@ -196,12 +197,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the bytes the tables' mesh region holds (<see cref="SdfWorldTables.MeshRegionBytes"/>), or zero before
     /// the tables are built.</summary>
     public ulong MeshRegionBytes => (m_tables?.MeshRegionBytes ?? 0UL);
+    /// <summary>Gets the bytes the latest staged frame's draw records and meshes take of the mesh region
+    /// (<see cref="SdfWorldTables.MeshRegionWords"/>), or zero before the tables are built.</summary>
+    public ulong MeshRegionUsedBytes => (((ulong)(m_tables?.MeshRegionWords ?? 0)) * sizeof(uint));
     /// <summary>Gets the bytes the tables' regions hold, by the memory they live in (<see cref="SdfWorldTables.TableBytes"/>),
     /// or none before the tables are built.</summary>
     public GpuMemoryBytes TableBytes => (m_tables?.TableBytes ?? default);
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
     public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
+    /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass draws (<see cref="SdfMeshDraw.Glass"/>), which
+    /// the glass pass draws over the opaque image.</summary>
+    public int GlassDrawCount => Volatile.Read(location: ref m_glassDrawCount);
     /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
     /// first frame captured and packed, and its views kernel built. It is false again after a device loss until the
     /// rebuilt tables are, and while a captured frame waits for a views kernel that is still building or was refused,
@@ -493,6 +500,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The bake takes its batch before the upload, which carries the batch's surface points.
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
+        // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
+        if (!m_frame!.TickLocked || !MeshPathBake.Pending) {
+            Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+        }
+        tables.ViewExposures = Exposures;
 
         tables.UpdateTablesSignature();
         // The views render once the views kernel is built; the residency is ready then.
@@ -671,6 +683,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
     public SdfMeshIrradiance MeshIrradiance { get; } = new();
+    /// <summary>Gets the exposure each view of the residency's latest frame maps the luminance it shades by.</summary>
+    public SdfViewExposures Exposures { get; } = new();
     /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled with indirect light
     /// off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
@@ -687,6 +701,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether the residency holds its frame for a capture (<see cref="BeginConvergence"/>): until the
     /// capture completes, every frame renders the frame the capture's first frame took.</summary>
     public bool HoldsFrame => (m_convergence is { Completion.IsCompleted: false });
+
+    // The presentation time of the frame the exposure last adapted to, for a lockstep frame's own interval.
+    private float m_exposureTime = float.NaN;
+
+    // The seconds the views' exposure adapts over this staging (SdfViewExposures.SecondsOf).
+    private double ExposureSeconds(in FrameContext context, SdfFrame frame) {
+        var previous = m_exposureTime;
+
+        m_exposureTime = frame.Time;
+
+        return SdfViewExposures.SecondsOf(frame: frame, frameSeconds: context.FrameDeltaSeconds, previousTime: previous);
+    }
 
     /// <summary>Freezes the presentation source for a capture.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>
@@ -713,41 +739,49 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         var converging = HoldsFrame;
+        SdfFrame frame;
 
         if (converging && (m_frozenFrame is { } frozen)) {
-            m_frame = frozen with { ProgramChanged = false };
-            m_pendingFrame = null;
+            frame = frozen with { ProgramChanged = false };
             m_frameSource.PresentHeldFrame();
-            return;
-        }
-        if (!converging) {
-            m_frozenFrame = null;
-        }
+        } else {
+            if (!converging) {
+                m_frozenFrame = null;
+            }
 
-        if (m_tables is { } tables) {
-            m_frameSource.AdvanceBricks(bakes: tables);
-        }
+            if (m_tables is { } tables) {
+                m_frameSource.AdvanceBricks(bakes: tables);
+            }
 
-        var frame = m_frameSource.CaptureFrame(
-            width: m_width,
-            height: m_height,
-            deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
-            interpolationAlpha: ((float)context.InterpolationAlpha)
-        );
+            frame = m_frameSource.CaptureFrame(
+                width: m_width,
+                height: m_height,
+                deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
+                interpolationAlpha: ((float)context.InterpolationAlpha)
+            );
+            if (converging) {
+                // Freeze the authored frame, while derived meshes can still finish under the capture's hold.
+                m_frozenFrame = frame;
+            }
+        }
 
         // Every view draws the program's baked meshes.
         frame = MeshPathBake.Dress(frame: frame);
 
         m_frame = frame;
         m_pendingFrame = null;
-        if (converging) {
-            m_frozenFrame = frame;
-        }
         m_programPending |= frame.ProgramChanged;
+
+        var glass = 0;
+
+        foreach (var draw in frame.MeshDraws) {
+            if (draw.Glass) { glass++; }
+        }
         Volatile.Write(
             location: ref m_meshDrawCount,
             value: frame.MeshDraws.Count
         );
+        Volatile.Write(location: ref m_glassDrawCount, value: glass);
     }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until
     // it completes this returns false and no view renders, so a cold driver cache delays the first frame rather than
@@ -764,6 +798,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
                 shadowRaster: passes.ShadowRaster,
+                glassRaster: passes.GlassRaster,
+                occlusion: passes.Occlusion,
                 meshRaster: passes.MeshRaster,
                 options: inputs.Options,
                 pipelines: pipelines,
@@ -850,8 +886,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 mapping: sources.MappingOf(screen: screen),
                 screenIndex: screen
             );
-            tables.SetScreenEmission(
-                emits: sources.Emits(screen: screen),
+            tables.SetScreenLuminance(
+                luminance: sources.LuminanceOf(screen: screen),
+                screenIndex: screen
+            );
+            tables.SetScreenRipple(
+                ripple: (sources.TryRippleOf(
+                    ripple: out var ripple,
+                    screen: screen
+                )
+                    ? ripple
+                    : null
+                ),
                 screenIndex: screen
             );
         }

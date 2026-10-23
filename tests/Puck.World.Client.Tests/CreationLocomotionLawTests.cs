@@ -499,4 +499,26 @@ public sealed class CreationLocomotionLawTests {
 
         Assert.All(collection: Rig(pool: pool).Effectors, action: effector => Assert.Equal(expected: "no", actual: effector.Contact));
     }
+    /// <summary><c>view.reseed</c> restarts a walking body's gait as for a new occupant: its stride phase and eased speed
+    /// read zero on the next pack, where a teleport of the same occupant would keep them; a body the pool roots nothing
+    /// for restarts nothing.</summary>
+    [Fact]
+    public void AReseedRestartsTheGaitAsForANewOccupant() {
+        var (client, pool, transforms) = Stage();
+        var tick = 1UL;
+
+        for (; (tick < 40UL); tick++) {
+            Advance(client: client, pool: pool, position: new Vector3(x: 0f, y: 0f, z: -(0.05f * tick)), tick: tick, transforms: transforms, yaw: 0f);
+        }
+
+        Assert.True(condition: (Rig(pool: pool).Drivers[0].Phase > 0f));
+        Assert.True(condition: (Rig(pool: pool).Speed > 0f));
+        Assert.Equal(expected: 0, actual: pool.Reseed(bodyIndex: 3));
+        Assert.Equal(expected: 1, actual: pool.Reseed(bodyIndex: 0));
+
+        Advance(client: client, pool: pool, position: new Vector3(x: 0f, y: 0f, z: -(0.05f * tick)), tick: tick, transforms: transforms, yaw: 0f);
+
+        Assert.Equal(expected: 0f, actual: Rig(pool: pool).Drivers[0].Phase);
+        Assert.Equal(expected: 0f, actual: Rig(pool: pool).Speed);
+    }
 }

@@ -199,9 +199,11 @@ internal sealed class ApuStage : IPostStage<PostContext> {
                     StepCpuCycle(machine: machine);
                 }
 
-                // Length-table index 3 loads 2. The first reset leaves 1; the second expires it 3 or 4 cycles after
-                // the CPU write cycle, on the second get cycle after that write. https://www.nesdev.org/wiki/APU_Frame_Counter
-                var delay = (((machine.Cpu.Cycles & 1) == 0) ? 3 : 4);
+                // Length-table index 3 loads 2. The first reset leaves 1; the second expires it in the APU step that
+                // ends the second or third cycle after the CPU write cycle, so a read on the third or fourth cycle sees
+                // it, NESdev's 3 or 4 (https://www.nesdev.org/wiki/APU_Frame_Counter). blargg's apu_test 5-len_timing
+                // pins the step.
+                var delay = (((machine.Cpu.Cycles & 1) == 0) ? 2 : 3);
 
                 for (var cycle = 0; (cycle <= delay); ++cycle) {
                     var active = ((machine.Apu.PeekStatus(openBus: 0) & 1) != 0);

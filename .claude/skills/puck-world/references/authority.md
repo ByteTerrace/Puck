@@ -20,6 +20,9 @@ ONE server-side table authorizes every write: `WorldGrants`
 - Refusals and read-backs
 - Verifying
 
+Trace the acting principal stamped at ingress when debugging a refusal;
+constructing a `Principal` in a test bypasses that ingress path.
+
 ## Vocabulary
 
 - `WorldCapability` (5 members): `Drive`, `Observe`, `Control`, `Mutate`,
@@ -526,13 +529,17 @@ abstract on the union, so an arm cannot compile without it, answers each
 subject's `StateAccess`). Written: every row the operation changes, a random draw
 site, and a `pushRay`'s pool (`state:<pool>`; pools share the rows' namespace).
 Read: a sort's key rows, a source board, mask, rank row, vector table or operand.
-`TransformAuthorityLawTests` holds the pool case and the sort case (observe over
-the key rows, no edit, admits the sort). Authority is not disclosure: whatever
+`TransformDisclosureLawTests` exercises the sort with edit over its destination
+and observe over its key row. Authority is not disclosure: whatever
 the actor holds, a transform whose written row some reader sees while a read row
 (or one of its declared cells) withholds from that reader is refused
-`TransformWidensAudience` (`StateVisibility.Encloses`, checked in
-`RuleCompiler`'s transform resolution, so the same check refuses an authored
-rule at validation and a submitted transform at compose).
+`TransformWidensAudience`. `RuleCompiler` applies `StateVisibility.Encloses` to
+resolved dependencies, including rows both read and written, dynamic keys, live
+zone selectors, declared sets and control flow. The shared arena transform door
+checks current cell and containing-zone restrictions again before writes. A rule
+refuses at validation when the declarations prove the mismatch, and refuses
+atomically at firing when live visibility proves it. A written-and-read row
+requires Edit; distinct read-only subjects require Observe.
 `TransformDisclosureLawTests` holds both doors. A transform never declassifies; a
 rule that shows a hidden value writes it through its own `setState` (word spy's
 clue word). A row's `phaseOf` requires the matching

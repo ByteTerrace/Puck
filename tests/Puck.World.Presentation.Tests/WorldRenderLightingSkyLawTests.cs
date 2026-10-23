@@ -157,7 +157,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     y: 0.6f,
                     z: -0.5f
                 ),
-                Weight: 0.42f,
+                Illuminance: 0.42f,
                 Color: new BindableColor(Raw: "#FFD9A6"),
                 AngularRadius: 0.2f,
                 Shadow: WorldShadowMode.Always, Name: "sun"
@@ -168,10 +168,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     y: 0f,
                     z: 0f
                 ),
-                Weight: 0.3f
+                Illuminance: 0.3f
             ),
                 new WorldRenderLight.Rim(
-                Weight: 0.7f,
+                Luminance: 0.7f,
                 Power: 5f,
                 Color: new BindableColor(Raw: "#88AAFF")
             ),
@@ -201,14 +201,15 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             actual: key.Weight,
-            expected: 0.42f
+            expected: SdfPhotometry.DirectionalWeight(lux: 0.42f)
         );
+        // A light's colour is scaled to unit luminance, so it gives exactly its illuminance.
         Assert.Equal(
-            expected: new Vector3(
+            expected: SdfPhotometry.UnitLuminance(color: new Vector3(
                 x: (0xFF / 255f),
                 y: (0xD9 / 255f),
                 z: (0xA6 / 255f)
-            ),
+            )),
             actual: key.Color
         );
         Assert.Equal(
@@ -222,7 +223,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         Assert.False(condition: fill.CastsShadow);
         Assert.Equal(
-            expected: Vector3.One,
+            expected: SdfPhotometry.UnitLuminance(color: Vector3.One),
             actual: fill.Color
         );
         Assert.Equal(
@@ -275,12 +276,13 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             expected: 3u,
             actual: resolved.Sky.First<SdfSkyGradient>().Count
         );
+        // Each layer's colours and brightnesses are in units of its luminance, the default sky's here.
         Assert.Equal(
-            expected: (Color: new Vector3(
+            expected: (Color: (new Vector3(
                 x: (0xE0 / 255f),
                 y: (0x8F / 255f),
                 z: (0x6B / 255f)
-            ), Elevation: 0f),
+            ) * SdfSky.DefaultLuminance), Elevation: 0f),
             actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 1)
         );
         Assert.Equal(
@@ -304,7 +306,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: resolved.Sky.First<SdfSkyStars>().Density
         );
         Assert.Equal(
-            expected: 0.85f,
+            expected: (0.85f * SdfSky.DefaultLuminance),
             actual: resolved.Sky.First<SdfSkyStars>().Brightness
         );
         Assert.Equal(
@@ -330,7 +332,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
-            expected: 1f,
+            expected: SdfSky.DefaultLuminance,
             actual: resolved.Sky.First<SdfSkyStars>().Brightness
         );
         Assert.Equal(
@@ -338,11 +340,11 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: resolved.Sky.IndexOf(kind: SdfSkyLayerKind.Stars)
         );
         Assert.Equal(
-            expected: (Color: SdfSky.DefaultGroundColor, Elevation: -1f),
+            expected: (Color: (SdfSky.DefaultGroundColor * SdfSky.DefaultLuminance), Elevation: -1f),
             actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 0)
         );
         Assert.Equal(
-            expected: (Color: SdfSky.DefaultZenithColor, Elevation: 1f),
+            expected: (Color: (SdfSky.DefaultZenithColor * SdfSky.DefaultLuminance), Elevation: 1f),
             actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 1)
         );
     }
@@ -422,7 +424,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     y: 0f,
                     z: 1f
                 ),
-                Weight: (0.1f * (index + 1))
+                Illuminance: (0.1f * (index + 1))
             );
         }
 
@@ -439,7 +441,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             actual: eighth.Weight,
-            expected: 0.8f,
+            expected: SdfPhotometry.DirectionalWeight(lux: 0.8f),
             precision: 5
         );
     }
@@ -453,7 +455,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     y: 1f,
                     z: 0f
                 ),
-                Weight: 0.1f,
+                Illuminance: 0.1f,
                 Shadow: WorldShadowMode.Always, Name: "sun"
             ),
                 new WorldRenderLight.Directional(
@@ -462,11 +464,11 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     y: 0f,
                     z: 0f
                 ),
-                Weight: 0.2f
+                Illuminance: 0.2f
             ),
-                new WorldRenderLight.Point(Weight: 0.3f),
+                new WorldRenderLight.Point(Intensity: 0.3f),
                 new WorldRenderLight.Rim(
-                Weight: 0.4f,
+                Luminance: 0.4f,
                 Power: 2f
             ),
                 new WorldRenderLight.Directional(
@@ -475,7 +477,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     y: 0f,
                     z: 1f
                 ),
-                Weight: 0.9f
+                Illuminance: 0.9f
             ),
             ]),
         });
@@ -501,7 +503,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             actual: fifth.Weight,
-            expected: 0.9f
+            expected: SdfPhotometry.DirectionalWeight(lux: 0.9f)
         );
 
         // The packed lights table (what the engine uploads, record for record) must carry the fifth light's direction
@@ -518,7 +520,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: records[4].Direction
         );
         Assert.Equal(
-            expected: 0.9f,
+            expected: SdfPhotometry.DirectionalWeight(lux: 0.9f),
             actual: records[4].Weight
         );
     }
@@ -622,8 +624,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                         y: 2f,
                         z: 4f
                     ),
-                    Radius: 1.5f,
-                    Weight: 1.2f,
+                    Intensity: 1.2f,
                     Anchor: new WorldAnchor.Placement(
                         PlacementId: "nozzle",
                         ShapeId: null
@@ -772,7 +773,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: 0f, actual: water.Sky.Atmosphere.FogDensity);
         Assert.Equal(expected: -2f, actual: water.Sky.Atmosphere.MediumSurface);
         Assert.Equal(expected: SdfAtmosphere.DefaultMediumExtinction, actual: water.Sky.Atmosphere.MediumExtinction);
-        Assert.Equal(expected: SdfAtmosphere.DefaultMediumColor, actual: water.Sky.Atmosphere.MediumColor);
+        Assert.Equal(expected: (SdfAtmosphere.DefaultMediumColor * SdfSky.DefaultLuminance), actual: water.Sky.Atmosphere.MediumColor);
     }
     // The stack is open: a kind may appear as often as authored, each layer counting under its own label.
     [Fact]
@@ -1002,19 +1003,19 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         ).Lights[0].Color;
 
         Assert.Equal(
-            expected: new Vector3(
+            expected: SdfPhotometry.UnitLuminance(color: new Vector3(
                 x: (0xFF / 255f),
                 y: (0xD9 / 255f),
                 z: (0xA6 / 255f)
-            ),
+            )),
             actual: first
         );
         Assert.Equal(
-            expected: new Vector3(
+            expected: SdfPhotometry.UnitLuminance(color: new Vector3(
                 x: (0x4C / 255f),
                 y: (0x5C / 255f),
                 z: (0x8C / 255f)
-            ),
+            )),
             actual: second
         );
         Assert.Equal(
@@ -1040,24 +1041,64 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]
     [Theory]
-    public void Weights_NonFiniteOrNegative_RefuseByName(float weight) {
+    public void PhotometricQuantities_NonFiniteOrNegative_RefuseByName(float value) {
+        foreach (var light in (WorldRenderLight[])[new WorldRenderLight.Directional(Illuminance: value), new WorldRenderLight.Rim(Luminance: value), new WorldRenderLight.Point(Power: value), new WorldRenderLight.Spot(Intensity: value)]) {
+            Assert.False(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [light]) },
+            })));
+        }
         Assert.False(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-            RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: weight)]) },
+            RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(Cavity: value)) },
         })));
-        Assert.False(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-            RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Rim(Weight: weight)]) },
-        })));
-        Assert.False(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-            RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(Cavity: weight)) },
-        })));
-        // The control: the same three surfaces with an admissible weight validate.
+        // The control: the same surfaces with admissible quantities validate.
         Assert.True(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
             RenderRaw = BaseDefaults() with {
                 Lighting = new WorldRenderLighting(
-            Lights: [new WorldRenderLight.Directional(Weight: 0.5f), new WorldRenderLight.Rim(Weight: 0.5f)],
+            Lights: [new WorldRenderLight.Directional(Illuminance: 100000f), new WorldRenderLight.Rim(Luminance: 0.5f), new WorldRenderLight.Point(Power: 800f), new WorldRenderLight.Spot(Intensity: 300f)],
             Curvature: new WorldRenderCurvature(Cavity: 0.5f)
         ),
             },
         })));
+    }
+    [Fact]
+    public void ALightAuthoringTwoSpellingsOfOneQuantity_RefusesByName() {
+        static string? Reason(WorldRenderLight light) {
+            _ = WorldDefinitionValidator.TryValidate(definition: (Fixtures.BuildDocument() with { RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [light]) } }), neighbours: null, reason: out var reason);
+
+            return reason;
+        }
+
+        Assert.Contains(expectedSubstring: "both color and temperature", actualString: Reason(light: new WorldRenderLight.Directional(Color: new BindableColor(Raw: "#FFFFFF"), Temperature: 5500f)));
+        Assert.Contains(expectedSubstring: "both intensity (candela) and power (lumens)", actualString: Reason(light: new WorldRenderLight.Point(Intensity: 80f, Power: 800f)));
+        Assert.Contains(expectedSubstring: "is wider than the cone's angle", actualString: Reason(light: new WorldRenderLight.Spot(Angle: 0.3f, InnerAngle: 0.5f)));
+        Assert.Contains(expectedSubstring: "temperature 500 must be finite and within", actualString: Reason(light: new WorldRenderLight.Spot(Temperature: 500f)));
+        Assert.True(condition: string.IsNullOrEmpty(value: Reason(light: new WorldRenderLight.Spot(Angle: 0.5f, InnerAngle: 0.3f, Temperature: 3000f, Power: 1500f))));
+    }
+    [Fact]
+    public void AnExposureOutsideACameraOrWithBoundsOutOfOrder_RefusesByName() {
+        static string? Reason(WorldRenderExposure exposure) {
+            _ = WorldDefinitionValidator.TryValidate(definition: (Fixtures.BuildDocument() with { RenderRaw = BaseDefaults() with { Exposure = exposure } }), neighbours: null, reason: out var reason);
+
+            return reason;
+        }
+
+        Assert.Contains(expectedSubstring: "render.exposure.ev100", actualString: Reason(exposure: new WorldRenderExposure(Ev100: 40f)));
+        Assert.Contains(expectedSubstring: "render.exposure.minimum 12 is above its maximum 8", actualString: Reason(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto, Minimum: 12f, Maximum: 8f)));
+        Assert.Contains(expectedSubstring: "with mode Manual", actualString: Reason(exposure: new WorldRenderExposure(Ev100: 10f, Compensation: 1f)));
+        Assert.Contains(expectedSubstring: "render.exposure.adaptation", actualString: Reason(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto, Adaptation: -1f)));
+        Assert.Contains(expectedSubstring: "render.exposure.compensation", actualString: Reason(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto, Compensation: 20f)));
+        Assert.True(condition: string.IsNullOrEmpty(value: Reason(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto, Minimum: 7f, Maximum: 16f, Compensation: 1.5f, Adaptation: 0.75f))));
+    }
+    [Fact]
+    public void AnExposureResolvesItsAbsentValues_AManualOneHoldingItsEv100() {
+        Assert.Equal(expected: SdfExposure.Default, actual: WorldRenderExposure.Resolve(exposure: null));
+        var manual = WorldRenderExposure.Resolve(exposure: new WorldRenderExposure(Ev100: 9f));
+
+        Assert.Equal(expected: (SdfExposureMode.Manual, 9f, 9f, 9f), actual: (manual.Mode, manual.Ev100, manual.Minimum, manual.Maximum));
+        var automatic = WorldRenderExposure.Resolve(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto, Minimum: 6f, Maximum: 16f));
+
+        Assert.Equal(expected: (11f, 0f, SdfExposure.DefaultAdaptation), actual: (automatic.Ev100, automatic.Compensation, automatic.Adaptation));
+        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: 6f), actual: automatic.BrightestGain);
+        Assert.Equal(expected: (SdfPhotometry.MinimumEv100, SdfPhotometry.MaximumEv100), actual: (WorldRenderExposure.Resolve(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto)).Minimum, WorldRenderExposure.Resolve(exposure: new WorldRenderExposure(Mode: SdfExposureMode.Auto)).Maximum));
     }
 }

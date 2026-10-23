@@ -1,52 +1,86 @@
-// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
-// compile, never the '.world.json' beside it.
-//
-// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
-// 'for' in it, none of which the document carries.
-
 schema: "puck.world.definition.v1"
+import "../inputs"
 import "../quality"
+import "moth-head"
+
+// Her real head, about 0.26 m from crown to chin, sits recessed in the unchanged hood with dark lining round it.
+let headScale = 0.7
+let headAt = [0, 1.735, 0.207]
+
+// The blink frame's poses in the head's unscaled frame, [id, x, y, z]: each closed lid forward over its eye, each open
+// eye's white, opening, iris, pupil, catchlights, lids and lash back inside the face.
+let blinkPose = [
+  [284, 0.07656, 1.74842, 0.21045]
+  [285, 0.03356, 1.74842, 0.23245]
+  [41, 0.07656, 1.74842, 0.06945]
+  [42, 0.07656, 1.74842, 0.06945]
+  [43, 0.07456, 1.74842, 0.11045]
+  [44, 0.07456, 1.74842, 0.11545]
+  [45, 0.06856, 1.76042, 0.11945]
+  [46, 0.08556, 1.73642, 0.11745]
+  [47, 0.02956, 1.74842, 0.09645]
+  [48, 0.02956, 1.74842, 0.09645]
+  [49, 0.11656, 1.76542, 0.09945]
+  [286, -0.07656, 1.74842, 0.21045]
+  [287, -0.11956, 1.74842, 0.23245]
+  [57, -0.07656, 1.74842, 0.06945]
+  [58, -0.07656, 1.74842, 0.06945]
+  [59, -0.07456, 1.74842, 0.11045]
+  [60, -0.07456, 1.74842, 0.11545]
+  [61, -0.06856, 1.76042, 0.11945]
+  [62, -0.08556, 1.73642, 0.11745]
+  [63, -0.02956, 1.74842, 0.09645]
+  [64, -0.02956, 1.74842, 0.09645]
+  [65, -0.11656, 1.76542, 0.09945]
+]
+
+// The suit's two plate colours, from the concept pack: dusty lavender and a warm ivory, with the darker lavender of
+// a groove and the near-black of a vent slot.
+let lavenderPlate = "#744080"
+let ivoryPlate = "#F2C49A"
+let lavenderSeam = "#5E3468"
+let ventSlot = "#2B2630"
 
 // The palette, by role. A slot number says nothing; a name says what the surface IS.
-let skin = 0 // #EED3A6
-let violet = 1 // #9D66C6
-let charcoal = 2 // #252630
-let rust = 3 // #B76B3C
-let ink = 4 // #171210
-let ivory = 5 // #FFF8E9
-let cyan = 6 // #2ED6EC
+let skin = 0 // ivory: hood rim, ear mounts, cheek guards, knee guards, hip guards and boot insteps
+let violet = 1 // lavender: hood shell, forearms, pelvic plate, toe caps and heel guards
+let charcoal = 2 // #252630 joints, pivots, undersuit and soles
+let rust = 3 // #B76B3C her skin
+let ink = 4 // #171210 hair, lids and brows
+let ivory = 5 // #FFF8E9 the eyes' whites
 let leather = 7 // #754137
-let brass = 8 // #B88335
+let brass = 8 // #C98F35 ochre collar and belt
 let umber = 9 // #89481D
 let jet = 10 // #120D13
 let pearl = 11 // #FFF8EF
-let violetBandLeft = 12 // violet under the left shoulder pad's #EED3A6 band
-let violetBandRight = 13 // violet under the right shoulder pad's #EED3A6 band
-let violetPodLeft = 14 // violet of the left back pod's plates, under its vent and grey plate
-let violetPodRight = 15 // violet of the right back pod's plates, under its vent and grey plate
-let chestArmor = 16 // cream cuirass, lavender neckline and fine panel seams
-let shinCream = 17 // #EED3A6 fitted ankle trim, shin side panels and back-pod bands
-let shinViolet = 18 // #9D66C6 greaves under their #EED3A6 arch band and side panel
+let violetBandLeft = 12 // lavender left shoulder stack under its ivory bands
+let violetBandRight = 13 // lavender right shoulder stack under its ivory bands
+let violetPodLeft = 14 // lavender of the left back pod's plates, under its vent and grey plate
+let violetPodRight = 15 // lavender of the right back pod's plates, under its vent and grey plate
+let chestArmor = 16 // ivory chest slab round its lavender centre
+let shinCream = 17 // ivory ankle trim, shin side panels with their vents, and back-pod bands
+let shinViolet = 18 // lavender greaves under their ivory arch band and side panel
 let gunmetal = 19 // #43464E heel lens housing and heel block
 let steel = 20 // #8B9099 the lens housing's bright ring
 let thrusterGlow = 21 // #D8FDFF the back-pod thruster cores, lit by flight mode (lane 2)
 let thrusterCyan = 22 // #1F9BAE the back-pod thruster lenses, lit by flight mode (lane 2)
-let gauntletLeft = 23 // #EED3A6 of the left gauntlet pod, under its lilac and seams
-let gauntletRight = 24 // #EED3A6 of the right gauntlet pod, under its lilac and seams
+let gauntletLeft = 23 // ivory left gauntlet, lavender on its inner half, vents on its outer face
+let gauntletRight = 24 // ivory right gauntlet, lavender on its inner half, vents on its outer face
 let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
 let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
-let pelvicArmor = 27 // recessed dark face inside the grey pelvic rim
+let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-let chestFlank = 29 // lilac rib plates with an inset lower joint seam
-let shoulderDisc = 30 // lavender shoulder pivot, cream fastener and dark perimeter
+// Slots 6 (cyan), 29 and 30 (lavender) are free.
 
-// Paint wear reveals pale primer first, then the dark alloy at the exposed edges.
+// Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest
+// edges, where pale primer shows first, then the dark alloy.
+let plateWear = 0
 let lilacUndercoat = [
-  { threshold: 0.2, surface { color: "#B39BC3", roughness: 0.6, metal: 0.05 } }
+  { threshold: 0.2, surface { color: "#C9B4CB", roughness: 0.6, metal: 0.05 } }
   { threshold: 0.38, surface { color: "#51525C", roughness: 0.52, metal: 0.55 } }
 ]
 let creamUndercoat = [
-  { threshold: 0.2, surface { color: "#BDAE95", roughness: 0.65, metal: 0.05 } }
+  { threshold: 0.2, surface { color: "#C9B9A6", roughness: 0.65, metal: 0.05 } }
   { threshold: 0.38, surface { color: "#5B5D63", roughness: 0.52, metal: 0.55 } }
 ]
 
@@ -83,10 +117,6 @@ let shinPanelOutline = [
 ]
 
 let braidParent = [
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-0"
-  "braid-root-0"
   "braid-root-1"
   "braid-root-1"
   "braid-root-1"
@@ -98,10 +128,6 @@ let braidParent = [
 ]
 
 let braid0Position = [
-  [-0.1977, 1.658, 0.1051875]
-  [-0.2131, 1.6294, 0.1225625]
-  [-0.2285, 1.6008, 0.1119375]
-  [-0.2439, 1.5722, 0.1013125]
   [-0.2527, 1.53865, 0.120375]
   [-0.2549, 1.50015, 0.141125]
   [-0.2571, 1.46165, 0.133875]
@@ -121,17 +147,9 @@ let braid0Rotation = [
   [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
   [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
 ]
 
 let braid1Position = [
-  [-0.1697, 1.658, 0.1051875]
-  [-0.1851, 1.6294, 0.0945625]
-  [-0.2005, 1.6008, 0.1119375]
-  [-0.2159, 1.5722, 0.1293125]
   [-0.2247, 1.53865, 0.120375]
   [-0.2269, 1.50015, 0.113125]
   [-0.2291, 1.46165, 0.133875]
@@ -151,127 +169,6 @@ let braid1Rotation = [
   [0, 0, braidTwist, braidUntwist]
   [0, 0, -braidTwist, braidUntwist]
   [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-  [0, 0, -braidTwist, braidUntwist]
-  [0, 0, braidTwist, braidUntwist]
-]
-
-let fringeBlend = [
-  "Union"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-  "SmoothUnion"
-]
-
-let fringe0Position = [
-  [0.0462, 1.9407, 0.12825]
-  [0.0249877, 1.9377667, 0.154]
-  [0.0024173, 1.9309222, 0.17425]
-  [-0.0215111, 1.9201667, 0.189]
-  [-0.0467975, 1.9055, 0.19825]
-  [-0.073442, 1.8869222, 0.202]
-  [-0.1014444, 1.8644333, 0.20025]
-  [-0.1308049, 1.8380333, 0.193]
-  [-0.1615235, 1.8077222, 0.18025]
-  [-0.1936, 1.7735, 0.162]
-]
-
-let fringe0Scale = [
-  [0.052976, 0.058256, 0.0174774]
-  [0.060982, 0.066262, 0.0201187]
-  [0.0680224, 0.0733024, 0.0224414]
-  [0.0732479, 0.0785279, 0.0241654]
-  [0.0720319, 0.0773119, 0.0237642]
-  [0.0594857, 0.0647657, 0.019625]
-  [0.0409938, 0.0462738, 0.0135244]
-  [0.0229078, 0.0281878, 0.0075576]
-  [0.0104181, 0.0156981, 0.0034371]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-let fringe1Position = [
-  [0.0396, 1.9407, 0.1287]
-  [0.0589383, 1.9329864, 0.1506333]
-  [0.077842, 1.9235346, 0.1676333]
-  [0.0963111, 1.9123444, 0.1797]
-  [0.1143457, 1.899416, 0.1868333]
-  [0.1319457, 1.8847494, 0.1890333]
-  [0.1491111, 1.8683444, 0.1863]
-  [0.165842, 1.8502012, 0.1786333]
-  [0.1821383, 1.8303198, 0.1660333]
-  [0.198, 1.8087, 0.1485]
-]
-
-let fringe1Scale = [
-  [0.037136, 0.042416, 0.0122516]
-  [0.0424332, 0.0477132, 0.0139992]
-  [0.0470915, 0.0523715, 0.0155361]
-  [0.050549, 0.055829, 0.0166767]
-  [0.0497444, 0.0550244, 0.0164113]
-  [0.0414432, 0.0467232, 0.0136726]
-  [0.0292079, 0.0344879, 0.0096361]
-  [0.0172413, 0.0225213, 0.0056881]
-  [0.0089774, 0.0142574, 0.0029618]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-let fringe2Position = [
-  [-0.1452, 1.8285, 0.12825]
-  [-0.154516, 1.8086457, 0.1378056]
-  [-0.1619309, 1.7891716, 0.1454722]
-  [-0.1674444, 1.7700778, 0.15125]
-  [-0.1710568, 1.7513642, 0.1551389]
-  [-0.1727679, 1.7330309, 0.1571389]
-  [-0.1725778, 1.7150778, 0.15725]
-  [-0.1704864, 1.6975049, 0.1554722]
-  [-0.1664938, 1.6803123, 0.1518056]
-  [-0.1606, 1.6635, 0.14625]
-]
-
-let fringe2Scale = [
-  [0.032208, 0.037488, 0.0106258]
-  [0.0366625, 0.0419425, 0.0120954]
-  [0.0405797, 0.0458597, 0.0133877]
-  [0.0434871, 0.0487671, 0.0143469]
-  [0.0428105, 0.0480905, 0.0141237]
-  [0.0358299, 0.0411099, 0.0118207]
-  [0.0255412, 0.0308212, 0.0084264]
-  [0.0154783, 0.0207583, 0.0051065]
-  [0.0085292, 0.0138092, 0.0028139]
-  [0.00616, 0.01144, 0.0020323]
-]
-
-let fringe3Position = [
-  [0.1562, 1.8307, 0.1035]
-  [0.1622459, 1.8141321, 0.1112222]
-  [0.1666948, 1.7976728, 0.1173889]
-  [0.1695467, 1.7813222, 0.122]
-  [0.1708015, 1.7650802, 0.1250556]
-  [0.1704593, 1.7489469, 0.1265556]
-  [0.16852, 1.7329222, 0.1265]
-  [0.1649837, 1.7170062, 0.1248889]
-  [0.1598504, 1.7011988, 0.1217222]
-  [0.15312, 1.6855, 0.117]
-]
-
-let fringe3Scale = [
-  [0.029744, 0.035024, 0.0098129]
-  [0.0337771, 0.0390571, 0.0111435]
-  [0.0373238, 0.0426038, 0.0123136]
-  [0.0399562, 0.0452362, 0.013182]
-  [0.0393436, 0.0446236, 0.0129799]
-  [0.0330233, 0.0383033, 0.0108948]
-  [0.0237079, 0.0289879, 0.0078215]
-  [0.0145969, 0.0198769, 0.0048157]
-  [0.0083051, 0.0135851, 0.0027399]
-  [0.00616, 0.01144, 0.0020323]
 ]
 
 template cameraLayout(name) {
@@ -291,25 +188,9 @@ template cameraLayout(name) {
   }
 }
 
-template fringeChain(chainIdx, baseId, groupIdx, positions, scales) {
-  for i in range(0, 10) {
-    shape Superellipsoid $"fringe-{chainIdx}-{i}" {
-      id: baseId + i
-      blend: fringeBlend[i]
-      exponent: softness
-      group: groupIdx
-      material: ink
-      parent: "helmet"
-      position: positions[i]
-      rotation [0, 0, 0, 1]
-      scale: scales[i]
-      smooth: 0.008
-    }
-  }
-}
-
+// One column of the plait's lobes, from where the root becomes the braid below her jaw down to the tie.
 template braidChain(chainIdx, baseId, positions, rotations) {
-  for i in range(0, 12) {
+  for i in range(0, 8) {
     shape Superellipsoid $"braid-{chainIdx}-{i}" {
       id: baseId + i
       blend: "Union"
@@ -342,6 +223,7 @@ bindingOverlays [
                 sources [
                   "keyboard.w"
                   "keyboard.arrowUp"
+                  "gamepad.dpadUp"
                 ]
               }
               {
@@ -351,6 +233,7 @@ bindingOverlays [
                 sources [
                   "keyboard.s"
                   "keyboard.arrowDown"
+                  "gamepad.dpadDown"
                 ]
               }
               {
@@ -359,6 +242,7 @@ bindingOverlays [
                 scale: -1
                 sources [
                   "keyboard.a"
+                  "gamepad.dpadLeft"
                 ]
               }
               {
@@ -367,6 +251,7 @@ bindingOverlays [
                 scale: 1
                 sources [
                   "keyboard.d"
+                  "gamepad.dpadRight"
                 ]
               }
               {
@@ -399,12 +284,13 @@ bindingOverlays [
                   "gamepad.rightStick"
                 ]
               }
+              // The pad's recenter is the View page's North (controls.puck): the right stick's press is fly.
               {
                 command: "player.look.recenter"
                 id: "recenter"
                 label: "Recenter"
                 sources [
-                  "gamepad.rightStickPress"
+                  "keyboard.r"
                 ]
               }
               {
@@ -422,13 +308,51 @@ bindingOverlays [
                   "mouse.button2"
                 ]
               }
+              // Run while held (Left Shift, West), or switched on and off (N, the left stick's press). The View page's
+              // left stick press (controls.puck) is autorun.
+              {
+                channel: "run"
+                id: "run"
+                label: "Run"
+                scale: 1
+                sources [
+                  "keyboard.shiftLeft"
+                  "gamepad.buttonWest"
+                ]
+              }
+              {
+                channel: "run"
+                id: "runToggle"
+                label: "Run on/off"
+                mode: Toggle
+                scale: 1
+                sources [
+                  "keyboard.n"
+                  "gamepad.leftStickPress"
+                ]
+              }
               {
                 channel: "flight"
                 id: "flight"
+                label: "Flight"
                 scale: 1
                 sources [
                   "keyboard.f"
                   "gamepad.buttonNorth"
+                ]
+              }
+              // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which the `fly-1` rule reads as
+              // switching flight mode on, so she takes off and climbs, and letting go hovers. The View page's right stick
+              // press (controls.puck) is autofly.
+              {
+                channel: "rise"
+                id: "fly"
+                label: "Fly"
+                scale: 1
+                sources [
+                  "keyboard.controlLeft"
+                  "keyboard.m"
+                  "gamepad.rightStickPress"
                 ]
               }
               {
@@ -452,10 +376,10 @@ bindingOverlays [
               {
                 channel: "rise"
                 id: "descend"
+                label: "Descend"
                 scale: -1
                 sources [
-                  "keyboard.controlLeft"
-                  "keyboard.controlRight"
+                  "keyboard.c"
                   "gamepad.buttonEast"
                 ]
               }
@@ -469,12 +393,33 @@ bindingOverlays [
                 ]
               }
               {
+                channel: "select"
+                id: "select"
+                scale: 1
+                sources [
+                  "keyboard.shiftRight"
+                  "gamepad.back"
+                ]
+              }
+              // The context button: engage the device in reach, and leave it again.
+              {
                 channel: "interact"
                 id: "interact"
+                label: "Interact"
                 scale: 1
                 sources [
                   "keyboard.e"
-                  "gamepad.buttonWest"
+                  "gamepad.rightShoulder"
+                ]
+              }
+              // The engaged screen's view: L switches between the framed picture and the other view, which is the held
+              // view of a carried screen and the room for any other. The pad's is the View page's East (controls.puck).
+              {
+                command: "player.frame"
+                id: "frame"
+                label: "Frame"
+                sources [
+                  "keyboard.l"
                 ]
               }
               {
@@ -1686,75 +1631,7 @@ cameras [
   }
 ]
 
-channels [
-  {
-    composition: false
-    frame: Heading
-    name: "forward"
-    role: MoveAdvance
-    shape: Bipolar
-  }
-  {
-    composition: false
-    frame: Heading
-    name: "strafe"
-    role: MoveStrafe
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "turn"
-    role: Turn
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "faceX"
-    role: FaceX
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "faceZ"
-    role: FaceZ
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "faceY"
-    role: FaceY
-    shape: Bipolar
-  }
-  {
-    composition: true
-    name: "jump"
-    shape: Binary
-  }
-  {
-    composition: true
-    name: "flight"
-    shape: Binary
-  }
-  {
-    composition: false
-    name: "rise"
-    role: MoveUp
-    shape: Bipolar
-  }
-  // The pad's start button, which the Moth herself ignores: an engaged machine reads it as its own start.
-  {
-    composition: true
-    name: "start"
-    shape: Binary
-  }
-  // The context button, which the Moth herself ignores: beside an engageable screen naming it as its engage channel,
-  // a press engages that screen and the next press leaves it.
-  {
-    composition: true
-    name: "interact"
-    shape: Binary
-  }
-]
+
 
 collision {
   contactSkin: 0.02
@@ -2027,6 +1904,8 @@ kits {
             hold: Lift
             forward: Heading
             lift: 1
+            // She flies at her running pace, and running in the air doubles it.
+            speed: 5
             gravity {
               fall: 46
               rise: 28
@@ -2061,8 +1940,13 @@ kits {
             turnScale: 1
           }
         ]
+        // She walks at 5 m/s and runs at 10 while the run channel is held.
         speed {
           value: 5
+          held {
+            channel: "run"
+            multiplier: 2
+          }
         }
         // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
         stepHeight: 0.3
@@ -2257,126 +2141,17 @@ prototypes {
     document {
       schema: "puck.creation.v1"
       name: "moth"
+      // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face, at the head's scale.
       frames [
         {
           name: "blink"
-          transforms [
-            {
-              id: 284
-              position [0.07656, 1.74842, 0.21045]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 285
-              position [0.03356, 1.74842, 0.23245]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 41
-              position [0.07656, 1.74842, 0.06945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 42
-              position [0.07656, 1.74842, 0.06945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 43
-              position [0.07456, 1.74842, 0.11045]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 44
-              position [0.07456, 1.74842, 0.11545]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 45
-              position [0.06856, 1.76042, 0.11945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 46
-              position [0.08556, 1.73642, 0.11745]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 47
-              position [0.02956, 1.74842, 0.09645]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 48
-              position [0.02956, 1.74842, 0.09645]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 49
-              position [0.11656, 1.76542, 0.09945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 286
-              position [-0.07656, 1.74842, 0.21045]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 287
-              position [-0.11956, 1.74842, 0.23245]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 57
-              position [-0.07656, 1.74842, 0.06945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 58
-              position [-0.07656, 1.74842, 0.06945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 59
-              position [-0.07456, 1.74842, 0.11045]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 60
-              position [-0.07456, 1.74842, 0.11545]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 61
-              position [-0.06856, 1.76042, 0.11945]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 62
-              position [-0.08556, 1.73642, 0.11745]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 63
-              position [-0.02956, 1.74842, 0.09645]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 64
-              position [-0.02956, 1.74842, 0.09645]
-              rotation [0, 0, 0, 1]
-            }
-            {
-              id: 65
-              position [-0.11656, 1.76542, 0.09945]
-              rotation [0, 0, 0, 1]
-            }
-          ]
+          transforms: map(blinkPose, row => { id: row[0], position: map([row[1], row[2], row[3]], (v, k) => headAt[k] + (v - mothHeadPivot[k]) * headScale), rotation [0, 0, 0, 1] })
         }
       ]
+      // The suit is pristine, as on the sheets: wear reaches only the tightest edges, and faintly.
       palette [
         {
-          color: "#EED3A6"
+          color: ivoryPlate
           roughness: 0.36
           specular: 0.08
           emissive: 0
@@ -2388,35 +2163,17 @@ prototypes {
             reach: 0.014
             seed: 71
             scale: 75
-            floor: 1
+            floor: plateWear
             under: creamUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          paints [
-            {
-              parent: "bootPlan-left"
-              type: "Box"
-              position [0, 0, 0.04]
-              scale [0.0025, 0.2, 0.17]
-              color: "#CDB794"
-            }
-            {
-              parent: "bootPlan-right"
-              type: "Box"
-              position [0, 0, 0.04]
-              scale [0.0025, 0.2, 0.17]
-              color: "#CDB794"
-            }
-          ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.3
           specular: 0.12
           emissive: 0
           coat: 0.4
-          // The helmet's cream trim, in the helmet's frame: a horseshoe round the face opening, its ellipse projected
-          // along the face's forward axis; the throat opening leaves the helmet no surface below it.
           weathering {
             edge: 0.55
             lines: 0
@@ -2424,69 +2181,18 @@ prototypes {
             reach: 0.014
             seed: 72
             scale: 75
-            floor: 1
+            floor: plateWear
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
+          // The sole grooves, and the hood's ivory trim in the helmet's frame: a horseshoe round the face opening, its
+          // ellipse projected along the face's forward axis; the throat opening leaves the helmet no surface below it.
           paints [
-            {
-              parent: "sole-left"
-              type: "Prism"
-              position [0, 0.02, 0.29]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.0065, 0.0065, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "sole-left"
-              type: "Prism"
-              position [0, 0.022, -0.115]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.0065, 0.0065, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "sole-right"
-              type: "Prism"
-              position [0, 0.02, 0.29]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.0065, 0.0065, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "sole-right"
-              type: "Prism"
-              position [0, 0.022, -0.115]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.0065, 0.0065, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "helmet"
-              type: "Prism"
-              position [0, -0.0198, 0.21575]
-              scale [0.24265, 0.26245, 0.2]
-              profile {
-                kind: "Ellipse"
-              }
-              stroke: 0.0227
-              color: "#EED3A6"
-            }
-
-            { parent: "thighPlate-left", type: "Prism", position [0.025, -0.07, 0.11], scale [0.026, 0.0035, 0.05], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#D4C4DA" }
-            { parent: "thighPlate-left", type: "Prism", position [0.022, -0.08, 0.11], scale [0.017, 0.0018, 0.05], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#66556F" }
+            { parent: "sole-left", type: "Prism", position [0, 0.02, 0.29], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
+            { parent: "sole-left", type: "Prism", position [0, 0.022, -0.115], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
+            { parent: "sole-right", type: "Prism", position [0, 0.02, 0.29], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
+            { parent: "sole-right", type: "Prism", position [0, 0.022, -0.115], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
+            { parent: "helmet", type: "Prism", position [0, -0.0198, 0.21575], scale [0.24265, 0.26245, 0.2], profile { kind: "Ellipse" }, stroke: 0.0227, color: ivoryPlate }
           ]
         }
         {
@@ -2502,17 +2208,17 @@ prototypes {
           specular: 0.04
           emissive: 0
           coat: 0
-          wrap: 0.15
-          fill: "#4B2318"
+          wrap: 0.35
+          fill: "#8A4A2C"
           // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it.
           paints [
             {
               parent: "face"
               type: "Sweep"
               curve {
-                a [-0.05808, -0.088389, 0.1068]
-                b [0, -0.1141765, 0.1082]
-                c [0.05808, -0.0862981, 0.1078]
+                a: map([-0.05808, -0.088389, 0.1068], v => v * headScale)
+                b: map([0, -0.1141765, 0.1082], v => v * headScale)
+                c: map([0.05808, -0.0862981, 0.1078], v => v * headScale)
                 radiusStart: 0.0015
                 radiusEnd: 0.0015
               }
@@ -2537,61 +2243,17 @@ prototypes {
           // Where each eye's upper lid and lash meet its white, in the eye's frame: their own curves, half a millimetre
           // wider than the tubes, so the white under a tube's edge reads as the tube rather than two meshes trading pixels.
           paints [
-            {
-              parent: "eye-left"
-              type: "Sweep"
-              curve {
-                a [-0.047, 0, 0.027]
-                b [0, 0.066, 0.052]
-                c [0.047, 0.004, 0.027]
-                radiusStart: 0.0045
-                radiusEnd: 0.0045
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-left"
-              type: "Sweep"
-              curve {
-                a [0.04, 0.017, 0.03]
-                b [0.05, 0.023, 0.023]
-                c [0.059, 0.023, 0.016]
-                radiusStart: 0.0035
-                radiusEnd: 0.0035
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-right"
-              type: "Sweep"
-              curve {
-                a [0.047, 0, 0.027]
-                b [0, 0.066, 0.052]
-                c [-0.047, 0.004, 0.027]
-                radiusStart: 0.0045
-                radiusEnd: 0.0045
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-right"
-              type: "Sweep"
-              curve {
-                a [-0.04, 0.017, 0.03]
-                b [-0.05, 0.023, 0.023]
-                c [-0.059, 0.023, 0.016]
-                radiusStart: 0.0035
-                radiusEnd: 0.0035
-              }
-              color: "#171210"
-            }
+            { parent: "eye-left", type: "Sweep", curve { a: map([-0.047, 0, 0.027], v => v * headScale), b: map([0, 0.066, 0.052], v => v * headScale), c: map([0.047, 0.004, 0.027], v => v * headScale), radiusStart: 0.0045 * headScale, radiusEnd: 0.0045 * headScale }, color: "#171210" }
+            { parent: "eye-left", type: "Sweep", curve { a: map([0.04, 0.017, 0.03], v => v * headScale), b: map([0.05, 0.023, 0.023], v => v * headScale), c: map([0.059, 0.023, 0.016], v => v * headScale), radiusStart: 0.0035 * headScale, radiusEnd: 0.0035 * headScale }, color: "#171210" }
+            { parent: "eye-right", type: "Sweep", curve { a: map([0.047, 0, 0.027], v => v * headScale), b: map([0, 0.066, 0.052], v => v * headScale), c: map([-0.047, 0.004, 0.027], v => v * headScale), radiusStart: 0.0045 * headScale, radiusEnd: 0.0045 * headScale }, color: "#171210" }
+            { parent: "eye-right", type: "Sweep", curve { a: map([-0.04, 0.017, 0.03], v => v * headScale), b: map([-0.05, 0.023, 0.023], v => v * headScale), c: map([-0.059, 0.023, 0.016], v => v * headScale), radiusStart: 0.0035 * headScale, radiusEnd: 0.0035 * headScale }, color: "#171210" }
           ]
         }
         {
           color: "#2ED6EC"
           roughness: 0.25
           specular: 0.04
-          emissive: 1.5
+          emissive: 2250
           coat: 0
         }
         {
@@ -2602,7 +2264,7 @@ prototypes {
           coat: 0
         }
         {
-          color: "#B88335"
+          color: "#C98F35"
           roughness: 0.42
           specular: 0.04
           emissive: 0
@@ -2615,7 +2277,7 @@ prototypes {
             reach: 0.012
             seed: 79
             scale: 45
-            floor: 1
+            floor: plateWear
             under [{ threshold: 0.22, surface { color: "#D0AF70", roughness: 0.6, metal: 0.5 } }]
             deposit { color: "#615B53", roughness: 0.85, metal: 0 }
           }
@@ -2638,11 +2300,13 @@ prototypes {
           color: "#FFF8EF"
           roughness: 0.2
           specular: 0.04
-          emissive: 0.8
+          emissive: 1200
           coat: 0
         }
+        // The left shoulder stack, in each slab's own frame: an ivory band along the upper slab's lower edge, and the
+        // lower slab ivory above its lavender skirt.
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.3
           specular: 0.12
           emissive: 0
@@ -2654,20 +2318,17 @@ prototypes {
             reach: 0.014
             seed: 83
             scale: 75
-            floor: 1
+            floor: plateWear
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "shoulder-left", type: "Plane", position [0, 0.035, 0], rotation [0, 0, -0.130526, 0.9914449], stroke: 0.014, color: "#EED3A6" }
-            { parent: "shoulderSaddle-left", type: "Box", position [0.045, 0.025, 0], scale [0.0012, 0.045, 0.2], color: "#76558C" }
-
-            { parent: "shoulder-left", type: "Prism", position [0.04, -0.033, 0.1], scale [0.031, 0.004, 0.07], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#CFB9DC" }
-            { parent: "shoulder-left", type: "Prism", position [0.037, -0.034, 0.1], scale [0.023, 0.0018, 0.07], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#65556E" }
+            { parent: "shoulderSlab-left", type: "Box", position [0, -0.04, 0], scale [0.2, 0.026, 0.25], color: ivoryPlate }
+            { parent: "shoulderSlabLower-left", type: "Box", position [0, 0.035, 0], scale [0.2, 0.034, 0.25], color: ivoryPlate }
           ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.3
           specular: 0.12
           emissive: 0
@@ -2679,19 +2340,17 @@ prototypes {
             reach: 0.014
             seed: 84
             scale: 75
-            floor: 1
+            floor: plateWear
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "shoulder-right", type: "Plane", position [0, 0.035, 0], rotation [0, 0, 0.130526, 0.9914449], stroke: 0.014, color: "#EED3A6" }
-            { parent: "shoulderSaddle-right", type: "Box", position [-0.045, 0.025, 0], scale [0.0012, 0.045, 0.2], color: "#76558C" }
-
-            { parent: "shoulder-right", type: "Prism", position [-0.064, -0.06, 0.1], scale [0.013, 0.004, 0.07], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#D0BEDA" }
+            { parent: "shoulderSlab-right", type: "Box", position [0, -0.04, 0], scale [0.2, 0.026, 0.25], color: ivoryPlate }
+            { parent: "shoulderSlabLower-right", type: "Box", position [0, 0.035, 0], scale [0.2, 0.034, 0.25], color: ivoryPlate }
           ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.3
           specular: 0.12
           emissive: 0
@@ -2703,22 +2362,16 @@ prototypes {
             reach: 0.014
             seed: 85
             scale: 75
-            floor: 1
+            floor: plateWear
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            {
-              parent: "podCoreCut-left"
-              type: "Box"
-              position [-0.117, 0.9953, 0]
-              scale [0.22, 0.0109, 0.22]
-              color: "#7A7F8C"
-            }
+            { parent: "podCoreCut-left", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
           ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.3
           specular: 0.12
           emissive: 0
@@ -2730,22 +2383,17 @@ prototypes {
             reach: 0.014
             seed: 86
             scale: 75
-            floor: 1
+            floor: plateWear
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            {
-              parent: "podCoreCut-right"
-              type: "Box"
-              position [-0.117, 0.9953, 0]
-              scale [0.22, 0.0109, 0.22]
-              color: "#7A7F8C"
-            }
+            { parent: "podCoreCut-right", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
           ]
         }
+        // The chest slab's lavender centre, in the slab's frame, leaving the ivory border round it.
         {
-          color: "#EED3A6"
+          color: ivoryPlate
           roughness: 0.34
           specular: 0.08
           emissive: 0
@@ -2757,60 +2405,27 @@ prototypes {
             reach: 0.014
             seed: 87
             scale: 75
-            floor: 1
+            floor: plateWear
             under: creamUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
             {
-              parent: "breastplate"
+              parent: "chestSlab"
               type: "Prism"
-              position [0, 0.12, 0]
-              scale [0.23, 0.036, 0.2]
+              position [0, -0.005, 0.055]
+              scale [0.125, 0.105, 0.06]
               profile {
-                kind: "Convex"
-                vertices [[-1, 1], [1, 1], [1, 0.35], [0.3, -1], [-0.3, -1], [-1, 0.35]]
-                cornerRadius: 0.08
+                kind: "Polygon"
+                sides: 6
               }
-              color: "#9D66C6"
+              color: lavenderPlate
             }
-            {
-              parent: "breastplate"
-              type: "Box"
-              position [0, -0.018, 0.13]
-              scale [0.0009, 0.101, 0.08]
-              color: "#BEA98C"
-            }
-            {
-              parent: "breastplate"
-              type: "Box"
-              position [-0.0017, -0.018, 0.13]
-              scale [0.0007, 0.101, 0.08]
-              color: "#FFF1D6"
-            }
-            {
-              parent: "breastplate"
-              type: "Prism"
-              position [-0.148, 0.103, 0.13]
-              scale [0.0028, 0.0028, 0.09]
-              profile { kind: "Ellipse" }
-              color: "#B69B7C"
-            }
-            {
-              parent: "breastplate"
-              type: "Prism"
-              position [0.148, 0.103, 0.13]
-              scale [0.0028, 0.0028, 0.09]
-              profile { kind: "Ellipse" }
-              color: "#B69B7C"
-            }
-
-            { parent: "breastplate", type: "Prism", position [0.09, 0.023, 0.13], scale [0.026, 0.0025, 0.06], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#A99C87" }
-            { parent: "breastplate", type: "Prism", position [0.083, 0.014, 0.13], scale [0.016, 0.0015, 0.06], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#B8AB94" }
           ]
         }
+        // Ivory of the shin side panels, where each outer face carries its pair of vent slots, and of the pods' bands.
         {
-          color: "#EED3A6"
+          color: ivoryPlate
           roughness: 0.36
           specular: 0.08
           emissive: 0
@@ -2822,50 +2437,28 @@ prototypes {
             reach: 0.014
             seed: 88
             scale: 75
-            floor: 1
+            floor: plateWear
             under: creamUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            {
-              parent: "podCoreCut-right"
-              type: "Box"
-              position [0.0526, 0.8091, 0.0417]
-              rotation [0.0451, 0.0937, 0.896, -0.4318]
-              scale [0.0312, 0.0094, 0.2]
-              color: "#9DA3B4"
-            }
-            {
-              parent: "podCoreCut-right"
-              type: "Box"
-              position [-0.117, 0.9953, 0]
-              scale [0.22, 0.0109, 0.22]
-              color: "#7A7F8C"
-            }
-            {
-              parent: "podCoreCut-left"
-              type: "Box"
-              position [0.0526, 0.8091, -0.0417]
-              rotation [-0.0451, -0.0937, 0.896, -0.4318]
-              scale [0.0312, 0.0094, 0.2]
-              color: "#9DA3B4"
-            }
-            {
-              parent: "podCoreCut-left"
-              type: "Box"
-              position [-0.117, 0.9953, 0]
-              scale [0.22, 0.0109, 0.22]
-              color: "#7A7F8C"
-            }
+            { parent: "podCoreCut-right", type: "Box", position [0.0526, 0.8091, 0.0417], rotation [0.0451, 0.0937, 0.896, -0.4318], scale [0.0312, 0.0094, 0.2], color: "#9DA3B4" }
+            { parent: "podCoreCut-right", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
+            { parent: "podCoreCut-left", type: "Box", position [0.0526, 0.8091, -0.0417], rotation [-0.0451, -0.0937, 0.896, -0.4318], scale [0.0312, 0.0094, 0.2], color: "#9DA3B4" }
+            { parent: "podCoreCut-left", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
+            { parent: "sidePanel-left", type: "Box", position [0.16, 0.115, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
+            { parent: "sidePanel-left", type: "Box", position [0.16, 0.08, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
+            { parent: "sidePanel-right", type: "Box", position [-0.16, 0.115, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
+            { parent: "sidePanel-right", type: "Box", position [-0.16, 0.08, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
           ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.36
           specular: 0.08
           emissive: 0
           coat: 0.28
-          // A panel line and two rivets on each greave's outer side; its cream arch band and side panel are raised plates.
+          // A panel line and two rivets on each greave's outer side; its ivory arch band and side panel are raised plates.
           weathering {
             edge: 0.55
             lines: 0
@@ -2873,97 +2466,13 @@ prototypes {
             reach: 0.014
             seed: 89
             scale: 75
-            floor: 1
+            floor: plateWear
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            {
-              parent: "shin-left"
-              type: "Prism"
-              position [0, -0.29, -0.225]
-              scale [0.2, 0.206, 0.225]
-              profile {
-                kind: "Convex"
-                vertices: archBackOutline
-                cornerRadius: 0.07
-              }
-              stroke: 0.0035
-              color: "#4A3266"
-            }
-            {
-              parent: "shin-right"
-              type: "Prism"
-              position [0, -0.29, -0.225]
-              scale [0.2, 0.206, 0.225]
-              profile {
-                kind: "Convex"
-                vertices: archBackOutline
-                cornerRadius: 0.07
-              }
-              stroke: 0.0035
-              color: "#4A3266"
-            }
-            {
-              parent: "shin-left"
-              type: "Box"
-              position [0.12, -0.06, 0.05]
-              rotation [0.3827, 0, 0, 0.9239]
-              scale [0.06, 0.0022, 0.16]
-              color: "#6F4B9A"
-            }
-            {
-              parent: "shin-left"
-              type: "Prism"
-              position [0.12, 0.2, 0.075]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.006, 0.006, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "shin-left"
-              type: "Prism"
-              position [0.12, -0.12, -0.07]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.006, 0.006, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "shin-right"
-              type: "Box"
-              position [-0.12, -0.06, 0.05]
-              rotation [0.3827, 0, 0, 0.9239]
-              scale [0.06, 0.0022, 0.16]
-              color: "#6F4B9A"
-            }
-            {
-              parent: "shin-right"
-              type: "Prism"
-              position [-0.12, 0.2, 0.075]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.006, 0.006, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
-            {
-              parent: "shin-right"
-              type: "Prism"
-              position [-0.12, -0.12, -0.07]
-              rotation [0, diagonal, 0, diagonal]
-              scale [0.006, 0.006, 0.3]
-              profile {
-                kind: "Ellipse"
-              }
-              color: "#7550A3"
-            }
+            { parent: "shin-left", type: "Prism", position [0, -0.29, -0.225], scale [0.2, 0.206, 0.225], profile { kind: "Convex", vertices: archBackOutline, cornerRadius: 0.07 }, stroke: 0.0035, color: lavenderSeam }
+            { parent: "shin-right", type: "Prism", position [0, -0.29, -0.225], scale [0.2, 0.206, 0.225], profile { kind: "Convex", vertices: archBackOutline, cornerRadius: 0.07 }, stroke: 0.0035, color: lavenderSeam }
           ]
         }
         {
@@ -2980,7 +2489,7 @@ prototypes {
             reach: 0.012
             seed: 90
             scale: 45
-            floor: 1
+            floor: plateWear
             under [{ threshold: 0.22, surface { color: "#858891", roughness: 0.6, metal: 0.5 } }]
             deposit { color: "#615B53", roughness: 0.85, metal: 0 }
           }
@@ -2999,7 +2508,7 @@ prototypes {
             reach: 0.012
             seed: 91
             scale: 45
-            floor: 1
+            floor: plateWear
             under [{ threshold: 0.22, surface { color: "#BDC1C5", roughness: 0.6, metal: 0.5 } }]
             deposit { color: "#615B53", roughness: 0.85, metal: 0 }
           }
@@ -3008,7 +2517,7 @@ prototypes {
           color: "#D8FDFF"
           roughness: 0.2
           specular: 0.04
-          emissive: 3
+          emissive: 4500
           emissiveLane: 2
           coat: 0
         }
@@ -3016,18 +2525,18 @@ prototypes {
           color: "#1F9BAE"
           roughness: 0.25
           specular: 0.04
-          emissive: 2.4
+          emissive: 3600
           emissiveLane: 2
           coat: 0
         }
+        // The left gauntlet, in its own frame: ivory outside with two vent slots on the outer face, lavender on the
+        // inner half facing her body.
         {
-          color: "#EED3A6"
+          color: ivoryPlate
           roughness: 0.36
           specular: 0.08
           emissive: 0
           coat: 0.28
-          // The gauntlet pod's lilac elbow cap and back face, and the darker seams that split its cream into plates, in
-          // the pod's own frame.
           weathering {
             edge: 0.55
             lines: 0
@@ -3035,60 +2544,22 @@ prototypes {
             reach: 0.014
             seed: 94
             scale: 75
-            floor: 1
+            floor: plateWear
             under: creamUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0, 0.195, 0]
-              scale [0.2, 0.04, 0.2]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0, 0, -0.17]
-              scale [0.2, 0.25, 0.075]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0, 0.06, 0]
-              scale [0.2, 0.0025, 0.2]
-              color: "#B39C78"
-            }
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0, -0.12, 0]
-              scale [0.2, 0.0025, 0.2]
-              color: "#B39C78"
-            }
-            {
-              parent: "bracer-left"
-              type: "Box"
-              position [0.03, 0.11, 0.13]
-              scale [0.0025, 0.05, 0.06]
-              color: "#B39C78"
-            }
-
-            { parent: "bracer-left", type: "Prism", position [0.008, -0.035, 0.12], scale [0.036, 0.005, 0.045], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#C1B098" }
-            { parent: "bracer-left", type: "Prism", position [0.012, -0.036, 0.12], scale [0.026, 0.0018, 0.045], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#7D796F" }
-            { parent: "bracer-left", type: "Prism", position [0.005, -0.049, 0.12], scale [0.019, 0.002, 0.045], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#AB9E87" }
+            { parent: "bracer-left", type: "Box", position [-0.11, 0, 0], scale [0.09, 0.25, 0.2], color: lavenderPlate }
+            { parent: "bracer-left", type: "Box", position [0.12, 0.075, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
+            { parent: "bracer-left", type: "Box", position [0.12, 0.04, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
           ]
         }
         {
-          color: "#EED3A6"
+          color: ivoryPlate
           roughness: 0.36
           specular: 0.08
           emissive: 0
           coat: 0.28
-          // The gauntlet pod's lilac elbow cap and back face, and the darker seams that split its cream into plates, in
-          // the pod's own frame.
           weathering {
             edge: 0.55
             lines: 0
@@ -3096,90 +2567,36 @@ prototypes {
             reach: 0.014
             seed: 95
             scale: 75
-            floor: 1
+            floor: plateWear
             under: creamUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0, 0.195, 0]
-              scale [0.2, 0.04, 0.2]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0, 0, -0.17]
-              scale [0.2, 0.25, 0.075]
-              color: "#9D66C6"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0, 0.06, 0]
-              scale [0.2, 0.0025, 0.2]
-              color: "#B39C78"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [0, -0.12, 0]
-              scale [0.2, 0.0025, 0.2]
-              color: "#B39C78"
-            }
-            {
-              parent: "bracer-right"
-              type: "Box"
-              position [-0.03, 0.11, 0.13]
-              scale [0.0025, 0.05, 0.06]
-              color: "#B39C78"
-            }
-
-            { parent: "bracer-right", type: "Prism", position [-0.027, 0.085, 0.12], scale [0.023, 0.0022, 0.045], profile { kind: "Convex", vertices [[-0.2, 0.4], [1, 0], [0.65, -0.5], [-1, -0.1]] }, color: "#AE9E87" }
+            { parent: "bracer-right", type: "Box", position [0.11, 0, 0], scale [0.09, 0.25, 0.2], color: lavenderPlate }
+            { parent: "bracer-right", type: "Box", position [-0.12, 0.075, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
+            { parent: "bracer-right", type: "Box", position [-0.12, 0.04, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
           ]
         }
         {
           color: "#1F9BAE"
           roughness: 0.25
           specular: 0.04
-          emissive: 0.7
+          emissive: 1050
           coat: 0
         }
         {
           color: "#D8FDFF"
           roughness: 0.2
           specular: 0.04
-          emissive: 1.3
+          emissive: 1950
           coat: 0
         }
         {
-          color: "#252630"
-          roughness: 0.48
-          specular: 0.06
-          weathering {
-            edge: 0.5
-            lines: 0
-            settle: 0.015
-            reach: 0.012
-            seed: 98
-            scale: 45
-            floor: 1
-            under [{ threshold: 0.22, surface { color: "#5C606A", roughness: 0.6, metal: 0.5 } }]
-            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
-          }
-          paints [
-            {
-              parent: "pelvicInset"
-              type: "Prism"
-              position [0, 0, 0.02]
-              scale [0.052, 0.025, 0.04]
-              profile { kind: "ChamferedRectangle", cornerRadius: 0.45 }
-              stroke: 0.0015
-              color: "#666873"
-            }
-          ]
+          color: "#7A7E88"
+          roughness: 0.3
+          specular: 0.4
+          metal: 0.6
+          coat: 0.15
         }
         {
           color: "#1C1D24"
@@ -3193,46 +2610,16 @@ prototypes {
           ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.32
           specular: 0.08
           coat: 0.3
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 100
-            scale: 75
-            floor: 1
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
-          paints [
-            { parent: "chestFlank-left", type: "Box", position [0, -0.035, 0.03], rotation [0, 0, 0.1736482, 0.9848078], scale [0.09, 0.0012, 0.035], color: "#78538F" }
-            { parent: "chestFlank-right", type: "Box", position [0, -0.035, 0.03], rotation [0, 0, -0.1736482, 0.9848078], scale [0.09, 0.0012, 0.035], color: "#78538F" }
-          ]
         }
         {
-          color: "#9D66C6"
+          color: lavenderPlate
           roughness: 0.34
           specular: 0.08
           coat: 0.28
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 101
-            scale: 75
-            floor: 1
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
-          paints [
-            { parent: "shoulderBadge-left", type: "Prism", rotation [diagonal, 0, 0, diagonal], scale [0.059, 0.059, 0.05], profile { kind: "Ellipse" }, stroke: 0.0015, color: "#68477D" }
-            { parent: "shoulderBadge-right", type: "Prism", rotation [diagonal, 0, 0, diagonal], scale [0.059, 0.059, 0.05], profile { kind: "Ellipse" }, stroke: 0.0015, color: "#68477D" }
-          ]
         }
       ]
       shape Superellipsoid "pelvis" {
@@ -3253,11 +2640,13 @@ prototypes {
             wave: "sine"
             phase: 0
           }
+          // Moving in flight pitches the whole body 0.6 rad about her middle, so the legs trail behind; the cruise gate
+          // eases it in and out. A constant wave: the pitch is a pose, the same at any speed.
           {
-            driver: "run"
+            driver: "cruise"
             axis [1, 0, 0]
-            amplitude: 0.1
-            pivot [0, 0, 0]
+            amplitude: 0.6
+            pivot [0, 1, 0]
             wave: "constant"
             phase: 0
           }
@@ -3372,11 +2761,11 @@ prototypes {
             phase: 0
           }
           {
-            driver: "cruise"
+            driver: "run"
             axis [1, 0, 0]
-            amplitude: 0.28
+            amplitude: 0.1
             pivot [0, 1.0765, 0]
-            wave: "linear"
+            wave: "constant"
             phase: 0
           }
         ]
@@ -3391,130 +2780,31 @@ prototypes {
         ]
       }
 
-      // The outline and shallow ridged face meet as one beveled cuirass.
-      shape Prism "breastplate" {
+      // One flat chamfered slab over the chest; its ivory border and lavender centre are paint (chestArmor).
+      shape Prism "chestSlab" {
         id: 3
-        position [0, 1.41, 0.02]
-        scale [0.215, 0.13, 0.17]
+        position [0, 1.38, 0.1]
+        scale [0.175, 0.165, 0.055]
         material: chestArmor
-        group: 1
         parent: "torso"
         profile {
-          kind: "Convex"
-          vertices [[-0.7, 1], [0.7, 1], [1, 0.55], [0.86, 0.02], [0.46, -0.86], [0.3, -1], [-0.3, -1], [-0.46, -0.86], [-0.86, 0.02], [-1, 0.55]]
-          cornerRadius: 0.08
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.3
         }
+        rounding: 0.012
       }
 
-      shape Prism "cuirassFace" {
-        id: 12
-        position [0, 1.41, 0.02]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.245, 0.14, 0.19]
-        material: chestArmor
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 1
-        parent: "torso"
-        profile {
-          kind: "Convex"
-          vertices [[-1, 0.55], [0, 1], [1, 0.55], [1, -1], [-1, -1]]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Superellipsoid "neckCut" {
-        id: 4
-        position [0, 1.572, 0.04]
-        scale [0.095, 0.063, 0.16]
-        material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.009
-        group: 1
-        parent: "torso"
-        exponent: softness
-      }
-
-      shape Prism "chestFlank-left" {
-        id: 5
-        position [0.173, 1.36, 0.085]
-        rotation [0, 0.3007058, 0, 0.953717]
-        scale [0.068, 0.079, 0.034]
-        material: chestFlank
-        parent: "torso"
-        profile {
-          kind: "Convex"
-          vertices [[0.25, 1], [0.95, 0.72], [1, -0.2], [0.1, -1], [-0.65, -0.65], [-1, 0.15]]
-          cornerRadius: 0.1
-        }
-      }
-
-      shape Prism "chestFlank-right" {
-        id: 6
-        position [-0.173, 1.36, 0.085]
-        rotation [0, -0.3007058, 0, 0.953717]
-        scale [0.068, 0.079, 0.034]
-        material: chestFlank
-        parent: "torso"
-        profile {
-          kind: "Convex"
-          vertices [[-0.95, 0.72], [-0.25, 1], [1, 0.15], [0.65, -0.65], [-0.1, -1], [-1, -0.2]]
-          cornerRadius: 0.1
-        }
-      }
-
+      // The lavender plate below the belt, narrowing to a point between the thighs.
       shape Prism "pelvicShield" {
         id: 7
-        position [0, 1.005, 0.126]
-        scale [0.108, 0.103, 0.029]
-        material: pelvicArmor
+        position [0, 1.0, 0.13]
+        scale [0.125, 0.11, 0.04]
+        material: violet
         parent: "pelvis"
         profile {
           kind: "Convex"
-          vertices [[-0.7, 1], [0.7, 1], [1, 0.52], [0.62, -0.65], [0.28, -1], [-0.28, -1], [-0.62, -0.65], [-1, 0.52]]
-          cornerRadius: 0.08
-        }
-      }
-
-      shape Prism "abdominalPlate" {
-        id: 8
-        position [0, 1.235, 0.105]
-        scale [0.074, 0.041, 0.027]
-        material: chestArmor
-        parent: "torso"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.7, 1]
-            [0.7, 1]
-            [1, 0.45]
-            [0.83, -0.75]
-            [0.5, -1]
-            [-0.5, -1]
-            [-0.83, -0.75]
-            [-1, 0.45]
-          ]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Prism "pelvicInset" {
-        id: 9
-        position [0, 1.054, 0.151]
-        scale [0.063, 0.036, 0.009]
-        material: pelvicArmor
-        parent: "pelvis"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.78, 1]
-            [0.78, 1]
-            [1, 0.45]
-            [0.55, -1]
-            [-0.55, -1]
-            [-1, 0.45]
-          ]
-          cornerRadius: 0.12
+          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
+          cornerRadius: 0.1
         }
       }
 
@@ -3578,9 +2868,9 @@ prototypes {
 
       shape Prism "collar" {
         id: 20
-        position [0, 1.54, 0.045]
+        position [0, 1.585, 0.09]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.0905, 0.071, 0.022]
+        scale [0.1, 0.095, 0.03]
         material: brass
         group: 3
         parent: "torso"
@@ -3592,9 +2882,9 @@ prototypes {
 
       shape Prism "collarOpening" {
         id: 21
-        position [0, 1.54, 0.045]
+        position [0, 1.585, 0.09]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.065, 0.05, 0.04]
+        scale [0.066, 0.065, 0.045]
         material: charcoal
         blend: "Subtraction"
         group: 3
@@ -3606,7 +2896,7 @@ prototypes {
 
       shape Cylinder "collarStud" {
         id: 22
-        position [0.02, 1.5345, 0.1175]
+        position [0.035, 1.58, 0.185]
         rotation [diagonal, 0, 0, diagonal]
         scale [0.011, 0.0025, 0.011]
         material: charcoal
@@ -3649,20 +2939,23 @@ prototypes {
           {
             driver: "cruise"
             axis [1, 0, 0]
-            amplitude: -0.18
+            amplitude: -0.4
             pivot [0, 1.5715, 0]
-            wave: "linear"
+            wave: "constant"
             phase: 0
           }
         ]
       }
 
+      // The hood's charcoal interior, the headroom round her face reading as its padded lining: the cut takes the
+      // cutter's charcoal, and its rounded seam leaves no knife edge where it meets the face opening.
       shape Superellipsoid "helmetInner" {
         id: 24
         position [0, 1.7559, 0.009]
-        scale [0.2442, 0.25828, 0.2205]
+        scale [0.21, 0.224, 0.186]
         material: charcoal
-        blend: "Subtraction"
+        blend: "SmoothSubtraction"
+        smooth: 0.01
         group: 4
         parent: "helmet"
         exponent: softness
@@ -3673,7 +2966,9 @@ prototypes {
         position [0, 1.7405, 0.2475]
         scale [0.2222, 0.24112, 0.23175]
         material: charcoal
-        blend: "Subtraction"
+        // A rounded cut, so the rim and the interior meet the opening without a knife edge the bake would tear.
+        blend: "SmoothSubtraction"
+        smooth: 0.012
         group: 4
         parent: "helmet"
         profile {
@@ -3689,228 +2984,6 @@ prototypes {
         blend: "Subtraction"
         group: 4
         parent: "helmet"
-      }
-
-      shape Superellipsoid "face" {
-        id: 32
-        position [0, 1.7405, 0.10575]
-        scale [0.176, 0.165, 0.13275]
-        material: rust
-        group: 6
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "neck" {
-        id: 33
-        position [0, 1.5579, 0.05625]
-        scale [0.058, 0.075, 0.045]
-        material: rust
-        blend: "SmoothUnion"
-        smooth: 0.006
-        group: 6
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Box "jaw-1" {
-        id: 34
-        position [-0.227, 1.526, 0.1]
-        rotation [0, 0, -0.2955202, 0.9553365]
-        scale [0.18, 0.11, 0.3]
-        material: rust
-        blend: "SmoothSubtraction"
-        smooth: 0.012
-        group: 6
-        parent: "helmet"
-      }
-
-      shape Box "jaw1" {
-        id: 35
-        position [0.227, 1.526, 0.1]
-        rotation [0, 0, 0.2955202, 0.9553365]
-        scale [0.18, 0.11, 0.3]
-        material: rust
-        blend: "SmoothSubtraction"
-        smooth: 0.012
-        group: 6
-        parent: "helmet"
-      }
-
-      shape Sweep "noseBridge" {
-        id: 36
-        position [0, 1.7295, 0.2295]
-        material: rust
-        blend: "SmoothUnion"
-        smooth: 0.009
-        group: 6
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0, -0.0176, 0.00675]
-          c [0, -0.03212, 0.0108]
-          radiusStart: 0.004
-          radiusEnd: 0.004
-        }
-      }
-
-      shape Superellipsoid "nose" {
-        id: 37
-        position [0, 1.6899, 0.2466]
-        scale [0.01452, 0.01012, 0.0126]
-        material: rust
-        blend: "SmoothUnion"
-        smooth: 0.006
-        group: 6
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "nostril-1" {
-        id: 38
-        position [-0.01188, 1.6833, 0.2547]
-        scale [0.003, 0.0014, 0.0015]
-        material: leather
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "nostril1" {
-        id: 39
-        position [0.01188, 1.6833, 0.2547]
-        scale [0.003, 0.0014, 0.0015]
-        material: leather
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Prism "socket-left" {
-        id: 40
-        position [0.07656, 1.74842, 0.20745]
-        scale [0.049, 0.034, 0.06]
-        material: rust
-        blend: "SmoothSubtraction"
-        smooth: 0.001
-        group: 6
-        parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "eye-left" {
-        id: 41
-        position [0.07656, 1.74842, 0.18945]
-        scale [0.06, 0.058, 0.044]
-        material: ivory
-        group: 7
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Prism "eyeOpening-left" {
-        id: 42
-        position [0.07656, 1.74842, 0.18945]
-        scale [0.048, 0.033, 0.065]
-        material: ivory
-        blend: "Intersection"
-        group: 7
-        parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "iris-left" {
-        id: 43
-        position [0.07456, 1.74842, 0.23045]
-        scale [0.023, 0.028, 0.006]
-        material: umber
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "pupil-left" {
-        id: 44
-        position [0.07456, 1.74842, 0.23545]
-        scale [0.0105, 0.016, 0.004]
-        material: jet
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "catchlight-left" {
-        id: 45
-        position [0.06856, 1.76042, 0.23945]
-        scale [0.0044, 0.0052, 0.002]
-        material: pearl
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "catchlightSmall-left" {
-        id: 46
-        position [0.08556, 1.73642, 0.23745]
-        scale [0.0018, 0.0022, 0.0015]
-        material: pearl
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Sweep "upperLid-left" {
-        id: 47
-        position [0.02956, 1.74842, 0.21645]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.047, 0.066, 0.025]
-          c [0.094, 0.004, 0]
-          radiusStart: 0.004
-          radiusEnd: 0.004
-        }
-      }
-
-      shape Sweep "lowerLid-left" {
-        id: 48
-        position [0.02956, 1.74842, 0.21645]
-        material: rust
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.047, -0.064, 0.025]
-          c [0.094, 0.004, 0]
-          radiusStart: 0.0018
-          radiusEnd: 0.0018
-        }
-      }
-
-      shape Sweep "lash-left" {
-        id: 49
-        position [0.11656, 1.76542, 0.21945]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.01, 0.006, -0.007]
-          c [0.019, 0.006, -0.014]
-          radiusStart: 0.003
-          radiusEnd: 0.003
-        }
-      }
-
-      shape Sweep "brow-left" {
-        id: 50
-        position [0.02992, 1.8241, 0.22005]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.04048, 0.02332, 0.0072]
-          c [0.09988, 0.00132, -0.02655]
-          radiusStart: 0.005
-          radiusEnd: 0.005
-        }
       }
 
       shape Cylinder "earMount-left" {
@@ -3953,154 +3026,6 @@ prototypes {
         rounding: 0.0012
       }
 
-      shape Prism "cheekGuard-left" {
-        id: 55
-        position [0.2046, 1.6283, 0.108]
-        scale [0.077, 0.066, 0.023]
-        material: skin
-        parent: "helmet"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.1142857, 1]
-            [0.5142857, 0.7]
-            [0.4857143, -0.2666667]
-            [-0.8285714, -0.8333333]
-            [-1, -0.4]
-          ]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Prism "socket-right" {
-        id: 56
-        position [-0.07656, 1.74842, 0.20745]
-        scale [0.049, 0.034, 0.06]
-        material: rust
-        blend: "SmoothSubtraction"
-        smooth: 0.001
-        group: 6
-        parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "eye-right" {
-        id: 57
-        position [-0.07656, 1.74842, 0.18945]
-        scale [0.06, 0.058, 0.044]
-        material: ivory
-        group: 8
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Prism "eyeOpening-right" {
-        id: 58
-        position [-0.07656, 1.74842, 0.18945]
-        scale [0.048, 0.033, 0.065]
-        material: ivory
-        blend: "Intersection"
-        group: 8
-        parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "iris-right" {
-        id: 59
-        position [-0.07456, 1.74842, 0.23045]
-        scale [0.023, 0.028, 0.006]
-        material: umber
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "pupil-right" {
-        id: 60
-        position [-0.07456, 1.74842, 0.23545]
-        scale [0.0105, 0.016, 0.004]
-        material: jet
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "catchlight-right" {
-        id: 61
-        position [-0.06856, 1.76042, 0.23945]
-        scale [0.0044, 0.0052, 0.002]
-        material: pearl
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "catchlightSmall-right" {
-        id: 62
-        position [-0.08556, 1.73642, 0.23745]
-        scale [0.0018, 0.0022, 0.0015]
-        material: pearl
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Sweep "upperLid-right" {
-        id: 63
-        position [-0.02956, 1.74842, 0.21645]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [-0.047, 0.066, 0.025]
-          c [-0.094, 0.004, 0]
-          radiusStart: 0.004
-          radiusEnd: 0.004
-        }
-      }
-
-      shape Sweep "lowerLid-right" {
-        id: 64
-        position [-0.02956, 1.74842, 0.21645]
-        material: rust
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [-0.047, -0.064, 0.025]
-          c [-0.094, 0.004, 0]
-          radiusStart: 0.0018
-          radiusEnd: 0.0018
-        }
-      }
-
-      shape Sweep "lash-right" {
-        id: 65
-        position [-0.11656, 1.76542, 0.21945]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [-0.01, 0.006, -0.007]
-          c [-0.019, 0.006, -0.014]
-          radiusStart: 0.003
-          radiusEnd: 0.003
-        }
-      }
-
-      shape Sweep "brow-right" {
-        id: 66
-        position [-0.02992, 1.8241, 0.22005]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [-0.04048, 0.02332, 0.0072]
-          c [-0.09988, 0.00132, -0.02655]
-          radiusStart: 0.005
-          radiusEnd: 0.005
-        }
-      }
-
       shape Cylinder "earMount-right" {
         id: 67
         position [-0.27544, 1.7295, -0.01575]
@@ -4141,71 +3066,21 @@ prototypes {
         rounding: 0.0012
       }
 
-      shape Prism "cheekGuard-right" {
-        id: 71
-        position [-0.2046, 1.6283, 0.108]
-        scale [0.077, 0.066, 0.023]
-        material: skin
-        parent: "helmet"
-        profile {
-          kind: "Convex"
-          vertices [
-            [1, -0.4]
-            [0.8285714, -0.8333333]
-            [-0.4857143, -0.2666667]
-            [-0.5142857, 0.7]
-            [0.1142857, 1]
-          ]
-          cornerRadius: 0.12
-        }
-      }
+      mothHead(headScale, headAt, "helmet", rust, leather, ivory, umber, jet, pearl, ink)
 
-      shape Superellipsoid "scalp" {
-        id: 76
-        position [0, 1.7735, 0.0855]
-        scale [0.1958, 0.1892, 0.1575]
-        material: ink
-        group: 9
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Box "scalpBottom" {
-        id: 77
-        position [0, 1.68, 0.25]
-        scale [0.4, 0.141, 0.22]
-        material: ink
-        blend: "Subtraction"
-        group: 9
-        parent: "helmet"
-      }
-
-      shape Box "scalpFront" {
-        id: 78
-        position [0, 1.88, 0.4]
-        scale [0.4, 0.4, 0.24925]
-        material: ink
-        blend: "Subtraction"
-        group: 9
-        parent: "helmet"
-      }
-
-      fringeChain(0, 79, 10, fringe0Position, fringe0Scale)
-      fringeChain(1, 89, 11, fringe1Position, fringe1Scale)
-      fringeChain(2, 99, 12, fringe2Position, fringe2Scale)
-      fringeChain(3, 109, 13, fringe3Position, fringe3Scale)
-
+      // The braid roots under the lock beside her right cheek as one smooth tapering root, which becomes the plait below
+      // her jaw and leaves through the hood's front opening; the braid keeps its full thickness whatever the head's scale.
       shape Sweep "braid-root-0" {
         id: 119
-        position [-0.176, 1.6723, 0.1035]
+        position [-0.1232, 1.695, 0.137]
         material: ink
         parent: "helmet"
         curve {
           a [0, 0, 0]
-          b [-0.0308, -0.0572, 0.00675]
-          c [-0.0616, -0.1144, 0.0135]
-          radiusStart: 0.017
-          radiusEnd: 0.017
+          b [-0.012, -0.095, 0.012]
+          c [-0.1144, -0.1371, -0.02]
+          radiusStart: 0.011
+          radiusEnd: 0.019
         }
       }
 
@@ -4267,8 +3142,8 @@ prototypes {
         parent: "torso"
         curve {
           a [0, 0, 0]
-          b [0.045, -0.125, 0]
-          c [0.09, -0.255, 0]
+          b [0.0363, -0.1009, 0]
+          c [0.0727, -0.2059, 0]
           radiusStart: 0.08
           radiusEnd: 0.08
         }
@@ -4292,7 +3167,7 @@ prototypes {
           {
             driver: "flight"
             axis [0, 0, 1]
-            amplitude: 0.28
+            amplitude: -0.1
             pivot [0.295, 1.4515, 0]
             wave: "linear"
             phase: 0
@@ -4320,101 +3195,77 @@ prototypes {
 
       shape Superellipsoid "elbow-left" {
         id: 149
-        position [0.345811, 1.165024, 0.005]
+        position [0.336, 1.2201, 0.004]
         rotation [0, 0, -0.078459, 0.996917]
-        scale [0.085, 0.08, 0.0875]
+        scale [0.07, 0.065, 0.072]
         material: charcoal
         parent: "upperArm-left"
         exponent: softness
       }
 
-      // The swept skirt clears the upper arm beneath a separate rounded crown.
-      shape Prism "shoulder-left" {
+      // The shoulder stack: two thick slabs on a round charcoal pivot, riding the upper arm. The upper slab's inner
+      // edge stays outboard of the hood as the arm swings.
+      shape Superellipsoid "shoulderPivot-left" {
         id: 150
-        position [0.355, 1.46, -0.005]
-        scale [0.13, 0.13, 0.16]
-        material: violetBandLeft
-        group: 14
+        position [0.3, 1.46, 0]
+        scale [0.085, 0.085, 0.085]
+        material: charcoal
         parent: "upperArm-left"
-        profile {
-          kind: "Convex"
-          vertices [[-0.6, 0.4], [0.1, 0.68], [0.75, 0.35], [1, -0.9], [0.1, -0.6], [-0.6, -0.05]]
-          cornerRadius: 0.14
+        exponent: 3
+      }
+
+      shape Superellipsoid "shoulderSlab-left" {
+        id: 151
+        position [0.395, 1.57, -0.005]
+        rotation [0, 0, -0.1305, 0.9914]
+        scale [0.135, 0.07, 0.175]
+        material: violetBandLeft
+        parent: "upperArm-left"
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1.3
+          cubic: 0
+          target: 1
+          driver: 2
         }
       }
 
-      shape Superellipsoid "shoulderCurve-left" {
-        id: 151
-        position [0.34, 1.46, -0.005]
-        scale [0.19, 0.18, 0.145]
-        material: violetBandLeft
-        blend: "SmoothIntersection"
-        smooth: 0.008
-        group: 14
-        parent: "upperArm-left"
-        exponent: 2.4
-      }
-
-      shape Superellipsoid "shoulderUnderside-left" {
+      shape Superellipsoid "shoulderSlabLower-left" {
         id: 152
-        position [0.3, 1.37, -0.005]
-        scale [0.125, 0.105, 0.105]
-        material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.008
-        group: 14
-        parent: "upperArm-left"
-        exponent: 2
-      }
-
-      shape Superellipsoid "shoulderSaddle-left" {
-        id: 156
-        position [0.325, 1.515, 0.005]
-        scale [0.14, 0.115, 0.151]
+        position [0.415, 1.43, 0]
+        rotation [0, 0, -0.0698, 0.9976]
+        scale [0.14, 0.085, 0.185]
         material: violetBandLeft
-        group: 150
         parent: "upperArm-left"
-        exponent: 2.3
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1
+          cubic: 0
+          target: 1
+          driver: 2
+        }
       }
 
-      shape Box "shoulderCapTrim-left" {
+      // The elbow piston, inside the bend: a cylinder on the upper arm and a rod on the forearm, both aimed at the
+      // hinge so they meet inside the joint at any bend.
+      shape Cylinder "elbowCylinder-left" {
         id: 153
-        position [0.325, 1.26, -0.01]
-        rotation [0, 0, -0.0871557, 0.9961947]
-        scale [0.25, 0.27, 0.25]
-        material: violetBandLeft
-        blend: "SmoothSubtraction"
-        smooth: 0.004
-        group: 150
-        parent: "upperArm-left"
-      }
-
-      shape Cylinder "shoulderBadge-left" {
-        id: 157
-        position [0.285, 1.547, 0.17]
-        rotation [0.618, 0, -0.163, 0.768]
-        scale [0.066, 0.012, 0.066]
-        material: shoulderDisc
+        position [0.3834, 1.3086, 0.0499]
+        rotation [-0.6604, 0, 0.6817, 0.3149]
+        scale [0.022, 0.0594, 0.022]
+        material: pistonSteel
         parent: "upperArm-left"
         rounding: 0.006
       }
 
-      shape Cylinder "shoulderStud-left" {
-        id: 158
-        position [0.2888, 1.5497, 0.1843]
-        rotation [0.618, 0, -0.163, 0.768]
-        scale [0.018, 0.004, 0.018]
-        material: skin
-        parent: "upperArm-left"
-        rounding: 0.002
-      }
-
       shape Superellipsoid "forearm-left" {
         id: 159
-        position [0.375516, 1.024866, 0.002901]
+        position [0.3706, 1.0524, 0.0024]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.107, 0.17, 0.112]
-        material: violet
+        scale [0.1, 0.2, 0.105]
+        material: charcoal
         parent: "upperArm-left"
         exponent: 2.6
         swings [
@@ -4422,7 +3273,7 @@ prototypes {
             driver: "run"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: -0.7
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "constant"
             phase: 0
           }
@@ -4430,7 +3281,7 @@ prototypes {
             driver: "gait"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: 0.18
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "sine"
             phase: 3.6416
           }
@@ -4438,7 +3289,7 @@ prototypes {
             driver: "flight"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: -0.25
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 0
           }
@@ -4447,7 +3298,7 @@ prototypes {
             driver: "air"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: -0.03
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 12
           }
@@ -4456,21 +3307,23 @@ prototypes {
             driver: "land"
             axis [0.660568, -0.349483, -0.664463]
             amplitude: 0.05
-            pivot [0.345811, 1.165024, 0.005]
+            pivot [0.336, 1.2201, 0.004]
             wave: "linear"
           }
         ]
       }
 
+      // The heavy gauntlet: a squared block from the elbow to the wrist, faced square to the body rather than the
+      // forearm's twist, so its outer face and its vents look straight out.
       shape Superellipsoid "bracer-left" {
         id: 160
-        position [0.379353, 1.053594, -0.006895]
-        rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.112, 0.2, 0.115]
+        position [0.395, 0.995, 0]
+        rotation [-0.0915, 0, 0, 0.9958]
+        scale [0.12, 0.13, 0.135]
         material: gauntletLeft
         group: 16
         parent: "forearm-left"
-        exponent: 3.2
+        exponent: 3.6
       }
 
       shape Box "bracerMouth-left" {
@@ -4494,31 +3347,20 @@ prototypes {
         rounding: 0.003
       }
 
-      shape Cylinder "bracerSocket-left" {
-        id: 172
-        position [0.503985, 0.955221, 0.005956]
-        rotation [-0.079561, -0.049422, -0.702727, 0.705267]
-        scale [0.04, 0.012, 0.04]
-        material: charcoal
+      shape Capsule "elbowRod-left" {
+        id: 156
+        position [0.466, 1.1236, 0.084]
+        rotation [-0.253, 0, 0.411, 0.8758]
+        scale [0.013, 0.2612, 0.013]
+        material: steel
         parent: "forearm-left"
-        rounding: 0.005
-      }
-
-      shape Superellipsoid "bracerLight-left" {
-        id: 173
-        position [0.513977, 0.955218, 0.005528]
-        rotation [-0.079561, -0.049422, -0.702727, 0.705267]
-        scale [0.027, 0.007, 0.027]
-        material: cyan
-        parent: "forearm-left"
-        exponent: softness
       }
 
       shape Superellipsoid "palm-left" {
         id: 165
-        position [0.377234, 0.798693, 0.044653]
+        position [0.3775, 0.7677, 0.0504]
         rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.067, 0.054, 0.04]
+        scale [0.09045, 0.0729, 0.054]
         material: charcoal
         parent: "forearm-left"
         exponent: 2.8
@@ -4532,85 +3374,85 @@ prototypes {
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0079792, -0.0340783, 0]
-          c [0.0170983, -0.073025, 0]
-          radiusStart: 0.038
-          radiusEnd: 0.038
+          b [0.0107719, -0.0460057, 0]
+          c [0.0230827, -0.0985838, 0]
+          radiusStart: 0.0513
+          radiusEnd: 0.0513
         }
       }
 
       shape Sweep "finger-left-0" {
         id: 167
-        position [0.348163, 0.780479, 0.084894]
+        position [0.3382, 0.7431, 0.1047]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0159584, -0.0681566, 0.005]
-          c [0.0175351, -0.0626523, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0215438, -0.0920114, 0.00675]
+          c [0.0236724, -0.0845806, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-left-1" {
         id: 168
-        position [0.36914, 0.776489, 0.062422]
+        position [0.3665, 0.7377, 0.0744]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0173263, -0.0739986, 0.005]
-          c [0.0170919, -0.0689183, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0233905, -0.0998981, 0.00675]
+          c [0.0230741, -0.0930397, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-left-2" {
         id: 169
-        position [0.390117, 0.7725, 0.039948]
+        position [0.3949, 0.7324, 0.044]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0159584, -0.0681566, 0.005]
-          c [0.013913, -0.0635003, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0215438, -0.0920114, 0.00675]
+          c [0.0187826, -0.0857254, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-left-3" {
         id: 170
-        position [0.411094, 0.76851, 0.017476]
+        position [0.4232, 0.727, 0.0137]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [0.0136787, -0.05842, 0.005]
-          c [0.0098222, -0.0541877, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [0.0184662, -0.078867, 0.00675]
+          c [0.01326, -0.0731534, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "thumb-left" {
         id: 171
-        position [0.342981, 0.819577, 0.071049]
+        position [0.3312, 0.7959, 0.086]
         rotation [-0.130367, 0.388295, -0.137633, 0.901825]
         material: charcoal
         parent: "forearm-left"
         curve {
           a [0, 0, 0]
-          b [-0.0295877, -0.0644423, -0.004]
-          c [0.0148304, -0.0786912, -0.037]
-          radiusStart: 0.019
-          radiusEnd: 0.019
+          b [-0.0399434, -0.0869971, -0.0054]
+          c [0.020021, -0.1062331, -0.04995]
+          radiusStart: 0.02565
+          radiusEnd: 0.02565
         }
       }
 
@@ -4667,10 +3509,12 @@ prototypes {
             pivot [0.145, 1.0265, 0]
             wave: "sine"
           }
+          // In flight mode the hip undoes the air tuck the hover would hold at zero vertical speed (0.8 rad) and trails
+          // the leg 0.1 rad back, so she hovers and flies with straight legs.
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: -0.2
+            amplitude: 0.898
             pivot [0.145, 1.0265, 0]
             wave: "linear"
             phase: 0
@@ -4695,26 +3539,40 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "thighPlate-left" {
+      // The hip pivot: a large charcoal disc on the hip's axis, set on an ivory guard, both riding the thigh.
+      shape Prism "hipGuard-left" {
         id: 175
-        position [0.1825, 0.9215, 0.0075]
-        rotation [0, 0, 0.059964, 0.9982005]
-        scale [0.1175, 0.16, 0.114]
-        material: violet
-        group: 17
+        position [0.222, 1.05, 0]
+        rotation [0, diagonal, 0, diagonal]
+        scale [0.13, 0.125, 0.016]
+        material: skin
         parent: "thigh-left"
-        exponent: softness
+        profile {
+          kind: "Convex"
+          vertices [[-0.6, 1], [0.6, 1], [1, 0.2], [0.7, -0.7], [-0.7, -0.7], [-1, 0.2]]
+          cornerRadius: 0.12
+        }
       }
 
-      shape Box "thighSide-left" {
+      shape Cylinder "hipDisc-left" {
         id: 176
-        position [0.285, 0.9215, 0.0075]
-        scale [0.095, 0.23, 0.1]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.009
-        group: 17
+        position [0.25, 1.0265, 0]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.075, 0.022, 0.075]
+        material: charcoal
         parent: "thigh-left"
+        rounding: 0.01
+      }
+
+      // The knee piston, behind the knee: a cylinder on the thigh and a rod on the shin, both aimed at the hinge.
+      shape Cylinder "kneeCylinder-left" {
+        id: 177
+        position [0.171, 0.865, -0.069]
+        rotation [0.9286, 0, -0.2563, 0.2684]
+        scale [0.021, 0.0923, 0.021]
+        material: pistonSteel
+        parent: "thigh-left"
+        rounding: 0.006
       }
 
       shape Superellipsoid "knee-left" {
@@ -4728,8 +3586,8 @@ prototypes {
 
       shape Prism "kneeGuard-left" {
         id: 179
-        position [0.19, 0.7465, 0.105]
-        scale [0.075, 0.09, 0.0475]
+        position [0.19, 0.735, 0.118]
+        scale [0.095, 0.105, 0.04]
         material: skin
         parent: "thigh-left"
         profile {
@@ -4748,14 +3606,14 @@ prototypes {
       shape Superellipsoid "shin-left" {
         id: 180
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinViolet
         group: 18
         parent: "thigh-left"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -4770,10 +3628,11 @@ prototypes {
             wave: "halfSine"
             phase: 5.184
           }
+          // And the knee undoes its 1.2 rad of air tuck, keeping a 0.2 rad bend.
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: 0.44
+            amplitude: -1
             pivot [0.19, 0.7465, 0]
             wave: "linear"
             phase: 0
@@ -4811,15 +3670,15 @@ prototypes {
       shape Superellipsoid "shinCavity-left" {
         id: 182
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.42, 0.109]
+        scale [0.083, 0.42, 0.09]
         material: charcoal
         blend: "Subtraction"
         group: 18
         parent: "shin-left"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -4872,15 +3731,15 @@ prototypes {
       shape Superellipsoid "archBand-left" {
         id: 950
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 76
         parent: "shin-left"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -4927,7 +3786,7 @@ prototypes {
       shape Superellipsoid "archBandHollow-left" {
         id: 990
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.33, 0.109]
+        scale [0.083, 0.33, 0.09]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.008
@@ -4935,8 +3794,8 @@ prototypes {
         parent: "shin-left"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -4973,15 +3832,15 @@ prototypes {
       shape Superellipsoid "archBandBack-left" {
         id: 966
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 80
         parent: "shin-left"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5054,15 +3913,15 @@ prototypes {
       shape Superellipsoid "sidePanel-left" {
         id: 954
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 77
         parent: "shin-left"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -5099,6 +3958,15 @@ prototypes {
           radiusStart: 0.0715
           radiusEnd: 0.0715
         }
+      }
+
+      shape Capsule "kneeRod-left" {
+        id: 157
+        position [0.1955, 0.5716, -0.1233]
+        rotation [0.3021, 0, 0.0134, 0.9532]
+        scale [0.012, 0.404, 0.012]
+        material: steel
+        parent: "shin-left"
       }
 
 
@@ -5159,8 +4027,8 @@ prototypes {
         id: 195
         position [0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.18]
-        material: skin
+        scale [0.235, 0.235, 0.2]
+        material: violet
         group: 21
         swings [
           {
@@ -5223,8 +4091,8 @@ prototypes {
         id: 196
         position [0.2, 0.19, 0.085]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.145, 0.225, 0.25]
-        material: skin
+        scale [0.165, 0.24, 0.25]
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.012
         group: 21
@@ -5241,7 +4109,7 @@ prototypes {
         position [0.2, -0.248, 0.3339]
         rotation [-0.342, 0, 0, 0.9397]
         scale [0.5, 0.5, 0.5]
-        material: skin
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.01
         group: 21
@@ -5254,7 +4122,7 @@ prototypes {
         position [0.2, 0.169638, -0.212769]
         rotation: bootNozzleRotation
         scale [0.12, 0.24, 0.12]
-        material: skin
+        material: violet
         blend: "Subtraction"
         group: 21
         parent: "boot-left"
@@ -5287,9 +4155,9 @@ prototypes {
 
       shape Prism "toe-left" {
         id: 199
-        position [0.2, 0.105, 0.205]
+        position [0.2, 0.125, 0.205]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.18, 0.105, 0.19]
+        scale [0.19, 0.12, 0.215]
         material: violet
         group: 120
         parent: "boot-left"
@@ -5312,7 +4180,7 @@ prototypes {
         id: 200
         position [0.2, 0.1, 0.205]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.16, 0.18, 0.2]
+        scale [0.18, 0.2, 0.2]
         material: violet
         blend: "SmoothIntersection"
         smooth: 0.012
@@ -5363,9 +4231,9 @@ prototypes {
 
       shape Prism "sole-left" {
         id: 201
-        position [0.2, 0.018, 0.204]
+        position [0.2, 0.03, 0.204]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.158, 0.178, 0.018]
+        scale [0.18, 0.2, 0.03]
         material: charcoal
         parent: "boot-left"
         profile {
@@ -6191,8 +5059,8 @@ prototypes {
         parent: "torso"
         curve {
           a [0, 0, 0]
-          b [-0.045, -0.125, 0]
-          c [-0.09, -0.255, 0]
+          b [-0.0363, -0.1009, 0]
+          c [-0.0727, -0.2059, 0]
           radiusStart: 0.08
           radiusEnd: 0.08
         }
@@ -6216,7 +5084,7 @@ prototypes {
           {
             driver: "flight"
             axis [0, 0, 1]
-            amplitude: -0.28
+            amplitude: 0.1
             pivot [-0.295, 1.4515, 0]
             wave: "linear"
             phase: 0
@@ -6244,101 +5112,73 @@ prototypes {
 
       shape Superellipsoid "elbow-right" {
         id: 217
-        position [-0.345811, 1.165024, 0.005]
+        position [-0.336, 1.2201, 0.004]
         rotation [0, 0, 0.078459, 0.996917]
-        scale [0.085, 0.08, 0.0875]
+        scale [0.07, 0.065, 0.072]
         material: charcoal
         parent: "upperArm-right"
         exponent: softness
       }
 
-      // The swept skirt clears the upper arm beneath a separate rounded crown.
-      shape Prism "shoulder-right" {
+      shape Superellipsoid "shoulderPivot-right" {
         id: 218
-        position [-0.355, 1.46, -0.005]
-        scale [0.13, 0.13, 0.16]
-        material: violetBandRight
-        group: 28
+        position [-0.3, 1.46, 0]
+        scale [0.085, 0.085, 0.085]
+        material: charcoal
         parent: "upperArm-right"
-        profile {
-          kind: "Convex"
-          vertices [[0.6, -0.05], [-0.1, -0.6], [-1, -0.9], [-0.75, 0.35], [-0.1, 0.68], [0.6, 0.4]]
-          cornerRadius: 0.14
+        exponent: 3
+      }
+
+      shape Superellipsoid "shoulderSlab-right" {
+        id: 219
+        position [-0.395, 1.57, -0.005]
+        rotation [0, 0, 0.1305, 0.9914]
+        scale [0.135, 0.07, 0.175]
+        material: violetBandRight
+        parent: "upperArm-right"
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1.3
+          cubic: 0
+          target: 1
+          driver: 2
         }
       }
 
-      shape Superellipsoid "shoulderCurve-right" {
-        id: 219
-        position [-0.34, 1.46, -0.005]
-        scale [0.19, 0.18, 0.145]
-        material: violetBandRight
-        blend: "SmoothIntersection"
-        smooth: 0.008
-        group: 28
-        parent: "upperArm-right"
-        exponent: 2.4
-      }
-
-      shape Superellipsoid "shoulderUnderside-right" {
+      shape Superellipsoid "shoulderSlabLower-right" {
         id: 220
-        position [-0.3, 1.37, -0.005]
-        scale [0.125, 0.105, 0.105]
-        material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.008
-        group: 28
-        parent: "upperArm-right"
-        exponent: 2
-      }
-
-      shape Superellipsoid "shoulderSaddle-right" {
-        id: 224
-        position [-0.325, 1.515, 0.005]
-        scale [0.14, 0.115, 0.151]
+        position [-0.415, 1.43, 0]
+        rotation [0, 0, 0.0698, 0.9976]
+        scale [0.14, 0.085, 0.185]
         material: violetBandRight
-        group: 218
         parent: "upperArm-right"
-        exponent: 2.3
+        exponent: 4
+        shear {
+          linear: 0
+          quadratic: -1
+          cubic: 0
+          target: 1
+          driver: 2
+        }
       }
 
-      shape Box "shoulderCapTrim-right" {
+      shape Cylinder "elbowCylinder-right" {
         id: 221
-        position [-0.325, 1.26, -0.01]
-        rotation [0, 0, 0.0871557, 0.9961947]
-        scale [0.25, 0.27, 0.25]
-        material: violetBandRight
-        blend: "SmoothSubtraction"
-        smooth: 0.004
-        group: 218
-        parent: "upperArm-right"
-      }
-
-      shape Cylinder "shoulderBadge-right" {
-        id: 225
-        position [-0.285, 1.547, 0.17]
-        rotation [0.618, 0, 0.163, 0.768]
-        scale [0.066, 0.012, 0.066]
-        material: shoulderDisc
+        position [-0.3834, 1.3086, 0.0499]
+        rotation [-0.6604, 0, -0.6817, 0.3149]
+        scale [0.022, 0.0594, 0.022]
+        material: pistonSteel
         parent: "upperArm-right"
         rounding: 0.006
       }
 
-      shape Cylinder "shoulderStud-right" {
-        id: 226
-        position [-0.2888, 1.5497, 0.1843]
-        rotation [0.618, 0, 0.163, 0.768]
-        scale [0.018, 0.004, 0.018]
-        material: skin
-        parent: "upperArm-right"
-        rounding: 0.002
-      }
-
       shape Superellipsoid "forearm-right" {
         id: 227
-        position [-0.375516, 1.024866, 0.002901]
+        position [-0.3706, 1.0524, 0.0024]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.107, 0.17, 0.112]
-        material: violet
+        scale [0.1, 0.2, 0.105]
+        material: charcoal
         parent: "upperArm-right"
         exponent: 2.6
         swings [
@@ -6346,7 +5186,7 @@ prototypes {
             driver: "run"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: -0.7
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "constant"
             phase: 0
           }
@@ -6354,7 +5194,7 @@ prototypes {
             driver: "gait"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: 0.18
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "sine"
             phase: 0.5
           }
@@ -6362,7 +5202,7 @@ prototypes {
             driver: "flight"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: -0.25
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 0
           }
@@ -6371,7 +5211,7 @@ prototypes {
             driver: "air"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: -0.03
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "linear"
             phase: 12
           }
@@ -6380,7 +5220,7 @@ prototypes {
             driver: "land"
             axis [0.660568, 0.349483, 0.664463]
             amplitude: 0.05
-            pivot [-0.345811, 1.165024, 0.005]
+            pivot [-0.336, 1.2201, 0.004]
             wave: "linear"
           }
         ]
@@ -6388,13 +5228,13 @@ prototypes {
 
       shape Superellipsoid "bracer-right" {
         id: 228
-        position [-0.379353, 1.053594, -0.006895]
-        rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.112, 0.2, 0.115]
+        position [-0.395, 0.995, 0]
+        rotation [-0.0915, 0, 0, 0.9958]
+        scale [0.12, 0.13, 0.135]
         material: gauntletRight
         group: 30
         parent: "forearm-right"
-        exponent: 3.2
+        exponent: 3.6
       }
 
       shape Box "bracerMouth-right" {
@@ -6418,31 +5258,20 @@ prototypes {
         rounding: 0.003
       }
 
-      shape Cylinder "bracerSocket-right" {
-        id: 240
-        position [-0.503985, 0.955221, 0.005956]
-        rotation [-0.079561, 0.049422, 0.702727, 0.705267]
-        scale [0.04, 0.012, 0.04]
-        material: charcoal
+      shape Capsule "elbowRod-right" {
+        id: 224
+        position [-0.466, 1.1236, 0.084]
+        rotation [-0.253, 0, -0.411, 0.8758]
+        scale [0.013, 0.2612, 0.013]
+        material: steel
         parent: "forearm-right"
-        rounding: 0.005
-      }
-
-      shape Superellipsoid "bracerLight-right" {
-        id: 241
-        position [-0.513977, 0.955218, 0.005528]
-        rotation [-0.079561, 0.049422, 0.702727, 0.705267]
-        scale [0.027, 0.007, 0.027]
-        material: cyan
-        parent: "forearm-right"
-        exponent: softness
       }
 
       shape Superellipsoid "palm-right" {
         id: 233
-        position [-0.377234, 0.798693, 0.044653]
+        position [-0.3775, 0.7677, 0.0504]
         rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.067, 0.054, 0.04]
+        scale [0.09045, 0.0729, 0.054]
         material: charcoal
         parent: "forearm-right"
         exponent: 2.8
@@ -6456,85 +5285,85 @@ prototypes {
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0079792, -0.0340783, 0]
-          c [-0.0170983, -0.073025, 0]
-          radiusStart: 0.038
-          radiusEnd: 0.038
+          b [-0.0107719, -0.0460057, 0]
+          c [-0.0230827, -0.0985838, 0]
+          radiusStart: 0.0513
+          radiusEnd: 0.0513
         }
       }
 
       shape Sweep "finger-right-0" {
         id: 235
-        position [-0.348163, 0.780479, 0.084894]
+        position [-0.3382, 0.7431, 0.1047]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0159584, -0.0681566, 0.005]
-          c [-0.0175351, -0.0626523, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0215438, -0.0920114, 0.00675]
+          c [-0.0236724, -0.0845806, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-right-1" {
         id: 236
-        position [-0.36914, 0.776489, 0.062422]
+        position [-0.3665, 0.7377, 0.0744]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0173263, -0.0739986, 0.005]
-          c [-0.0170919, -0.0689183, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0233905, -0.0998981, 0.00675]
+          c [-0.0230741, -0.0930397, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-right-2" {
         id: 237
-        position [-0.390117, 0.7725, 0.039948]
+        position [-0.3949, 0.7324, 0.044]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0159584, -0.0681566, 0.005]
-          c [-0.013913, -0.0635003, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0215438, -0.0920114, 0.00675]
+          c [-0.0187826, -0.0857254, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "finger-right-3" {
         id: 238
-        position [-0.411094, 0.76851, 0.017476]
+        position [-0.4232, 0.727, 0.0137]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [-0.0136787, -0.05842, 0.005]
-          c [-0.0098222, -0.0541877, -0.0415]
-          radiusStart: 0.013
-          radiusEnd: 0.013
+          b [-0.0184662, -0.078867, 0.00675]
+          c [-0.01326, -0.0731534, -0.056025]
+          radiusStart: 0.01755
+          radiusEnd: 0.01755
         }
       }
 
       shape Sweep "thumb-right" {
         id: 239
-        position [-0.342981, 0.819577, 0.071049]
+        position [-0.3312, 0.7959, 0.086]
         rotation [-0.130367, -0.388295, 0.137633, 0.901825]
         material: charcoal
         parent: "forearm-right"
         curve {
           a [0, 0, 0]
-          b [0.0295877, -0.0644423, -0.004]
-          c [-0.0148304, -0.0786912, -0.037]
-          radiusStart: 0.019
-          radiusEnd: 0.019
+          b [0.0399434, -0.0869971, -0.0054]
+          c [-0.020021, -0.1062331, -0.04995]
+          radiusStart: 0.02565
+          radiusEnd: 0.02565
         }
       }
 
@@ -6591,7 +5420,7 @@ prototypes {
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: -0.2
+            amplitude: 0.898
             pivot [-0.145, 1.0265, 0]
             wave: "linear"
             phase: 0
@@ -6616,26 +5445,38 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "thighPlate-right" {
+      shape Prism "hipGuard-right" {
         id: 243
-        position [-0.1825, 0.9215, 0.0075]
-        rotation [0, 0, -0.059964, 0.9982005]
-        scale [0.1175, 0.16, 0.114]
-        material: violet
-        group: 31
+        position [-0.222, 1.05, 0]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.13, 0.125, 0.016]
+        material: skin
         parent: "thigh-right"
-        exponent: softness
+        profile {
+          kind: "Convex"
+          vertices [[-0.6, 1], [0.6, 1], [1, 0.2], [0.7, -0.7], [-0.7, -0.7], [-1, 0.2]]
+          cornerRadius: 0.12
+        }
       }
 
-      shape Box "thighSide-right" {
+      shape Cylinder "hipDisc-right" {
         id: 244
-        position [-0.285, 0.9215, 0.0075]
-        scale [0.095, 0.23, 0.1]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.009
-        group: 31
+        position [-0.25, 1.0265, 0]
+        rotation [0, 0, -diagonal, diagonal]
+        scale [0.075, 0.022, 0.075]
+        material: charcoal
         parent: "thigh-right"
+        rounding: 0.01
+      }
+
+      shape Cylinder "kneeCylinder-right" {
+        id: 225
+        position [-0.171, 0.865, -0.069]
+        rotation [0.9286, 0, 0.2563, 0.2684]
+        scale [0.021, 0.0923, 0.021]
+        material: pistonSteel
+        parent: "thigh-right"
+        rounding: 0.006
       }
 
       shape Superellipsoid "knee-right" {
@@ -6649,8 +5490,8 @@ prototypes {
 
       shape Prism "kneeGuard-right" {
         id: 247
-        position [-0.19, 0.7465, 0.105]
-        scale [0.075, 0.09, 0.0475]
+        position [-0.19, 0.735, 0.118]
+        scale [0.095, 0.105, 0.04]
         material: skin
         parent: "thigh-right"
         profile {
@@ -6669,14 +5510,14 @@ prototypes {
       shape Superellipsoid "shin-right" {
         id: 248
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinViolet
         group: 32
         parent: "thigh-right"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -6694,7 +5535,7 @@ prototypes {
           {
             driver: "flight"
             axis [1, 0, 0]
-            amplitude: 0.44
+            amplitude: -1
             pivot [-0.19, 0.7465, 0]
             wave: "linear"
             phase: 0
@@ -6732,15 +5573,15 @@ prototypes {
       shape Superellipsoid "shinCavity-right" {
         id: 250
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.42, 0.109]
+        scale [0.083, 0.42, 0.09]
         material: charcoal
         blend: "Subtraction"
         group: 32
         parent: "shin-right"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -6793,15 +5634,15 @@ prototypes {
       shape Superellipsoid "archBand-right" {
         id: 957
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 78
         parent: "shin-right"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -6848,7 +5689,7 @@ prototypes {
       shape Superellipsoid "archBandHollow-right" {
         id: 991
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.33, 0.109]
+        scale [0.083, 0.33, 0.09]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.008
@@ -6856,8 +5697,8 @@ prototypes {
         parent: "shin-right"
         exponent: 3
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -6894,15 +5735,15 @@ prototypes {
       shape Superellipsoid "archBandBack-right" {
         id: 974
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 81
         parent: "shin-right"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -6975,15 +5816,15 @@ prototypes {
       shape Superellipsoid "sidePanel-right" {
         id: 961
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.36, 0.131]
+        scale [0.105, 0.36, 0.112]
         material: shinCream
         group: 79
         parent: "shin-right"
         exponent: 3
         dilate: 0.01
         flare {
-          amount: 0.7
-          bulge: 0.1
+          amount: 1
+          bulge: 0
           span: 0.56
           top: 0.28
           axis: 1
@@ -7020,6 +5861,15 @@ prototypes {
           radiusStart: 0.0715
           radiusEnd: 0.0715
         }
+      }
+
+      shape Capsule "kneeRod-right" {
+        id: 226
+        position [-0.1955, 0.5716, -0.1233]
+        rotation [0.3021, 0, -0.0134, 0.9532]
+        scale [0.012, 0.404, 0.012]
+        material: steel
+        parent: "shin-right"
       }
 
 
@@ -7080,8 +5930,8 @@ prototypes {
         id: 263
         position [-0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.18]
-        material: skin
+        scale [0.235, 0.235, 0.2]
+        material: violet
         group: 35
         swings [
           {
@@ -7144,8 +5994,8 @@ prototypes {
         id: 264
         position [-0.2, 0.19, 0.085]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.145, 0.225, 0.25]
-        material: skin
+        scale [0.165, 0.24, 0.25]
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.012
         group: 35
@@ -7162,7 +6012,7 @@ prototypes {
         position [-0.2, -0.248, 0.3339]
         rotation [-0.342, 0, 0, 0.9397]
         scale [0.5, 0.5, 0.5]
-        material: skin
+        material: violet
         blend: "SmoothIntersection"
         smooth: 0.01
         group: 35
@@ -7175,7 +6025,7 @@ prototypes {
         position [-0.2, 0.169638, -0.212769]
         rotation: bootNozzleRotation
         scale [0.12, 0.24, 0.12]
-        material: skin
+        material: violet
         blend: "Subtraction"
         group: 35
         parent: "boot-right"
@@ -7208,9 +6058,9 @@ prototypes {
 
       shape Prism "toe-right" {
         id: 267
-        position [-0.2, 0.105, 0.205]
+        position [-0.2, 0.125, 0.205]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.18, 0.105, 0.19]
+        scale [0.19, 0.12, 0.215]
         material: violet
         group: 124
         parent: "boot-right"
@@ -7233,7 +6083,7 @@ prototypes {
         id: 268
         position [-0.2, 0.1, 0.205]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.16, 0.18, 0.2]
+        scale [0.18, 0.2, 0.2]
         material: violet
         blend: "SmoothIntersection"
         smooth: 0.012
@@ -7283,9 +6133,9 @@ prototypes {
 
       shape Prism "sole-right" {
         id: 269
-        position [-0.2, 0.018, 0.204]
+        position [-0.2, 0.03, 0.204]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.158, 0.178, 0.018]
+        scale [0.18, 0.2, 0.03]
         material: charcoal
         parent: "boot-right"
         profile {
@@ -8103,51 +6953,6 @@ prototypes {
         rounding: 0.003
       }
 
-      shape Superellipsoid "blinkCover-left" {
-        id: 284
-        position [0.07656, 1.74842, 0.09945]
-        scale [0.05, 0.035, 0.021]
-        material: rust
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Sweep "blinkCrease-left" {
-        id: 285
-        position [0.03356, 1.74842, 0.11245]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.043, -0.012, 0.003]
-          c [0.086, 0, 0]
-          radiusStart: 0.0017
-          radiusEnd: 0.0017
-        }
-      }
-
-      shape Superellipsoid "blinkCover-right" {
-        id: 286
-        position [-0.07656, 1.74842, 0.09945]
-        scale [0.05, 0.035, 0.021]
-        material: rust
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Sweep "blinkCrease-right" {
-        id: 287
-        position [-0.11956, 1.74842, 0.11245]
-        material: ink
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.043, -0.012, 0.003]
-          c [0.086, 0, 0]
-          radiusStart: 0.0017
-          radiusEnd: 0.0017
-        }
-      }
       drivers [
         // Her pace in metres per second, the X every gait curve reads.
         {
@@ -8327,23 +7132,25 @@ prototypes {
           ]
         }
       ]
+      // Each pod's exhaust leaves its nozzle 55 degrees back from straight down in the pod's frame and narrows to two and a
+      // half times its mouth, so in a straight-legged hover it passes behind the greaves rather than over them (sheet 10).
       volumes [
         {
           kind: "flow"
           parent: "pod-left"
           position [0.0072, -0.4054, -0.2791]
-          rotation [0.3007, 0, 0, 0.9537]
+          rotation [0.4617, 0, 0, 0.887]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
           width: 0.0432
-          spread: 4
+          spread: 2.5
           fade: 1.5
           noiseScale: 0.08
           noiseDepth: 0.4
           speed: 1.5
           seed: 31
           steps: 40
-          intensity: 60
+          intensity: 90000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
@@ -8371,18 +7178,18 @@ prototypes {
           kind: "flow"
           parent: "pod-right"
           position [-0.0072, -0.4054, -0.2791]
-          rotation [0.3007, 0, 0, 0.9537]
+          rotation [0.4617, 0, 0, 0.887]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
           width: 0.0432
-          spread: 4
+          spread: 2.5
           fade: 1.5
           noiseScale: 0.08
           noiseDepth: 0.4
           speed: 1.5
           seed: 39
           steps: 40
-          intensity: 60
+          intensity: 90000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
@@ -8422,7 +7229,7 @@ prototypes {
           speed: 2.5
           seed: 53
           steps: 32
-          intensity: 220
+          intensity: 330000
           extinction: 1.2
           pulseAmplitude: 0.06
           pulseFrequency: 18
@@ -8461,7 +7268,7 @@ prototypes {
           speed: 2.5
           seed: 59
           steps: 32
-          intensity: 220
+          intensity: 330000
           extinction: 1.2
           pulseAmplitude: 0.06
           pulseFrequency: 18
@@ -8564,10 +7371,24 @@ render {
       inkLow: 30
       rim: 0.02
     }
+    // The sun, a clear midday's 100,000 lux. The sky fills the shadows: its luminance (each layer's, by default a
+    // white surface's under this sun) reaches every surface the irradiance volume finds open to it.
     lights [
-      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
-      directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
+      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
     ]
+  }
+  // The camera adapts like an eye: it meters the light about each view's camera and eases there over three quarters of
+  // a second, from a sunlit day (about EV 14) down to a dim room (EV 7), where a 150-nit screen shows its picture as
+  // bright as a display does and a room lit only by it stays dark. It exposes two and a half stops over the meter's
+  // middle grey, the pale, bright look the world was drawn for, and adapts halfway to each surface's own surroundings,
+  // so a room beside its sunlit windows reads as the eye sees it rather than as a photograph's dark interior.
+  exposure {
+    mode: Auto
+    minimum: 7
+    maximum: 16
+    compensation: 2.5
+    adaptation: 0.75
+    "local": 0.5
   }
   renderScale: 1
   shadowLights: 1
@@ -8609,6 +7430,14 @@ render {
     ambient: 0.4
     reflection: 1
   }
+}
+
+// Fly: seat 1 pressing rise without jump (the fly bindings, not Space or South, which press both) switches flight mode
+// on, so she takes off and climbs. One rule a local seat, since a rule reads a seat as a literal (`bodies.localSeats`).
+rule "fly-1" {
+  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0
+  mode: Level
+  setBodyState(key: 0, state: "flightFuel", expression: 1000)
 }
 
 // The flight pose and wings deploy only in flight mode; an ordinary jump keeps her upright.

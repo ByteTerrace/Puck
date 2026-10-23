@@ -6,6 +6,7 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
+        ValidateToon(definition.Render.Toon, errors);
         ValidateIndirect(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
@@ -34,6 +35,25 @@ public static partial class WorldDefinitionValidator {
             if ((quality.Tier is { } selected) && (definition.Render.Preset(tier: selected) is null)) {
                 errors.Add(item: $"views.quality[{quality.Name}].tier names no {selected} preset.");
             }
+        }
+    }
+    private static void ValidateToon(WorldRenderToon? toon, List<string> errors) {
+        if (toon is null) { return; }
+        RequireRange(toon.Threshold, 0f, 1f, "render.toon.threshold", errors);
+        RequireRange(toon.Softness, .001f, .5f, "render.toon.softness", errors);
+        RequireRange(toon.OutlineWidth, 0f, 4f, "render.toon.outlineWidth", errors);
+        RequireRange(toon.OutlineDistance, .1f, 1000f, "render.toon.outlineDistance", errors);
+        RequireRange(toon.OutlineNormal, 0f, .95f, "render.toon.outlineNormal", errors);
+        RequireRange(toon.SpecularSize, .001f, .25f, "render.toon.specularSize", errors);
+        RequireRange(toon.Exposure, -4f, 4f, "render.toon.exposure", errors);
+        RequireRange(toon.Shoulder, 0f, 2f, "render.toon.shoulder", errors);
+        Color(toon.ShadowTint, "shadowTint");
+        Color(toon.OutlineTint, "outlineTint");
+        void Color(DocumentVector3? color, string name) {
+            if (color is not { } value) { return; }
+            RequireRange(value.X, 0f, 1f, $"render.toon.{name}[0]", errors);
+            RequireRange(value.Y, 0f, 1f, $"render.toon.{name}[1]", errors);
+            RequireRange(value.Z, 0f, 1f, $"render.toon.{name}[2]", errors);
         }
     }
     private static void ValidateSkyFieldScale(float value, string path, List<string> errors) {
@@ -106,9 +126,17 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                field: WorldValueFields.DirectionalWeight,
-                                path: $"{lightPath}.weight",
-                                scalar: directional.Weight
+                                field: WorldValueFields.DirectionalIlluminance,
+                                path: $"{lightPath}.illuminance",
+                                scalar: directional.Illuminance
+                            );
+                            JudgeChromaticity(
+                                color: directional.Color,
+                                definition: definition,
+                                errors: errors,
+                                field: WorldValueFields.DirectionalTemperature,
+                                path: lightPath,
+                                temperature: directional.Temperature
                             );
                             JudgeScalar(
                                 definition: definition,
@@ -128,9 +156,9 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                field: WorldValueFields.RimWeight,
-                                path: $"{lightPath}.weight",
-                                scalar: rim.Weight
+                                field: WorldValueFields.RimLuminance,
+                                path: $"{lightPath}.luminance",
+                                scalar: rim.Luminance
                             );
                             JudgeScalar(
                                 definition: definition,
@@ -179,22 +207,79 @@ public static partial class WorldDefinitionValidator {
                                 position: point.Position
                             );
 
-                            JudgeScalar(
+                            JudgeOutput(
                                 definition: definition,
                                 errors: errors,
-                                field: WorldValueFields.PointRadius,
-                                path: $"{lightPath}.radius",
-                                scalar: point.Radius
+                                intensity: point.Intensity,
+                                intensityField: WorldValueFields.PointIntensity,
+                                path: lightPath,
+                                power: point.Power,
+                                powerField: WorldValueFields.PointPower
                             );
-                            JudgeScalar(
+                            JudgeChromaticity(
+                                color: point.Color,
                                 definition: definition,
                                 errors: errors,
-                                field: WorldValueFields.PointWeight,
-                                path: $"{lightPath}.weight",
-                                scalar: point.Weight
+                                field: WorldValueFields.PointTemperature,
+                                path: lightPath,
+                                temperature: point.Temperature
                             );
                             ValidateLightAnchor(
                                 anchor: point.Anchor,
+                                definition: definition,
+                                errors: errors,
+                                path: $"{lightPath}.anchor"
+                            );
+
+                            break;
+                        }
+                    case WorldRenderLight.Spot spot: {
+                            JudgePosition(
+                                errors: errors,
+                                path: $"{lightPath}.position",
+                                position: spot.Position
+                            );
+                            JudgeDirection(
+                                direction: spot.Direction,
+                                errors: errors,
+                                path: $"{lightPath}.direction"
+                            );
+                            JudgeOutput(
+                                definition: definition,
+                                errors: errors,
+                                intensity: spot.Intensity,
+                                intensityField: WorldValueFields.SpotIntensity,
+                                path: lightPath,
+                                power: spot.Power,
+                                powerField: WorldValueFields.SpotPower
+                            );
+                            JudgeChromaticity(
+                                color: spot.Color,
+                                definition: definition,
+                                errors: errors,
+                                field: WorldValueFields.SpotTemperature,
+                                path: lightPath,
+                                temperature: spot.Temperature
+                            );
+                            JudgeScalar(
+                                definition: definition,
+                                errors: errors,
+                                field: WorldValueFields.SpotAngle,
+                                path: $"{lightPath}.angle",
+                                scalar: spot.Angle?.Value
+                            );
+                            JudgeScalar(
+                                definition: definition,
+                                errors: errors,
+                                field: WorldValueFields.SpotInnerAngle,
+                                path: $"{lightPath}.innerAngle",
+                                scalar: spot.InnerAngle?.Value
+                            );
+                            if ((spot.InnerAngle?.Value.Literal is { } inner) && (inner > ((spot.Angle?.Value.Literal) ?? WorldRenderLight.Spot.DefaultAngle))) {
+                                errors.Add(item: $"{lightPath}.innerAngle {inner} is wider than the cone's angle {(spot.Angle?.Value.Literal ?? WorldRenderLight.Spot.DefaultAngle)}; the inner half angle lies inside the outer.");
+                            }
+                            ValidateLightAnchor(
+                                anchor: spot.Anchor,
                                 definition: definition,
                                 errors: errors,
                                 path: $"{lightPath}.anchor"
@@ -268,8 +353,51 @@ public static partial class WorldDefinitionValidator {
         WorldRenderLight.Directional directional => directional.Color,
         WorldRenderLight.Rim rim => rim.Color,
         WorldRenderLight.Point point => point.Color,
+        WorldRenderLight.Spot spot => spot.Color,
         _ => null,
     });
+    // A light's colour is a colour or a black body's temperature, never both.
+    private static void JudgeChromaticity(WorldDefinition definition, BindableColor? color, BindableScalar? temperature, WorldValueField field, string path, List<string> errors) {
+        JudgeScalar(definition: definition, errors: errors, field: field, path: $"{path}.temperature", scalar: temperature);
+        if ((color is not null) && (temperature is not null)) {
+            errors.Add(item: $"{path} authors both color and temperature; a light's colour is one or the other.");
+        }
+    }
+    // A point or spot light's output is its luminous intensity or its luminous power, never both.
+    private static void JudgeOutput(WorldDefinition definition, BindableScalar? intensity, WorldValueField intensityField, BindableScalar? power, WorldValueField powerField, string path, List<string> errors) {
+        JudgeScalar(definition: definition, errors: errors, field: intensityField, path: $"{path}.intensity", scalar: intensity);
+        JudgeScalar(definition: definition, errors: errors, field: powerField, path: $"{path}.power", scalar: power);
+        if ((intensity is not null) && (power is not null)) {
+            errors.Add(item: $"{path} authors both intensity (candela) and power (lumens); a light's output is one or the other.");
+        }
+    }
+    // The camera exposure: each value within the range a camera can take, and the automatic bounds in order.
+    private static void ValidateExposure(WorldRenderExposure? exposure, List<string> errors) {
+        if (exposure is null) {
+            return;
+        }
+
+        foreach (var (value, name) in new (float?, string)[] { (exposure.Ev100, "ev100"), (exposure.Minimum, "minimum"), (exposure.Maximum, "maximum") }) {
+            if (value is { } ev) {
+                RequireRange(value: ev, min: SdfPhotometry.MinimumEv100, max: SdfPhotometry.MaximumEv100, name: $"render.exposure.{name}", errors: errors);
+            }
+        }
+        if (exposure.Compensation is { } compensation) {
+            RequireRange(value: compensation, min: WorldRenderExposure.MinCompensation, max: WorldRenderExposure.MaxCompensation, name: "render.exposure.compensation", errors: errors);
+        }
+        if (exposure.Adaptation is { } adaptation) {
+            RequireRange(value: adaptation, min: 0f, max: WorldRenderExposure.MaxAdaptation, name: "render.exposure.adaptation", errors: errors);
+        }
+        if (exposure.Local is { } local) {
+            RequireRange(value: local, min: 0f, max: 1f, name: "render.exposure.local", errors: errors);
+        }
+        if ((exposure.Minimum is { } minimum) && (exposure.Maximum is { } maximum) && (minimum > maximum)) {
+            errors.Add(item: $"render.exposure.minimum {minimum} is above its maximum {maximum}; the darkest exposure an automatic exposure takes is the lower bound.");
+        }
+        if ((exposure.Mode == SdfExposureMode.Manual) && ((exposure.Minimum is not null) || (exposure.Maximum is not null) || (exposure.Compensation is not null) || (exposure.Adaptation is not null) || (exposure.Local is not null))) {
+            errors.Add(item: "render.exposure authors automatic bounds, compensation, adaptation or local adaptation with mode Manual, which holds ev100; set mode: Auto or remove them.");
+        }
+    }
     // Judges a section after its keys are expanded, as ValidateRenderLighting does.
     private static void ValidateRenderSky(WorldDefinition definition, WorldRenderSky? sky, List<string> errors, string path = "render.sky", WorldRenderLighting? lighting = null) {
         if (sky?.Layers is not { } layers) {
@@ -616,6 +744,7 @@ public static partial class WorldDefinitionValidator {
     // What every layer of the stack carries: its opacity, mask, transform and clock.
     private static void ValidateSkyLayerCommon(WorldDefinition definition, WorldRenderSkyLayer layer, string path, List<string> errors) {
         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SkyLayerOpacity, path: $"{path}.opacity", scalar: layer.Opacity);
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SkyLayerLuminance, path: $"{path}.luminance", scalar: layer.Luminance);
 
         if (layer.Transform is { } transform) {
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SkyLayerTurn, path: $"{path}.transform.turn", scalar: transform.Turn?.Value);
@@ -906,6 +1035,7 @@ public static partial class WorldDefinitionValidator {
 
         if (atmosphere.Fog is { } fog) {
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogDensity, path: $"{path}.fog.density", scalar: fog.Density);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogLuminance, path: $"{path}.fog.luminance", scalar: fog.Luminance);
             JudgeColor(color: fog.Color, definition: definition, errors: errors, path: $"{path}.fog.color");
             JudgeHeight(definition: definition, errors: errors, height: fog.Height, path: $"{path}.fog.height");
         }
@@ -917,6 +1047,7 @@ public static partial class WorldDefinitionValidator {
         if (atmosphere.Medium is { } medium) {
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumSurface, path: $"{path}.medium.surface", scalar: medium.Surface);
             JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumExtinction, path: $"{path}.medium.extinction", scalar: medium.Extinction);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumLuminance, path: $"{path}.medium.luminance", scalar: medium.Luminance);
             JudgeColor(color: medium.Color, definition: definition, errors: errors, path: $"{path}.medium.color");
         }
 

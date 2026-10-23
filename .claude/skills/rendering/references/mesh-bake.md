@@ -23,7 +23,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   which keeps the mesh crack-free. Never refine a cell without that ring: a
   whole cell next to measured fine samples cracks (`SdfSampledLatticeLawTests`).
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
-  in 20 s.
+  in 20 s. A refinement past its fine-sample budget (`MaxFineSamples`) splits
+  each cell into fewer fine cells, down to two, and contours whole only past
+  that: a sheet thinner than the coarse cell survives any refinement and none
+  of the coarse contour, so an all-or-nothing budget drops a long light strip
+  or keeps it depending on where the coarse samples fall.
 - **Crossings stay on their lattice edges.** Before measuring crossing normals,
   `SdfSampledLattice.CrossingPoints` and `AnswerCrossings` bracket each zero along
   its sign-changing edge through the bake's existing point batches. Both the
@@ -95,6 +99,16 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
   serial contour of about a million samples is the bake's long pole on the
   debug world, so unions take each frame's first lattices.
+- **A glass instance is a group of its own** (`SdfMeshBakeGroup.Glass`, from
+  `SdfProgram.IsGlassRange`): it never joins a static run and no instance joins
+  it, whatever either declares, and a dynamic group is glass only while every
+  instance on its slot is. The stampers emit a creation's glass shapes as one
+  static instance after its opaque ones (`WorldPlacementStamper`, with a field
+  scope of their own when one blends other than by union) and a pooled
+  creation's each on its own slot, before any text-coupled instance opens
+  (`WorldStampPool.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
+  glass pass alone and stays out of the mesh pass, the cascades and the
+  irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
 - **Static features declare their spacing.** `WorldPlacementStamper.ShapeDetail`
   feeds the existing `SdfInstanceRange.Detail` refinement regions from authored
   geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
@@ -104,9 +118,49 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   A bound alone misses thin strands and leaves warped corners under-resolved.
   Convex rounding reads the scaled polygon's inradius and extrusion clamp;
   warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
-  an offset and may be zero while its radial extent remains positive.
+  an offset and may be zero while its radial extent remains positive. A plate
+  longer than eight of its half-thicknesses (a slab, a wall, a light strip)
+  declares its half thickness: a lattice sized by its length steps clean over
+  a sheet thinner than its cell, and the sheet bakes to nothing.
+- **A tall union misses thin layers.** One static creation holding stacked
+  floors bakes as one union whose lattice is sized by its height, so a 0.3 m
+  slab between two samples never crosses and is dropped while it still
+  collides. Give each storey's floor its own prototype and placement
+  (`worlds/debug/hall.puck`), so each is a flat group.
+- **A group of thin strips alone loses strips.** The coarse narrowing
+  (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's finest
+  spacing of the surface, so a 6 cm strip lying between sample rows of a 1.8 m
+  coarse cube is cut out of the box and never bakes, while its neighbour a row
+  lands near survives (`hall.puck`'s light strips, alone in a creation, baked one
+  of four). Keeping samples within half a cell's diagonal keeps every strip but
+  fattens the converged box until the final lattice's samples step over the
+  plates (every hall light group then baked nothing), so the narrowing stands
+  and thin trim joins the large solid it hangs from (`hallStrips` in each slab).
   The bake caps declared-detail refinement at eight cells per coarse axis.
-  A dynamic instance declares detail too: a pooled creation's embossed text is
+- **A body's round sections declare their spacing.** Every pooled instance
+  declares detail from its shapes' round sections (`WorldStampPool.BodyDetail`):
+  a strand's thicker radius, a capsule's, a sphere's, an ellipsoid's middle
+  radius (a superellipsoid's tightened by its exponent), or an elliptic prism's
+  tightest bend (an eye socket's carved rim follows it), over three cells, so
+  each cell turns about 19 degrees, under the contour's 25-degree crease split.
+  At `SdfMeshPathBake.MinimumCell` (15 mm) any section under 4.5 cm turns past
+  it and shades as flat facets: the Moth's fingers, hair locks and braid did.
+  A flattened ellipsoid, a box, another prism or a cylinder declares nothing (an edge
+  bends along its length alone, and the contour keeps it as a crease), and
+  neither does a detail of 15 mm or more. A blend group takes its finest
+  member's detail over its whole surface, so a member finer than 3 mm (a lid, a
+  rivet) declares none rather than refining the plate or face it is grouped
+  with; a shape on an instance of its own goes to 2 mm. Static placements keep
+  `ShapeDetail` alone. `puck mesh audit --prototype <id> --cpu` prints each
+  group's triangles and cell before a boot.
+- **A pooled instance's detail spreads over its whole bound.** A dynamic group
+  refines the box its detailed instances' bounds cover
+  (`SdfMeshBakeGroup.DetailLow`, `OwnFinal`), never per member as a static
+  union does, so one thin member of a blend group refines every member's
+  surface. Pooled creations therefore take `BodyDetail`, not `ShapeDetail`,
+  whose plate and rounded-profile terms put the Moth's whole suit at 2 to 3 mm
+  and multiply her triangles about eighteenfold.
+  A dynamic instance's text declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
   (`WorldStampPool.TextSlot`), bounded by its glyphs' reach and declaring their
   detail. Sharing the root slot with a blend group put the glyphs in that
@@ -122,8 +176,8 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
-  their own group. The pass block's lattice rows are a sync pair with
-  `SdfFrameBlock.WriteMeshBake`.
+  their own group. The bake's own pass block (`sdf-mesh-bake.interface.hlsli`)
+  and its lattice rows are a sync pair with `SdfFrameBlock.WriteMeshBake`.
 - **A bake never reads the frame's transforms.** A dynamic group's box,
   lattices and points are slot-local, and `sdf-mesh-bake` reads every transform
   through the poses the group's geometry hashed (`SdfMeshGeometryBuilder.Poses`,
@@ -179,8 +233,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   anything a world means. `world.counters sdf.mesh-settle` reads queued, done,
   reused, moving (frames a drifted group waited while it moved), capped and
   refused, summed over the residencies sharing the presentation's library. A
-  program that arrives later still plans every group at the pose of its frame,
-  unsnapped.
+  program that arrives later plans every group at the pose of its frame,
+  unsnapped, but keeps a dynamic group whose form held (`SdfMeshBakeGroup.Form`,
+  `SdfMeshGeometryBuilder.Form`: the geometry without the other slots' poses):
+  a body breathing while a placement elsewhere changes keeps its skinned mesh,
+  and only its settle rebakes it (`SdfMeshPathBakeLawTests`, the rebuild law).
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and
   `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
@@ -202,6 +259,27 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
   ([sync pairs](sync-pairs.md#engine-buffers-groups-and-bindings)).
+- **One region holds every resident mesh, up to
+  `SdfWorldTables.MostMeshRegionBytes` (2 GiB).** It grows to twice its need,
+  so it reads full long before it is; `world.budget` prints the bytes the
+  staged draws use beside the bytes held and that ceiling. The debug world uses
+  about 1.4 GB of it, and a frame that needs more than the ceiling throws.
+- **A jump in planned groups is usually a population change.** Every pooled
+  body adds one dynamic group a slot, so a body that starts wearing a large
+  creation multiplies `groups=` and `dynamic=` in the `[sdf.mesh-bake] start`
+  line. A `state.body` register selector whose case names the register's
+  initial value selects every body: the suit selector once dressed every chess
+  piece and the board cursor as the Moth, and the debug world planned 7,322
+  groups, 6,880 dynamic, in place of about 1,286 and 844. The validator refuses
+  such a case (`WorldDefinitionValidator.ValidateRowSelector`); `body.rig <n>` names the creation a body wears.
+- **A group a later program drops before it lands is never stored,** so it bakes
+  again on every boot. A boot whose second `[sdf.mesh-bake] start` line plans
+  fewer groups than its first, and whose next boot's first start still reads
+  `baking=` above zero, presented a document its first tick then changed. A
+  placement's response mask is settled into the booting document
+  (`WorldStateSettlement.SettleResponses`), so the debug world's raised blinds
+  never reach the first plan; look for another tick-one change (a rule, a deal)
+  when the line comes back.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
   field evaluations a 60 Hz frame's bake dispatch makes (a gradient sample
   counts five), and a longer frame takes a share for each whole 60 Hz frame it
@@ -233,14 +311,80 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   the symptom of a miss is an edit that shows only once the group's first shape
   changes. The key is taken from the frame a program arrives in, so shapes that
   move against one another later keep the mesh of that pose until they settle
-  and the group bakes again (the settle rebake above).
+  and the group bakes again (the settle rebake above). A geometry whose bake
+  found no surface is held as empty (`SdfMeshLibrary.StoreEmpty`), so a group
+  of it at another selector finishes at once instead of baking again.
+- **A material id shift renumbers every later mesh.** A group whose material
+  ids moved takes its mesh renumbered (`SdfMeshLibrary.TryTake`), a new
+  `SdfMesh` the mesh region lands again word for word, 2 MB a frame, with its
+  draw held out of the frame until it lands. Program material ids are dense in
+  registration order, so a placement that stops or starts showing a palette
+  shifts every group after it: a responding static row registers the palette
+  of every creation it can show (`WorldPlacementStamper.EmitStatic`,
+  `ResponsePaletteLawTests`), and a creation with nothing to draw emits no
+  instance, so a response swaps one row's materials alone.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
-  device cache), keyed by geometry and the bake's identity: the bake kernels'
-  bytecode, `Puck.SignedDistance`'s build, and the hash of the
-  `PuckMeshBakeSource` files listed in `Puck.SdfVm.csproj`
-  (`SdfMeshStore.CodeIdentity`). A new `Puck.SdfVm` file the bake's CPU code
-  reads joins that list, or an edit to it reads stale meshes. A boot that bakes
-  nothing shows `done … loaded=N` with `dispatches=0`.
+  device cache), keyed by geometry and the bake's identity
+  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
+  and the code the bake runs (`SdfMeshBakeClosure`). The kernels' source
+  closure is `passes/sdf-bake-world.hlsli`: their own interface
+  (`isa/sdf-mesh-bake.interface.hlsli`, `SdfWorldInterfaces.MeshBakeParameters`:
+  a pass block of `SdfWorldPackage.BakeValues` alone, the masks, samples and
+  counters, and the World group with the field's tables first), the field
+  interpreter, the field's generated vocabulary (`isa/sdf-isa.hlsli`) and the
+  work counters, stamped with the field's fingerprint
+  (`SdfIsaFingerprint.Field`). A lighting, screen or view module, a renderer
+  constant (`isa/sdf-render.hlsli`), a world pass-block value or resource, or a
+  World table after `FieldTables` is outside it and leaves their bytecode byte
+  for byte as it was on DXIL and SPIR-V; an edit to the field, its generated
+  vocabulary, the encoding or the bake kernels moves it. The code part is read from
+  the build's assemblies: from the bake's roots (`SdfMeshPathBake`, the group,
+  geometry, mesh and material-cut types, `SdfFrameBlock.WriteMeshBake`, the
+  point table and program upload, the store's entry format) it follows every
+  call, delegate, override of a type the bake constructs and implementation of
+  an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
+  references, and hashes each method's IL with its tokens written as the
+  members they name, its locals, exception regions and loaded field data, and
+  each named type's layout. A value type's layout counts whole (the bytes its
+  code moves); any other type's counts only the fields the closure's code loads,
+  stores or takes the address of, so a field the bake never reads (a
+  presentation-only flag on `SdfFrame`) leaves the identity as it was, and a
+  record the code merely copies with `with` has its synthesized clone and copy
+  constructor hashed by signature (they read no field). A record the bake
+  constructs counts its whole layout, since its synthesized equality and
+  printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
+  stops at `SdfMeshLibrary` and `SdfMeshStore`,
+  which hold meshes, and at the runtime. So an edit to `Puck.Maths` code the
+  contour calls re-bakes, while an edit to the rest of the renderer, a new
+  public member of a referenced assembly, a comment or another checkout path
+  keeps every entry, and worktrees of one bake share one set. Code the bake
+  reaches only through reflection or a runtime callback on a type it does not
+  construct is outside the walk: add a root to `SdfMeshBakeClosure` for it.
+- **A miss names its cause.** Each identity's parts and code members are
+  recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
+  and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity
+  … unchanged: geometry new to its set of S entries (N entries in K sets, B of C
+  bytes)` or `… unchanged: its set was evicted, or it never stored one (…)`, or
+  `identity … new since <earlier>: the code, K members (Puck.Maths
+  1: Puck.Maths.VectorFunctions.IsFinite) changed`. `puck mesh identity --build <dir>
+  --against <dir>` prints the same comparison for two builds with no boot, and
+  its value is the key a cache of the store is saved under.
+- **The store keeps whole sets.** Each identity's entries are one set, in a
+  directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
+  world's meshes fill about 1.42 GB in about 1,180 entries under one identity
+  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, five
+  such sets), shared by every World and worktree on the machine, a set at a
+  time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
+  recently read or written entry's, and a write removes whole sets, least
+  recently used first, never its own. A set a World is baking or loading is
+  never cut short by another lane's writes, so concurrent lanes on different
+  identities keep each other's complete sets until five newer ones displace
+  them, and a set larger than the cap alone keeps its most recently used
+  entries. An entry left directly in the directory is a set of its own and ages
+  out first. A boot that bakes nothing shows `done … loaded=N` with
+  `dispatches=0`. A program that arrives while groups are pending and takes
+  every group from the library reports the started bake `done` at once
+  (`SdfMeshPathBake.Restart`), since no landing follows to report it.
 
 ## Shadows and indirect light
 
@@ -269,6 +413,12 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   read included) and `shade/sdf-mesh-irradiance.hlsli`, which only the views
   kernel compiles. The trace reads static mesh draws through
   `SdfMeshIrradianceScene`; never route it through the field interpreter. The
+  scene is two-level and keyed by each mesh's position and index buffers, so a
+  static-draw change builds only geometry new to the previous scene: a slow
+  `[sdf.mesh-gi] scene` line with a large `built-triangles=` means new geometry,
+  not the trace. `puck mesh scene --world <file>` times a build and a one-draw
+  change over the stored meshes with no device, and `world.counters
+  sdf.mesh-gi` counts builds. The
   [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
   owns the technique and its limits.
 
@@ -281,7 +431,8 @@ through `SdfFieldEvaluator`'s render reading), and prints per group, worst
 first, the off-surface error at vertices, centroids and edge midpoints, face and
 shading normal error against the field gradient, folds, flips, open edges,
 uncovered surface and how loose the field is, then the worst clusters with
-rest-pose and author-frame positions and the shapes nearest them. The
+rest-pose and author-frame positions, the worst sample's position with the
+mesh's facing against the field's gradient there, and the shapes nearest them. The
 [CLI reference](../../../../docs/reference/cli.md#puck-mesh-auditbaked-mesh-audit)
 owns its flags.
 
@@ -294,8 +445,8 @@ owns its flags.
   with each lattice answered through the group's CPU field, so a contour,
   refinement or field change shows in the audit without a boot. Where the
   fixed-point field and the kernel's agree, its mesh matches a stored Direct3D
-  12 bake of the group to the triangle; a field the evaluator refuses (a path, a
-  warp, a multi-strand sweep) needs a World boot.
+  12 bake of the group to the triangle; a field the evaluator refuses (a regular
+  polygon, a glyph, a sampled region) needs a World boot.
 - **The store is keyed by the bake identity of the build that booted.** From
   your own worktree's CLI, audit a World you ran from the same checkout, or name
   another build with `--build <its Puck.World bin dir>`; a rebuilt build's
@@ -310,9 +461,11 @@ owns its flags.
   crossings and open edges; a cutter that is only a lower bound (a stretched
   ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to
   the shape whose own field is loosest there.
-- **What it cannot read.** The render reading interprets the flare
-  (`AxialProfile`) and twist (`RotatePlane`) warps and a non-uniform scale, a
-  sync pair with their `mapCore` cases; a group holding another warp (shear,
-  bumps, a polar fold), a regular polygon, a path or a multi-strand sweep
-  reports `field refused`, and one whose evaluation faults `field failed`.
-  Mirrored groups (left and right) share one geometry and one stored mesh.
+- **What it cannot read.** The render reading interprets every warp, fold and
+  relief the renderer draws, a non-uniform scale, a sweep of any strand count
+  and a path's edge table, each a sync pair with its `mapCore` case
+  (`SdfFieldEvaluator.RenderOps.cs`, `SdfFieldEvaluator.Path.cs`); a group
+  holding a regular polygon or star (runtime trigonometry), a glyph or a
+  sampled region reports `field refused`, and one whose evaluation faults
+  `field failed`. Mirrored groups (left and right) share one geometry and one
+  stored mesh.

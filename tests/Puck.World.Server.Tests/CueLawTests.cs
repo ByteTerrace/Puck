@@ -256,12 +256,8 @@ public sealed class CueLawTests {
         };
 
         using var fixture = JoinSeatAndBall(definition: definition);
-        var strikeOrdinal = (definition.Channels.Count - 1);
 
-        Assert.Equal(
-            expected: StrikeChannel,
-            actual: definition.Channels[strikeOrdinal].Name
-        );
+        Assert.True(condition: fixture.Server.Population.Channels.TryGetOrdinal(name: StrikeChannel, ordinal: out var strikeOrdinal));
 
         fixture.Server.Body(index: 0)!.PressChannel(
             ordinal: strikeOrdinal,

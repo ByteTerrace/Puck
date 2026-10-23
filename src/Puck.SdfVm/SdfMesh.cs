@@ -175,10 +175,29 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <summary>Gets whether the draw belongs to a moving body or animated placement, which the irradiance volume's
     /// static scene leaves out (<see cref="SdfMeshIrradianceScene.IsStatic"/>).</summary>
     public bool IsDynamic { get; init; }
+    /// <summary>Gets whether the draw is glass (<see cref="SdfMeshBakeGroup.Glass"/>): the glass pass rasterizes it over
+    /// the opaque image, and the mesh pass, the shadow cascades and the irradiance volume's static scene leave it
+    /// out.</summary>
+    public bool Glass { get; init; }
     /// <summary>Gets the dynamic-transform slot whose frame the mesh's object space is, or <see langword="null"/> for a
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot.</summary>
     public int? FrameSlot { get; init; }
+    /// <summary>Gets the rotation of the carry every world position and normal the draw resolves goes through last,
+    /// after its matrix or its members' slots: identity for a draw drawn where it stands, a portal pair's turn for the
+    /// copy of a body drawn through the pair.</summary>
+    public Quaternion CarryRotation { get; init; } = Quaternion.Identity;
+    /// <summary>Gets the translation of the carry, applied after <see cref="CarryRotation"/> and
+    /// <see cref="CarryScale"/>.</summary>
+    public Vector3 CarryTranslation { get; init; }
+    /// <summary>Gets the carry's uniform scale, applied to a position after <see cref="CarryRotation"/>: one for a draw
+    /// drawn where it stands, a portal pair's scale for the copy of a body drawn through a pair of two sizes. Normals
+    /// only turn.</summary>
+    public float CarryScale { get; init; } = 1f;
+    /// <summary>Gets the world-space plane the draw is clipped by, <c>(n, d)</c>: a point where <c>dot(n, x) + d</c> is
+    /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
+    /// glass is drawn clipped to the glass's front on each side.</summary>
+    public Vector4 ClipPlane { get; init; }
 }
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
@@ -201,8 +220,11 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// word at <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A
 /// vertex without a normal holds zeros there, and the flags say which a mesh has. Word 32 is the word a mesh with
 /// members (<see cref="SdfMeshRecord.SkinFlag"/>) keeps them at, past its indices: their count, then <see cref="SdfMeshRecord.MemberWords"/> words a
-/// member (its slot offset, then its position and orientation), then one word a vertex naming its member. The record is
-/// whole words, so it has no padding a structured-buffer reader could disagree on.
+/// member (its slot offset, then its position and orientation), then one word a vertex naming its member. Words 33 to 39
+/// are the draw's carry (<see cref="SdfMeshDraw.CarryRotation"/> as x, y, z, w, then
+/// <see cref="SdfMeshDraw.CarryTranslation"/>), which every world position and normal the draw resolves goes through
+/// last, and words 40 to 43 its clip plane (<see cref="SdfMeshDraw.ClipPlane"/>). The record is whole words, so it has no
+/// padding a structured-buffer reader could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
@@ -316,7 +338,7 @@ public static class SdfMeshRegion {
     public static int SkinWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return (mesh.VertexMembers.IsEmpty ? 0 : checked((1 + (mesh.Members.Length * SdfMeshRecord.MemberWords)) + mesh.VertexMembers.Length));
+        return (mesh.VertexMembers.IsEmpty ? 0 : checked(((1 + (mesh.Members.Length * SdfMeshRecord.MemberWords)) + mesh.VertexMembers.Length)));
     }
     /// <summary>Writes a list of draws into the region's words as <paramref name="layout"/> places them.</summary>
     /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
@@ -354,7 +376,7 @@ public static class SdfMeshRegion {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
         if (destination.Length < (draws.Count * SdfMeshRecord.DrawWords)) {
-            throw new ArgumentException(message: $"{draws.Count} draw records need {draws.Count * SdfMeshRecord.DrawWords} words; the destination holds {destination.Length}.", paramName: nameof(destination));
+            throw new ArgumentException(message: $"{draws.Count} draw records need {(draws.Count * SdfMeshRecord.DrawWords)} words; the destination holds {destination.Length}.", paramName: nameof(destination));
         }
 
         for (var draw = 0; (draw < draws.Count); draw++) {
@@ -385,7 +407,7 @@ public static class SdfMeshRegion {
             record[SdfMeshRecord.IndexWord] = ((uint)placement.IndexWord);
             record[SdfMeshRecord.IndexCountWord] = ((uint)placement.IndexCount);
             record[SdfMeshRecord.VertexWord] = ((uint)placement.VertexWord);
-            record[SdfMeshRecord.FlagsWord] = ((mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag));
+            record[SdfMeshRecord.FlagsWord] = (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag);
             record[SdfMeshRecord.TriangleMaterialWord] = ((uint)placement.MaterialWord);
             WriteNormalMatrix(
                 matrix: matrix,
@@ -393,6 +415,23 @@ public static class SdfMeshRegion {
             );
             record[SdfMeshRecord.FrameSlotWord] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
             record[SdfMeshRecord.SkinWord] = ((uint)placement.SkinWord);
+
+            var carry = draws[draw].CarryRotation;
+            var shift = draws[draw].CarryTranslation;
+            var clip = draws[draw].ClipPlane;
+
+            record[SdfMeshRecord.CarryRotationWord] = BitConverter.SingleToUInt32Bits(value: carry.X);
+            record[(SdfMeshRecord.CarryRotationWord + 1)] = BitConverter.SingleToUInt32Bits(value: carry.Y);
+            record[(SdfMeshRecord.CarryRotationWord + 2)] = BitConverter.SingleToUInt32Bits(value: carry.Z);
+            record[(SdfMeshRecord.CarryRotationWord + 3)] = BitConverter.SingleToUInt32Bits(value: carry.W);
+            record[SdfMeshRecord.CarryTranslationWord] = BitConverter.SingleToUInt32Bits(value: shift.X);
+            record[(SdfMeshRecord.CarryTranslationWord + 1)] = BitConverter.SingleToUInt32Bits(value: shift.Y);
+            record[(SdfMeshRecord.CarryTranslationWord + 2)] = BitConverter.SingleToUInt32Bits(value: shift.Z);
+            record[SdfMeshRecord.CarryScaleWord] = BitConverter.SingleToUInt32Bits(value: draws[draw].CarryScale);
+            record[SdfMeshRecord.ClipPlaneWord] = BitConverter.SingleToUInt32Bits(value: clip.X);
+            record[(SdfMeshRecord.ClipPlaneWord + 1)] = BitConverter.SingleToUInt32Bits(value: clip.Y);
+            record[(SdfMeshRecord.ClipPlaneWord + 2)] = BitConverter.SingleToUInt32Bits(value: clip.Z);
+            record[(SdfMeshRecord.ClipPlaneWord + 3)] = BitConverter.SingleToUInt32Bits(value: clip.W);
         }
     }
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
@@ -452,6 +491,7 @@ public static class SdfMeshRegion {
         skin[0] = ((uint)members.Length);
         for (var member = 0; (member < members.Length); member++) {
             var words = skin.Slice(length: SdfMeshRecord.MemberWords, start: (1 + (member * SdfMeshRecord.MemberWords)));
+
             var (offset, position, orientation) = members[member];
 
             words[0] = unchecked((uint)offset);
@@ -480,7 +520,6 @@ public static class SdfMeshRegion {
             );
         }
     }
-
     // A draw's normal matrix: the inverse transpose of its matrix's upper 3×3, row by row, in the row-vector convention
     // (n_world = n.x row0 + n.y row1 + n.z row2). A singular matrix writes its own upper 3×3.
     private static void WriteNormalMatrix(Matrix4x4 matrix, Span<uint> record) {

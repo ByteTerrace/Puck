@@ -23,7 +23,7 @@ public static partial class WorldNameRegistry {
         "Source", "Attribute", "Occupancy", "Board", "Tokens", "Turn", "Verdict", "Legal", "Reach", "Held", "Counts",
         "Best", "Move", "Plan", "Medium", "Family", "Field", "Binding", "Template", "ForEach", "Key", "FromKey", "SetKey",
         "TargetKey", "ComparandKey", "ComparandState", "FromState", "FilterRow", "SpillRow", "ValuesFrom",
-        "PhaseOf", "ScaleRow", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
+        "PhaseOf", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
         "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names",
         "Parent", "Placement", "Prototype",
     };
@@ -136,7 +136,7 @@ public static partial class WorldNameRegistry {
     // A light's and a sky layer's name, which a render section key addresses it by: each kind's own member, since
     // every kind declares it.
     private static WorldNameExclusion[] SectionKeyNames => [
-        .. new[] { typeof(WorldRenderLight.Directional), typeof(WorldRenderLight.Rim), typeof(WorldRenderLight.Point), typeof(WorldRenderLight.Occluder) }
+        .. new[] { typeof(WorldRenderLight.Directional), typeof(WorldRenderLight.Rim), typeof(WorldRenderLight.Point), typeof(WorldRenderLight.Spot), typeof(WorldRenderLight.Occluder) }
             .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a light name a section key addresses")),
         .. new[] { typeof(WorldRenderSkyLayer.Gradient), typeof(WorldRenderSkyLayer.SunDisc), typeof(WorldRenderSkyLayer.Stars), typeof(WorldRenderSkyLayer.Clouds), typeof(WorldRenderSkyLayer.Aurora), typeof(WorldRenderSkyLayer.Noise), typeof(WorldRenderSkyLayer.Pattern), typeof(WorldRenderSkyLayer.Panorama), typeof(WorldRenderSkyLayer.Panel), typeof(WorldRenderSkyLayer.View), typeof(WorldRenderSkyLayer.Far) }
             .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a sky layer name a section key addresses")),

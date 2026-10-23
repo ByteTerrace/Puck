@@ -9,8 +9,8 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: a real WebAssembly guest, compiled by the pinned Wasmtime, mounts through the addon handshake
-/// and ticks; its store holds each linear memory to 256 pages, refusing a guest that grows past them and, as
-/// MemoryLimit, one that declares more at instantiation in any memory, exported or not; and a guest that never returns
+/// and ticks; its store holds one linear memory to 256 pages and one table to 65,536 entries. Hidden additional
+/// resources and oversized sources are refused before compilation; growth stays bounded. A guest that never returns
 /// exhausts its per-tick fuel and faults as OutOfFuel, spending the same fuel on every run. A guest's out-of-bounds
 /// access faults as MemoryOutOfBounds, and once a guest has run, a hardware fault in the host's own managed code, on a
 /// thread that never ran a guest, is still an ordinary managed exception: the engine installs no signal handlers. Each
@@ -75,7 +75,9 @@ public sealed class AddonGuestLawTests {
     // Serves one module's bytes at one path, so a guest reaches the host through the real loader.
     private sealed class OneModule(string path, byte[] bytes) : IAssetSource {
         public bool Exists(string path1) => string.Equals(a: path1, b: path, comparisonType: StringComparison.Ordinal);
-        public ReadOnlyMemory<byte> Read(string path1) => (Exists(path1: path1) ? bytes : throw new FileNotFoundException(message: path1));
+        public ReadOnlyMemory<byte> Read(string path1, int maximumBytes = int.MaxValue) =>
+            !Exists(path1: path1) ? throw new FileNotFoundException(message: path1) :
+            bytes.Length <= maximumBytes ? bytes : throw new InvalidDataException("Source exceeds limit.");
     }
 
     private static ScriptingModuleInfo Load(ScriptingEngine engine, byte[] bytes) {
@@ -201,25 +203,24 @@ public sealed class AddonGuestLawTests {
         Assert.Equal(expected: AddonFaultKind.Unreachable, actual: past.Fault.Kind);
     }
     [Fact]
-    public void AGuestDeclaringMoreThanTheCeilingIsRefusedAtInstantiation() {
+    public void AGuestDeclaringMoreThanTheCeilingIsRefusedBeforeCompilation() {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
         using var atCeiling = Mount(engine: engine, wat: MemoryOf(pages: 256));
-        using var pastCeiling = Mount(engine: engine, wat: MemoryOf(pages: 257));
+        var refusal = Assert.Throws<AddonModuleLoadException>(() => Load(engine, Encoding.UTF8.GetBytes(MemoryOf(pages: 257))));
 
         Assert.Equal(expected: AddonState.Enabled, actual: atCeiling.State);
-        Assert.Equal(expected: AddonState.Faulted, actual: pastCeiling.State);
-        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: pastCeiling.Fault.Kind);
+        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: refusal.Kind);
     }
     [Fact]
-    public void AGuestHoldingAnUnexportedMemoryPastTheCeilingIsRefusedAtInstantiation() {
-        // The ceiling bounds each memory a guest holds, not only the one it exports, and its refusal is named as such.
+    public void AGuestCannotMultiplyItsBudgetWithAnUnexportedMemory() {
+        // Even a small hidden memory is refused: a per-memory limit must not multiply into a larger store budget.
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
-        using var atCeiling = Mount(engine: engine, wat: UnexportedMemoryOf(pages: 256));
-        using var pastCeiling = Mount(engine: engine, wat: UnexportedMemoryOf(pages: 257));
+        using var control = Mount(engine: engine, wat: MemoryOf(pages: 256));
+        var refusal = Assert.Throws<AddonModuleLoadException>(() => Load(engine, Encoding.UTF8.GetBytes(UnexportedMemoryOf(pages: 1))));
 
-        Assert.Equal(expected: AddonState.Enabled, actual: atCeiling.State);
-        Assert.Equal(expected: AddonState.Faulted, actual: pastCeiling.State);
-        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: pastCeiling.Fault.Kind);
+        Assert.Equal(expected: AddonState.Enabled, actual: control.State);
+        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: refusal.Kind);
+        Assert.Contains("2 memories", refusal.Message);
     }
     [Fact]
     public void AGuestDeclaringTheWholeAddressSpaceIsRefusedWithoutAllocatingIt() {
@@ -229,14 +230,129 @@ public sealed class AddonGuestLawTests {
         using var process = Process.GetCurrentProcess();
         var managedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var privateBefore = process.PrivateMemorySize64;
-        using var guest = Mount(engine: engine, wat: MemoryOf(pages: 65_536));
+        var refusal = Assert.Throws<AddonModuleLoadException>(() => Load(engine, Encoding.UTF8.GetBytes(MemoryOf(pages: 65_536))));
 
         process.Refresh();
 
-        Assert.Equal(expected: AddonState.Faulted, actual: guest.State);
-        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: guest.Fault.Kind);
+        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: refusal.Kind);
         Assert.InRange(actual: (GC.GetTotalAllocatedBytes(precise: true) - managedBefore), high: (16L << 20), low: 0L);
         Assert.InRange(actual: (process.PrivateMemorySize64 - privateBefore), high: (256L << 20), low: long.MinValue);
+    }
+    [Theory]
+    [InlineData("(table 65537 funcref)")]
+    [InlineData("(table 1 funcref) (table 1 funcref)")]
+    public void HiddenTablesCannotExceedTheStoreBudget(string tables) {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        using var control = Mount(engine, Quiet.Replace("(module", "(module (table 65536 funcref)", StringComparison.Ordinal));
+        var refusal = Assert.Throws<InvalidDataException>(() => Load(engine,
+            Encoding.UTF8.GetBytes(Quiet.Replace("(module", $"(module {tables}", StringComparison.Ordinal))));
+
+        Assert.Equal(AddonTickStatus.Ok, control.Tick([]).Status);
+        Assert.Contains("table limit", refusal.Message);
+    }
+    [Fact]
+    public void TableGrowthStopsAtTheStoreCeiling() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var wat = Grower.Replace("(global $ticks", "(table $t 0 funcref) (global $ticks", StringComparison.Ordinal)
+            .Replace("(memory.grow (select (i32.const 255)", "(table.grow $t (ref.null func) (select (i32.const 65536)", StringComparison.Ordinal);
+        using var guest = Mount(engine, wat);
+
+        Assert.Equal(AddonTickStatus.Ok, guest.Tick([]).Status);
+        var refusal = guest.Tick([]);
+        Assert.Equal(AddonFaultKind.Unreachable, refusal.Fault.Kind);
+    }
+    [Fact]
+    public void SourceLimitPrecedesNativeParsingEvenForACustomSource() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var path = Path.GetFullPath("security-content-oversized.wasm");
+        var source = new OversizedSource(new byte[AddonModuleLimits.SourceBytes + 1]);
+        var loader = new WasmModuleLoader(engine, source);
+
+        Assert.Contains("source limit", Assert.Throws<InvalidDataException>(() => loader.Load(path)).Message);
+        Assert.Equal(AddonModuleLimits.SourceBytes, source.RequestedLimit);
+        using var control = Mount(engine, Quiet);
+        Assert.Equal(AddonTickStatus.Ok, control.Tick([]).Status);
+    }
+    private sealed class OversizedSource(byte[] bytes) : IAssetSource {
+        public int RequestedLimit { get; private set; }
+        public bool Exists(string path) => true;
+        // Deliberately violates the source contract: the loader must still keep oversized bytes out of Wasmtime.
+        public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) {
+            RequestedLimit = maximumBytes;
+            return bytes;
+        }
+    }
+    [Fact]
+    public void HashMismatchIsRefusedBeforeMalformedWatIsParsed() {
+        var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var path = Path.GetFullPath("security-content-malformed.wat");
+        var bytes = Encoding.UTF8.GetBytes("not a WebAssembly module");
+        using var host = new AddonHost(engine, new WasmModuleLoader(engine, new OneModule(path, bytes)), new NoChannels());
+        var descriptor = new AddonDescriptor("guest", path, ContentPin.Compute("other"u8).ToString(), null, true);
+        using var refused = host.Prepare(in descriptor);
+
+        Assert.Equal(AddonFaultKind.HashMismatch, refused.Fault.Kind);
+        descriptor = descriptor with { ModuleHash = ContentPin.Compute(bytes).ToString() };
+        using var parsed = host.Prepare(in descriptor);
+        Assert.Equal(AddonFaultKind.BadExport, parsed.Fault.Kind);
+    }
+    [Fact]
+    public void OnlyTheCompleteSourcePinAuthorizesTheGuest() {
+        var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var path = Path.GetFullPath("security-content-pinned.wat");
+        var bytes = Encoding.UTF8.GetBytes(Quiet);
+        using var host = new AddonHost(engine, new WasmModuleLoader(engine, new OneModule(path, bytes)), new NoChannels());
+        var pin = ContentPin.Compute(bytes).ToString();
+        var changedTail = string.Concat(pin.AsSpan(0, pin.Length - 1), pin[^1] == '0' ? "1" : "0");
+
+        foreach (var refusedPin in new[] { AssetContentHash.Compute(bytes).ToString(), changedTail }) {
+            var refusedDescriptor = new AddonDescriptor("guest", path, refusedPin, null, true);
+            using var refused = host.Prepare(in refusedDescriptor);
+            Assert.Equal(AddonFaultKind.HashMismatch, refused.Fault.Kind);
+        }
+
+        var descriptor = new AddonDescriptor("guest", path, pin, null, true);
+        using var control = host.Prepare(in descriptor);
+        Assert.Equal(AddonState.Enabled, control.State);
+        Assert.Equal(pin, control.Hash!.Value.ToString());
+        control.Admit();
+        Assert.Equal(AddonTickStatus.Ok, control.Tick([]).Status);
+    }
+    [Fact]
+    public void IdenticalContentSharesCompilationAndChangedContentDoesNot() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var path = Path.GetFullPath("security-content-cache.wat");
+        var bytes = Encoding.UTF8.GetBytes(Quiet);
+        var loader = new WasmModuleLoader(engine, new OneModule(path, bytes), maxCachedModules: 1);
+        var first = loader.Load(path);
+        Assert.Equal(ContentPin.Compute(bytes), first.ContentHash);
+        Assert.Same(first.Module, loader.Load(path).Module);
+        using var guest = new AddonInstance(engine, first, new NoChannels(),
+            new AddonDescriptor("guest", path, null, null, true));
+        guest.Admit();
+        // A same-size edit of the guest's source must produce a distinct compile-cache identity.
+        bytes[Array.IndexOf(bytes, (byte)'1')] = (byte)'2';
+        var changed = loader.Load(path);
+        Assert.NotEqual(first.ContentHash, changed.ContentHash);
+        Assert.NotSame(first.Module, changed.Module);
+        Assert.Equal(AddonTickStatus.Ok, guest.Tick([]).Status);
+    }
+    [Fact]
+    public void ImportsAreRefusedBeforeCompilation() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var wat = Quiet.Replace("(module", "(module (import \"env\" \"escape\" (func))", StringComparison.Ordinal);
+        var refusal = Assert.Throws<InvalidDataException>(() => Load(engine, Encoding.UTF8.GetBytes(wat)));
+        Assert.Contains("env::escape", refusal.Message);
+        using var control = Mount(engine, Quiet);
+        Assert.Equal(AddonTickStatus.Ok, control.Tick([]).Status);
+    }
+    [Fact]
+    public void GuestCannotAllocateAnUnbudgetedGarbageCollectedHeap() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var wat = Quiet.Replace("(module", "(module (type (array (mut i32)))", StringComparison.Ordinal);
+        Assert.Throws<Wasmtime.WasmtimeException>(() => Load(engine, Encoding.UTF8.GetBytes(wat)));
+        using var control = Mount(engine, Quiet);
+        Assert.Equal(AddonTickStatus.Ok, control.Tick([]).Status);
     }
     [Fact]
     public void AMalformedMemorySectionIsRefusedByNameBeforeCompiling() {
@@ -246,6 +362,14 @@ public sealed class AddonGuestLawTests {
         var refusal = Assert.Throws<InvalidDataException>(testCode: () => Load(bytes: module, engine: engine));
 
         Assert.Contains(expectedSubstring: "memory section entry 0: its limits flags 0x10 are not declared", actualString: refusal.Message);
+    }
+    [Fact]
+    public void MalformedTableLimitsAreRefusedBeforeCompiling() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        // One funcref table, flags zero, but no minimum. The declaration reader must not invent a zero minimum.
+        byte[] module = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x04, 0x03, 0x01, 0x70, 0x00];
+        var refusal = Assert.Throws<InvalidDataException>(() => Load(engine, module));
+        Assert.Contains("table section entry 0", refusal.Message);
     }
     [Fact]
     public void AGuestReadingPastItsMemoryFaultsAsMemoryOutOfBounds() {

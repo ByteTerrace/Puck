@@ -19,7 +19,10 @@ namespace Puck.World.Server;
 public static partial class WorldAuthorityCheckpointCodec {
     // "PCKP" — Puck Checkpoint.
     private const uint Magic = 0x504B4350U;
-    private const int MaxCollectionCount = 1_000_000;
+
+    /// <summary>The admission bound for a variable-length authority collection.</summary>
+    public const int MaxCollectionCount = 1_000_000;
+
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     // Version 5 bounded the complete body, including the server section and every other section, to MaxSectionBytes.
@@ -33,7 +36,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
     /// changes, and never reuse an earlier value.</summary>
-    public const ushort SupportedVersion = 16;
+    public const ushort SupportedVersion = 17;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>

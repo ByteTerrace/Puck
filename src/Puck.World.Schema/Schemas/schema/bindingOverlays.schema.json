@@ -502,14 +502,19 @@
             "default": true
           },
           "text": {
-            "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+            "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and a chord hint\u0027s label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
             "type": "boolean",
             "default": true
           },
           "modifiers": {
-            "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text\u0027s, not this one\u0027s.",
+            "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.",
             "type": "boolean",
             "default": true
+          },
+          "declaredModifiersOnly": {
+            "description": "Whether the modifier row (and the chord hints it places) keeps to the modifiers the binding document DECLARES in its modifiers section \u2014 the page-holding triggers an author named \u2014 and leaves out the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a shoulder). false draws every one. It shapes only what Modifiers draws, so it does nothing while that is off.",
+            "type": "boolean",
+            "default": false
           },
           "pageLabel": {
             "description": "Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page\u0027s name.",

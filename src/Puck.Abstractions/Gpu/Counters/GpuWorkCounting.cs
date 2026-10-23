@@ -292,6 +292,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
             parameters: in parameters
         );
         Tally(column: GpuWork.DrawsColumn);
+        Tally(amount: (((long)parameters.VertexCount) * parameters.InstanceCount), column: GpuWork.VerticesColumn);
     }
     public void DrawIndexed(nint commandBufferHandle, uint indexCount) {
         inner.DrawIndexed(
@@ -299,6 +300,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
             indexCount: indexCount
         );
         Tally(column: GpuWork.DrawsColumn);
+        Tally(amount: indexCount, column: GpuWork.VerticesColumn);
     }
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         inner.Dispatch(
@@ -316,6 +318,21 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
             commandBufferHandle: commandBufferHandle
         );
         Tally(column: GpuWork.IndirectDispatchesColumn);
+    }
+    public bool CanDrawIndirectCount =>
+        inner.CanDrawIndirectCount;
+    // The draws and vertices of the commands are the GPU's to count (GpuKernelCounters.DrawnWords); the call counts here.
+    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) {
+        inner.DrawIndirectCount(
+            argumentBufferHandle: argumentBufferHandle,
+            argumentBufferOffset: argumentBufferOffset,
+            commandBufferHandle: commandBufferHandle,
+            countBufferHandle: countBufferHandle,
+            countBufferOffset: countBufferOffset,
+            maxDrawCount: maxDrawCount,
+            pipelineLayoutHandle: pipelineLayoutHandle
+        );
+        Tally(column: GpuWork.IndirectDrawsColumn);
     }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
         inner.ClearStorageImage(

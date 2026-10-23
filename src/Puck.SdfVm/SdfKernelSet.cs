@@ -83,6 +83,7 @@ public sealed class SdfKernelSet {
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.Sky => "sdf-sky-runs",
         SdfKernel.Composite => "sdf-composite",
+        SdfKernel.Glass => "sdf-glass",
         SdfKernel.SkyEnvironment => "sdf-sky-environment",
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.ScreenEmission => "sdf-screen-emission",
@@ -94,15 +95,19 @@ public sealed class SdfKernelSet {
     /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), reconstruction's
     /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
     /// (<see cref="SdfWorldInterfaces.SkyParameters"/>), the environment map's and its reduction's
-    /// (<see cref="SdfWorldInterfaces.EnvironmentParameters"/>), or every native per-view dispatch's
-    /// (<see cref="SdfWorldInterfaces.WorldLayout"/>), each stamped with this host's instruction set.</summary>
+    /// (<see cref="SdfWorldInterfaces.EnvironmentParameters"/>), the mesh bake's mask's and sampler's
+    /// (<see cref="SdfWorldInterfaces.MeshBakeLayout"/>, stamped with the field's instruction set alone), or every other
+    /// native per-view dispatch's (<see cref="SdfWorldInterfaces.WorldLayout"/>), each stamped with this host's
+    /// instruction set.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <returns>The layout.</returns>
     public static ShaderInterfaceLayout LayoutOf(SdfKernel kernel) =>
         kernel switch {
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
+            SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
+            SdfKernel.Glass => SdfWorldInterfaces.GlassParameters.Layout,
             SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce or SdfKernel.ScreenEmission => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };

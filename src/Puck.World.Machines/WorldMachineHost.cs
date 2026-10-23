@@ -23,6 +23,11 @@ namespace Puck.World.Server;
 /// this type as its own DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
 /// disposes it.</remarks>
 public sealed partial class WorldMachineHost : IWorldMachineHost {
+    /// <summary>Gets the host's optional completion policy, read at each step. When true, each machine finishes the
+    /// tick through its synchronous advance path before presentation can read its video; otherwise queued machines
+    /// submit asynchronously. This changes completion timing, never the tick budget or input.</summary>
+    public Func<bool>? SynchronousSteps { get; init; }
+
     private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
 
     /// <summary>Gets this host's immutable registration catalog.</summary>
@@ -233,7 +238,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
     // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
     // bytes and the executable image without depending on a provider's source-document or compiler types.
-    private bool TryResolveContent(IMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
+    private bool TryResolveContent(IMachineEngine engine, string contentPath, string? documentDirectory, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
         _ = Catalog.ContentProviders.TryGetValue(
             key: engine.Id,
             value: out var compiler
@@ -245,7 +250,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         ) {
             try {
                 WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
-                compilation = compiler.Prepare(content: content);
+                compilation = compiler.Prepare(content: content, contentPath: WorldDocumentPaths.Resolve(documentDirectory: documentDirectory, path: contentPath));
                 bytes = compilation.Image;
                 cartridge = new WorldMachineCartridge(
                     Path: contentPath,
@@ -821,17 +826,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return new WorldMachineState(
             Assigned: false,
-            Engine: null,
-            FramesStepped: 0L,
-            PendingSteps: 0L,
-            MaximumPendingSteps: 0,
             BackpressureEvents: 0L,
-            Fault: null,
             Cartridge: null,
-            Content: null
+            Content: null,
+            Engine: null,
+            Fault: null,
+            FramesStepped: 0L,
+            MaximumPendingSteps: 0,
+            PendingSteps: 0L
         );
     }
-
     /// <inheritdoc/>
     public (bool Ok, string Message) TryLink(string name, IReadOnlyList<int> members) {
         if (m_disposed) {

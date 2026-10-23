@@ -189,11 +189,11 @@ public sealed class WorldPresentationManifest {
 
         var builder = new Builder { Definition = definition };
 
-        if (definition.Population.ScaleRow is { } scaleRow) {
+        if (definition.Population.Scale is { } scale) {
             builder.Owner = definition;
             builder.AddBody(binding: new StateBinding(
                 Key: StateBinding.BodyKey,
-                Row: scaleRow,
+                Row: WorldBodyStateReads.BindingRow(slot: scale),
                 Target: false
             ));
             builder.Owner = null;
@@ -306,6 +306,12 @@ public sealed class WorldPresentationManifest {
             }
         }
         foreach (var chord in bindings.Chords) {
+            // A page's own id keys the icon a plate wears when its control opens that page (BindingPageView.Openers).
+            builder.AddCell(
+                key: chord?.Page?.Id,
+                rowReference: bar.IconRow
+            );
+
             foreach (var entry in (chord?.Page?.Entries ?? [])) {
                 if (entry is not null) {
                     builder.AddCell(

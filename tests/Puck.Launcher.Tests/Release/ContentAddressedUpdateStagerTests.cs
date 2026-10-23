@@ -140,10 +140,37 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
         );
     }
 
+    [Fact]
+    public async Task StageAsync_RefusesEscapingPathsBeforeFetchingOrWriting() {
+        var content = "untrusted bytes"u8.ToArray();
+        var hash = ContentPin.Compute(content: content).ToString();
+        var source = new RecordingReleaseSource(files: new Dictionary<string, byte[]> { [hash] = content });
+        var stager = new ContentAddressedUpdateStager(
+            source: source,
+            cache: new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "objects")),
+            cacheRoot: m_root.RootPath
+        );
+        var escapedFile = Path.Combine(path1: m_root.RootPath, path2: "escaped.dll");
+        var file = new ReleasePayloadFile(Path: "a.dll", Hash: hash, Size: content.Length);
+        var candidates = new[] {
+            ManifestFor(version: "2.0.0+/../../escaped", file: file),
+            ManifestFor(version: "2.0.0", file: file with { Path = escapedFile }),
+        };
+
+        foreach (var manifest in candidates) {
+            var result = await stager.StageAsync(manifest: manifest, rid: "win-x64", cancellationToken: TestContext.Current.CancellationToken);
+            Assert.False(condition: result.Staged);
+        }
+
+        Assert.Empty(collection: source.Requested);
+        Assert.False(condition: File.Exists(path: escapedFile));
+        Assert.False(condition: Directory.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "escaped")));
+    }
+
     private sealed class RecordingReleaseSource(IReadOnlyDictionary<string, byte[]> files) : IReleaseSource {
         public readonly List<string> Requested = [];
 
-        public Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, CancellationToken cancellationToken) {
+        public Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, long length, CancellationToken cancellationToken) {
             Requested.Add(item: pin.ToString());
 
             if (!files.TryGetValue(

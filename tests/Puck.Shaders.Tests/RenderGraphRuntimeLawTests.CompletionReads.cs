@@ -4,6 +4,34 @@ using Puck.Testing;
 namespace Puck.Shaders.Tests;
 
 public sealed partial class RenderGraphRuntimeLawTests {
+    [Fact]
+    public void ARenderedPackageKeepsRecordingUntilItsContentCompletes() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var package = new ReadingPackage(samples: false);
+
+        recorders.Registry.Register(factory: package, package: Camera);
+        using var runtime = Runtime(gpu, recorders, Set(Instance(name: "view")), "view", Graph(pipeline: CameraGraph()));
+        var frames = new Frames(footprints: [], roots: [new RenderGraphRoot(Height: 1.0, Instance: "view", Width: 1.0)], runtime: runtime);
+
+        frames.Settle();
+        package.Waiting = "mesh readback is pending";
+        var recorded = package.Seen.Count;
+
+        for (var frame = 0; (frame < 3); frame++) {
+            Assert.False(condition: frames.Next().IsEmpty);
+            Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: runtime.Render.Completion);
+            Assert.Contains(expectedSubstring: package.Waiting, actualString: runtime.Render.Reason);
+            Assert.True(condition: (package.Seen.Count > recorded));
+            recorded = package.Seen.Count;
+            package.Unchanged = true;
+        }
+
+        package.Waiting = null;
+        _ = frames.Next();
+        Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+    }
+
     [InlineData(true, true, false, FrameCompletion.NotYetRenderable)]
     [InlineData(false, true, false, FrameCompletion.NotYetRenderable)]
     [InlineData(false, false, false, FrameCompletion.Rendered)]
@@ -15,9 +43,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var recorders = new Recorders();
         var source = new FakeProducer(gpu: gpu);
         var view = new FakeProducer(gpu: gpu);
+        var reading = new ReadingPackage(samples: samples);
 
         recorders.Registry.RegisterProducer(factory: context => ((context.Instance == ReadSource) ? source : view), package: World);
-        recorders.Registry.Register(factory: new ReadingPackage(samples: samples), package: Camera);
+        recorders.Registry.Register(factory: reading, package: Camera);
 
         var read = new RenderGraphRead(Producer: ReadSource, PreviousFrame: previous);
         var consumer = (external
@@ -48,6 +77,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.False(condition: frames.Next().IsEmpty);
             Assert.Equal(expected: produced, actual: source.Produced);
             Assert.Equal(expected: expected, actual: runtime.Render.Completion);
+            // Unchanged local content cannot stand for a frame whose sampled source has not completed.
+            reading.Unchanged = true;
         }
 
         source.Holding = false;

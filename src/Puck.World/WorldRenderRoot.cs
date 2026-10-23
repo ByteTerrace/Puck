@@ -3,6 +3,7 @@ using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Launcher;
 using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -220,7 +221,13 @@ public static class WorldRenderRoot {
         }
 
         binder.Runtime = runtime;
-        frameSource.CapturePending = () => (runtime.PendingCapturePath is not null);
+        // Only a settled capture pins the presented state to the completed tick; a presented one reads what the
+        // display shows, interpolation included.
+        frameSource.CapturePending = () => runtime.HoldsPresentation;
+        // Lockstep presentation renders every frame free of frame history too, so a still of a tick repeats.
+        if (sp.GetService<PresentPacingControl>() is { } pacing) {
+            frameSource.HistoryFree = () => pacing.TickLocked;
+        }
         // A view the root places shows once its instance has completed an image, so a capture is never served over a
         // stand-in.
         frameSource.ViewRendered = view => runtime.TryLatestImage(
@@ -301,6 +308,7 @@ public static class WorldRenderRoot {
 
         probe.Device = device;
         probe.Residency = residency;
+        probe.MeshIrradiance.Retarget(target: residency.MeshIrradiance.Counters);
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
         // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame

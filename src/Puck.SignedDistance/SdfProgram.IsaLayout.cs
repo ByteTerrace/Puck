@@ -62,7 +62,7 @@ public sealed partial class SdfProgram {
     public const uint BoundModeStatic = 1;
     /// <summary>The material float4 stride, written by PackMaterials and read by the kernels' <c>sdfMaterialLoad</c>
     /// (<c>SDF_MATERIAL_VECTORS_PER_ENTRY</c>).</summary>
-    public const int MaterialVectorsPerEntry = 21;
+    public const int MaterialVectorsPerEntry = 22;
     /// <summary>The paint table's float4 stride, written by PackPaints and read by the views pass's paint layer
     /// (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>): the frame origin and shape, the rotation, the residual scale, the shape's
     /// two data vectors, the color and stroke, the slot and bound center, the bound half-extents, then

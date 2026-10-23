@@ -1,0 +1,16 @@
+{
+  "puck-command-policies": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/agent-policy.ps1 -Tool agy",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

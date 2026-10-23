@@ -150,7 +150,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         for (var projection = 1; (projection <= 7); projection++) {
             var slot = ((int)(rig.Node.FrameCounter % 3));
 
-            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * projection)), elevation: 1f, index: 1);
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * projection * SdfSky.DefaultLuminance)), elevation: 1f, index: 1);
             rig.Render();
             Assert.Equal(expected: (projection + 1L), actual: rig.Engine.SkyEnvironmentRenders);
             Assert.False(condition: unread[slot], userMessage: $"Projection {projection} overwrote unread slot {slot}.");
@@ -180,7 +180,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         for (var index = 0; (index < 40); index++) { _ = rig.Engine.SkyDetails.RowOf(label: $"retired-{index}"); }
         var lastRow = rig.Engine.SkyDetails.RowOf(label: "retired-39");
         // Three passes, the map's plain detail row and retained layers, then the screen pass's plain and image rows.
-        var expectedBytes = ((6 + rig.Engine.SkyDetails.Labels.Count) * GpuKernelCounters.RowBytes);
+        var expectedBytes = ((int)GpuKernelCounters.SlotBytesOf(rows: (6 + rig.Engine.SkyDetails.Labels.Count)));
         var reads = new List<int>();
 
         rig.Gpu.WriteReadback = (name, destination) => {
@@ -194,7 +194,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         };
         // Visit every recording slot; each new pair's actual bytes enter the graph's account.
         for (var index = 1; (index <= 3); index++) {
-            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.2f * index)), elevation: 1f, index: 1);
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.2f * index * SdfSky.DefaultLuminance)), elevation: 1f, index: 1);
             rig.Render();
             rig.Complete();
         }
@@ -203,7 +203,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(expected: oldLabels, actual: earlier.Details.ToArray().Skip(count: 1).Take(count: oldLabels.Length).Select(selector: static detail => detail.Detail));
         Assert.Equal(expected: "screen-images", actual: earlier.Details[^1].Detail);
         // The first slot already had the original details; the other two held only the three pass rows.
-        var originalCounterBytes = ((2UL * ((ulong)GpuKernelCounters.RowBytes)) * ((ulong)(((6 + oldLabels.Length) + 3) + 3)));
+        var originalCounterBytes = (2UL * GpuKernelCounters.SlotBytesOf(rows: (((6 + oldLabels.Length) + 3) + 3)));
 
         Assert.Equal(expected: ((beforeBytes - originalCounterBytes) + (6UL * ((ulong)expectedBytes))), actual: rig.Node.OwnedBytes);
         Assert.Equal(expected: rig.Node.OwnedBytes, actual: rig.Node.InstalledAccount.SteadyBytes);

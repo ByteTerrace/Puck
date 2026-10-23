@@ -4,8 +4,37 @@ using Puck.Testing;
 namespace Puck.Shaders.Tests;
 
 public sealed partial class RenderGraphRuntimeLawTests {
+    // Retained taint the package cannot discard holds a capture, whatever its current inputs, and names the state; the
+    // capture lands once the package replaces it.
     [Fact]
     public void CleanCurrentInputsCannotRemoveTheRetainedPackagesExternalTaint() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var recorders = new Recorders();
+        var view = new ViewPackage { Discardable = false, RetainedTainted = true };
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance(), Instance(name: "main", reads: new RenderGraphRead(Producer: PackageView))),
+            "main", null!, Graph(ScreensGraph(false, "view"), ("view", PackageView)));
+        var frames = new Frames(
+            footprints: [new(Consumer: "main", Height: 1, Producer: PackageView, Width: 1)],
+            roots: [new(Height: 1, Instance: "main", Width: 1)], runtime: runtime);
+
+        frames.Settle();
+        var request = CaptureRequest();
+
+        runtime.RequestCapture(request: request);
+        frames.Next(count: 3);
+        Assert.False(condition: request.Completion.IsCompleted);
+        Assert.Contains("retained package state (retained history)", Assert.IsType<string>(@object: runtime.UnservedCaptureReason), StringComparison.Ordinal);
+        view.RetainedTainted = false;
+        TestLiveness.Until(step: () => { frames.Next(); return request.Completion.IsCompleted; });
+        Assert.Null(@object: Outcome(request: request).Error);
+        Assert.Equal(expected: 0, actual: view.Discards);
+    }
+    // A settled capture over retained taint the package can discard has it discarded on its first frame, and that frame,
+    // rendered over the gate's fills, serves it.
+    [Fact]
+    public void ASettledCaptureDiscardsRetainedTaintAndServesTheFirstCleanFrame() {
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
         var recorders = new Recorders();
         var view = new ViewPackage { RetainedTainted = true };
@@ -21,11 +50,37 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var request = CaptureRequest();
 
         runtime.RequestCapture(request: request);
-        frames.Next(count: 3);
-        Assert.False(condition: request.Completion.IsCompleted);
-        Assert.Contains("external content", Assert.IsType<string>(@object: runtime.UnservedCaptureReason), StringComparison.Ordinal);
-        view.RetainedTainted = false;
         TestLiveness.Until(step: () => { frames.Next(); return request.Completion.IsCompleted; });
         Assert.Null(@object: Outcome(request: request).Error);
+        Assert.Equal(expected: 1, actual: view.Discards);
+    }
+    // A presented capture holds no frame to converge over, so retained history carrying external pixels would taint every
+    // frame while it is armed. Its first frame discards that history once, and the capture skips the renders the
+    // history needs to converge again before it reads the steady image.
+    [Fact]
+    public void APresentedCaptureDiscardsTaintedHistoryOnceAndSkipsItsReconvergence() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var recorders = new Recorders();
+        var view = new ViewPackage { RetainedTainted = true };
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance(), Instance(name: "main", reads: new RenderGraphRead(Producer: PackageView))),
+            "main", null!, Graph(ScreensGraph(false, "view"), ("view", PackageView)));
+        var frames = new Frames(
+            footprints: [new(Consumer: "main", Height: 1, Producer: PackageView, Width: 1)],
+            roots: [new(Height: 1, Instance: "main", Width: 1)], runtime: runtime);
+
+        frames.Settle();
+        var request = PresentedRequest(frames: 2);
+        var armed = frames.Index;
+
+        runtime.RequestCapture(request: request);
+        frames.Next(count: (view.RefillFrames + 2));
+
+        var result = Landed(request: request);
+
+        Assert.Null(@object: result.Error);
+        Assert.Equal(expected: 1, actual: view.Discards);
+        Assert.Equal(expected: new[] { (armed + view.RefillFrames), (armed + view.RefillFrames + 1) }, actual: result.Presented.Select(selector: static frame => frame.Presentation).ToArray());
     }
 }

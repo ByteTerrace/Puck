@@ -27,7 +27,7 @@
 
 #include "../field/sdf-octahedral.hlsli"
 #include "sdf-shadow-visibility.hlsli"
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 
 #if defined(SDF_SURFACE_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW

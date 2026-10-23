@@ -589,6 +589,18 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Expression
         ),
         new(
+            typeof(WorldEffect.SetBodyState),
+            nameof(WorldEffect.SetBodyState.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
+            typeof(WorldEffect.SetBodyState),
+            nameof(WorldEffect.SetBodyState.Expression),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
             typeof(WorldEffect.PaintField),
             nameof(WorldEffect.PaintField.Field),
             WorldNameKind.Field,
@@ -994,6 +1006,7 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Names
         ),
+        new(typeof(WorldSearchShape.Relocate), nameof(WorldSearchShape.Relocate.Codes), WorldNameKind.State, WorldNameRole.Names),
         new(
             typeof(WorldSearchChance),
             nameof(WorldSearchChance.Row),
@@ -1102,12 +1115,6 @@ public static partial class WorldNameRegistry {
         new(
             typeof(WorldBodiesDefaults),
             nameof(WorldBodiesDefaults.CapacityRow),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
-        new(
-            typeof(WorldBodiesDefaults),
-            nameof(WorldBodiesDefaults.ScaleRow),
             WorldNameKind.State,
             WorldNameRole.Names
         ),
@@ -1317,6 +1324,8 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
+        new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),
         new(typeof(StatePoolField), nameof(StatePoolField.Enum), "an enum name is local to the document"),
         new(typeof(WorldPoolBodyCarrier), nameof(WorldPoolBodyCarrier.Field), "a field local to its pool record"),
@@ -1582,6 +1591,11 @@ public static partial class WorldNameRegistry {
             nameof(WorldKit.BodyMotionProgram),
             "a body motion program name"
         ),
+        new(
+            typeof(WorldRowSelectorCase),
+            nameof(WorldRowSelectorCase.Row),
+            "a kit or look row name"
+        ),
         new(typeof(WorldViewLayout), nameof(WorldViewLayout.Name), "a view layout name"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),
         new(typeof(WorldViewQuality), nameof(WorldViewQuality.Name), "a render view instance name or the default selector *"),
@@ -1685,6 +1699,16 @@ public static partial class WorldNameRegistry {
         new(
             typeof(WorldPredicate.TimerElapsed),
             nameof(WorldPredicate.TimerElapsed.State),
+            "a per-body slot name"
+        ),
+        new(
+            typeof(WorldRowSelector),
+            nameof(WorldRowSelector.BodyState),
+            "a per-body slot name"
+        ),
+        new(
+            typeof(WorldEffect.SetBodyState),
+            nameof(WorldEffect.SetBodyState.State),
             "a per-body slot name"
         ),
         new(

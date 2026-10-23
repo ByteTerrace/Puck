@@ -444,7 +444,7 @@ public sealed class NamedMachineMemoryLawTests {
     private sealed class SymbolProvider : IMachineContentProvider {
         public string EngineId => "memory";
 
-        public PreparedMachineContent Prepare(ReadOnlyMemory<byte> content) => new(
+        public PreparedMachineContent Prepare(ReadOnlyMemory<byte> content, string contentPath) => new(
             content.ToArray(),
             WorldDefinitionFileSource.ComputeContentHash(content: content.Span),
             new Dictionary<string, MachineContentSymbol> {

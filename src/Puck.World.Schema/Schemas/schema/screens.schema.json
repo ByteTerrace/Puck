@@ -112,6 +112,63 @@
               "string",
               "null"
             ]
+          },
+          "display": {
+            "description": "How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "fill": {
+                "description": "The matte colour around the framed picture, as #RRGGBB, or null for black.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "title": "WorldScreenDisplay"
+          },
+          "padPointer": {
+            "description": "How a local pad\u0027s sticks drive the pointer over this screen\u0027s framed picture while a seat engaged on it frames a window capture (WorldScreenPadPointer). Only an engageable screen showing a window capture may author it. null (the default) moves and scrolls nothing from a stick; a pad\u0027s buttons still click and press keys. Omitted from the wire when null.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "speed": {
+                "description": "The pointer\u0027s speed at full deflection before any boost, in heights of the framed picture per second. Positive.",
+                "type": "number"
+              },
+              "curve": {
+                "description": "The exponent the deflection\u0027s length is raised to; 1 is a linear response. At least 1.",
+                "type": "number",
+                "default": 1
+              },
+              "boost": {
+                "description": "The speed\u0027s multiplier once a deflection has been held for RampSeconds, rising linearly from 1 while it is held and back to 1 once the stick rests. At least 1.",
+                "type": "number",
+                "default": 1
+              },
+              "rampSeconds": {
+                "description": "How long a held deflection takes to reach Boost; 0 applies it at once. Non-negative.",
+                "type": "number",
+                "default": 0
+              },
+              "scrollSpeed": {
+                "description": "The wheel\u0027s speed at full deflection of the scrolling stick, in wheel notches per second, its deflection raised to Curve too. Non-negative; 0 scrolls nothing.",
+                "type": "number",
+                "default": 0
+              }
+            },
+            "required": [
+              "speed"
+            ],
+            "additionalProperties": false,
+            "title": "WorldScreenPadPointer"
           }
         },
         "additionalProperties": false,
@@ -193,6 +250,51 @@
         ],
         "default": "Nearest",
         "title": "GpuSamplerFilter"
+      },
+      "luminance": {
+        "description": "The display\u0027s peak luminance, in nits: a white picture shows at it, and the light the picture casts into the room scales with it. A CRT television shows about 100 to 200, a handheld\u0027s unlit panel far less, a desktop monitor about 250. In (0, SdfScreenEmission.MaxLuminance]; absent is SdfScreenEmission.DefaultLuminance. A screen whose source is a window onto another world shows that world\u0027s own luminance whatever this says.",
+        "type": [
+          "number",
+          "null"
+        ],
+        "default": null
+      },
+      "carry": {
+        "description": "The body that carries the screen\u0027s picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "look": {
+            "description": "The look row whose wearer carries the picture; a creation look.",
+            "type": "string"
+          },
+          "pose": {
+            "description": "The look\u0027s Poses frame that holds while the body carries it.",
+            "type": "string"
+          },
+          "shape": {
+            "description": "The name of the ungrouped box in the look\u0027s creation that shows the picture.",
+            "type": "string"
+          },
+          "camera": {
+            "description": "The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture\u0027s front face whose axes are the picture\u0027s: \u002BX its right, \u002BY its up and \u002BZ its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "look",
+          "pose",
+          "shape"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldScreenCarry"
       }
     },
     "required": [

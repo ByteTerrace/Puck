@@ -976,6 +976,12 @@ confidentiality only; where the recipient must know who sent it, the sealed
 payload rides inside an ordinary signed attestation and the signature names the
 sender.
 
+The recipient keeps a long-lived private key. Compromise of that key lets an
+attacker decrypt recorded sealed payloads using their carried ephemeral public
+keys; fresh sender keys do not provide forward secrecy against recipient
+compromise. Treat private-key retention and recovery as part of the payload's
+confidentiality policy.
+
 ### 15. Conformance summary
 
 An implementation conforms to a named profile when, for every input within

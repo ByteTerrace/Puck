@@ -11,22 +11,26 @@ using Puck.SignedDistance.Queries;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: every enum an instruction word
-/// carries, the packed-layout constants the interpreter decodes words with, the screen count,
-/// the sampler filters a screen's row indexes the engine's samplers by, and where each row of the environment lies in a
-/// pass block's environment array, with its light kinds, and the visibility record's identity fields, transform-slot
-/// sentinel and workgroup edge (<see cref="SdfVisibility"/>). Every value is read from the C# model, never
-/// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
+/// Generates <see cref="FileName"/>, the kernels' declarations of the field's instruction set: every enum an instruction
+/// word carries, the packed-layout constants the interpreter decodes words with, the capacities and constants the
+/// interpreter's shapes and hash read, the sampler filters, and the transform-slot sentinel and packing. It is all the
+/// generated vocabulary the field interpreter and the mesh bake read; what the renderer alone reads (lights, exposure,
+/// the visibility record, mesh records, the irradiance volume, the debug views) is <see cref="SdfRenderHlsl"/>'s, so a
+/// renderer constant added there leaves the bake kernels' declarations, and their bytecode, as they were. Every value
+/// is read from the C# model, never transcribed, and an enum member's name is its C# name in upper snake case after the
+/// enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
 /// every host.</para>
 /// <para>The instruction set's fingerprint (<see cref="DescribeFingerprint"/>) names its whole encoding: the generated
-/// text, which states every enum, lane accessor, stride and constant the kernels read, and the encoding the model's
+/// texts, which state every enum, lane accessor, stride and constant the kernels read, and the encoding the model's
 /// builder and packer produce (<see cref="SdfEncodingProbe.Describe()"/>: where every field, bitfield and table entry
-/// lands). <c>puck shaders generate</c> records it in <c>SdfIsaFingerprint</c> (<see cref="FingerprintSourcePath"/>), which
-/// the engine reads. The SDF kernels' interfaces carry it as their stamp (<see cref="StampOf"/>,
-/// <see cref="SdfKernelInterfaces"/>), so every kernel's bytecode reflects the instruction set it was compiled against,
-/// and a reload refuses kernels whose stamp is not this host's.</para>
+/// lands); the field's fingerprint (<see cref="DescribeFieldFingerprint"/>) names this include's text and that encoding
+/// alone. <c>puck shaders generate</c> records both in <c>SdfIsaFingerprint</c> (<see cref="FingerprintSourcePath"/>),
+/// which the engine reads. The SDF kernels' interfaces carry them as their stamps (<see cref="StampOf"/>,
+/// <see cref="SdfKernelInterfaces"/>): the bake's the field's, every other the whole one's, so every kernel's bytecode
+/// reflects the instruction set it was compiled against, and a reload refuses kernels whose stamp is not this
+/// host's.</para>
 /// </summary>
 public static class SdfIsaHlsl {
     /// <summary>The file name of the generated include, which sits with the other generated declarations in
@@ -35,38 +39,53 @@ public static class SdfIsaHlsl {
 
     private const string Guard = "SDF_ISA_HLSLI";
 
-    /// <summary>The repository-relative path of the generated source that records the fingerprint
-    /// (<see cref="DescribeFingerprint"/>) as <c>SdfIsaFingerprint.Value</c> in <c>Puck.SdfVm</c>, so a host names its
-    /// instruction set without describing the encoding. <c>--check</c> holds the record to
-    /// <see cref="DescribeFingerprint"/>.</summary>
+    /// <summary>The repository-relative path of the generated source that records the fingerprints
+    /// (<see cref="DescribeFingerprint"/>, <see cref="DescribeFieldFingerprint"/>) as <c>SdfIsaFingerprint.Value</c> and
+    /// <c>SdfIsaFingerprint.Field</c> in <c>Puck.SdfVm</c>, so a host names its instruction set without describing the
+    /// encoding. <c>--check</c> holds the record to both.</summary>
     public const string FingerprintSourcePath = "src/Puck.SdfVm/SdfIsaFingerprint.cs";
 
     /// <summary>Returns the fingerprint of the model's instruction set: <see cref="FingerprintOf"/> of the generated
-    /// includes (this one and the sky's kind table, <see cref="SdfSkyKindsHlsl"/>) and the model's described encoding. It
-    /// moves with any member, value, lane or constant the kernels read from the model, with any sky kind's value or
-    /// parameter layout, and with any change to where the builder puts a field or the packer a word.</summary>
+    /// includes (this one, the renderer's, <see cref="SdfRenderHlsl"/>, and the sky's kind table,
+    /// <see cref="SdfSkyKindsHlsl"/>) and the model's described encoding. It moves with any member, value, lane or
+    /// constant the kernels read from the model, with any sky kind's value or parameter layout, and with any change to
+    /// where the builder puts a field or the packer a word.</summary>
     /// <returns>The fingerprint.</returns>
     public static uint DescribeFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(),
-            include: ((Generate() + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable())
+            include: (((Generate() + SdfRenderHlsl.Generate()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable())
         );
-    /// <summary>Generates the source that records a fingerprint as <c>SdfIsaFingerprint.Value</c>.</summary>
-    /// <param name="fingerprint">The fingerprint (<see cref="DescribeFingerprint"/>).</param>
+    /// <summary>Returns the fingerprint of the field's instruction set, which the mesh bake's interface carries as its
+    /// stamp: <see cref="FingerprintOf"/> of this include alone and the model's described encoding. It moves with what
+    /// the field interpreter reads from the model and with the encoding, and with nothing the renderer alone
+    /// reads.</summary>
+    /// <returns>The fingerprint.</returns>
+    public static uint DescribeFieldFingerprint() =>
+        FingerprintOf(
+            encoding: SdfEncodingProbe.Describe(),
+            include: Generate()
+        );
+    /// <summary>Generates the source that records the fingerprints as <c>SdfIsaFingerprint.Value</c> and
+    /// <c>SdfIsaFingerprint.Field</c>.</summary>
+    /// <param name="fingerprint">The instruction set's fingerprint (<see cref="DescribeFingerprint"/>).</param>
+    /// <param name="field">The field's fingerprint (<see cref="DescribeFieldFingerprint"/>).</param>
     /// <returns>The C# text.</returns>
-    public static string GenerateFingerprintSource(uint fingerprint) =>
+    public static string GenerateFingerprintSource(uint fingerprint, uint field) =>
         string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $$"""
                 // Generated by `puck shaders generate` from the SDF instruction set's C# model; regenerate it, never edit it.
                 namespace Puck.SdfVm;
 
-                /// <summary>The fingerprint of the instruction set this build's kernels are declared against
-                /// (<see cref="SdfIsaHlsl.DescribeFingerprint"/>), recorded when <c>puck shaders generate</c> wrote the
-                /// declarations.</summary>
+                /// <summary>The fingerprints of the instruction set this build's kernels are declared against
+                /// (<see cref="SdfIsaHlsl.DescribeFingerprint"/>, <see cref="SdfIsaHlsl.DescribeFieldFingerprint"/>),
+                /// recorded when <c>puck shaders generate</c> wrote the declarations.</summary>
                 public static class SdfIsaFingerprint {
-                    /// <summary>The fingerprint.</summary>
+                    /// <summary>The whole instruction set's fingerprint.</summary>
                     public const uint Value = 0x{{fingerprint:X8}}u;
+                    /// <summary>The field's instruction set's fingerprint, which the mesh bake's interface carries.</summary>
+                    public const uint Field = 0x{{field:X8}}u;
                 }
 
                 """
@@ -74,7 +93,7 @@ public static class SdfIsaHlsl {
     /// <summary>Generates the include.</summary>
     /// <returns>The HLSL text.</returns>
     /// <exception cref="InvalidOperationException">Two declarations would share one HLSL name.</exception>
-    public static string Generate() => Declare();
+    public static string Generate() => DeclareField().Text();
     /// <summary>Returns the fingerprint of an instruction set: the first four bytes, little-endian, of the SHA-256 of the
     /// UTF-8 text of its include, a NUL, and its described encoding.</summary>
     /// <param name="include">The include's text (<see cref="Generate"/>).</param>
@@ -98,12 +117,11 @@ public static class SdfIsaHlsl {
             handler: $"Isa{fingerprint:X8}"
         );
 
-    // Every declaration the include makes.
-    private static string Declare() {
-        var declarations = new Declarations();
+    // Every declaration the field's include makes.
+    private static Declarations DeclareField() {
+        var declarations = new Declarations(guard: Guard);
 
         declarations.Members<SdfOp>(prefix: "SDF_OP");
-        declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
         declarations.Members<SdfShapeType>(prefix: "SDF_SHAPE");
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");
         declarations.Members<SdfLift>(prefix: "SDF_LIFT");
@@ -208,48 +226,20 @@ public static class SdfIsaHlsl {
             name: "SDF_SCREEN_MATERIAL",
             value: SdfProgramBuilder.ScreenMaterialId
         );
-        declarations.Count(
-            name: "SDF_MAX_SCREEN_SURFACES",
-            value: SdfProgramBuilder.MaxScreenSurfaces
-        );
-        declarations.Count(name: "SDF_MAX_LIGHTS", value: SdfLights.MaxLights);
-        declarations.Count(name: "SDF_MAX_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
-        declarations.Count(name: "SDF_MAX_DISPATCH_GROUPS", value: checked((int)GpuRegion.CopyMaxGroupsPerDimension));
         declarations.Count(name: "SDF_MAX_NOISE_OCTAVES", value: SdfProgramBuilder.MaxNoiseOctaves);
         declarations.Count(name: "SDF_MAX_SWEEP_STRANDS", value: SdfProgramBuilder.MaxSweepStrands);
         declarations.Count(name: "SDF_MAX_CONVEX_VERTICES", value: SdfPrismProfile.MaxConvexVertices);
         declarations.Count(name: "SDF_CONVEX_COUNT_BITS", value: SdfPrismProfile.ConvexCountBits);
         declarations.Count(name: "SDF_MAX_PATH_EDGES", value: SdfPathProfile.MaxEdges);
-        declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
-        declarations.Real(name: "SDF_SCREEN_EMISSION_DIRECT_GAIN", value: SdfScreenEmission.DirectGain);
-        declarations.Real(
-            name: "SDF_MINIMUM_NEAR",
-            value: SdfWorldPackage.MinimumNear
-        );
         declarations.Count(
             name: "SDF_NOISE_PERIOD_CELLS",
             value: SdfVolume.NoisePeriodCells
         );
-        declarations.Count(name: "SDF_VOLUME_VECTORS_PER_ENTRY", value: SdfVolume.VectorsPerEntry);
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
-        declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
-        declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
-        declarations.Members<SdfVisibilityKind>(prefix: "SDF_VISIBILITY_KIND");
-        declarations.Section(title: "The visibility record's identity fields, frame-slot lane and the record passes' workgroup edge (SdfVisibility).");
-        declarations.Count(name: "SDF_VISIBILITY_KIND_SHIFT", value: SdfVisibility.KindShift);
-        declarations.Bits(name: "SDF_VISIBILITY_SOURCE_MASK", value: SdfVisibility.SourceMask);
+        declarations.Section(title: "The dynamic-transform slot of no slot, and the packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).");
         declarations.Signed(name: "SDF_TRANSFORM_SLOT_NONE", value: SdfProgram.NoDynamicTransformSlot);
-        declarations.Count(name: "SDF_VISIBILITY_GROUP_EDGE", value: SdfVisibility.GroupEdgePixels);
-        declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
-        declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);
-        declarations.Count(name: "SDF_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
-        declarations.Count(name: "SDF_SHADOW_FADE_CAPACITY", value: SdfShadowSlots.MaxFadeSlots);
-        declarations.Section(title: "The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).");
         declarations.Count(name: "SDF_TRANSFORM_SLOT_STATIC_WORD", value: SdfProgram.StaticTransformSlotWord);
         declarations.Expression(name: "SDF_TRANSFORM_SLOT_UNPACK(word)", value: "((int)(word) + SDF_TRANSFORM_SLOT_NONE)");
-        declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
-        declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfVisibility.NormalScale);
-        declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
         declarations.Section(title: "The field's shared constants: the chamfer bevel's scale (SdfProgram.SqrtHalf), the smooth blends' radius floor (SdfProgram.SmoothRadiusMin) and the sweep search (SdfFieldEvaluator).");
         declarations.Real(name: "SDF_SQRT_HALF", value: SdfProgram.SqrtHalf);
         declarations.Real(name: "SDF_SMOOTH_RADIUS_MIN", value: SdfProgram.SmoothRadiusMin);
@@ -265,6 +255,49 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_NOISE_SEED_STREAM_Z", value: Pcg3dLatticeNoise.NoiseSeedStreamZ);
         declarations.Bits(name: "SDF_R2_ALPHA1", value: LowDiscrepancy.R2AlphaXQ32);
         declarations.Bits(name: "SDF_R2_ALPHA2", value: LowDiscrepancy.R2AlphaYQ32);
+
+        return declarations;
+    }
+    // Every declaration the renderer's include makes, after it includes the field's.
+    internal static string DeclareRender() {
+        var declarations = new Declarations(builtOn: DeclareField(), guard: SdfRenderHlsl.Guard, include: FileName);
+
+        declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
+        declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");
+        declarations.Count(
+            name: "SDF_MAX_SCREEN_SURFACES",
+            value: SdfProgramBuilder.MaxScreenSurfaces
+        );
+        declarations.Count(name: "SDF_MAX_LIGHTS", value: SdfLights.MaxLights);
+        declarations.Count(name: "SDF_MAX_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
+        declarations.Count(name: "SDF_MAX_DISPATCH_GROUPS", value: checked((int)GpuRegion.CopyMaxGroupsPerDimension));
+        declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
+        declarations.Real(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
+        declarations.Real(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
+        declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
+        declarations.Real(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
+        declarations.Real(name: "SDF_LOCAL_REFLECTANCE", value: SdfExposure.LocalReflectance);
+        declarations.Real(name: "SDF_REFERENCE_WHITE", value: SdfExposure.ReferenceWhite);
+        declarations.Real(name: "SDF_SKY_PEAK_TARGET", value: SdfExposure.SkyPeakTarget);
+        declarations.Real(
+            name: "SDF_MINIMUM_NEAR",
+            value: SdfWorldPackage.MinimumNear
+        );
+        declarations.Count(name: "SDF_VOLUME_VECTORS_PER_ENTRY", value: SdfVolume.VectorsPerEntry);
+        declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
+        declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
+        declarations.Members<SdfVisibilityKind>(prefix: "SDF_VISIBILITY_KIND");
+        declarations.Section(title: "The visibility record's identity fields and the record passes' workgroup edge (SdfVisibility).");
+        declarations.Count(name: "SDF_VISIBILITY_KIND_SHIFT", value: SdfVisibility.KindShift);
+        declarations.Bits(name: "SDF_VISIBILITY_SOURCE_MASK", value: SdfVisibility.SourceMask);
+        declarations.Count(name: "SDF_VISIBILITY_GROUP_EDGE", value: SdfVisibility.GroupEdgePixels);
+        declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
+        declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);
+        declarations.Count(name: "SDF_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
+        declarations.Count(name: "SDF_SHADOW_FADE_CAPACITY", value: SdfShadowSlots.MaxFadeSlots);
+        declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
+        declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfVisibility.NormalScale);
+        declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
         declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the view shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshViewShift).");
         declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
         declarations.Count(name: "SDF_MESH_MATERIAL_WORD", value: SdfMeshRecord.MaterialWord);
@@ -276,6 +309,10 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_NORMAL_MATRIX_WORD", value: SdfMeshRecord.NormalMatrixWord);
         declarations.Count(name: "SDF_MESH_FRAME_SLOT_WORD", value: SdfMeshRecord.FrameSlotWord);
         declarations.Count(name: "SDF_MESH_SKIN_WORD", value: SdfMeshRecord.SkinWord);
+        declarations.Count(name: "SDF_MESH_CARRY_ROTATION_WORD", value: SdfMeshRecord.CarryRotationWord);
+        declarations.Count(name: "SDF_MESH_CARRY_TRANSLATION_WORD", value: SdfMeshRecord.CarryTranslationWord);
+        declarations.Count(name: "SDF_MESH_CARRY_SCALE_WORD", value: SdfMeshRecord.CarryScaleWord);
+        declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
@@ -284,11 +321,24 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_VIEW_SHIFT", value: SdfKernelInterfaces.MeshViewShift);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHTS_WORD", value: SdfMeshIrradianceProbe.LightsWord);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHT_WORDS", value: SdfMeshIrradianceProbe.LightWords);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_DEPTH_WORD", value: SdfMeshIrradianceProbe.DepthWord);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_FADE", value: SdfMeshIrradianceProbe.DepthFade);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD", value: SdfMeshIrradianceProbe.NeighboursWord);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_MUTUAL_LOW", value: SdfMeshIrradianceProbe.MutualLow);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_MUTUAL_HIGH", value: SdfMeshIrradianceProbe.MutualHigh);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
-        declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords) and the weight its history saturates at, one period of samples (SdfTemporalSamples.Period).");
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_BEHIND", value: SdfMeshIrradianceProbe.Behind);
+        declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).");
         declarations.Count(name: "SDF_HISTORY_SURFACE_WORDS", value: SdfWorldPackage.HistorySurfaceWords);
+        declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfTemporalSamples.Period);
         declarations.Real(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfTemporalSamples.Period);
+        declarations.Real(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfTemporalSamples.Period * SdfTemporalSamples.FeaturePeriods));
+        declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
+        declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
+        declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);
@@ -307,7 +357,7 @@ public static class SdfIsaHlsl {
         declarations.Signed(name: "SDF_DEBUG_VIEW_COUNT", value: DebugViewModes.Count);
 
         for (var mode = 0; (mode < DebugViewModes.Count); mode++) {
-            declarations.Signed(name: $"SDF_DEBUG_VIEW_{DebugViewModes.Names[mode].Replace(oldChar: '-', newChar: '_').ToUpperInvariant()}", value: mode);
+            declarations.Signed(name: $"SDF_DEBUG_VIEW_{DebugViewModes.Names[mode].Replace(newChar: '_', oldChar: '-').ToUpperInvariant()}", value: mode);
         }
 
         return declarations.Text();
@@ -340,19 +390,31 @@ public static class SdfIsaHlsl {
         return text.ToString();
     }
 
+    // One generated include's declarations: its guard, the include it builds on, and its defines, none named as one the
+    // include it builds on declares.
     private sealed class Declarations {
+        private readonly string m_guard;
         private readonly List<(string Name, string Value)> m_group = [];
         private readonly HashSet<string> m_names = new(comparer: StringComparer.Ordinal);
+        private readonly HashSet<string> m_reserved;
         private readonly StringBuilder m_text = new();
 
-        public Declarations() {
+        public Declarations(string guard, string? include = null, Declarations? builtOn = null) {
+            m_guard = guard;
+            m_reserved = ((builtOn is null) ? [] : [.. builtOn.m_names]);
             Line(line: "// Generated by `puck shaders generate` from the SDF instruction set's C# model; regenerate it, never edit it.");
-            Line(line: $"#ifndef {Guard}");
-            Line(line: $"#define {Guard}");
+            Line(line: $"#ifndef {guard}");
+            Line(line: $"#define {guard}");
+
+            if (include is not null) {
+                Line(line: $"#include \"{include}\"");
+            }
         }
 
         private void Define(string name, string value) {
-            if (!m_names.Add(item: name.Split(separator: '(')[0])) {
+            var bare = name.Split(separator: '(')[0];
+
+            if (m_reserved.Contains(item: bare) || !m_names.Add(item: bare)) {
                 throw new InvalidOperationException(message: $"Two SDF instruction-set declarations are both named {name}.");
             }
 
@@ -458,7 +520,7 @@ public static class SdfIsaHlsl {
         );
         public string Text() {
             Line(line: "");
-            Line(line: $"#endif // {Guard}");
+            Line(line: $"#endif // {m_guard}");
 
             return m_text.ToString();
         }

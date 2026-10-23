@@ -146,8 +146,11 @@ Puck.World extends the rule compiler the way any host does (see
   compile shares. Its operand family answers the reserved world channels:
   `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$bodyPosition:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
-  `$clock:`, and `$board:cellOf:`. `bodyState(each, fuel)` reads one of a
+  `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
+  `$board:pointer:` and `$board:side:` (a seat at an engageable tabletop, the
+  [Schema README](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
+  `bodyState(each, fuel)` reads one of a
   body's action-state slots (declared in `state.body` or `state.identity`, the
   slots a kit's `compareState` and a hold's `spend` use) as the body's step
   left it this tick: a counter's value, or a timer's remaining seconds. A slot
@@ -159,17 +162,31 @@ Puck.World extends the rule compiler the way any host does (see
   for a reference resolving to no live body; any other axis is refused with
   `WorldRuleRefusal.BodyPositionMalformed`. A gate over it with a `pose`
   effect recovers a body that falls out of the world, as the debug world's
-  `fall-respawn` rule does for every live body through `forEach: $bodies`. Its key family answers `$pair:`. Its effect arms cover body motion and
+  `fall-respawn` rule does for every live body through `forEach: $bodies`.
+  `engaged(each, 0)` reads `1` while the body's participant holds a control
+  application onto screen 0, captured or mirrored, and `0` otherwise or for no
+  live body; a screen index the document declares no screen at is refused with
+  `WorldRuleRefusal.EngagedMalformed`. The debug world's `brick-pick-up` rule
+  reads it to have the Moth pick up the brick she plays. Its key family answers `$pair:`. Its effect arms cover body motion and
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,
   `pose` and `poseCell`, `paintField`, placement and HUD panel upserts and
-  removals, `setIdentityFact`, and `save`. The four body-motion effects —
+  removals, `setIdentityFact`, `setBodyState`, and `save`. `setBodyState(key:
+  0, state: "suit", expression: 1 - bodyState(body, 0, suit))` writes a
+  `state.body` Counter of the body it names, the register a kit's own
+  `setState` writes; the register crosses to another world with the body, and
+  a kit's action refuses the effect by name. The four body-motion effects —
   `setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse` and
   `designate` — are one operation in a kit's action and in a rule: a kit's
   action acts on its own body, and a rule names the body with `key`
   (`WorldBodyEffects` is the one check both scopes lower through). Its predicate arms `held`, `now`,
   `recently`, and `timerElapsed` belong to body programs; a rule that uses one
-  is refused with `RuleRefusal.PredicateKindInadmissible`.
+  is refused with `RuleRefusal.PredicateKindInadmissible`. `pose` and
+  `poseCell` teleport: the client snaps the body and its contact state is
+  dropped. `poseCell(…, glide: true)` instead moves the body as continuous
+  motion, keeping its attitude, velocity and contact state, so a client
+  interpolates it; a rule that steps a body along a topology every tick (the
+  debug world's lift car) glides it.
 - **`WorldFactsCompileContext`** is the derived compile context. It carries the
   world definition, resolves body references, anchors topologies in a
   placement's frame, and prices reads that scan the population at its capacity.
@@ -396,9 +413,12 @@ Here's how the opponent plays:
    hasn't reached the move-count or repetition draw limit.
 2. `chess-ai-revision` bumps `aiRevision` whenever the settled position
    changes.
-3. The `chessAI` job searches one ply. Its judge is the game's own legality
-   rules; `chess-ai-evaluate` scores material, central occupation, and pawn
-   progress only when `search(ply) > 0`.
+3. The `chessAI` job searches one ply. Its one shape is a `relocate` with
+   `moves` (`chessMoves`): each piece kind's steps, jumps and slides for the
+   side to move, so the job judges only the squares a piece could reach, a few
+   dozen from the opening rather than all 2,048 token and cell pairs. Its judge
+   is the game's own legality rules; `chess-ai-evaluate` scores material,
+   central occupation, and pawn progress only when `search(ply) > 0`.
 4. `chess-ai-request` accepts the answer only when `aiBest[revision]` equals
    `aiRevision`, then the apply rules move the physical pieces with `poseCell`.
    Castling moves both pieces, en passant removes the right pawn, captured

@@ -10,7 +10,9 @@ namespace Puck.World.Client;
 /// imported producer a host registers): it owns the feed the instance's factory opened, publishes it when the runtime
 /// renders the instance, and hands its image out through the capture gate (<see cref="WorldCaptureGate.Resolve"/>),
 /// which makes <see cref="TryAcquireOutput"/> the one place a source's image is acquired. A filled source hands out its
-/// fill and never acquires the feed. A producer that exposes the complete acquired image carries it with the same
+/// fill and never acquires the feed; an external source whose feed has no image of its own is filled too
+/// (<see cref="WorldCaptureGate.FillsFeed"/>), so it answers as its fill does and never holds the frames that show it. A
+/// producer that exposes the complete acquired image carries it with the same
 /// lease, publication and wait; a view-only feed still exposes no copyable surface. Every member runs on the thread
 /// that produces frames.
 /// </summary>
@@ -48,15 +50,18 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
 
     /// <inheritdoc/>
     public FrameRender Answer => ((Feed is { } feed)
-        ? (m_gate.Fills(content: feed.Descriptor.Content)
+        ? (m_gate.FillsFeed(feed: feed)
             ? m_fillRender(arg: feed.Descriptor.CaptureFill)
             : feed.Answer)
         : FrameRender.Refused(reason: (Fault ?? m_unopened)));
     /// <inheritdoc/>
     public ImageSourceDescriptor? Descriptor => Feed?.Descriptor;
-    /// <summary>Gets why the source shows nothing: why its feed did not open, or the feed's own fault; or
-    /// <see langword="null"/> while it shows its image.</summary>
-    public string? Fault => (Opening.Fault ?? (m_notImported ?? Feed?.Fault));
+    /// <summary>Gets why the source shows no image of its own: why its feed did not open, or the feed's own fault, naming
+    /// the capture fill the source shows in its place while the gate fills the feed; or <see langword="null"/> while it
+    /// shows its image.</summary>
+    public string? Fault => (Opening.Fault ?? (m_notImported ?? (((Feed is { } feed) && (feed.Fault is { } fault))
+        ? (m_gate.FillsFeed(feed: feed) ? $"{fault}; it shows its capture fill" : fault)
+        : null)));
     /// <summary>Gets the feed the producer publishes and acquires, or <see langword="null"/> when none opened or the one
     /// that opened hands out no image.</summary>
     public IWorldImportFeed? Feed { get; }
@@ -83,12 +88,17 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// <inheritdoc/>
     /// <remarks>Publishes the feed for the frame and answers as the image it hands out stands. A source that opened no
     /// feed refuses. While the gate fills the feed's content class the source hands out its capture fill, never the
-    /// feed's image, so it is rendered once the fill has converted, whatever the feed answers; otherwise it answers as
-    /// its feed does (<see cref="IWorldImportFeed.Publish"/>). The extent is the one the feed declared, so the arguments
-    /// are not read. A filled source publishes only its fill; the live feed owes no publication.</remarks>
+    /// feed's image, so it is rendered once the fill has converted, whatever the feed answers, and the live feed owes no
+    /// publication. Otherwise it publishes the feed (<see cref="IWorldImportFeed.Publish"/>) and answers as the feed
+    /// does, unless an external feed answers that it has no image: the source then hands out its fill and answers as the
+    /// fill does. The extent is the one the feed declared, so the arguments are not read.</remarks>
     public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
         if ((Feed is { } feed) && !m_gate.Fills(content: feed.Descriptor.Content)) {
-            return feed.Publish(context: in context);
+            var published = feed.Publish(context: in context);
+
+            if (published.IsRendered || !feed.Descriptor.FillsCaptures) {
+                return published;
+            }
         }
 
         return Answer;
@@ -103,7 +113,7 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     }
     /// <inheritdoc/>
     /// <remarks>The image is the feed's acquired frame, tainted when its content is external, or its capture fill while
-    /// the gate fills its content class. The output carries the complete image when that same acquisition exposes it;
+    /// the gate fills the feed (<see cref="WorldCaptureGate.FillsFeed"/>). The output carries the complete image when that same acquisition exposes it;
     /// a view-only acquisition remains available for sampling.</remarks>
     public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
         if (Feed is not { } feed) {

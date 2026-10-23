@@ -96,9 +96,21 @@ public static class BindingBarSeatComposer {
             var livePress = ((isPressed is not null) && isPressed(source));
             var latched = ((binding is { Toggle: true }) && (isCommandHeld is not null) && isCommandHeld(binding.Command));
             var pressed = (livePress || latched);
-            var icon = ((binding is null)
-                ? OverlayResolvedGlyph.None
-                : resolveIcon(binding.Key)
+            // A control the page leaves unbound but whose hold opens a deeper page (a shoulder that opens the play wheel)
+            // reads as that page's opener: bright, and wearing the icon the bar's icon row names for the page's id.
+            var opener = ((binding is null) && (view.Openers is { } openers) && openers.TryGetValue(
+                key: source,
+                value: out var opens
+            )
+                ? opens
+                : null
+            );
+            var icon = ((binding is not null)
+                ? resolveIcon(binding.Key)
+                : ((opener is not null)
+                    ? resolveIcon(opener.PageId)
+                    : OverlayResolvedGlyph.None
+                )
             );
 
             destination[index] = new OverlayBindingSlot(
@@ -106,7 +118,7 @@ public static class BindingBarSeatComposer {
                 BadgeGlyph0: glyph.Glyph0,
                 BadgeGlyph1: glyph.Glyph1,
                 BankOrder: bankOrder,
-                Bound: (binding is not null),
+                Bound: ((binding is not null) || (opener is not null)),
                 Latched: (latched && (isPressed is null)),
                 Toggled: latched,
                 IconGlyph0: icon.Glyph0,
@@ -114,7 +126,7 @@ public static class BindingBarSeatComposer {
                 PitchX: plate.Position.X,
                 PitchY: plate.Position.Y,
                 Pressed: pressed,
-                Visible: ((binding is not null) || !hideUnbound),
+                Visible: ((binding is not null) || (opener is not null) || !hideUnbound),
                 Frame: frame,
                 BadgeX: plate.Badge.X,
                 BadgeY: plate.Badge.Y
@@ -131,31 +143,165 @@ public static class BindingBarSeatComposer {
     /// <param name="resolveBadge">Resolves a modifier's input source id to its badge content — the caller's own icon
     /// table, the SAME door a slot's badge resolves through.</param>
     /// <param name="destination">The destination modifiers; at least <c>view.Modifiers.Count</c> entries.</param>
+    /// <param name="declaredOnly">Whether to keep to the modifiers the profile declares
+    /// (<see cref="BindingModifierView.Declared"/>), leaving out the ones the compiler minted for a raw source a row
+    /// names.</param>
     /// <returns>The number of modifiers written.</returns>
-    public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Span<OverlayBindingModifier> destination) {
+    public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Span<OverlayBindingModifier> destination, bool declaredOnly = false) {
         ArgumentNullException.ThrowIfNull(argument: view);
         ArgumentNullException.ThrowIfNull(argument: resolveBadge);
 
-        var count = Math.Min(
-            val1: view.Modifiers.Count,
-            val2: destination.Length
-        );
+        var count = 0;
 
-        for (var index = 0; (index < count); index++) {
+        for (var index = 0; ((index < view.Modifiers.Count) && (count < destination.Length)); index++) {
             var modifier = view.Modifiers[index];
+
+            if (declaredOnly && !modifier.Declared) {
+                continue;
+            }
+
             var badge = Badge(
                 glyph: resolveBadge(modifier.Sources[0]),
                 text: text
             );
 
-            destination[index] = new OverlayBindingModifier(
+            destination[count] = new OverlayBindingModifier(
                 BadgeGlyph0: badge.Glyph0,
                 BadgeGlyph1: badge.Glyph1,
                 Held: modifier.Required
             );
+            count++;
         }
 
         return count;
+    }
+    /// <summary>Composes the bar's command-chord hints from a page view. A chord row of the active group becomes a hint
+    /// only when the bar places every member — a control in <paramref name="slotSet"/>, or any member while the bar
+    /// draws its modifier row — and every member's badge resolves: the hint is the members' badges and the action's
+    /// icon, else the row's label while the bar draws text. Any other row stays off the bar, so the bar never spells a
+    /// source or a command name.</summary>
+    /// <param name="view">The seat's active page view.</param>
+    /// <param name="slotSet">The bar's slot set: the controls it places.</param>
+    /// <param name="modifiers">Whether the bar draws its modifier row, which places every chord member.</param>
+    /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> drops label badges and label
+    /// actions.</param>
+    /// <param name="resolveBadge">Resolves a member's input source id to its badge content — the same door a slot's
+    /// badge resolves through.</param>
+    /// <param name="resolveAction">Resolves a chord row to its action's icon content.</param>
+    /// <param name="destination">The destination hints; rows past its length stay off the bar.</param>
+    /// <param name="members">The backing the hints' member badges are written into,
+    /// <see cref="BindingBarWriter.MaxHintMembers"/> per destination hint.</param>
+    /// <param name="declaredOnly">Whether the modifier row places only the modifiers the profile declares
+    /// (<see cref="BindingModifierView.Declared"/>), so a chord whose member is a minted modifier needs that member in
+    /// <paramref name="slotSet"/> instead.</param>
+    /// <returns>The number of hints written.</returns>
+    /// <exception cref="ArgumentException"><paramref name="members"/> is shorter than
+    /// <see cref="BindingBarWriter.MaxHintMembers"/> per destination hint.</exception>
+    public static int ComposeHints(BindingPageView view, IReadOnlyList<string> slotSet, bool modifiers, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Func<BindingChordCommandView, OverlayResolvedGlyph> resolveAction, Span<OverlayBindingHint> destination, Memory<OverlayResolvedGlyph> members, bool declaredOnly = false) {
+        ArgumentNullException.ThrowIfNull(argument: view);
+        ArgumentNullException.ThrowIfNull(argument: slotSet);
+        ArgumentNullException.ThrowIfNull(argument: resolveBadge);
+        ArgumentNullException.ThrowIfNull(argument: resolveAction);
+
+        if (members.Length < (destination.Length * BindingBarWriter.MaxHintMembers)) {
+            throw new ArgumentException(
+                message: $"Expected {(destination.Length * BindingBarWriter.MaxHintMembers)} member slots; got {members.Length}.",
+                paramName: nameof(members)
+            );
+        }
+
+        var chords = view.CommandChords;
+        var count = 0;
+
+        for (var row = 0; ((row < chords.Count) && (count < destination.Length)); row++) {
+            var chord = chords[row];
+            var sources = chord.Sources;
+
+            if (
+                (sources.Count == 0) ||
+                (sources.Count > BindingBarWriter.MaxHintMembers)
+            ) {
+                continue;
+            }
+
+            var badges = members.Slice(
+                length: sources.Count,
+                start: (count * BindingBarWriter.MaxHintMembers)
+            );
+            var placed = true;
+
+            for (var index = 0; (placed && (index < sources.Count)); index++) {
+                var badge = Badge(
+                    glyph: resolveBadge(sources[index]),
+                    text: text
+                );
+
+                badges.Span[index] = badge;
+                placed = (
+                    (badge != OverlayResolvedGlyph.None) &&
+                    ((modifiers && (!declaredOnly || IsDeclaredModifier(
+                        source: sources[index],
+                        view: view
+                    ))) || Places(
+                        slotSet: slotSet,
+                        source: sources[index]
+                    ))
+                );
+            }
+
+            var action = Badge(
+                glyph: resolveAction(chord),
+                text: text
+            );
+            var label = (((action == OverlayResolvedGlyph.None) && text)
+                ? (chord.Label ?? string.Empty)
+                : string.Empty
+            );
+
+            if (
+                !placed ||
+                ((action == OverlayResolvedGlyph.None) && (label.Length == 0))
+            ) {
+                continue;
+            }
+
+            destination[count] = new OverlayBindingHint(
+                Action: action,
+                Label: label,
+                Members: badges
+            );
+            count++;
+        }
+
+        return count;
+    }
+    private static bool IsDeclaredModifier(BindingPageView view, string source) {
+        for (var index = 0; (index < view.Modifiers.Count); index++) {
+            var modifier = view.Modifiers[index];
+
+            if (modifier.Declared && (modifier.Sources.Count > 0) && string.Equals(
+                a: modifier.Sources[0],
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static bool Places(IReadOnlyList<string> slotSet, string source) {
+        for (var index = 0; (index < slotSet.Count); index++) {
+            if (string.Equals(
+                a: slotSet[index],
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
     /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
     /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing

@@ -340,14 +340,11 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
         public void HoldQueue() {
             var device = ((ID3D12Device*)m_context.Device.Handle);
 
-            device->CreateFence(
+            device->CreateFence<ID3D12Fence>(
                 Flags: default,
                 InitialValue: 0,
-                ppFence: out var created,
-                riid: ID3D12Fence.IID_Guid
+                ppFence: out var hold
             );
-
-            var hold = ((ID3D12Fence*)created);
 
             m_hold = ((nint)hold);
             m_released = false;

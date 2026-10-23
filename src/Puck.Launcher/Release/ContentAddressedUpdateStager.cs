@@ -5,7 +5,7 @@ namespace Puck.Launcher.Release;
 /// <summary>The <see cref="IUpdateStager"/> every <c>AddSelfUpdate</c> registration wires: <see cref="IReleaseSource"/>
 /// for transport, a <see cref="ContentAddressedStore"/> rooted at <c>&lt;cacheRoot&gt;/objects/</c> for the
 /// download/verify/dedup cache, and <c>&lt;cacheRoot&gt;/versions/&lt;version&gt;/</c> as the staged directory a
-/// future <c>Puck.Platform.IUpdateApplier</c> points the stub at.</summary>
+/// <see cref="IUpdateApplier"/> points the stub at.</summary>
 /// <param name="source">The transport to fetch missing files through.</param>
 /// <param name="cache">The content-addressed object cache.</param>
 /// <param name="cacheRoot">The root directory staged versions live under.</param>
@@ -18,6 +18,12 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
     public async Task<UpdateStageResult> StageAsync(ReleaseManifest manifest, string rid, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rid);
+
+        var errors = ReleaseCanonicalizer.Validate(document: manifest);
+
+        if (errors.Count != 0) {
+            return UpdateStageResult.Refuse(reason: $"manifest fails structural validation: {errors[0]}");
+        }
 
         var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(
             a: candidate.Rid,
@@ -49,6 +55,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             var found = await m_source.TryGetFileAsync(
                 cancellationToken: cancellationToken,
                 destination: buffer,
+                length: file.Size,
                 pin: pin
             ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -59,7 +66,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             var bytes = buffer.ToArray();
             var actualHash = ContentPin.Compute(content: bytes);
 
-            if (actualHash != pin) {
+            if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' fetched with hash {actualHash}, expected {file.Hash} — refused rather than staged");
             }
 
@@ -72,6 +79,14 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             path2: "versions",
             path3: manifest.Version
         );
+
+        // A previous attempt can stop after writing files but before UpdateService persists an install intent.
+        // A later signed manifest for this version may omit some of those files. Its payload is the complete
+        // file set, so rebuild the inactive directory instead of inheriting undeclared executable content.
+        // The caller holds the install lease and has excluded the current version before entering staging.
+        if (Directory.Exists(path: versionDirectory)) {
+            Directory.Delete(path: versionDirectory, recursive: true);
+        }
 
         foreach (var file in payload.Files) {
             if (
@@ -89,7 +104,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
 
             var actualHash = ContentPin.Compute(content: bytes);
 
-            if (actualHash != pin) {
+            if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
             }
 

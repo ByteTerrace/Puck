@@ -9,10 +9,13 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
     private CommandResult Inspect(CommandContext context, WireArgs args) {
         if (inspector is null) { return CommandResult.Error(output: "[world.inspect: requires GPU presentation]"); }
         if (args.Count != 0) {
-            if ((args.Count != 1) || (!args.Is(index: 0, value: "on") && !args.Is(index: 0, value: "off"))) {
-                return CommandResult.Usage(form: "[on|off]", verb: "world.inspect");
+            if ((args.Count != 1) || (!args.Is(index: 0, value: "on") && !args.Is(index: 0, value: "off") && !args.Is(index: 0, value: "toggle"))) {
+                return CommandResult.Usage(form: "[on|off|toggle]", verb: "world.inspect");
             }
-            seats.SetInspector(slot: context.Slot, enabled: args.Is(index: 0, value: "on"));
+            seats.SetInspector(slot: context.Slot, enabled: (args.Is(index: 0, value: "toggle")
+                ? !seats.InspectorEnabled(slot: context.Slot)
+                : args.Is(index: 0, value: "on")
+            ));
         }
         return new CommandResult(Output: inspector.Describe(slot: context.Slot));
     }
@@ -30,7 +33,7 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(name: "world.cost", description: "Reads live placement cost: world.cost [<placement>]; world.cost top [<n>]. Prints exclusive words and separate shared program overhead. world.cost sky reads the sky, composite and environment passes and their layer rows from each node's latest completed submission.",
             handler: Cost, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
-        yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: "Shows the acting seat's pointer, camera, counts and reload diagnostics: world.inspect on|off; bare prints the same text as its panel.",
+        yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: "Shows the acting seat's pointer, camera, counts and reload diagnostics: world.inspect on|off|toggle; bare prints the same text as its panel.",
             handler: Inspect, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
         yield return CommandDefinition.WithWireArgs(name: "world.explain", description: "Requests the acting seat or pane's pointer pixel once through its shared GPU picker and, after its fence, reports the pixel's material. A missing pixel names its refusal; no simulation state changes.",
             handler: Explain, routing: CommandRouting.Immediate, bindability: CommandBindability.Unbindable);

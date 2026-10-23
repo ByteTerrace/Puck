@@ -1,6 +1,6 @@
 ---
 name: gaming-bricks
-description: "Fixes and diagnoses Puck's GB/GBC/GBA emulators (SM83 STOP/HALT/EI, PPU/STAT timing, APU, serial and SIOCNT links, snapshots) and their Post batteries (--cosim, --filter). Cartridges are rom-forge."
+description: "Fixes Puck GB/GBC/GBA and NES/Famicom (HGD) emulators: CPU, PPU/STAT timing, APU, links, snapshots and Post batteries (--cosim, --filter). Cartridges: rom-forge."
 ---
 
 # Gaming Bricks
@@ -50,6 +50,14 @@ change.
 
 ## Contracts that bite
 
+- **Lockstep presentation completes machine steps.** The World selects
+  `IMachineRuntime.Advance` through `WorldMachineHost.SynchronousSteps` while
+  `world.lockstep` is on. Ordinary presentation keeps asynchronous `Submit`.
+  A source upload's publication number identifies the upload, not the native
+  frame its worker finished: compare `WriteFrame`'s version and bytes when
+  diagnosing screen or screen-light repeatability. Adding a GPU fence wait can
+  hide a late worker frame without fixing its completion boundary.
+
 Each is detailed in [references/hardware-and-oracles.md](references/hardware-and-oracles.md).
 
 - **STOP and EI are oracle conflicts, not bugs.** `ExecuteStop` (`Sm83.Decode.cs`)
@@ -72,6 +80,14 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
 - **A `--cosim` run under about 60 frames proves nothing** (the boot logo scroll
   dominates it). Give a CPU-stream comparison at least 120 frames and check that the
   record count differs per ROM before believing a clean result.
+- **Know which AGB BIOS ran before blaming firmware.** Advanced Post
+  diagnostics (`--render`, `--probe`, `--trace-crash` and the rest) boot the
+  bundled Puck firmware unless `--bios` names another image, as a World does;
+  only the battery runs the zeroed stub, where any SWI or IRQ runs off into
+  zeroed BIOS memory. A hosted core or `AgbLinkSession` console that stops
+  being able to run (Undefined or Abort mode, a fetch from a region with no
+  code) throws
+  `AgbExecutionFaultException`, which `machine.state` shows as `fault=`.
 - **Every core's framebuffer is packed `0x00RRGGBB`** (`ITimeTravelMachineCore.Framebuffer`, red in bits 16-23;
   the advanced brick sets the alpha byte), because the queued worker repacks it for the World's screens in that
   order. A PNG or a hash of the image goes through `FramebufferRgba.Pack` (`Puck.Machines.Post`), never
@@ -85,10 +101,14 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   layout and its snapshot order in one `HgdBoardMemory`; a new board does the
   same. Board timing comes only from `IHgdMapper.ObserveM2` and
   `ObservePpuAddress`: MMC1's consecutive-cycle write rule counts M2 falls, and
-  MMC3's counter clocks on a PPU A12 rise after three M2 falls with A12 low. A
+  MMC3's counter clocks on a PPU A12 rise after three whole low M2 cycles. A
   board's laws live in `BoardLawTests`, and its fixture joins
   `PostMachine.Fixtures`, which the determinism, fork and mid-instruction replay
-  stages all run. A Deck program that clears the CPU's I flag inhibits the APU
+  stages all run. A Deck cycle's transaction runs at the read point mid-M2 and
+  its write lands as M2 falls, with the interrupt sample; the `blargg-suites`
+  and `accuracy-coin` stages are the judge of Deck timing (owner ruling in the
+  [Deck manual](../../../docs/emulation/hgd/README.md#how-accuracy-is-judged)),
+  never another emulator or a game's look. A Deck program that clears the CPU's I flag inhibits the APU
   frame IRQ (`$4017 = $40`) first, or the shared IRQ line never drops.
 - **GBA multiplayer SIOCNT has an unmodeled ready line.** `AgbSerialController.PackSioControl`
   does not derive the SD/SI bits from cable-partner presence, and
@@ -96,9 +116,13 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   Implementing it flips that stage; update the stage and the reference together,
   and derive the bits from the modeled `AgbLinkCable` partner, never from ambient
   state.
-- **No licensed image is ever a default or a bundled payload.** Retail ROMs and BIOS
-  images are named per run (`--link-rom`, `--bios`, `--ags`) and stay out of the
-  repository.
+- **No licensed image is ever a committed default or a bundled payload.** Retail
+  ROMs and BIOS images are named per run (`--link-rom`, `--bios`, `--ags`) and
+  stay out of the repository, its builds, packages, logs and commit messages. A
+  world device boots one only as the owner's local default: the git-ignored
+  folder's own `folder.json`, written by `machine.default` (`puck-world`,
+  [engagement](../puck-world/references/engagement.md)), so nothing committed
+  names it.
 
 ## Workflow
 
@@ -133,7 +157,8 @@ dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier A
 `--tier`; Tier A needs no assets, Tier B runs over the fetched corpora, Tier C
 covers serial, link and infrared exchange. A stage whose asset is absent skips
 (`--require-assets` turns that into an infrastructure failure), and the report
-lists every skip. Exit 0 is pass or skip, 1 a failed check (a corpus ROM that does
+lists every skip. Report stage and skip counts from stdout; exit 0 alone does
+not prove a stage ran. Exit 0 is pass or skip, 1 a failed check (a corpus ROM that does
 not pass included), 2 infrastructure. `tests/Puck.HumbleGamingBrick.Tests` runs the
 Humble battery with an empty corpus cache, so CPU suites cover the self-contained
 stages.

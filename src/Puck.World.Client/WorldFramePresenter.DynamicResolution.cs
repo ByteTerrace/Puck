@@ -26,13 +26,18 @@ public sealed partial class WorldFramePresenter {
     /// <param name="name">The registered view name whose resolution policy applies.</param>
     /// <param name="width">The allocated view width.</param>
     /// <param name="height">The allocated view height.</param>
+    /// <param name="native">Whether the view renders at native scale this frame whatever its saved quality, pin and
+    /// controller say, as a seat's view matted to a framed screen does; its controller is reset, so it takes the
+    /// governor's choice again from scratch once the view leaves native.</param>
     /// <returns>The same view with its live resolution and sky-field presentation overrides.</returns>
-    public SdfViewSnapshot DressResolution(SdfViewSnapshot view, string name, uint width, uint height) {
+    public SdfViewSnapshot DressResolution(SdfViewSnapshot view, string name, uint width, uint height, bool native = false) {
         var state = m_settings.Resolution(view: name);
-        var ceiling = m_settings.Ceiling(view: name);
+        var ceiling = (native ? 1f : m_settings.Ceiling(view: name));
         var scale = ceiling;
 
-        if (m_settings.Enabled(view: name)) {
+        if (native) {
+            state.Controller.Reset();
+        } else if (m_settings.Enabled(view: name)) {
             if (!m_viewLoads.TryGetValue(key: name, value: out var load)) {
                 load = ((name == WorldViewGraphs.WorldInstance) ? FrameLoad : FrameLoadForView?.Invoke(name));
                 m_viewLoads.Add(key: name, value: load);

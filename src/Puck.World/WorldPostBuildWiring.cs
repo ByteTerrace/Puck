@@ -83,6 +83,13 @@ public static class WorldPostBuildWiring {
         // (WorldSeatBindings holds the boot instance's; the document validator compiles the candidate's).
         WorldAffordances.Install(registry: consoleRegistry);
 
+        // The live document's `commands` rows answer beside the engine's verbs. The registry reads the set on every
+        // resolution, so a reload, a load or an undo that swaps the document changes them with it.
+        var commandServer = services.GetRequiredService<WorldServer>();
+
+        consoleRegistry.UseAuthoredCommands(source: _ => WorldConsoleCommands.For(definition: commandServer.Definition));
+        consoleRegistry.UseVerbCatalog(catalog: WorldConsoleVerbCatalog.Lookup);
+
         var seatBindings = services.GetRequiredService<WorldSeatBindings>();
 
         seatBindings.ValidateAffordancesLoudly();
@@ -209,7 +216,8 @@ public static class WorldPostBuildWiring {
             roster: services.GetRequiredService<PlayerRoster>(),
             grants: services.GetRequiredService<WorldServer>().Grants,
             anchor: services.GetRequiredService<WorldPerceptionAnchor>(),
-            activeLayout: services.GetRequiredService<Puck.World.Client.WorldViewComposer>().ActiveLayoutName
+            activeLayout: services.GetRequiredService<Puck.World.Client.WorldViewComposer>().ActiveLayoutName,
+            screens: services.GetRequiredService<WorldServer>().Definition.Screens
         );
 
         // Close the lever path here, where both halves are resolvable in EVERY shape: an accepted lever reaches the

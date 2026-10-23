@@ -132,14 +132,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                     NumArgumentDescs = 1,
                     pArgumentDescs = &argumentDesc,
                 };
-                void* signature;
-                var signatureIid = ID3D12CommandSignature.IID_Guid;
-
                 device->CreateCommandSignature(
                     pDesc: in signatureDesc,
                     pRootSignature: null,
-                    ppvCommandSignature: &signature,
-                    riid: in signatureIid
+                    ppvCommandSignature: out ID3D12CommandSignature* signature
                 );
                 m_dispatchSignature = ((nint)signature);
 
@@ -302,14 +298,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         // The info queue (present only when the debug layer loaded) lets DrainDebugMessages surface validation
         // messages to the console instead of only OutputDebugString.
-        void* infoQueuePtr;
-        var infoQueueIid = ID3D12InfoQueue.IID_Guid;
-
-        if (((IUnknown*)m_device.Handle)->QueryInterface(
-            ppvObject: out infoQueuePtr,
-            riid: in infoQueueIid
-        ).Succeeded) {
-            m_infoQueue = ((nint)infoQueuePtr);
+        if (((IUnknown*)m_device.Handle)->QueryInterface(ppvObject: out ID3D12InfoQueue* infoQueue).Succeeded) {
+            m_infoQueue = ((nint)infoQueue);
         }
 
         // A requested layer states whether it is live, so a validation run that prints no [d3d12-debug] line can tell a
@@ -328,16 +318,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         ((ID3D12Device*)m_device.Handle)->CreateCommandQueue(
             pDesc: in queueDesc,
-            ppCommandQueue: out var commandQueue,
-            riid: ID3D12CommandQueue.IID_Guid
+            ppCommandQueue: out ID3D12CommandQueue* commandQueue
         );
         m_commandQueue = ((nint)commandQueue);
 
         ((ID3D12Device*)m_device.Handle)->CreateFence(
             Flags: default,
             InitialValue: 0,
-            ppFence: out var idleFence,
-            riid: ID3D12Fence.IID_Guid
+            ppFence: out ID3D12Fence* idleFence
         );
         m_idleFence = ((nint)idleFence);
         m_idleFenceValue = 1;
@@ -371,50 +359,31 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     // Enables the debug layer and, at the full level, GPU-based validation (state tracking stays on, its default) and
     // synchronized command-queue validation. A runtime without the layer leaves it off, and the live line says so.
     private static void EnableDebugLayer(bool full) {
-        void* debugInterface;
-        var debugIid = ID3D12Debug.IID_Guid;
-
-        if (PInvoke.D3D12GetDebugInterface(
-            ppvDebug: &debugInterface,
-            riid: in debugIid
-        ).Failed) {
+        if (PInvoke.D3D12GetDebugInterface(ppvDebug: out ID3D12Debug* debug).Failed) {
             return;
         }
 
-        ((ID3D12Debug*)debugInterface)->EnableDebugLayer();
+        debug->EnableDebugLayer();
 
-        var debug1Iid = ID3D12Debug1.IID_Guid;
-
-        if (full && ((IUnknown*)debugInterface)->QueryInterface(
-            ppvObject: out var debug1,
-            riid: in debug1Iid
-        ).Succeeded) {
-            ((ID3D12Debug1*)debug1)->SetEnableGPUBasedValidation(Enable: true);
-            ((ID3D12Debug1*)debug1)->SetEnableSynchronizedCommandQueueValidation(Enable: true);
+        if (full && ((IUnknown*)debug)->QueryInterface(ppvObject: out ID3D12Debug1* debug1).Succeeded) {
+            debug1->SetEnableGPUBasedValidation(Enable: true);
+            debug1->SetEnableSynchronizedCommandQueueValidation(Enable: true);
             _ = ((IUnknown*)debug1)->Release();
         }
 
-        _ = ((IUnknown*)debugInterface)->Release();
+        _ = ((IUnknown*)debug)->Release();
     }
     // Turns on DRED's auto-breadcrumbs, their PIX-event contexts and page-fault reporting for every device created from
     // here on. A runtime without DRED settings records nothing, and a removal then reports only its reason.
     private static void EnableRemovalRecord() {
-        void* settings;
-        var settingsIid = ID3D12DeviceRemovedExtendedDataSettings1.IID_Guid;
-
-        if (PInvoke.D3D12GetDebugInterface(
-            ppvDebug: &settings,
-            riid: in settingsIid
-        ).Failed) {
+        if (PInvoke.D3D12GetDebugInterface(ppvDebug: out ID3D12DeviceRemovedExtendedDataSettings1* dred).Failed) {
             return;
         }
-
-        var dred = ((ID3D12DeviceRemovedExtendedDataSettings1*)settings);
 
         dred->SetAutoBreadcrumbsEnablement(Enablement: D3D12_DRED_ENABLEMENT.D3D12_DRED_ENABLEMENT_FORCED_ON);
         dred->SetBreadcrumbContextEnablement(Enablement: D3D12_DRED_ENABLEMENT.D3D12_DRED_ENABLEMENT_FORCED_ON);
         dred->SetPageFaultEnablement(Enablement: D3D12_DRED_ENABLEMENT.D3D12_DRED_ENABLEMENT_FORCED_ON);
-        _ = ((IUnknown*)settings)->Release();
+        _ = ((IUnknown*)dred)->Release();
     }
     // Writes the current device's removal record once, when the device reports a removal reason: the breadcrumb trail
     // and page fault DRED kept, or why there is none. A healthy device writes nothing.
@@ -457,16 +426,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return false;
         }
 
-        var device5Iid = ID3D12Device5.IID_Guid;
-
-        if (((IUnknown*)m_device.Handle)->QueryInterface(
-            ppvObject: out var device5,
-            riid: in device5Iid
-        ).Failed) {
+        if (((IUnknown*)m_device.Handle)->QueryInterface(ppvObject: out ID3D12Device5* device5).Failed) {
             return false;
         }
 
-        ((ID3D12Device5*)device5)->RemoveDevice();
+        device5->RemoveDevice();
         _ = ((IUnknown*)device5)->Release();
 
         return true;
@@ -665,11 +629,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         Drain(live: false);
 
-        var debugDeviceIid = ID3D12DebugDevice.IID_Guid;
-        var queried = ((IUnknown*)m_device.Handle)->QueryInterface(
-            ppvObject: out var debugDevice,
-            riid: in debugDeviceIid
-        );
+        var queried = ((IUnknown*)m_device.Handle)->QueryInterface(ppvObject: out ID3D12DebugDevice* debugDevice);
 
         if (queried.Failed) {
             (DebugOutput ?? Console.Error).WriteLine(value: $"[d3d12-debug] live objects not reported: QueryInterface(ID3D12DebugDevice) returned 0x{queried.Value:X8}");
@@ -678,7 +638,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         }
 
         try {
-            ((ID3D12DebugDevice*)debugDevice)->ReportLiveDeviceObjects(Flags: D3D12_RLDO_FLAGS.D3D12_RLDO_DETAIL | D3D12_RLDO_FLAGS.D3D12_RLDO_IGNORE_INTERNAL);
+            debugDevice->ReportLiveDeviceObjects(Flags: D3D12_RLDO_FLAGS.D3D12_RLDO_DETAIL | D3D12_RLDO_FLAGS.D3D12_RLDO_IGNORE_INTERNAL);
         } catch (Exception exception) {
             (DebugOutput ?? Console.Error).WriteLine(value: $"[d3d12-debug] live objects not reported: ReportLiveDeviceObjects returned 0x{exception.HResult:X8}");
         } finally {

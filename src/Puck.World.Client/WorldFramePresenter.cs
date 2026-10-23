@@ -143,8 +143,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly Quaternion[] m_lastSeatAnchorOrientation = new Quaternion[PlayerRoster.MaxSlots];
     private readonly bool[] m_hasSeatAnchor = new bool[PlayerRoster.MaxSlots];
     private readonly bool[] m_missingSeatAnchorNarrated = new bool[PlayerRoster.MaxSlots];
-    // Each seat's emulator view: the ease toward the screen it is captured on, and back.
+    // Each seat's framing of the screen it is captured on: the camera's ease onto the screen's picture, and back.
     private readonly WorldScreenFraming[] m_screenFraming = NewScreenFraming();
+    private readonly WorldTabletopFraming[] m_tabletopFraming = NewTabletopFraming();
     // The seat.join cue's edge detector: a slot's roster presence last frame.
     private readonly bool[] m_seatWasJoined = new bool[PlayerRoster.MaxSlots];
     // views.cameraRig's compiled-rig cache, one slot per seat. Slot-indexed rather than owned by WorldSeatViewState
@@ -156,7 +157,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Every kit's compiled collider, indexed by kit row, for the definition it was compiled from: the volume a chase
     // eye keeps out of when it frames a body of that kit.
     private FixedWorldCollider?[] m_subjectColliders = [];
+
     private WorldDefinition? m_subjectCollidersFor;
+
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot).
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
@@ -167,12 +170,18 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly WorldViewOutputRegions m_outputRegions = new();
     // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
     private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
+    // The screens the composed frame's seats frame: each seat whose camera has settled on the screen it engaged, that
+    // screen, the seat's view in m_views, which renders at native scale, and the matte the root shows of it
+    // (WorldScreenFraming.Matte, WorldViewGraphHost.FrameScreen).
+    private readonly List<(WorldScreen Screen, int View, NormalizedRect Matte)> m_engagedViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
 
     // The text screens' decals: each provider re-reads the binder's live source every produced frame, so a slot rotating
     // away from text clears its decal the same frame and a slot whose live source becomes text (a magazine selection, a
     // live source verb) lights it without a definition revision.
     private readonly WorldScreenDecals m_decals;
+    // Every engine screen slot's surface transform, which moves a carried screen's picture with its carrier.
+    private readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenTransforms;
     // The colors the presentation query field's build resolves; the query reads no material, so nothing follows them.
     private readonly WorldBakedColors m_queryColors;
 
@@ -466,7 +475,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 builder: builder,
                 definition: definition,
                 creations: definition.Creations,
-                placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
+                placements: WorldPlacementStamper.Queryable(
+                    definition: definition,
+                    placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
+                    excluded: static (placement, reason) => Console.Error.WriteLine(value: $"[world.presentation-field: excluded placement '{placement.Id}': {reason}]")
+                ),
                 colors: m_queryColors,
                 palettes: m_queryPalettes
             );
@@ -483,11 +496,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 screens: definition.Screens
             );
 
-            m_adjacencies.EmitCurrent(builder: builder);
+            m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
             m_client.PublishStaticField(field: new SdfFieldEvaluator(program: builder.Build()));
-        } catch (ArgumentException) {
-            // Render-only warp/texture operations have no fixed-point query twin. Those worlds retain the authored
-            // eye; query-compatible worlds still receive the presentation-only clearance correction.
+        } catch (ArgumentException exception) {
+            // Placement admission isolates unsupported props. A failure in the remaining combined scene still leaves
+            // no field; name it so missing surface targets cannot be mistaken for a probe or rig problem.
+            Console.Error.WriteLine(value: $"[world.presentation-field: unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
     }
     // The delivery boundary: a definition delivery (scene/screen mutation, swap, or undo) landed since the last frame,
@@ -536,6 +550,27 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
         m_builtDefinitionRevision = definitionRevision;
     }
+
+    // The presentation row of the scale register, rebuilt only when the document names another, so a frame allocates
+    // none.
+    private string? m_scaleRegister;
+    private string? m_scaleBindingRow;
+
+    private string? ScaleBindingRow(string? register) {
+        if (!string.Equals(
+            a: register,
+            b: m_scaleRegister,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            m_scaleRegister = register;
+            m_scaleBindingRow = ((register is null)
+                ? null
+                : WorldBodyStateReads.BindingRow(slot: register)
+            );
+        }
+
+        return m_scaleBindingRow;
+    }
     // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
     // The rig is the seat's chase rig by default; while its camera control application is active, views.cameraRig
     // frames it instead. The anchor is the render pose (interpolated and error-eased,
@@ -543,7 +578,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
     // WorldSeatCameraPose this camera fills is the listener policy's per-seat candidate.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target) {
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
         // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
@@ -650,7 +685,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
             liveScale = WorldGaitDrivers.LiveBodyScale(
                 reads: reads,
-                scaleRow: definition.Population.ScaleRow
+                scaleRow: ScaleBindingRow(register: definition.Population.Scale)
             );
 
             if (
@@ -732,18 +767,42 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
         }
 
-        var placed = PlacedExtent(height: height, region: region, width: width);
-        // A seat captured on a screen of the world it is presented in frames that screen (the emulator view), easing
+        // A boom through a same-world door puts the eye past the counterpart's glass, looking back through it.
+        _ = WorldPortalStraddle.CarryBoom(
+            anchor: bodyPosition,
+            doors: WorldPortalStraddle.Doors(definition: definition),
+            eye: ref eye,
+            target: ref target
+        );
+
+        // A seat captured on a screen of the world it is presented in frames that screen's picture onto its matte, easing
         // in and out on the chase rig's own dynamics.
+        var placed = PlacedExtent(height: height, region: region, width: width);
         var near = m_screenFraming[slot].Apply(
-            aspectRatio: (placed.X / placed.Y),
             deltaSeconds: deltaSeconds,
             dynamics: chase.Dynamics,
             eye: ref eye,
             fieldOfViewRadians: fieldOfView,
-            screen: (presentedHere
-                ? EngagedScreenRow(slot: slot)
+            held: held,
+            offset: offset,
+            screen: engaged,
+            share: share,
+            target: ref target
+        );
+
+        fieldOfView = m_screenFraming[slot].FieldOfView;
+        // A seat sitting at a tabletop of the world it is presented in looks down on the board (the board view).
+        var tabletopNear = m_tabletopFraming[slot].Apply(
+            aspectRatio: (placed.X / placed.Y),
+            definition: definition,
+            deltaSeconds: deltaSeconds,
+            dynamics: chase.Dynamics,
+            eye: ref eye,
+            fieldOfViewRadians: fieldOfView,
+            placementId: (presentedHere
+                ? m_anchor.EngagedTabletop(slot: slot)
                 : null),
+            seatPosition: bodyPosition,
             target: ref target
         );
 
@@ -754,30 +813,122 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             viewportHeight: placed.Y,
             viewportWidth: placed.X
         ) with {
-            Near = near
+            Near = MathF.Max(
+                x: near,
+                y: tabletopNear
+            ),
         };
     }
-    // The screen row the seat is captured on, or null when it engages none or the row is gone.
-    private WorldScreen? EngagedScreenRow(int slot) {
+    // The rows a screen's picture shows, from the mapping the screen last published (its source's height), or 0 before
+    // its source has an extent.
+    private int SourceRows(int screen) => (((m_graphs?.Screens is { } screens) && screens.TryGet(
+        mapping: out var mapping,
+        screen: screen
+    ))
+        ? mapping.Crop.Height
+        : 0);
+    // The matte the root shows of a view of m_views, or null when no seat frames a screen through it.
+    private NormalizedRect? MatteOf(int view) {
+        foreach (var engaged in m_engagedViews) {
+            if (engaged.View == view) {
+                return engaged.Matte;
+            }
+        }
+
+        return null;
+    }
+    // The screen row the seat is captured on, where its picture is this frame (in its carrier's hands while a body
+    // carries it), or null when it engages none or the row is gone. A carried screen whose carry authors a camera row
+    // names it in held, which is the view the engagement starts on (WorldPerceptionAnchor.ScreenFramed).
+    private WorldScreen? EngagedScreenRow(int slot, out WorldCamera? held) {
         var index = m_anchor.EngagedScreen(slot: slot);
+
+        held = null;
 
         if (index < 0) {
             return null;
         }
 
         foreach (var screen in m_client.Definition.Screens) {
-            if (screen.Index == index) {
-                return screen;
+            if (screen.Index != index) {
+                continue;
             }
+            if (m_animator.TryCarriedScreen(
+                carried: out var carried,
+                client: m_client,
+                screen: screen
+            )) {
+                if (screen.Carry?.Camera is { } name) {
+                    foreach (var camera in m_client.Definition.Cameras) {
+                        if (string.Equals(a: camera.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                            held = camera;
+
+                            break;
+                        }
+                    }
+                }
+
+                return carried;
+            }
+
+            return screen;
         }
 
         return null;
+    }
+    // Where the held camera of a carried screen stands this frame: its rig run against an anchor at the picture's face, in
+    // the picture's own axes (+X right, +Y up, +Z toward the body looking at it).
+    private WorldHeldView HeldView(WorldCamera camera, WorldScreen carried) {
+        var right = Vector3.Normalize(value: carried.Right);
+        var up = Vector3.Normalize(value: carried.Up);
+        var normal = Vector3.Normalize(value: Vector3.Cross(
+            vector1: right,
+            vector2: up
+        ));
+        var rig = ResolveNamedCameraRig(
+            definition: m_client.Definition,
+            name: camera.Name,
+            program: camera.Rig
+        );
+        var anchor = new SdfAnchor(
+            Orientation: Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
+                m11: right.X, m12: right.Y, m13: right.Z, m14: 0f,
+                m21: up.X, m22: up.Y, m23: up.Z, m24: 0f,
+                m31: normal.X, m32: normal.Y, m33: normal.Z, m34: 0f,
+                m41: 0f, m42: 0f, m43: 0f, m44: 1f
+            )),
+            Position: carried.Origin
+        );
+        var clock = new SdfCameraClock(
+            PresentationSeconds: m_elapsedSeconds,
+            AuthoritativeTick: m_simulation.Tick
+        );
+
+        var (eye, target, fieldOfView) = rig.Resolve(
+            anchor: in anchor,
+            clock: in clock
+        );
+
+        return new WorldHeldView(
+            Eye: eye,
+            FieldOfViewRadians: fieldOfView,
+            Target: target
+        );
     }
     private static WorldScreenFraming[] NewScreenFraming() {
         var framing = new WorldScreenFraming[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < framing.Length); slot++) {
             framing[slot] = new WorldScreenFraming();
+        }
+
+        return framing;
+    }
+    private static WorldTabletopFraming[] NewTabletopFraming() {
+        var framing = new WorldTabletopFraming[PlayerRoster.MaxSlots];
+
+        for (var slot = 0; (slot < framing.Length); slot++) {
+            framing[slot] = new WorldTabletopFraming();
         }
 
         return framing;
@@ -1201,6 +1352,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         graphs.BeginFrame(
+            displayHertz: context.DisplayHertz,
             sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
@@ -1240,8 +1392,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
         }
 
+        // A framed screen's view shows only its matte, and what no view covers is the letterbox, in the screen's fill.
         graphs.PlaceViews(
             envelopes: m_viewEnvelopes,
+            letterboxColor: ((m_engagedViews.Count > 0)
+                ? WorldScreenFraming.Fill(screen: m_engagedViews[0].Screen)
+                : null),
+            mattes: ((m_engagedViews.Count > 0)
+                ? MatteOf
+                : null),
             panesCover: panesCover,
             rendered: ViewRendered,
             sharpness: m_settings.UpscaleSharpness,
@@ -1273,6 +1432,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             var instanceDeltaSeconds = entry.AdvanceClock(presentedSeconds: presented.Time);
+
             UpdatePipelinePointer(
                 entry: entry,
                 height: height,
@@ -1285,6 +1445,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Time = entry.ClockSeconds,
                 TimeDelta = instanceDeltaSeconds,
             });
+        }
+
+        foreach (var (screen, _, matte) in m_engagedViews) {
+            graphs.FrameScreen(
+                region: matte,
+                screen: screen.Index
+            );
         }
 
         graphs.PublishPanes(
@@ -1334,12 +1501,42 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets the trace each framed seat's camera eye, presented body and interpolation fraction are recorded in,
     /// or <see langword="null"/> to record none (<c>world.view.motion</c>).</summary>
     public WorldSeatMotionTrace? MotionTrace { get; init; }
-    /// <summary>Gets or sets whether the render chain owes a capture. Such a frame presents the completed simulation
-    /// tick itself, including body poses, rather than interpolating from its predecessor.</summary>
+    /// <summary>Gets or sets whether the render chain owes a settled capture, the one that holds presentation. Such a
+    /// frame presents the completed simulation tick itself, including body poses, rather than interpolating from its
+    /// predecessor; a presented capture reads frames as the display shows them and does not pin them.</summary>
     public Func<bool>? CapturePending { get; set; }
+    /// <summary>Gets or sets whether presentation runs in lockstep with the ticks (<c>world.lockstep</c>): every frame
+    /// presents the completed tick itself, as a frame held for a settled capture does, and advances presentation
+    /// animation by the ticks completed since the last frame captured rather than by the host frame's interval.
+    /// <see langword="null"/> is never.</summary>
+    public Func<bool>? HistoryFree { get; set; }
 
-    private bool PinsPresentation => (PinsStateFraction || (CapturePending?.Invoke() ?? false));
+    // A lockstep frame presents the completed tick itself, as an offscreen one does: interpolating from the tick before
+    // would show that tick again on a frame that steps nothing, and the presentation animation would read the step back
+    // and forth there on some runs and not others.
+    private bool PinsPresentation => (PinsStateFraction || SettlesCapture || TickLocked);
+    // Whether this frame is held for a settled capture.
+    private bool SettlesCapture => (CapturePending?.Invoke() ?? false);
+    // Whether presentation runs in lockstep with the ticks.
+    private bool TickLocked => (HistoryFree?.Invoke() ?? false);
+    bool ISdfFrameDresser.TickLocked => TickLocked;
 
+    /// <summary>Returns the cull a frame renders with: the box cull in place of the occlusion test, whose first phase
+    /// draws the previous frame's visible set, while the frame is held for a settled capture.</summary>
+    /// <param name="cull">The session's cull level.</param>
+    /// <param name="settles">Whether the frame is held for a settled capture.</param>
+    /// <returns>The frame's cull level.</returns>
+    public static SdfMeshCullLevel CullOf(SdfMeshCullLevel cull, bool settles) => ((settles && (cull == SdfMeshCullLevel.Occlusion))
+        ? SdfMeshCullLevel.Frustum
+        : cull);
+    /// <summary>Returns the rated work a frame rates: none while the frame is held for a settled capture, since a rated
+    /// update held from an earlier frame would show an earlier tick in the still, and the session's levers otherwise.</summary>
+    /// <param name="rates">The session's rate levers.</param>
+    /// <param name="settles">Whether the frame is held for a settled capture.</param>
+    /// <returns>The frame's rate levers.</returns>
+    public static SdfUpdateRates RatesOf(SdfUpdateRates rates, bool settles) => (settles
+        ? SdfUpdateRates.None
+        : rates);
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
@@ -1372,6 +1569,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var quality = ViewQuality();
 
         m_views.Clear();
+        m_engagedViews.Clear();
         BeginRoutedViews();
         Array.Clear(array: m_seatCameraPoses);
         m_viewports.BeginFrame();
@@ -1509,16 +1707,68 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             var slot = joinedRosterSlots[composed.SeatOrder];
+            // A seat engaged on a screen of the world it is presented in frames the screen's picture onto the matte,
+            // refitted to the display every frame. Once the ease has settled on that screen the root shows only the
+            // matte's part of its view: the picture already fills it, so the picture stays where it was and only what
+            // lay around it turns to the matte's fill. A screen a body carries with a held camera starts on the view that
+            // shows the body holding it, and a toggle (WorldPerceptionAnchor.ToggleFrame) switches between the two.
+            WorldCamera? holdCamera = null;
+
+            var carried = ((m_continuum.PresentedElsewhere(slot: slot) is null)
+                ? EngagedScreenRow(held: out holdCamera, slot: slot)
+                : null);
+
+            m_anchor.PublishHoldView(
+                holdView: (holdCamera is not null),
+                slot: slot
+            );
+
+            var engaged = (m_anchor.ScreenFramed(slot: slot)
+                ? carried
+                : null);
+            WorldHeldView? held = (((carried is not null) && (holdCamera is not null))
+                ? HeldView(
+                    camera: holdCamera,
+                    carried: carried
+                )
+                : null);
+            var matte = ((engaged is null)
+                ? region
+                : WorldScreenFraming.Matte(
+                    displayHeight: height,
+                    displayWidth: width,
+                    screen: engaged,
+                    sourceRows: SourceRows(screen: engaged.Index),
+                    view: region
+                ));
+            var share = (((engaged is not null) && (region.Height > 0f))
+                ? Math.Clamp(max: 1f, min: 1e-3f, value: (matte.Height / region.Height))
+                : 1f);
+            var matted = (
+                (engaged is not null) &&
+                (m_screenFraming[slot].Framed is { } settled) &&
+                (settled.Index == engaged.Index)
+            );
             var camera = ResolveCamera(
                 deltaSeconds: deltaSeconds,
+                engaged: engaged,
                 eye: out var eye,
                 height: height,
+                held: held,
                 interpolationAlpha: interpolationAlpha,
+                offset: ((engaged is null)
+                    ? Vector2.Zero
+                    : WorldScreenFraming.MatteOffset(displayHeight: height, displayWidth: width, matte: matte, view: region)),
                 region: region,
+                share: share,
                 slot: slot,
                 target: out var target,
                 width: width
             );
+
+            if (matted) {
+                m_engagedViews.Add(item: (engaged!, m_views.Count, matte));
+            }
 
             // The world the seat is presented in this frame, resolved before its grid: a seat that has just crossed
             // queries the scene of the world it crossed into, which has drawn no view of it yet and so answers no
@@ -1553,8 +1803,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
-                RenderScale = m_settings.RenderCeiling,
-                ResolvedRenderScale = transitionScale,
+                // A matted view renders at native scale whatever the dynamic resolution's floor, so the picture is never
+                // resampled.
+                RenderScale = (matted ? 1f : m_settings.RenderCeiling),
+                ResolvedRenderScale = (matted ? 1f : transitionScale),
+                // The ease's weight is the view's screen fidelity: at one the framed picture's pixels reach the window
+                // untouched, and as it falls the CRT treatment and the world's atmosphere and tone fade back in.
+                ScreenFidelity = m_screenFraming[slot].Weight,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             };
 
@@ -1679,10 +1934,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // Routed snapshots are dressed before the scene latches them; advance each policy once per frame.
             if ((viewIndex < m_viewRoutes.Count) && (m_viewRoutes[viewIndex].Scene is not null)) { continue; }
             var dip = ((snapshot.ResolvedRenderScale > 0f) ? snapshot.ResolvedRenderScale : 1f);
+            var native = (MatteOf(view: viewIndex) is not null);
 
             snapshot = DressResolution(snapshot, ViewProducerName(view: viewIndex),
-                ((uint)Math.Max(val1: 1, val2: (width * snapshot.Region.Width))), ((uint)Math.Max(val1: 1, val2: (height * snapshot.Region.Height))));
-            m_views[viewIndex] = snapshot with { ResolvedRenderScale = (snapshot.ResolvedRenderScale * dip) };
+                ((uint)Math.Max(val1: 1, val2: (width * snapshot.Region.Width))), ((uint)Math.Max(val1: 1, val2: (height * snapshot.Region.Height))),
+                native: native);
+            m_views[viewIndex] = (native
+                ? snapshot
+                : (snapshot with { ResolvedRenderScale = (snapshot.ResolvedRenderScale * dip) }));
         }
         m_outputRegions.Views(
             cameras: m_client.Definition.Cameras,
@@ -1702,6 +1961,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             authoritativeTick: m_simulation.Tick,
             presentationSeconds: m_elapsedSeconds,
             transforms: transforms,
+            views: m_frameViews
+        );
+        // The next pack rates the bodies by the views this frame renders them through.
+        m_animator.RateBy(
+            counts: m_settings.RateCounts,
+            height: height,
+            rates: m_settings.UpdateRates,
             views: m_frameViews
         );
 
@@ -1751,6 +2017,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A frame whose render inputs match the previous one re-composites the retained image instead of
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
+            // A frame held for a settled capture renders free of earlier frames' visible set and rated updates, so a
+            // still of a tick is the same image whatever frames preceded it.
+            MeshCull = CullOf(cull: m_settings.Cull, settles: SettlesCapture),
+            UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
+            TickLocked = TickLocked,
+            RateCounts = m_settings.RateCounts,
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,
@@ -1760,12 +2032,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
+            // The stamp pool's bodies straddling a same-world door, drawn on both sides of it.
+            SlotClips = m_animator.SlotClips,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,
+            Exposure = lighting.Exposure,
+            Toon = m_settings.ResolveToon(m_client.Definition.Render),
             Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
@@ -1874,6 +2150,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             colors: new WorldBakedColors(mirror: client.StateMirror),
             textAt: binder.TextSourceAt
         );
+        m_screenTransforms = animator.ScreenSurfaceTransforms(client: client);
         m_queryColors = new WorldBakedColors(mirror: client.StateMirror);
         m_anchor = anchor;
         m_speech = speech;
@@ -2021,4 +2298,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public int ProgramWordCapacity { get; }
     /// <inheritdoc/>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
+    /// <inheritdoc/>
+    /// <remarks>A carried screen's (<see cref="WorldScreen.Carry"/>) answers the frame its carrier holds it at this frame
+    /// (<see cref="WorldStampPool.ScreenSurfaceTransforms"/>).</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => m_screenTransforms;
 }

@@ -30,7 +30,9 @@ public sealed class SdfFrameBlockLawTests {
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
-        SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow];
+        SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow,
+        // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
+        SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.
@@ -87,6 +89,7 @@ public sealed class SdfFrameBlockLawTests {
                 ) {
                     Grid = Grid,
                     Quality = Restricted,
+                    ScreenFidelity = 0.75f,
                 },
             ],
             Time: 7f
@@ -95,12 +98,18 @@ public sealed class SdfFrameBlockLawTests {
             FarDistance = 30f,
             IndirectTier = SdfIndirectTier.High,
             Lights = Lights(),
+            Toon = SdfToon.Default with { Enabled = true },
         };
     }
-    // Lights whose count, shadow light and curvature gains are none of them zero.
+    // Lights whose count, shadow light and curvature gains are none of them zero, and a full table of directionals, which
+    // every view shades, so every word of the view's light mask is set.
     private static SdfLights Lights() {
         var lights = SdfLights.Default();
 
+        for (var index = 2; (index < SdfLights.MaxLights); index++) {
+            lights.Set(index: index, light: lights[0]);
+        }
+        lights.Count = SdfLights.MaxLights;
         lights.Set(index: 1, light: (lights[0] with { Shadows = 1u }));
         lights.ShadowSlots.Configure(fadeCapacity: 1, slots: 1);
         lights.ShadowSlots.SetSlot(light: 1, slot: 0);
@@ -211,7 +220,7 @@ public sealed class SdfFrameBlockLawTests {
         );
         Assert.Equal(
             actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
-            expected: (1u, 1)
+            expected: ((uint)SdfLights.MaxLights, 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from
@@ -222,12 +231,13 @@ public sealed class SdfFrameBlockLawTests {
         var authored = Frame();
         var defaults = (authored with {
             DisableScreenLights = false,
-            Views = [(authored.Views[0] with { Quality = default })],
+            Views = [(authored.Views[0] with { Quality = default, ScreenFidelity = 0f })],
         });
 
         SdfFrame WithQuality(SdfViewQuality quality) => (defaults with { Views = [(defaults.Views[0] with { Quality = quality })] });
 
         (string Member, SdfFrame Frame)[] levers = [
+            (SdfWorldPackage.ScreenFidelity, (defaults with { Views = [(defaults.Views[0] with { ScreenFidelity = 1f })] })),
             (SdfWorldPackage.GeometryOnly, WithQuality(quality: new() { GeometryOnly = true })),
             (SdfWorldPackage.DisableAmbientOcclusion, WithQuality(quality: new() { DisableAmbientOcclusion = true })),
             (SdfWorldPackage.DisableScreenLights, (defaults with { DisableScreenLights = true })),
@@ -312,7 +322,7 @@ public sealed class SdfFrameBlockLawTests {
     [Fact]
     public void ThePassBlockCarriesTheCamerasOwnNearAndTheSurfacesRenderFromTheFloorAtLeast() {
         Assert.Matches(
-            actualString: SdfIsaHlsl.Generate(),
+            actualString: SdfRenderHlsl.Generate(),
             expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfWorldPackage.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
         );
 

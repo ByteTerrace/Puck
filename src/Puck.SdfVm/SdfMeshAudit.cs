@@ -62,6 +62,11 @@ public readonly record struct SdfMeshAuditShapeCount(string Name, int Count);
 public sealed record SdfMeshAuditCluster(Vector3 Center, Vector3 Extent, float Score, int Samples, int Off, int Turned, int Shaded, int Folded, int Missing, float WorstError, float WorstNormal, IReadOnlyList<SdfMeshAuditShape> Shapes) {
     /// <summary>Gets the position of its most severe sample, in the group's frame.</summary>
     public Vector3 Worst { get; init; }
+    /// <summary>Gets the unit direction the mesh faces at its most severe sample (the wound face normal of a turned
+    /// triangle, the straying corner's shading normal of a shaded one); zero for a sample with no facing.</summary>
+    public Vector3 WorstFacing { get; init; }
+    /// <summary>Gets the field's unit gradient at its most severe sample; zero where the field is flat.</summary>
+    public Vector3 WorstGradient { get; init; }
     /// <summary>Gets the unit direction its samples spread along most: the line an edge defect runs along.</summary>
     public Vector3 Axis { get; init; } = Vector3.UnitX;
     /// <summary>Gets positions of up to sixteen of its samples, spread over them, at which its shapes are named.</summary>
@@ -132,6 +137,10 @@ public static class SdfMeshAudit {
     // A triangle is a sliver when twice its area over its longest edge squared falls below this: a height under a
     // twentieth of that edge.
     private const float SliverRatio = 0.05f;
+    // A triangle is degenerate when that ratio falls below this, a height under a five-hundredth of its longest edge:
+    // its corners are collinear to rounding, so it draws nothing and its facing is noise, judged neither against the
+    // gradient nor against its neighbours across an edge.
+    private const float DegenerateRatio = 0.002f;
     // The samples of a cluster its shapes are named at.
     private const int ProbeCount = 16;
 
@@ -240,8 +249,10 @@ public static class SdfMeshAudit {
             var longest = MathF.Max(Vector3.DistanceSquared(value1: a, value2: b), MathF.Max(Vector3.DistanceSquared(value1: b, value2: c), Vector3.DistanceSquared(value1: c, value2: a)));
             var centroid = ((a + b + c) / 3f);
 
-            slivers += (((longest <= 0f) || ((cross.Length() / longest) < SliverRatio)) ? 1 : 0);
-            faceNormals[triangle] = ((cross.LengthSquared() > 0f) ? Vector3.Normalize(value: cross) : Vector3.Zero);
+            var ratio = ((longest <= 0f) ? 0f : (cross.Length() / longest));
+
+            slivers += ((ratio < SliverRatio) ? 1 : 0);
+            faceNormals[triangle] = ((ratio >= DegenerateRatio) ? Vector3.Normalize(value: cross) : Vector3.Zero);
             centroidErrors[triangle] = Off(field: field, flagged: flagged, cell: cell, point: centroid, threshold: threshold);
             var slope = Slope(field: field, point: centroid, step: options.GradientStep);
             var steepness = slope.Length();
@@ -263,7 +274,8 @@ public static class SdfMeshAudit {
         for (var triangle = 0; (triangle < triangles); triangle++) {
             var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
 
-            if (gradients[triangle] == Vector3.Zero) {
+            // A flat field or a degenerate triangle gives nothing to judge a facing against.
+            if ((gradients[triangle] == Vector3.Zero) || (faceNormals[triangle] == Vector3.Zero)) {
                 normalErrors[triangle] = float.NaN;
                 if (!normals.IsEmpty) { shadingErrors[triangle] = float.NaN; }
                 continue;
@@ -274,19 +286,22 @@ public static class SdfMeshAudit {
             if (!normals.IsEmpty) {
                 var worst = 0f;
 
+                var straying = Vector3.Zero;
+
                 for (var corner = 0; (corner < 3); corner++) {
                     var normal = normals[(int)indices[(3 * triangle) + corner]];
+                    var unit = ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero);
+                    var angle = Angle(first: unit, second: gradients[triangle]);
 
-                    worst = MathF.Max(worst, Angle(first: ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero), second: gradients[triangle]));
+                    if (angle > worst) {
+                        worst = angle;
+                        straying = unit;
+                    }
                 }
                 shadingErrors[triangle] = worst;
                 if (worst > options.NormalDegrees) {
-                    flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: ((a + b + c) / 3f), Severity: (worst / 90f), Value: worst));
+                    flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: ((a + b + c) / 3f), Severity: (worst / 90f), Value: worst) { Facing = straying, Gradient = gradients[triangle] });
                 }
-            }
-            if (faceNormals[triangle] == Vector3.Zero) {
-                normalErrors[triangle] = float.NaN;
-                continue;
             }
 
             var degrees = Angle(first: (winding * faceNormals[triangle]), second: gradients[triangle]);
@@ -294,7 +309,7 @@ public static class SdfMeshAudit {
             normalErrors[triangle] = degrees;
             flipped += ((degrees > 90f) ? 1 : 0);
             if (degrees > options.NormalDegrees) {
-                flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees));
+                flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
             }
         }
 
@@ -314,7 +329,7 @@ public static class SdfMeshAudit {
             } else if (held.Count > 2) {
                 nonManifold++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
-            } else if (Vector3.Dot(vector1: faceNormals[held.First], vector2: faceNormals[held.Second]) < FoldDot) {
+            } else if ((faceNormals[held.First] != Vector3.Zero) && (faceNormals[held.Second] != Vector3.Zero) && (Vector3.Dot(vector1: faceNormals[held.First], vector2: faceNormals[held.Second]) < FoldDot)) {
                 folds++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Folded, Position: midpoint, Severity: 1f, Value: 0f));
             }
@@ -626,6 +641,8 @@ public static class SdfMeshAudit {
                     Axis = Spread(center: center, samples: samples),
                     Probes = [.. Enumerable.Range(start: 0, count: Math.Min(samples.Length, ProbeCount)).Select(selector: probe => samples[(probe * samples.Length) / Math.Min(samples.Length, ProbeCount)].Position)],
                     Worst = samples.MaxBy(keySelector: static sample => sample.Severity).Position,
+                    WorstFacing = samples.MaxBy(keySelector: static sample => sample.Severity).Facing,
+                    WorstGradient = samples.MaxBy(keySelector: static sample => sample.Severity).Gradient,
                 };
             })
             .OrderByDescending(keySelector: static cluster => cluster.Score)
@@ -717,7 +734,10 @@ public static class SdfMeshAudit {
         Folded,
         Missing,
     }
-    private readonly record struct Sample(SampleKind Kind, Vector3 Position, float Severity, float Value);
+    private readonly record struct Sample(SampleKind Kind, Vector3 Position, float Severity, float Value) {
+        public Vector3 Facing { get; init; }
+        public Vector3 Gradient { get; init; }
+    }
     // The triangles that hold an edge: how many, and the first two.
     private readonly record struct Held(int Count, int First, int Second) {
         public Held With(int triangle) => new(Count: (Count + 1), First: First, Second: ((Count == 1) ? triangle : Second));

@@ -5,7 +5,7 @@
 // and acquired image publications, so a held sky renders once. Each layer counts its own evaluations
 // (gpu.sky.evaluations) in its detail row, and each texel one texel written.
 #include "../isa/sdf-sky-environment.interface.hlsli"
-#include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-render.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../frame/sdf-screen-mapping.hlsli"
 #define SDF_SKY_SCREENS

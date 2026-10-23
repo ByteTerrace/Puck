@@ -165,7 +165,7 @@ public sealed partial class WorldBody {
     /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
     /// <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same
     /// mask the snapshot publishes. <c>scale=</c> is <see cref="Scale"/> — 1.00 for every body under a world
-    /// authoring no <c>bodies.scaleRow</c>. <c>com=</c> trails only for a rigid-kit body — <see cref="RigidCenterOfMass"/>,
+    /// authoring no <c>bodies.scale</c>. <c>com=</c> trails only for a rigid-kit body — <see cref="RigidCenterOfMass"/>,
     /// which orbits away from <c>pos=</c> (the root) for a rolling or tumbling rigid body while <c>pos=</c> itself
     /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
     /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry
@@ -276,6 +276,15 @@ public sealed partial class WorldBody {
             rollRadians: FixedQ4816.FromDouble(value: rollRadians)
         );
     }
+    /// <summary>Moves the body to <paramref name="position"/> as continuous motion: its attitude, velocity, contact state
+    /// and previous-pose anchor stay, so a client interpolates from where it was, where <see cref="Pose(FixedVector3,
+    /// FixedQ4816, FixedQ4816, FixedQ4816)"/> snaps. For a body a rule moves a short step every tick (the debug world's
+    /// lift car); a long move glided this way streaks across the gap for one tick.</summary>
+    /// <param name="position">The new world position.</param>
+    public void Glide(FixedVector3 position) {
+        WakeUp();
+        m_position = position;
+    }
     /// <summary>Teleports to a full pose already expressed in deterministic numerics.</summary>
     public void Pose(FixedVector3 position, FixedQ4816 yawRadians, FixedQ4816 pitchRadians, FixedQ4816 rollRadians) {
         m_position = position;
@@ -334,7 +343,8 @@ public sealed partial class WorldBody {
     public void PressChannel(int ordinal, FixedQ4816 value) {
         if (
             (ordinal < 0) ||
-            (ordinal >= ActionLaneCount)
+            (ordinal >= ActionLaneCount) ||
+            (m_channelShapes[ordinal] == ChannelShape.Relative)
         ) {
             return;
         }
@@ -439,7 +449,10 @@ public sealed partial class WorldBody {
     /// the body motion program. The body keeps its pose, velocity, tape, source, and engagement; only the compiled feel
     /// changes. The action runtime resets because it is bound to the old binding and named-state shapes, and an
     /// incompatible program switch re-pins the pose exactly as
-    /// <c>body.motion</c> does (a no-op when unchanged).</summary>
+    /// <c>body.motion</c> does (a no-op when unchanged). A collider whose volumes differ from the body's last ones moves
+    /// the body to the nearest pose, up its axis or along world X or Z and never down, where they are not embedded in
+    /// static geometry, so a body leaving a volumeless kit inside a wall steps out of it rather than through the
+    /// floor.</summary>
     /// <param name="tuning">The kit's compiled locomotion tuning (<see cref="FixedWorldKit.Tuning"/>).</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings.</param>
     /// <param name="actionThresholds">The kit's per-ordinal binary crossing thresholds, parallel to <paramref name="actions"/>.</param>
@@ -457,13 +470,15 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    /// <param name="channels">The compiled typed input table.</param>
     /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
     /// <see langword="null"/> for a kit that carries no rope.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
         );
+        SetChannelTable(channels: channels);
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,
@@ -472,12 +487,22 @@ public sealed partial class WorldBody {
         );
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
+
+        var colliderChanged = !SameVolumes(
+            left: m_collider,
+            right: collider
+        );
+
         m_collider = collider;
         RescaleColliderVolumes();
 
         var hadRigidFacet = (m_rigid is not null);
 
         m_rigid = rigid;
+
+        if (colliderChanged) {
+            EscapeEmbedding();
+        }
         m_maxSmoothError = maxSmoothError;
 
         if (hadRigidFacet != (rigid is not null)) {
@@ -733,7 +758,7 @@ public sealed partial class WorldBody {
     public void SetHeldChannels(in PlayerIntent channels) {
         m_transferHeldChannels = default;
         m_hasTransferHeldChannels = false;
-        m_heldChannels = channels;
+        m_heldChannels = WithoutRelative(intent: channels);
     }
     /// <summary>Sets the intent-source axis — <c>body.control</c>'s write and the peer sweep's per-entity half. A
     /// transition drops the staged transient input images (the submitted, producer, and held-lane images), so a stale

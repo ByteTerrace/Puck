@@ -1,31 +1,33 @@
-// The desktop pane: a live capture of the Claude desktop app's window, shown as a pane below the play view and on a
-// screen standing in the world. The debug world imports this file whole. desktop.md beside it gives the console lines
-// that show the pane, hand the window the keyboard and mouse, take them back, and reload this file while it runs.
+// The desktop pane: a live capture of the whole primary display, shown as a pane below the play view and on the monitor
+// of a desktop computer standing in the world. The World's own window is on that display, so the picture shows the
+// World showing the picture, as a camera pointed at its own screen does. The debug world imports this file whole.
+// desktop.md beside it gives the console lines that show the pane, hand the desktop the mouse and keyboard, take them
+// back, and reload this file while it runs.
 //
-// The capture finds its window by title: the first visible top-level window whose title contains `claudeTitle`,
-// compared without regard to case. Nothing here sends the window input: only the local user's own console opens a
-// passthrough source (`source.passthrough open claude Claude`), and the engine refuses a document that tries.
+// Nothing here sends the desktop input: only the local user's own console (`source.passthrough open desktop Desktop`)
+// or own press on the engaged monitor opens a passthrough source, and the desktop page below only says which pad
+// control means which pointer act; the engine acts on a local pad's own press alone and refuses a document that tries
+// more.
 
-let claudeTitle = "Claude"
-
-// The capture's output extent and cadence, the pane's and the wall screen's alike: the window at its own size and shape
-// (2560 by 1392, maximized on a 2560 by 1440 display), so its text stays sharp. The pane shows it at the window's own
-// aspect ratio whatever this extent's; the wall slab is cut to this shape, so a window of another shape reads stretched
-// there until the profile and the slab follow it.
-let claudeCapture = {
-  windowTitle: claudeTitle
-  profile { width: 2560, height: 1392, refreshRateHz: 30 }
+// The capture's output extent and cadence, the pane's and the monitor's alike: the primary display at its own size and
+// shape (2560 by 1440), so its text stays sharp. The primary display rather than the one the World's window is on:
+// the monitor's glass is cut to this extent when the world compiles, and the primary does not change under a running
+// World, while the World's window can move to a display of another shape. A display of another shape reads stretched
+// on the glass until this profile follows it.
+let desktopCapture = {
+  monitorIndex: 0
+  profile { width: 2560, height: 1440, refreshRateHz: 30 }
 }
 
 // The pane's share of the display, from the bottom edge. Two fifths leave the play view the top three fifths.
 let paneHeight = 0.4
 
 views {
-  // Contained: the window keeps its own aspect ratio, centred in its slot with bars beside it, and a pointer on a bar
+  // Contained: the display keeps its own aspect ratio, centred in its slot with bars beside it, and a pointer on a bar
   // stays with the game.
-  graph "claude" {
+  graph "desktop" {
     package: "source.capture"
-    settings: claudeCapture
+    settings: desktopCapture
     fit: Contain
   }
 
@@ -34,31 +36,322 @@ views {
     seatCount: 0
     slots [
       { x: 0, y: 0, width: 1, height: (1 - paneHeight) }
-      { x: 0, y: (1 - paneHeight), width: 1, height: paneHeight, instance: "claude" }
+      { x: 0, y: (1 - paneHeight), width: 1, height: paneHeight, instance: "desktop" }
     ]
     transitionRenderScale: 1
     transitionSeconds: 0
   }
 }
 
-// The same window as a wall screen: a 4 m wide glass slab, its height following the window's 2560 by 1392 shape, eight
-// metres ahead of the spawn and eight to the right, facing +Z, beside the portal frame. It is its own capture of the
-// window, at the same settings as the pane's.
+// ---- The desktop computer --------------------------------------------------------------------------------------
+// A desk against the gallery lobby's west wall (hall.puck, its inner face at x = 10.3), between the chess table and
+// the big painting to Wonderland (wonderland.puck), with a 27-inch monitor on a stand, a tower beside it on the floor, a keyboard and mouse, and an office
+// chair. Whoever sits at it faces the wall, -X; the monitor faces +X, into the lobby. Every number is a world coordinate
+// on the level 0 floor (y = 0.05): each placement stands at the origin and `deskBox` writes a box's author-frame row
+// from its world bounds (the creation frame is the world's turned 180 degrees about up, so x and z negate). Each piece
+// is its own prototype so the bake meshes it at its own scale.
+//
+//   desk       1.5 by 0.75 m, its top 0.74 m up: x 10.33 .. 11.08, z 22.95 .. 24.45
+//   monitor    the glass's face centred at (10.75, 1.13, 23.7) on a stand on the desk's back half
+//   computer   a mid tower, 210 by 480 by 480 mm, on the floor north of the desk: x 10.42 .. 10.9, z 24.52 .. 24.73
+//   keyboard   440 by 140 mm before the monitor, the mouse on its right (the -Z side)
+//   chair      its column at (11.55, 23.7), the back toward the lobby
+
+// The monitor's glass is exactly the picture (docs/decisions/rendering.md, in-world devices): the capture's pixels at a
+// 27-inch 2560 by 1440 panel's pixel pitch, 0.2331 mm, so 2560 by 1440 is 596.7 by 335.7 mm. The glass is a 14 mm slab
+// sunk 4 mm into the panel, its face 10 mm proud of the panel and 3 mm proud of the black bezel round it, which runs
+// 7 mm wide at the sides and top and 18 mm at the chin, outside the glass. A screen's `origin` is its glass's face (the
+// slab runs 2 halfDepth back from it).
+let monitorPitch = 0.0002331
+let pictureHalfWidth = ((desktopCapture.profile.width * monitorPitch) / 2)
+let pictureHalfHeight = ((desktopCapture.profile.height * monitorPitch) / 2)
+let glassFront = 10.75
+let glassHalfDepth = 0.007
+let pictureY = 1.13
+let pictureZ = 23.7
+let panelFront = (glassFront - 0.01)
+let bezelFront = (glassFront - 0.003)
+let bezelSide = 0.007
+let bezelChin = 0.018
+let monitorTop = ((pictureY + pictureHalfHeight) + bezelSide)
+let monitorBottom = ((pictureY - pictureHalfHeight) - bezelChin)
+let monitorNorth = ((pictureZ + pictureHalfWidth) + bezelSide)
+let monitorSouth = ((pictureZ - pictureHalfWidth) - bezelSide)
+
+let deskTop = 0.79
+let chairX = 11.55
+let chairZ = 23.7
+
+// One box given its world bounds, chamfered (0 leaves the box's own fillet).
+template deskBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+    chamfer: bevel
+  }
+}
+
+prototypes {
+  // Light oak on charcoal panel legs, a modesty panel across the back.
+  prototype "desk" {
+    document {
+      name: "desk"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#C9A57B", roughness: 0.55, specular: 0.05 }
+        { color: "#2E3136", roughness: 0.6, specular: 0.2, metal: 0.3 }
+      ]
+      deskBox(label: "top", x0: 10.33, x1: 11.08, y0: (deskTop - 0.025), y1: deskTop, z0: 22.95, z1: 24.45, slot: 0, bevel: 0.003)
+      deskBox(label: "leg-south", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 22.98, z1: 23.01, slot: 1)
+      deskBox(label: "leg-north", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 24.39, z1: 24.42, slot: 1)
+      deskBox(label: "modesty", x0: 10.37, x1: 10.39, y0: 0.4, y1: (deskTop - 0.02), z0: 23.005, z1: 24.395, slot: 1)
+    }
+  }
+
+  // The monitor: the black bezel round the glass, the panel behind it, a tapered back, the VESA block and an aluminium
+  // stand whose neck rises from a flat oval-cornered foot on the desk.
+  prototype "desk-monitor" {
+    document {
+      name: "desk-monitor"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#0E0F11", roughness: 0.35, specular: 0.05 }
+        { color: "#1F2125", roughness: 0.5, specular: 0.04 }
+        { color: "#B9BCC2", metal: 0.9, roughness: 0.3, specular: 0.5 }
+      ]
+      // Each part sinks a few millimetres into the one behind it rather than abutting it: two coplanar faces meeting
+      // fold the bake's contour.
+      deskBox(label: "bezel-top", x0: (panelFront - 0.005), x1: bezelFront, y0: (pictureY + pictureHalfHeight), y1: monitorTop, z0: monitorSouth, z1: monitorNorth, slot: 0)
+      deskBox(label: "bezel-chin", x0: (panelFront - 0.005), x1: bezelFront, y0: monitorBottom, y1: (pictureY - pictureHalfHeight), z0: monitorSouth, z1: monitorNorth, slot: 0)
+      deskBox(label: "bezel-north", x0: (panelFront - 0.005), x1: bezelFront, y0: (pictureY - pictureHalfHeight), y1: (pictureY + pictureHalfHeight), z0: (pictureZ + pictureHalfWidth), z1: monitorNorth, slot: 0)
+      deskBox(label: "bezel-south", x0: (panelFront - 0.005), x1: bezelFront, y0: (pictureY - pictureHalfHeight), y1: (pictureY + pictureHalfHeight), z0: monitorSouth, z1: (pictureZ - pictureHalfWidth), slot: 0)
+      deskBox(label: "panel", x0: (panelFront - 0.022), x1: panelFront, y0: monitorBottom, y1: monitorTop, z0: monitorSouth, z1: monitorNorth, slot: 1)
+      deskBox(label: "back", x0: (panelFront - 0.06), x1: (panelFront - 0.008), y0: 1.0, y1: 1.25, z0: (pictureZ - 0.24), z1: (pictureZ + 0.24), slot: 1, bevel: 0.012)
+      deskBox(label: "mount", x0: 10.65, x1: (panelFront - 0.056), y0: 1.06, y1: 1.16, z0: (pictureZ - 0.05), z1: (pictureZ + 0.05), slot: 1)
+      deskBox(label: "neck", x0: 10.615, x1: 10.655, y0: deskTop, y1: 1.18, z0: (pictureZ - 0.035), z1: (pictureZ + 0.035), slot: 2)
+      shape Prism "foot" {
+        material: 2
+        position [-10.62, (deskTop + 0.005), (0 - pictureZ)]
+        rotation [0.707107, 0, 0, 0.707107]
+        scale [0.12, 0.13, 0.005]
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.6
+        }
+        rounding: 0.003
+      }
+    }
+  }
+
+  // A graphite mid tower on four feet, its dark mesh front facing the lobby with a lit power button near the top.
+  prototype "desk-computer" {
+    document {
+      name: "desk-computer"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#2B2E33", metal: 0.4, roughness: 0.4, specular: 0.3 }
+        { color: "#141619", roughness: 0.8, specular: 0.05 }
+        { color: "#4FA3FF", emissive: 250, roughness: 0.3 }
+      ]
+      deskBox(label: "case", x0: 10.42, x1: 10.9, y0: 0.07, y1: 0.55, z0: 24.52, z1: 24.73, slot: 0, bevel: 0.004)
+      deskBox(label: "front", x0: 10.89, x1: 10.91, y0: 0.08, y1: 0.54, z0: 24.53, z1: 24.72, slot: 1, bevel: 0.003)
+      for x in [10.46, 10.86] {
+        for z in [24.545, 24.705] {
+          deskBox(label: $"foot-{x}-{z}", x0: (x - 0.02), x1: (x + 0.02), y0: 0.05, y1: 0.07, z0: (z - 0.015), z1: (z + 0.015), slot: 1)
+        }
+      }
+      shape Cylinder "power" {
+        material: 2
+        position [-10.913, 0.505, -24.625]
+        rotation [0, 0, 0.707107, 0.707107]
+        scale [0.009, 0.005, 0.009]
+      }
+    }
+  }
+
+  // The keyboard: a dark deck carrying five rows of 14 mm keys on a 19 mm pitch (one key folded 21 times along each
+  // row), a space bar in the front row, and the mouse on its right.
+  prototype "desk-keyboard" {
+    document {
+      name: "desk-keyboard"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#25272B", roughness: 0.55, specular: 0.05 }
+        { color: "#3A3D44", roughness: 0.4, specular: 0.05 }
+      ]
+      deskBox(label: "deck", x0: 10.82, x1: 10.96, y0: deskTop, y1: (deskTop + 0.016), z0: 23.48, z1: 23.92, slot: 0, bevel: 0.002)
+      shape Box "keys" {
+        material: 1
+        position [-10.89, (deskTop + 0.02), -23.7]
+        scale [0.007, 0.004, 0.007]
+        domain [repeat(spacing: [0.019, 1, 0.019], limit: [2, 0, 10], origin: [10.89, (deskTop + 0.02), 23.7])]
+      }
+      deskBox(label: "space", x0: 10.921, x1: 10.935, y0: (deskTop + 0.016), y1: (deskTop + 0.024), z0: 23.645, z1: 23.755, slot: 1)
+      shape Superellipsoid "mouse" {
+        material: 0
+        position [-10.9, (deskTop + 0.013), -23.38]
+        scale [0.058, 0.019, 0.031]
+        exponent: 2.5
+      }
+    }
+  }
+
+  // An office chair: five spokes on casters (one spoke and one caster folded five times about the column), a gas
+  // column, the seat, arm rests, and a back leaning 8 degrees away from the desk.
+  prototype "desk-chair" {
+    document {
+      name: "desk-chair"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#25272B", roughness: 0.95, specular: 0.04 }
+        { color: "#1C1D20", roughness: 0.45, specular: 0.05 }
+        { color: "#8A8F98", metal: 0.8, roughness: 0.3, specular: 0.5 }
+      ]
+      shape Box "spoke" {
+        material: 2
+        position [(0 - (chairX - 0.16)), 0.12, (0 - chairZ)]
+        scale [0.16, 0.015, 0.02]
+        domain [polar(count: 5, axis: Y, origin: [chairX, 0, chairZ])]
+      }
+      shape Sphere "caster" {
+        material: 1
+        position [(0 - (chairX - 0.3)), 0.075, (0 - chairZ)]
+        scale [0.025, 0.025, 0.025]
+        domain [polar(count: 5, axis: Y, origin: [chairX, 0, chairZ])]
+      }
+      shape Cylinder "hub" {
+        material: 2
+        position [(0 - chairX), 0.12, (0 - chairZ)]
+        scale [0.045, 0.03, 0.045]
+      }
+      shape Cylinder "column" {
+        material: 2
+        position [(0 - chairX), 0.29, (0 - chairZ)]
+        scale [0.022, 0.14, 0.022]
+      }
+      deskBox(label: "mechanism", x0: (chairX - 0.09), x1: (chairX + 0.09), y0: 0.42, y1: 0.46, z0: (chairZ - 0.09), z1: (chairZ + 0.09), slot: 1)
+      shape Superellipsoid "seat" {
+        material: 0
+        position [(0 - chairX), 0.49, (0 - chairZ)]
+        scale [0.25, 0.045, 0.25]
+        exponent: 4
+      }
+      deskBox(label: "spine", x0: (chairX + 0.225), x1: (chairX + 0.255), y0: 0.49, y1: 0.66, z0: (chairZ - 0.03), z1: (chairZ + 0.03), slot: 1)
+      shape Superellipsoid "back" {
+        material: 0
+        position [(0 - (chairX + 0.27)), 0.88, (0 - chairZ)]
+        rotation [0, 0, 0.069756, 0.997564]
+        scale [0.035, 0.25, 0.23]
+        exponent: 4
+      }
+      for side in [-1, 1] {
+        deskBox(label: $"arm-post-{side}", x0: (chairX + 0.005), x1: (chairX + 0.035), y0: 0.5, y1: 0.71, z0: ((chairZ + (0.255 * side)) - 0.015), z1: ((chairZ + (0.255 * side)) + 0.015), slot: 1)
+        deskBox(label: $"arm-rest-{side}", x0: (chairX - 0.1), x1: (chairX + 0.14), y0: 0.71, y1: 0.735, z0: ((chairZ + (0.255 * side)) - 0.03), z1: ((chairZ + (0.255 * side)) + 0.03), slot: 0)
+      }
+    }
+  }
+}
+
+placements {
+  placement "desk" {
+    prototype: "desk"
+    position [0, 0, 0]
+    solid
+  }
+  placement "desk-monitor" {
+    prototype: "desk-monitor"
+    position [0, 0, 0]
+  }
+  placement "desk-computer" {
+    prototype: "desk-computer"
+    position [0, 0, 0]
+    solid
+  }
+  placement "desk-keyboard" {
+    prototype: "desk-keyboard"
+    position [0, 0, 0]
+  }
+  placement "desk-chair" {
+    prototype: "desk-chair"
+    position [0, 0, 0]
+    solid
+  }
+}
+
+// The monitor's glass: the same display, its own capture at the pane's settings, facing +X.
 screens [
   {
     index: 16
-    origin [8, 1.2, -8]
-    right [1, 0, 0]
+    origin [glassFront, pictureY, pictureZ]
+    right [0, 0, -1]
     up [0, 1, 0]
-    halfWidth: 2
-    halfHeight: 1.0875
-    halfDepth: 0.02
+    halfWidth: pictureHalfWidth
+    halfHeight: pictureHalfHeight
+    halfDepth: glassHalfDepth
     round: 0
-    source: producer(id: "capture", settings: claudeCapture)
+    source: producer(id: "capture", settings: desktopCapture)
+    // A desktop monitor's 250 nits.
+    luminance: 250nit
     filter: Linear
+    // Engaged on the Moth's context button like a device: the camera frames its picture as large as the World's window
+    // holds, on the fill, and a click on the picture lands on the desktop where the picture shows it (desktop.md).
     route {
-      engageable: false
-      engageRadius: 0
+      engageable: true
+      engageRadius: 3
+      engageChannel: "interact"
+      display { fill: "#000000" }
+      // A pad's sticks over the framed desktop (the desktop page below): at full tilt the pointer crosses half the
+      // display's height a second, a squared response for fine placement, tripling over 0.6 s of held tilt; the right
+      // stick scrolls up to 12 notches a second.
+      padPointer {
+        speed: 0.5
+        curve: 2
+        boost: 3
+        rampSeconds: 0.6
+        scrollSpeed: 12
+      }
+    }
+  }
+]
+
+// The desktop page: while a seat is engaged on the monitor (the engagement family's `passthrough` state, a captured
+// screen showing a capture), a pad is the desktop's mouse, the way a controller's desktop mode is. Only the local user's
+// own pad acts through these verbs, and only while its seat frames the desktop. RB (or E) leaves through the context
+// button, as at every device, and West is the mouse's forward button.
+bindingOverlays [
+  {
+    id: "desktop-pad"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      contexts [
+        { family: "engagement", state: "passthrough", group: "desktop" }
+      ]
+      chords [
+        {
+          chord []
+          group: "desktop"
+          page {
+            id: "desktop"
+            label: "Desktop"
+            entries [
+              { command: "source.passthrough.pointer", id: "deskPointer", label: "Pointer", sources ["gamepad.leftStick"] }
+              { command: "source.passthrough.scroll", id: "deskScroll", label: "Scroll", sources ["gamepad.rightStick"] }
+              { command: "source.passthrough.button.left", id: "deskClick", label: "Click", sources ["gamepad.buttonSouth"] }
+              { command: "source.passthrough.button.right", id: "deskRightClick", label: "Right click", sources ["gamepad.buttonNorth"] }
+              { command: "source.passthrough.button.middle", id: "deskMiddleClick", label: "Middle click", sources ["gamepad.buttonEast"] }
+              { command: "source.passthrough.button.back", id: "deskBack", label: "Back", sources ["gamepad.leftShoulder"] }
+              { command: "source.passthrough.button.forward", id: "deskForward", label: "Forward", sources ["gamepad.buttonWest"] }
+              { command: "source.passthrough.arrow.up", id: "deskUp", sources ["gamepad.dpadUp"] }
+              { command: "source.passthrough.arrow.down", id: "deskDown", sources ["gamepad.dpadDown"] }
+              { command: "source.passthrough.arrow.left", id: "deskLeft", sources ["gamepad.dpadLeft"] }
+              { command: "source.passthrough.arrow.right", id: "deskRight", sources ["gamepad.dpadRight"] }
+              { channel: "interact", id: "deskLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
+            ]
+          }
+        }
+      ]
     }
   }
 ]

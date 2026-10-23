@@ -9,6 +9,9 @@ namespace Puck.SdfVm;
 /// do with what geometry exists and everything to do with how this frame presents it. Composition owns the emitter
 /// list (content); a host implements this to own presentation, without needing to know how the program was built.</summary>
 public interface ISdfFrameDresser {
+    /// <summary>Gets whether this frame belongs to a tick-locked presentation, whose content builds finish before the
+    /// frame reads them. Ordinary presentation may keep its previous program while a replacement builds.</summary>
+    bool TickLocked => false;
     /// <summary>Builds this frame's <see cref="SdfFrame"/> from the composed program/transforms.</summary>
     /// <param name="program">This frame's program (freshly rebuilt this call, or the same instance as last call when
     /// the composed content revision hasn't changed — compare by reference against a previous frame's
@@ -37,6 +40,10 @@ public interface ISdfFrameDresser {
     /// <summary>Gets the glyph decals the dressed world's text screens draw, which the composed frame source hands its
     /// host as its <see cref="ISdfFrameSource.ScreenDecals"/>; <see langword="null"/>, the default, for none.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;
+    /// <summary>Gets the screen-surface transforms of the dressed world's screens that move, which the composed frame
+    /// source hands its host as its <see cref="ISdfFrameSource.ScreenSurfaceTransforms"/>; <see langword="null"/>, the
+    /// default, for none.</summary>
+    IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => null;
 }
 /// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into one <see cref="ISdfFrameSource"/> — the
 /// generalization of the hand-written <c>BuildProgram</c> method every prior frame source wrote for itself: rather
@@ -115,15 +122,16 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly DynamicTransform[] m_transforms;
 
     private readonly SdfMovedTransforms m_moved = new();
+
     // The table as it stood before a repack, which the repack is compared with; made at the first repack.
     private DynamicTransform[]? m_repackedTransforms;
     private bool m_transformsPacked;
 
     // The background build in flight, if any, and the components it was emitted from.
     private readonly int[] m_buildingRevisions;
+
     private Task<(SdfProgram Program, SdfProgramDelta? Delta)>? m_building;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
-
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
@@ -134,7 +142,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
     /// content moved emits the program, and every frame until the build finishes renders the program held before it, with
     /// its transforms, mesh draws and dress live; the first frame after the build finishes adopts it. A converging capture
-    /// (<see cref="BeginConvergence"/>) waits for the build instead. <see langword="false"/>, the default, builds every
+    /// (<see cref="BeginConvergence"/>) or tick-locked dresser waits for the build instead. <see langword="false"/>, the default, builds every
     /// program in the frame that finds the content moved.</summary>
     public bool BuildsInBackground { get; init; }
     /// <summary>Gets whether a background build is in flight (<see cref="BuildsInBackground"/>).</summary>
@@ -147,6 +155,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public SdfProgram? Program => m_program;
 
     private bool Converging => (m_convergence is { Completion.IsCompleted: false });
+    private bool WaitsForBuild => (Converging || m_dresser.TickLocked);
 
     /// <inheritdoc/>
     /// <remarks>Until the request completes, a frame adopts a background build in flight, waiting for it, and builds a
@@ -162,6 +171,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <inheritdoc/>
     /// <remarks>The dresser's (<see cref="ISdfFrameDresser.ScreenDecals"/>).</remarks>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_dresser.ScreenDecals;
+    /// <inheritdoc/>
+    /// <remarks>The dresser's (<see cref="ISdfFrameDresser.ScreenSurfaceTransforms"/>).</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => m_dresser.ScreenSurfaceTransforms;
 
     /// <summary>Composes <paramref name="emitters"/> into one frame source, dressed each frame by
     /// <paramref name="dresser"/>.</summary>
@@ -274,12 +286,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     }
     // A build packs, validates and analyses the emitted builder, which owns everything it reads, so it runs on any thread.
     private static SdfProgram Build(SdfProgramBuilder builder) => builder.Build();
-    // Adopts the program a background build finished, or waits for it while a capture converges, so a converging frame
+    // Adopts the program a background build finished, or waits for it in a converging or tick-locked frame, so that frame
     // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
     // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
     // throws here and leaves the built record describing the program still held, so the next frame emits again.
     private bool AdoptBuild(ref bool moved) {
-        if ((m_building is not { } building) || (!building.IsCompleted && !Converging)) {
+        if ((m_building is not { } building) || (!building.IsCompleted && !WaitsForBuild)) {
             return false;
         }
 
@@ -368,6 +380,26 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         return moved;
+    }
+    // Reads every emitter's straddling slot runs after packing: one emitter's list passes through as it is, several are
+    // copied into a new list, and none is the one empty list, so a frame no body straddles a portal in costs nothing.
+    private IReadOnlyList<SdfSlotClip> ComposeSlotClips() {
+        IReadOnlyList<SdfSlotClip> composed = [];
+
+        foreach (var emitter in m_emitters) {
+            var clips = emitter.SlotClips;
+
+            if (clips.Count == 0) {
+                continue;
+            }
+
+            composed = ((composed.Count == 0)
+                ? clips
+                : [.. composed, .. clips]
+            );
+        }
+
+        return composed;
     }
     // Reads every emitter's mesh draws after packing and recomposes them only when an emitter's list or revision moved:
     // one emitter's list passes through as it is, several are copied in list order into the host's own list. Either way
@@ -532,7 +564,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 length: m_buildingRevisions.Length
             );
 
-            if ((m_program is null) || !BuildsInBackground || Converging) {
+            if ((m_program is null) || !BuildsInBackground || WaitsForBuild) {
                 m_program = Build(builder: builder);
                 m_programDelta = null;
                 Array.Copy(
@@ -549,7 +581,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 m_building = Task.Run(function: () => {
                     var built = Build(builder: builder);
 
-                    return (built, (SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built));
+                    return (built, ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
                 });
             }
         }
@@ -570,6 +602,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         );
 
         dressed.PickMap = ComposePickMap();
+        dressed.SlotClips = ComposeSlotClips();
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         Frames++;
         return dressed;

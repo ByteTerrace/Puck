@@ -1,18 +1,20 @@
-// The garden: the debug world's portal destination, a small sunset plot with a green floor and a golden obelisk, so a
-// window onto it reads at a glance. The debug world's frame (`portal`) opens onto the arrival frame here, and the two
-// map as the identity: a body walking -Z through the debug frame arrives here at the same point, still walking -Z.
-// Turn round and the arrival frame is the way back. Walk on and the far frame, twelve metres further along the line the
-// spawn camera looks through the debug frame, shows the debug world turned about, so it is also a frame seen through a
-// frame from the debug world's spawn. Boot the debug world, never this one: it is reached through the debug world's
-// frame, and `world.reload` there recompiles only the debug world. See debug.md beside this file.
+// The garden: a destination of the debug world's painting wing, a small sunset plot with a green floor and a golden
+// obelisk, so a window onto it reads at a glance. The debug world's garden painting (`painting-garden`, hung on the
+// north wall of the wing, paintings.puck) opens onto the arrival frame here: a body walking +Z into the painting comes
+// out of the arrival frame walking -Z. Turn round and the arrival frame is the way back. Walk on and the far frame,
+// twelve metres further along the line the painting's window looks along, shows the debug world again, so it is also a
+// frame seen through a frame from the wing. Boot the debug world, never this one: it is reached through the debug
+// world's painting, and `world.reload` there recompiles only the debug world. See debug.md beside this file.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "garden"
 
-// The debug world's chrome, so a traveller keeps its bar and wheel here.
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
 import "theme"
 import "controls"
+import "suit"
+import "size"
 
 // The garden draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -24,7 +26,7 @@ let frameGold = 0 // #C9A43A
 
 metadata {
   title: "Garden"
-  description: "The debug world's portal destination: a sunset plot with a green floor, a golden obelisk and two frames back to the debug world."
+  description: "A destination of the debug world painting wing: a sunset plot with a green floor, a golden obelisk and two frames back to the debug world."
 }
 
 // A traveller from the debug world arrives here, and the debug world's window onto the garden observes it whole.
@@ -86,8 +88,8 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // The debug frame's counterpart, at its position and facing -Z, so the pair maps as the identity. Its glass is the
-  // way back: walking +Z into it arrives out of the debug frame walking +Z, towards the debug world's spawn.
+  // The garden painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
+  // back: walking +Z into it arrives out of the painting walking -Z, into the wing.
   placement "arrival" {
     prototype: "frame"
     position [3, 0, -8]
@@ -98,7 +100,7 @@ placements {
         filter: linear
         portal {
           arrival: "mapped"
-          counterpart: "portal/glass"
+          counterpart: "painting-garden/glass"
           destination: "debug"
           travel: "body"
         }
@@ -112,9 +114,9 @@ placements {
     ]
   }
 
-  // The far frame stands on the line the spawn camera looks along through the debug frame and faces back along it, so
-  // the debug world's window onto the garden shows it. It also maps onto the debug frame, turned about: a body walking
-  // -Z into it arrives out of the debug frame walking +Z.
+  // The far frame stands on the line the painting's window looks along and faces back along it, so the debug world's
+  // window onto the garden shows it. It also maps onto the garden painting, face to face: a body walking -Z into it
+  // arrives out of the painting walking -Z, in front of the wing's north wall.
   placement "far" {
     prototype: "frame"
     position [5.5, 0, -20]
@@ -125,7 +127,7 @@ placements {
         filter: linear
         portal {
           arrival: "mapped"
-          counterpart: "portal/glass"
+          counterpart: "painting-garden/glass"
           destination: "debug"
           travel: "body"
         }
@@ -166,7 +168,9 @@ prototypes {
     }
   }
 
-  // The same picture frame the debug world stands: a gilt rim round an open aperture whose glass is face 0.
+  // A gilt frame round a canvas the size of the gallery painting's (2.24 by 2.84 m, its bottom below the ground so a
+  // body's feet cross the glass): a mapped pair of two sizes carries a traveller only within one world. Face 0, the
+  // rim, names the glass, which shows through the opening carved out of it.
   prototype "frame" {
     document {
       behavior {
@@ -188,14 +192,29 @@ prototypes {
       schema: "puck.creation.v1"
       shape Box "rim" {
         material: frameGold
-        position [0, 1.75, 0]
-        scale [1.25, 1.75, 0.08]
+        position [0, 1.3, 0]
+        scale [1.12, 1.42, 0.04]
       }
       shape Box "opening" {
         blend: Subtraction
         material: frameGold
-        position [0, 1.75, 0]
-        scale [1.1, 1.6, 0.3]
+        position [0, 1.3, 0]
+        scale [1.1, 1.4, 0.3]
+      }
+      shape Box "frame-left" {
+        material: frameGold
+        position [-1.24, 1.42, 0]
+        scale [0.12, 1.54, 0.08]
+      }
+      shape Box "frame-right" {
+        material: frameGold
+        position [1.24, 1.42, 0]
+        scale [0.12, 1.54, 0.08]
+      }
+      shape Box "frame-top" {
+        material: frameGold
+        position [0, 2.84, 0]
+        scale [1.12, 0.12, 0.08]
       }
     }
   }
@@ -206,7 +225,7 @@ prototypes {
       palette [
         {
           color: "#F2C230"
-          emissive: 0.35
+          emissive: 14000
           roughness: 0.5
           specular: 0.3
         }
@@ -226,18 +245,25 @@ prototypes {
   }
 }
 
+// A sunset: a low sun's 2,000 lux under a 400-nit sky, so the garden reads as evening in its own exposure and a painting
+// onto it from the dimmer gallery shows its colours rather than a sunlit glare.
 render {
   farDistance: 120
+  lighting {
+    lights [
+      directional(name: "key", direction: [3, 5, -4], color: "#FFC27A", illuminance: 2000lx, shadow: always, angularRadius: 0.2)
+    ]
+  }
   sky {
     layers [
-      gradient(name: "air", stops: [
+      gradient(name: "air", luminance: 400nit, stops: [
         { elevation: -1, color: "#3A2440" }
         { elevation: 0, color: "#FF9A4D" }
         { elevation: 0.25, color: "#D2557A" }
         { elevation: 1, color: "#3B2A6E" }
       ]
       )
-      sunDisc(name: "sun", light: 0, radius: 1.2deg, intensity: 10, color: "#FFC27A")
+      sunDisc(name: "sun", luminance: 400nit, light: 0, radius: 1.2deg, intensity: 10, color: "#FFC27A")
     ]
   }
   atmosphere {

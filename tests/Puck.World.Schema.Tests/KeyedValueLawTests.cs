@@ -185,7 +185,7 @@ public sealed class KeyedValueLawTests {
         Assert.Contains(
             expectedSubstring: "render.lighting.keys[0].lights.moon names no light",
             actualString: Validate(definition: Definition(lighting: lighting with {
-                Keys = [new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> { ["moon"] = new WorldRenderLight.Directional(Weight: 0.2f) })],
+                Keys = [new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> { ["moon"] = new WorldRenderLight.Directional(Illuminance: 0.2f) })],
             }))
         );
     }

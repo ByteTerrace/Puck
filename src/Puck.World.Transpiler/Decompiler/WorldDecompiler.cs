@@ -769,7 +769,7 @@ public static partial class WorldDecompiler {
 
         var names = string.Join(
             separator: ", ",
-            values: arr.Select(selector: n => (n?.ToString() ?? ""))
+            values: arr.Select(selector: n => Puck.Transpiler.Ast.QualifiedName.Parse(text: (n?.ToString() ?? "")).Print(segment: PuckPrinter.PrintName))
         );
 
         sb.AppendLine(
@@ -1113,9 +1113,17 @@ public static partial class WorldDecompiler {
     // `$type` discriminator prints as a call (`compare(left: …)`), which is leaf-shaped and keeps its colon.
     private static bool RendersAsContainer(JsonNode? value) => value switch {
         JsonArray => true,
-        JsonObject obj => ((obj["$type"] is not JsonValue typeVal) || !typeVal.TryGetValue<string>(value: out _)),
+        JsonObject obj => !PrintsAsCall(obj: obj),
         _ => false,
     };
+    // An object carrying a `$type` discriminator prints as a call, unless the discriminator spells a compile-time
+    // builtin (an envelope's `range`): the call would evaluate as the builtin wherever the position names no arm, so
+    // the object stays a literal carrying its `$type`.
+    private static bool PrintsAsCall(JsonObject obj) => (
+        (obj["$type"] is JsonValue typeVal) &&
+        typeVal.TryGetValue<string>(value: out var typeName) &&
+        !DocumentBuiltins.Names.Contains(item: typeName)
+    );
     // The separator a field writes before its value: none in front of a container, ": " in front of a leaf. The
     // colon is what tells a reader "this is a leaf", so it never appears in front of a '{' or a '['.
     // The rules no group claims, in document order. A group prints its own members inside its block.
@@ -1392,10 +1400,7 @@ public static partial class WorldDecompiler {
             // The call-form escape hatch (§7): any object carrying a `$type` discriminator prints as
             // `type(k: v, ...)` — the ActionPredicate/ActionEffect/StateTransform family and every extension arm
             // the DSL's dedicated sugar does not otherwise cover, wherever it appears in the document.
-            if (
-                (obj["$type"] is JsonValue typeVal) &&
-                typeVal.TryGetValue<string>(value: out _)
-            ) {
+            if (PrintsAsCall(obj: obj)) {
                 return FormatCallForm(
                     context: context,
                     indentLevel: indentLevel,

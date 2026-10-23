@@ -187,6 +187,7 @@ public sealed partial class RenderGraphRuntime {
                 acquired.Image.IsSameDeviceImage &&
                 !Withholds(
                     previousFrame: previousFrame,
+                    rendersThisFrame: RendersIn(producer: producer, schedule: schedule),
                     tainted: acquired.Tainted
                 )
             ) {

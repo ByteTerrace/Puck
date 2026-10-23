@@ -372,9 +372,15 @@ public static partial class WorldDefinitionValidator {
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Weight,
-                        path: $"{path}.weight",
-                        value: directional.Weight
+                        own: own.Illuminance,
+                        path: $"{path}.illuminance",
+                        value: directional.Illuminance
+                    );
+                    RequireKeyScalar(
+                        errors: errors,
+                        own: own.Temperature,
+                        path: $"{path}.temperature",
+                        value: directional.Temperature
                     );
                     RequireKeyScalar(
                         errors: errors,
@@ -396,9 +402,9 @@ public static partial class WorldDefinitionValidator {
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Weight,
-                        path: $"{path}.weight",
-                        value: rim.Weight
+                        own: own.Luminance,
+                        path: $"{path}.luminance",
+                        value: rim.Luminance
                     );
                     RequireKeyScalar(
                         errors: errors,
@@ -429,18 +435,24 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.color",
                         value: point.Color
                     );
-                    RequireKeyScalar(
-                        errors: errors,
-                        own: own.Radius,
-                        path: $"{path}.radius",
-                        value: point.Radius
-                    );
-                    RequireKeyScalar(
-                        errors: errors,
-                        own: own.Weight,
-                        path: $"{path}.weight",
-                        value: point.Weight
-                    );
+                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: point.Intensity);
+                    RequireKeyScalar(errors: errors, own: own.Power, path: $"{path}.power", value: point.Power);
+                    RequireKeyScalar(errors: errors, own: own.Temperature, path: $"{path}.temperature", value: point.Temperature);
+
+                    break;
+                }
+            case WorldRenderLight.Spot spot: {
+                    var own = ((WorldRenderLight.Spot)target);
+
+                    RequireKeyVector(errors: errors, own: own.Position, path: $"{path}.position", value: spot.Position);
+                    RequireKeyDirection(errors: errors, own: own.Direction, path: $"{path}.direction", value: spot.Direction);
+                    RefuseStructure(errors: errors, path: $"{path}.anchor", stated: (spot.Anchor is not null));
+                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: spot.Color);
+                    RequireKeyScalar(errors: errors, own: own.Angle?.Value, path: $"{path}.angle", value: spot.Angle?.Value);
+                    RequireKeyScalar(errors: errors, own: own.InnerAngle?.Value, path: $"{path}.innerAngle", value: spot.InnerAngle?.Value);
+                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: spot.Intensity);
+                    RequireKeyScalar(errors: errors, own: own.Power, path: $"{path}.power", value: spot.Power);
+                    RequireKeyScalar(errors: errors, own: own.Temperature, path: $"{path}.temperature", value: spot.Temperature);
 
                     break;
                 }
@@ -487,6 +499,7 @@ public static partial class WorldDefinitionValidator {
         RefuseStructure(errors: errors, path: $"{path}.visibility", stated: (part.Visibility is not null));
         RefuseStructure(errors: errors, path: $"{path}.tier", stated: (part.Tier is not null));
         RequireKeyScalar(errors: errors, own: target.Opacity, path: $"{path}.opacity", value: part.Opacity);
+        RequireKeyScalar(errors: errors, own: target.Luminance, path: $"{path}.luminance", value: part.Luminance);
         RequireKeyScalar(errors: errors, own: target.Transform?.Turn?.Value, path: $"{path}.transform.turn", value: part.Transform?.Turn?.Value);
         RequireKeyScalar(errors: errors, own: target.Transform?.Tilt?.Value, path: $"{path}.transform.tilt", value: part.Transform?.Tilt?.Value);
 

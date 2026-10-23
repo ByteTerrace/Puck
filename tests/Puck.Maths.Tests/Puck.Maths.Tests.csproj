@@ -15,7 +15,4 @@
         <ProjectReference Include="../../src/Puck.Abstractions/Puck.Abstractions.csproj" />
         <ProjectReference Include="../../src/Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
-    <ItemGroup>
-        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
-    </ItemGroup>
 </Project>

@@ -18,11 +18,28 @@
 // - The bounded volumes composite last over each share, the surface share's clipped at the transport's distance and the
 //   sky share's at the far distance, from the camera's near plane, so a medium never paints through solid geometry,
 //   even at an edge whose samples it lies behind.
+// - With the local adaptation on (localAdaptation, SdfExposure.Local; the views stage adapts each surface), the sky
+//   share is scaled so the sky's brightest texel (skyPeakLuminance) reaches display white (SDF_SKY_PEAK_TARGET) rather
+//   than clipping, so a window from a dim room shows the sky's gradient; outdoors the sky already lies below white and
+//   is left as it is.
 // A debug view's lit image is its whole picture, so it passes through.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
+
+// The factor the local adaptation scales a view's sky share by: one where the sky's brightest already lies at or below
+// white under the view's exposure, and one for a view a window shows, whose output is not display-referred (the view
+// looking through the window applies the rest of the exposure, and its own sky share is the one it scales).
+float sdfSkyPeakGain() {
+    if (!(passGroup.localAdaptation > 0.0) || !(passGroup.skyPeakLuminance > 0.0) || (passGroup.exposeShare < 1.0)) {
+        return 1.0;
+    }
+
+    float exposed = (max(passGroup.exposure, 1.0e-12) * passGroup.skyPeakLuminance);
+
+    return min(1.0, (SDF_SKY_PEAK_TARGET / max(exposed, 1.0e-12)));
+}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -52,8 +69,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             skyAir = sdfAirAlong(origin, direction, worldFarDistance(view), false);
         }
 
+        // The view's screen fidelity clears the atmosphere's in-scatter and the bounded volumes by its share, as the
+        // views stage cleared the transmittance, so a framed screen's pixels reach the output as the glass shaded them.
+        float fidelity = saturate(passGroup.screenFidelity);
+
+        weights *= (1.0 - fidelity);
+
         float3 kinds = max(weights, skyAir.weights);
-        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? sdfSkyPassEnvironment(direction) : float3(0.0, 0.0, 0.0));
+        // The sky and the bodies light the air only as far as the air about the camera sees them open (airLight): a
+        // closed room's air is not lit by the sky outside it.
+        float airLight = saturate(passGroup.airLight);
+        float3 ambient = (((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky())) ? (sdfSkyPassEnvironment(direction) * airLight) : float3(0.0, 0.0, 0.0));
         float3 hazeColor = float3(0.0, 0.0, 0.0);
 
         if (kinds.x > 0.0) {
@@ -62,7 +88,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
         if (kinds.y > 0.0) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
-            hazeColor = (ambient + sdfAirBodies(direction, sdfSky[0].HazeAnisotropy));
+            hazeColor = (ambient + (sdfAirBodies(direction, sdfSky[0].HazeAnisotropy) * airLight));
             surface += (hazeColor * weights.y);
         }
         if (kinds.z > 0.0) {
@@ -75,7 +101,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS];
             bool summarized = sdfSkyPassRuns(id.xy, base, scales, offsets);
 
-            sky = sdfSkyCompose(direction, summarized, base, scales, offsets);
+            sky = (sdfSkyCompose(direction, summarized, base, scales, offsets) * sdfSkyPeakGain());
             if (sdfAirBeforeSky()) {
                 sky = ((skyAir.transmittance * sky) + (skyAir.weights.y * hazeColor) + (skyAir.weights.z * sdfSky[0].MediumColor));
             }
@@ -94,6 +120,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
             if (geometryOnly) { color *= coverage; }
+            else if (fidelity > 0.0) { color = lerp(color, (surface + sky), fidelity); }
         }
         if (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) {
             // RGB: layer/atmosphere evaluations / 4, procedural hashes / 64, texture loads / 16.
@@ -101,8 +128,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    // The float working color; the display encode dithers and quantizes it.
-    output[id.xy] = float4(color, (geometryOnly ? litColor.a : 1.0));
+    // The view's exposure maps the luminance it shaded, in nits, to the display before the root's tonemap; a view a
+    // window shows applies the window share of it (exposeShare), and the view looking through the window applies the
+    // rest of its own; a debug view leaves it as it is.
+    if (passGroup.debugMode == 0u) {
+        color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
+    }
+
+    // The float working color, held within the half-float range it is stored in; the display encode dithers and
+    // quantizes it.
+    output[id.xy] = float4(min(color, SDF_LUMINANCE_CEILING), (geometryOnly ? litColor.a : 1.0));
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

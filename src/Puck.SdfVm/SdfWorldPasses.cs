@@ -68,6 +68,16 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool SamplesReads => true;
 
     /// <inheritdoc/>
+    public string? WaitingOf(string instance) {
+        lock (m_gate) {
+            return ((m_entries.TryGetValue(key: instance, value: out var entry) &&
+                (entry.Residency is { Frame.TickLocked: true } residency) && residency.MeshPathBake.Pending)
+                ? $"residency '{residency.Name}' is completing its meshes"
+                : null);
+        }
+    }
+
+    /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
     /// its tables' build or its views kernel, refused by name, which only a change to what they are built from
     /// retries.</remarks>
@@ -130,6 +140,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             }
             if ((context.Part == SdfWorldPackage.Parts.Sky) || (context.Part == SdfWorldPackage.Parts.Composite)) {
                 return new SdfSkyRecorder(context: context, groups: groups, owner: this, view: view);
+            }
+            if (context.Part == SdfWorldPackage.Parts.GlassShade) {
+                return new SdfGlassRecorder(context: context, groups: groups, owner: this, view: view);
             }
             return new SdfWorldPassRecorder(
                 context: context,
@@ -214,10 +227,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         entry.Convergence = convergence;
         // An ordinary capture observes the next normal temporal sample. Explicit convergence starts a new sequence,
         // and retained tainted history must be discarded before a filled source can serve any capture.
-        if (convergence.IsActive || entry.HistoryTainted) {
+        if (convergence.IsActive) {
             entry.Temporal.Reset();
         }
-        entry.HistoryTainted = false;
+        _ = DiscardTaintedState(instance: instance);
         entry.Residency?.BeginConvergence(request: convergence.Request);
     }
 

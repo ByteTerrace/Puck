@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -58,6 +58,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     /// <summary>The look-swap command: turns the seat camera a half-turn about the body.</summary>
     /// <summary>The look-recenter command: turns the seat camera round behind the body.</summary>
     public const string RecenterLookCommand = Puck.World.Client.PlayerCommandNames.RecenterLookCommand;
+    /// <summary>The engaged-screen view toggle: <c>player.frame [seat]</c>.</summary>
+    public const string FrameCommand = "player.frame";
     /// <summary>The generic sensor-input mode toggle.</summary>
     public const string MotionControlsCommand = Puck.World.Client.PlayerCommandNames.MotionControlsCommand;
     /// <summary>The Axis3D angular-velocity input for motion controls.</summary>
@@ -86,6 +88,9 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // The creation-stamp pool, read (never stepped) by body.rig: the driver/effector state is presentation-side and
     // exists nowhere else, so this is the one door onto it.
     private readonly WorldStampPool m_stamps = stamps;
+    // The seat camera's pointer adapter, whose drag gate applies player.orbit and player.steer edges; a headless boot
+    // registers none, having no pointer to drag.
+    private readonly WorldSeatViewInput? m_viewInput = viewInput;
     // The boot instance's live channel table — name→ordinal resolution for a typed press, fly or tether on a body
     // the boot world owns. It is the population's own table, so a world.load, world.reload or channels edit retargets
     // it at the same tick boundary the kit ordinals move. Never the source a bound channel verb dispatches against —
@@ -111,7 +116,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.where",
-            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable home=(x.xx, y.yy, z.zz) scale=s.ss vel=(x.xx, y.yy, z.zz) com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: vel= is the authoritative velocity in m/s (planar x, vertical, planar z); facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, inmedium, atmediumband, holdingunwalkable, unsupported, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scaleRow names a state row carrying this body's own cell) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. body.where [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
+            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable home=(x.xx, y.yy, z.zz) scale=s.ss vel=(x.xx, y.yy, z.zz) com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: vel= is the authoritative velocity in m/s (planar x, vertical, planar z); facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, inmedium, atmediumband, holdingunwalkable, unsupported, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scale names a state.body register carrying this body's size) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. body.where [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
             handler: WhereHandler
         );
         yield return CommandDefinition.WithWireArgs(

@@ -24,6 +24,10 @@ namespace Puck.Commands;
 /// <param name="CommandChords">The command-meaning chord rows of this page's group, in profile order — the hints a
 /// binding bar renders so a player can discover a chord-fired act (a group that binds one; a group whose chords are
 /// all pages carries none).</param>
+/// <param name="Openers">Each input source id that, held on top of this page's own modifiers, selects a deeper page of
+/// the group, mapped to that page (<c>OrdinalIgnoreCase</c>; the first page in profile order wins a source two pages
+/// open). A binding bar reads it for a control this page leaves unbound, so a plate whose job is to open a page
+/// (a shoulder that opens the play wheel) still shows what it does. <see langword="null"/> reads as no openers.</param>
 public sealed record BindingPageView(
     string PageId,
     string Group,
@@ -32,7 +36,17 @@ public sealed record BindingPageView(
     IReadOnlyList<BindingPageButtonView> Buttons,
     FrozenDictionary<string, BindingPageButtonView> ButtonsBySource,
     IReadOnlyList<BindingModifierView> Modifiers,
-    IReadOnlyList<BindingChordCommandView> CommandChords
+    IReadOnlyList<BindingChordCommandView> CommandChords,
+    FrozenDictionary<string, BindingPageOpenerView>? Openers = null
+);
+/// <summary>The page a held control opens, as the UI presents it.</summary>
+/// <param name="PageId">The profile-unique identifier of the page the control opens.</param>
+/// <param name="Label">The opened page's display label, if any; opaque to the engine.</param>
+/// <param name="Icon">The opened page's display icon id, if any; opaque to the engine.</param>
+public sealed record BindingPageOpenerView(
+    string PageId,
+    string? Label,
+    string? Icon
 );
 /// <summary>One bound source as the UI presents it.</summary>
 /// <param name="Source">The row's trigger label — its source ids comma-joined, or an activator label. A DISPLAY
@@ -71,12 +85,15 @@ public sealed record BindingPageButtonView(
 /// <param name="Required">Whether the page's own row requires this modifier to be held — either as an unordered
 /// <c>held</c> member or as a member of its ordered <c>chord</c>. Both lists must be down for the page to be the
 /// selected one, so both mark their modifiers required.</param>
+/// <param name="Declared">Whether the profile's own <c>modifiers</c> section declares this modifier, rather than the
+/// compiler minting it for a raw source a chord or held row names.</param>
 public sealed record BindingModifierView(
     string Id,
     IReadOnlyList<string> Sources,
     string? Label,
     string? Icon,
-    bool Required
+    bool Required,
+    bool Declared = true
 );
 /// <summary>One command-meaning row as the UI presents it — a binding bar's chord hint.</summary>
 /// <param name="Chord">The modifier ids that must have been pressed in this order.</param>
@@ -86,6 +103,8 @@ public sealed record BindingModifierView(
 /// <param name="Icon">The row's display icon id, if any; opaque to the engine.</param>
 /// <param name="HoldRelease">Whether the command dispatches on both edges (see <see cref="BindingCommandDefinition.HoldRelease"/>).</param>
 /// <param name="Held">The modifier ids that must be down, in any order.</param>
+/// <param name="Action">The AUTHORED action the row names — its <c>command</c>, else its named <c>channel</c> — the key a
+/// binding bar's icon row looks the row up by, as it looks a page entry up by its action.</param>
 public sealed record BindingChordCommandView(
     IReadOnlyList<string> Chord,
     IReadOnlyList<string> Sources,
@@ -93,5 +112,6 @@ public sealed record BindingChordCommandView(
     string? Label,
     string? Icon,
     bool HoldRelease,
-    IReadOnlyList<string>? Held = null
+    IReadOnlyList<string>? Held = null,
+    string? Action = null
 );

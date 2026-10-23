@@ -7,7 +7,7 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Parlot" Version="[1.5.*, )" />
+        <PackageReference Include="Parlot" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/IdentifierCorpus.cs" Link="IdentifierCorpus.cs" />

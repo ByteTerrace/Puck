@@ -105,7 +105,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             Subject: body,
             Exclusive: false,
             Budget: 9,
-            Reach: new ChannelReachMask(Bits: 1UL),
+            Reach: new ChannelReachMask(Bits: new ChannelMask(Axes: 1, Buttons: 0)),
             HoldCeiling: 100L
         );
         var mutateSectionGrant = new WorldGrant(
@@ -235,7 +235,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         ));
         Assert.Equal(
             expected: 1UL,
-            actual: reach.Bits
+            actual: reach.Bits.Axes
         );
         Assert.Equal(
             expected: 100L,

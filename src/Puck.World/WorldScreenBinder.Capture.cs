@@ -17,9 +17,8 @@ public sealed partial class WorldScreenBinder {
     // frame-source registry (DeclareFrameSource, WorldScreenBinder.FrameSources.cs — a HUD/overlay capture with
     // no screen row at all): the D3D12 GPU transport always defers to the pending path (the render adapter LUID is
     // not resolvable yet); otherwise an immediate CPU/GPU open is tried, then a pending feed on a platform that
-    // supports window capture at all, then nothing (fault only, no feed) on a platform with none. A caller that
-    // gets no feed back never retries on its own — a null return means the platform itself cannot ever open this
-    // source, not a transient miss.
+    // cannot open the target. A declared external source needs a feed even on an unsupported platform so the
+    // capture gate can serve its fill. Invalid target settings still refuse; live open verbs use TryOpen directly.
     private CaptureFeed? TryCreateCaptureFeed(WorldCaptureSettings capture, out string? fault) {
         var windowTitle = (capture.WindowTitle ?? string.Empty);
 
@@ -50,10 +49,7 @@ public sealed partial class WorldScreenBinder {
                 return monitorFeed;
             }
 
-            if (
-                m_windowCapture.IsSupported &&
-                (monitorIndex >= 0)
-            ) {
+            if (monitorIndex >= 0) {
                 fault = monitorFault;
 
                 return NewCaptureFeed(
@@ -95,10 +91,7 @@ public sealed partial class WorldScreenBinder {
             return captureFeed;
         }
 
-        if (
-            m_windowCapture.IsSupported &&
-            !string.IsNullOrWhiteSpace(value: windowTitle)
-        ) {
+        if (!string.IsNullOrWhiteSpace(value: windowTitle)) {
             fault = captureFault;
 
             return NewCaptureFeed(

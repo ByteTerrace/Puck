@@ -66,7 +66,7 @@ sky layer with `direction`, `size` (angular half-width and half-height in
 radians), `color`, `intensity` and `blur`; its defaults are lighting
 visibility and add blending. Its colour, intensity and blur can be keyed;
 direction and size are structure. `tonemap` absent is `none` — the stylized shaded color,
-unchanged; `filmic` puts each view through an ACES-fit filmic curve (no gamma
+unchanged; `filmic` puts each view through a filmic curve, the Gran Turismo fit (no gamma
 encode — the shading is already display-referred) as the root graph's place pass
 reconstructs it, so the letterbox color, a pane (display-referred, its shader's
 own tonemap included) and the HUD are never tonemapped, and nothing is

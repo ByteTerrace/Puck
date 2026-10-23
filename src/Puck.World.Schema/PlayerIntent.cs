@@ -8,14 +8,14 @@ using Puck.Maths;
 
 namespace Puck.World.Protocol;
 
-/// <summary>The channel vector's declared ordinal ceiling — every <see cref="PlayerIntent"/> preallocates this many
-/// <see cref="FixedQ4816"/> slots inline, independent of the wire's per-tick act-cell bound (a different quantity: that
-/// one bounds out-cells per tick, this one bounds how many rows a world's channel table may declare). A PROTOTYPE
-/// value: the real ceiling is owed to the fold's preallocation, which is what makes a zero-alloc tick true rather than
-/// aspirational — a mount ceiling times this count is the contribution set's fixed size.</summary>
+/// <summary>Independent active input bank budgets. Fold scratch is preallocated against their sum.</summary>
 public static class ChannelLimits {
     /// <summary>The total addressable ordinals.</summary>
-    public const int MaxChannels = 16;
+    public const int MaxChannels = (MaxAxes + MaxButtons);
+    /// <summary>The numeric bank's capacity.</summary>
+    public const int MaxAxes = 32;
+    /// <summary>The packed button bank's capacity.</summary>
+    public const int MaxButtons = 64;
 }
 /// <summary>A channel's declared value shape — what a bound destination's value clamps and quantizes to, and what
 /// <see cref="Puck.Maths.FixedContributionFold"/> receives through <see cref="Puck.World.WorldChannelTable.CompileFoldShape"/>
@@ -35,18 +35,62 @@ public enum ChannelShape : byte {
     /// threshold against the previous sub-step (see <c>Puck.World.Server.WorldBody</c>'s per-channel edge
     /// tracking) — never carried.</summary>
     Binary,
+
+    /// <summary>A Q32.32 displacement accumulated since the preceding input submission, consumed once.</summary>
+    Relative,
 }
-/// <summary>Zero-alloc fixed-point storage for one <see cref="PlayerIntent"/> — <see cref="ChannelLimits.MaxChannels"/>
-/// <see cref="FixedQ4816"/> slots inline in the value itself (an <c>InlineArray</c>, never a heap array), so
-/// constructing, copying, and folding an intent every sub-step allocates nothing.</summary>
-[InlineArray(ChannelLimits.MaxChannels)]
+/// <summary>The inline numeric bank; copying it allocates nothing.</summary>
+[InlineArray(ChannelLimits.MaxAxes)]
+public struct ChannelAxes {
+    private long m_element0;
+}
+/// <summary>Thirty-two numeric lanes and sixty-four packed held buttons. Compiled addresses below
+/// <see cref="ChannelLimits.MaxAxes"/> select numeric lanes; the remaining addresses select buttons.</summary>
 public struct ChannelValues {
-    private FixedQ4816 m_element0;
+    /// <summary>The numeric value bank.</summary>
+    public ChannelAxes Axes;
+    /// <summary>The packed held button bank.</summary>
+    public ulong Buttons;
+
+    /// <summary>Reads a numeric bank slot as Q32.32; resolve and validate its shape through WorldChannelTable first.</summary>
+    public readonly FixedQ3232 Relative(int ordinal) {
+        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(ordinal, ChannelLimits.MaxAxes);
+        return FixedQ3232.FromRawBits(value: Axes[ordinal]);
+    }
+    /// <summary>Writes a numeric bank slot as Q32.32; resolve and validate its shape through WorldChannelTable first.</summary>
+    public void SetRelative(int ordinal, FixedQ3232 value) {
+        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(ordinal, ChannelLimits.MaxAxes);
+        Axes[ordinal] = value.Value;
+    }
+
+    /// <summary>Reads or writes an already-quantized level through its compiled bank address.</summary>
+    public FixedQ4816 this[int ordinal] {
+        readonly get {
+            ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(ordinal, ChannelLimits.MaxChannels);
+            return ((ordinal < ChannelLimits.MaxAxes) ? FixedQ4816.FromRawBits(value: Axes[ordinal])
+                : (((Buttons & (1UL << (ordinal - ChannelLimits.MaxAxes))) != 0) ? FixedQ4816.One : FixedQ4816.Zero));
+        }
+        set {
+            ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(ordinal, ChannelLimits.MaxChannels);
+            if (ordinal < ChannelLimits.MaxAxes) {
+                Axes[ordinal] = value.Value;
+            } else {
+                if ((value != FixedQ4816.Zero) && (value != FixedQ4816.One)) {
+                    throw new ArgumentOutOfRangeException(nameof(value), "A packed button requires a quantized zero or one.");
+                }
+                var bit = (1UL << (ordinal - ChannelLimits.MaxAxes));
+
+                Buttons = ((value == FixedQ4816.One) ? Buttons | bit : Buttons & ~bit);
+            }
+        }
+    }
 }
-/// <summary>One simulation tick's player intent. The vector retains sixteen positional wire slots; the compiled
-/// world channel table assigns every declared channel consecutively and resolves claimed roles to those authored
-/// ordinals. Beside the vector, an intent may carry the seat's pointer ray, which fits no channel.</summary>
-/// <param name="Channels">The raw per-ordinal fixed-point values.</param>
+/// <summary>One tick's packed levels, addressed through the compiled world channel table, and optional pointer ray.</summary>
+/// <param name="Channels">The numeric and button banks.</param>
 /// <param name="SourceRay">The seat's world-space pointer ray this tick, quantized once at the host
 /// (<see cref="Puck.Commands.CommandValueQuantization.QuantizeAxis3D"/>), or <see langword="null"/> when the seat points
 /// at nothing. The server maps it through a <c>Simulation</c> screen's row in fixed point
@@ -62,26 +106,34 @@ public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? So
     /// first backing field to reflection-based equality) — silently comparing only ordinal 0 instead of the
     /// vector.</summary>
     public bool Equals(PlayerIntent other) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if (Channels[ordinal] != other.Channels[ordinal]) {
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
+            if (Channels.Axes[ordinal] != other.Channels.Axes[ordinal]) {
                 return false;
             }
         }
 
-        return (SourceRay == other.SourceRay);
+        return ((Channels.Buttons == other.Channels.Buttons) && (SourceRay == other.SourceRay));
     }
     /// <summary>Returns a hash consistent with <see cref="Equals(PlayerIntent)"/> — folded over every ordinal and the
     /// pointer ray, for the same reason <see cref="Equals(PlayerIntent)"/> is declared explicitly.</summary>
     public override int GetHashCode() {
         var hash = new HashCode();
 
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            hash.Add(value: Channels[ordinal]);
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
+            hash.Add(value: Channels.Axes[ordinal]);
         }
 
+        hash.Add(value: Channels.Buttons);
         hash.Add(value: SourceRay);
 
         return hash.ToHashCode();
+    }
+    /// <summary>Returns this image with one Q32.32 displacement replaced.</summary>
+    public PlayerIntent WithRelative(int ordinal, FixedQ3232 value) {
+        var channels = Channels;
+
+        channels.SetRelative(ordinal: ordinal, value: value);
+        return this with { Channels = channels };
     }
     /// <summary>Returns this intent with one ordinal replaced — the composition-channel write path (a bound kit
     /// effect, a wire press, a held device value). The pointer ray is kept.</summary>

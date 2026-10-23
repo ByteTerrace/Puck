@@ -29,37 +29,33 @@ public sealed record WorldTargetRegister(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RangeState = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HalfAngleState = null
 );
-/// <summary>The compiled target-register name and Drive-reach ordinal tables.</summary>
+/// <summary>Target-register names and their independent Drive-reach bank.</summary>
 public sealed class WorldTargetRegisterTable {
+    /// <summary>The independent target-register reach capacity.</summary>
+    public const int MaxRegisters = 64;
+
     private readonly OrdinalTable m_table;
 
-    private WorldTargetRegisterTable(OrdinalTable table, int reachBase) {
+    private WorldTargetRegisterTable(OrdinalTable table) {
         m_table = table;
-        ReachBase = reachBase;
     }
 
     /// <summary>Gets the number of authored registers.</summary>
     public int Count => m_table.Count;
     /// <summary>Gets an empty target-register table.</summary>
     public static WorldTargetRegisterTable Empty { get; } = new(
-        table: OrdinalTable.Empty,
-        reachBase: 0
+        table: OrdinalTable.Empty
     );
-    /// <summary>Gets the first target-register bit in a Drive row's shared reach mask.</summary>
-    public int ReachBase { get; }
 
-    /// <summary>Compiles target registers after the world's channel ordinal range.</summary>
-    public static WorldTargetRegisterTable Compile(IReadOnlyList<WorldTargetRegister> registers, int channelCount) => new(
+    /// <summary>Compiles names into the independent target-register bank.</summary>
+    public static WorldTargetRegisterTable Compile(IReadOnlyList<WorldTargetRegister> registers) => new(
         table: OrdinalTable.Build(
             names: registers.Select(selector: static register => register.Name).ToArray(),
             comparer: StringComparer.Ordinal
-        ),
-        reachBase: channelCount
+        )
     );
     /// <summary>Gets a register's authored name.</summary>
     public string Name(int index) => m_table.Name(ordinal: index);
-    /// <summary>Gets the Drive-reach ordinal for a compact register index.</summary>
-    public int ReachOrdinal(int index) => (ReachBase + index);
     /// <summary>Resolves a register name to its compact storage index.</summary>
     public bool TryGetIndex(string name, out int index) => m_table.TryGetOrdinal(
         name: name,
@@ -205,6 +201,8 @@ public static class WorldTargetSelection {
     private static bool EffectReferencesLineOfSight(ActionEffect effect) => effect switch {
         ActionEffect.SetState set => NamesLineOfSight(name: set.FromState?.Spelling),
         ActionEffect.AddState add => NamesLineOfSight(name: add.FromState?.Spelling),
+        ActionEffect.If branch => (PredicateReferencesLineOfSight(predicate: branch.Condition) ||
+            branch.Then.Any(predicate: EffectReferencesLineOfSight) || (branch.Else?.Any(predicate: EffectReferencesLineOfSight) == true)),
         _ => false,
     };
     private static bool NamesLineOfSight(string? name) => ((name is not null) && name.StartsWith(
@@ -214,6 +212,8 @@ public static class WorldTargetSelection {
     private static bool PredicateReferencesLineOfSight(ActionPredicate? predicate) => predicate switch {
         ActionPredicate.CompareState compare => (NamesLineOfSight(name: compare.State.Spelling) || NamesLineOfSight(name: compare.ComparandState?.Spelling)),
         ActionPredicate.All all => all.Predicates.Any(predicate: PredicateReferencesLineOfSight),
+        ActionPredicate.Any any => any.Predicates.Any(predicate: PredicateReferencesLineOfSight),
+        ActionPredicate.Not not => PredicateReferencesLineOfSight(predicate: not.Predicate),
         _ => false,
     };
     // Scanned over the AUTHORED rule rows (mirroring the two checks above), never the compiled form — this decides

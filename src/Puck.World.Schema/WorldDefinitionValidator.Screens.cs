@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -552,7 +553,7 @@ public static partial class WorldDefinitionValidator {
     // permanent no-op. The engage channel's press also leaves the screen it engaged, so the route's kit may not play
     // it as a pad button. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
     // bar.
-    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorldPadElement>> padKits, List<string> errors) {
+    private static void ValidateRoute(WorldScreenRoute route, WorldScreenSource? source, string path, ISet<string> channelNames, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorldPadElement>> padKits, List<string> errors) {
         RequireNonNegative(
             value: route.EngageRadius,
             name: $"{path}.engageRadius",
@@ -624,6 +625,109 @@ public static partial class WorldDefinitionValidator {
             } else if (!route.Engageable) {
                 errors.Add(item: $"{path}.port '{port}' is named but engageable is false: a passive display drives no input port.");
             }
+        }
+        if (route.Display is { } display) {
+            ValidateDisplay(
+                display: display,
+                engageable: route.Engageable,
+                errors: errors,
+                path: $"{path}.display"
+            );
+        }
+        if (route.PadPointer is { } padPointer) {
+            ValidatePadPointer(
+                engageable: route.Engageable,
+                errors: errors,
+                padPointer: padPointer,
+                path: $"{path}.padPointer",
+                source: source
+            );
+        }
+    }
+    // A pad drives the pointer only over a window or desktop a seat engaged on the screen frames, so the feel belongs
+    // to an engageable screen showing a capture, and each speed is a finite rate in its own range.
+    private static void ValidatePadPointer(WorldScreenPadPointer padPointer, bool engageable, WorldScreenSource? source, string path, List<string> errors) {
+        if (!engageable) {
+            errors.Add(item: $"{path} is authored but engageable is false: only a seat engaged on the screen drives its pointer.");
+        }
+        if (!WorldImageProducerSettings.IsPassthroughCapture(source: source)) {
+            errors.Add(item: $"{path} is authored but the screen shows no capture: a pad drives the pointer only over a window or desktop the local user opens.");
+        }
+        if (!(float.IsFinite(f: padPointer.Speed) && (padPointer.Speed > 0f))) {
+            errors.Add(item: $"{path}.speed must be a positive number of picture heights per second.");
+        }
+        if (!(float.IsFinite(f: padPointer.Curve) && (padPointer.Curve >= 1f))) {
+            errors.Add(item: $"{path}.curve must be at least 1.");
+        }
+        if (!(float.IsFinite(f: padPointer.Boost) && (padPointer.Boost >= 1f))) {
+            errors.Add(item: $"{path}.boost must be at least 1.");
+        }
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.rampSeconds",
+            value: padPointer.RampSeconds
+        );
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.scrollSpeed",
+            value: padPointer.ScrollSpeed
+        );
+    }
+    // A carried screen's picture rides a creation look's ungrouped box while the look's pose holds, so the look, the pose
+    // and the box must all resolve: the presentation reads the box's face as the picture.
+    private static void ValidateCarry(WorldDefinition definition, WorldScreenCarry carry, string path, List<string> errors) {
+        WorldLook? look = null;
+
+        foreach (var row in definition.Looks) {
+            if (string.Equals(a: row.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal)) {
+                look = row;
+
+                break;
+            }
+        }
+
+        if (
+            (look?.Source is not WorldLookSource.Creation source) ||
+            (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: source.PrototypeId.Value) is not { } creation)
+        ) {
+            errors.Add(item: $"{path}.look '{carry.Look}' names no creation look row.");
+
+            return;
+        }
+        if (
+            (carry.Camera is { } camera) &&
+            !definition.Cameras.Any(predicate: row => string.Equals(a: row.Name, b: camera, comparisonType: StringComparison.Ordinal))
+        ) {
+            errors.Add(item: $"{path}.camera '{camera}' names no cameras row.");
+        }
+        if ((look.Motion.Poses is not { } poses) || !poses.ContainsKey(key: carry.Pose)) {
+            errors.Add(item: $"{path}.pose '{carry.Pose}' is not a pose of look '{carry.Look}' (its motion.poses names the frames a body holds).");
+        }
+
+        foreach (var shape in (creation.Document.Shapes ?? [])) {
+            if (!string.Equals(a: shape.Name?.Value, b: carry.Shape, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+            if ((shape.Type != SdfSolidPrimitive.Box) || ((shape.Group ?? 0) != 0)) {
+                errors.Add(item: $"{path}.shape '{carry.Shape}' must be an ungrouped box: its front face shows the picture.");
+            }
+
+            return;
+        }
+
+        errors.Add(item: $"{path}.shape '{carry.Shape}' names no shape of look '{carry.Look}''s creation '{source.PrototypeId.Value}'.");
+    }
+    // How an engaged seat's framed view of the screen is matted: only an engageable screen is ever seen that way, and
+    // its fill is a colour.
+    private static void ValidateDisplay(WorldScreenDisplay display, bool engageable, string path, List<string> errors) {
+        if (!engageable) {
+            errors.Add(item: $"{path} is authored but engageable is false: only a seat engaged on the screen sees its display.");
+        }
+        if (
+            (display.Fill is { } fill) &&
+            !IsHexColor(value: fill)
+        ) {
+            errors.Add(item: $"{path}.fill '{fill}' must be #RRGGBB.");
         }
     }
 
@@ -885,6 +989,14 @@ public static partial class WorldDefinitionValidator {
             if (session.Resolution is not null) {
                 errors.Add(item: $"{path}.session.resolution must be absent under projection 'window': a window renders at the extent its glass covers on screen.");
             }
+        }
+
+        // A ripple refracts the opening's image, and only a window is an opening: a display's glass has its own treatment.
+        if (
+            session.Ripple &&
+            (session.Projection != WorldScreenProjection.Window)
+        ) {
+            errors.Add(item: $"{path}.session.ripple requires projection 'window': only an opening ripples.");
         }
 
         if (

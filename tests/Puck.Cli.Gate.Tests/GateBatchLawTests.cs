@@ -153,7 +153,7 @@ public sealed class GateAdmissionLawTests : GateRunLaws {
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
         Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
-        string[] heavy = ["build", "affected", "Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations", "affected record"];
+        string[] heavy = ["build", "affected", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations", "affected record"];
 
         Assert.Equal(heavy.Select(selector: name => ("admit " + name)), runner.Events.Where(predicate: entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "admit ")));
         foreach (var name in heavy) { Assert.Equal(("run " + name), runner.Events[(runner.Events.IndexOf(item: ("admit " + name)) + 1)]); }
@@ -165,7 +165,8 @@ public sealed class GateAdmissionLawTests : GateRunLaws {
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
         Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
-        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.World.Tests", true, true), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false), ("affected record", true, false)], actual: runner.Admissions);
+        // Heavy device-suite admission is inside the process runner's lease, not this preflight.
+        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false), ("affected record", true, false)], actual: runner.Admissions);
         // The baselines and affected's suites run CPU tests alone: none of their classes carries the Gpu trait.
         Assert.All(collection: GatePlan.Steps.Where(predicate: static step => ((step.Kind is GateStepKind.Build or GateStepKind.Baseline) || (step.Name == "affected"))), action: static step => Assert.False(condition: step.Gpu));
     }

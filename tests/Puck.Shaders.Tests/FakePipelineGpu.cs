@@ -121,6 +121,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// that reaches the published image fails there. Set, each read creates a staging buffer of the read's width times
     /// its height times its texel size, counted in <see cref="LiveBytes"/>, and replaces it when a read's size differs.</summary>
     public bool ReadbackSupported { get; set; }
+    /// <summary>Gets or sets whether the next surface read reports device loss instead of reading.</summary>
+    public bool LoseNextReadback { get; set; }
     /// <summary>Gets or sets a gate every shader module and pipeline creation waits on before it creates, or
     /// <see langword="null"/> for none: a held gate is a driver compiling on a cold cache. The thread that sets it is the
     /// one producing frames; a creation on that thread while the gate is held would wait forever, so it throws instead.</summary>
@@ -659,6 +661,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
+
+    public bool CanDrawIndirectCount => false;
+
+    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
+        throw new NotSupportedException();
     public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => RecordGraphics(command: "draw", buffer: 0, offsetBytes: 0, sizeBytes: 0, count: parameters.VertexCount);
     public void DrawIndexed(nint commandBufferHandle, uint indexCount) => RecordGraphics(buffer: 0, command: "draw-indexed", count: indexCount, offsetBytes: 0, sizeBytes: 0);
     public void EndCommandBuffer(nint commandBufferHandle) { }
@@ -696,8 +703,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         Submissions++;
         Complete(through: Submitted(commandBufferHandles: commandBufferHandles));
     }
+
     // The fake submits at once, so a batch only counts the frames that flushed one.
     public int BatchesFlushed { get; private set; }
+
     public void BeginBatch() { }
     public void FlushBatch() => BatchesFlushed++;
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
@@ -899,6 +908,12 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Dispose() => m_staging?.Dispose();
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
+
+            if (gpu.LoseNextReadback) {
+                gpu.LoseNextReadback = false;
+
+                throw new DeviceLostException(message: "Injected loss during readback.");
+            }
 
             gpu.NoteUse(handle: sourceImageHandle, use: "readback");
             gpu.Readbacks.Add(item: (sourceImageHandle, sourceLayout));

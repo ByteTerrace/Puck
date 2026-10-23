@@ -30,11 +30,13 @@ public static class WorldPredicate {
 /// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="Designate"/>) are one operation in
 /// both scopes: a kit's action acts on its own body when it names none, and a world rule, which has no body of its
 /// own, names one with <c>key</c> (<see cref="WorldBodyEffects"/> is the one check and lowering both read). A timer
-/// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, and save arms
-/// belong to world rules and refuse in a kit.</summary>
+/// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, body-state and save
+/// arms belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
     /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
-    /// <param name="Velocity">The vertical velocity, in world units per second.</param>
+    /// <param name="Velocity">The vertical velocity, in world units per second at the body's authored size; a body
+    /// whose live scale (<c>bodies.scale</c>) is not one launches at this times its scale, so under the gravity
+    /// that scales with it the jump rises the same number of its own heights.</param>
     /// <param name="Key">The body a world rule names — an index, a <c>$cell:</c> indirection, or a bound key. A kit's
     /// action names none: it acts on its own body, or on <paramref name="Target"/>.</param>
     /// <param name="Target">The participant a kit's action addresses; a world rule refuses any but the default.</param>
@@ -56,7 +58,8 @@ public static class WorldEffect {
     /// attitude at fire time and ridden as authored, never normalized, so it must be unit length, at
     /// <paramref name="Speed"/> for <paramref name="DurationSeconds"/>, an exact whole number of engine ticks.</summary>
     /// <param name="BodyDirection">The unit direction in the body's own frame.</param>
-    /// <param name="Speed">The overlay's speed, in world units per second.</param>
+    /// <param name="Speed">The overlay's speed, in world units per second at the body's authored size, times the
+    /// body's live scale.</param>
     /// <param name="DurationSeconds">How long the overlay rides.</param>
     /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
     /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>
@@ -149,12 +152,31 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
+    /// <summary>Writes one <c>state.body</c> counter of a world-addressed body: the register a kit's own
+    /// <c>setState</c> writes, in the arena's participant lane, settled through the register's envelope. The register
+    /// is the body's, so it crosses to another world with the body and survives a kit recompile; an anonymous seat holds
+    /// one like any body. Exactly one of <paramref name="Value"/> and <paramref name="Expression"/> is authored. A kit
+    /// writes its own registers with <c>setState</c>, so this arm refuses in a kit.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="State">The <c>state.body</c> counter.</param>
+    /// <param name="Value">The literal value.</param>
+    /// <param name="Expression">A bounded fixed-point expression evaluated at fire time.</param>
+    public sealed record SetBodyState(
+        StateChannelRef Key,
+        string State,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
+    ) : ActionEffect;
     /// <summary>Places a body upright at a live cell of an anchored topology, plus an authored offset.</summary>
     /// <param name="Key">A body reference, including placement:$each.</param>
     /// <param name="Topology">The declared topology.</param>
     /// <param name="Expression">The integer cell ordinal evaluated when the effect fires.</param>
     /// <param name="Offset">The displacement from the cell centre, in world units.</param>
-    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset) : ActionEffect;
+    /// <param name="Glide">Whether the body moves there as continuous motion, which a client interpolates and which
+    /// keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them.
+    /// For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.</param>
+    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
         StateChannelRef Key,

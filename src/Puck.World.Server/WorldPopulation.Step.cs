@@ -387,10 +387,7 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
-                ? m_seatKit
-                : entry.KitIndex
-            );
+            var kitIndex = ResolveKitIndex(index: index);
 
             if (
                 m_kits[kitIndex].Producers.TryGetValue(
@@ -455,7 +452,7 @@ public sealed partial class WorldPopulation {
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
 
-        var producer = SeedProducer(kit: m_kits[m_entries[index].KitIndex]);
+        var producer = SeedProducer(kit: m_kits[KitIndex(index: index)]);
 
         var phase = WorldSequenceSampling.FixedAngle(
             sequence: m_peerVariation.Phase,
@@ -479,7 +476,7 @@ public sealed partial class WorldPopulation {
         entry.ProducerState.PreferredAltitude = ((producer is null)
             ? FixedQ4816.Zero
             : PreferredAltitudeFor(
-                kit: m_kits[entry.KitIndex],
+                kit: m_kits[KitIndex(index: index)],
                 producer: producer,
                 altitudeUnit: altitudeUnit
             )
@@ -552,10 +549,7 @@ public sealed partial class WorldPopulation {
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
         body.SetFlockMovementDomain(domain: null);
-        var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
-            ? m_seatKit
-            : entry.KitIndex
-        );
+        var kitIndex = ResolveKitIndex(index: index);
 
         if (
             (body.Source.ProducerName is not { } name) ||
@@ -753,8 +747,8 @@ public sealed partial class WorldPopulation {
 
             m_gravityTargets.Add(item: new WorldGravityTarget(
                 EntityIndex: index,
-                Mass: ((((uint)entry.KitIndex) < ((uint)m_kits.Length))
-                ? m_kits[entry.KitIndex].Mass
+                Mass: ((((uint)KitIndex(index: index)) < ((uint)m_kits.Length))
+                ? m_kits[KitIndex(index: index)].Mass
                 : FixedQ4816.Zero),
                 Position: body.FixedPosition
             ));
@@ -815,7 +809,20 @@ public sealed partial class WorldPopulation {
 
         AutonomyStatistics = default;
 
-        (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
+        if (m_baseContactField is WorldColliderSet colliders) {
+            colliders.RefreshAttached(population: this);
+
+            // Every body standing on a moving attached solid rides it before any body advances, seats included.
+            for (var index = 0; (index < Capacity); index++) {
+                if (
+                    m_entries[index].Active &&
+                    (m_entries[index].Body is { } rider)
+                ) {
+                    rider.RideAttachedSupport(field: colliders);
+                }
+            }
+        }
+
         SolveGravity();
         FreezeFlockImage();
         m_navigation.BeginStep();
@@ -843,7 +850,7 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var kit = m_kits[entry.KitIndex];
+            var kit = m_kits[KitIndex(index: index)];
             var locallyAutonomous = (
                 !entry.IsRemoteHuman &&
                 !player.Source.IsLive &&
@@ -1118,7 +1125,7 @@ public sealed partial class WorldPopulation {
 
         for (var ordinal = 0; (ordinal < Math.Min(
             val1: state.PreviousChannelBit.Length,
-            val2: m_channels.ChannelCount
+            val2: ChannelLimits.MaxChannels
         )); ordinal++) {
             if (m_channels.Name(ordinal: ordinal) is { } name) {
                 channels.Add(item: new WorldTransferChannelEdge(

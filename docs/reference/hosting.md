@@ -193,7 +193,7 @@ The fields most often confused in `FrameContext` have distinct meanings:
 
 | Host | Time | Rule |
 |---|---|---|
-| Windowed | The wall clock, paced by the swap chain | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. |
+| Windowed | The wall clock, paced by the swap chain | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. `world.lockstep on` instead uses the offscreen one-step rule and holds an unfinished render's tick, for tick-exact captures. |
 | Headless (`host.presentation: none`) | The wall clock, on a waitable-timer grid | The same `Advance` rule. A headless authority serving remote clients keeps real time, because its peers send input and expect snapshots in real time; it renders nothing, so no frame needs a tick of its own. `--unpaced` takes one step an iteration through `TryStep` and waits for nothing. |
 | Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes, and steps the next tick only once the root reports that frame rendered. Every tick has exactly one rendered frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
 
@@ -267,6 +267,28 @@ brought forward stays composed at the signal until its swap chain is recreated
 (a resize recreates it). Direct3D 12 engages it whenever the window comes to
 the front.
 
+A World runs the same whether anyone can see its window, because agents' Worlds
+almost always run behind other windows. A window behind others, fully
+occluded, never activated or never shown keeps presenting into its swap chain,
+and the composed refresh paces it. A minimized window has no client area
+(`WM_SIZE` reports 0×0) and nothing to present into, so the windowed host
+composes each frame at the last extent the window had, skips the presenter's
+`BeginFrame` and `Present`, and the timer paces the iteration. The render root
+keeps its own frames in flight, as it does on the offscreen host, so readiness,
+bakes and captures (settled, presented and scheduled) progress while minimized
+exactly as in front. On the RTX 4070 (Direct3D 12, a 60 Hz signal on a
+48–165 Hz range, warm mesh store), each state stepped 30 ticks a second: 322
+ticks in 10.1 s with the window never shown, 354 in 10.05 s at the bottom of
+the z-order under two maximized windows, and 314 to 332 in 10 s minimized,
+booted minimized or minimized mid-run. A World booted minimized reported
+`[engine: ready at tick 38]` and `[bakes: settled at tick 43]`, and served a
+settled capture and a burst of four presented frames while still minimized.
+One booted minimized with an empty mesh store baked the world's 1,275 groups
+in 269 s without ever being shown and settled its bakes at tick 19,310, 668 s
+after launch, boot included.
+`host.frames` read an average of 16.65 to 16.77 ms over 300 to 600
+iterations in each state, the minimized ones with a present phase of zero.
+
 The simulation's fixed tick is unchanged by this. The pump still hands
 `FixedStepPump.Advance` the wall interval each iteration sampled and runs
 every whole step it covers, so a 30 Hz simulation steps on alternate 60 Hz
@@ -299,10 +321,14 @@ thread, a seat that may take a camera). A feed that ended or could not open (a
 window or monitor that is gone, a probe whose ring cannot be provisioned)
 refuses, and so does a source whose image is a function of the simulation with
 none for this tick (a machine that is not running or has completed no frame),
-since only a later tick can change it. Offscreen, external content renders its
-capture fill, so an external source waits only for its fill to convert, and a
-refused fill conversion refuses the frame. A filled source publishes the fill
-without publishing its live feed. A capture's CPU tier answers from its
+since only a later tick can change it. Those are a feed's answers. An external
+source instance (`WorldImageFeedProducer`) shows its capture fill wherever its
+feed has no image, waiting or refused, and offscreen it shows the fill always
+(`WorldCaptureGate.FillsFeed`), so an external source waits only for its fill
+to convert and refuses only with a refused fill conversion: a minimized or
+closed window, a camera opening or a probe starting never holds or refuses the
+frame that shows it. A filled source publishes the fill without publishing its
+live feed offscreen or under an armed capture. A capture's CPU tier answers from its
 converted image rather than the pixels it captured, so a captured frame whose
 conversion refuses refuses too. Camera CPU tiers forward the same conversion
 answer. A captured CPU frame keeps converting when its source has no newer
@@ -520,8 +546,9 @@ and the frame's pass-pixel budget:
   does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
   source whose producer declares nothing or no extent does not render. An
   imported source still answers its availability when no extent or display
-  cadence can be scheduled: an unopened feed refuses, a first frame arriving
-  on another thread waits, and an offscreen capture fill renders once it has converted.
+  cadence can be scheduled: an unopened feed refuses, and an external source
+  with no image of its own, or any external source offscreen, answers as its
+  capture fill does, rendering once the fill has converted.
   These rows read `IRenderGraphSourceProducer.Answer`, which produces no work;
   only scheduled rows call `Produce`. Repeated answers reuse their named diagnostics.
   The runtime declares an upload's state and a source producer's
@@ -719,7 +746,14 @@ The margin cannot cover a pump stalled for longer than it, such as a frame that
 takes seconds; that call still ends at its deadline with an unknown outcome.
 
 Captures arm through `TextCommandSession.InvokeAsync`, then await the exact
-`FrameCaptureRequest.Completion` off the pump. Cancellation after arming leaves
+`FrameCaptureRequest.Completion` off the pump. A settled capture whose
+`ControlCapture.Tick` is set first queues `world.wait until <tick>` in the
+session, so the capture behind it arms in the drain right after that tick
+completes; a refused wait, or a tick already passed (the arming host's
+`FrameCaptureRequest.StateTick` differs), fails the capture rather than
+answering with another tick. The answer reports the host's
+`FrameCaptureRequest.StateStamp`, the tick and state hashes the still is held
+at. Cancellation after arming leaves
 the capture alive, with a cleanup continuation owning its unique, user-only temporary directory
 until completion. Successful reads and failed captures also clean that path.
 A process crash can leave a temporary artifact; crash recovery is not promised.

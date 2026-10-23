@@ -27,7 +27,7 @@ public sealed class WorldAdmissionEnvironmentLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-boot-admission-");
 
         try {
-            BindingVocabularyHook.VocabularyCheck = (_, _, _, _) => checks++;
+            BindingVocabularyHook.VocabularyCheck = (_, _, _, _, _) => checks++;
             var definition = Document() with {
                 BindingOverlaysRaw = [new WorldBindingOverlay(Id: "test", Document: new BindingProfileDocument(
                     Version: BindingProfileDocument.CurrentVersion, Modifiers: [], Chords: []))],
@@ -91,7 +91,7 @@ public sealed class WorldAdmissionEnvironmentLawTests {
         var checks = 0;
 
         try {
-            BindingVocabularyHook.VocabularyCheck = (_, _, _, errors) => {
+            BindingVocabularyHook.VocabularyCheck = (_, _, _, _, errors) => {
                 checks++;
                 if (reject) { errors.Add(item: "command 'missing.command' is not registered"); }
             };

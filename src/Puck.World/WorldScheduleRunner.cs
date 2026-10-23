@@ -28,12 +28,16 @@ internal sealed record WorldScheduleManifestEcho(bool Rejected, string Message);
 /// <param name="Started">Whether this world is running; a sibling the run could not start exports nothing and
 /// carries the reason.</param>
 /// <param name="Reason">Why a sibling did not start, or <see langword="null"/>.</param>
+/// <param name="Document">The document id of an instance a crossing started, which no schedule armed and whose name
+/// is minted by the host; <see langword="null"/> for the booted world and for an armed sibling, which the document
+/// names itself.</param>
 internal sealed record WorldScheduleManifestWorld(
     string World,
     string Export,
     ulong Tick,
     bool Started,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Reason
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Reason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Document = null
 );
 /// <summary>The <c>schedule.json</c> document a scheduled run writes beside its state export.</summary>
 /// <param name="Schema">The manifest's schema id.</param>
@@ -256,6 +260,33 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
                     : (sibling with { Started = false, Reason = (sibling.Reason ?? "the instance is no longer admitted") })
                 ));
             }
+            // A crossing starts instances no schedule armed, under names the host mints. Each one that judges something
+            // (its document carries a verdict row) is exported too, so a verdict written into the document a body crosses
+            // into is read from the world it names.
+            foreach (var name in m_instances.Names) {
+                if (
+                    m_worlds.Exists(match: armed => string.Equals(a: armed.World, b: name, comparisonType: StringComparison.Ordinal)) ||
+                    !m_instances.TryGet(instance: out var started, name: name) ||
+                    (started is not { } running) ||
+                    string.Equals(a: name, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) ||
+                    !running.Server.Definition.State.Any(predicate: static row => (row?.Verdict is not null))
+                ) {
+                    continue;
+                }
+
+                worlds.Add(item: ExportInstance(
+                    instance: running,
+                    sibling: new WorldScheduleManifestWorld(
+                        Document: DocumentOf(instance: running),
+                        Export: WorldScheduleSection.ExportFileNameFor(world: name),
+                        Reason: null,
+                        Started: true,
+                        Tick: 0UL,
+                        World: name
+                    ),
+                    tick: tick
+                ));
+            }
             File.WriteAllText(
                 contents: JsonSerializer.Serialize(
                     options: ManifestSerializerOptions,
@@ -287,6 +318,11 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
             Console.Error.WriteLine(value: $"[schedule] tick {tick}: the export could not be written: {exception.Message}");
         }
     }
+    // The id the instance's document authors, which is the name a test addresses it by; the instance's own name for a
+    // document that authors none.
+    private static string DocumentOf(WorldInstance instance) => ((instance.Server.Definition.DocumentId is { Length: > 0 } id)
+        ? id
+        : instance.Name);
     private WorldScheduleManifestWorld ExportInstance(WorldInstance instance, WorldScheduleManifestWorld sibling, ulong tick) {
         var server = instance.Server;
         var exportPath = Path.Combine(
@@ -325,7 +361,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
         // before control returns here.
         var registry = m_registry();
 
-        landed.Pending = registry.RoutesToSimulation(line: landed.Command);
+        landed.Pending = registry.RoutesToSimulation(line: landed.Command, slot: session.Slot);
         landed.Outcome = WorldScheduleSection.OutcomePending;
 
         var result = registry.SubmitSession(

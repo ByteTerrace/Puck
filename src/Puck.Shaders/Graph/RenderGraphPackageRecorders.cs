@@ -124,12 +124,13 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="context">The frame being prepared, before any pass records.</param>
     /// <returns>The named detail labels in kernel index order.</returns>
     IReadOnlyList<string> WorkDetails(in FrameContext context) => [];
-    /// <summary>Records the pass's work for one frame. It must not submit, wait, create a pipeline or record a barrier:
-    /// the instance submits the command buffer with the rest of its frame, the pipelines were built off the frame thread
-    /// (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned barriers the instance recorded before it left
-    /// each bound version in the layout its port's access needs (<see cref="RenderGraphPortAccess"/>): a sampled input
-    /// shader-readable and a color-attachment output in <see cref="GpuImageLayout.RenderTarget"/>, which a render pass
-    /// the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
+    /// <summary>Records the pass's work for one frame. It must not submit, wait or create a pipeline, and records no
+    /// barrier on a bound version but to move it and return it within the recording (a mesh pass reading its own
+    /// target between two draws of it): the instance submits the command buffer with the rest of its frame, the
+    /// pipelines were built off the frame thread (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned
+    /// barriers the instance recorded before it left each bound version in the layout its port's access needs
+    /// (<see cref="RenderGraphPortAccess"/>): a sampled input shader-readable and a color-attachment output in
+    /// <see cref="GpuImageLayout.RenderTarget"/>, which a render pass the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
     /// copies an input into an output to stand for it.</summary>
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
@@ -268,11 +269,28 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     string? RefusalOf(string instance) => null;
-    /// <summary>Returns whether the instance consumes retained package state containing unfilled external pixels.
-    /// This joins the current graph inputs' taint; replacing those inputs cannot relabel an older retained result.</summary>
+    /// <summary>Returns why the instance's rendered image is still incomplete, or null when it shows this frame's
+    /// content. Recording continues while waiting, so GPU work and readbacks needed to complete it can progress.</summary>
+    /// <param name="instance">The instance whose recording just submitted.</param>
+    /// <returns>The pending work, or null.</returns>
+    string? WaitingOf(string instance) => null;
+    /// <summary>Names the retained package state the instance consumes that contains unfilled external pixels, or
+    /// returns <see langword="null"/> when none does. This joins the current graph inputs' taint; replacing those inputs
+    /// cannot relabel an older retained result. The name reaches a waiting capture's reason, so it says which state holds
+    /// the content (a temporal history, a lighting source and the screen that fed it). It allocates only while tainted.</summary>
     /// <param name="instance">The instance whose next output is being prepared or whose recording just submitted.</param>
-    /// <returns>Whether retained source state or history contributes external content.</returns>
-    bool TaintedOf(string instance) => false;
+    /// <returns>The tainted state's name, or <see langword="null"/>.</returns>
+    string? TaintOf(string instance) => null;
+    /// <summary>Discards retained state that holds unfilled external pixels (<see cref="TaintOf"/>) and that the capture
+    /// gate's fills cannot replace on their own, such as a history every render blends into the next, so the instance's
+    /// next render over filled sources is clean. The runtime calls it on the frame thread, before any instance renders, on
+    /// every frame a capture is pending and still to be served, for each instance the capture reads; a settled capture
+    /// then serves the first clean frame, and a presented one skips the renders this returns. State the next render
+    /// derives again from its now-filled sources is left to that render. A factory whose state is clean does nothing.</summary>
+    /// <param name="instance">The instance whose tainted state is discarded.</param>
+    /// <returns>The renders the instance needs after the discard before its output is the steady image it would have
+    /// shown; zero when nothing was discarded.</returns>
+    int DiscardTaintedState(string instance) => 0;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }

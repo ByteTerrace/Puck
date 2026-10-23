@@ -81,9 +81,10 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
             );
         }
 
+        // Spans the written bytes alone: the rest of a mapping past 2 GiB does not fit a span's length.
         var destination = new Span<byte>(
             pointer: (((byte*)m_mapped) + destinationOffsetBytes),
-            length: ((int)(SizeBytes - destinationOffsetBytes))
+            length: checked((int)size)
         );
 
         MemoryMarshal.AsBytes(span: data).CopyTo(destination: destination);

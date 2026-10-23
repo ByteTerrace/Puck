@@ -19,7 +19,10 @@ namespace Puck.SdfVm;
 /// same frame values, copied by declared member offsets as the resolve's are.</para>
 /// <para><see cref="EnvironmentParameters"/> serves the residency's shared environment producer: its map dispatch reads
 /// acquired panorama images, and its reduction publishes the coefficients after the map's graph dependency.</para>
-/// <para><see cref="World"/> serves the native per-view dispatches: the bake's mask and sampler, surface and views. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
+/// <para><see cref="MeshBake"/> serves the bake's mask and sampler, the one interface whose bytecode keys the stored
+/// meshes: the World group <see cref="World"/> declares and a pass group of the bake's own, stamped with the field's
+/// instruction set alone (<see cref="FieldStamp"/>).</para>
+/// <para><see cref="World"/> serves the other native per-view dispatches: the pyramid, surface and views. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
 /// and the lights and sky tables (<see cref="LightAndSkyTables"/>): its World group is the residency's tables
 /// (<see cref="SdfWorldPackage.Tables"/> and those), one set per upload ring slot that every pass of every view binds,
 /// and its pass group one set per frame slot and pass, whose block holds the view's render extent and the frame's
@@ -30,7 +33,7 @@ namespace Puck.SdfVm;
 /// <para><see cref="World"/>, <see cref="BrickBake"/> and <see cref="ResolveParameters"/> carry an instruction set's stamp
 /// (<see cref="SdfIsaHlsl.StampOf"/>, <see cref="Stamp"/>) in their pass blocks' variable names, so every kernel's bytecode
 /// reflects the instruction set it was compiled against, and a reload holds each kernel to its interface's layout, stamp
-/// included. The interfaces are declared for any stamp: <c>puck shaders generate</c> declares them for the model's own
+/// included. The interfaces are declared for any stamps: <c>puck shaders generate</c> declares them for the model's own
 /// instruction set, and the engine for the one its build recorded (<c>SdfWorldInterfaces</c> in <c>Puck.SdfVm</c>).</para>
 /// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline: one pass set per
 /// frame slot binding the pass block the world interface lays out and the mesh region, with the view and the draw pushed
@@ -42,8 +45,26 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
     public const string BakePool = "brickPool";
     /// <summary>The bit the view starts at in the index a <see cref="Mesh"/> draw call pushes; the bits below it name the
-    /// draw.</summary>
+    /// draw. The occlusion kernel's pushed index holds its step from this bit up and the pyramid level it writes
+    /// below it.</summary>
     public const int MeshViewShift = 24;
+    /// <summary>The mesh pass occlusion's candidates, a <see cref="Mesh"/> table of <c>uint4</c>s the host writes each
+    /// frame: a header (the candidates, the depth pyramid's levels), then four rows a candidate, its draw, its vertex
+    /// count and its world box (<c>SdfMeshOcclusion</c> in <c>Puck.SdfVm</c>).</summary>
+    public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";
+    /// <summary>The mesh pass occlusion's visible set: one word a draw, nonzero for a draw its latest test found
+    /// visible, which the next frame's first phase draws.</summary>
+    public const string MeshOcclusionVisibleWritten = "sdfMeshOcclusionVisibleRW";
+    /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
+    /// <c>GpuDrawIndirectCommand</c> records long.</summary>
+    public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
+    /// <summary>The mesh pass occlusion's draw counts: the first phase's, then the second's.</summary>
+    public const string MeshOcclusionCountsWritten = "sdfMeshOcclusionCountsRW";
+    /// <summary>The mesh pass occlusion's depth pyramid: from level one up, each texel the farthest forward depth of its
+    /// block of the first phase's target, positive infinity where any pixel of it is uncovered.</summary>
+    public const string MeshOcclusionDepthWritten = "sdfMeshOcclusionDepthRW";
+    /// <summary>The name of the mesh bake's interface (<see cref="MeshBake"/>).</summary>
+    public const string MeshBakeInterfaceName = "sdf-mesh-bake";
     /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
@@ -75,17 +96,30 @@ public sealed class SdfKernelInterfaces {
     public const string SkyCoefficients = "sdfSkyCoefficients";
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelInterfaces"/> class.</summary>
-    /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
-    /// <exception cref="ArgumentException"><paramref name="stamp"/> is null or empty.</exception>
-    public SdfKernelInterfaces(string stamp) {
+    /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/> of
+    /// <see cref="SdfIsaHlsl.DescribeFingerprint"/>).</param>
+    /// <param name="fieldStamp">The field's instruction set's stamp, which the bake's interface carries
+    /// (<see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaHlsl.DescribeFieldFingerprint"/>).</param>
+    /// <exception cref="ArgumentException"><paramref name="stamp"/> or <paramref name="fieldStamp"/> is null or
+    /// empty.</exception>
+    public SdfKernelInterfaces(string stamp, string fieldStamp) {
         ArgumentException.ThrowIfNullOrEmpty(argument: stamp);
+        ArgumentException.ThrowIfNullOrEmpty(argument: fieldStamp);
 
         Stamp = stamp;
+        FieldStamp = fieldStamp;
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
             members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
+        // The bake's mask and sampler bind the residency's World set, so their World group is the world interface's; their
+        // pass group holds only what the bake reads, and their stamp names the field's instruction set alone.
+        MeshBakeParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: [.. SdfWorldPackage.BakeMembers, .. LightAndSkyTables],
+            package: MeshBakeInterfaceName
+        ).Stamped(stamp: fieldStamp);
         // The resolve pass binds the residency's World set, so its World group is the world interface's, the lights
         // and sky tables included.
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
@@ -115,6 +149,13 @@ public sealed class SdfKernelInterfaces {
             package: RenderGraphPackageCatalog.SdfBricks,
             pushesIndex: true
         ).Stamped(stamp: stamp);
+        // The glass shading pass binds the residency's World set too, for the material table, the lights and the sky's
+        // environment map its reflections read.
+        GlassParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: [.. SdfWorldPackage.GlassMembers, .. LightAndSkyTables],
+            package: "sdf-glass"
+        ).Stamped(stamp: stamp);
         Mesh = new(
             members: [
                 .. World.Members.Where(predicate: static member => (
@@ -124,6 +165,19 @@ public sealed class SdfKernelInterfaces {
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
                 Read(element: ShaderValueType.Float4, name: SdfWorldPackage.DynamicTransforms),
                 ShaderWorkCounters.BufferMember,
+                // The glass raster pass reads each pixel's opaque hit and accumulates its faces' distances; the mesh and
+                // shadow passes bind the tables' dummy at both.
+                Read(element: ShaderValueType.Uint, name: SdfWorldPackage.VisibilityRecords),
+                Written(element: ShaderValueType.Uint, name: SdfWorldPackage.GlassSumsWritten),
+                // The mesh pass's occlusion kernel (passes/sdf-mesh-occlusion.comp.hlsl) reads the target its first phase
+                // drew and the frame's candidates, and writes the depth pyramid, each draw's visibility and both phases'
+                // indirect draws; every other raster part binds the tables' filler and dummy at them.
+                ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.MeshVisibility, type: ShaderValueType.Float4),
+                Read(element: ShaderValueType.Uint4, name: MeshOcclusionCandidates),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionVisibleWritten),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionDrawsWritten),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionCountsWritten),
+                Written(element: ShaderValueType.Uint, name: MeshOcclusionDepthWritten),
             ],
             name: "sdf-mesh",
             pushesIndex: true
@@ -131,10 +185,12 @@ public sealed class SdfKernelInterfaces {
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
             (IncludePath(shaderInterface: World), World),
+            (IncludePath(shaderInterface: MeshBake), MeshBake),
             (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
             (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
+            (IncludePath(shaderInterface: GlassParameters.Interface), GlassParameters.Interface),
             (IncludePath(shaderInterface: EnvironmentParameters.Interface), EnvironmentParameters.Interface),
         ];
     }
@@ -172,6 +228,17 @@ public sealed class SdfKernelInterfaces {
 
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
+    /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of
+    /// <see cref="Stamp"/>.</summary>
+    public string FieldStamp { get; }
+    /// <summary>Gets the frame data of the mesh bake's mask and sampler (<c>sdf-mesh-bake-mask</c>, <c>sdf-mesh-bake</c>):
+    /// the standard frame group, the World group the world interface declares, and a pass group of the bake's values
+    /// and resources alone (<see cref="SdfWorldPackage.BakeMembers"/>), stamped with <see cref="FieldStamp"/>. Its
+    /// declarations are all the bake kernels read beside the field's instruction set, and their bytecode keys the stored
+    /// meshes, so a value, resource or define another pass gains leaves the bake kernels byte for byte as they were.</summary>
+    public ShaderPipelineParameterLayout MeshBakeParameters { get; }
+    /// <summary>Gets the interface the mesh bake's mask and sampler read.</summary>
+    public ShaderInterface MeshBake => MeshBakeParameters.Interface;
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the
     /// residency's tables, and a pass group whose block holds the view's render extent and the frame's values, followed by
     /// the view's own resources. Its frame block is written through
@@ -182,6 +249,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes
     /// (<see cref="SdfWorldPackage.SkyMembers"/>).</summary>
     public ShaderPipelineParameterLayout SkyParameters { get; }
+    /// <summary>Gets the interface the glass shading pass reads, with the same frame values as the traversal passes
+    /// (<see cref="SdfWorldPackage.GlassMembers"/>) and the lights and sky tables.</summary>
+    public ShaderPipelineParameterLayout GlassParameters { get; }
     /// <summary>Gets the interface the environment map's kernel and its reduction read: the standard frame group, and a
     /// pass group whose block holds the map's extent and the pass's work-counter rows, followed by the sky block and layer
     /// table of the upload's ring slot, acquired panorama images and their mappings, the map and coefficients, and work counters.</summary>
@@ -199,7 +269,9 @@ public sealed class SdfKernelInterfaces {
     /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region and the work
     /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>); and the index
     /// each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits below it name
-    /// the draw (<see cref="MeshPushedIndex"/>).</summary>
+    /// the draw (<see cref="MeshPushedIndex"/>). The mesh pass's occlusion kernel reads the same interface through a
+    /// compute layout, with the mesh target and the occlusion's tables (<see cref="MeshOcclusionCandidates"/> and the
+    /// members after it), which the raster stages leave unread.</summary>
     public ShaderInterface Mesh { get; }
     /// <summary>Gets the layout of <see cref="World"/>.</summary>
     public ShaderInterfaceLayout WorldLayout => WorldParameters.Layout;

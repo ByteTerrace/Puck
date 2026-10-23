@@ -23,7 +23,7 @@ namespace Puck.Commands;
 /// applies snapshots is its only caller. Construction is the only thread-safe operation; the acknowledgement mode, the
 /// rejection count, and the re-entrancy depth are plain fields read and written on that one thread.</para>
 /// </remarks>
-public sealed class CommandRegistry {
+public sealed partial class CommandRegistry {
     private readonly Dictionary<string, CommandDefinition> m_byName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Command, CommandDefinition> m_byTextCommand = [];
     private readonly RootCommand m_root = new(description: "Puck commands.");
@@ -229,6 +229,7 @@ public sealed class CommandRegistry {
         m_wirePath = wirePath.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase);
         m_wirePathAlt = m_wirePath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
+        m_runner = m_byName[RunCommandName];
         m_metadata = [.. m_byTextCommand.Values
             .Select(selector: static definition => definition.Metadata)
             .OrderBy(
@@ -350,7 +351,9 @@ public sealed class CommandRegistry {
     /// <remarks>A caller submitting a line outside the console pump reads this to know whether the verdict it is
     /// about to receive is the command's own (Immediate) or only its admission to the tick lane (Simulation), whose
     /// own verdict reaches an <see cref="ICommandObserver"/> when that tick applies.</remarks>
-    public bool RoutesToSimulation(string line) {
+    /// <param name="slot">The slot of the session submitting the line, which decides the authored commands it can
+    /// name (<see cref="AuthoredCommandsFor"/>).</param>
+    public bool RoutesToSimulation(string line, int slot = 0) {
         var verb = LeadingVerb(line: line);
 
         if (verb.IsEmpty) {
@@ -358,11 +361,13 @@ public sealed class CommandRegistry {
         }
 
         return (
-            m_byNameAlt.TryGetValue(
-            key: verb,
-            value: out var definition
+            TryResolveVerb(
+            definition: out var definition,
+            metadata: out _,
+            slot: slot,
+            verb: verb
         ) &&
-            (definition.Routing == CommandRouting.Simulation)
+            (definition!.Routing == CommandRouting.Simulation)
         );
     }
     /// <summary>Submits one line through a host-issued session, stamped with the identity that session was bound
@@ -385,10 +390,12 @@ public sealed class CommandRegistry {
 
         if (
             (session.Authorize is { } authorize) &&
-            (!m_byNameAlt.TryGetValue(
-            key: LeadingVerb(line: line),
-            value: out var definition
-        ) || !authorize(definition.Metadata))
+            (!TryResolveVerb(
+            definition: out _,
+            metadata: out var metadata,
+            slot: session.Slot,
+            verb: LeadingVerb(line: line)
+        ) || !authorize(metadata))
         ) {
             return CommandResult.Error(output: "This session is not authorized for that command.");
         }
@@ -416,14 +423,15 @@ public sealed class CommandRegistry {
         if (entry.Text is { } line) {
             // The submitting session settles with whatever became of its line, a line that never dispatched included:
             // a session that settles results is otherwise left waiting on a verdict nothing will produce.
-            var settled = ((entry.Dispatch && (((int)entry.CommandId) < m_nameById.Length))
+            var settled = ((entry.Dispatch && (DefinitionForId(id: entry.CommandId) is not null))
                 ? ApplySubmittedSimulation(
                     line: line,
                     expectedCommandId: entry.CommandId,
                     phase: entry.Phase,
                     value: entry.Value,
                     principal: entry.Principal,
-                    slot: slot
+                    slot: slot,
+                    authorize: entry.Session?.Authorize
                 )
                 : CommandResult.Error(output: "[wire.reject: the line was not dispatched]")
             );
@@ -479,7 +487,7 @@ public sealed class CommandRegistry {
     // The entry's read-after-write barrier is NOT this method's to release: ApplySnapshot's per-entry boundary owns
     // that, so a throw anywhere in here — the parse, CanonicalizeVerb, a handler's exception rendering — releases it
     // exactly once and cannot strand the session.
-    private CommandResult ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, Principal principal, int slot) {
+    private CommandResult ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, Principal principal, int slot, Func<CommandMetadata, bool>? authorize) {
         Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
 
         if (
@@ -487,12 +495,16 @@ public sealed class CommandRegistry {
             definition: out var wireDefinition,
             line: line,
             tokenCount: out var tokenCount,
+            slot: slot,
             tokenRanges: tokenRanges
         ) &&
-            (expectedCommandId < m_definitionById.Length) &&
             ReferenceEquals(
             objA: wireDefinition,
-            objB: m_definitionById[expectedCommandId]
+            objB: DefinitionForId(id: expectedCommandId)
+        ) &&
+            LineNamesAuthoredId(
+            id: expectedCommandId,
+            line: line
         )
         ) {
             var wireResult = DispatchWire(
@@ -504,7 +516,8 @@ public sealed class CommandRegistry {
                 principal: principal,
                 slot: slot,
                 observe: true,
-                faulted: out _
+                faulted: out _,
+                authorize: authorize
             );
 
             if (wireResult.IsError) {
@@ -525,10 +538,9 @@ public sealed class CommandRegistry {
             key: parseResult.CommandResult.Command,
             value: out var definition
         ) ||
-            (expectedCommandId >= m_definitionById.Length) ||
             !ReferenceEquals(
             objA: definition,
-            objB: m_definitionById[expectedCommandId]
+            objB: DefinitionForId(id: expectedCommandId)
         )
         ) {
             // A snapshot-routed line that does not parse to the command it was injected as never reaches its
@@ -556,7 +568,9 @@ public sealed class CommandRegistry {
             slot: slot,
             text: line,
             value: value
-        );
+        ) {
+            Authorize = authorize,
+        };
 
         // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
         // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
@@ -661,7 +675,7 @@ public sealed class CommandRegistry {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
             description: "Lists the available commands: help [--names] [<prefix>] — one `name - description` line per registered verb, this registry's own built-ins included, ordinal-ordered by name. A prefix keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.); --names prints the names alone, one per line.",
-            handler: (_, args) => Help(args: in args),
+            handler: (context, args) => Help(args: in args, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
@@ -675,6 +689,13 @@ public sealed class CommandRegistry {
             description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
             handler: (_, args) => ApplyWireErrors(args: in args),
             bindability: CommandBindability.Unbindable
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: RunCommandName,
+            description: "Runs a console command the world document authors (its `commands` section): run <command> [args…], the same as typing <command> [args…]. An authored command submits its lines in order, the arguments substituted, under the caller's own principal and session policy, on the simulation tick its line applies on; the first refused line stops it and is reported. help lists the world's authored commands beside the engine's verbs.",
+            handler: RunAuthored,
+            bindability: CommandBindability.Bindable,
+            routing: CommandRouting.Simulation
         );
     }
     // The canonical spelling a verb token must be rewritten to before the parser sees it, or null when it needs no
@@ -830,7 +851,8 @@ public sealed class CommandRegistry {
         int slot,
         bool observe,
         out bool faulted,
-        TextCommandSession? textSession = null
+        TextCommandSession? textSession = null,
+        Func<CommandMetadata, bool>? authorize = null
     ) {
         var quiet = (m_acksQuiet && definition.AcknowledgementOnly);
         var context = new CommandContext(
@@ -843,7 +865,9 @@ public sealed class CommandRegistry {
             text: line,
             textSession: textSession,
             value: value
-        );
+        ) {
+            Authorize = authorize,
+        };
         CommandResult result;
 
         try {
@@ -996,10 +1020,7 @@ public sealed class CommandRegistry {
     private CommandResult NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, Principal principal, int slot) {
         // Named for the command the line was INJECTED as, which is what the operator asked for; the line's own text
         // rides Text, so a sink can show both when they disagree.
-        var name = ((((int)expectedCommandId) < m_nameById.Length)
-            ? m_nameById[expectedCommandId]
-            : LeadingVerb(line: line).ToString()
-        );
+        var name = (NameForId(id: expectedCommandId) ?? LeadingVerb(line: line).ToString());
         var reason = ((errors.Count != 0)
             ? string.Join(
                 separator: " | ",
@@ -1096,7 +1117,10 @@ public sealed class CommandRegistry {
         }
     }
     // Submit's body. Submit itself owns the rejection accounting so no return path here has to remember to count.
-    private CommandResult SubmitCore(string line, TextCommandSession? session) {
+    // `queue` is false for a line an authored command submits: that line already runs on the tick its command applied
+    // on, or in a registry with no sink, so it dispatches inline rather than queueing behind a sink whose principal is
+    // not its caller's.
+    private CommandResult SubmitCore(string line, TextCommandSession? session, Principal principal, int slot, Func<CommandMetadata, bool>? authorize, bool queue) {
         // A blank line is REFUSED rather than quietly answering None. wire.errors is advertised as the one number that
         // says whether any submitted line silently no-opped, and a blank line is the purest no-op there is; answering
         // success for it made the counter's own promise false. Nothing in the live drain path pays for this: a script's
@@ -1105,9 +1129,6 @@ public sealed class CommandRegistry {
         if (string.IsNullOrWhiteSpace(value: line)) {
             return CommandResult.Error(output: "[wire.reject: a blank line names no command]");
         }
-
-        var principal = (session?.Principal ?? Principal.Console);
-        var slot = (session?.Slot ?? 0);
 
         // WIRE-NATIVE PATH for the plain `verb arg arg…` line shape — skips the System.CommandLine parse (measured
         // ~5.2 µs + ~8.6 KB per line at the World's command surface), the measured cause of stdin burst dips. Eligible
@@ -1127,13 +1148,17 @@ public sealed class CommandRegistry {
             definition: out var wireDefinition,
             line: line,
             tokenCount: out var tokenCount,
+            slot: slot,
             tokenRanges: tokenRanges
         )) {
-            if (TryQueueSimulation(
+            if (
+                queue &&
+                TryQueueSimulation(
                 definition: wireDefinition!,
                 line: line,
                 session: session
-            )) {
+            )
+            ) {
                 return CommandResult.None;
             }
 
@@ -1141,14 +1166,27 @@ public sealed class CommandRegistry {
                 definition: wireDefinition!,
                 line: line,
                 argumentRanges: tokenRanges[1..tokenCount],
-                phase: CommandPhase.Completed,
+                phase: InlinePhase(definition: wireDefinition!, queue: queue),
                 value: ImpulseValue(kind: wireDefinition!.ValueKind),
                 principal: principal,
                 slot: slot,
                 observe: false,
                 faulted: out _,
-                textSession: session
+                textSession: session,
+                authorize: authorize
             );
+        }
+
+        // An authored command takes plain tokens, so it always resolves on the wire path above; a line naming one that
+        // reaches here carries a quote or more tokens than that path reads.
+        if (
+            !LeadingVerb(line: line).IsEmpty &&
+            AuthoredCommandsFor(slot: slot).TryGet(
+            command: out var authored,
+            name: LeadingVerb(line: line)
+        )
+        ) {
+            return CommandResult.Error(output: $"[{authored!.Name}: an authored command takes at most {(MaxWireTokens - 1)} plain arguments and no quotes — usage: {authored.Usage}]");
         }
 
         // THE FIRST HALF OF THE ROUTING DECISION: a Simulation-class line whose verb token stands on its own is routed
@@ -1164,6 +1202,7 @@ public sealed class CommandRegistry {
         var verb = LeadingVerb(line: line);
 
         if (
+            queue &&
             !verb.IsEmpty &&
             m_byNameAlt.TryGetValue(
             key: verb,
@@ -1213,25 +1252,30 @@ public sealed class CommandRegistry {
             // would otherwise run its Simulation handler INLINE at submit: outside the deterministic lane, and missing
             // from every replay of the session. Routing here costs nothing on the hot path (this branch has already
             // paid for a parse) and cannot double-queue: the pre-parse route returns before reaching it.
-            if (TryQueueSimulation(
+            if (
+                queue &&
+                TryQueueSimulation(
                 definition: definition,
                 line: line,
                 session: session
-            )) {
+            )
+            ) {
                 return CommandResult.None;
             }
 
             var context = new CommandContext(
                 origin: CommandOrigin.Text,
                 parse: parseResult,
-                phase: CommandPhase.Completed,
+                phase: InlinePhase(definition: definition, queue: queue),
                 principal: principal,
                 registry: this,
                 slot: slot,
                 text: line,
                 textSession: session,
                 value: ImpulseValue(kind: definition.ValueKind)
-            );
+            ) {
+                Authorize = authorize,
+            };
 
             // The text path returns its result to the caller, so it is not observed (the caller displays
             // it); observers exist for the snapshot-driven path, which has no return value to inspect. The handler
@@ -1275,8 +1319,12 @@ public sealed class CommandRegistry {
 
         try {
             result = SubmitCore(
+                authorize: session?.Authorize,
                 line: line,
-                session: session
+                principal: (session?.Principal ?? Principal.Console),
+                queue: true,
+                session: session,
+                slot: (session?.Slot ?? 0)
             );
         } finally {
             m_submitDepth--;
@@ -1400,7 +1448,7 @@ public sealed class CommandRegistry {
     // to the full parse: an '@'-prefixed token used to as well, because System.CommandLine would have expanded it from
     // a file on disk, but response files are off (WireParserConfiguration) so '@everyone' is an ordinary token on both
     // paths and belongs on the fast one.
-    private bool TryResolveWireLine(string line, Span<Range> tokenRanges, out CommandDefinition? definition, out int tokenCount) {
+    private bool TryResolveWireLine(string line, Span<Range> tokenRanges, int slot, out CommandDefinition? definition, out int tokenCount) {
         definition = null;
         tokenCount = 0;
 
@@ -1413,13 +1461,29 @@ public sealed class CommandRegistry {
             tokens: tokenRanges
         );
 
-        return (
-            (tokenCount > 0) &&
-            m_wirePathAlt.TryGetValue(
+        if (tokenCount <= 0) {
+            return false;
+        }
+
+        if (m_wirePathAlt.TryGetValue(
             key: line.AsSpan()[tokenRanges[0]],
             value: out definition
-        )
-        );
+        )) {
+            return true;
+        }
+
+        // An authored command dispatches through the registry's own `run`, which reads the command's name from the
+        // line it is handed.
+        if (AuthoredCommandsFor(slot: slot).TryGet(
+            command: out _,
+            name: line.AsSpan()[tokenRanges[0]]
+        )) {
+            definition = m_runner;
+
+            return true;
+        }
+
+        return false;
     }
     // The one refusal for a line whose leading token names nothing this registry registered, written once so both
     // places that can reach that verdict — the parse that resolved no subcommand, and the resolved-but-unregistered
@@ -1538,28 +1602,32 @@ public sealed class CommandRegistry {
     /// <param name="prefix">Keeps only the commands whose canonical names equal or start with it, ignoring case, as
     /// the registry resolves a verb; <see langword="null"/> keeps every command.</param>
     /// <param name="namesOnly">Lists each command's name alone, without its description.</param>
+    /// <param name="slot">The slot whose authored commands the listing includes (<see cref="AuthoredCommandsFor"/>).</param>
     /// <returns>A newline-separated list of <c>name - description</c> entries, or of names; empty when nothing
     /// matches.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false) {
+    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0) {
+        var registered = m_root.Subcommands.Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty)));
+        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description));
+
         return string.Join(
             separator: '\n',
-            values: m_root.Subcommands.Where(predicate: command => (((include is null) || include(m_byTextCommand[command].Metadata)) && ((prefix is null) || command.Name.StartsWith(
+            values: registered.Concat(second: authored).Where(predicate: entry => (((include is null) || include(entry.Metadata)) && ((prefix is null) || entry.Metadata.Name.StartsWith(
                 comparisonType: StringComparison.OrdinalIgnoreCase,
                 value: prefix
             ))))
                 .OrderBy(
                 comparer: StringComparer.Ordinal,
-                keySelector: command => command.Name
+                keySelector: entry => entry.Metadata.Name
             )
-                .Select(selector: command => (namesOnly
-                    ? command.Name
-                    : $"{command.Name} - {command.Description}"))
+                .Select(selector: entry => (namesOnly
+                    ? entry.Metadata.Name
+                    : $"{entry.Metadata.Name} - {entry.Description}"))
         );
     }
 
     // help [--names] [<prefix>]: a prefix that matches nothing is refused by name, so a mistyped one never answers an
     // empty success.
-    private CommandResult Help(in WireArgs args) {
+    private CommandResult Help(in WireArgs args, int slot) {
         string? prefix = null;
         var namesOnly = false;
 
@@ -1581,7 +1649,8 @@ public sealed class CommandRegistry {
 
         var text = BuildHelpText(
             namesOnly: namesOnly,
-            prefix: prefix
+            prefix: prefix,
+            slot: slot
         );
 
         return ((text.Length == 0)
@@ -1590,16 +1659,11 @@ public sealed class CommandRegistry {
     }
 
     /// <summary>Gets the canonical name for an interned command id.</summary>
-    /// <param name="id">The interned id, in <c>[0, <see cref="CommandCount"/>)</c>.</param>
+    /// <param name="id">The interned id: a registered command's, in <c>[0, <see cref="CommandCount"/>)</c>, or an
+    /// authored command's that <see cref="TryGetId"/> issued.</param>
     /// <returns>The command's canonical name.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is not a valid interned id.</exception>
-    public string GetName(ushort id) {
-        if (((int)id) >= m_nameById.Length) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(id));
-        }
-
-        return m_nameById[id];
-    }
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is not an interned id.</exception>
+    public string GetName(ushort id) => (NameForId(id: id) ?? throw new ArgumentOutOfRangeException(paramName: nameof(id)));
     /// <summary>Counts one refusal that a submitted line's own dispatch could not report — a deferred rejection, raised
     /// after the line was accepted (a host queued the work and refused it later).</summary>
     /// <remarks>
@@ -1682,13 +1746,19 @@ public sealed class CommandRegistry {
     /// <param name="id">When this method returns, the interned id, or <c>0</c> when the name is unknown.</param>
     /// <returns><see langword="true"/> when <paramref name="name"/> names a known command; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    /// <remarks>An authored command interns an id of its own past <see cref="CommandCount"/> the first time it is
+    /// resolved, and keeps it for the registry's lifetime; the registry's own <c>run</c> dispatches it, reading the
+    /// command's name from the line its bound press carries.</remarks>
     public bool TryGetId(string name, out ushort id) {
         ArgumentNullException.ThrowIfNull(name);
 
-        return m_idByName.TryGetValue(
+        return (m_idByName.TryGetValue(
             key: name,
             value: out id
-        );
+        ) || TryInternAuthored(
+            id: out id,
+            name: name
+        ));
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
     /// <see cref="BindingVocabularyCheck"/> consumers resolve a binding document's <c>Command</c> strings through.
@@ -1714,6 +1784,15 @@ public sealed class CommandRegistry {
             return true;
         }
 
+        if (AuthoredCommands.TryGet(
+            command: out var authored,
+            name: name
+        )) {
+            metadata = AuthoredMetadata(name: authored!.Name);
+
+            return true;
+        }
+
         metadata = default;
 
         return false;
@@ -1735,7 +1814,21 @@ public sealed class CommandRegistry {
     /// vocabulary must not confer the ability to drive it. <see cref="ImmutableArray{T}"/> rather than
     /// <see cref="IReadOnlyList{T}"/>: the manifest is a fact, and an interface over an array is a cast away from
     /// being rewritten under the registry's feet.</remarks>
-    public ImmutableArray<CommandMetadata> Definitions => m_metadata;
+    public ImmutableArray<CommandMetadata> Definitions {
+        get {
+            var authored = AuthoredCommands;
+
+            if (authored.Commands.IsEmpty) {
+                return m_metadata;
+            }
+
+            return [.. m_metadata.Concat(second: authored.Commands.Select(selector: static command => AuthoredMetadata(name: command.Name)))
+                .OrderBy(
+                    keySelector: static metadata => metadata.Name,
+                    comparer: StringComparer.Ordinal
+                )];
+        }
+    }
     /// <summary>Gets the registered command-map names. <see cref="CommandMaps.Global"/> is always first.</summary>
     public ImmutableArray<string> Maps => m_mapNames;
 }

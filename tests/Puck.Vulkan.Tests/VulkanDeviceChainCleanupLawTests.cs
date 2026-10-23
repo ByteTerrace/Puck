@@ -103,6 +103,26 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             expected: [.. built.Select(selector: name => $"create {name}"), .. built.Reverse().Select(selector: name => $"destroy {name}")]
         );
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ADeviceEnablesCountedIndirectDrawsOnlyWhenItReportsTheFeaturesAndTheExtension(bool reported) {
+        var driver = new RecordingDriver(failAt: null) { IndirectDraws = reported };
+
+        _ = Record(run: () => {
+            using var renderer = Renderer(driver: driver);
+
+            renderer.Initialize(
+                binding: Binding(),
+                height: 1,
+                width: 1
+            );
+        });
+        Assert.Equal(
+            actual: driver.Extensions.Contains(value: VulkanDeviceCommands.DrawIndirectCountExtension),
+            expected: reported
+        );
+    }
     [Fact]
     public void AFailedChainLeavesTheRendererToBuildAFreshOne() {
         var failing = new RecordingDriver(failAt: "present queue");
@@ -233,6 +253,12 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
     private sealed class RecordingDriver(string? failAt) : IVulkanInstanceApi, IVulkanSurfaceApi, IVulkanPhysicalDeviceApi, IVulkanLogicalDeviceApi {
         public string? FailAt { get; set; } = failAt;
 
+        // Whether the device reports multiDrawIndirect, drawIndirectFirstInstance and VK_KHR_draw_indirect_count.
+        public bool IndirectDraws { get; set; }
+
+        // The extensions the chain asked the logical device to enable.
+        public IReadOnlyList<string> Extensions { get; private set; } = [];
+
         private static void Log(string entry) =>
             NativeLog!.Add(item: entry);
         private void Reach(string link) {
@@ -262,6 +288,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         }
         public VkResult CreateLogicalDevice(VulkanLogicalDeviceCreateRequest request, out VulkanDeviceCommands? device) {
             Reach(link: "device");
+            Extensions = request.ExtensionNames;
             device = new VulkanDeviceCommands(
                 deviceHandle: DeviceHandle,
                 procedures: new VulkanProcResolver(
@@ -342,9 +369,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
-        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34).
+        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34) and clip distance (37).
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 29 or 34))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: index => ((index is 26 or 29 or 34 or 37) || (IndirectDraws && (index is 9 or 10))))];
         public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             default;
         public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
@@ -372,7 +399,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         public bool GetSurfaceSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint queueFamilyIndex, nint surfaceHandle) =>
             (queueFamilyIndex == PresentFamily);
         public bool HasDeviceExtension(VulkanInstanceCommands instance, nint physicalDeviceHandle, string extensionName) =>
-            false;
+            (IndirectDraws && (extensionName == VulkanDeviceCommands.DrawIndirectCountExtension));
         public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
         // A device reporting no optional feature.

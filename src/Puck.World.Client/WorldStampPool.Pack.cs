@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -31,6 +32,36 @@ public sealed partial class WorldStampPool {
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: one more for each pack that rewrote it.</summary>
     public long MeshDrawsRevision => m_meshDrawsRevision;
 
+    /// <summary>Gets the slot runs of the body-rooted registrations the last <see cref="PackTransforms"/> found
+    /// straddling a portal whose counterpart stands in the same world (<see cref="WorldPortalStraddle"/>): the same list
+    /// for as long as the runs are unchanged, a new one when they change, the one empty list when there are none.</summary>
+    public IReadOnlyList<SdfSlotClip> SlotClips { get; private set; } = [];
+
+    private readonly List<SdfSlotClip> m_slotClipRun = [];
+
+    // Whether this pack found exactly the runs the held list names, in order.
+    private static bool SameRuns(IReadOnlyList<SdfSlotClip> held, List<SdfSlotClip> packed) {
+        if (held.Count != packed.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < packed.Count); index++) {
+            if (held[index] != packed[index]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // A registration's creation's reach from its root, in creation units, measured once.
+    private static float ReachOf(Registration live) {
+        if (live.Reach < 0f) {
+            live.Reach = CreationGeometry.Reach(document: live.Creation.EngineDocument);
+        }
+
+        return live.Reach;
+    }
+
     /// <summary>Packs the pool's moved transforms: each live registration's root rides its placement pose (animated),
     /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
     /// (attached), and each shape holds its current frame's snapshot (composed root ∘ per-shape pose, positions scaled by
@@ -54,6 +85,9 @@ public sealed partial class WorldStampPool {
 
         m_packedSlotBase = slotBase;
         m_volumes.Clear();
+        m_slotClipRun.Clear();
+
+        var doors = WorldPortalStraddle.Doors(definition: client.Definition);
 
         var deltaSeconds = m_pendingDeltaSeconds;
 
@@ -127,6 +161,8 @@ public sealed partial class WorldStampPool {
                 );
             }
 
+            var packedBefore = ReferenceEquals(objA: m_packedRegistrations[index], objB: live);
+
             if (Wake(
                 client: client,
                 deltaSeconds: deltaSeconds,
@@ -135,7 +171,7 @@ public sealed partial class WorldStampPool {
                 moved: moved,
                 rootPosition: rootPosition,
                 rootRotation: rootRotation
-            )) {
+            ) || live.RateOwed) {
                 var previous = m_previousSlots.AsSpan(
                     length: packedSlots,
                     start: 0
@@ -145,20 +181,50 @@ public sealed partial class WorldStampPool {
                     length: previous.Length,
                     start: rootSlot
                 ).CopyTo(destination: previous);
-                PackRegistration(
-                    client: client,
-                    deltaSeconds: deltaSeconds,
-                    live: live,
-                    parkPosition: parkPosition,
-                    placementScale: placementScale,
-                    rootPosition: rootPosition,
-                    rootRotation: rootRotation,
-                    rootSlot: rootSlot,
-                    shapeCount: shapeCount,
-                    transforms: transforms
-                );
-                if (packedSlots > (1 + shapeCount)) {
-                    transforms[rootSlot + TextSlot(shapeCount: shapeCount)] = transforms[rootSlot];
+
+                // A body's pose holds between its rated packs, except on the frame its slots change owner or the whole
+                // table is owed (WorldStampPool.Rates).
+                if (
+                    (live.BodyIndex is not null) &&
+                    packedBefore &&
+                    !moved.Everything &&
+                    !m_owners.Reseats(owner: index) &&
+                    HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: (ReachOf(live: live) * placementScale))
+                ) {
+                    CarryPose(
+                        deltaSeconds: deltaSeconds,
+                        live: live,
+                        packedSlots: packedSlots,
+                        rootPosition: rootPosition,
+                        rootRotation: rootRotation,
+                        rootSlot: rootSlot,
+                        transforms: transforms
+                    );
+                    live.RateSeconds += deltaSeconds;
+                    live.RateOwed = true;
+                    m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
+                } else {
+                    PackRegistration(
+                        client: client,
+                        deltaSeconds: (live.RateSeconds + deltaSeconds),
+                        live: live,
+                        parkPosition: parkPosition,
+                        placementScale: placementScale,
+                        rootDeltaSeconds: deltaSeconds,
+                        rootPosition: rootPosition,
+                        rootRotation: rootRotation,
+                        rootSlot: rootSlot,
+                        shapeCount: shapeCount,
+                        transforms: transforms
+                    );
+                    if (packedSlots > (1 + shapeCount)) {
+                        transforms[(rootSlot + TextSlot(shapeCount: shapeCount))] = transforms[rootSlot];
+                    }
+                    if (live.BodyIndex is not null) {
+                        m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
+                    }
+                    live.RateSeconds = 0f;
+                    live.RateOwed = false;
                 }
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
@@ -180,6 +246,21 @@ public sealed partial class WorldStampPool {
                 shapeCount: shapeCount
             );
 
+            // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it.
+            if (
+                (live.BodyIndex is not null) &&
+                (doors.Count > 0) &&
+                (WorldPortalStraddle.Clip(
+                    center: transforms[rootSlot].Position,
+                    doors: doors,
+                    firstSlot: rootSlot,
+                    radius: (ReachOf(live: live) * placementScale),
+                    slotCount: SlotsPerPlacement
+                ) is { } clip)
+            ) {
+                m_slotClipRun.Add(item: clip);
+            }
+
             // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
             // repacked it.
             SetMeshDraw(
@@ -194,6 +275,15 @@ public sealed partial class WorldStampPool {
                     ) with { IsDynamic = true }
                     : null),
                 index: index
+            );
+        }
+
+        // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
+        // sees a new list, so a body holding still across a door keeps the one it was first clipped by.
+        if (!SameRuns(held: SlotClips, packed: m_slotClipRun)) {
+            SlotClips = ((m_slotClipRun.Count == 0)
+                ? []
+                : [.. m_slotClipRun]
             );
         }
 
@@ -243,9 +333,12 @@ public sealed partial class WorldStampPool {
         var facts = 0;
 
         if (live.BodyIndex is { } watched) {
+            // An in-place crossing carries the body continuously, but its slots jump through the portal pair: the frame
+            // that carries them reseats their history, so reprojection never reads the far side as motion.
             discontinuity |= (
                 (live.RootEpoch != client.PoseEpoch(index: watched)) ||
-                (live.RootAddress != client.EntityAddress(index: watched))
+                (live.RootAddress != client.EntityAddress(index: watched)) ||
+                (live.RootCarryEpoch != client.Carries.Epoch(index: watched))
             );
             facts = ((int)client.Facts(index: watched));
         }
@@ -288,7 +381,7 @@ public sealed partial class WorldStampPool {
         live.FollowedOrientation = carry.Attitude(attitude: live.FollowedOrientation);
         live.DriverPosition = carry.Point(point: live.DriverPosition);
         live.DriverOrientation = carry.Attitude(attitude: live.DriverOrientation);
-        live.Kinematics.Carry(rotation: carry.Rotation);
+        live.Kinematics.Carry(carry: carry);
 
         for (var shapeSlot = 0; (shapeSlot < live.PartFollower.Length); shapeSlot++) {
             live.PartFollower[shapeSlot].Carry(
@@ -307,12 +400,15 @@ public sealed partial class WorldStampPool {
             live.EffectorStepToNormal[effector] = carry.Direction(direction: live.EffectorStepToNormal[effector]);
         }
     }
-    // Packs one live registration's root and shape slots, stepping its followers, drivers and effectors by
-    // deltaSeconds.
-    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
+    // Packs one live registration's root and shape slots, stepping its root follower by rootDeltaSeconds, this frame's,
+    // and its drivers, effectors and part followers by deltaSeconds, which spans every frame since the registration's
+    // last full pack (a held pose's frames included, WorldStampPool.Rates).
+    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, float rootDeltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
         // the world point a foot was planted at belongs to where the body was.
+        var cut = false;
+
         if (live.BodyIndex is { } watched) {
             var epoch = client.PoseEpoch(index: watched);
             var address = client.EntityAddress(index: watched);
@@ -353,12 +449,24 @@ public sealed partial class WorldStampPool {
 
                 Array.Clear(array: live.EffectorPlanted);
                 Array.Clear(array: live.EffectorStepping);
+                // The drivers measure travel from the pose they last saw, which a teleport of the same occupant has
+                // left behind: they hold their phases and weights through the jump's frame and relatch there, and
+                // their eased motion and followers restart, so the next frame reads the body's own motion and seeds
+                // on it. A teleport or a respawn shows no one-frame spike and no pop. A new occupant reseeds them all
+                // in WorldGaitDrivers.Advance.
+                cut = (live.DriverSeeded && (live.DriverAddress == address));
+
+                if (cut) {
+                    live.DriverPosition = rootPosition;
+                    live.DriverOrientation = rootRotation;
+                    live.Kinematics.Reset();
+                }
             }
         }
 
         if (live.HasRootDynamics) {
             StepRootFollower(
-                deltaSeconds: deltaSeconds,
+                deltaSeconds: rootDeltaSeconds,
                 live: live,
                 targetPosition: rootPosition,
                 targetRotation: rootRotation
@@ -395,24 +503,26 @@ public sealed partial class WorldStampPool {
             rows: client.Definition.Dynamics
         );
 
-        WorldGaitDrivers.Advance(
-            address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
-            deltaSeconds: deltaSeconds,
-            drivers: drivers,
-            facts: ((live.BodyIndex is { } factBody) ? client.Facts(index: factBody) : default),
-            easedSpeed: ref live.DriverSpeed,
-            lastAddress: ref live.DriverAddress,
-            lastOrientation: ref live.DriverOrientation,
-            lastPosition: ref live.DriverPosition,
-            orientation: rootRotation,
-            phases: live.DriverPhase,
-            position: rootPosition,
-            seeded: ref live.DriverSeeded,
-            weights: live.DriverWeight,
-            reads: live.Reads,
-            kinematics: live.Kinematics,
-            definition: client.Definition
-        );
+        if (!cut) {
+            WorldGaitDrivers.Advance(
+                address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
+                deltaSeconds: deltaSeconds,
+                drivers: drivers,
+                facts: ((live.BodyIndex is { } factBody) ? client.Facts(index: factBody) : default),
+                easedSpeed: ref live.DriverSpeed,
+                lastAddress: ref live.DriverAddress,
+                lastOrientation: ref live.DriverOrientation,
+                lastPosition: ref live.DriverPosition,
+                orientation: rootRotation,
+                phases: live.DriverPhase,
+                position: rootPosition,
+                seeded: ref live.DriverSeeded,
+                weights: live.DriverWeight,
+                reads: live.Reads,
+                kinematics: live.Kinematics,
+                definition: client.Definition
+            );
+        }
 
         var shapes = (document.Shapes ?? []);
         var poses = FramePoses(

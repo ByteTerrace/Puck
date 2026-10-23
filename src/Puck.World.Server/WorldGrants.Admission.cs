@@ -296,9 +296,9 @@ public sealed partial class WorldGrants {
 
         if (admitted.Count > 0) {
             // Every admitted body's own WorldBody instance postdates the last Install/construction-time resync
-            // (the same reasoning the Join case in ApplySession carries) — catch it up from bodies.scaleRow here,
+            // (the same reasoning the Join case in ApplySession carries) — catch it up from its registers here,
             // the one choke point every admission path in this file funnels an admitted list through.
-            Host.Population.SyncBodyScale(definition: Host.Definition);
+            Host.Population.SyncBodyCells(definition: Host.Definition);
 
             // mintedGrants is supplied only by TryAdmitVerifiedParticipant, built from the door's verdict. Every
             // other admitted-list caller (boot inhabitant reconciliation, world.population's SetSimulatedCount, a
@@ -591,9 +591,9 @@ public sealed partial class WorldGrants {
 
                     // The freshly admitted (or resumed) body's own WorldBody instance postdates the last
                     // Install/construction-time resync, so it starts at the constructed default (Scale == One)
-                    // until this catches it up from bodies.scaleRow — the same reason a reused slot never inherits
+                    // until this catches it up from its registers — the same reason a reused slot never inherits
                     // a previous occupant's scale.
-                    Host.Population.SyncBodyScale(definition: Host.Definition);
+                    Host.Population.SyncBodyCells(definition: Host.Definition);
                     RevokeStaleEmbodiments(index: join.Slot);
 
                     StageOwnedState(

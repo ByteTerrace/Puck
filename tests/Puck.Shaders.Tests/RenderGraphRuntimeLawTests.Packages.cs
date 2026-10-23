@@ -470,7 +470,23 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool SamplesReads { get; set; }
         public bool Unchanged { get; set; }
 
-        public bool TaintedOf(string instance) => RetainedTainted;
+        public string? TaintOf(string instance) => (RetainedTainted ? "retained history" : null);
+        // The renders a discarded history needs to converge again, and how many times it was discarded.
+        public int RefillFrames { get; set; } = 3;
+        public int Discards { get; private set; }
+        // Whether its tainted state can be discarded, or only replaced by the package itself.
+        public bool Discardable { get; set; } = true;
+
+        public int DiscardTaintedState(string instance) {
+            if (!RetainedTainted || !Discardable) {
+                return 0;
+            }
+
+            RetainedTainted = false;
+            Discards++;
+
+            return RefillFrames;
+        }
 
         // The unread frames each cadence question and each recording carried, in order.
         public List<long> AskedUnread { get; } = [];

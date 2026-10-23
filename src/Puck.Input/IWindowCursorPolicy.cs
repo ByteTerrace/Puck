@@ -12,4 +12,11 @@ public interface IWindowCursorPolicy {
     /// <summary>Gets whether the pointer rests where the host sends it outside the game, such as over a pane that passes
     /// it to an external window, so the window shows the system cursor there in place of the game's.</summary>
     bool ShowsSystemCursor { get; }
+
+    /// <summary>Takes the client point the host moves the cursor to now, as a pad driving the pointer does; the pump hands
+    /// it to <c>INativeWindowCursor.WarpPointer</c>.</summary>
+    /// <param name="x">The client-area x coordinate, in client pixels, when this returns <see langword="true"/>.</param>
+    /// <param name="y">The client-area y coordinate, in client pixels, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the cursor moves this frame.</returns>
+    bool TryTakeWarp(out int x, out int y);
 }

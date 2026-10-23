@@ -16,9 +16,8 @@ namespace Puck.World;
 /// seat's published viewport rect (<see cref="WorldSeatViewports.Seat(int)"/>, the exact region
 /// <c>WorldFramePresenter</c> resolved this frame, authored layout included), and publishes one
 /// <see cref="OverlayBindingBarFrame"/>. Zero steady-state allocation: the per-seat arrays and
-/// pressed probes are preallocated and reused, and the hint lines are re-formatted only when their source facts move
-/// (a page/group flip) — safe because the feed and the overlay reader run on the
-/// same thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
+/// pressed probes and the chord hints are preallocated and reused — safe because the feed and the overlay reader run
+/// on the same thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
 /// </summary>
 internal sealed class WorldOverlayFeed {
     private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
@@ -34,10 +33,12 @@ internal sealed class WorldOverlayFeed {
     private readonly WorldEditorSeats m_editor;
     private readonly WorldSeatBindings m_bindings;
     private readonly GamepadManager? m_gamepads;
-    private readonly string[][] m_hintLines;
-    // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
-    // reference-stable per page), so the per-frame publish is a reference handoff.
-    private readonly BindingPageView?[] m_hintViews;
+    // Each seat's chord hints and the member badges they slice, recomposed every frame like the slots: a badge
+    // follows the connected family and an action icon follows its live icon-row cell.
+    private readonly OverlayResolvedGlyph[][] m_hintMembers;
+    private readonly OverlayBindingHint[][] m_hints;
+    // A chord row's action icon: its own authored icon name, else the bar's icon row keyed by its action.
+    private readonly Func<BindingChordCommandView, OverlayResolvedGlyph> m_resolveHintAction;
     // Each seat's icon-row cells, read through whichever mirror the seat is routed to.
     private readonly WorldStateCells[] m_iconCells;
     private readonly WorldIconTable m_icons;
@@ -122,10 +123,14 @@ internal sealed class WorldOverlayFeed {
             family: m_currentFamily,
             source: source
         );
+        m_resolveHintAction = chord => ((chord.Icon is { Length: > 0 } icon)
+            ? icons.ResolveIcon(name: icon)
+            : m_resolveIcon(chord.Action)
+        );
         m_roster = roster;
         m_store = store;
-        m_hintLines = new string[PlayerRoster.MaxSlots][];
-        m_hintViews = new BindingPageView?[PlayerRoster.MaxSlots];
+        m_hintMembers = new OverlayResolvedGlyph[PlayerRoster.MaxSlots][];
+        m_hints = new OverlayBindingHint[PlayerRoster.MaxSlots][];
         m_seats = new OverlayBindingSeat[PlayerRoster.MaxSlots];
         m_slots = new OverlayBindingSlot[PlayerRoster.MaxSlots][];
         m_modifiers = new OverlayBindingModifier[PlayerRoster.MaxSlots][];
@@ -136,7 +141,8 @@ internal sealed class WorldOverlayFeed {
         for (var index = 0; (index < PlayerRoster.MaxSlots); index++) {
             var slot = index;
 
-            m_hintLines[index] = [];
+            m_hintMembers[index] = new OverlayResolvedGlyph[(BindingBarWriter.MaxHintLines * BindingBarWriter.MaxHintMembers)];
+            m_hints[index] = new OverlayBindingHint[BindingBarWriter.MaxHintLines];
             m_slots[index] = new OverlayBindingSlot[(WorldBindingBarCapacity.MaxBanks * WorldBindingBarCapacity.MaxSlots)];
             m_modifiers[index] = new OverlayBindingModifier[WorldBindingBarCapacity.MaxModifiers];
             m_pressedBySlot[index] = command => router.IsCommandHeld(
@@ -151,78 +157,6 @@ internal sealed class WorldOverlayFeed {
         }
     }
 
-    // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a
-    // recompose — human cadence, never per frame). One ASCII line per command-chord row of the active group:
-    // the chord's modifier labels joined by '+', then the row's label (or its command name).
-    private ReadOnlyMemory<string> HintLinesFor(int slot, BindingPageView view) {
-        if (ReferenceEquals(
-            objA: m_hintViews[slot],
-            objB: view
-        )) {
-            return m_hintLines[slot];
-        }
-
-        var chords = view.CommandChords;
-        var lines = ((chords.Count == 0)
-            ? []
-            : new string[chords.Count]
-        );
-
-        for (var index = 0; (index < chords.Count); index++) {
-            // Held members join with '+' (any order); chord members with '>' (press order); both halves separated by a space.
-            var chord = chords[index];
-            var heldIds = (chord.Held ?? []);
-            var held = new string[heldIds.Count];
-            var ordered = new string[chord.Chord.Count];
-
-            for (var memberIndex = 0; (memberIndex < held.Length); memberIndex++) {
-                held[memberIndex] = (ModifierLabelFor(
-                    id: heldIds[memberIndex],
-                    view: view
-                ) ?? heldIds[memberIndex].ToUpperInvariant());
-            }
-
-            for (var memberIndex = 0; (memberIndex < ordered.Length); memberIndex++) {
-                ordered[memberIndex] = (ModifierLabelFor(
-                    id: chord.Chord[memberIndex],
-                    view: view
-                ) ?? chord.Chord[memberIndex].ToUpperInvariant());
-            }
-
-            var heldText = string.Join(
-                separator: '+',
-                values: held
-            );
-            var orderedText = string.Join(
-                separator: '>',
-                values: ordered
-            );
-
-            lines[index] = $"{(((held.Length > 0) && (ordered.Length > 0))
-                ? ((heldText + " ") + orderedText)
-                : ((held.Length > 0)
-                    ? heldText
-                    : orderedText))} {(chord.Label ?? chord.Command)}";
-        }
-
-        m_hintLines[slot] = lines;
-        m_hintViews[slot] = view;
-
-        return lines;
-    }
-    private static string? ModifierLabelFor(BindingPageView view, string id) {
-        foreach (var modifier in view.Modifiers) {
-            if (string.Equals(
-                a: modifier.Id,
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return modifier.Label;
-            }
-        }
-
-        return null;
-    }
     // The primary player's family drives the glyph theme; the first connected pad stands in until per-player
     // family routing exists.
     private GamepadType ResolveFamily() {
@@ -383,6 +317,7 @@ internal sealed class WorldOverlayFeed {
 
             var modifierCount = (authoring.Modifiers
                 ? BindingBarSeatComposer.ComposeModifiers(
+                    declaredOnly: authoring.DeclaredModifiersOnly,
                     destination: m_modifiers[viewIndex],
                     resolveBadge: m_resolveBadge,
                     text: barText,
@@ -390,17 +325,26 @@ internal sealed class WorldOverlayFeed {
                 )
                 : 0
             );
+            var hintCount = BindingBarSeatComposer.ComposeHints(
+                declaredOnly: authoring.DeclaredModifiersOnly,
+                destination: m_hints[viewIndex],
+                members: m_hintMembers[viewIndex],
+                modifiers: authoring.Modifiers,
+                resolveAction: m_resolveHintAction,
+                resolveBadge: m_resolveBadge,
+                slotSet: slotSet,
+                text: barText,
+                view: view
+            );
             var viewport = m_viewports.Seat(slot: slot).Region;
             var authoredLayout = liveLayout;
 
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
-                Hints: (barText
-                ? HintLinesFor(
-                        slot: slot,
-                        view: view
-                    )
-                : ReadOnlyMemory<string>.Empty),
+                Hints: m_hints[viewIndex].AsMemory(
+                    length: hintCount,
+                    start: 0
+                ),
                 Label: ((barText && authoring.PageLabel)
                 ? ((string.Equals(a: view.PageId, b: WorldEditorBindings.BuildPage, comparisonType: StringComparison.Ordinal) && m_editor.IsReadOnly(slot: slot))
                     ? WorldEditorBindings.ReadOnlyLabel

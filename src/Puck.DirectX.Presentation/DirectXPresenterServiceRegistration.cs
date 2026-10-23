@@ -41,14 +41,15 @@ public static class DirectXPresenterServiceRegistration {
             services.AddKeyedSingleton(implementationInstance: presentation, serviceKey: PipelineCacheBackend);
             services.AddSingleton<IWorkCounterSource>(implementationInstance: presentation);
         }
-        // The device is created lazily on the default adapter; its pipeline library lives under the host's
+        // The device is created lazily on the default adapter, or on WARP when the host's GpuDeviceOptions asks for the
+        // software device; its pipeline library lives under the host's
         // GpuPipelineCacheStore when one is registered, and in memory otherwise. The debug layer follows the host's
         // GpuDeviceOptions, and is off when none is registered. Its services pass through the host's GpuCreationFaults
         // when one is registered.
         services.TryAddSingleton(implementationFactory: static sp => new DirectXDeviceContext(
             adapterLuid: 0,
             creationFaults: sp.GetService<GpuCreationFaults>(),
-            deviceApi: new DirectXNativeDeviceApi(),
+            deviceApi: ((sp.GetService<GpuDeviceOptions>()?.Software ?? false) ? new DirectXWarpDeviceApi() : new DirectXNativeDeviceApi()),
             minimumFeatureLevel: DirectXFeatureLevel.Level110,
             pipelineCacheStore: sp.GetService<GpuPipelineCacheStore>(),
             pipelineCacheWork: sp.GetRequiredKeyedService<GpuPipelineCacheWork>(serviceKey: PipelineCacheBackend)

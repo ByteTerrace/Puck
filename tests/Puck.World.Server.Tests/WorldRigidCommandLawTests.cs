@@ -182,30 +182,13 @@ public sealed class WorldRigidCommandLawTests {
             )],
         };
     }
-    // FallingRigidBallDocument plus an authored bodies.scaleRow naming a keyed kind=Fixed "scale" row for body 0 —
-    // the same shape BodyScaleLawTests.WithScaleRow builds, added onto the falling-ball fixture rather than the
-    // bare-locomotion one so the scaled body actually has a rigid facet to advance.
-    private static WorldDefinition ScaledFallingRigidBallDocument(FixedQ4816 cellValue) {
-        var source = FallingRigidBallDocument();
-        var scaleRow = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: FixedQ4816.FromDouble(value: 0.05).Value,
-            Max: FixedQ4816.One.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                    Key: CellName.Parse(candidate: "0"),
-                    Value: CellValue.Fixed(rawBits: cellValue.Value)
-                )]
-        );
-
-        return (source with {
-            PopulationRaw = (source.Population with { ScaleRow = "scale" }),
-            StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (source.StateRaw?.World ?? []), scaleRow],
-            }),
-        });
-    }
+    // FallingRigidBallDocument plus an authored bodies.scale register born at the value — the same shape
+    // BodyScaleLawTests builds, added onto the falling-ball fixture rather than the bare-locomotion one so the scaled
+    // body actually has a rigid facet to advance.
+    private static WorldDefinition ScaledFallingRigidBallDocument(FixedQ4816 cellValue) => Fixtures.WithBodyScale(
+        initial: cellValue,
+        source: FallingRigidBallDocument()
+    );
 
     [Fact]
     public void ScaleRigidMassAndBoundingRadiusFollowScaleCubedAndScaleAgainstTheScaleOneControl() {

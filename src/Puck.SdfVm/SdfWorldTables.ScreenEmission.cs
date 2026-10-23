@@ -14,7 +14,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the latest screen reduction whose actual submission fence has completed.</summary>
     public GpuImagePublication CompletedScreenEmission { get { m_screenEmission.Poll(); return m_screenEmission.Completed; } }
 
-    internal bool ScreenEmissionOwes => m_screenEmission.Owes;
+    internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
     internal ReadOnlySpan<bool> ScreenEmissionScreens => m_screenEmission.Screens;
 
@@ -28,7 +28,7 @@ public sealed partial class SdfWorldTables {
 
         private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly byte[] m_mappings = new byte[(MaxScreenSurfaces * ScreenMappingByteLength)];
+        private readonly byte[] m_mappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
         private readonly bool[] m_tainted = new bool[MaxScreenSurfaces];
         private readonly bool[] m_renderedTainted = new bool[MaxScreenSurfaces];
 
@@ -42,6 +42,8 @@ public sealed partial class SdfWorldTables {
 
         public bool[] Screens { get; } = new bool[MaxScreenSurfaces];
         public bool Owes { get; private set; } = true;
+        // Whether the next observation reduces again whatever its sources say (SdfWorldTables.ProjectTaintedSourcesAgain).
+        public bool Forced { get; set; }
 
         public GpuImagePublication Completed { get; private set; }
         public long Renders { get; private set; }
@@ -71,25 +73,26 @@ public sealed partial class SdfWorldTables {
             var changed = false;
 
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
-                var offset = (screen * ScreenMappingByteLength);
+                var offset = (screen * ScreenMappingStride);
                 var different = ((m_sources[screen] != m_renderedSources[screen]) || (m_tainted[screen] != m_renderedTainted[screen]) ||
                     !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
                         .SequenceEqual(other: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset)));
 
                 changed |= different;
             }
-            Owes = ((Submitted is null) || changed);
+            Owes = ((Submitted is null) || changed || Forced);
             return unchecked((ulong)(Renders + (Owes ? 1 : 0)));
         }
         public long Publish(IGpuSubmissionFence fence) {
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
                 m_renderedSources[screen] = m_sources[screen];
                 m_renderedTainted[screen] = m_tainted[screen];
-                var offset = (screen * ScreenMappingByteLength);
+                var offset = (screen * ScreenMappingStride);
 
                 m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset).CopyTo(destination: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset));
             }
             Owes = false;
+            Forced = false;
             Submitted = new(Owner: this, Sequence: ++Renders, Fence: fence, Tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
             return Renders;
         }

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Hosting;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 
@@ -68,16 +67,10 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
         lock (m_gate) {
             m_server ??= new LocalControlServer(createSession: () => new ConsoleControlSession(
                 source(),
-                path => {
-                    var request = new FrameCaptureRequest(path: path);
-
-                    captureScheduler.ArmUnscheduled(
-                        request: request,
-                        target: (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer."))
-                    );
-
-                    return request;
-                }
+                request => captureScheduler.ArmUnscheduled(
+                    request: request,
+                    target: (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer."))
+                )
             ), world: world?.Invoke());
 
             return m_server.AttachmentPath;

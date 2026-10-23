@@ -179,13 +179,6 @@ internal static partial class User32 {
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetCursorPos(int x, int y);
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ClipCursor(in Rectangle rectangle);
-    // ClipCursor with a null rectangle (pass 0), which frees the cursor.
-    [LibraryImport("user32.dll", EntryPoint = "ClipCursor", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool FreeCursor(nint rectangle);
     [LibraryImport("user32.dll", EntryPoint = "SendNotifyMessageW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SendNotifyMessage(nint windowHandle, uint message, nint wParam, nint lParam);
@@ -206,4 +199,32 @@ internal static partial class User32 {
     public static partial nint GetWindowDpiAwarenessContext(nint windowHandle);
     [LibraryImport("user32.dll")]
     public static partial nint SetThreadDpiAwarenessContext(nint context);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial uint SendInput(uint count, [In] SystemInput[] inputs, int size);
+    [LibraryImport("user32.dll")]
+    public static partial nint WindowFromPoint(Point point);
+    [LibraryImport("user32.dll")]
+    public static partial nint GetAncestor(nint windowHandle, uint flags);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool RegisterHotKey(nint windowHandle, int id, uint modifiers, uint virtualKey);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnregisterHotKey(nint windowHandle, int id);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetForegroundWindow(nint windowHandle);
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool PostMessage(nint windowHandle, uint message, nint wParam, nint lParam);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsIconic(nint windowHandle);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsZoomed(nint windowHandle);
+    // EnumThreadWindows takes a managed delegate callback, as EnumWindows does.
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumThreadWindows(uint threadId, EnumWindowsCallback callback, nint parameter);
 }

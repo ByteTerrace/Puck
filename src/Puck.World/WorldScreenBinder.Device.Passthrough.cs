@@ -23,14 +23,10 @@ public sealed partial class WorldScreenBinder {
 
         return false;
     }
-    // The window a running instance's feed captures, or why it is none: a monitor capture, a capture that has not opened
-    // its window yet, or another producer's feed.
+    // The window or desktop a running instance's feed captures, or why it is none: a capture that has not opened its
+    // target yet, or another producer's feed.
     private static ISourcePassthroughWindow? PassthroughWindowOf(IWorldImageFeed feed, string instance, out string? fault) {
         switch (feed) {
-            case CaptureSlotFeed { Feed.MonitorIndex: { } monitor }:
-                fault = $"'{instance}' captures monitor {monitor}, not a window";
-
-                return null;
             case CaptureSlotFeed { Feed.Source.Window: { } window }:
                 fault = null;
 

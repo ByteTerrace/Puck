@@ -198,7 +198,8 @@ public sealed class SdfMeshAuditLawTests {
         Assert.Equal(expected: [0, 1, 2], actual: world.InstructionIndices(program: program));
         Assert.Equal(expected: -Radius, actual: SdfMeshAudit.Distance(field: field, point: new Vector3(x: 2f, y: 0f, z: 0f)), tolerance: 1e-4f);
         Assert.True(condition: SdfMeshAudit.TryEvaluator(field: out _, program: SdfMeshAudit.Field(group: world, program: program), refusal: out _));
-        Assert.False(condition: SdfMeshAudit.TryEvaluator(field: out _, program: Program(emit: static (builder, material) => builder.Shear(cubic: 0f, driver: SdfAxis.Y, linear: 0.2f, quadratic: 0f, target: SdfAxis.X).Sphere(material: material, radius: Radius)), refusal: out var refusal));
+        // A regular polygon's exact core needs runtime trigonometry, which no reading has.
+        Assert.False(condition: SdfMeshAudit.TryEvaluator(field: out _, program: Program(emit: static (builder, material) => builder.RegularPolygon(lift: SdfLift.Extrude, liftAmount: 0.1f, material: material, radius: Radius, sides: 6)), refusal: out var refusal));
         Assert.StartsWith(expectedStartString: "refused: ", actualString: refusal);
     }
 

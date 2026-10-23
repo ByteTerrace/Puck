@@ -1,0 +1,108 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One console command a world document authors from existing verbs: commands rows. The registry answers it beside the engine\u0027s verbs \u2014 in help, from a binding row or wheel sector naming it, typed at any console \u2014 and runs it by submitting its lines, the arguments substituted, under the caller\u0027s own authority.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The command\u0027s namespaced name (debug.go), unique within the document and never a registered verb\u0027s.",
+        "type": "string"
+      },
+      "help": {
+        "description": "The help text the listing shows before the command\u0027s usage, or null.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "parameters": {
+        "description": "The parameters, in argument order; a required one never follows an optional one.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "One typed parameter of a WorldConsoleCommand.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The parameter\u0027s name, which a line\u0027s {name} placeholder substitutes.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "What an argument for it must be.",
+              "enum": [
+                "Text",
+                "Number",
+                "Integer",
+                "Choice",
+                "Body",
+                "Spawn"
+              ],
+              "default": "Text",
+              "title": "WorldConsoleCommandParameterKind"
+            },
+            "default": {
+              "description": "The argument a caller who omits it gets, written as it would be typed; null makes the argument required.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "values": {
+              "description": "The admitted values of a Choice parameter, each one plain token; no other kind carries any.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "default": null
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "title": "WorldConsoleCommandParameter"
+        },
+        "default": null
+      },
+      "lines": {
+        "description": "The console lines the command submits, in order. A {name} placeholder takes a parameter\u0027s argument and {{/}} stand for literal braces; the first token, the verb, is literal.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default": null
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false,
+    "title": "WorldConsoleCommand"
+  },
+  "default": null
+}

@@ -16,7 +16,7 @@ public static class OperatorMcpServer {
     internal const string StatusMeanings = "status is completed when the command returned output, submitted when it returned none (accepted, which does not certify authoritative application), refused when the command or adapter reported an error, and unknown when the attachment closed or the deadline passed after dispatch; inspect state before retrying an unknown call. Mutation commands that report an authority settlement wait for its applied or refused verdict in output. clearTranscript is true when the command asked the console to clear its transcript. truncated is true when the output was longer than the 1048576-character transport limit: output is then its head, ending in a marker naming the full length, under the command's own status; narrow the command to read the rest.";
 
     private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"One console line, exactly as typed at the Puck console."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the result. When it passes, the attachment closes and the outcome is reported as unknown."}},"required":["command"],"additionalProperties":false}""");
-    private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the frame. When it passes, the attachment closes and the outcome is reported as unknown."}},"additionalProperties":false}""");
+    private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"tick":{"type":"integer","minimum":0,"description":"settled only: the simulation tick the still shows. The call holds until the world completes that tick, then arms the capture before the next tick steps and holds the world there until the frame is served, so the still is exactly that tick; a tick the world has already completed is refused. Omitted, the still shows the last tick completed when the call reaches the World. Give a timeoutMs that covers the wait."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the frame. When it passes, the attachment closes and the outcome is reported as unknown."},"mode":{"type":"string","enum":["settled","presented"],"default":"settled","description":"settled: one clean still; the capture holds presentation and temporal views converge over the held frame, so it hides frame-to-frame defects. presented: what the display actually showed; nothing is held or settled, and each frame is read back as composed for the display, with its jitter, temporal history and motion. Use presented for flicker, ghosting and trails."},"frames":{"type":"integer","minimum":1,"maximum":120,"default":1,"description":"presented only: the consecutive presented frames to read. One frame returns its PNG inline. More than one writes each PNG to a directory on the World's machine and returns, instead of images, a report: per frame its path, presentation index, the presentation its image was rendered on (earlier means the display repeated an image), its tick, and against the previous frame the changed-pixel count and the mean and largest absolute Rec. 709 luma change; then a summary line. Read only the frames the report flags."},"region":{"type":"object","description":"presented only: the rectangle the report's differences are measured over, in fractions of the frame (origin top-left), to isolate one screen or object; omitted, the whole frame.","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"width":{"type":"number","exclusiveMinimum":0,"maximum":1},"height":{"type":"number","exclusiveMinimum":0,"maximum":1}},"required":["x","y","width","height"],"additionalProperties":false}},"additionalProperties":false}""");
 
     private static readonly JsonElement WorldsInput = JsonElement.Parse("""{"type":"object","properties":{},"additionalProperties":false}""");
     private static readonly JsonElement WorldsOutput = JsonElement.Parse("""{"type":"object","properties":{"worlds":{"type":"array","items":{"type":"object","properties":{"attachmentId":{"type":"string","description":"Names this World in a call's world argument."},"processId":{"type":"integer","description":"Also names this World in a call's world argument."},"document":{"type":["string","null"],"description":"The world document the World booted from."},"startedUtc":{"type":"string"},"current":{"type":"boolean","description":"True for the World a call that names none runs on."}},"required":["attachmentId","processId","document","startedUtc","current"],"additionalProperties":false}}},"required":["worlds"],"additionalProperties":false}""");
@@ -49,11 +49,16 @@ public static class OperatorMcpServer {
         }
         var exec = (parameters.Name == "puck_exec");
         var vectorWrite = (parameters.Name == "puck_state_vector_write");
+        var capture = (parameters.Name == "puck_capture_frame");
         var timeout = 30_000;
         string? command = null;
         string? row = null;
         string? key = null;
         string? vector = null;
+        string? mode = null;
+        int? frames = null;
+        double[]? region = null;
+        ulong? tick = null;
 
         if (parameters.Arguments is { } arguments) {
             foreach (var (argumentKey, value) in arguments) {
@@ -82,7 +87,25 @@ public static class OperatorMcpServer {
                     (argumentKey == "vector") &&
                     vectorWrite &&
                     (value.ValueKind == JsonValueKind.String)
-                ) { vector = value.GetString(); } else {
+                ) { vector = value.GetString(); } else if (
+                    (argumentKey == "mode") &&
+                    capture &&
+                    (value.ValueKind == JsonValueKind.String)
+                ) { mode = value.GetString(); } else if (
+                    (argumentKey == "frames") &&
+                    capture &&
+                    (value.ValueKind == JsonValueKind.Number) &&
+                    value.TryGetInt32(value: out var parsedFrames)
+                ) { frames = parsedFrames; } else if (
+                    (argumentKey == "region") &&
+                    capture &&
+                    (RegionOf(value: value) is { } parsedRegion)
+                ) { region = parsedRegion; } else if (
+                    (argumentKey == "tick") &&
+                    capture &&
+                    (value.ValueKind == JsonValueKind.Number) &&
+                    value.TryGetUInt64(value: out var parsedTick)
+                ) { tick = parsedTick; } else {
                     return Fail(
                     $"Invalid argument: {argumentKey}.",
                     unknown: false
@@ -107,7 +130,13 @@ public static class OperatorMcpServer {
 
             command = $"world.state.cell.set {row} {cellKey} {vector}";
         }
+
+        var captureOptions = (((mode ?? (((frames is not null) || (region is not null)) ? ControlCapture.Presented : ((tick is not null) ? ControlCapture.Settled : null))) is { } named)
+            ? new ControlCapture(Frames: (frames ?? 1), Mode: named, Region: region, Tick: tick)
+            : null);
+
         if (LocalControlServer.Validate(request: new(
+            Capture: captureOptions,
             Command: command,
             Id: 1,
             Operation: ((exec || vectorWrite)
@@ -122,6 +151,7 @@ public static class OperatorMcpServer {
         }
         try {
             var request = new ControlRequest(
+                Capture: captureOptions,
                 Command: command,
                 Id: requestId,
                 Operation: ((exec || vectorWrite)
@@ -209,9 +239,25 @@ public static class OperatorMcpServer {
             OutputSchema = source.OutputSchema,
         };
     }
+    // The region argument's x, y, width and height, or null when it is not an object of four numbers; the control
+    // request's validation judges the values.
+    private static double[]? RegionOf(JsonElement value) {
+        if (
+            (value.ValueKind != JsonValueKind.Object) ||
+            !value.TryGetProperty(propertyName: "x", value: out var x) || (x.ValueKind != JsonValueKind.Number) ||
+            !value.TryGetProperty(propertyName: "y", value: out var y) || (y.ValueKind != JsonValueKind.Number) ||
+            !value.TryGetProperty(propertyName: "width", value: out var width) || (width.ValueKind != JsonValueKind.Number) ||
+            !value.TryGetProperty(propertyName: "height", value: out var height) || (height.ValueKind != JsonValueKind.Number) ||
+            (value.EnumerateObject().Count() != 4)
+        ) {
+            return null;
+        }
+
+        return [x.GetDouble(), y.GetDouble(), width.GetDouble(), height.GetDouble()];
+    }
     internal static Tool CaptureTool() => new() {
         Name = "puck_capture_frame",
-        Description = "Capture the composed frame, ordered after this attachment's prior commands and waits. The capture holds presentation from the frame it is armed in until it is served: the World keeps rendering that held frame, with no presentation time passing, and the PNG is a render of it. Returns PNG directly, including overlays, up to 16 MiB. Requires a renderer; busy and capture failures are tool errors. No output path or exact-tick guarantee.",
+        Description = "Capture the composed frame, including overlays, ordered after this attachment's prior commands and waits. mode settled (the default) is a clean still: the capture holds presentation from the frame it is armed in until it is served, the World keeps rendering that held frame with no presentation time passing, temporal views converge over it, and the PNG is a render of it, so it cannot show flicker, ghosting or trails. mode presented reads what the display actually showed, holding and settling nothing: frames 1 returns that frame's PNG inline; frames 2..120 reads that many consecutive presented frames, writes their PNGs on the World's machine and returns a per-frame report (paths, presentation indices so gaps and repeated images show, ticks, changed pixels and luma change against the previous frame, optionally over a region) instead of images. A still scene whose presented frames change is flicker; read the flagged PNGs to see it. External desktop and camera screens show their capture fill while any capture is armed. PNGs up to 16 MiB. Requires a renderer; busy and capture failures are tool errors. A settled still is exact: the World steps no tick past the one it is armed at until the frame is served, and output names it as tick=<T> hash=<world.state.hash at T> pose=<pose hash> and the tick the frame shows. Which tick that is depends on when the call reaches the World, unless tick pins it; to capture a moment of a scripted motion, arm the script with world.at and pin each still with tick (or a world.at <tick> world.screenshot <path.png> line, which also writes per-viewport PNGs with slots). On a windowed World, world.lockstep on makes presentation animation advance with the ticks, so stills of the same ticks repeat.",
         InputSchema = CaptureInput,
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = false, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = true },
@@ -230,7 +276,7 @@ public static class OperatorMcpServer {
     );
     internal static Tool ExecTool() => new() {
         Name = "puck_exec",
-        Description = ("Execute one Puck console line as the explicitly trusted Operator, with the full console registry, ordinary validation and the Operator's authority. The line must be one nonblank, non-comment line; batches are refused. help --names lists every console verb by name, help <prefix> describes the verbs whose names start with the prefix (help world.state), and help alone describes them all. " + StatusMeanings),
+        Description = ("Execute one Puck console line as the explicitly trusted Operator, with the full console registry, ordinary validation and the Operator's authority. The line must be one nonblank, non-comment line; batches are refused. Each call is a round trip during which the World keeps stepping, so two calls never land a fixed number of ticks apart: to apply commands on exact ticks, arm them in one call with world.at (world.at {\"start\": \"+30\", \"steps\": [{\"at\": 0, \"run\": \"body.pose 0 …\"}, {\"at\": 45, \"run\": \"world.screenshot <path.png> slots\"}]}), wait for the last with world.wait until <tick>, and read what ran with world.at. help --names lists every console verb by name, help <prefix> describes the verbs whose names start with the prefix (help world.state), and help alone describes them all. " + StatusMeanings),
         InputSchema = ExecInput,
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },

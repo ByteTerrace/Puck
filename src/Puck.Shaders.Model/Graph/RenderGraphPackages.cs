@@ -31,6 +31,10 @@ public enum RenderGraphPortAccess : byte {
     /// <summary>Writes a current buffer with a transfer command. The graph owns its destination barrier and the
     /// transition to subsequent shader readers; images and history are not transfer output ports.</summary>
     TransferWrite = 6,
+    /// <summary>Written through a read-write binding by a fragment shader inside a render pass that allows shader
+    /// writes, as a raster pass accumulating into a buffer with atomics does: a buffer in the fragment stage. Only a
+    /// buffer port takes it.</summary>
+    FragmentWrite = 7,
 }
 /// <summary>One port of an engine package: what the version a pass binds to it carries, a buffer's storage, and how the
 /// package reaches it. A pass binds a version of the port's kind, and to a buffer port a buffer of the port's stride and
@@ -56,7 +60,7 @@ public sealed record RenderGraphPackagePort(
     /// port's stride, when it has one, is a positive multiple of four, only an image port is a color attachment,
     /// and only a buffer input can be updated in place.</summary>
     public bool IsValid => (Enum.IsDefined(value: Access) && (Kind switch {
-        ShaderPipelineResourceKind.Image => ((Access is not (RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead or RenderGraphPortAccess.TransferWrite)) && (StrideBytes is null) && (Count is null)),
+        ShaderPipelineResourceKind.Image => ((Access is not (RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead or RenderGraphPortAccess.TransferWrite or RenderGraphPortAccess.FragmentWrite)) && (StrideBytes is null) && (Count is null)),
         ShaderPipelineResourceKind.Buffer => (
             (Access != RenderGraphPortAccess.ColorAttachmentWrite) &&
             ((StrideBytes is not { } stride) || ((stride != 0) && ((stride % 4) == 0)))
@@ -236,8 +240,9 @@ public sealed class RenderGraphPackageCatalog {
     /// sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
     /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
     /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
-    /// rather than the base (<see cref="PlaceLetterbox"/>) and whether the reconstructed source is tonemapped
-    /// (<see cref="PlaceTonemap"/>). <see cref="PlaceCompareMode"/> selects a held/current comparison instead of normal
+    /// rather than the base (<see cref="PlaceLetterbox"/>), whether the reconstructed source is tonemapped
+    /// (<see cref="PlaceTonemap"/>), the part of the source shown (<see cref="PlaceCrop"/>) and how much of it is written
+    /// as it is (<see cref="PlaceFidelity"/>). <see cref="PlaceCompareMode"/> selects a held/current comparison instead of normal
     /// placement, with <see cref="PlaceWipe"/> controlling its divider.</summary>
     public const string Place = "place";
     /// <summary>The <see cref="Place"/> comparison mode: 0 places normally, 1 wipes, 2 splits and 3 shows absolute
@@ -248,6 +253,23 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The <see cref="Place"/> config field that, at 1, fills the destination outside the rect with the
     /// letterbox color the kernel states rather than the base; 0, the default, keeps the base there.</summary>
     public const string PlaceLetterbox = "letterbox";
+    /// <summary>The <see cref="Place"/> config field holding the letterbox color, linear RGBA, which
+    /// <see cref="PlaceLetterbox"/> writes outside the rect: <see cref="DefaultLetterboxColor"/> unless a host places
+    /// another, such as the fill around an engaged screen's matte.</summary>
+    public const string PlaceLetterboxColor = "letterboxColor";
+    /// <summary>The <see cref="Place"/> config field holding the share, from 0 to 1, of the reconstructed source the
+    /// pass writes as it is, past <see cref="PlaceSharpen"/> and <see cref="PlaceTonemap"/>: a seat framing the screen
+    /// it engaged places its view at its ease's weight, so a framed picture reaches the display untouched. 0, the
+    /// default, applies both as configured.</summary>
+    public const string PlaceFidelity = "fidelity";
+    /// <summary>The <see cref="Place"/> config field holding the part of the source the rect shows, as fractions of the
+    /// source's extent: left, top, width, height, each edge rounded to the nearest source pixel. The default, the whole
+    /// source, keeps a rect of the source's own extent an exact copy, as does a crop of the rect's own pixel extent: a
+    /// seat framing the screen it engaged shows only its matte of its view this way.</summary>
+    public const string PlaceCrop = "crop";
+    /// <summary>The letterbox color a <see cref="Place"/> pass writes unless its host places another: a near-black with
+    /// a faint blue cast, opaque.</summary>
+    public static System.Numerics.Vector4 DefaultLetterboxColor => new(x: 0.015f, y: 0.016f, z: 0.02f, w: 1f);
     /// <summary>The <see cref="Place"/> config field holding the destination rect as fractions of the output's extent:
     /// left, top, width, height.</summary>
     public const string PlaceRect = "rect";
@@ -258,8 +280,8 @@ public sealed class RenderGraphPackageCatalog {
     /// is otherwise an exact copy, by a contrast-adaptive sharpen of <see cref="PlaceSharpness"/>'s strength: a
     /// temporally resolved view asks for it. At sharpness 0 the copy stays exact; 0, the default, never sharpens.</summary>
     public const string PlaceSharpen = "sharpen";
-    /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the Narkowicz
-    /// ACES-fit filmic curve inside the rect: a world's root sets it on each view's place pass when
+    /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the filmic curve
+    /// (Uchimura's Gran Turismo fit) inside the rect: a world's root sets it on each view's place pass when
     /// <c>render.tonemap</c> is <c>Filmic</c>, so the scene is tonemapped where it enters the frame and the base, the
     /// letterbox color and every pane are not; 0, the default, writes the source as it is.</summary>
     public const string PlaceTonemap = "tonemap";
@@ -404,6 +426,27 @@ public sealed class RenderGraphPackageCatalog {
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Uint
+        ),
+        [PlaceCrop] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 1, 1]").RootElement.Clone(),
+            Description: "The part of the source the rect shows as fractions of the source extent: left, top, width, height.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float4
+        ),
+        [PlaceFidelity] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "The share of the reconstructed source written as it is, past the sharpen and the tonemap.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float
+        ),
+        [PlaceLetterboxColor] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "[0.015, 0.016, 0.02, 1]").RootElement.Clone(),
+            Description: "The linear RGBA letterbox color the destination shows outside the rect when letterbox is 1.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float4
         ),
         [PlaceRect] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 1, 1]").RootElement.Clone(),

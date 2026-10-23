@@ -8,8 +8,19 @@ public static partial class SdfFrameBlock {
     private static readonly int MeshShadowCountOffset = Offset(member: SdfWorldPackage.MeshShadowCount);
     private static readonly int MeshShadowParametersOffset = Offset(member: SdfWorldPackage.MeshShadowParameters);
     private static readonly int MeshShadowTexelsOffset = Offset(member: SdfWorldPackage.MeshShadowTexels);
-    private static readonly int MeshBakeLatticesOffset = Offset(member: SdfWorldPackage.MeshBakeLattices);
-    private static readonly int MeshBakeCountOffset = Offset(member: SdfWorldPackage.MeshBakeCount);
+    // The mesh bake's own pass block, which its mask and sampler read in place of the world interface's.
+    private static readonly ShaderPipelineParameterLayout BakeLayout = SdfWorldInterfaces.MeshBakeParameters;
+    private static readonly int BakeInstanceMaskWordCountOffset = BakeOffset(member: SdfWorldPackage.InstanceMaskWordCount);
+    private static readonly int BakeWorkCounterRowOffset = BakeOffset(member: ShaderWorkCounters.Row);
+    private static readonly int BakeWorkCounterDetailRowOffset = BakeOffset(member: ShaderWorkCounters.DetailRow);
+    private static readonly int MeshBakeLatticesOffset = BakeOffset(member: SdfWorldPackage.MeshBakeLattices);
+    private static readonly int MeshBakeCountOffset = BakeOffset(member: SdfWorldPackage.MeshBakeCount);
+
+    /// <summary>Gets the bytes of the mesh bake's pass block (<see cref="WriteMeshBake"/>), a multiple of 16.</summary>
+    public static int BakeSizeBytes => ((int)BakeLayout.SizeBytes);
+
+    private static int BakeOffset(string member) =>
+        ((int)BakeLayout.BlockOffsetOf(member: member));
 
     /// <summary>Writes the shadow cascades the surface pass reads.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
@@ -53,17 +64,28 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: ((uint)texels));
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
-    /// <summary>Writes the lattices one bake dispatch samples and the instances each selects, four rows a lattice
+    /// <summary>Writes the mesh bake's pass block (<see cref="SdfWorldInterfaces.MeshBakeParameters"/>), all its mask
+    /// and sampler read beside the extent the node writes: the live program's instance-mask width, the pass's rows of the
+    /// work counters, and the lattices one bake dispatch samples and the instances each selects, four rows a lattice
     /// (<see cref="SdfWorldPackage.MeshBakeLattices"/>), the lattices' samples back to back; the fourth names the point
     /// table entry its group's poses start at, their first slot and how many slots they cover
     /// (<see cref="SdfMeshBakeBatch.Poses"/>).</summary>
-    /// <param name="block">The pass block <see cref="Write"/> filled.</param>
+    /// <param name="block">The bake's pass block, at least <see cref="BakeSizeBytes"/> bytes.</param>
     /// <param name="batch">The batch.</param>
-    public static void WriteMeshBake(Span<byte> block, SdfMeshBakeBatch batch) {
+    /// <param name="instanceMaskWordCount">The live program's instance-mask width, in words
+    /// (<see cref="SdfPassValues.InstanceMaskWordCount"/>).</param>
+    /// <param name="workCounterRow">The pass's row of the work counters (<see cref="ShaderWorkCounters.Row"/>).</param>
+    /// <param name="workCounterDetailRow">The pass's first named detail row, zero for none
+    /// (<see cref="ShaderWorkCounters.DetailRow"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="batch"/> is <see langword="null"/>.</exception>
+    public static void WriteMeshBake(Span<byte> block, SdfMeshBakeBatch batch, uint instanceMaskWordCount, uint workCounterRow, uint workCounterDetailRow) {
         ArgumentNullException.ThrowIfNull(argument: batch);
 
         var first = 0u;
 
+        WriteUInt32(block: block, offset: BakeInstanceMaskWordCountOffset, value: instanceMaskWordCount);
+        WriteUInt32(block: block, offset: BakeWorkCounterRowOffset, value: workCounterRow);
+        WriteUInt32(block: block, offset: BakeWorkCounterDetailRowOffset, value: workCounterDetailRow);
         WriteUInt32(block: block, offset: MeshBakeCountOffset, value: ((uint)batch.Lattices.Length));
         for (var index = 0; (index < batch.Lattices.Length); index++) {
             var lattice = batch.Lattices[index];

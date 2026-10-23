@@ -51,7 +51,7 @@ lists outlines but has no window to draw them in; offscreen draws no overlay.
 shapes alone and the whole creation; F4 in the debug world toggles the Moth's
 jetpack alone (`toggle moth pod* nozzle*`).
 
-`world.inspect on|off` toggles the acting seat's editor panel; bare
+`world.inspect on|off|toggle` shows or hides the acting seat's editor panel; bare
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,
 camera, ticks, render levers, counted work, capacity and reload refusal.
@@ -232,7 +232,11 @@ API layer (on Vulkan with synchronization validation), which `puck canary
 (Direct3D 12 GPU-based validation, Vulkan GPU-assisted validation and best
 practices), at the cost of minutes of pipeline instrumentation and much slower
 frames ([Direct3D 12](../../docs/rendering/directx.md#validation),
-[Vulkan](../../docs/rendering/vulkan.md#validation)). `--capture-tool pix|renderdoc`
+[Vulkan](../../docs/rendering/vulkan.md#validation)). `--software-gpu` (with
+`--backend directx`) creates the Direct3D 12 device on WARP, the software
+rasterizer, so a machine whose GPU another job holds, or one with none, boots the
+same frames on the CPU, slowly; its bake keys meshes by the same identity as a
+hardware bake. `--capture-tool pix|renderdoc`
 loads a GPU capture tool into the process before the device exists (PIX for
 Direct3D 12 only, RenderDoc for either backend) and names the device's objects,
 so `gpu.capture` can capture chosen frames
@@ -349,6 +353,16 @@ path is taken as-is), so the `.ico` travels beside the world file:
 
 Authoring neither wears the executable's own icon and `Puck: World`. An icon
 this OS cannot read falls back the same way rather than refusing the boot.
+
+**Physical devices.** A windowed World opens every gamepad and receives the
+window's keyboard and mouse events. `--devices none` opens no pad (no gamepad
+manager, arbiter or capture is registered) and drops every OS key, text and
+pointer event before a seat sees it; stdin, `player.signal`, `body.*`, schedule
+rows and MCP are unaffected, and stderr opens with `[world.host] physical input
+devices are off`. It is an operator's per-run choice with no document member, and
+the default is `all`. Agents and `puck` verbs that boot a World pass it
+([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
+A headless or offscreen boot opens no device either way.
 
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device—the
@@ -479,12 +493,15 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-The island binds the left stick to `player.move.strafe`, the right stick to
-`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
-and South and Space to `jump`; East and West switch the view layout. It binds
-no run channel, no autorun and no free-look chord. An author gets autorun from
-a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
-`player.look.free` command suppresses body steering while camera look continues.
+The debug world's Moth (`worlds/debug/avatars/moth.puck`, with the bar's pages
+in `worlds/debug/controls.puck`) binds the left stick to `player.move.strafe`,
+the right stick to `player.look.steer`, mouse buttons 1 and 2 to `player.orbit`
+and `player.steer`, the `run` channel held on West and Left Shift and toggled
+(`BindingEntryMode.Toggle`) on the left stick's press and N, and, on the left
+trigger's page, autorun and autofly as toggles of `forward` and `rise` and the
+held `player.look.free`, which suppresses body steering while camera look
+continues. Its full control table is
+[the Moth's controls](../../worlds/debug/avatars/moth.md#controls).
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -934,7 +951,9 @@ Facts a script needs:
   ([`Puck.Mcp`](../Puck.Mcp/README.md#tools-and-results)).
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
-  after a `world.wait` that releases at tick R runs before tick R+1. The
+  after a `world.wait` that releases at tick R runs before tick R+1;
+  `world.wait until <tick>` releases at an absolute tick, and `world.at <tick>
+  <line>` pins a line to one whatever ingress armed it. The
   [commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)
   owns this contract. End a script with `quit` to stop the World when the script
   ends; `--exit-after-seconds` stops it after a wall-clock time instead.
@@ -1014,6 +1033,12 @@ Facts a script needs:
   (`world=` is the share the unowned segments answered, `near-surface` the
   samples within three pixels of the surface), and `world.wait bakes <seconds>`
   holds a script until then. It needs a renderer (windowed or offscreen).
+  `world.slice` takes a caller's path, so it is Unbindable; `world.slice.save
+  <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]` is its
+  Bindable twin, the placement form writing
+  `<package>/slices/<placement>-<axis>.png` beside the booted document, where
+  `near` names the placement of the spawn point nearest the calling seat's body
+  (the debug world's `gallery.slice` calls it).
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
   shape of the document section; a malformed row echoes its error and mutates
   nothing. These verbs are Simulation-routed, so the line is not parsed at
@@ -1161,8 +1186,11 @@ Facts a script needs:
   entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
   imports, the `theme.puck` theme and the `controls.puck` cursor, key hints,
-  icons, binding bar and play wheel it and the garden import, and
-  `garden.puck`, the destination its portal frame opens onto
+  icons, five-page binding bar and three-ring play wheel it and the garden import
+  (with `pad.puck`, the debug world's own Go and Tour pages and Places ring, and
+  the `pad-kit.puck` library), and
+  `garden.puck` and `night.puck`, the destinations its painting wing's portals
+  open onto, and `paintings.puck`, the wing in the gallery hall
   ([the portal demo](../../worlds/debug/debug.md));
   every other world named in this bullet is quarantined under
   `experimental/src/Puck.World/Assets/worlds/`
@@ -1591,10 +1619,20 @@ slot shows the source as a pane and a `captures` row can capture it before
 composition. A capture's and a camera's lease carries the complete image it
 acquired (`GpuImageLease.Image`: the shared ring's slot, or the converted
 image on the CPU and HDR routes), so a pane or graph input bound to one draws
-it; a reader draws a stand-in only while the source has no image yet, or for
-a feed that hands out an image view alone. While a capture is armed, an
-external source resolves to its capture fill, so a capture of the display shows
-the fill in its pane, never the window.
+it; a reader draws a stand-in only while the source's capture fill has not
+converted, or for a feed that hands out an image view alone. While a capture is
+armed, an external source resolves to its capture fill, so a capture of the
+display shows the fill in its pane, never the window. An external source whose
+feed has no image of its own shows its fill too, armed or not: a window
+minimized since its capture opened (it delivers no compositor frame), a camera
+still opening, a probe before its first frame, or a window that is gone. A
+declared desktop capture retains its feed even when the platform offers no
+capture service, so it also shows its fill; a live command to open an
+unavailable target still refuses. The
+source then answers as its fill does, so it never holds the frame, readiness
+(`world.wait ready`) or a capture of the display, and `screen.state` names the
+feed's fault followed by `it shows its capture fill`. A window minimized after
+its first frame keeps showing that frame.
 
 The live render graph runs every source a screen shows, its row's or the one a
 presentation verb bound over the row (`screen.source <index> <kind>`, a
@@ -1620,7 +1658,7 @@ the drawn image, none exists:
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, `WorldCaptureFillLawTests.ACapturedFrameAnswersFromItsConversionNeverFromItsPixels` (camera conversion refusal), the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
-| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss, a source with no image showing its fill); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
 | `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it; in a presented world, a view of the residency that world renders through, named under its level (`WorldViewNames.NestedCamera`) | `WorldViewPaneMappingLawTests.Views`, `WorldNestedScreensLawTests`, `WorldPresentedSourcesLawTests` (a presented world's cameras read each other at their previous frame), the `view-screens` and `portal-sources` canaries |
 | `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
 | `text` | no image: the decal tier draws its lines (`WorldScreenDecals` over `WorldScreenTextDecal`, through `TextSourceAt`, or a presented world's own rows and font catalog in its session emitter) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`), `WorldPresentedSourcesLawTests` (a destination's text through its own fonts); the `uploaded-sources` and `portal-sources` canaries check its glyphs' ink |
@@ -1667,7 +1705,8 @@ compares a read-back against.
 
 **External content never reaches a capture.** Every external image, whether a
 camera, a desktop capture or a probe's output, resolves through
-`WorldCaptureGate`. While the gate fills, the image resolves to its declared
+`WorldCaptureGate`. While the gate fills, or while the feed has no image of its
+own (`WorldCaptureGate.FillsFeed`), the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
 default), and the producer's frame is never acquired. A fill is a 1×1 image
 converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
@@ -1744,9 +1783,20 @@ is drawn, and a pointer on a bar is the game's. `source.passthrough close <insta
 `source.passthrough` with no argument echoes where the keyboard is and each
 open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator
-attachment (`world.control`) is that console too. No binding, seat, peer,
-addon, schedule or world document can open a passthrough source or send it
-input. A source that stops showing the window it was opened on (its instance
+attachment (`world.control`) is that console too. The local user's own press
+on the framed picture of an engaged window capture's screen opens one too: a
+physical click, or a local pad's bound press. No seat, peer, addon, schedule,
+script or world document can open a passthrough source or send it input: a
+binding page names which pad control means which pointer act
+(`source.passthrough.pointer`, `.scroll`, `.button.<left|right|middle|back|forward>`,
+`.arrow.<up|down|left|right>`), and those verbs act only for a local pad's
+own control, refusing a typed line, an authored command, a wheel sector,
+`player.signal` and a probe by name. The pad's stick moves the system cursor
+across the framed picture at the screen route's `padPointer` feel, and
+`source.passthrough` echoes the pad (`pad p<n> screen <n> … stick … scroll …
+buttons … keys … feel …`, or `pad idle`). While a seat frames such a window,
+Control+Alt+Escape leaves in one step, whoever has the keyboard: it returns the
+keyboard, closes the window's source and leaves the seat's engagement. A source that stops showing the window it was opened on (its instance
 stops, its capture reopens onto another window, or a row of the same name
 replaces it) is closed before the next event routes. A source whose pane is
 only not published for a while stays open: its window receives nothing while the
@@ -1758,6 +1808,23 @@ window holds and returns the keyboard to the game. Delivery is Windows-only:
 the capture feed's `Win32PassthroughWindow` sends window messages to the
 captured window, described in
 [Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
+
+**A captured monitor is the whole desktop.** A `capture` naming a
+`monitorIndex` opens the same way (its target's title is `Desktop`), but its
+feed's target is `Win32DesktopPassthrough`, which reaches Windows through the
+system's own input (`SendInput`), so the taskbar, Start and every window take
+it. A press on the picture is replayed at its release where the picture shows
+it (the cursor goes there, presses, drags, releases and comes back), a wheel
+turn likewise, a move reaches nothing, and the desktop takes no keyboard: keys
+go wherever Windows sends them. A press whose point shows the World's own
+window, mirrored in the picture, is sent nowhere. Over a framed desktop the pad
+is the desktop's mouse, moving the system cursor across the monitor, and the
+leaving chord is claimed system-wide; leaving, however the seat leaves, brings
+the World's window to the front. The pad never holds a press on the World's
+own window frame, which Windows would answer with a modal loop on the World's
+window thread that only the pad's unsent release could end: a click there runs
+the caption button's command at once. The debug world's [desktop computer](../../worlds/debug/desktop.md) is
+the worked case.
 A headless or offscreen boot has no window and no such verb.
 
 **A physical camera is an input device, seated like a gamepad, never named by
@@ -1912,11 +1979,22 @@ rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.
 A screen whose route names an `engageChannel` is also engaged from the
 controls: that channel's press within `engageRadius` composes the application,
 and the same press leaves it (the debug world's devices use the Moth's
-`interact` channel, E or a pad's X; [`devices.md`](../../worlds/debug/devices.md)).
-While a seat is captured on a screen, its camera eases into the emulator view:
-the screen's glass fills the viewport's limiting axis, square-on, derived from
-the row's own frame, with nothing between the camera and the glass drawn
-([engagement](../../.claude/skills/puck-world/references/engagement.md#the-emulator-view--the-camera-frames-the-engaged-screen)).
+`interact` channel, E or a pad's RB; [`devices.md`](../../worlds/debug/devices.md)).
+While a seat is captured on a screen, its own camera eases in on the screen's
+picture, square-on, derived from the row's own frame, with nothing between the
+camera and the glass drawn, until each source row is a whole number of window
+pixels; as it settles the CRT treatment, atmosphere and tone map fade out, the
+view renders at native scale and the root shows only its picture, and the window shows
+the picture as a desktop emulator does, on the matte its route's `display.fill`
+colours. Leaving fades the in-world look back in
+([engagement](../../.claude/skills/puck-world/references/engagement.md#the-framed-screen--the-camera-frames-the-engaged-screens-picture-as-an-emulator-shows-it)).
+The same button sits a seat at a tabletop whose board facet authors an `engage`
+block: the seat is captured on `placement:<id>`, its camera eases to a view of
+the whole board from its side, its controls switch through the `engagement`
+context family's `tabletop` state, and the world's rules play the game from
+its channels and `board(pointer|side|engaged, …)` (the debug world's chess
+table, [`chess.md`](../../worlds/debug/chess.md);
+[engagement](../../.claude/skills/puck-world/references/engagement.md#tabletops--the-context-button-sits-a-seat-at-a-board)).
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
@@ -2163,7 +2241,12 @@ native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
 the world's own views over time at any render scale: each jitters its samples,
 resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
-Camera and session views never reconstruct over time. The render section's `temporal`
+The world's own views are every view the presentation lays out: seat views, the
+operator pose, and layout slots that name a camera alike, so a named-camera slot
+reconstructs too and its settled still converges over a jitter period. The
+camera views a screen films and session views never reconstruct over time: their
+reduced quality (`WorldScreenBinder.CameraViewQuality`,
+`WorldSessionSceneEmitter.ReducedQuality`) does not ask. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
 `world.shadows off|low|medium|high` selects the shadow tier: `off` renders and
 holds no cascade, and `low`, `medium` and `high` render every cascade at 512,
@@ -2253,7 +2336,10 @@ totals stay in the sum. It also registers `sdf.mesh-settle`, the settle rebakes
 of skinned blend groups (`SdfMeshSettle`) over every residency sharing the
 presentation's mesh library: groups queued, done and reused from the library,
 frames a drifted group waited while it moved or for the caps, and rebakes
-refused for meshing no surface. The
+refused for meshing no surface. It registers `sdf.mesh-gi` too, the world
+residency's irradiance volume (`SdfMeshIrradiance`): its trace scene builds,
+the geometries they built and took from the scene they replaced, the triangles
+they built, and the probe sweeps traced. The
 `allocation` section names the GC mode and the fewest managed bytes one read of
 every count allocated (`world.counters.read`, measured with
 `AllocationWindow.Measure`); only zero or not zero is meaningful. A render host
@@ -2523,6 +2609,64 @@ scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
+
+That capture is a settled still: it holds presentation and lets temporal views
+converge over the held frame, so it cannot show flicker, ghosting or trails.
+`world.screenshot <path.png> presented [<frames>] [region <x> <y> <w> <h>]`
+reads the frames the display presents instead, as composed for it and holding
+nothing, 1..120 of them (`<path>-000.png` onward for a burst), and prints a
+report on stderr once the last PNG is written: per frame its presentation
+index, the presentation its image was rendered on, its tick, and the pixels and
+luma that changed from the frame before, over the region or the whole frame.
+The host's clock runs on during it; `world.wait captures <seconds>` fences it.
+The MCP form is `puck_capture_frame` with `mode: "presented"`
+([Puck.Mcp](../Puck.Mcp/README.md#tools-and-results)).
+
+A settled still is exact to its tick. It records the tick it is held at and that
+tick's state hashes, and once it lands stderr carries `[still] <path> tick=<T>
+hash=<capture hash, as world.state.hash reads it> pose=<pose hash> shown=<tick
+the frame shows>` (`WorldCaptureScheduler.Stamp`); the operator attachment's
+answer carries the same stamp. `world.screenshot <path.png> slots` also cuts
+the frame at each slot of the active layout and writes `<stem>-<camera>.png`
+per slot (`WorldSlotStills`), so a four-camera layout (`view.override layout
+motion`) gives four stills of one tick. To land stills and inputs on chosen
+ticks, pin console lines to boot ticks with `world.at`
+(`WorldTickScript`): `world.at <tick>|+<n> <line>`, or a whole script in one line,
+`world.at {"start": "+30", "steps": [{"at": 0, "run": "body.pose 0 0 0 0 0 0"},
+{"at": 45, "run": "world.screenshot <path.png> slots"}]}`. Each line runs in the
+drain right after its tick completes, whatever ingress armed it, so a script
+armed over MCP lands on the same ticks as one piped on stdin. `world.wait until
+<tick>` holds a session until an absolute tick has completed, and `world.at`
+alone reads back what ran. Two presentation levers make the stills of a repeat
+match: `world.lockstep on` has the windowed host step at most once a frame,
+present the completed tick and advance presentation animation by the ticks
+completed since the last captured frame, as the offscreen host does
+(`PresentPacingControl.TickLocked`, `WorldFramePresenter.HistoryFree`), so gait
+and followers advance with the ticks rather than wall time. Hosted machines
+finish each tick synchronously before their video is read, keeping screen
+images and the light they emit independent of worker completion timing; a frame held for a
+settled capture also culls by box and rates no work; and `view.reseed <body>`
+(`WorldStampPool.Reseed`) restarts a body's gait drivers, foot plants and
+followers as for a new occupant, which a `body.pose` teleport deliberately does
+not. The procedure and its measured repeatability are in
+the `puck-world` skill's
+[captures reference](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture).
+
+`world.flag <exhibit|near> [note…]` is a player's "this looks wrong" mark, for
+the gallery and anything else a document names by a token; `near` names the
+spawn point nearest the flagging seat's body, so one key flags whatever exhibit
+the player stands at. It writes
+`<package>/flags/<exhibit>.json` beside the booted document (the exhibit, the
+note, the tick, the flagging seat, its authoritative pose as `body.where` reads
+it, and its render camera) and arms a capture of the next composed frame to
+`<package>/flags/<exhibit>.png`, announced on stderr exactly as
+`world.screenshot`'s is. The caller never names a path: the exhibit is a
+file-safe token, the folder is the package's own (the debug world git-ignores
+`worlds/debug/flags/`), and a later flag of the same exhibit overwrites the
+earlier one. Only the host console and a local seat may flag. Headless, or
+while another capture is pending, the record is still written and the echo says
+no capture was armed. It is bindable, so a binding row or a document-authored
+command (the debug world's `gallery.flag`) may call it.
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
 manifests under `tests/Puck.World.Canaries/`—`sdf-decode-sign-refusal`

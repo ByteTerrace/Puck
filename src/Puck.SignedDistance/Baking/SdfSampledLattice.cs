@@ -239,8 +239,8 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// size. Where the edge lies up to half a cell past the cell that sees both its faces, in a neighbour that sees one, the
 /// vertex of a straight edge reaches past its cell to it, and a curved convex edge moves onto the neighbour's vertex.
 /// <para>Where the samples cannot resolve the surface, the lattice refines (<see cref="Refine"/>): a cell crossed by a
-/// sheet or gap thinner than a cell along an axis, whether a sample caught it or it passed between two, a cell whose
-/// outside corners report different materials, and a cell two separate sheets cross are sampled again at a finer spacing
+/// sheet or gap thinner than a cell along an axis, whether a sample caught it or it passed between two, and a cell two
+/// separate sheets cross are sampled again at a finer spacing
 /// and contoured at it, with the cells around them contoured at the fine spacing from their coarse corners so the mesh
 /// stays closed where its resolution changes. Every other cell contours whole.</para>
 /// <para>The lattice is answered in stages: <see cref="Refine"/> names the fine samples to measure and
@@ -257,6 +257,8 @@ public sealed class SdfSampledLattice {
     // How much less one diagonal's triangles must turn from their corners' normals than the other's for a quad to split
     // along it (SplitsAlongFirstDiagonal): below it, the two splits of a quad flat to within its normals' noise tie.
     private const double TurnTie = 1.0e-3;
+    // A triangle whose height is under this share of its longest edge is a line to a split (SplitsAlongFirstDiagonal).
+    private const double DegenerateSplit = 0.02;
 
     private readonly Vector3 m_origin;
     private readonly Vector3 m_cell;
@@ -344,17 +346,18 @@ public sealed class SdfSampledLattice {
     /// sample between two of the other sign whose crossings lie less than a cell apart, or two samples of one sign whose
     /// values fall steeply toward each other from both sides and meet below the surface, where no line beside it crosses
     /// the solid or gap two samples thick, as beside a solid's edge or corner the line crosses near its tip or grazes,
-    /// which the contour keeps sharp at the lattice's spacing), a crossed cell whose outside
-    /// corners report different owned materials, a crossed cell whose corner signs hold more than one surface patch, and
+    /// which the contour keeps sharp at the lattice's spacing), a crossed cell whose corner signs hold more than one
+    /// surface patch, and
     /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
     /// <paramref name="regions"/>.
     /// </summary>
-    /// <param name="factor">The fine cells along each axis of a coarse cell, at least two.</param>
+    /// <param name="factor">The fine cells along each axis of a coarse cell, at least two; fewer when that many would
+    /// measure more fine samples than the refinement's budget (<see cref="Refinement"/> reports the split taken).</param>
     /// <param name="regions">The boxes, in the lattice's frame, whose surface is contoured at the fine spacing wherever
     /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
-    /// their answers; empty when no cell needs refining or the refinement would measure too many, and the lattice then
-    /// contours at its own spacing.</returns>
+    /// their answers; empty when no cell needs refining or even two fine cells a side would measure too many, and the
+    /// lattice then contours at its own spacing.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
     public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
@@ -407,6 +410,77 @@ public sealed class SdfSampledLattice {
 
             return false;
         }
+        // Whether one of the four lattice lines beside sample `at`'s line along `axis` crosses the same sheet or gap
+        // (whose samples are inside when `sheetInside`) thinly from `first` to `last` along it: a run of one sheet
+        // sample between two of the other sign, or two samples of the other sign the field falls toward from both sides
+        // and passes between (PassesBetween). A sheet or gap thinner than a step spans the lines beside the one that
+        // caught it; a convex corner a line crosses near its tip is seen by that line alone, the lines beside it either
+        // missing the solid or crossing its body, and refining its cells merges their fine vertices into collinear
+        // slivers along the crease that the coarse contour's tangent planes keep sharp.
+        bool ThinBeside(Span<int> at, int axis, bool sheetInside, int first, int last) {
+            Span<int> p = stackalloc int[3];
+            var h = spacing[axis];
+            var n = samples[axis];
+
+            for (var offset = 1; (offset < 3); offset++) {
+                var across = ((axis + offset) % 3);
+
+                if (!ThinAcross(across: across, at: at, p: p)) {
+                    return false;
+                }
+            }
+
+            return true;
+
+            // Whether a line beside this one along `across`, on either side, crosses the sheet thinly: a sheet spans both
+            // directions across the line that caught it, where a solid's edge spans one, its own.
+            bool ThinAcross(Span<int> at, Span<int> p, int across) {
+                for (var direction = -1; (direction <= 1); direction += 2) {
+                    at.CopyTo(destination: p);
+                    p[across] += direction;
+                    if ((p[across] < 0) || (p[across] >= samples[across])) {
+                        continue;
+                    }
+
+                    float Beside(Span<int> q, int i) {
+                        q[axis] = i;
+
+                        return m_values[Index(x: q[0], y: q[1], z: q[2])];
+                    }
+
+                    for (var i = Math.Max(val1: 1, val2: first); (i <= Math.Min(val1: last, val2: (n - 2))); i++) {
+                        var before = Beside(i: (i - 1), q: p);
+                        var value = Beside(i: i, q: p);
+                        var after = Beside(i: (i + 1), q: p);
+
+                        if (((value < 0f) == sheetInside) && ((before < 0f) != sheetInside) && ((after < 0f) != sheetInside)) {
+                            var middle = MathF.Abs(value);
+
+                            if (((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after)))) < 1f) {
+                                return true;
+                            }
+                        }
+                        if (((i + 2) < n) && ((before < 0f) != sheetInside) && ((value < 0f) != sheetInside) && ((after < 0f) != sheetInside)) {
+                            var further = Beside(i: (i + 2), q: p);
+
+                            if ((further < 0f) != sheetInside) {
+                                p[axis] = i;
+
+                                var slope = Slope(x: p[0], y: p[1], z: p[2]);
+
+                                p[axis] = (i + 1);
+                                slope = MathF.Max(slope, Slope(x: p[0], y: p[1], z: p[2]));
+                                if (PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            }
+        }
         // Marks the cells around the lattice edge from sample `at` along `axis`.
         void MarkEdge(Span<int> at, int axis) {
             var u = ((axis + 1) % 3);
@@ -428,29 +502,24 @@ public sealed class SdfSampledLattice {
             }
         }
 
-        // Crossed cells: more than one surface patch, or outside corners that disagree on the owned material.
+        // Crossed cells holding more than one surface patch. A cell whose outside corners disagree on the material is not
+        // refined for that: the material cut (SdfMeshMaterialCut) searches each boundary on the mesh's own edges, and fine
+        // cells along a concave seam between two materials merge into collinear vertices whose quads fold.
         for (var z = 0; (z < cellsZ); z++) {
             for (var y = 0; (y < cellsY); y++) {
                 for (var x = 0; (x < cellsX); x++) {
                     var mask = 0;
-                    var material = int.MinValue;
-                    var mixed = false;
 
                     for (var offset = 0; (offset < 8); offset++) {
-                        var index = Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)));
-
-                        if (m_values[index] < 0f) {
+                        if (m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) {
                             mask |= (1 << offset);
-                        } else {
-                            mixed |= ((material != int.MinValue) && (material != m_materials[index]));
-                            material = m_materials[index];
                         }
                     }
 
                     if ((mask == 0) || (mask == 0xFF)) {
                         continue;
                     }
-                    if (mixed || (SdfDualContouring.PatchesOf(mask: mask) > 1)) {
+                    if (SdfDualContouring.PatchesOf(mask: mask) > 1) {
                         measured[CellIndex(x: x, y: y, z: z)] = true;
                         any = true;
                     }
@@ -520,15 +589,15 @@ public sealed class SdfSampledLattice {
 
                         // A run of one sample between two of the other sign: a sheet or gap the lattice caught once. A
                         // solid's edge or corner the line crosses near its tip (an acute rim's, a tilted cut's) is as thin
-                        // along the line, but thickens beside it (Thickens), and the contour's tangent planes keep it
-                        // sharp at the lattice's own spacing.
+                        // along the line, but thickens beside it (Thickens) or is seen by this line alone (ThinBeside),
+                        // and the contour's tangent planes keep it sharp at the lattice's own spacing.
                         if (((before < 0f) != inside) && ((after < 0f) != inside)) {
                             var middle = MathF.Abs(value);
                             var thickness = ((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after))));
 
                             at[axis] = i;
 
-                            if ((thickness < 1f) && !Thickens(at: at, axis: axis, first: (i - 1), inside: inside, last: (i + 1))) {
+                            if ((thickness < 1f) && !Thickens(at: at, axis: axis, first: (i - 1), inside: inside, last: (i + 1)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 1), sheetInside: inside)) {
                                 at[axis] = (i - 1);
                                 MarkEdge(at: at, axis: axis);
                                 at[axis] = i;
@@ -556,8 +625,9 @@ public sealed class SdfSampledLattice {
                         at[axis] = i;
 
                         // A solid's edge or corner the line grazes falls toward the pair from both sides as a sheet does,
-                        // but the lines beside the pair cross its body a step thick or more (Thickens).
-                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
+                        // but the lines beside the pair cross its body a step thick or more (Thickens) or miss it
+                        // (ThinBeside).
+                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 2), sheetInside: !inside)) {
                             MarkEdge(at: at, axis: axis);
                         }
                     }
@@ -596,38 +666,52 @@ public sealed class SdfSampledLattice {
             refinedCount += (cell ? 1 : 0);
         }
 
-        // The fine samples of every measured cell, its faces included, that are not coarse samples.
-        var fineX = ((cellsX * factor) + 1);
-        var fineY = ((cellsY * factor) + 1);
+        // The fine samples of every measured cell, its faces included, that are not coarse samples. A refinement that would
+        // measure more than MaxFineSamples splits each cell into fewer fine cells rather than none: a sheet thinner than
+        // the coarse cell is caught by any refinement and lost by the coarse contour.
         var keys = new List<int>();
         var slots = new Dictionary<int, int>();
 
-        for (var z = 0; (z < cellsZ); z++) {
-            for (var y = 0; (y < cellsY); y++) {
-                for (var x = 0; (x < cellsX); x++) {
-                    if (!measured[CellIndex(x: x, y: y, z: z)]) {
-                        continue;
-                    }
-                    for (var fz = (z * factor); (fz <= ((z + 1) * factor)); fz++) {
-                        for (var fy = (y * factor); (fy <= ((y + 1) * factor)); fy++) {
-                            for (var fx = (x * factor); (fx <= ((x + 1) * factor)); fx++) {
-                                if (((fx % factor) == 0) && ((fy % factor) == 0) && ((fz % factor) == 0)) {
-                                    continue;
-                                }
+        while (!FineKeys(split: factor)) {
+            if (--factor < 2) {
+                return [];
+            }
+        }
 
-                                var key = (fx + (fineX * (fy + (fineY * fz))));
+        bool FineKeys(int split) {
+            var fineX = ((cellsX * split) + 1);
+            var fineY = ((cellsY * split) + 1);
 
-                                if (slots.TryAdd(key: key, value: keys.Count)) {
-                                    keys.Add(item: key);
+            keys.Clear();
+            slots.Clear();
+            for (var z = 0; (z < cellsZ); z++) {
+                for (var y = 0; (y < cellsY); y++) {
+                    for (var x = 0; (x < cellsX); x++) {
+                        if (!measured[CellIndex(x: x, y: y, z: z)]) {
+                            continue;
+                        }
+                        for (var fz = (z * split); (fz <= ((z + 1) * split)); fz++) {
+                            for (var fy = (y * split); (fy <= ((y + 1) * split)); fy++) {
+                                for (var fx = (x * split); (fx <= ((x + 1) * split)); fx++) {
+                                    if (((fx % split) == 0) && ((fy % split) == 0) && ((fz % split) == 0)) {
+                                        continue;
+                                    }
+
+                                    var key = (fx + (fineX * (fy + (fineY * fz))));
+
+                                    if (slots.TryAdd(key: key, value: keys.Count)) {
+                                        keys.Add(item: key);
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (keys.Count > MaxFineSamples) {
-                        return [];
+                        if (keys.Count > MaxFineSamples) {
+                            return false;
+                        }
                     }
                 }
             }
+            return true;
         }
 
         m_factor = factor;
@@ -1389,6 +1473,16 @@ public sealed class SdfSampledLattice {
             Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
             Z: (((((double)n0.Z) + n1.Z) + n2.Z) + n3.Z)
         );
+        // A split whose triangle is a line (three vertices on one crease, as a diagonal crease through three of the four
+        // cells around a lattice edge places them) loses to the other: that triangle's facing is rounding noise, and the
+        // other split's two triangles both have area.
+        var thinFirst = Math.Min(val1: Thinness(a: v0, b: v1, c: v2), val2: Thinness(a: v0, b: v2, c: v3));
+        var thinSecond = Math.Min(val1: Thinness(a: v0, b: v1, c: v3), val2: Thinness(a: v1, b: v2, c: v3));
+
+        if ((thinFirst < DegenerateSplit) != (thinSecond < DegenerateSplit)) {
+            return (thinFirst >= DegenerateSplit);
+        }
+
         var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
         var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
 
@@ -1430,6 +1524,12 @@ public sealed class SdfSampledLattice {
         return turn;
     }
     private static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    // Twice triangle (a, b, c)'s area over its longest edge squared: its height as a share of that edge, zero for a line.
+    private static double Thinness(Vector3 a, Vector3 b, Vector3 c) {
+        var longest = Math.Max(val1: DistanceSquared(a: a, b: b), val2: Math.Max(val1: DistanceSquared(a: b, b: c), val2: DistanceSquared(a: c, b: a)));
+
+        return ((longest > 0.0) ? (((double)Vector3.Cross(vector1: (b - a), vector2: (c - a)).Length()) / longest) : 0.0);
+    }
     // Whether triangle (a, b, c), wound counter-clockwise, faces the way `outward` points: (b - a) x (c - a) . outward.
     private static bool Faces(Vector3 a, Vector3 b, Vector3 c, (double X, double Y, double Z) outward) {
         var ux = (((double)b.X) - a.X);

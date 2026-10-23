@@ -84,5 +84,51 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.board.enforcement 'Return' requires both board.move and board.verdict.");
         }
+
+        if (board.Engage is { } engage) {
+            ValidateTabletopEngage(
+                definition: definition,
+                engage: engage,
+                errors: errors,
+                path: $"{path}.board.engage"
+            );
+        }
+    }
+    // The engage channel is consumed by the context-button probe exactly like a screen route's, so it is held to the
+    // same "names a declared channel" bar; the view and pointer numbers are refused where no camera or ray can use them.
+    private static void ValidateTabletopEngage(WorldTabletopEngage engage, WorldDefinition definition, string path, List<string> errors) {
+        var declared = false;
+
+        foreach (var channel in definition.Channels) {
+            if (string.Equals(
+                a: channel.Name,
+                b: engage.Channel,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                declared = true;
+
+                break;
+            }
+        }
+
+        if (!declared) {
+            errors.Add(item: $"{path}.channel '{engage.Channel}' names no declared channel.");
+        }
+
+        if (!(double.IsFinite(d: engage.Radius) && (engage.Radius > 0d))) {
+            errors.Add(item: $"{path}.radius must be a finite positive distance, not {engage.Radius.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.");
+        }
+
+        if (!(double.IsFinite(d: engage.Pitch) && (engage.Pitch > 0d) && (engage.Pitch <= 90d))) {
+            errors.Add(item: $"{path}.pitch must be in (0, 90] degrees, not {engage.Pitch.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.");
+        }
+
+        if (!(double.IsFinite(d: engage.Margin) && (engage.Margin >= 0d))) {
+            errors.Add(item: $"{path}.margin must be a finite non-negative distance, not {engage.Margin.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.");
+        }
+
+        if (!(double.IsFinite(d: engage.Surface) && (engage.Surface >= 0d))) {
+            errors.Add(item: $"{path}.surface must be a finite non-negative height, not {engage.Surface.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.");
+        }
     }
 }

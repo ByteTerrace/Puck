@@ -42,7 +42,8 @@ public sealed partial class WorldScreenBinder {
     }
     /// <summary>Creates the producer of a probe source instance (<see cref="WorldImageProducerSettings.ProbeId"/>): an
     /// imported source adapted like any other (<see cref="Adapt"/>), whose feed is the probe output's ring, so the capture
-    /// gate hands out its latest published slot, or its capture fill while the gate fills. Only the boot world runs a
+    /// gate hands out its latest published slot, or its capture fill while the gate fills or before the probe's first
+    /// frame. Only the boot world runs a
     /// probe host: a probe of a world shown through a screen opens with a fault naming that world.</summary>
     /// <param name="context">The source instance and its settings.</param>
     /// <returns>The producer, whose feed owns nothing: the probe's ring belongs to this binder.</returns>

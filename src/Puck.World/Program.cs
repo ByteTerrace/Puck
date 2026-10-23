@@ -95,6 +95,11 @@ var debugLayersOption = new Option<GpuValidation>(name: "--debug-layers") {
     DefaultValueFactory = static _ => GpuValidation.Off,
     Description = "Create the GPU device with its backend's validation. A bare flag (or 'basic') is the API layer: [vulkan-debug] lines with synchronization validation on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. 'full' adds GPU-based validation with state tracking and synchronized queue validation on Direct3D 12, GPU-assisted validation and best-practices checks (NVIDIA's included) on Vulkan, and makes pipeline creation and every frame much slower. Every level names the device's objects. On some Direct3D 12 configurations the layer makes device creation fail.",
 };
+// A device choice, never world-authored: WARP runs the Direct3D 12 host on the CPU, so a machine with no usable GPU
+// (a CI agent baking the mesh store) or one whose GPU another job holds boots the same frames, slowly.
+var softwareGpuOption = new Option<bool>(name: "--software-gpu") {
+    Description = "Create the Direct3D 12 device on WARP, the software rasterizer, instead of a hardware adapter. Needs --backend directx.",
+};
 // A developer diagnostic, never world-authored: a capture tool hooks the graphics API from inside the process, so it
 // loads before anything can create a device, and gpu.capture then captures the frames the operator asks for.
 var captureToolOption = new Option<string?>(name: "--capture-tool") {
@@ -152,15 +157,24 @@ var controlOption = new Option<bool>(name: "--control") {
     DefaultValueFactory = static _ => false,
     Description = "Start the local trusted Operator control endpoint at boot, as a first console line `world.control start` would, and print its attachment file on standard error. `puck mcp --profile operator` then attaches to this World. Absent, the endpoint stays closed until a console line starts it.",
 };
+// An OPERATOR's per-run choice, never world-authored (the --control pattern): a document cannot decide whose hardware a
+// run may read. Agents and automation boot with `none`, so the owner's pads, keyboard and mouse never drive their Worlds.
+var devicesOption = new Option<string>(name: "--devices") {
+    DefaultValueFactory = static _ => "all",
+    Description = "Which physical input devices this run opens: all (the default: every gamepad, and the keyboard and mouse the window receives) or none (no pad is opened or polled, and no OS key, text or pointer event reaches a seat; stdin, the console, player.signal, body.*, schedule rows and MCP drive the World exactly as before). Every World an agent boots passes none.",
+};
+devicesOption.AcceptOnlyFromAmong(values: ["all", "none"]);
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
     controlOption,
+    devicesOption,
     federationKeyFileOption,
     authenticationConfigFileOption,
     captureDirOption,
     captureToolOption,
     debugLayersOption,
+    softwareGpuOption,
     scheduleDirOption,
     unpacedOption,
     exitAfterSecondsOption,
@@ -236,6 +250,11 @@ if (parseResult.GetValue(option: backendOption) is { } backendName) {
 
         return 1;
     }
+}
+if (parseResult.GetValue(option: softwareGpuOption) && (backendOverride != WorldBackendPreference.DirectX)) {
+    Console.Error.WriteLine(value: "--software-gpu creates a WARP device, which only the Direct3D 12 host has; pass --backend directx with it.");
+
+    return 1;
 }
 PresentMode? presentModeOverride = null;
 if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
@@ -441,6 +460,12 @@ if (parseResult.GetValue(option: captureToolOption) is { } captureToolName) {
 
     Console.Error.WriteLine(value: $"{GpuFrameCapture.LinePrefix} {captureTool!.Name} loaded; gpu.capture <path> [<frames>] captures the next frames");
 }
+var physicalDevices = (parseResult.GetValue(option: devicesOption) != "none");
+if (!physicalDevices) {
+    Console.Error.WriteLine(value: (hostSettings.Presentation == WorldHostPresentation.Windowed)
+        ? "[world.host] physical input devices are off (--devices none): no gamepad is opened, and no key, text or pointer event from the OS reaches a seat; scripted input still drives the World."
+        : "[world.host] physical input devices are off (--devices none); this boot shape opens none either way.");
+}
 var builder = Host.CreateApplicationBuilder(args: args);
 // Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
 // and whichever thread writes it, goes to standard error beside the narration.
@@ -479,11 +504,13 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     CaptureTool = captureTool,
     ConnectionSubject = connectionSubject,
     Control = parseResult.GetValue(option: controlOption),
+    PhysicalDevices = physicalDevices,
     // The parser hands a bare flag its default rather than its custom parser, so a present flag with no value is read
     // here as the basic level.
     Validation = ((parseResult.GetResult(option: debugLayersOption) is { Implicit: false, Tokens.Count: 0 })
         ? GpuValidation.Basic
         : parseResult.GetValue(option: debugLayersOption)),
+    Software = parseResult.GetValue(option: softwareGpuOption),
     ExtensionsConfiguration = extensionsConfiguration,
     FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
     ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),

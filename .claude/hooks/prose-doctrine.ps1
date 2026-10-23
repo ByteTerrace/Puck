@@ -6,8 +6,11 @@ Reminds an agent of Puck's writing rules before it edits a file whose prose thos
 
 .DESCRIPTION
 As a PreToolUse hook, classifies the edited file into a writing surface and injects that surface's rules,
-quoted at run time from the documents that own them, so the reminder can never drift from its owner. Each
-surface is injected once per session and agent; files outside the project and legal text get nothing.
+quoted at run time from the documents that own them, so the reminder can never drift from its owner. The rules
+come from the checkout that holds the file (a lane's worktree, not the session's start root). Each surface is
+injected once per session, agent and checkout; files outside a Puck checkout and legal text get nothing.
+
+Claude Code only: Antigravity's PreToolUse reply has no field that adds context, and Codex registers no edit hook.
 
 As a SessionStart hook for a compaction, forgets which surfaces the session has seen, so the next edit
 injects them again into the compacted context.
@@ -21,7 +24,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$projectRoot = (Resolve-Path -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '../..')).Path
+$projectRoot = $null
 $markerRoot = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath 'claude-prose-doctrine'
 
 $contributing = 'docs/development/contributing.md'
@@ -30,7 +33,6 @@ $documentation = 'docs/development/documentation.md'
 $codeExtensions = @('.hlsl', '.hlsli', '.puck', '.ps1', '.ts')
 $legalNames = @('LICENSE.md', 'THIRD-PARTY-NOTICES.md', 'CLA.md', 'PRIVACY.md')
 $generatedPatterns = @(
-    '^tests/Puck\.Maths\.Tests/(coverage-manifest\.json|leg-ledger\.md|RESULTS\.md|frontier\.json)$'
     '^docs/api/(api|_site)/'
 )
 
@@ -146,7 +148,7 @@ function Get-Surface {
         return $null
     }
 
-    if (($RelativePath -match '^\.claude/') -or ($RelativePath -eq 'AGENTS.md')) {
+    if (($RelativePath -match '^\.(claude|codex|agents)/') -or ($RelativePath -eq 'AGENTS.md')) {
         return 'agent'
     }
 
@@ -190,7 +192,33 @@ if ($file -isnot [string]) {
     exit 0
 }
 
-$relativePath = [IO.Path]::GetRelativePath($projectRoot, [IO.Path]::GetFullPath($file)).Replace('\', '/')
+$sessionDirectory = $payload['cwd']
+$fullPath = if ([string]::IsNullOrEmpty($sessionDirectory)) { [IO.Path]::GetFullPath($file) } else { [IO.Path]::GetFullPath($file, $sessionDirectory) }
+
+# A new file's directory may not exist yet: ask git from the nearest one that does.
+$existing = Split-Path -Parent $fullPath
+
+while ($existing -and -not (Test-Path -LiteralPath $existing -PathType Container)) {
+    $existing = Split-Path -Parent $existing
+}
+
+if (-not $existing) {
+    exit 0
+}
+
+$topLevel = & git -C $existing rev-parse --show-toplevel 2>$null
+
+if (($LASTEXITCODE -ne 0) -or (-not $topLevel)) {
+    exit 0
+}
+
+$projectRoot = [IO.Path]::GetFullPath($topLevel)
+
+if (-not (Test-Path -LiteralPath (Join-Path -Path $projectRoot -ChildPath $documentation))) {
+    exit 0
+}
+
+$relativePath = [IO.Path]::GetRelativePath($projectRoot, $fullPath).Replace('\', '/')
 
 if ($relativePath.StartsWith('../') -or [IO.Path]::IsPathRooted($relativePath)) {
     exit 0
@@ -203,7 +231,8 @@ if ($null -eq $surface) {
 }
 
 $agent = $payload['agent_id'] ?? 'main'
-$marker = Join-Path -Path $sessionMarkers -ChildPath "$agent.$surface"
+$checkout = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($projectRoot.ToLowerInvariant())), 0, 6).ToLowerInvariant()
+$marker = Join-Path -Path $sessionMarkers -ChildPath "$checkout.$agent.$surface"
 
 if (Test-Path -LiteralPath $marker) {
     exit 0

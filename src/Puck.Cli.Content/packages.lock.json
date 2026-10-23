@@ -12,6 +12,11 @@
         "resolved": "10.0.13",
         "contentHash": "4tnWU9vrU/A8NwYe9Z6wvieZ0EBb/uM82LAT+edNhdepOBWREZ7M7mzb941EIDPJaeOFdbVrDd5+7s9e89U6bQ=="
       },
+      "Parlot": {
+        "type": "Transitive",
+        "resolved": "2.0.0",
+        "contentHash": "wkWsCyotLwtERMwQvjYOdeq7Md2ERfbCq+jP35jCoeTd/AG/QDqTN4W7tPiMK9EI/p9uDHrAmBwnKwnu2Oy+qQ=="
+      },
       "Resharp": {
         "type": "Transitive",
         "resolved": "1.0.6",
@@ -56,7 +61,8 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Assets": {
@@ -90,6 +96,13 @@
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.GamingBricks.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",
         "dependencies": {
@@ -114,6 +127,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )"
         }
       },
@@ -174,6 +188,14 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "Parlot": "[2.*, )"
         }
       },
       "puck.cli.core": {

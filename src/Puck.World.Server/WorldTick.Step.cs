@@ -338,14 +338,17 @@ public sealed partial class WorldTick {
         // PRE-MOVE positions (this tick's population has not advanced yet), so a rising edge computed inside
         // AdvanceSeats below diverts into an Engage instead of ever reaching the avatar's action track.
         Span<int> engageProbeOrdinals = stackalloc int[Host.Population.LocalSeatCount];
-        Span<int> engageProbeScreens = stackalloc int[Host.Population.LocalSeatCount];
+        var engageProbeTargets = m_engageProbeTargets.AsSpan(
+            length: Host.Population.LocalSeatCount,
+            start: 0
+        );
         Span<bool> engageEdges = stackalloc bool[Host.Population.LocalSeatCount];
         Span<bool> engageProbeLeaving = stackalloc bool[Host.Population.LocalSeatCount];
 
         ResolveEngageProbes(
             leaving: engageProbeLeaving,
             ordinals: engageProbeOrdinals,
-            screens: engageProbeScreens
+            targets: engageProbeTargets
         );
 
         var tick = (context.Tick + 1UL);
@@ -438,7 +441,7 @@ public sealed partial class WorldTick {
             }
 
             var principal = Principal.Seat(slot: slot);
-            var target = GrantSubject.Screen(index: engageProbeScreens[slot]);
+            var target = engageProbeTargets[slot];
 
             if (engageProbeLeaving[slot]) {
                 if (
@@ -535,6 +538,9 @@ public sealed partial class WorldTick {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        // A kit action this tick's advance fired and a rule's setBodyState have both written by now, so a body whose
+        // size or selecting register moved takes its scale, kit and look before the snapshot and its next advance.
+        Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.GrantTable.SettleSessionPresses();
         StepBoardEnforcement(tick: tick);
         Host.StepSearch(tick: tick);

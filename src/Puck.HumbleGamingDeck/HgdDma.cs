@@ -36,8 +36,9 @@ public sealed class HgdDma : ISnapshotable {
         m_oamIndex = 0;
         m_oamHoldsByte = false;
     }
-    /// <summary>Runs one CPU cycle: the CPU's own step when no DMA is pending or the CPU is about to write, otherwise a
-    /// halt, dummy or alignment cycle on which the CPU repeats its read, or a DMA transfer.</summary>
+    /// <summary>Runs one CPU cycle's transaction at its read point: the CPU's own transfer when no DMA is pending or the
+    /// CPU is about to write, otherwise a halt, dummy or alignment cycle on which the CPU repeats its read, or a DMA
+    /// transfer. A write, the CPU's or an OAM put, waits on the bus for M2's fall.</summary>
     /// <param name="cpu">The CPU the unit halts.</param>
     /// <param name="bus">The CPU bus DMA transfers use.</param>
     /// <param name="apu">The APU whose DMC requests sample bytes.</param>
@@ -48,20 +49,20 @@ public sealed class HgdDma : ISnapshotable {
             m_dmcDummyDone = false;
         }
         if (!m_oamRequested && !m_dmcRequested) {
-            cpu.StepCycle();
+            cpu.Transfer();
 
             return;
         }
         if (!m_halted) {
             if (cpu.NextAccessIsWrite) {
-                cpu.StepCycle();
+                cpu.Transfer();
 
                 return;
             }
 
             m_halted = true;
             cpu.Ready = false;
-            cpu.StepCycle();
+            cpu.Transfer();
 
             return;
         }
@@ -78,7 +79,7 @@ public sealed class HgdDma : ISnapshotable {
             m_oamByte = bus.Read(address: ((ushort)((m_oamPage << 8) | m_oamIndex)));
             m_oamHoldsByte = true;
         } else if (!m_getCycle && m_oamRequested && m_oamHoldsByte) {
-            bus.Write(
+            bus.PostWrite(
                 address: 0x2004,
                 value: m_oamByte
             );
@@ -88,7 +89,7 @@ public sealed class HgdDma : ISnapshotable {
                 m_oamRequested = false;
             }
         } else {
-            cpu.StepCycle();
+            cpu.Transfer();
         }
         if (!m_oamRequested && !m_dmcRequested) {
             m_halted = false;

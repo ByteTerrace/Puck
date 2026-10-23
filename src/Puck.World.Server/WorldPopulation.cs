@@ -137,7 +137,7 @@ public sealed partial class WorldPopulation {
     /// <see langword="null"/> — the seam <see cref="WorldServer"/> adopts at construction so it owns the field lifecycle
     /// without a second boot build. A live rebuild instead receives the server's field back through
     /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
-    public WorldSolidField? SolidField => (m_contactField as WorldSolidField);
+    public WorldSolidField? SolidField => (m_baseContactField as WorldSolidField);
     /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
     /// narrates nothing.</summary>
     public WorldOutputHub? NarrationHub { get; set; }
@@ -149,7 +149,7 @@ public sealed partial class WorldPopulation {
     /// changed since the value was last observed.</summary>
     public ulong ContactFieldVersion => unchecked(
         ((m_contactFieldInstallVersion +
-        ((m_contactField as WorldColliderSet)?.AttachedRevision ?? 0UL)) +
+        ((m_baseContactField as WorldColliderSet)?.AttachedRevision ?? 0UL)) +
         ((ulong)(m_fields?.Revision ?? 0)))
     );
     /// <summary>Gets the authored idle floor (<c>bodies.sleepAfterSeconds</c>), in engine ticks, before a non-seat body's
@@ -188,9 +188,10 @@ public sealed partial class WorldPopulation {
     // CompileFixedTables and handed to every live body, so a live solid-geometry or collision-tuning edit takes
     // effect on the next tick with no restart. Grounded bodies solve their swept position against it.
     // m_contactField is the EFFECTIVE field a body resolves against — m_baseContactField wrapped by
-    // WorldAdjacencyContactField when an adjacency resolver is configured AND the live definition authors an edge
-    // band, or m_baseContactField unwrapped otherwise. Composed by
-    // ComposeContactField, the ONE place either input changes.
+    // WorldPortalHoleContactField when the live definition declares a portal face, then by WorldAdjacencyContactField
+    // when an adjacency resolver is configured AND the definition authors an edge band, or m_baseContactField
+    // unwrapped otherwise. Composed by ComposeContactField, the ONE place any input changes; a provider's own members are read
+    // through m_baseContactField.
     private IContactField? m_baseContactField;
     // Bumped once per ComposeContactField call — every document rebuild and every adjacency-source (re)configure,
     // regardless of whether the resulting reference actually differs. Folds into ContactFieldVersion.
@@ -378,6 +379,7 @@ public sealed partial class WorldPopulation {
 
         // The look table resolves after the entries exist (it writes each entry's LookIndex).
         ResolveLookIndices(definition: definition);
+        _ = ResolveSelections(definition: definition);
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             SeedSimulated(index: index);
@@ -442,6 +444,11 @@ public sealed partial class WorldPopulation {
         // The resolved LOOK row index (PRESENTATION-ONLY; carried out on the snapshot). Reassigned by ResolveLookIndices
         // on construction and on every Rebuild.
         public byte LookIndex { get; set; }
+        // The kit and look rows this body's own cell of an assignment selector picks, or -1 where none does. They
+        // outrank KitIndex/LookIndex and the seat kit, and are derived from state (ResolveSelections), so a checkpoint
+        // carries the cell rather than these.
+        public int SelectedKit { get; set; } = -1;
+        public int SelectedLook { get; set; } = -1;
         // The stable cross-authority incarnation/epoch and the local generation whose occupant owns it. The stamp
         // makes ordinary slot reuse invalidate stale mobility without comparing the foreign origin generation.
         public WorldMobilityIdentity? Mobility { get; set; }

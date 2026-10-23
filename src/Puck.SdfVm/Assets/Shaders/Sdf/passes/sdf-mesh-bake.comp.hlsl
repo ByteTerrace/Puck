@@ -17,7 +17,7 @@
 #define SDF_INSTANCE_MASKS
 #define SDF_SAMPLED_REGIONS
 #define SDF_GLYPH_ATLAS
-#include "sdf-world.hlsli"
+#include "sdf-bake-world.hlsli"
 
 static const float3 SdfBakeTaps[4] = {
     float3(1.0, -1.0, -1.0),

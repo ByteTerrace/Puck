@@ -6,19 +6,39 @@
 // whole destination resamples the whole source. Every tap is a formatted load clamped to its image's edge, so no sampler
 // state decides the filter and both backends compute the same arithmetic. With tonemap set, the reconstructed source,
 // and only it, goes through the filmic curve: a world's root places its SDF views this way, so the scene is tonemapped
-// where it enters the frame and the letterbox color, the base and every pane reach the display as they are.
-// The generated interface declares the frame group and the pass group: the extent, the config (letterbox, rect,
-// sharpen, sharpness, tonemap, compareMode, wipe) and the images base, source and destination, each image input with a sampler it never reads. rect
-// is the destination rect as fractions of the destination's extent: left, top, width, height.
+// where it enters the frame and the letterbox color, the base and every pane reach the display as they are. A crop shows
+// only that part of the source in the rect, by the same rules, so a crop of the rect's own pixel extent is an exact copy
+// of those pixels. With fidelity above zero, that share of the rect is the source as it is, past the sharpen and the
+// tonemap.
+// The generated interface declares the frame group and the pass group: the extent, the config (letterbox,
+// letterboxColor, rect, crop, sharpen, sharpness, tonemap, fidelity, compareMode, wipe) and the images base, source and
+// destination, each image input with a sampler it never reads. rect is the destination rect as fractions of the
+// destination's extent and crop the shown part as fractions of the source's: left, top, width, height.
 #include "place.interface.hlsli"
 
-// What the display shows between placed views: a near-black with a faint blue cast, opaque.
-static const float4 LetterboxColor = float4(0.015, 0.016, 0.02, 1.0);
-
-// The Narkowicz ACES-fit filmic curve, and only the curve: the stylized shading is already display-referred, so no gamma
-// encode follows it, and the display encode writes its result as it is.
+// The filmic curve, Uchimura's Gran Turismo fit, and only the curve: the stylized shading is already display-referred,
+// so no gamma encode follows it, and the display encode writes its result as it is. A toe near linear (its power 1.1)
+// keeps shadows open, a linear section of slope 0.9 from middle grey keeps the midtones soft, and the shoulder rolls
+// the highlights into white from about three times middle grey.
 float3 filmicTonemap(float3 color) {
-    return saturate((color * ((2.51 * color) + 0.03)) / (((color * ((2.43 * color) + 0.59)) + 0.14)));
+    const float peak = 1.0;
+    const float contrast = 0.9;
+    const float linearStart = 0.22;
+    const float linearLength = 0.4;
+    const float toePower = 1.1;
+    const float l0 = (((peak - linearStart) * linearLength) / contrast);
+    const float S0 = (linearStart + l0);
+    const float S1 = (linearStart + (contrast * l0));
+    const float C2 = ((contrast * peak) / (peak - S1));
+    float3 x = max(color, 0.0);
+    float3 toeWeight = (1.0 - smoothstep(0.0, linearStart, x));
+    float3 shoulderWeight = step(S0, x);
+    float3 linearWeight = (1.0 - toeWeight - shoulderWeight);
+    float3 toe = (linearStart * pow((x / linearStart), toePower));
+    float3 shoulder = (peak - ((peak - S1) * exp((-C2 * (x - S0)) / peak)));
+    float3 middle = (linearStart + (contrast * (x - linearStart)));
+
+    return saturate(((toe * toeWeight) + (middle * linearWeight)) + (shoulder * shoulderWeight));
 }
 
 #include "../Shared/reconstruction.hlsli"
@@ -88,7 +108,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
         if (passGroup.letterbox != 0u) {
-            written = LetterboxColor;
+            written = passGroup.letterboxColor;
         } else {
             base.GetDimensions(baseDims.x, baseDims.y);
             written = (passGroup.compareMode == 0u)
@@ -102,12 +122,26 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     } else {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 
+        // The crop's pixel edges, rounded as the rect's are: the whole source unless the host shows a part of it.
+        float4 crop = passGroup.crop;
+        uint2 cropMin = (uint2)clamp(floor((crop.xy * float2(sourceDims)) + 0.5), float2(0.0, 0.0), float2(sourceDims - 1));
+        uint2 cropMax = (uint2)clamp(floor(((crop.xy + crop.zw) * float2(sourceDims)) + 0.5), float2(cropMin + 1), float2(sourceDims));
+        uint2 cropDims = (cropMax - cropMin);
         uint2 rectDims = (rectMax - rectMin);
-        float3 color = (((passGroup.sharpen != 0u) && all(sourceDims == rectDims))
-            ? placeSharpen((id.xy - rectMin), sourceDims, passGroup.sharpness)
-            : puckReconstruct(source, (id.xy - rectMin), rectDims, sourceDims, passGroup.sharpness).rgb);
+        uint2 pixel = (id.xy - rectMin);
+        float3 color = (((passGroup.sharpen != 0u) && all(cropDims == rectDims))
+            ? placeSharpen((pixel + cropMin), sourceDims, passGroup.sharpness)
+            : puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, passGroup.sharpness).rgb);
 
-        written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
+        color = ((passGroup.tonemap != 0u) ? filmicTonemap(color) : color);
+
+        // A view's fidelity writes that share of its source as it is, past the sharpen and the tonemap: a framed screen's
+        // view at one is an exact copy of its native-scale source's matte.
+        if (passGroup.fidelity > 0.0) {
+            color = lerp(color, puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, 0.0).rgb, saturate(passGroup.fidelity));
+        }
+
+        written = float4(color, 1.0);
     }
 
     destination[id.xy] = written;

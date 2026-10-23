@@ -256,6 +256,9 @@ public enum GrantSubjectKind : byte {
     /// <summary>A single <c>placements</c> row, by its stable <see cref="WorldPlacement.Id"/> value
     /// (<see cref="GrantSubject.Id"/>) — <see cref="Creation"/>'s peer over <see cref="WorldSection.Placements"/>,
     /// admitting <c>WorldMutation.UpsertPlacement</c>/<c>WorldMutation.RemovePlacement</c> naming exactly this id.
+    /// It is also the <see cref="WorldCapability.Control"/> subject of a tabletop: a control application onto a
+    /// placement whose board facet carries an engage block (<see cref="WorldTabletopEngage"/>) seats the principal at
+    /// that table.
     /// <remarks>Distinct from <see cref="Region"/>, which addresses the same placement's volume facet for
     /// <see cref="WorldCapability.Observe"/> and confers no write authority.</remarks></summary>
     Placement,

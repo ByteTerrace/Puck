@@ -144,6 +144,56 @@ nothing captures its input version in that version's layout.
 `RenderGraphRuntimeLawTests.Alias`
 (`ARootCaptureOfAFrameThatDrewNothingReadsTheInputVersionInItsLayout`).
 
+A presented capture (`FrameCaptureMode.Presented`,
+`RenderGraphRuntime.Presented.cs`) is the one capture no node serves: the
+runtime keeps it, forwards it nowhere, begins no convergence and holds no
+residency frame, and after each frame's renders and batch flush reads back the
+captured instance's latest output resolved through what it stands for, the
+image `ProduceFrame` hands the display, through that instance's node
+(`ShaderPipelineRenderNode.TryReadPresented`). The readback waits for the GPU,
+so the image cannot change under it. A frame on which `ReasonOf` names a reason
+or the output is tainted is skipped, never read, and the burst's presentation
+indices show the gap. It skips, besides, the renders retained state it had
+discarded needs to converge again (one `SdfTemporalSamples.Period`, below), so
+the burst reads the steady image. It counts as pending (`PendingCapturePath`) until its
+last PNG is written, so the capture gate fills, capture frames re-render
+tainted instances and `world.wait captures` fences the files, but not as
+holding (`HoldsPresentation`), so the presenter does not pin interpolation and
+the capture scheduler holds no clock for it. A `CaptureRequestSlot` refuses to
+arm one.
+
+**Every capture can complete over retained external content.** Retained package
+state can hold external pixels that no fill replaces by itself: a temporal
+history blends what it read into every later render, and a lighting source
+(the sky environment's projection, the screen emission's reduction) stands
+until something records it again. On every capture frame of a capture still
+to be served, settled or presented, before anything renders, the capture-frame
+walk asks every package of every instance the capture reads to discard such
+state (`IRenderGraphPackageFactory.DiscardTaintedState`,
+`RenderGraphRuntime.DiscardCaptureTaint`): `SdfWorldPasses` resets tainted
+history (§5) and has tainted lighting sources derived again from the fills on
+their next recording (`SdfWorldTables.ProjectTaintedSourcesAgain`), which
+stand reported as tainted until then. Because it runs every frame, taint that
+comes back (a source a frame late, a reload, a lights change) is discarded
+again rather than holding the capture. A read the capture frame cannot render
+again is withheld instead (`RenderGraphRuntime.Withholds`): a previous-frame
+read, and a read of an instance the frame does not render, such as a portal's
+innermost level that nothing shown reaches and that its outer level reads only
+as a screen source; on a capture frame its tainted latest output binds nothing
+(a stand-in, or an unbound screen), so a stale image from before the capture
+armed can hold no capture
+(`RenderGraphRuntimeLawTests.ACaptureWithholdsAnUnrenderedTaintedScreenSourceAndCompletes`).
+A capture still waiting names the state
+in its reason (`IRenderGraphPackageFactory.TaintOf`, followed through the
+instances that passed it on), so `world.wait ready` says what holds it. The SDF
+package tells a views render that itself read external content this frame
+(`the latest views render, which read …`, naming the lighting source or the
+read instance) from history carrying an earlier read (`the temporal history,
+which read …`): the first is a source the fills do not reach, which no discard
+can cure, the second what the discard restarts. The glass fragment
+(`SdfWorldPackage.WithGlass`) keeps the same taint and discard
+(`SdfWorldPassesLawTests.ACaptureOfTheGlassFragmentDiscardsTaintedHistoryAndCompletes`).
+
 `RenderGraphRuntime.OfferCaptureSource` offers an aliased output under its own
 lease. A node serving it without rendering copies it before readback
 (`ShaderPipelineRenderNode.CapturePin.cs`); a node that renders releases the
@@ -172,14 +222,21 @@ stands on purpose). `MarkUnproduced` (`RenderGraphRuntime.Completion.cs`) is the
 one place a graph instance's refusal becomes `Refused` (a package's
 `RefusalOf`, a refused build, a missing graph); every other unproduced instance
 is waiting. A producer or an upload answers the same three ways
-(`MarkProduction`). The offscreen host paces by `HostPacing.OneTickPerFrame` and
+(`MarkProduction`), and a waiting or refused producer holds or refuses every
+instance that reads it within the frame, up to the root. An external source
+(`WorldImageFeedProducer`: a desktop capture, a camera, a probe) whose feed has
+no image of its own therefore answers as its capture fill does
+(`WorldCaptureGate.FillsFeed`), showing the fill instead, so a minimized or
+closed window never holds the World's frame, readiness or captures; the fill
+waits only while it converts. The offscreen host paces by `HostPacing.OneTickPerFrame` and
 `FixedStepPump.TryStep`, steps the next tick only once the root reports the
 frame rendered, and holds the tick (composing it again, stepping none) while it
 is not yet renderable; a refused frame releases the tick. Both rendered hosts
 also hold their clock at an armed, unserved capture.
 
 **Laws.** `RenderGraphRuntimeLawTests.Completion`, `OffscreenTickPacingLawTests`,
-`WorldCaptureHoldLawTests` and `SdfPipelineBuildLivenessLawTests` (the pump never
+`WorldCaptureHoldLawTests`,
+`WorldCaptureFillLawTests.AnExternalSourceWithNoImageShowsItsFillAndNeverHoldsTheRoot` and `SdfPipelineBuildLivenessLawTests` (the pump never
 blocks on pipeline creation).
 
 **Where the code is weaker.** The classification is only as good as each
@@ -190,7 +247,9 @@ can end it.
 
 **Violations to hunt.** A permanent condition reported as waiting: a source
 with no frames, a disabled view, a portal past its nesting limit, a world with
-no camera, a capture feed that ended. A "rendered" result carrying an older
+no camera, a capture feed that ended. A live external source, which may never
+deliver a frame, answering anything but its fill's answer while it has no
+image. A "rendered" result carrying an older
 tick's image. Commands landing on a different tick when a host holds or
 retries a frame.
 
@@ -199,7 +258,9 @@ retries a frame.
 **Rule.** Temporal history (accumulated samples, reprojected frames) resets when
 its previous samples are wrong for this view: a cut, a binding change, an
 output extent or reconstruction ceiling change, an enable or debug toggle, a pose the view did
-not render, or a view shown again after it went unseen. A gap the view's
+not render, a view shown again after it went unseen, or samples holding external
+content the capture gate did not fill when a capture must read the view (a
+settled capture's convergence and a presented capture's discard, §3). A gap the view's
 cadence scheduled (a refresh divisor, a standing consumer, a budget skip) is
 continuity and never resets history.
 
@@ -225,9 +286,17 @@ recording writer and commits its cursor at submission; its recovery restores
 the existing access tracker on failure. `IRenderGraphPackageRecorder.Submitted`
 commits the temporal sample metadata, and `SdfResolveRecorder` caches history
 descriptors by their bound handles as well as their slot and tables.
+`SdfWorldPasses` marks an instance's history tainted when a views render read
+an unfilled external source or tainted history (`SubmittedTaint`), and
+`DiscardTaintedState` resets only such history: a settled capture's
+`BeginConvergence` and every capture frame call it (§3), and clean history
+keeps its samples. The window shows the reset as one period of reconvergence
+(a single-sample image refining over eight frames) of a view that had an
+external screen in it, while that screen shows its capture fill.
 
 **Laws.** `SdfWorldPassesLawTests.Temporal`, the runtime's convergence laws,
-and `RenderGraphSchedulerLawTests.History`.
+`RenderGraphRuntimeLawTests.RetainedCapture` and
+`RenderGraphSchedulerLawTests.History`.
 
 **Verification boundary.** CPU laws hold scheduling, cursor recovery and
 submission callbacks on a fake device. Nothing automated holds the backend

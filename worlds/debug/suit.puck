@@ -1,0 +1,245 @@
+import "inputs"
+// The Moth's suit on and off. `suit` is a body register (state.body) holding 1 while the body wears the mech suit and 0
+// while it is out of it, and the look and kit assignments select by it (`select`), so what she wears and how she moves
+// follow the register: a rule or a replay moves both at the same tick, and a saved world keeps them. The register is
+// the body's own, so it crosses with her through a painting: every world she can walk into imports this file and
+// declares the same register, and she arrives in the form she left in. The suit channel (T, or South while the right
+// trigger is held; `body.press suit` from the console and the play wheel's Suit sector) flips it while she stands; a
+// press in the air does nothing unless it is still held when she lands.
+//
+// Out of the suit she runs the `pilot` kit, a walker with one jump and no flight mode, so flight is refused, and wears
+// the `moth-pilot` look: the 1.68 m woman inside the suit (avatars/moth-pilot.puck), the same head on a body of her
+// own. Her look raises the `hold` frame while her `pilotHold` cell is set, and blinks otherwise.
+
+import "avatars/moth-pilot"
+import "pad-kit"
+import "suit-toggle"
+
+// The cell her look's hold pose reads, which a world's rules set to have her hold the handheld (devices.puck's brick).
+exports {
+  reads [pilotHold]
+  actions [pilotHold]
+}
+
+
+
+state {
+  body [
+    {
+      name: "suit"
+      kind: "Counter"
+      initial: 1
+    }
+  ]
+}
+
+kits {
+  // The sequence and rows are the inert default the basis leaves implied. Every body holds the register, born 1, so the
+  // cases name only the suit-off value 0: a case naming 1 would select every body, a chess piece included. A body whose
+  // register holds no case's value keeps what it was given, the seat kit for a suited Moth. The debug world imports this
+  // file through noclip.puck, whose selector reads `form` (the suit register plus noclip) in place of this one.
+  assignment {
+    rows []
+    sequence {
+      name: "index"
+      offset: 0
+      step: 0
+    }
+    select {
+      bodyState: "suit"
+      cases [
+        { value: 0, row: "pilot" }
+      ]
+    }
+  }
+  rows [
+    // The woman inside the suit: 1.68 m tall and as quick on foot, walking and running, with one jump and no flight pack,
+    // so the fly channel does nothing for her. Her capsule's
+    // 0.25 m spheres span 0 to 1.68 m and the 0.5 m across her shoulders and hanging hands.
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: capsule(endpoint: [0, 1.18, 0], radius: 0.25)
+      mass: 0
+      motion {
+        facingSnap: false
+        groundStick: 2
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 1.2
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+          {
+            name: "fall"
+            bond: Free
+            hold: Gravity
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+        ]
+        moveFrame: World
+        shaping [
+          {
+            along {
+              engage: 40
+              release: 50
+            }
+            turnScale: 1
+          }
+        ]
+        speed {
+          value: 5
+          held {
+            channel: "run"
+            multiplier: 2
+          }
+        }
+        stepHeight: 0.3
+        turn {
+          falloff: 1
+          maxPitch: 1.2
+          pitchRate: 0
+          rate: 2.5
+        }
+      }
+      // One grounded jump from the ground, spent by leaving it either way, so she never jumps in the air: 3.7 m/s lifts
+      // her feet 0.56 m, a fit woman's standing jump, where the suit's 5.1 m/s clears 1.1 m.
+      actions {
+        jump {
+          onPress {
+            gate: compareState(state: jumps, comparison: Equal, value: 2)
+            latchSeconds: 0
+            effects [
+              setVerticalVelocity(velocity: 3.7)
+              addState(state: jumps, value: -1)
+            ]
+          }
+          onRelease {
+            gate: now(fact: Rising)
+            latchSeconds: 0
+            effects [
+              scaleVerticalVelocity(factor: 0.45)
+            ]
+          }
+          onFact [
+            {
+              fact: "Airborne"
+              mode: "Edge"
+              gate: compareState(state: jumps, comparison: Equal, value: 2)
+              effects [
+                addState(state: jumps, value: -1)
+              ]
+            }
+          ]
+        }
+      }
+      name: "pilot"
+    }
+  ]
+}
+
+looks {
+  assignment {
+    select {
+      bodyState: "suit"
+      cases [
+        { value: 0, row: "moth-pilot" }
+      ]
+    }
+  }
+  rows [
+    {
+      motion {
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+        // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
+        poses {
+          hold: "state.pilotHold.$body"
+          blink: "state.blink.$body"
+        }
+      }
+      name: "moth-pilot"
+      scale: 1
+      source: creation(prototypeId: `moth-pilot`)
+    }
+  ]
+}
+
+// A press flips the suit once while she stands; a press in the air fires only if it is still held when she lands. The
+// toggle is one rule per local seat (suit-toggle.puck): every Moth world seats one.
+suitToggle(seat: 1, index: 0)
+
+// The basis's flight pose, raised only in the suit: out of it she has no wings to deploy.
+rule "airborne-on" {
+  when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0 and bodyState(each, suit) == 1
+  mode: Edge
+  forEach: airPose
+  airPose[$each] = 1
+  airWings[$each] = 1
+}
+
+bindingOverlays [
+  {
+    id: "suit-keys"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers: padModifiers
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              {
+                channel: "suit"
+                id: "suit"
+                label: "Suit"
+                scale: 1
+                sources ["keyboard.t"]
+              }
+            ]
+          }
+        }
+        // The pad's toggle is a bar plate on the Debug page (controls.puck), the right trigger's: hold it (or X) and press
+        // South (or K).
+        {
+          chord ["rt"]
+          group: "play"
+          page {
+            id: "pad-rt"
+            inherits: "base"
+            label: "Debug"
+            entries [
+              {
+                channel: "suit"
+                id: "dbgSuit"
+                label: "Suit"
+                scale: 1
+                sources ["gamepad.buttonSouth", "keyboard.k"]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

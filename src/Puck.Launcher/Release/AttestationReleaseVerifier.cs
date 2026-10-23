@@ -1,5 +1,7 @@
+using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Attestation;
+using System.Text.Json;
 
 namespace Puck.Launcher.Release;
 
@@ -25,12 +27,24 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
     private readonly TrustList m_trustList = trustList;
 
     /// <inheritdoc/>
-    public ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence) {
+    public ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence) =>
+        VerifyCore(manifest: manifest, now: now, installedVersion: installedVersion, advanceSequence: advanceSequence, reserveInstall: false);
+
+    /// <inheritdoc/>
+    public ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion) =>
+        VerifyCore(manifest: manifest, now: verifiedAt, installedVersion: installedVersion, advanceSequence: true, reserveInstall: true);
+
+    private ReleaseVerifyOutcome VerifyCore(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence, bool reserveInstall) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: installedVersion);
 
         if (manifest.Signature is not { } signature) {
             return ReleaseVerifyOutcome.Refuse(reason: "manifest carries no signature");
+        }
+
+        if (signature.Claim is null || signature.Chain is null ||
+            (signature.Chain.Count is not (0 or 2)) || signature.Chain.Any(predicate: entry => entry is null)) {
+            return ReleaseVerifyOutcome.Refuse(reason: "malformed signature: a claim and zero or two non-null chain entries are required");
         }
 
         SignedAttestation claim;
@@ -71,7 +85,9 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
 
         // Compare-only: refuses a replayed old manifest before anything it carries is trusted. The durable write
         // happens only at the very end, once every other check below has also passed.
-        if (!m_sequenceStore.IsAcceptable(requirement: requirement)) {
+        var manifestPin = ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(value: manifest, options: DocumentJsonOptions.Shared));
+        if (!m_sequenceStore.IsAcceptable(requirement: requirement) &&
+            !(reserveInstall && m_sequenceStore.IsReserved(requirement: requirement, manifestPin: manifestPin))) {
             return ReleaseVerifyOutcome.Refuse(reason: $"sequence {requirement.Sequence} at epoch {requirement.EpochStartUnixSeconds} does not exceed the stored high-water mark — refused as a replay");
         }
 
@@ -114,8 +130,10 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: $"version '{manifest.Version}' is not strictly greater than the installed version '{installedVersion}'");
         }
 
-        if (advanceSequence) {
-            m_sequenceStore.Advance(requirement: requirement);
+        if (advanceSequence && !(reserveInstall
+            ? m_sequenceStore.TryReserve(requirement: requirement, manifestPin: manifestPin)
+            : m_sequenceStore.TryAdvance(requirement: requirement))) {
+            return ReleaseVerifyOutcome.Refuse(reason: "the sequence was already committed by another verification or the stored mark is invalid");
         }
 
         return ReleaseVerifyOutcome.Accept();

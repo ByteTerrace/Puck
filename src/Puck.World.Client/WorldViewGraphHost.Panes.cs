@@ -93,8 +93,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// default while <see cref="HoveredPane"/> is <see langword="null"/>.</summary>
     public SourcePick HoveredPick => m_hoveredPick;
     /// <summary>Gets the mapping of every pane the root's <c>place</c> passes draw, in drawing order (the views, then the
-    /// <c>views.graphs</c> panes), as <see cref="PublishPanes"/> last published it. The host rewrites the list in
-    /// place.</summary>
+    /// <c>views.graphs</c> panes), then of every screen a seat's view frames (<see cref="FrameScreen"/>), as
+    /// <see cref="PublishPanes"/> last published it. The host rewrites the list in place.</summary>
     public IReadOnlyList<SourceMapping> Panes => m_panes;
     /// <summary>Gets the whole-display mapping of the lone view covering the whole display, which is no pane (the display
     /// is that view) and so is never hovered or outlined, but which <see cref="Walk"/> starts from where no pane holds the
@@ -176,16 +176,17 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             }
         }
 
+        PublishFramed();
         Picker.Publish(
             displayHeight: m_displayHeight,
             displayWidth: m_displayWidth,
             panes: m_panes
         );
     }
-    /// <summary>Marks an instance as a passthrough source the local user opened: from the next
-    /// <see cref="PublishPanes"/>, the mapping of each pane showing it takes <see cref="SourceDestination.Passthrough"/>
-    /// with the <see cref="SourceOpener.LocalUser"/> opener. The host's local-user door is the only caller; nothing a
-    /// world document declares reaches it.</summary>
+    /// <summary>Marks an instance as a passthrough source the local user opened: the mapping of each published pane
+    /// showing it takes <see cref="SourceDestination.Passthrough"/> with the <see cref="SourceOpener.LocalUser"/> opener at
+    /// once, so the event that opened it can reach its window, and so does every pane <see cref="PublishPanes"/> publishes
+    /// for it after. The host's local-user door is the only caller; nothing a world document declares reaches it.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <exception cref="ArgumentException"><paramref name="instance"/> is <see langword="null"/>, empty or white
     /// space.</exception>
@@ -193,6 +194,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: instance);
 
         _ = m_passthrough.Add(item: instance);
+
+        for (var index = 0; (index < m_panes.Count); index++) {
+            if (string.Equals(
+                a: m_panes[index].Source.Name,
+                b: instance,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                m_panes[index] = (m_panes[index] with {
+                    Destination = SourceDestination.Passthrough,
+                    Opener = SourceOpener.LocalUser,
+                });
+            }
+        }
+
+        Picker.Publish(
+            displayHeight: m_displayHeight,
+            displayWidth: m_displayWidth,
+            panes: m_panes
+        );
     }
     /// <summary>Returns an instance's panes to the presentation destination from the next <see cref="PublishPanes"/>.</summary>
     /// <param name="instance">The instance's name.</param>

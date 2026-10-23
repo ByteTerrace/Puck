@@ -274,6 +274,22 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             groupCountZ: groupCountZ
         );
     /// <inheritdoc/>
+    public unsafe bool CanDrawIndirectCount => (Device.CmdDrawIndirectCountKhr is not null);
+    /// <inheritdoc/>
+    /// <remarks>Vulkan reads each record from its vertex count on (<see cref="GpuDrawIndirectCommand.VertexCountWord"/>):
+    /// the identity reaches the vertex stage through the record's first instance.</remarks>
+    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
+        recordingApi.DrawIndirectCount(
+            bufferHandle: argumentBufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            countBufferHandle: countBufferHandle,
+            countBufferOffset: countBufferOffset,
+            device: Device,
+            maxDrawCount: maxDrawCount,
+            offset: (argumentBufferOffset + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint))),
+            stride: GpuDrawIndirectCommand.StrideBytes
+        );
+    /// <inheritdoc/>
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) =>
         recordingApi.DispatchIndirect(
             bufferHandle: argumentBufferHandle,

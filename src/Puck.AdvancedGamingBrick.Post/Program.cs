@@ -18,9 +18,9 @@ if (!CommandLineArguments.TryValidateValues(
     Console.Error.WriteLine(value: optionError);
     return 2;
 }
-ReadOnlyMemory<byte> biosImage;
+ReadOnlyMemory<byte>? explicitBios;
 try {
-    biosImage = LoadBios(path: CommandLineArguments.Value(
+    explicitBios = LoadBios(path: CommandLineArguments.Value(
         args: args,
         name: "--bios"
     ));
@@ -59,8 +59,10 @@ if (
         return 2;
     }
 }
+// A diagnostic boots what a World boots: the bundled Puck firmware unless --bios names another image. The battery keeps
+// the zeroed stub, on which its BIOS-dependent stages skip.
 var diagnostics = new Diagnostics(
-    biosImage: biosImage,
+    biosImage: (explicitBios ?? AgbFirmware.GetImage()),
     machineOptions: machineOptions
 );
 // A diagnostic flag short-circuits the battery: run that single investigative mode and return its exit code.
@@ -127,7 +129,7 @@ var context = new PostContext(
         name: "--ags"
     )),
     artifactsDirectory: artifactsDirectory,
-    biosImage: biosImage,
+    biosImage: (explicitBios ?? new byte[ReplacementBios.ImageSize]),
     fuzzRoot: corpora.Resolve(
         args: args,
         flag: "--fuzz",
@@ -173,10 +175,9 @@ static string? ExistingFile(string? path) =>
         ? path
         : null
     );
-// Loads the explicit --bios image, rejecting unreadable or wrong-sized files. Only omission selects the zeroed
-// 16 KiB stub, on which BIOS-dependent stages skip cleanly. The banner reports the image's
-// real classification (retail / replacement / unknown) via AgbBiosProfile rather than assuming a replacement.
-static ReadOnlyMemory<byte> LoadBios(string? path) {
+// Loads the explicit --bios image, rejecting unreadable or wrong-sized files, or returns null when none is named. The
+// banner reports the image's real classification (retail / replacement / unknown) via AgbBiosProfile.
+static ReadOnlyMemory<byte>? LoadBios(string? path) {
     if (path is not null) {
         var bytes = File.ReadAllBytes(path: path);
 
@@ -191,5 +192,5 @@ static ReadOnlyMemory<byte> LoadBios(string? path) {
         throw new ArgumentException(message: $"Expected {ReplacementBios.ImageSize} bytes in '{path}', got {bytes.Length}.");
     }
 
-    return new byte[ReplacementBios.ImageSize];
+    return null;
 }

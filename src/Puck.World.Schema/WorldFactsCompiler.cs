@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
@@ -7,6 +8,7 @@ using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
 using IRuleEffect = Puck.State.Rules.IRuleEffect;
 using OperandSite = Puck.State.Rules.OperandSite;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
+using RuleDataflow = Puck.State.Rules.RuleDataflow;
 
 namespace Puck.World;
 
@@ -95,6 +97,23 @@ public static partial class WorldFactsCompiler {
                     context: context,
                     rule: rule
                 );
+
+                if (decision is not null) {
+                    var controls = new List<CellAccess>();
+                    RuleDataflow.CollectGate(gate: compiled.Gate, into: controls);
+                    RuleDataflow.CollectGate(gate: decision.Interrupt ?? [], into: controls);
+                    if (compiled.ForEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: compiled.ForEachOrdinal, Key: default)); }
+                    if (compiled.PoolForEach is { } pool) { controls.Add(item: new CellAccess(RowOrdinal: pool.DomainRowOrdinal, Key: default)); }
+                    foreach (var option in decision.Options) {
+                        RuleDataflow.CollectGate(gate: option.Gate, into: controls);
+                        RuleDataflow.CollectExpression(tokens: option.Score, into: controls);
+                    }
+                    RuleCompiler.RequireTransformControlAudience(effects: compiled.Effects, controls: controls, context: context, ruleName: rule.Name);
+                    RuleCompiler.RequireTransformControlAudience(effects: decision.OnNoChoice, controls: controls, context: context, ruleName: rule.Name);
+                    foreach (var option in decision.Options) {
+                        RuleCompiler.RequireTransformControlAudience(effects: option.Effects, controls: controls, context: context, ruleName: rule.Name);
+                    }
+                }
 
                 return new CompiledWorldFactsRule(
                     decision: decision,
@@ -396,6 +415,77 @@ public static partial class WorldFactsCompiler {
             source: CompiledValueSource.FromExpression(expression: program)
         );
     }
+    internal static IRuleEffect ResolveBodyState(WorldEffect.SetBodyState effect, string ruleName, WorldFactsCompileContext context) {
+        const string Verb = "setBodyState";
+
+        var address = context.ResolveBodyAddress(
+            reference: effect.Key,
+            ruleName: ruleName,
+            verb: Verb
+        );
+        var bodyState = context.Definition.BodyState;
+        var slot = -1;
+
+        for (var index = 0; (index < bodyState.Count); index++) {
+            if (string.Equals(
+                a: bodyState[index].Name,
+                b: effect.State,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                slot = index;
+
+                break;
+            }
+        }
+
+        if (
+            (slot < 0) ||
+            (bodyState[slot].Kind != ActionStateKind.Counter)
+        ) {
+            throw new RuleException(
+                detail: $"'{Verb}' state '{effect.State}' names no Counter state.body declares",
+                refusal: WorldRuleRefusal.BodyStateUnwritable,
+                ruleName: ruleName
+            );
+        }
+        if ((effect.Value is not null) == (effect.Expression is not null)) {
+            throw new RuleException(
+                detail: $"'{Verb}' must name exactly one of 'value' or 'expression'",
+                refusal: RuleRefusal.EffectSourceAmbiguous,
+                ruleName: ruleName
+            );
+        }
+        if (effect.Value is { } literal) {
+            return new WorldBodyStateEffect(
+                describe: $"{Verb} body:{effect.Key}.{effect.State} = {literal.ToString(provider: CultureInfo.InvariantCulture)}",
+                key: address.Key,
+                keyFrom: address.KeyFrom,
+                slot: slot,
+                source: CompiledValueSource.Constant(rawValue: RuleCompiler.LiteralToRaw(
+                    kind: CellKind.Fixed,
+                    literal: literal,
+                    ruleName: ruleName,
+                    verb: Verb
+                ))
+            );
+        }
+
+        var program = RuleCompiler.CompileExpression(
+            context: context,
+            expression: effect.Expression,
+            kind: CellKind.Fixed,
+            ruleName: ruleName,
+            verb: Verb
+        );
+
+        return new WorldBodyStateEffect(
+            describe: $"{Verb} body:{effect.Key}.{effect.State} := expression[{program.Length}]",
+            key: address.Key,
+            keyFrom: address.KeyFrom,
+            slot: slot,
+            source: CompiledValueSource.FromExpression(expression: program)
+        );
+    }
     internal static IRuleEffect ResolvePoseCell(WorldEffect.PoseCell effect, string ruleName, WorldFactsCompileContext context) {
         var body = context.ResolveBodyRef(channel: "poseCell.key", ruleName: ruleName, start: 0, tokens: effect.Key.Split(':'));
 
@@ -406,7 +496,7 @@ public static partial class WorldFactsCompiler {
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
 
         return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
-            FixedVector3.FromVector3(value: effect.Offset));
+            FixedVector3.FromVector3(value: effect.Offset), effect.Glide);
     }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;

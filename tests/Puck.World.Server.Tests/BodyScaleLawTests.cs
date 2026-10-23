@@ -2,7 +2,9 @@ using System.Numerics;
 using Xunit;
 
 using Puck.Assets.Documents;
+using Puck.Commands;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Authoring;
@@ -10,16 +12,17 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>Laws for <c>bodies.scaleRow</c> — the world declaring which keyed <c>state.world</c> row carries each
-/// body's live scale multiplier: the declared envelope refuses an out-of-range cell, and an admitted cell survives
-/// the document's own serialize/deserialize round trip into <see cref="Server.WorldBody.Scale"/>.</summary>
+/// <summary>Laws for <c>bodies.scale</c> — the world naming the <c>state.body</c> Counter register that carries each
+/// body's live scale multiplier: the register's envelope must be a positive range inside the render capacity, and the
+/// register's value, initial or written, survives the document's serialize/deserialize round trip and a checkpoint
+/// restore into <see cref="Server.WorldBody.Scale"/>.</summary>
 public sealed class BodyScaleLawTests {
-    private static readonly FixedQ4816 EnvelopeMin = FixedQ4816.FromDouble(value: 0.05);
-    private static readonly FixedQ4816 EnvelopeMax = FixedQ4816.One;
+    private const double EnvelopeMin = 0.05d;
+    private const double EnvelopeMax = 1d;
     private static readonly ulong StepWidth = Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: SimulationRateHz);
 
     // The shipped world's own platform/walker/gravity recipe (see ConstantUpLipContactLawTests.PlatformDocument),
-    // with a bodies.scaleRow cell layered on top so the contact resolve runs against a real collider-bearing
+    // with a bodies.scale register layered on top so the contact resolve runs against a real collider-bearing
     // ground contact at the exact radius/skin ratio a shrunk garden body reaches.
     private static WorldDefinition PlatformDocumentWithScale(FixedQ4816 cellValue) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
@@ -59,19 +62,9 @@ public sealed class BodyScaleLawTests {
             Document: canonical.Document,
             HashRaw: canonical.Hash
         );
-        var scaleRow = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: EnvelopeMin.Value,
-            Max: EnvelopeMax.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                    Key: CellName.Parse(candidate: "0"),
-                    Value: CellValue.Fixed(rawBits: cellValue.Value)
-                )]
-        );
-
-        return source with {
+        return Fixtures.WithBodyScale(
+            initial: cellValue,
+            source: source with {
             Simulation = new WorldSimulationDefaults(RateHz: ((int)SimulationRateHz)),
             GravityRaw = new WorldGravity(
             Attractors: [],
@@ -104,38 +97,22 @@ public sealed class BodyScaleLawTests {
                 Scale: 1f,
                 Solid: new WorldSolid(Margin: 0f)
             )],
-            PopulationRaw = (source.Population with { ScaleRow = "scale" }),
-            StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (source.StateRaw?.World ?? []), scaleRow],
-            }),
-        };
-    }
-    private static WorldDefinition WithScaleRow(FixedQ4816 cellValue) {
-        var baseDocument = Fixtures.BuildDocument();
-        var scaleRow = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: EnvelopeMin.Value,
-            Max: EnvelopeMax.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                    Key: CellName.Parse(candidate: "0"),
-                    Value: CellValue.Fixed(rawBits: cellValue.Value)
-                )]
+        },
+            minimum: EnvelopeMin,
+            maximum: EnvelopeMax
         );
-
-        return (baseDocument with {
-            PopulationRaw = (baseDocument.Population with { ScaleRow = "scale" }),
-            StateRaw = ((baseDocument.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (baseDocument.StateRaw?.World ?? []), scaleRow],
-            }),
-        });
     }
+    private static WorldDefinition WithScaleRegister(FixedQ4816 initial) => Fixtures.WithBodyScale(
+        initial: initial,
+        maximum: EnvelopeMax,
+        minimum: EnvelopeMin,
+        source: Fixtures.BuildDocument()
+    );
 
-    // Control for the case above: a body carrying no scaleRow cell restores at the unscaled default, so the prior
-    // assertion is discriminating a real resync rather than every restored body reading 0.15 regardless.
+    // Control for the case below: a world naming no scale register restores at the unscaled default, so the
+    // assertion that follows is discriminating a real resync rather than every restored body reading 0.15 regardless.
     [Fact]
-    public void ScaleRow_AbsentCell_CheckpointRestoreLeavesBodyScaleAtOne() {
+    public void ScaleRegister_Absent_CheckpointRestoreLeavesBodyScaleAtOne() {
         using var fixture = Fixtures.FreshServer();
 
         fixture.JoinSeat();
@@ -170,7 +147,7 @@ public sealed class BodyScaleLawTests {
         );
     }
     [Fact]
-    public void ScaleRow_Absent_BodyScaleDefaultsToOne() {
+    public void ScaleRegister_Absent_BodyScaleDefaultsToOne() {
         using var fixture = Fixtures.FreshServer();
         var body = fixture.JoinSeat();
 
@@ -180,17 +157,27 @@ public sealed class BodyScaleLawTests {
         );
     }
     // RestoreCheckpoint rebuilds every WorldBody at the constructed default (WorldPopulationCheckpoint carries no
-    // Scale field of its own — bodies.scaleRow is document state, restored with the definition), so this proves the
-    // catch-up resync — not merely that the document round-trips through serialization.
+    // Scale field of its own — a body's size is its register, restored with the arena), so this proves the catch-up
+    // resync. The register is written away from its initial value, so a restore that reborn it would read one.
     [Fact]
-    public void ScaleRow_AdmittedCell_SurvivesCheckpointRestoreIntoBodyScale() {
+    public void ScaleRegister_WrittenValue_SurvivesCheckpointRestoreIntoBodyScale() {
         var authored = FixedQ4816.FromDouble(value: 0.15);
-        var document = WithScaleRow(cellValue: authored);
+        var document = WithScaleRegister(initial: FixedQ4816.One);
 
         using var fixture = Fixtures.FreshServer(definition: document);
 
         fixture.JoinSeat();
+        Fixtures.WriteBodyScale(
+            body: 0,
+            server: fixture.Server,
+            value: authored
+        );
         fixture.Step();
+
+        Assert.Equal(
+            expected: authored,
+            actual: fixture.Server.Body(index: 0)!.Scale
+        );
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
@@ -221,9 +208,9 @@ public sealed class BodyScaleLawTests {
         );
     }
     [Fact]
-    public void ScaleRow_AdmittedCell_SurvivesSerializationRoundTripIntoBodyScale() {
+    public void ScaleRegister_Initial_SurvivesSerializationRoundTripIntoBodyScale() {
         var authored = FixedQ4816.FromDouble(value: 0.4);
-        var document = WithScaleRow(cellValue: authored);
+        var document = WithScaleRegister(initial: authored);
 
         using var fixture = Fixtures.FreshServer(definition: document);
         var body = fixture.JoinSeat();
@@ -234,8 +221,8 @@ public sealed class BodyScaleLawTests {
         );
     }
     [Fact]
-    public void ScaleRow_CellAboveDeclaredMaximum_Refused() {
-        var denied = WithScaleRow(cellValue: FixedQ4816.FromDouble(value: 1.5));
+    public void ScaleRegister_InitialAboveItsEnvelope_Refused() {
+        var denied = WithScaleRegister(initial: FixedQ4816.FromDouble(value: 1.5));
 
         Assert.False(
             condition: WorldDefinitionValidator.TryValidate(
@@ -243,16 +230,161 @@ public sealed class BodyScaleLawTests {
                 neighbours: null,
                 reason: out var deniedReason
             ),
-            userMessage: "a scaleRow cell above its own declared max was expected to refuse"
+            userMessage: "a scale register initial above its own envelope was expected to refuse"
         );
         Assert.Contains(
             actualString: deniedReason,
-            expectedSubstring: "scale"
+            expectedSubstring: "inside its envelope"
         );
     }
     [Fact]
-    public void ScaleRow_CellBelowDeclaredMinimum_Refused() {
-        var denied = WithScaleRow(cellValue: FixedQ4816.FromDouble(value: 0.01));
+    public void ScaleRegister_EnvelopeNotPositiveOrPastTheRenderCapacity_RefusedByName() {
+        var source = Fixtures.BuildDocument();
+        var zero = Fixtures.WithBodyScale(
+            initial: FixedQ4816.Zero,
+            maximum: 1d,
+            minimum: 0d,
+            source: source
+        );
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: zero,
+                neighbours: null,
+                reason: out var zeroReason
+            ),
+            userMessage: "a scale envelope reaching zero was expected to refuse"
+        );
+        Assert.Contains(
+            actualString: zeroReason,
+            expectedSubstring: "bodies.scale names register 'scale'"
+        );
+
+        var tooBig = Fixtures.WithBodyScale(
+            initial: FixedQ4816.One,
+            maximum: (source.Authoring.MaxPlacementScale + 1d),
+            minimum: 0.5d,
+            source: source
+        );
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: tooBig,
+                neighbours: null,
+                reason: out var tooBigReason
+            ),
+            userMessage: "a scale envelope past authoring.maxPlacementScale was expected to refuse"
+        );
+        Assert.Contains(
+            actualString: tooBigReason,
+            expectedSubstring: "authoring.maxPlacementScale"
+        );
+    }
+    // THE LAW: the size travels with the body. An anonymous traveller lands with the scale register it carried, and the
+    // destination, whose own register would be born at one, scales the body by the carried value before it first
+    // advances there; a size past the destination's own envelope settles to the envelope's ceiling.
+    [InlineData(0.25d, 0.25d)]
+    [InlineData(1d, 1d)]
+    [InlineData(5d, 1d)]
+    [Theory]
+    public void ACrossingCarriesTheScaleRegisterAndTheDestinationScalesTheBodyByIt(double carried, double expected) {
+        using var fixture = Fixtures.FreshServer(definition: WithScaleRegister(initial: FixedQ4816.One));
+        const string SourceAuthority = "origin/world";
+        var address = new WorldEntityAddress(
+            Authority: SourceAuthority,
+            Generation: 7,
+            Index: 0
+        );
+        var request = new WorldTransferReservationRequest(
+            TransferId: 1,
+            SourceAuthority: SourceAuthority,
+            SourceRateHz: 30,
+            SourceTick: 0,
+            DeadlineSourceTick: 60,
+            Border: "painting",
+            BorderCapacity: null,
+            PartyAllOrNothing: true,
+            PeerAdmission: false,
+            Members: [new WorldTransferReservationMember(
+                Principal: Principal.Console,
+                PreferredSlot: 0,
+                Identity: null,
+                Source: default,
+                BodyColor: default,
+                CatalogRig: 0,
+                Mobility: new WorldMobilityIdentity(
+                    DepartedFrom: address,
+                    Epoch: 0,
+                    Incarnation: address
+                )
+            )]
+        );
+        var reservation = fixture.Server.ReserveTransfer(request: request);
+
+        Assert.True(
+            condition: reservation.Accepted,
+            userMessage: reservation.Reason
+        );
+        Assert.True(
+            condition: (fixture.Server.CommitTransfer(
+                members: [new WorldTransferCommitMember(
+                    Profile: null,
+                    HasMappedArrival: true,
+                    BodyMotionProgramName: "grounded",
+                    Position: default,
+                    YawRadians: default,
+                    PlanarVelocity: default,
+                    VerticalVelocity: default,
+                    ActionContinuity: new WorldTransferActionContinuity(
+                        Channels: [],
+                        Registers: [new WorldTransferActionRegister(
+                            Kind: ActionStateKind.Counter,
+                            Name: Fixtures.BodyScaleRegister,
+                            TimerTicks: 0UL,
+                            Value: FixedQ4816.FromDouble(value: carried)
+                        )]
+                    )
+                )],
+                reason: out var reason,
+                sourceAuthority: SourceAuthority,
+                transferId: request.TransferId
+            ) == WorldTransferStatus.Committed),
+            userMessage: reason
+        );
+
+        var slot = Assert.Single(collection: reservation.BodyIndices);
+
+        // On landing, before the body first advances here, and again after a step keeps it.
+        for (var step = 0; (step < 2); step++) {
+            Assert.Equal(
+                actual: fixture.Server.Body(index: slot)!.Scale,
+                expected: FixedQ4816.FromDouble(value: expected)
+            );
+
+            fixture.Step();
+        }
+    }
+    [Fact]
+    public void ScaleRegister_Undeclared_Refused() {
+        var source = Fixtures.BuildDocument();
+        var denied = source with { PopulationRaw = (source.Population with { Scale = "scale" }) };
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: denied,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: "a bodies.scale naming no register was expected to refuse"
+        );
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "which state.body does not declare"
+        );
+    }
+    [Fact]
+    public void ScaleRegister_InitialBelowItsEnvelope_RefusedAndInsideAdmitted() {
+        var denied = WithScaleRegister(initial: FixedQ4816.FromDouble(value: 0.01));
 
         Assert.False(
             condition: WorldDefinitionValidator.TryValidate(
@@ -260,14 +392,14 @@ public sealed class BodyScaleLawTests {
                 neighbours: null,
                 reason: out var deniedReason
             ),
-            userMessage: "a scaleRow cell below its own declared min was expected to refuse"
+            userMessage: "a scale register initial below its own envelope was expected to refuse"
         );
         Assert.Contains(
             actualString: deniedReason,
-            expectedSubstring: "scale"
+            expectedSubstring: "inside its envelope"
         );
 
-        var admitted = WithScaleRow(cellValue: FixedQ4816.FromDouble(value: 0.4));
+        var admitted = WithScaleRegister(initial: FixedQ4816.FromDouble(value: 0.4));
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidate(
@@ -282,7 +414,7 @@ public sealed class BodyScaleLawTests {
     [InlineData(0.15, 0.6)]
     [InlineData(0.05, 0.2)]
     [Theory]
-    public void ScaleRow_GroundedBodyCoversItsFullScaledSpeedPerSecond(double scaleValue, double expectedMetersPerSecond) {
+    public void ScaleRegister_GroundedBodyCoversItsFullScaledSpeedPerSecond(double scaleValue, double expectedMetersPerSecond) {
         var scale = FixedQ4816.FromDouble(value: scaleValue);
 
         using var fixture = Fixtures.FreshServer(definition: PlatformDocumentWithScale(cellValue: scale));

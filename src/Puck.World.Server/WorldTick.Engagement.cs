@@ -8,6 +8,15 @@ public sealed partial class WorldTick {
     internal bool CheckEngagePolicy(int entityIndex, GrantSubject target, out string reason) {
         reason = string.Empty;
 
+        if (target.Kind == GrantSubjectKind.Placement) {
+            return CheckTabletopEngagePolicy(
+                distanceSquared: out _,
+                entityIndex: entityIndex,
+                placementId: (target.Id ?? string.Empty),
+                reason: out reason
+            );
+        }
+
         if (target.Kind != GrantSubjectKind.Screen) {
             return true;
         }
@@ -47,8 +56,8 @@ public sealed partial class WorldTick {
             return false;
         }
 
-        if (!Host.Machines.HasMachine(index: screen.Index)) {
-            reason = $"screen {screen.Index} has no machine to control";
+        if (!ShowsEngageTarget(hasMachine: Host.Machines.HasMachine(index: screen.Index), screen: screen)) {
+            reason = $"screen {screen.Index} has no machine to control and shows no producer";
             return false;
         }
 
@@ -57,20 +66,85 @@ public sealed partial class WorldTick {
             return false;
         }
 
-        var position = body.FixedPosition;
-        var delta = new FixedVector2(
-            X: (position.X - FixedQ4816.FromDouble(value: screen.Origin.X)),
-            Y: (position.Z - FixedQ4816.FromDouble(value: screen.Origin.Z))
-        );
-        var radius = FixedQ4816.FromDouble(value: screen.Route.EngageRadius);
+        var radius = body.EngageReach(radius: screen.Route.EngageRadius);
 
-        if (delta.LengthSquared > (radius * radius)) {
-            reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({screen.Route.EngageRadius.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})";
+        if (PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) {
+            reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)";
             return false;
         }
 
         reason = string.Empty;
         return true;
+    }
+
+    // A tabletop engages a live body standing within its engage radius of the board's centre; a placement carrying no
+    // board facet with an engage block is no tabletop. The body's squared ground-plane distance from the board's centre
+    // is answered beside it, for the probe's nearest-target choice.
+    private bool CheckTabletopEngagePolicy(int entityIndex, string placementId, out string reason, out FixedQ4816 distanceSquared) {
+        distanceSquared = FixedQ4816.Zero;
+
+        if (!WorldTabletopFrame.TryFind(
+            definition: Host.Document.Definition,
+            engage: out var engage,
+            placementId: placementId,
+            topology: out var topology
+        )) {
+            reason = $"placement '{placementId}' carries no engageable tabletop";
+
+            return false;
+        }
+
+        if (Host.Body(index: entityIndex) is not { } body) {
+            reason = $"body {entityIndex} is not live";
+
+            return false;
+        }
+
+        var radius = body.EngageReach(radius: engage.Radius);
+
+        distanceSquared = PlanarDistanceSquared(body: body, centre: WorldTabletopFrame.Centre(topology: topology));
+
+        if (distanceSquared > (radius * radius)) {
+            reason = $"body {entityIndex} is outside tabletop '{placementId}''s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Returns whether an engageable screen has something a seat engages: a live booted machine, whose pad the
+    /// seat plays, or a producer source (a window capture, a camera, a test pattern), which the seat's camera frames on
+    /// the screen and no pad reaches. Read from the document and the machine host alone, so a replay decides it the
+    /// same.</summary>
+    /// <param name="screen">The screen row.</param>
+    /// <param name="hasMachine">Whether the screen carries a live booted machine
+    /// (<see cref="IWorldMachineHost.HasMachine"/>).</param>
+    /// <returns><see langword="true"/> when the screen carries a machine or shows a producer.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
+    public static bool ShowsEngageTarget(WorldScreen screen, bool hasMachine) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        return (hasMachine || (screen.Source is WorldScreenSource.Producer));
+    }
+    // The squared distance on the ground plane from a body to a screen's origin, which the engage radius bounds.
+    private static FixedQ4816 PlanarDistanceSquared(WorldBody body, WorldScreen screen) => PlanarDistanceSquared(
+        body: body,
+        centre: new FixedVector3(
+            X: FixedQ4816.FromDouble(value: screen.Origin.X),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.FromDouble(value: screen.Origin.Z)
+        )
+    );
+    // The squared distance on the ground plane from a body to a point.
+    private static FixedQ4816 PlanarDistanceSquared(WorldBody body, in FixedVector3 centre) {
+        var position = body.FixedPosition;
+
+        return new FixedVector2(
+            X: (position.X - centre.X),
+            Y: (position.Z - centre.Z)
+        ).LengthSquared;
     }
 
     // body.press and body.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
@@ -182,9 +256,13 @@ public sealed partial class WorldTick {
         }
     }
     /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>AGENTS.md</c>'s
-    /// overworld intent) — for each active, un-routed local seat, the first (document order) screen that is
-    /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
-    /// <see cref="IWorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
+    /// overworld intent) — for each active, un-routed local seat, the nearest target on the ground plane (the earlier in
+    /// document order on a tie, screens before tabletops): a tabletop whose board facet's engage block names a channel
+    /// this world resolves, within its radius of the board's centre, that would pass
+    /// <see cref="WorldEngagement.CheckEngage"/> (several seats may sit at one table), or a screen that is
+    /// engageable and backed by a live booted machine or showing a producer (the real gate is
+    /// <see cref="CheckScreenEngagePolicy"/>'s <see cref="ShowsEngageTarget"/> check over
+    /// <see cref="IWorldMachineHost.HasMachine"/> — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
     /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, carries no live occupant
     /// (<see cref="WorldEngagement.PlayersOn"/> empty), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the
@@ -201,17 +279,19 @@ public sealed partial class WorldTick {
     /// <param name="ordinals">Per-seat-slot output: the channel ordinal to probe this tick, or <c>-1</c> for none —
     /// filled entirely (every slot without an eligible screen reads <c>-1</c>, the zero-cost default every world
     /// without an <c>engageChannel</c>-bearing screen takes, which is every shipped world today).</param>
-    /// <param name="screens">Per-seat-slot output: the eligible screen's engine index paired with <paramref name="ordinals"/>'s
-    /// entry, or <c>-1</c> alongside a <c>-1</c> ordinal.</param>
-    /// <param name="leaving">Per-seat-slot output: whether the probe LEAVES its screen rather than engaging it. The
-    /// same button is the way out: a seat captured on a screen whose route names an engage channel probes that
-    /// channel, and its rising edge dissolves the seat's applications (see <see cref="ResolveLeaveProbe"/>).</param>
-    private void ResolveEngageProbes(Span<int> ordinals, Span<int> screens, Span<bool> leaving) {
+    /// <param name="targets">Per-seat-slot output: the eligible screen or tabletop placement paired with
+    /// <paramref name="ordinals"/>'s entry, meaningful only beside an ordinal that is not <c>-1</c>.</param>
+    /// <param name="leaving">Per-seat-slot output: whether the probe LEAVES its target rather than engaging it. The
+    /// same button is the way out: a seat captured on a screen whose route names an engage channel, or at a tabletop,
+    /// probes that channel, and its rising edge dissolves the seat's applications (see
+    /// <see cref="ResolveLeaveProbe"/>).</param>
+    private void ResolveEngageProbes(Span<int> ordinals, Span<GrantSubject> targets, Span<bool> leaving) {
         ordinals.Fill(value: -1);
-        screens.Fill(value: -1);
+        targets.Clear();
         leaving.Fill(value: false);
 
         var screenRows = Host.Document.Definition.Screens;
+        var placementRows = Host.Document.Definition.Placements;
 
         for (var slot = 0; (slot < Host.Population.LocalSeatCount); slot++) {
             if (Host.Body(index: slot) is not { } body) {
@@ -224,10 +304,10 @@ public sealed partial class WorldTick {
                 if (ResolveLeaveProbe(
                     ordinal: out var leaveOrdinal,
                     principal: principal,
-                    screenIndex: out var leaveScreen
+                    target: out var leaveTarget
                 )) {
                     ordinals[slot] = leaveOrdinal;
-                    screens[slot] = leaveScreen;
+                    targets[slot] = leaveTarget;
                     leaving[slot] = true;
                 }
 
@@ -239,6 +319,8 @@ public sealed partial class WorldTick {
             if (HasComposedApplication(principal: principal)) {
                 continue;
             }
+
+            var nearest = FixedQ4816.Zero;
 
             for (var index = 0; (index < screenRows.Count); index++) {
                 var screen = screenRows[index];
@@ -272,23 +354,78 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                ordinals[slot] = ordinal;
-                screens[slot] = screen.Index;
+                var distance = PlanarDistanceSquared(body: body, screen: screen);
 
-                break;
+                if ((ordinals[slot] < 0) || (distance < nearest)) {
+                    ordinals[slot] = ordinal;
+                    targets[slot] = GrantSubject.Screen(index: screen.Index);
+                    nearest = distance;
+                }
+            }
+
+            for (var index = 0; (index < placementRows.Count); index++) {
+                var placement = placementRows[index];
+
+                if (
+                    (placement.Board?.Engage is not { } engage) ||
+                    !Host.Population.Channels.TryGetOrdinal(
+                    name: engage.Channel,
+                    ordinal: out var ordinal
+                ) ||
+                    !CheckTabletopEngagePolicy(
+                    distanceSquared: out var distance,
+                    entityIndex: slot,
+                    placementId: placement.Id,
+                    reason: out _
+                )
+                ) {
+                    continue;
+                }
+
+                var table = GrantSubject.Placement(id: placement.Id);
+
+                if (!Host.Engagement.CheckEngage(
+                    actingPrincipal: principal,
+                    target: table
+                ).IsAllowed) {
+                    continue;
+                }
+
+                if ((ordinals[slot] < 0) || (distance < nearest)) {
+                    ordinals[slot] = ordinal;
+                    targets[slot] = table;
+                    nearest = distance;
+                }
             }
         }
     }
 
-    // The leave half of the context button: a seat captured on a screen (its set holds a screen application and not
-    // its own body) whose route names an engage channel this world resolves probes that channel, and its rising edge
-    // dissolves the set back to the own-body default. The validator refuses an engage channel the route's kit plays
-    // as a pad button, so the press that leaves is never also a machine button.
-    private bool ResolveLeaveProbe(Principal principal, out int ordinal, out int screenIndex) {
-        ordinal = -1;
-        screenIndex = -1;
+    // The leave half of the context button: a seat captured on a screen or at a tabletop (its set holds that
+    // application and not its own body) whose engage channel this world resolves probes that channel, and its rising
+    // edge dissolves the set back to the own-body default. The validator refuses a screen engage channel the route's
+    // kit plays as a pad button, so the press that leaves is never also a machine button.
+    private bool ResolveLeaveProbe(Principal principal, out int ordinal, out GrantSubject target) {
+        target = default;
 
         foreach (var application in Host.GrantTable.Applications(principal: principal)) {
+            if (
+                (application.Target.Kind == GrantSubjectKind.Placement) &&
+                WorldTabletopFrame.TryFind(
+                definition: Host.Document.Definition,
+                engage: out var engage,
+                placementId: (application.Target.Id ?? string.Empty),
+                topology: out _
+            ) &&
+                Host.Population.Channels.TryGetOrdinal(
+                name: engage.Channel,
+                ordinal: out ordinal
+            )
+            ) {
+                target = application.Target;
+
+                return true;
+            }
+
             if (application.Target.Kind != GrantSubjectKind.Screen) {
                 continue;
             }
@@ -302,7 +439,7 @@ public sealed partial class WorldTick {
                         ordinal: out ordinal
                     )
                 ) {
-                    screenIndex = screen.Index;
+                    target = application.Target;
 
                     return true;
                 }

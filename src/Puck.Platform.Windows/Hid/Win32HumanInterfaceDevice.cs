@@ -68,9 +68,9 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 return null;
             }
 
-            if (!PInvoke.HidD_GetPreparsedData(
-                HidDeviceObject: fileStream.SafeFileHandle,
-                PreparsedData: out preparsedData
+            if (!TryGetPreparsedData(
+                device: fileStream.SafeFileHandle,
+                preparsedData: out preparsedData
             )) {
                 fileStream.Dispose();
 
@@ -105,6 +105,29 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
 
             return null;
         }
+    }
+    /// <summary>
+    /// Reads a device's preparsed data and hands ownership to the caller, which frees it with
+    /// <c>HidD_FreePreparsedData</c> when it is done.
+    /// </summary>
+    /// <param name="device">The opened HID device handle.</param>
+    /// <param name="preparsedData">The preparsed data, or the null pointer on failure.</param>
+    /// <returns><see langword="true"/> if the device returned its preparsed data.</returns>
+    public static bool TryGetPreparsedData(SafeHandle device, out PHIDP_PREPARSED_DATA preparsedData) {
+        if (!PInvoke.HidD_GetPreparsedData(
+            HidDeviceObject: device,
+            PreparsedData: out var ownedPreparsedData
+        )) {
+            ownedPreparsedData.Dispose();
+            preparsedData = ((PHIDP_PREPARSED_DATA)nint.Zero);
+
+            return false;
+        }
+
+        preparsedData = ((PHIDP_PREPARSED_DATA)ownedPreparsedData.DangerousGetHandle());
+        ownedPreparsedData.SetHandleAsInvalid();
+
+        return true;
     }
 
     [SupportedOSPlatform(platformName: "windows5.1.2600")]
@@ -214,16 +237,15 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         in SP_DEVICE_INTERFACE_DATA deviceInterfaceData,
         out WIN32_ERROR errorCode
     ) {
-        var deviceInterfaceDetailDataSize = uint.MinValue;
+        var deviceInfoData = new SP_DEVINFO_DATA { cbSize = ((uint)sizeof(SP_DEVINFO_DATA)) };
         var devicePath = string.Empty;
 
         _ = PInvoke.SetupDiGetDeviceInterfaceDetail(
-            DeviceInfoData: null,
+            DeviceInfoData: ref deviceInfoData,
             DeviceInfoSet: deviceInfoSet,
             DeviceInterfaceData: in deviceInterfaceData,
-            DeviceInterfaceDetailData: null,
-            DeviceInterfaceDetailDataSize: uint.MinValue,
-            RequiredSize: &deviceInterfaceDetailDataSize
+            DeviceInterfaceDetailData: default,
+            RequiredSize: out var deviceInterfaceDetailDataSize
         );
         errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
 
@@ -231,24 +253,28 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             var deviceInterfaceDetailDataBuffer = ArrayPool<byte>.Shared.Rent(minimumLength: ((int)deviceInterfaceDetailDataSize));
 
             try {
-                fixed (byte* pDeviceInterfaceDetailDataBuffer = deviceInterfaceDetailDataBuffer) {
-                    var deviceInterfaceDetail = ((SP_DEVICE_INTERFACE_DETAIL_DATA_W*)pDeviceInterfaceDetailDataBuffer);
+                var deviceInterfaceDetail = deviceInterfaceDetailDataBuffer.AsSpan(
+                    length: ((int)deviceInterfaceDetailDataSize),
+                    start: 0
+                );
 
-                    deviceInterfaceDetail->cbSize = ((uint)sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W));
+                MemoryMarshal.Write(
+                    destination: deviceInterfaceDetail,
+                    value: ((uint)sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W))
+                );
 
-                    if (!PInvoke.SetupDiGetDeviceInterfaceDetail(
-                        DeviceInfoData: null,
-                        DeviceInfoSet: deviceInfoSet,
-                        DeviceInterfaceData: in deviceInterfaceData,
-                        DeviceInterfaceDetailData: deviceInterfaceDetail,
-                        DeviceInterfaceDetailDataSize: deviceInterfaceDetailDataSize,
-                        RequiredSize: &deviceInterfaceDetailDataSize
-                    )) {
-                        errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
-                    } else {
-                        devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(value: ref deviceInterfaceDetail->DevicePath.e0))));
-                        errorCode = WIN32_ERROR.NO_ERROR;
+                if (!PInvoke.SetupDiGetDeviceInterfaceDetail(
+                    DeviceInfoSet: deviceInfoSet,
+                    DeviceInterfaceData: in deviceInterfaceData,
+                    DeviceInterfaceDetailData: deviceInterfaceDetail
+                )) {
+                    errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
+                } else {
+                    fixed (byte* pDeviceInterfaceDetail = deviceInterfaceDetail) {
+                        devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(value: ref ((SP_DEVICE_INTERFACE_DETAIL_DATA_W*)pDeviceInterfaceDetail)->DevicePath.e0))));
                     }
+
+                    errorCode = WIN32_ERROR.NO_ERROR;
                 }
             } finally {
                 ArrayPool<byte>.Shared.Return(array: deviceInterfaceDetailDataBuffer);
@@ -592,7 +618,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     }
     /// <inheritdoc />
     [SupportedOSPlatform(platformName: "windows5.1.2600")]
-    public unsafe bool TryGetFeatureReport(Span<byte> buffer) {
+    public bool TryGetFeatureReport(Span<byte> buffer) {
         var fileStream = m_fileStream;
 
         if (
@@ -602,17 +628,14 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             return false;
         }
 
-        fixed (byte* reportBuffer = buffer) {
-            return PInvoke.HidD_GetFeature(
-                HidDeviceObject: fileStream.SafeFileHandle,
-                ReportBuffer: reportBuffer,
-                ReportBufferLength: ((uint)buffer.Length)
-            );
-        }
+        return PInvoke.HidD_GetFeature(
+            HidDeviceObject: fileStream.SafeFileHandle,
+            ReportBuffer: buffer
+        );
     }
     /// <inheritdoc />
     [SupportedOSPlatform(platformName: "windows5.1.2600")]
-    public unsafe bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
+    public bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
         var fileStream = m_fileStream;
 
         if (
@@ -622,14 +645,9 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             return false;
         }
 
-        // HidD_SetFeature does not mutate the buffer; the API just lacks a const pointer, so a read-only span is
-        // safe to pin and pass through.
-        fixed (byte* reportBuffer = buffer) {
-            return PInvoke.HidD_SetFeature(
-                HidDeviceObject: fileStream.SafeFileHandle,
-                ReportBuffer: reportBuffer,
-                ReportBufferLength: ((uint)buffer.Length)
-            );
-        }
+        return PInvoke.HidD_SetFeature(
+            HidDeviceObject: fileStream.SafeFileHandle,
+            ReportBuffer: buffer
+        );
     }
 }

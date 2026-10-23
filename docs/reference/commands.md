@@ -478,7 +478,9 @@ scripted driver depends on them:
   `Submit`'s return value. A handler-level refusal, such as an unparsable inline
   JSON row, always ran at apply time and still echoes there.
 - **`wire.errors` counts the lines its CALLER submitted**, not the calls the
-  registry made. A handler may submit lines of its own (a macro verb), and those
+  registry made. A handler may submit lines of its own (a macro verb, such as
+  the registry's own `run` running a
+  [document-authored command](#document-authored-commands)), and those
   reach the count only through the verdict that handler returns: a macro that
   propagates a nested refusal as an error contributes exactly one refusal
   however deeply it nested, and a macro that swallows one and answers success
@@ -588,6 +590,116 @@ directly is an empty one, which dispatches nothing. A snapshot another
 registry's router built is refused with `ArgumentException` before any entry is
 examined, so a host that mixed two registries learns it at the call site rather
 than through a half-applied tick.
+
+## Document-authored commands
+
+A world document composes console commands from existing verbs in its
+`commands` section, so a safe operation needs no C# verb. Each row is a
+namespaced name, help text, typed parameters and the console lines it runs:
+
+```text
+commands [
+  {
+    name: "debug.go"
+    help: "Poses a body at one of the debug world's places."
+    parameters [
+      { name: "place", kind: Spawn, default: "stage" }
+      { name: "body", kind: Body, default: "0" }
+    ]
+    lines [
+      "body.pose spawn:{place} {body}"
+      "view.override camera auto"
+      "view.override layout play"
+    ]
+  }
+]
+```
+
+- **Names.** Two or more dot-separated segments (`debug.go`, `gallery.show`),
+  each a letter then letters, digits, `-` or `_`. A name is matched ignoring
+  case, is unique within the document, and never takes a registered verb's or
+  alias's name. `commands` is a keyed list (by `name`), so each imported
+  document authors its own rows and a basis's rows are refined by name.
+- **Parameters** are positional, in declared order, at most 16. A parameter
+  with a `default` (written as it would be typed, as a string) is optional; a
+  required one never follows an optional one, and every parameter appears in
+  some line. Kinds: `Text` (any one token, the default kind), `Number`,
+  `Integer`, `Choice` (one of its `values`, matched ignoring case and
+  substituted as declared), `Body` (a body index, 0 to 4095) and `Spawn` (one
+  of the document's `spawnPoints` ids, matched ignoring case). An argument is
+  one plain token: no whitespace and no quotes.
+- **Lines** are console lines, at most 32. `{name}` substitutes a parameter's
+  argument, and `{{` and `}}` stand for literal braces, so an inline JSON row
+  writes `{{"key": {value}}}`. The first token, the verb, is always literal, so
+  no argument chooses which verb a line reaches and no argument adds a line.
+  A line may call another authored command; a chain that loops is refused.
+
+The registry answers an authored command beside the engine's verbs: `help`,
+`help --names` and `help <prefix>` list it with its usage and the lines it
+runs, `CommandRegistry.Definitions` and `TryGetMetadata` describe it (a
+bindable, Simulation-routed verb taking wire arguments), and a binding row or
+wheel sector names it like any verb, with or without `text` arguments. The
+registry's own verb `run` dispatches every authored command: `run debug.go
+chess` is the same as `debug.go chess`. Each authored command interns an id of
+its own past the registered ones the first time it is resolved, and keeps it
+for the registry's lifetime, so a bound press carries that id and the command's
+name in its line, and two keys bound to two authored commands are two buttons.
+An authored id belongs to the `Global` map.
+
+Safety is data, enforced twice. When a document validates against a live
+registry (boot's post-build admission, `world.reload`, `world.load`), a
+command taking an engine verb's name, a line calling a verb a binding may not
+name (an `Operator`-audience verb, or one declared `Unbindable` such as
+`quit`, `world.save` and `storage.*`), a line calling nothing registered, and
+a loop through the set are refused by name. When a line runs, its verb is
+checked against the same rule and against the calling session's `authorize`
+policy before it is submitted.
+
+The generated console verb catalog (`WorldConsoleVerbCatalog`, written by
+[`puck verbs`](cli.md#puck-verbsconsole-verb-catalog)) holds every verb any
+boot shape registers, headless and rendered. A live registry reads it
+(`CommandRegistry.UseVerbCatalog`): a line naming a verb this boot shape
+lacks but another registers (`world.debug-view` and `world.slice` exist only
+in a rendered World) passes validation, judged by the catalog's facts, and is
+refused by name when it runs in a host without it (`[world.slice: not
+available in this host — another boot shape (a rendered World) registers
+it]`), so a headless boot (`puck test`, CI) admits a document whose commands
+reach a rendered World's verbs. A verb no shape registers stays refused at
+validation. A binding row or wheel sector gets the same treatment: against a live
+registry a command only another shape registers is judged by the catalog's facts
+(bindable, accepts `text`, value kind) and the headless boot drops that entry from
+the seat's composition with a narrated line; where no World runs the catalog
+answers alone, so a typo'd or unbindable command in a binding document is refused
+by `puck compile --validate`. Where no World runs (`puck compile --validate`, the silo's
+admission), the catalog stands in for the registry and refuses the same
+things. Names, parameters, defaults and templates are checked everywhere. The
+catalog is generated: after adding, renaming or changing the bindability or
+audience of a verb, run `puck verbs` (it boots a headless and a windowed World,
+a GPU leg; `--headless-only` refreshes the headless verbs and keeps the rest).
+
+An authored command runs with exactly its caller's authority. `run` is
+Simulation-routed, so a typed line folds into the tick lane like any
+Simulation verb, and when its tick applies, each expanded line is submitted
+in order under the caller's principal, slot and session policy, with the
+arguments substituted. Each expanded line runs inline on that tick through the
+ordinary registry path: wire parse, audience check and handler, with a
+Simulation verb dispatched as the `Started` edge its own queued injection
+would carry. The first refused line stops the command, which answers
+`[<name>: line <n> '<line>' refused — <refusal>]`, counted once by
+`wire.errors`; otherwise the command answers its lines' output joined, or
+`[<name>: ran <n> lines]`. Nested lines count against the same eight-deep
+submission bound every re-entrant submission shares. What reaches the world
+server is whatever the expanded lines submitted, so `replay.record` and
+`replay.verify` see an authored command exactly as they see those lines typed.
+
+The World compiles the live document's rows (`WorldConsoleCommands.For`) and
+the registry reads them on every lookup (`CommandRegistry.UseAuthoredCommands`),
+so a reload, load or undo that swaps the document changes the set with it. The
+source is keyed by the slot of the line being resolved: the World answers the
+boot document's set on every slot, and the silo answers each row's own live
+document on the slot its session is bound to (`WorldSiloApplication.RowCommands`),
+so two rows never hear each other's commands and the administrative session
+hears none.
 
 ## Pointing at a displayed source
 
@@ -724,7 +836,7 @@ member-by-member surface.
   `Name`, so the same action needs only one definition.
 - **Names and aliases are claimed, not shared.** The registry's constructor
   throws if two modules register the same command name or alias, or if either
-  collides with a built-in (`help`, `wire.ack`, `wire.errors`). A non-`Global`
+  collides with a built-in (`help`, `run`, `wire.ack`, `wire.errors`). A non-`Global`
   map is deliberately shared: it is how several modules participate in one
   application mode, so there is no analogous guard over map names.
 - **Snapshot dispatch is gated, `Submit` is not.** Bound activation respects

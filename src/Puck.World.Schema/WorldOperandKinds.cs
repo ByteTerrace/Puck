@@ -124,6 +124,23 @@ public sealed class BodyPositionOperand : WorldOperandFact {
     /// <summary>Gets the compiled body reference.</summary>
     public CompiledBodyRef Body { get; }
 }
+/// <summary>Whether a body's participant holds a control application onto a declared screen
+/// (<see cref="WorldRuleFacts.EngagedPrefix"/>): <c>1</c> while it does, <c>0</c> otherwise or for a reference
+/// resolving to no live body.</summary>
+public sealed class EngagedOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="EngagedOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    /// <param name="screen">The declared screen's index.</param>
+    public EngagedOperand(CompiledBodyRef body, int screen) : base(CellKind.Int) {
+        Body = body;
+        Screen = screen;
+    }
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets the declared screen's index.</summary>
+    public int Screen { get; }
+}
 /// <summary>One of a body's action-state slots (<see cref="WorldRuleFacts.BodyStatePrefix"/>), answered as
 /// <see cref="WorldBodyStateReads.Presented"/> defines; a reference resolving to no live body reads <c>0</c>.</summary>
 public sealed class BodyStateOperand : WorldOperandFact {
@@ -287,6 +304,52 @@ public sealed class BoardCellOfOperand : WorldOperandFact {
 
     public CompiledBodyRef BodyA { get; }
     public string Row { get; }
+    public CompiledTopology Topology { get; }
+}
+/// <summary>What a <see cref="BoardSeatOperand"/> read reports of one seat at an engageable tabletop.</summary>
+public enum BoardSeatFacet : byte {
+    /// <summary><c>1</c> while the seat's control applications name the tabletop's placement, <c>0</c> otherwise.</summary>
+    Engaged,
+    /// <summary>The cell the seat's pointer ray meets on the playing surface (<see cref="WorldTabletopFrame.TryPointerCell"/>),
+    /// or <c>-1</c> for no ray or a ray off the board.</summary>
+    Pointer,
+    /// <summary>The side of the board the seat's body stands on (<see cref="WorldTabletopFrame.SideOf"/>), 0 through 3,
+    /// or <c>-1</c> for no live body.</summary>
+    Side,
+}
+/// <summary>One seat at an engageable tabletop (<c>$board:engaged|pointer|side:&lt;row&gt;:&lt;seat&gt;</c>): whether it
+/// sits at the board, the cell it points at, or the side it plays from — the reads a world's own rules turn a seat's
+/// input into play with. Every value derives in fixed point from the document, the seat's application set, its
+/// body's position and its pointer ray.</summary>
+public sealed class BoardSeatOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="BoardSeatOperand"/> class.</summary>
+    /// <param name="row">The board row the read names.</param>
+    /// <param name="placementId">The id of the placement whose board facet carries the row's topology and an
+    /// engagement.</param>
+    /// <param name="topology">The row's anchored topology.</param>
+    /// <param name="surface">The playing surface's height above the topology origin, in world units.</param>
+    /// <param name="seat">The zero-based local seat.</param>
+    /// <param name="facet">The facet the read reports.</param>
+    public BoardSeatOperand(string row, string placementId, CompiledTopology topology, FixedQ4816 surface, int seat, BoardSeatFacet facet) : base(CellKind.Int) {
+        Row = row;
+        PlacementId = placementId;
+        Topology = topology;
+        Surface = surface;
+        Seat = seat;
+        Facet = facet;
+    }
+
+    /// <summary>Gets the facet the read reports.</summary>
+    public BoardSeatFacet Facet { get; }
+    /// <summary>Gets the id of the placement carrying the tabletop.</summary>
+    public string PlacementId { get; }
+    /// <summary>Gets the board row the read names.</summary>
+    public string Row { get; }
+    /// <summary>Gets the zero-based local seat.</summary>
+    public int Seat { get; }
+    /// <summary>Gets the playing surface's height above the topology origin, in world units.</summary>
+    public FixedQ4816 Surface { get; }
+    /// <summary>Gets the row's anchored topology.</summary>
     public CompiledTopology Topology { get; }
 }
 /// <summary>A <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> cell key, resolved from the two bodies' indices at evaluation.</summary>

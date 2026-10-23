@@ -11,19 +11,25 @@ namespace Puck.SdfVm.Tests;
 /// views alone, and the environment map its radiance readers), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
-    // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
-    // the curvature shading, temporal history, indirect controls, the light-camera flag, twelve cascade rows, shadow
-    // parameters, 64 bake-lattice rows and the irradiance volume, 16-aligned.
-    private const uint PassBlockBytes = 1840;
+    // The pass block's bytes: the extent and the world values, the view, the levers, the light count, the view's light mask,
+    // exposure and air light, the shadow slots, the curvature shading, temporal history, indirect controls, the
+    // light-camera flag, twelve cascade rows, shadow parameters and the irradiance volume, 16-aligned. The bake's lattice
+    // rows are its own block's (BakeBlockBytes).
+    private const uint PassBlockBytes = 912;
+    // The bake's pass block's bytes: the extent, the instance-mask width, the lattice count, 64 lattice rows and the two
+    // work-counter rows, 16-aligned.
+    private const uint BakeBlockBytes = 1056;
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.
+    // The glass shading pass lights its highlights from the lights table, reflects the environment map and reads the
+    // atmosphere's lanes of the sky block.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, ViewsKernels),
-        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.Glass, .. ViewsKernels]),
+        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, SdfKernel.Glass, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, SdfKernel.Glass, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>
@@ -41,6 +47,44 @@ public sealed class SdfPassBindingLawTests {
         Assert.All(
             action: table => Assert.Contains(collection: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.WorldLayout).Resources, filter: resource => (resource.Member.Name == table)),
             collection: tables
+        );
+    }
+    // The bake's mask and sampler read a pass block of their own, holding the batch they sample and nothing of the view,
+    // and every pass group member the bake declares is one it reads: a value or resource another pass gains is no member
+    // of it, so the bake kernels' declarations, whose bytecode keys the stored meshes, stay as they were.
+    [Fact]
+    public void TheBakePassBlockHoldsTheBatchAlone() {
+        var pass = Group(group: ShaderInterfaceGroup.Pass, layout: SdfWorldInterfaces.MeshBakeLayout);
+
+        Assert.Equal(expected: BakeBlockBytes, actual: pass.BlockSizeBytes);
+        Assert.Equal(expected: ((int)BakeBlockBytes), actual: SdfFrameBlock.BakeSizeBytes);
+        Assert.Equal(
+            actual: pass.BlockMembers.Select(selector: static member => member.Name),
+            expected: [ShaderFrameInterface.Extent, SdfWorldPackage.InstanceMaskWordCount, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshBakeLattices, ShaderWorkCounters.Row, ShaderWorkCounters.DetailRow]
+        );
+        Assert.Equal(
+            actual: pass.Resources.Select(selector: static resource => resource.Member.Name),
+            expected: [SdfWorldPackage.InstanceMasks, SdfWorldPackage.InstanceMasksWritten, SdfWorldPackage.MeshBakeSamplesWritten, ShaderWorkCounters.Buffer]
+        );
+        // The world interface holds none of the bake's own values or resources.
+        Assert.DoesNotContain(
+            collection: Group(group: ShaderInterfaceGroup.Pass, layout: SdfWorldInterfaces.WorldLayout).BlockMembers,
+            filter: static member => (member.Name is SdfWorldPackage.InstanceMaskWordCount or SdfWorldPackage.MeshBakeCount or SdfWorldPackage.MeshBakeLattices)
+        );
+    }
+    // The bake's parts bind the residency's World set too, so their World group is the world interface's; the field's
+    // tables lead it, so a table added after them moves no binding the bake kernels read.
+    [Fact]
+    public void TheBakePartsLayOutTheWorldGroupTheyBindWithTheFieldsTablesFirst() {
+        var world = Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.WorldLayout);
+
+        Assert.Equal(
+            actual: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.MeshBakeLayout).Bindings,
+            expected: world.Bindings
+        );
+        Assert.Equal(
+            actual: world.Resources.Take(count: SdfWorldPackage.FieldTables.Count).Select(selector: static resource => resource.Member.Name),
+            expected: SdfWorldPackage.FieldTables.Select(selector: static member => member.Name)
         );
     }
     // Every pass of a view binds the residency's one World set, the resolve, sky and composite passes among them, so the World group its

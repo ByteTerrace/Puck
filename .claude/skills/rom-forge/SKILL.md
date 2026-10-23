@@ -20,7 +20,7 @@ this file is corrected in the same change.
 | Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
 | Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick.Forge`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
 | The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
-| Shipped sources | `worlds/debug/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world lists in a machine's `contentFolders`), each with its committed `.cartridge.json`; `shared/` holds the modules several targets import, each declaring `schema: "puck.cartridge.v1"` so a world-source walk of the package never takes it for a world module |
+| Shipped sources | `worlds/debug/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world lists in a machine's `contentFolders`), authored source only; `shared/` holds the modules several targets import, each declaring `schema: "puck.cartridge.v1"` so a world-source walk of the package never takes it for a world module |
 
 Both compilers consume the same rules, variables, sprites and input conditions.
 Source data determines behavior: never add a game-name switch or copy gameplay
@@ -30,28 +30,30 @@ into a C# template. `Puck.GamingBricks.Forge` depends on Abstractions, Assets an
 ## From source to a running cartridge
 
 1. Edit the `.puck` source.
-2. `puck compile <name>.cgb.puck --output <name>.cgb.cartridge.json --validate`.
+2. `puck compile <name>.cgb.puck --output .claude/scratch/<lane>-cartridge.cartridge.json --validate`.
    `--validate` runs `CartridgeDocuments.Validate` over the lowered JSON;
    lowering alone proves only that the source was well formed.
 3. In a running `Puck.World`, `forge.open <file>.cartridge.json` loads the
    compiled JSON as the console's draft, then `forge.play <screen-index>
-   <file>.cartridge.json` hot-loads the draft into a screen. There is no
-   in-engine compile of a `.puck` cartridge, and `forge.open` reads only JSON.
+   <file>.cartridge.json` hot-loads the draft into a screen. `forge.open` reads JSON only; machine content binding accepts authored `.puck`
+   sources directly.
    `forge.play` needs a draft first (`forge: create or open a draft first`
    otherwise), and its path is an output: it writes the draft's canonical source
    there, then inserts it, and refuses a path not ending in `.cartridge.json`.
    A world screen whose `source` is a machine may instead name the
-   `.cartridge.json` as its `contentPath`; the engine compiles it at bind.
+   `.puck` source as its `contentPath`; its content provider resolves imports
+   and compiles the source at bind.
 4. Look at it: `capture.start`, or a screenshot. Cartridges are verified in a
    world, never in a bespoke driver.
 
 `puck decompile <name>.cartridge.json --output <name>.cgb.puck` turns a document
 back into source; the source it writes compiles back to the same bytes.
 
-The committed `.cartridge.json` beside each source is derived: regenerate it by
-compiling the source and commit both halves.
-`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`
-byte-compares them. Never hand-edit the JSON.
+The owner's ruling treats cartridge JSON twins as derived caches: never commit
+them or compare a run against them. Commit the authored source, compile when
+needed, and keep semantic compile/decompile round trips over freshly compiled
+documents. The machine content provider accepts source directly; the forge
+console still opens a compiled JSON draft.
 
 `forge.play <screen> <path>` saves the source and inserts it through the
 screen's named machine (`WorldMachineCommandModule.InsertContent`); a screen
@@ -87,8 +89,7 @@ export and play always validate.
   (`CartridgeDocumentEmitter.LowerSource`, which `puck compile`, the language
   server and the round-trip test use), never rows. The game lives once as a
   template in `cartridges/shared/` (`tetromino.puck`), and each target's source
-  imports it, declares `target` and `palettes`, and calls it. A module has no
-  `.cartridge.json` twin.
+  imports it, declares `target` and `palettes`, and calls it. A module contributes no standalone document.
 - **A Color-only image cannot run on the DMG.** The cgb image arms the speed
   switch and executes STOP, which parks a monochrome processor until a key is
   pressed, and it writes palette memory and video bank one, which the DMG does

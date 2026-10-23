@@ -27,11 +27,11 @@ its own drag, in either press order). A command row targeting a channel may auth
 `mode: Toggle`: each chord completion flips the input-side channel latch, and
 breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a
-bespoke command or simulation state. No checked-in world authors one today; a profile can hold `look` (LT)
-plus `gamepad.leftStickPress` to toggle `forward` for autorun, and hold `look`
-plus `gamepad.rightStickPress` to toggle `up` for auto-jetpack. Each command
-chord consumes its stick press before the resting page's bare stick binding can
-see it. Toggle contributions are owned by the compiled command destination,
+bespoke command or simulation state. A page entry takes `mode: Toggle` the same way, and the
+debug world authors its auto-actions so: the Moth's resting page toggles `run` on the left stick's press beside the
+held `run` on West, and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
+stick's press (autorun) and `rise` on the right stick's press (autofly). The page's entry replaces the resting page's at
+that source, and the latch outlives the page, so the trigger lets go and she keeps going. Toggle contributions are owned by the compiled command destination,
 not by the button that flipped them; synthesized chord edges carry that stable
 logical source through press, reassertion, and release. Parallel auto-actions
 therefore coexist, while several bindings for the same destination operate one
@@ -46,10 +46,18 @@ EACH of its listed sources independently — an entry surviving at all of its
 sources stays combined, one narrowed to fewer sources by a later layer keeps
 only the ones still its own — first-touch-per-layer so a hold/release pair in
 one layer accumulates.
+A `Relative` channel declares `relative { unit, sensitivity, maximumPerStep }`.
+Bind a scalar source or component such as `mouse.motion.x`; each dispatch adds
+a displacement, and the next admitted submission consumes the sum once.
+The router preserves sample magnitude instead of quantizing it as a normalized
+stick, and no step duration multiplies it. Toggle and held/sequence activators
+are invalid for displacement. `player.signal` drives this same binding path
+without a physical device, including from a test's scheduled `when` block.
+
 The merged document compiles once per change through
 `BindingProfile.Compile` in `Puck.Commands` — deliberately shared, never
 copied. `WorldSeatBindings` compares the filtered composed document plus the
-ordered channel-name map before compiling: a route that presents a new document
+ordered channel definitions before compiling: a route that presents a new document
 instance with identical effective content is a true no-op, preserving held
 commands, chord/page state, and release latches. Live surface: `player.bind`,
 `player.bindings`.
@@ -77,13 +85,28 @@ identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
 bar draws. The live example is `worlds/debug/controls.puck`, which the debug world
 and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
 (the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
-right stick's press; `modifiers: false` and `pageLabel: false` drop the modifier row and the page name, and an
-`iconRow` keyed by entry id), authors the `icons` table, and appends a `play-wheel` row. The first world row, when one
+right stick's press, an `iconRow` keyed by entry id, and one bank per page of the trigger-held pages with
+`modelCell` reading `single`, so the bar swaps pages in place; `modifiers`, `declaredModifiersOnly` and `pageLabel` draw
+the modifier row on the layout anchor (only the modifiers the document declares, the two triggers, not the implicit one
+the compiler mints for each raw source a chord names: a key, a shoulder, a mouse button) and the page's name under it, while each bank's own `anchor` stands the plates above them), authors the
+`icons` table, and appends a `play-wheel` row and the `pad-pages` row of the chord pages. The first world row, when one
 is authored, supplies the world
 floor; the selected identity's own first row may replace it for that seat,
 matching the existing first-row binding-layer consumer in `WorldIdentity`.
 `world.binding-bar [on|off|auto] [player]` reads the resolved policy and controls
 its live visibility override.
+
+`declaredModifiersOnly` (default `false`) narrows what `modifiers` draws. The compiler mints a single-source modifier
+for every raw source a chord or held row names, so a bar over a profile with a Tab-or-LB wheel, a both-mouse-buttons
+walk and a Q chord lists them all beside the page-holding triggers (`BindingModifierView.Declared` tells them apart);
+with the flag on, the row and the chord hints it places keep to the declared ones, and a chord of minted modifiers
+shows only where `slotSet` places each member.
+
+**Openers.** A plate whose control the active page leaves unbound but whose hold opens a deeper page of the group (a
+chord row whose members are this page's plus that control) reads as that page's opener: bright, wearing the icon the
+bar's `iconRow` names for the OPENED PAGE'S ID (`state.barIcons."wheel-pad"`; `BindingPageView.Openers`). The Move
+page's LB opens the play wheel this way, as `WH`. `WorldPresentationManifest`
+registers each page id as an icon key.
 
 `bindingBar.slotSet` (required, non-empty) names the physical controls the bar
 shows by INPUT SOURCE ID (`gamepad.buttonSouth`, `gamepad.leftTrigger`,
@@ -133,7 +156,7 @@ adjusts the resolved theme, resolved in `WorldBindingBarControl.Status`.
 every text run the bar writes — every badge whose authored icon row carries a
 `label` (`LB`/`RB`, `LT`/`RT`, `LS`/`RS`, the menu trio, the exotics), the
 active page's name under the modifier
-indicators, and the chord-hint lines above them — leaving a purely pictographic
+indicators, and a chord hint's label badges and label — leaving a purely pictographic
 bar: the plates, the PROCEDURAL badge glyphs (the d-pad arrows and the
 face-position diamonds), the bound actions' icons, and the indicators all still
 draw. The policy resolves ONCE
@@ -162,8 +185,8 @@ over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
 `recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
 routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
 `SeatCameraApplication` (the seat's camera control application is active —
-`WorldSeatBindings.IsCameraModeActive`), `ScreenEngaged` (the seat is captured
-on a screen and its camera frames it — `WorldPerceptionAnchor.EngagedScreen`).
+`WorldSeatBindings.IsCameraModeActive`), `ScreenFramed` (the seat is captured
+on a screen and its view shows that picture alone — `WorldPerceptionAnchor.ScreenFramed`).
 Absent = always visible. `{ "$type": "recently", "fact":
 "SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
 seat's last input and shows it on the next; a world-scope panel reads a fact as
@@ -296,8 +319,31 @@ out a later mouse selection. Losing the pointer ends its hover.
 
 Axis selection, ring navigation, commit, and cancel sources are ordinary entries
 on each hold page. `worlds/debug/controls.puck`'s `play-primary` is the live
-example: two hold pages (Tab, LB) that inherit the resting page, and one ring
-whose labels and icons read `state.wheelLabels`/`state.wheelIcons`.
+example: two hold pages (Tab, LB) that inherit the resting page and step the ring
+with `player.wheel.ring` (Up and Down, a constant Axis1D value of +1 outward and -1
+inward, `activateOn: Started`), and rings whose labels and icons read
+`state.wheelLabels`/`state.wheelIcons`. The garden's wheel has two rings (Act,
+View); `worlds/debug/pad.puck` declares the wheel again with a third (Places, which
+names `debug.go`), since a later layer's wheel replaces the earlier one whole. A
+fourth ring is refused at validation.
+
+**Trigger-held pages** (the live example is `controls.puck`'s `pad-pages` row): declare
+the trigger modifiers (`id: "lt"`, `sources ["gamepad.leftTrigger", "keyboard.z"]`,
+with press and release thresholds for hysteresis) and one chord row per page in the same group.
+A chord is a press-order prefix of the held modifiers and the deepest matching row wins, so
+`["lt"]`, `["rt"]`, `["lt", "rt"]` and `["rt", "lt"]` are four pages (the two squeezes differ
+by order) beside the resting page; a page that `inherits` the resting page keeps the sticks
+and movement keys while it rebinds the rest. A binding document validates its chords against
+its own `modifiers`, so every overlay that adds entries to a trigger page declares the
+modifiers again (`let padModifiers` in `pad-kit.puck`); entries from several overlays on the
+same page id merge by source. A binding to a verb only a rendered World registers
+(`world.debug-view`, `world.quality`) is judged by the verb catalog in every shape: `puck compile --validate` checks every
+binding's command (named, Bindable, accepting `text`, the value kind) against it, a typo is refused there, and a headless
+boot admits the document and drops that entry from the seat's composition with one narrated line, as the seat recompose
+already does for any command a leaner shape lacks. The bar's Debug and Tour pages bind the render levers
+(`world.quality next`, `world.rates toggle`), `world.screenshot`, `world.history on` and `world.debug-view` directly. An
+imported module's state rows are private, so a binding in another module that reads one
+(`pad.puck`'s wheel names `wheelLabels`) needs the owner's `exports { bindings [...] }`.
 `WorldWheelFeed` owns presentation;
 its drawn labels, icons and hub label come from `WorldWheelRings`
 (`Puck.World.Client`), which reads the label and icon rows through the seat's

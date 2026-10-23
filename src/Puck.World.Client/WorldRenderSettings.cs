@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 
 namespace Puck.World;
@@ -14,6 +15,8 @@ public sealed partial class WorldRenderSettings {
 
     private bool m_ambientOcclusion;
     private bool m_cadenceGate;
+    private SdfMeshCullLevel m_cull;
+    private SdfUpdateRates m_updateRates;
     private bool m_dynamicResolution;
     private SdfIndirectTier m_indirectTier;
     private float m_renderScale;
@@ -21,6 +24,8 @@ public sealed partial class WorldRenderSettings {
     private ShadowTier m_shadows;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
+    private bool m_toonDefault;
+    private bool? m_toonOverride;
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
 
@@ -38,11 +43,14 @@ public sealed partial class WorldRenderSettings {
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
+        m_toonDefault = defaults.Toon?.Enabled ?? false;
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;
+        Cull = SdfMeshCullLevel.Occlusion;
+        UpdateRates = SdfUpdateRates.All;
     }
 
     /// <summary>Whether ambient occlusion is on. Boots at the definition's default (<see langword="false"/> in the built-in
@@ -64,6 +72,19 @@ public sealed partial class WorldRenderSettings {
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
     /// durable config; rides <see cref="Puck.SdfVm.SdfFrame.EnableCadenceGate"/>.</summary>
     public bool CadenceGate { get => m_cadenceGate; set { m_cadenceGate = value; m_revision++; } }
+    /// <summary>How much of the mesh draws each raster pass skips (default <see cref="SdfMeshCullLevel.Occlusion"/>;
+    /// pixel-identical at every level). <c>world.cull frustum</c> keeps the cull by box alone and <c>world.cull off</c>
+    /// draws every draw in every view and cascade, which measure each level's saving. Session state, never durable
+    /// config; rides <see cref="Puck.SdfVm.SdfFrame.MeshCull"/>.</summary>
+    public SdfMeshCullLevel Cull { get => m_cull; set { m_cull = value; m_revision++; } }
+    /// <summary>Which work updates less often when it is far or small on screen (<c>world.rates</c>; default
+    /// <see cref="SdfUpdateRates.All"/>): bodies' poses, nested views, screens' uploads and the far shadow cascade, each
+    /// only where the drop is barely perceptible (<see cref="SdfUpdateRateTiers"/>). Session state, never durable config;
+    /// rides <see cref="Puck.SdfVm.SdfFrame.UpdateRates"/>.</summary>
+    public SdfUpdateRates UpdateRates { get => m_updateRates; set { m_updateRates = value; m_revision++; } }
+    /// <summary>Gets the counters every frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), which
+    /// <c>world.counters sdf.rates</c> reads.</summary>
+    public Puck.Abstractions.Counting.WorkCounterSet RateCounts { get; } = SdfUpdateRateCounts.Counters();
     /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
     /// (<c>world.render-scale auto</c>; <see cref="Client.WorldDynamicResolution"/>), between
     /// each view's quality floor and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a
@@ -103,8 +124,21 @@ public sealed partial class WorldRenderSettings {
     /// <summary>Whether the world's own views reconstruct over time (<c>world.temporal</c>): each jitters its samples
     /// and resolves them over its history into its output, at native or reduced render scale, through each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
-    /// one. Camera and session views never ask for it.</summary>
+    /// one. The world's own views include every layout slot that names a camera; the camera views screens film and session
+    /// views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
+    /// <summary>The live cel-shading choice; until written it follows the document on reload.</summary>
+    public bool Toon { get => m_toonOverride ?? m_toonDefault; set { m_toonOverride = value; m_revision++; } }
+    /// <summary>The session's override for nested worlds; null lets each world use its document default.</summary>
+    public bool? ToonOverride => m_toonOverride;
+    /// <summary>Reads reloadable toon tuning and updates the default echoed by the live lever.</summary>
+    /// <param name="render">The current world render settings.</param>
+    /// <returns>The current presentation-only look.</returns>
+    public SdfToon ResolveToon(WorldRenderDefaults render) {
+        ArgumentNullException.ThrowIfNull(render);
+        m_toonDefault = render.Toon?.Enabled ?? false;
+        return WorldRenderToon.Resolve(render.Toon, m_toonOverride);
+    }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
     /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>

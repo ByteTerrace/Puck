@@ -7,6 +7,7 @@
 
 #define SDF_INSTANCE_MASKS
 #define SDF_DYNAMIC_TRANSFORMS
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh-bake.interface.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
 
 // Each case: the point, and the index of the results texel it writes (as bits).

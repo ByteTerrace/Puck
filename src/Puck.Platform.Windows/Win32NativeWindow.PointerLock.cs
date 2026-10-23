@@ -2,11 +2,12 @@ using Puck.Platform.Windows.Interop;
 
 namespace Puck.Platform.Windows;
 
-// The pointer lock's Win32 seam: the calls that hide, confine, capture and move the session's real cursor, which only a
-// foreground window and a real mouse reach, so build/CoverageHardwareOnly.txt lists this file. Every decision and every
-// coordinate is Win32PointerLock's, which the CPU suites test.
+// The Win32 pointer-lock calls need a real foreground window and session cursor. The hardware-only coverage list
+// excludes this seam; Win32PointerLock owns its pure eligibility and centre calculations. Absolute devices retain
+// Win32AbsolutePointer's no-warp behavior: their client cursor does not follow a session-side warp.
 internal sealed partial class Win32NativeWindow {
-    // Locks the pointer for a drag when the window may (Win32PointerLock.CanLock).
+    // Locks the pointer for a drag: only the foreground window takes the mouse, and a window with no client area has no
+    // centre to hold the cursor at.
     private void BeginPointerLock() {
         if (
             (m_windowHandle == 0) ||
@@ -51,13 +52,9 @@ internal sealed partial class Win32NativeWindow {
             _ = User32.SetCapture(windowHandle: m_windowHandle);
         }
 
-        _ = User32.ClipCursor(rectangle: new Rectangle {
-            Bottom = (origin.Y + client.Bottom),
-            Left = origin.X,
-            Right = (origin.X + client.Right),
-            Top = origin.Y,
-        });
-        _ = User32.SetCursor(cursorHandle: 0);
+        // No ClipCursor: the capture already routes every mouse message here wherever the cursor is, the recentre
+        // brings it back, and confining it pins a Remote Desktop session's cursor, which then reports no motion.
+        _ = User32.SetCursor(cursorHandle: ClientCursor);
         RecentrePointer();
     }
     // Frees a locked pointer, at the point the lock began when restoring, and gives back the capture no held button
@@ -68,9 +65,8 @@ internal sealed partial class Win32NativeWindow {
         }
 
         m_locksPointer = false;
-        _ = User32.FreeCursor(rectangle: 0);
 
-        if (restore) {
+        if (restore && !m_lastRawMouseAbsolute) {
             WarpPointer(screen: m_lockRestore);
         }
         if (m_pointerButtons == 0) {
@@ -80,19 +76,19 @@ internal sealed partial class Win32NativeWindow {
             _ = User32.SetCursor(cursorHandle: ClientCursor);
         }
     }
-    // Returns a locked pointer to the client area's centre once it has moved off it, after the pump has taken the
-    // motion that moved it.
+    // Returns a locked pointer to the client area's centre once it has left it, after the pump has taken the motion
+    // that moved it, while the lock holds it.
     private void RecentrePointer() {
         if (
+            HoldsCursor &&
             User32.GetCursorPos(point: out var at) &&
             ((at.X != m_lockCentre.X) || (at.Y != m_lockCentre.Y))
         ) {
             WarpPointer(screen: m_lockCentre);
         }
     }
-    // Moves the cursor to a screen point and rebases every motion baseline on it, so the move itself reports no motion:
-    // the window-message fallback's last client point, and each absolute-mode device's awaited warp target
-    // (Win32PointerLock.Baseline).
+    // Moves the cursor to a screen point and rebases the window-message fallback's last client point on it, so the move
+    // itself reports no motion.
     private void WarpPointer(Point screen) {
         if (!User32.SetCursorPos(
             x: screen.X,
@@ -109,31 +105,6 @@ internal sealed partial class Win32NativeWindow {
         )) {
             m_lastMouseX = client.X;
             m_lastMouseY = client.Y;
-        }
-
-        foreach (var state in m_rawMouseStates.Values) {
-            if (state.LastAbsoluteX is null) {
-                continue;
-            }
-
-            state.Warp = (state.VirtualDesktop
-                ? Win32PointerLock.ToAbsolute(
-                    height: User32.GetSystemMetrics(index: SmCyVirtualScreen),
-                    left: User32.GetSystemMetrics(index: SmXVirtualScreen),
-                    screenX: screen.X,
-                    screenY: screen.Y,
-                    top: User32.GetSystemMetrics(index: SmYVirtualScreen),
-                    width: User32.GetSystemMetrics(index: SmCxVirtualScreen)
-                )
-                : Win32PointerLock.ToAbsolute(
-                    height: User32.GetSystemMetrics(index: SmCyScreen),
-                    left: 0,
-                    screenX: screen.X,
-                    screenY: screen.Y,
-                    top: 0,
-                    width: User32.GetSystemMetrics(index: SmCxScreen)
-                ));
-            state.WarpReports = 0;
         }
     }
 }

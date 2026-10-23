@@ -50,7 +50,7 @@ public sealed class WorldPointerRayCaptureLawTests {
 
         private ulong m_tick;
 
-        public Rig(bool withSink) {
+        public Rig(bool withSink, Func<WorldDefinition, WorldDefinition>? pointed = null) {
             m_fixture = Fixtures.FreshServer(definition: Document());
 
             var definition = m_fixture.Server.Definition;
@@ -74,7 +74,7 @@ public sealed class WorldPointerRayCaptureLawTests {
                 )
                 : null);
             Capture = new WorldPointerRayCapture(
-                definition: () => definition,
+                definition: () => (pointed?.Invoke(arg: definition) ?? definition),
                 pointer: Pointer,
                 roster: Roster,
                 router: Router,
@@ -253,6 +253,45 @@ public sealed class WorldPointerRayCaptureLawTests {
 
         rig.Point(device: Gamepad);
         Assert.Empty(collection: rig.Frame());
+    }
+    [Fact]
+    public void AnEngageableTabletopDrawsThePointerWhereNoSimulationScreenDoes() {
+        // No screen reads the ray: the fixture's screens keep their own input, and only the table below reads it.
+        static WorldDefinition Passive(WorldDefinition definition) => definition with {
+            ScreensRaw = [.. definition.Screens.Select(selector: row => row with {
+                Route = (row.Route with { Input = SourceDestination.Presentation }),
+            })],
+        };
+        static WorldDefinition Table(WorldDefinition definition) => Passive(definition: definition) with {
+            PlacementsRaw = new WorldPlacementsSection(
+                Policy: Fixtures.StandardAuthoring,
+                Rows: [new WorldPlacement(
+                    Id: "table",
+                    PrototypeId: "table",
+                    Position: Vector3.Zero,
+                    YawDegrees: 0f,
+                    Scale: 1f,
+                    Board: new WorldPlacementBoard(
+                        Topology: "board",
+                        Occupancy: "cells",
+                        Engage: new WorldTabletopEngage(Channel: "interact")
+                    )
+                )]
+            ),
+        };
+
+        using (var neither = new Rig(pointed: Passive, withSink: false)) {
+            neither.Point(device: Mouse);
+            Assert.Empty(collection: neither.Frame());
+        }
+
+        using var table = new Rig(pointed: Table, withSink: false);
+
+        table.Point(device: Mouse);
+        Assert.Equal(
+            actual: table.Frame(),
+            expected: [Seat]
+        );
     }
     [Fact]
     public void APointerThatLeftTheWindowPointsNowhereUntilItReturns() {

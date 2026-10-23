@@ -22,7 +22,7 @@ public readonly record struct ControlApplication(GrantSubject Target, string? Ki
     /// <returns>The label.</returns>
     public string Describe() => $"{Target.Describe()}{((Kit is { Length: > 0 } kit)
         ? $"/{kit}"
-        : string.Empty)}(mask=0x{Reach.Bits:x4})";
+        : string.Empty)}(axes=0x{Reach.Bits.Axes:x8},buttons=0x{Reach.Bits.Buttons:x16},registers=0x{Reach.Registers:x16})";
     /// <summary>Creates the own-body application — passthrough over every ordinal onto the participant's own body.
     /// Its presence in the set is exactly "the avatar drives itself"; its absence is exactly "captured".</summary>
     /// <param name="bodyIndex">The 0-based entity index of the participant's own body.</param>

@@ -125,6 +125,9 @@ Rule operands accept these bounded channels:
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:fingerprint:<row>` | The 64-bit fingerprint of the whole board's values through the identity alone: the canonical fold's identity term, so a mirror image reads a different value. Go's ko check pushes it into a history ring to tell an exact position apart |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
+| `$board:engaged:<row>:<seat>` | 1 while the 1-based local seat sits at the tabletop whose board facet anchors the row's topology (its control applications name that placement), 0 otherwise; `board(engaged, <row>, <seat>)` |
+| `$board:pointer:<row>:<seat>` | The cell the seat's pointer ray (`PlayerIntent.SourceRay`) meets on the tabletop's playing surface, in fixed point, or -1 for no ray or a miss; `board(pointer, <row>, <seat>)` |
+| `$board:side:<row>:<seat>` | The side of the board the seat's body stands on: 0 its -Z edge, 1 +X, 2 +Z, 3 -X (`WorldTabletopFrame.SideOf`), or -1 for no live body; `board(side, <row>, <seat>)` |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$board:component:<row>:<min>:<max>:<maxVisits>` | The size of the connected component (along the topology's directions) of cells whose value lies in min..max that contains the key cell; 0 when the key cell is outside the range, -2 when the budget of settled cells runs out |
 | `$board:boundary:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>` | The count of distinct cells adjacent to that component whose value lies in boundaryMin..boundaryMax (`1:1:0:0:<n>` counts the empty cells around a component of 1s on an empty-is-0 board), on the same terms |
@@ -415,7 +418,25 @@ other value. The transition is an edge, not a level: a `verdict` left sitting
 at its refusing value returns the mover exactly once, and the engine remembers
 the last `verdict` it saw per board binding to detect it, so the remembered
 value folds into the state hash and the checkpoint. `return` requires both
-`move` and `verdict` to be authored (validated). The shipped
+`move` and `verdict` to be authored (validated).
+
+**Sitting down at a tabletop.** A board facet's optional `engage` block
+(`WorldTabletopEngage`: `channel`, `radius`, `pitch`, `margin`, `surface`)
+makes the table engageable like a device. The seat's context button (`channel`,
+a declared channel, the debug world's `interact`) within `radius` of the
+board's centre composes a capturing `control placement:<id>` application, so the
+avatar stands still, and the same button leaves (the context-button probe,
+nearest target first, screens and tabletops together; several seats may sit at
+one table). Seated, the seat's camera eases to the board view
+(`WorldTabletopFraming`): the whole board from the side the seat stands on, at
+`pitch` degrees above the horizontal with `margin` metres around it, and the
+seat's binding context family `engagement` reads `tabletop`, so a world's
+context row can give it the table's controls. The game stays rules: they read
+the seat's channels and the three `$board:` seat operands above
+(`engaged`, `pointer`, `side`), the pointer meeting the plane `surface` metres
+above the topology origin, all in fixed point from the document, the seat's
+application set, its body and its ray (`WorldTabletopFrame`). The debug world's
+chess table is the worked game ([`chess.md`](../../worlds/debug/chess.md)). The shipped
 `body.carry` facet (`WorldCarry`) is a
 separate primitive: it picks up a rigid body, never a placement or board. The
 bridge from rigid bodies to this row is authored, not built
@@ -2271,7 +2292,10 @@ occupancy derive so a knocked-over piece reads as displaced),
 metres, fixed point, 0 for no live body; any other axis refuses as
 `BodyPositionMalformed`; the debug world's `fall-respawn` rule sweeps
 `forEach: $bodies` and gates a `pose` on it to recover any body that falls off
-the ground), and
+the ground), `$engaged:<bodyRef>:<screen>` (1 while the body's participant
+holds a control application onto that declared screen, captured or mirrored,
+0 otherwise or for no live body; an undeclared screen refuses as
+`EngagedMalformed`), and
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and
@@ -2595,47 +2619,39 @@ large crowds that batch motion use the default `overlap` contact mode.
 
 ### Body scale
 
-`bodies.scaleRow` names a keyed `state.world` row (`kind: fixed`, a declared
-`capacity`, and both `min`/`max` authored, `min` strictly positive and `max`
-no greater than `authoring.maxPlacementScale`—the row's own envelope is the
-world's own declared scale envelope, and the render capacity probe's worst
-case must cover the largest live body—refused by name otherwise) whose
-cells, keyed by 0-based body index, carry each body's live scale multiplier:
-absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
-forever, at no per-tick cost. Every cell key must parse as an integer inside
-`0..bodies.capacity-1`—the SAME parse `WorldPopulation.SyncBodyScale` runs at
-every resync, which silently skips a key that fails it; refusing the mismatch
-at validation instead of leaving an authored cell nothing ever reads. A cell
-may not declare an `advance`/`cycle`/`dynamics` value-over-time trait—every
-resync reads at tick 0, so such a cell would read its base value forever
-instead of progressing. A `Region`
-INTERACTION scoped to the one affected body (`left` a one-cell carrier
-property naming it, `right` the placement) is the trigger shape for "this
-specific body standing in this region": the `$region:<placementId>` reserved
-channel is an AGGREGATE occupant count over the whole population and cannot
-express "this body, not any other"—an ordinary world rule gated on it
-shrinks whichever body happens to wander in, and restoring on "the aggregate
-reads zero" stays blocked while an unrelated body lingers in the same region.
-The interaction's own `Edge` mode (not `Level`) is what keeps the trigger a
-single write per crossing rather than a per-tick one: `Level` re-fires the
-effect every tick the co-occurrence holds, which for a `setState` effect is a
-document mutation, a stderr journal line, and a client definition delivery
-EVERY tick a body simply stands in the region. A shrink/restore pair is
-therefore two `Edge` interactions over two regions—one that lowers `Scale`
-on entering the shrinking region, a second, physically separate region that
-restores it on entering THAT one—never a single region's `Level` write
-paired with a self-resetting flag row, which is the same per-tick-write
-anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against. The garden's
-`drinkMe` bottle (shrinks on entry) and `eatMe` cake (restores on entry) are
-one authored instance of this primitive, not engine surface of their own.
-`WorldPopulation.SyncBodyScale` resyncs every active body's `Scale` wholesale
-from the row at the same `Install`/admission choke points `WorldGrants.SyncState`
-resyncs its own drive gates at, PLUS `RestoreCheckpoint` (after
-`WorldPopulation.Restore` rebuilds every body at the constructed default) and
-a detached-seat/peer transfer restore, so a live write settles before the next
-tick and a reused population slot—or a body a checkpoint restore or transfer
-just minted fresh—never inherits a previous occupant's value nor sits at the
-unscaled default the row itself disagrees with. `Scale` multiplies the body's
+`bodies.scale` names a `state.body` Counter register (declared with a `range`
+envelope whose `minimum` is strictly positive and whose `maximum` is no greater
+than `authoring.maxPlacementScale`—the register's own envelope is the world's
+declared scale envelope, and the render capacity probe's worst case must cover
+the largest live body—refused by name otherwise) carrying each body's live
+scale multiplier: absent (the default) leaves every body's
+`Server.WorldBody.Scale` at `1` forever, at no per-tick cost. The register's
+`initial` is the size a body is born at, and the envelope is the only place the
+range is authored (`worlds/debug/size.puck` declares `size`, a quarter to one).
+
+The register is the body's own state, so a body's size goes where the body
+goes. A rule's `setBodyState` writes it; a crossing through a portal pair of
+two sizes (`WorldFrameIsometry.TryScale`, in place in one world) multiplies it
+by the pair's exact scale and refuses, by name, a size outside the envelope
+before anything moves; a mapped crossing to another world carries it with the
+body, so a destination declaring the same register under the same name lands
+the traveller at the size it left in, clamped to the destination's own
+envelope; a checkpoint restores it with the arena and a replay moves it at the
+same tick. A pair of two sizes between two worlds is refused by name, since a
+transfer carries the register unchanged and cannot apply the pair's scale to
+it. A `Region` interaction (or a rule gated on the body's own position) that
+writes the register must be edge-triggered, one write per entry rather than
+one per tick.
+
+`WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs every active
+body's `Scale` from the register once a tick after the world rules (the last
+writer of a register in a tick), at the same `Install`/admission choke points
+`WorldGrants.SyncState` resyncs its own drive gates at, after
+`RestoreCheckpoint` (which rebuilds every body at the constructed default), when
+a crossing lands a body, and right after an in-place crossing wrote it, so a
+reused population slot—or a body a checkpoint restore or transfer just minted
+fresh—never inherits a previous occupant's value nor sits at the unscaled
+default the register itself disagrees with. `Scale` multiplies the body's
 collider volumes (about its own root—contact resolution and hold probes/
 standoff/reach alike), its resolved move speed and turn rate, a hold's own
 gravity fall/rise magnitudes and its own vertical-channel envelope (including
@@ -2643,7 +2659,8 @@ a medium's idle/settle target), a wall
 hold's travel speed, and a pull's own rate (`WorldBody.Hold.cs`)—so a shrunk body settles onto and
 depenetrates from the ground at a proportionally gentler rate too, rather than
 free-falling one tick of full-scale gravity into a collider whose own skin
-margin it can no longer absorb—and, client-side, reading the same row live,
+margin it can no longer absorb—and, client-side, reading the same register
+through the snapshot's body state (the `$bodyState:<register>` presentation row),
 its composed render scale (`Client.WorldSceneEmitter.ResolveStampCreation`)
 and the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`, scaled about the body's own root
@@ -2728,6 +2745,48 @@ the count actually run is derived DOWN from this ceiling by
 divided by the first pass's own resolved-pair count, so a lightly loaded tick
 gets every authored pass and a crowded one stays bounded. See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+
+### Kit and look selected by a body's register
+
+`kits.assignment` and `looks.assignment` each take an optional `select`
+(`WorldRowSelector`): `bodyState` names a `state.body` Counter, and `cases`
+maps a whole-number register value to a kit or look row
+(`{ value: 0, row: "pilot" }`). A body whose register holds a value a case
+names wears that look, or runs that kit, outranking the sequence and, for a
+local seat, the seat kit; a value no case names (a fraction included) keeps
+what the sequence gives it. A register is declared document-wide, so every
+body holds it at its `initial`, props and pieces included: a case naming the
+`initial` value would select every body, so a selector names only the values that
+deviate (the debug world's `suit` is born 1 and selects only 0, `pilot`); a body
+at the initial value keeps its sequence or seat kit and look. The
+validator refuses, by name, a `bodyState` `state.body` does not declare, a Timer
+register, an empty or repeated case value, a case value equal to the register's
+`initial`, and a case row naming no kit or look.
+
+The register is the body's own state, so the choice is the body's and goes
+where the body goes. A kit action's `setState` and a world rule's
+`setBodyState(key, state, value | expression)` write it (the rule effect
+settles through the register's envelope inside the firing's journal scope, and
+a kit refuses it by name, since a kit writes its own registers with
+`setState`); a replay and `puck test --reproduce` move the choice at the same
+tick. `WorldPopulation.SyncBodySelections` resolves it at the same choke points
+as `bodies.scale`, once a tick after the world rules, and when a crossing
+lands; a body whose kit moves recompiles it in place (pose, velocity and every
+register kept), and a moved kit or look bumps the population revision, so the
+client rebuilds and re-latches the body's stamp. A checkpoint carries the
+register, not the selection, and the restore resolves it again. A mapped
+crossing carries every register by name, so a destination declaring the same
+register selects by the carried value before the traveller first advances
+there, anonymous seats included. A look never changes a kit: a collider change
+is the kit assignment's own mapping, authored beside the look's. `world.assign`
+replaces the sequence and rows and keeps the authored `select`;
+`world.population` echoes each assignment's selector and `world.looks` the
+bodies each look holds. The debug world's suit toggle
+(`worlds/debug/suit.puck`) selects both by a `suit` register, which the garden
+and the night field declare too. The toggle is one rule per local seat
+(`worlds/debug/suit-toggle.puck`): a rule reads a seat as a literal checked
+against `bodies.localSeats`, so `suit.puck` instantiates seat 1 and a world
+seating more bodies instantiates one `suitToggle(seat, index)` for each more.
 
 ### Body sleep
 
@@ -2972,6 +3031,24 @@ reads two tokens sharing a cell decides the candidate itself. `promote`
 the walked token onto any other cell, evicting what stood there, with its code
 in `codes` changed to each offered value in turn—one candidate per (cell,
 code); the judge decides where a code may change.
+
+`relocate` with `moves` tries only the cells a token's move patterns reach
+instead of every other cell. A pattern (`WorldSearchMove`) lists `offsets`
+along the topology's own axes (`[dx, dz]` on a grid or ring, `[dq, dr]` on a
+hex, `[dx, dz, dy]` on a box), each stepped up to `range` times (1, the
+default, for a leaper; 0 to slide to the edge), a ray ending on the first cell
+a token stands on, which it still reaches. `codes` limits a pattern to tokens
+whose code in the shape's own `codes` row (an integer row keyed by the
+tokens) is one of them, and `turn` to the turn slot's value; absent, a pattern
+applies to every token or on every turn. A token no pattern applies to offers
+no candidate. The patterns only narrow what the judge runs on, which decides
+every move as before: a pattern that reaches more than the rules allow costs
+judge runs, one that reaches less hides legal moves. Resolving a candidate
+against the patterns is priced as an inspection (`SearchShapePlan.MoveInspect`),
+far below a judge run. A graph or tiling has no translations and refuses
+`moves`. The debug world's chess opponent authors one pattern set per piece
+kind and side, so a one-ply reply judges a few dozen candidates where every
+token on every cell was 2,048.
 
 A job over piles names `zones` instead of `board`: ordered zones (`keysOf`
 rows with `ordered`) over the token domain `tokens` names, whose ordinals are

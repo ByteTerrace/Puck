@@ -56,7 +56,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <param name="buildsInBackground">Whether the scene's rebuilt programs build on the thread pool
     /// (<see cref="SdfCompositionFrameSource.BuildsInBackground"/>).</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false) {
+    /// <param name="toonOverride">The host's live cel-shading override; absent follows the destination's default.</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false, Func<bool?>? toonOverride = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
@@ -70,7 +71,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             domains: domains,
             effectiveCameraName: null,
             mirror: endpoint.Mirror
-        ) { SkyLayers = skyLayers };
+        ) { SkyLayers = skyLayers, ToonOverride = toonOverride };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
             emitters: [m_emitter]
@@ -81,6 +82,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     public WorldAuthorityEndpoint Endpoint { get; }
     /// <summary>Gets the frame source a residency renders the scene through.</summary>
     public SdfCompositionFrameSource FrameSource { get; }
+    /// <inheritdoc/>
+    public bool TickLocked => (m_hostFrame()?.TickLocked ?? false);
     /// <summary>Gets how many seat views the presenter latched into the scene this frame.</summary>
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>
@@ -164,6 +167,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
 
         return frame with {
             EnableCadenceGate = host.EnableCadenceGate,
+            MeshCull = host.MeshCull,
+            UpdateRates = host.UpdateRates,
+            RateCounts = host.RateCounts,
             Time = host.Time,
             Views = m_frameViews,
         };

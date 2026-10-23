@@ -16,6 +16,9 @@ namespace Puck.World;
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
 /// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view
 /// view, which affects only live presentation settings.
+/// <para>Every verb here is Bindable: a write names no path or document target, and runs under the pressing seat's
+/// principal, so the server drops a lever whose section the seat holds no Mutate grant over
+/// (<c>WorldServer.ApplySessionLever</c>) exactly as it does for a typed line.</para>
 /// Nothing here needs a window or a
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
@@ -44,6 +47,24 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
     // The world.sky-quality echo.
     private static string SkyQualityEcho(WorldRenderSettings settings) =>
         $"[world.sky-quality: {SkyQualityName(tier: settings.SkyQuality)}]";
+    // The world.rates lever a token names, or null for none.
+    private static SdfUpdateRates? RatesLever(ReadOnlySpan<char> token) => token switch {
+        "bodies" => SdfUpdateRates.Bodies,
+        "views" => SdfUpdateRates.Views,
+        "screens" => SdfUpdateRates.Screens,
+        "shadow-far" => SdfUpdateRates.ShadowFar,
+        _ => null,
+    };
+    // The world.rates echo: each lever, then what each counted so far.
+    private static string RatesEcho(WorldRenderSettings settings) {
+        static string On(SdfUpdateRates rates, SdfUpdateRates lever) => (((rates & lever) != 0) ? "on" : "off");
+
+        var rates = settings.UpdateRates;
+        var counts = settings.RateCounts;
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"[world.rates: bodies={On(rates: rates, lever: SdfUpdateRates.Bodies)} views={On(rates: rates, lever: SdfUpdateRates.Views)} screens={On(rates: rates, lever: SdfUpdateRates.Screens)} shadow-far={On(rates: rates, lever: SdfUpdateRates.ShadowFar)} bodies.posed={counts.Read(kind: SdfUpdateRateCounts.BodiesPosed)} bodies.held={counts.Read(kind: SdfUpdateRateCounts.BodiesHeld)} views.rated={counts.Read(kind: SdfUpdateRateCounts.ViewsRated)} screens.rated={counts.Read(kind: SdfUpdateRateCounts.ScreensRated)} shadow-far.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered)} shadow-far.held={counts.Read(kind: SdfUpdateRateCounts.ShadowFarHeld)}]");
+    }
     // The world.cadence echo.
     private static string CadenceEcho(WorldRenderSettings settings) {
         return $"[world.cadence: {(settings.CadenceGate
@@ -210,7 +231,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.sky-layer",
             description: "Auditions the sky rows printed by world.lighting: world.sky-layer [solo <index>|solo off|mute <index> on|off]. Session-only; mute takes precedence over solo.",
             handler: (context, args) => {
@@ -228,7 +249,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                 return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
             });
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.shadows",
             description: "Selects the shadow tier ENGINE-WIDE, live: world.shadows [off|low|medium|high] — no argument echoes the current tier. High renders every shadow cascade at 2048 texels a side, medium at 1024 and low at 512, each at a quarter of the memory and fill of the tier above; a change of tier rebuilds each view's graph once. Off, every light goes unshadowed and no cascade renders or is held.",
             handler: (context, args) => {
@@ -260,7 +281,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.ao",
             description: "Toggles ambient occlusion engine-wide, live (no rebuild): world.ao [on|off] — no argument echoes the current state. AO darkens creases and contact seams; turning it off skips the surface pass's screen-space occlusion taps (a small GPU saving, see world.counters gpu).",
             handler: (context, args) => {
@@ -290,7 +311,21 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
+            name: "world.toon",
+            description: "Cel shading, live: world.toon [on|off|toggle]. No argument echoes the mode. Two diffuse bands, tinted shadows, shaped highlights and depth/normal outlines; render.toon tunes the look on reload. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}]");
+                if (args.Count == 0) { return Echo(); }
+                if (args.Count != 1) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
+                var on = args.Is(0, "toggle") ? !settings.Toon : ParseOnOff(args[0]);
+                if (on is not { } resolved) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Toon,
+                    a: resolved ? 1d : 0d, formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: "world.cadence",
             description: "Toggles the unchanged-frame cadence gate live (no rebuild): world.cadence [on|off|status]. On, a frame whose render inputs match the previous one re-composites the retained image (pixel-identical); off renders every frame, so world.counters gpu measures a still scene. Ships ON.",
             handler: (context, args) => {
@@ -320,7 +355,73 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
+            name: "world.cull",
+            description: "Selects how much of the mesh draws the raster passes skip, live (no rebuild): world.cull [occlusion|frustum|off|status] (on is occlusion). occlusion, the default, draws each view's mesh pass in two phases, what the previous frame found visible and then what the GPU finds newly visible against the first phase's depth, on top of the box cull; frustum keeps the box cull alone: each view's mesh and glass passes draw only the draws whose box may lie in the view's frustum before the far distance, and each shadow cascade only those in its light's box; off draws every draw everywhere. world.counters gpu measures what each level saves (draws, vertices, fragments); the image is the same at every level. A device without counted indirect draws keeps frustum under occlusion.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.cull: {settings.Cull.ToString().ToLowerInvariant()}]");
+
+                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                    return Echo();
+                }
+
+                var level = ((args.Count != 1) ? ((SdfMeshCullLevel?)null) : args[0] switch {
+                    "on" or "occlusion" => SdfMeshCullLevel.Occlusion,
+                    "frustum" => SdfMeshCullLevel.Frustum,
+                    "off" => SdfMeshCullLevel.Off,
+                    _ => ((SdfMeshCullLevel?)null),
+                });
+
+                if (level is not { } selected) {
+                    return CommandResult.Error(output: $"[world.cull: unknown '{args.Tail(start: 0)}' — occlusion|frustum|off|status]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Cull,
+                    a: ((double)selected),
+                    formatEcho: Echo
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "world.rates",
+            description: "Selects which presentation work updates less often when it is far or small on screen, live (no rebuild): world.rates [status|on|off|toggle|<lever> on|off] (toggle turns every lever off when all are on, else on), the levers bodies (a body's pose at 30 Hz at or below 30 pixels per metre and 15 Hz at or below 15, its root followed every frame), views (a nested portal or session view at 30 Hz at or below 120 display pixels high and 15 Hz at or below 60), screens (a screen's source upload at 30 Hz at or below its native height on the display and 15 Hz at or below half of it) and shadow-far (the far shadow cascade refreshed at 30 Hz, its fit held between). Every lever ships on. Presentation only: the simulation ticks every body and every machine runs at its own rate. world.counters sdf.rates counts what each held; world.counters gpu shows the far cascade standing between refreshes.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: RatesEcho(settings: settings));
+
+                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                    return Echo();
+                }
+
+                var rates = settings.UpdateRates;
+                SdfUpdateRates? selected = null;
+
+                if ((args.Count == 1) && args.Is(index: 0, value: "toggle")) {
+                    selected = ((rates == SdfUpdateRates.All) ? SdfUpdateRates.None : SdfUpdateRates.All);
+                } else if ((args.Count == 1) && (ParseOnOff(token: args[0]) is { } all)) {
+                    selected = (all ? SdfUpdateRates.All : SdfUpdateRates.None);
+                } else if ((args.Count == 2) && (RatesLever(token: args[0]) is { } lever) && (ParseOnOff(token: args[1]) is { } on)) {
+                    selected = (on ? (rates | lever) : (rates & ~lever));
+                }
+
+                if (selected is not { } chosen) {
+                    return CommandResult.Error(output: $"[world.rates: unknown '{args.Tail(start: 0)}' — status|on|off|toggle|bodies|views|screens|shadow-far on|off]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Rates,
+                    a: ((double)chosen),
+                    formatEcho: Echo
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: "world.indirect",
             description: "Selects the indirect-light tier the baked-mesh path's irradiance volume traces at: world.indirect [off|medium|high]. No argument reads the selected tier.",
             handler: (context, args) => {
@@ -342,17 +443,44 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.exposure",
+            description: "Reads the camera exposure: world.exposure. Echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation) and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual).",
+            handler: (_, args) => {
+                var exposure = WorldRenderExposure.Resolve(exposure: server.Definition.Render.Exposure);
+                var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##}");
+
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: "[world.exposure: takes no argument]");
+                }
+                if (renderProbe.Residency is not { } node) {
+                    return new CommandResult(Output: $"[world.exposure: {authored}; renderer not built yet]");
+                }
+
+                return new CommandResult(Output: $"[world.exposure: {authored}; {string.Join(separator: "; ", values: node.Exposures.Describe())}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: "world.debug-view",
             description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
                 separator: '|',
                 value: DebugViewModes.Names
-            )}]. Depth is the primary-march-only performance probe; off restores final shading.",
+            )}|next]. next steps to the following view, after the last back to off, so one key cycles them. Depth is the primary-march-only performance probe; off restores final shading. Bindable, so a binding row or an authored command (the debug world's gallery.view) may call it.",
             handler: (_, args) => {
                 if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
                 }
 
                 if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
+                }
+
+                if (
+                    (args.Count == 1) &&
+                    string.Equals(a: args[0].ToString(), b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)
+                ) {
+                    node.DebugMode = ((node.DebugMode + 1) % DebugViewModes.Count);
+
                     return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
                 }
 
@@ -401,7 +529,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.upscale-sharpness",
             description: "Sets reconstruction sharpness continuously, live: world.upscale-sharpness [bilinear|balanced|sharp|0..1|0%..100%]. Names alias 0/50/100%. A reduced view's spatial resolve is the four-tap bilinear fast path at zero, and any positive value blends toward clamped Catmull-Rom; a temporally resolved view (world.temporal) gets a contrast-adaptive sharpen of that strength where place shows it at its own extent. A native view that does not reconstruct ignores this setting.",
             handler: (context, args) => {
@@ -426,9 +554,9 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.temporal",
-            description: "Turns temporal reconstruction of the world's own views on or off, live: world.temporal [on|off] — no argument echoes the current state. On, each view jitters its samples over an eight-sample sequence and resolves them over its history into its output, at native or reduced render scale, and a still view stands once it has converged; off, a reduced view resolves spatially and a native view writes its output directly. A change rebuilds each view's graph beside the installed one. Camera and session views never reconstruct.",
+            description: "Turns temporal reconstruction of the world's own views on or off, live: world.temporal [on|off] — no argument echoes the current state. On, each view jitters its samples over an eight-sample sequence and resolves them over its history into its output, at native or reduced render scale, and a still view stands once it has converged; off, a reduced view resolves spatially and a native view writes its output directly. A change rebuilds each view's graph beside the installed one. The world's own views are the seat views, the operator pose and every layout slot that names a camera; the camera views screens film and session views never reconstruct.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: TemporalEcho(settings: settings));
@@ -448,7 +576,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.sky-quality",
             description: "Sets the sky's quality tier, live: world.sky-quality [low|medium|high] — no argument echoes the current tier. A sky layer whose tier lies above it writes no entry and counts no work; below high each kind draws its reduced form (clouds take one thickness tap and three octaves at low, shaded flat, and three octaves at medium; stars stop twinkling at low; an aurora and a noise field take fewer octaves). The world's quality presets set it through their sky row.",
             handler: (context, args) => {
@@ -477,7 +605,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.sky-field-scale",
             description: "Sets the sky field grid independently of the scene grid: world.sky-field-scale [1|0.5]. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
             handler: (context, args) => {
@@ -495,9 +623,9 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale, sky-quality, sky-field-scale and indirect-tier levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale, sky-quality, sky-field-scale and indirect-tier levers, live: world.quality low|medium|high|next — no argument echoes the current settings; next steps low to medium to high and back to low from the preset the shadow tier matches (off is low, high is high, any tier between is medium), so one key cycles them. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -506,8 +634,18 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
                 // preset table applies immediately: look the named tier up and write its levers into the live
                 // settings.
-                if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
-                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
+                // `next` steps the cheapest preset to the fullest and back, from the preset the shadow tier matches
+                // (off is low, high is high, the tiers between are medium), so one key cycles them.
+                var requested = (args.Is(index: 0, value: "next")
+                    ? QualityTiers.Name(tier: (settings.Shadows switch {
+                        ShadowTier.Off => QualityTier.Medium,
+                        ShadowTier.High => QualityTier.Low,
+                        _ => QualityTier.High,
+                    }))
+                    : args[0].ToString());
+
+                if (QualityTiers.Parse(name: requested) is not { } tier) {
+                    return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}|next]");
                 }
 
                 if (server.Definition.Render.Preset(tier: tier) is not { } preset) {

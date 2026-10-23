@@ -67,7 +67,9 @@ public static class WorldReplayEntryDescriber {
             text.Append(value: ' ');
             text.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
             text.Append(value: '=');
-            text.Append(value: WorldReplayInspector.DescribeValue(value: intent[ordinal]));
+            text.Append(value: ((channels.Shape(ordinal: ordinal) == ChannelShape.Relative)
+                ? intent.Channels.Relative(ordinal: ordinal).ToString()
+                : WorldReplayInspector.DescribeValue(value: intent[ordinal])));
         }
 
         return text.ToString();

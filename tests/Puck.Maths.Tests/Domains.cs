@@ -3,7 +3,7 @@ namespace Puck.Maths.Tests;
 /// <summary>
 /// Module 1 — operand sources over the <see cref="FixedQ4816"/> raw space and pairs/quads thereof. Three streams feed
 /// every law: a single committed <see cref="EdgeRaws"/> set (with a budget-bounded cross product), an edge-biased
-/// deterministic sampler seeded by the house <see cref="Pcg32XshRr"/>, and the rolling <see cref="Frontier"/> mapped
+/// deterministic sampler seeded by the house <see cref="Pcg32XshRr"/>, and a fixed stratified window mapped
 /// through the house stratified <see cref="DigitalNetSampler"/>. No law generates its own operands; each declares a
 /// <see cref="Domain"/> and receives cases from here.
 /// </summary>
@@ -300,12 +300,12 @@ internal static class Domains {
     }
 }
 /// <summary>
-/// An operand domain: a named region of the raw space with its own committed frontier counter and its own edge-biased
-/// sampler configuration. Distinct keys track independent progressive coverage. The default domain is the full signed
+/// An operand domain: a named region of the raw space with its own deterministic edge-biased
+/// sampler configuration. Distinct keys derive independent seeds. The default domain is the full signed
 /// raw range; a <see cref="SublatticeShift"/> folds operands onto the exact fixed-point sublattice for laws that
 /// require rounding-free arithmetic.
 /// </summary>
-/// <param name="Key">The persisted frontier key.</param>
+/// <param name="Key">The deterministic domain key.</param>
 /// <param name="Block">The frontier block size <c>B</c> — sample indices consumed per run.</param>
 /// <param name="EdgeFraction">The fraction of random draws taken from the raw edge set.</param>
 /// <param name="NeighborhoodFraction">The fraction of random draws taken from an edge plus a small delta.</param>
@@ -320,7 +320,7 @@ internal readonly record struct Domain(string Key, int Block, double EdgeFractio
     // same exact integer, so they wrap alike.)
     private const long SublatticeSpan = 4093L;
 
-    // Mixes the domain hash with the frontier counter into a generator state, so the seed is a pure function of the key
+    // Mixes the domain hash with the requested sample-window index into a generator state, so the seed is a pure function of the key
     // and the counter (the golden-ratio odd constant decorrelates adjacent counters). The one home of the mix, shared by
     // the generator and its reported seed.
     private static ulong MixSeed(ulong hash, long index) =>

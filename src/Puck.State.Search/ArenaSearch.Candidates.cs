@@ -281,7 +281,17 @@ public sealed partial class ArenaSearch {
                     return true;
                 }
             case SearchShapeKind.Relocate: {
-                    if (candidateIndex == from) {
+                    if (
+                        (candidateIndex == from) ||
+                        ((shape.Moves is { } moves) && !MovesReach(
+                            from: ((int)from),
+                            job: job,
+                            moves: moves,
+                            shapeIndex: shapeIndex,
+                            target: candidateIndex,
+                            token: token
+                        ))
+                    ) {
                         return false;
                     }
 
@@ -419,6 +429,68 @@ public sealed partial class ArenaSearch {
             default:
                 return false;
         }
+    }
+    // Whether a move pattern that applies to the token's code on this turn reaches the target: each offset is stepped
+    // up to its pattern's steps, and a ray ends on the first cell a token stands on, which it still reaches. A token
+    // with no code in the shape's codes row matches only the code-free patterns.
+    private bool MovesReach(Job job, int shapeIndex, SearchMovePlan[] moves, int token, int from, int target) {
+        var plan = job.Plan;
+        var topology = plan.Topology!;
+        var codes = plan.CodeOrdinals[shapeIndex];
+        var code = 0L;
+        var hasCode = (
+            (codes >= 0) &&
+            m_arena.TryReadLiveNumber(
+                key: job.TokenKeys[token],
+                rowOrdinal: codes,
+                time: Time,
+                value: out code
+            )
+        );
+        var turn = Slot(rowOrdinal: plan.TurnOrdinal);
+
+        foreach (var move in moves) {
+            if (
+                ((move.Codes.Length != 0) && !hasCode) ||
+                !move.AppliesTo(
+                    code: code,
+                    turn: turn
+                )
+            ) {
+                continue;
+            }
+
+            var offsets = move.Offsets;
+
+            for (var offset = 0; (offset < offsets.Length); offset += 3) {
+                var cell = from;
+
+                for (var step = 0; (step < move.Steps); step++) {
+                    if (!topology.TryOffset(
+                        cell: cell,
+                        dx: offsets[offset],
+                        dy: offsets[(offset + 2)],
+                        dz: offsets[(offset + 1)],
+                        result: out cell
+                    ) || (cell == from)) {
+                        break;
+                    }
+                    if (cell == target) {
+                        return true;
+                    }
+                    if (AnyTokenAt(
+                        cell: cell,
+                        excludeA: token,
+                        excludeB: -1,
+                        job: job
+                    )) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
     // A jump chain (SearchShapePlan.MaxHops > 1): a candidate is a whole sequence of 1..MaxHops hops, each over an
     // occupied cell onto an empty one, never revisiting a cell of the chain (the token's own starting cell

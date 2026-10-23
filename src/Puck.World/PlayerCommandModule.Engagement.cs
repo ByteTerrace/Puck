@@ -71,7 +71,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult EngageHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Error(output: "[body.engage: expected a target (a screen index or body:<n>) — plus an optional capture:on|off and an optional body index]");
+            return CommandResult.Error(output: "[body.engage: expected a target (a screen index, body:<n> or placement:<id> for a tabletop) — plus an optional capture:on|off and an optional body index]");
         }
 
         // capture:on|off, when present, is ALWAYS the LAST token — this keeps the target and the (optional) body
@@ -97,7 +97,7 @@ internal sealed partial class PlayerCommandModule {
             token: args[0],
             target: out var target
         )) {
-            return CommandResult.Error(output: $"[body.engage: target '{args[0].ToString()}' must be a screen index or body:<n>]");
+            return CommandResult.Error(output: $"[body.engage: target '{args[0].ToString()}' must be a screen index, body:<n> or placement:<id>]");
         }
 
         // The driving body is the optional 0-based body index at token 1, default body 0 (seat 1's body), read and
@@ -171,8 +171,8 @@ internal sealed partial class PlayerCommandModule {
                 );
             }
 
-            if (!m_screens.HasMachine(index: screenIndex)) {
-                return CommandResult.Error(output: $"[body.engage: screen {screenIndex} has no machine to control — screen.insert a cart first]");
+            if (!Server.WorldTick.ShowsEngageTarget(hasMachine: m_screens.HasMachine(index: screenIndex), screen: screen)) {
+                return CommandResult.Error(output: $"[body.engage: screen {screenIndex} has no machine to control and shows no producer — screen.insert a cart first]");
             }
 
             if (screen.Route.EngageRadius > 0f) {
@@ -181,12 +181,12 @@ internal sealed partial class PlayerCommandModule {
                     X: (position.X - FixedQ4816.FromDouble(value: screen.Origin.X)),
                     Y: (position.Z - FixedQ4816.FromDouble(value: screen.Origin.Z))
                 );
-                var radius = FixedQ4816.FromDouble(value: screen.Route.EngageRadius);
+                var radius = player.EngageReach(radius: screen.Route.EngageRadius);
 
                 if (delta.LengthSquared > (radius * radius)) {
                     return CommandResult.Error(output: string.Create(
                         provider: CultureInfo.InvariantCulture,
-                        handler: $"[body.engage: body:{index} is {((double)delta.Length):0.0}u from screen {screenIndex} — within {screen.Route.EngageRadius:0.0}u to engage (body.pose closer)]"
+                        handler: $"[body.engage: body:{index} is {((double)delta.Length):0.00}u from screen {screenIndex} — within {((double)radius):0.00}u to engage at its size (body.pose closer)]"
                     ));
                 }
             }
@@ -286,7 +286,7 @@ internal sealed partial class PlayerCommandModule {
         return false;
     }
     // Parses body.engage's target token: a bare non-negative integer names a SCREEN (the historical, unchanged
-    // shape); "screen:<n>"/"body:<n>" name either explicitly — the SAME grammar
+    // shape); "screen:<n>"/"body:<n>" name either explicitly, and "placement:<id>" a tabletop — the SAME grammar
     // world.grant's subject token already uses, so an operator who knows one already knows the other. Any other
     // GrantSubject shape (all/section/profile/composition) is not a legitimate engage target and is rejected.
     private static bool TryParseEngageTarget(ReadOnlySpan<char> token, out GrantSubject target) {
@@ -295,7 +295,7 @@ internal sealed partial class PlayerCommandModule {
             subject: out target,
             token: token
         ) &&
-            (target.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Body)
+            (target.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Body or GrantSubjectKind.Placement)
         ) {
             return true;
         }

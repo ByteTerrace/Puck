@@ -10,6 +10,9 @@ src/Puck.World/WorldScreenBinder.Device.
 # world.slice's device work: queuing a slice on a live residency's bake, whose sampler only a GPU runs.
 # WorldSliceCommandModuleLawTests covers the parse, the file and the refusals; SdfFieldSliceLawTests the sampling.
 src/Puck.World/WorldSliceCommandModule.Device.
+# world.flag's device work: whether the live render root can capture, arming the capture there, and the record's capture
+# fields. WorldFlagCommandModuleLawTests covers the token, the near resolution, the record and the refusals.
+src/Puck.World/WorldFlagCommandModule.Device.
 # The GPU capture tools' native bindings and their loading, which only an installed PIX or RenderDoc answers, beside
 # a GPU device. GpuFrameCaptureLawTests and GpuCaptureToolsLawTests cover the frame bracketing and the refusals.
 src/Puck.Launcher/GpuCapture/GpuCaptureTools.Load.
@@ -18,7 +21,19 @@ src/Puck.Launcher/GpuCapture/RenderDocCaptureTool.
 # A removed Direct3D 12 device's DRED record, read only from a device that was removed; DirectXRemovalReportLawTests
 # covers its formatting.
 src/Puck.DirectX/DirectXRemovalReport.Device.
-# The Win32 window's pointer-lock seam: hiding, confining, capturing and moving the session's real cursor, which only a
+# The Win32 window's pointer-lock seam: hiding, capturing and moving the session's real cursor, which only a
 # foreground window under a real mouse reaches. Win32PointerLockLawTests covers every decision and coordinate it uses,
 # and Win32PointerTests a background window's refusal to lock.
 src/Puck.Platform.Windows/Win32NativeWindow.PointerLock.
+# Direct3D 12's counted indirect draw: the recorder's ExecuteIndirect on a live command list and the pipeline layout's
+# command signature, created on a live device. VulkanIndirectCountLawTests holds the same call's recording on Vulkan.
+src/Puck.DirectX/DirectXGpuRecorder.Device.
+src/Puck.DirectX/DirectXPipelineLayout.Device.
+# The Vulkan logical device's native creation: vkCreateDevice with the chosen queues, extensions and feature chain, and the
+# command table resolved on the device it returns. VulkanDeviceChainCleanupLawTests drives the chain over a recording driver.
+src/Puck.Vulkan/Apis/VulkanNativeLogicalDeviceApi.cs
+# puck motion's World run: the verb's build, boot and drive of a windowed World, which needs a GPU and a window. MotionLawTests and
+# MotionCollectorLawTests cover the scenario file, the plan, the transcript, the collector, the sheets and the reports.
+src/Puck.Cli.Runs/Motion/MotionCommand.Device.
+src/Puck.Cli.Runs/Motion/MotionRun.Device.
+src/Puck.Cli.Runs/Motion/MotionWorldProcess.Device.

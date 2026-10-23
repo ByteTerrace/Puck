@@ -292,6 +292,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         WorldAffordances.Validate(
             document: probe,
             channels: m_seatBindings.Channels(slot: slot),
+            commands: null,
             seatModes: m_seatBindings.SeatModes(slot: slot),
             errors: vocabularyErrors
         );
@@ -489,8 +490,11 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
                 .Append(value: "\",\"bindable\":").Append(value: ((definition.Bindability == CommandBindability.Bindable)
                 ? "true"
                 : "false"))
+                .Append(value: ",\"wireArgs\":").Append(value: (definition.AcceptsWireArgs ? "true" : "false"))
                 .Append(value: ",\"audience\":\"").Append(value: definition.Audience.ToString().ToLowerInvariant())
-                .Append(value: "\"}");
+                .Append(value: (m_registry().NamesAuthoredCommand(name: definition.Name)
+                    ? "\",\"authored\":true}"
+                    : "\"}"));
             count++;
         }
 
@@ -1017,14 +1021,14 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.signal",
-            description: "Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal drives the issuing seat's lane (seat 1 from stdin or MCP) whatever physical devices are seated or idle, and never seats a device or counts as that seat's activity. It folds into the NEXT simulation tick's snapshot through the seat's bindings exactly like device input and remains carried until a release/zero sample, or until the window loses OS focus, which releases every held input. Echoes [player.signal: p<seat> <source> <sample>].",
+            description: "Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal drives the issuing seat's lane (seat 1 from stdin or MCP) whatever physical devices are seated or idle, and never seats a device or counts as that seat's activity. It folds into the NEXT simulation tick's snapshot through the seat's bindings exactly like device input. Level destinations remain carried until a release/zero sample or focus loss; Relative destinations consume displacement once without a held value. Echoes [player.signal: p<seat> <source> <sample>].",
             handler: SignalHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
-            description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, BINDABILITY, and audience (anyone, or operator for a verb the registry answers for the console alone) — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
+            description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, BINDABILITY, and audience (anyone, or operator for a verb the registry answers for the console alone), with \\\"authored\\\": true on a command the live document's `commands` section authors — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.affordances"

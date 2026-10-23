@@ -16,7 +16,7 @@
     </ItemGroup>
     <ItemGroup>
         <!-- DocsWorkflowLawTests reads the GitHub Actions workflows as YAML. -->
-        <PackageReference Include="YamlDotNet" Version="[16.*, )" />
+        <PackageReference Include="YamlDotNet" Version="[18.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- The repository data these laws read outside the project: a change under it selects this suite in `puck

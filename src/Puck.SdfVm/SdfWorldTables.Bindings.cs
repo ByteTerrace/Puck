@@ -104,7 +104,23 @@ public sealed partial class SdfWorldTables {
     // already bind them.
     internal void WriteMeshWorkCounters(nint set, IGpuBuffer counters, ref IGpuBuffer? bound) =>
         WriteMeshBuffer(bound: ref bound, buffer: counters, member: ShaderWorkCounters.Buffer, set: set);
-    private void WriteMeshBuffer(ref IGpuBuffer? bound, IGpuBuffer buffer, string member, nint set) {
+    // Writes the image view the mesh pass's occlusion reads its first phase from at the mesh interface's mesh target, when
+    // the set does not already bind it: the view's target, or the sampled filler for a pass that does not occlude.
+    internal void WriteMeshTarget(ref nint bound, nint set, nint view) {
+        if (bound == view) {
+            return;
+        }
+
+        m_bindings.WriteSampledImage(
+            arrayElement: 0,
+            binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshVisibility),
+            descriptorSetHandle: set,
+            imageViewHandle: view
+        );
+        bound = view;
+    }
+    // Writes a buffer at a member of the mesh interface in a mesh pass set, when the set does not already bind it.
+    internal void WriteMeshBuffer(ref IGpuBuffer? bound, IGpuBuffer buffer, string member, nint set) {
         if (ReferenceEquals(objA: bound, objB: buffer)) {
             return;
         }

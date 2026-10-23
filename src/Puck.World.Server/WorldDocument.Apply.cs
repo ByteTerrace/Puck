@@ -8,6 +8,7 @@ public sealed partial class WorldDocument {
     // Set only while the single-threaded mutation apply call is running. It lets the deferred typed completion carry
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
+
     // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
     // State slices; overwritten by the next snapshot, like the entry array itself.
     private long[] m_snapshotState = [];
@@ -58,7 +59,7 @@ public sealed partial class WorldDocument {
                 principal: principal,
                 subject: sourceSubject
             )
-                    || !reach.Contains(ordinal: Host.Population.TargetRegisters.ReachOrdinal(index: registerIndex)))
+                    || !reach.ContainsRegister(index: registerIndex))
             ) {
                 return Refuse(
                     $"{principal.Describe()} Drive reach does not include target register '{designation.Register}'",
@@ -1067,9 +1068,9 @@ public sealed partial class WorldDocument {
         }
 
         // AFTER the population branch above: a rebuild replaces every WorldBody, so resyncing scale before it would
-        // read bodies.scaleRow's cells into instances Rebuild is about to discard, leaving the fresh ones at their
-        // constructed default until the next Install happens to touch state again.
-        Host.Population.SyncBodyScale(definition: definition);
+        // read the registers into instances Rebuild is about to discard, leaving the fresh ones at their constructed
+        // default until the next Install happens to touch state again.
+        Host.Population.SyncBodyCells(definition: definition);
     }
 
     // A state mutation changes runtime values, not declaration shape. Keep the authoritative document as the
@@ -1093,7 +1094,6 @@ public sealed partial class WorldDocument {
         m_pendingStateDelivery = true;
 
         ReconcileStateConsumers(
-            bodyScale: true,
             definition: definition,
             driveGate: TouchesDriveGate(definition: definition, mutation: mutation),
             fields: true
@@ -1101,21 +1101,17 @@ public sealed partial class WorldDocument {
     }
 
     // Everything outside the arena that reads a state value and keeps its own copy: the drive gates the grant table
-    // resolved, the field lattice's input, each body's scale, and the cell-driven inhabit counts. A state value
+    // resolved, the field lattice's input and the cell-driven inhabit counts. A state value
     // reaches the installed document through two doors, a value mutation and the arena's end-of-tick export of what
     // the rules wrote, and both end here, so a gate a rule closed is as closed as one a command closed. Nothing here
     // writes the arena or opens a scope. Each flag says whether a row that consumer reads moved.
-    internal void ReconcileStateConsumers(WorldDefinition definition, bool driveGate, bool fields, bool bodyScale) {
+    internal void ReconcileStateConsumers(WorldDefinition definition, bool driveGate, bool fields) {
         if (driveGate) {
             Host.GrantTable.SyncState(definition: definition);
         }
         if (fields) {
             Host.Population.InstallFields(definition: definition);
         }
-        if (bodyScale) {
-            Host.Population.SyncBodyScale(definition: definition);
-        }
-
         // ReconcileInhabitCounts compares against its own cache and is a no-op walk when no tracked inhabit facet's
         // row moved.
         Host.Population.ReconcileInhabitCounts(

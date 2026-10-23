@@ -102,7 +102,7 @@
                     "number",
                     "null"
                   ],
-                  "description": "The emissive strength (null = 0 \u2014 optional members are nullable and normalized at load)."
+                  "description": "The emissive luminance, in nits, the colour tints (null = 0 \u2014 optional members are nullable and normalized at load)."
                 },
                 "specular": {
                   "type": [
@@ -787,6 +787,32 @@
                   ],
                   "default": null,
                   "description": "The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body\u0027s own look lanes; a placement without lanes reads zero, and null keeps the emissive static."
+                },
+                "glass": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "depth": {
+                      "type": "number",
+                      "description": "The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep."
+                    },
+                    "ior": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5)."
+                    }
+                  },
+                  "required": [
+                    "depth"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque."
                 }
               },
               "required": [
@@ -1153,6 +1179,98 @@
                         ],
                         "additionalProperties": false,
                         "description": "Wallpaper-group lattice fold \u2014 Wallpaper. Render only: it has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
+                      },
+                      {
+                        "properties": {
+                          "$type": {
+                            "const": "jitter"
+                          },
+                          "spacing": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The per-axis cell spacing, creation units (clamped to at least 0.001 per axis)."
+                          },
+                          "amount": {
+                            "type": "number",
+                            "description": "The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape\u0027s reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them."
+                          },
+                          "seed": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The hash seed (null = 0)."
+                          },
+                          "tumble": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The hashed rotation\u0027s share of a half turn, in [0, 1] (null = 0, every copy upright)."
+                          },
+                          "materialVariants": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The hashed palette rows a copy\u0027s material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches."
+                          },
+                          "flavor": {
+                            "enum": [
+                              "White",
+                              "Blue",
+                              "Gaussian",
+                              null
+                            ],
+                            "default": null,
+                            "description": "How the displacement is distributed over the cell (null = White).",
+                            "x-enumDescriptions": {
+                              "White": "The independent PCG3D uniform: three decorrelated hashed uniforms, one per axis. The default, and This is the zero-valued default and preserves the base jitter distribution.",
+                              "Blue": "The R3 generalized-golden low-discrepancy offset (the rank-1 lattice on the integer cell index), evaluated in FIXED-POINT integer so it is de-clumped yet bit-identical cross-backend. \u0022Blue-ish\u0022 low-discrepancy scatter \u2014 NOT true isotropic blue noise.",
+                              "Gaussian": "The central-limit average of several decorrelated hashed uniforms per axis: a bell-shaped offset whose mass clusters toward the cell centre, with occasional outliers."
+                            }
+                          },
+                          "origin": {
+                            "default": null,
+                            "description": "The point the lattice folds around, creation units (null = the creation origin)."
+                          }
+                        },
+                        "required": [
+                          "spacing",
+                          "amount"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Stochastic lattice fold \u2014 Jitter: a repeat whose every cell displaces, tumbles and recolours its copy by a hash of the cell. Render only: a hashed copy per cell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
+                      },
+                      {
+                        "properties": {
+                          "$type": {
+                            "const": "logSphere"
+                          },
+                          "shellRatio": {
+                            "type": "number",
+                            "description": "The ratio between neighbouring shells\u0027 radii, above 1 (clamped to at least MinShellRatio)."
+                          },
+                          "twist": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The spin each shell turns about the fold\u0027s Z axis, in radians per shell (null = 0, concentric shells)."
+                          },
+                          "origin": {
+                            "default": null,
+                            "description": "The point the shells centre on, creation units (null = the creation origin)."
+                          }
+                        },
+                        "required": [
+                          "shellRatio"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Log-spherical shell fold \u2014 LogSphere: space tiled into self-similar shells about the origin, each a scaled copy of the prototype shell, so one shape repeats outward and inward at every scale. Render only: a scaled copy per shell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation."
                       }
                     ],
                     "description": "One domain operator authored on a ShapeDocument, applied in creation space \u2014 after the creation/placement frame chain (origin/rotation/scale) and before the shape\u0027s own translate/rotate/scale, so every entry in Domain shares one space regardless of kind. The wire form of SdfDomainOp: a $type-discriminated ordered list whose optional members ToDomainOps resolves."
@@ -1860,6 +1978,100 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "Shape-local cellular relief, evaluated after geometry within its own field scope."
+                },
+                "warp": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "frequency": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency])."
+                    },
+                    "amplitude": {
+                      "type": "number",
+                      "description": "The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude])."
+                    },
+                    "reach": {
+                      "type": "number",
+                      "description": "The farthest the warp carries any point: the amplitude on every axis at once."
+                    }
+                  },
+                  "required": [
+                    "frequency",
+                    "amplitude"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "The shape\u0027s cross-coupled sinusoidal domain warp (null = none) \u2014 see ShapeWarpDocument. Applied to the shape\u0027s own local point after Bumps, before Elongate. Render-only."
+                },
+                "displace": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "frequency": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency])."
+                    },
+                    "amplitude": {
+                      "type": "number",
+                      "description": "The relief\u0027s height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude])."
+                    },
+                    "reach": {
+                      "type": "number",
+                      "description": "The farthest the relief carries the surface outward."
+                    }
+                  },
+                  "required": [
+                    "frequency",
+                    "amplitude"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "The shape\u0027s sine relief (null = none) \u2014 see ShapeDisplaceDocument. Added to the shape\u0027s own field inside its own scope. Render-only."
+                },
+                "elongate": {
+                  "default": null,
+                  "description": "The half-extents the primitive\u0027s cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape\u0027s own local point. Each component is clamped to [0, MaxElongate]. Render-only."
+                },
+                "steps": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps)."
+                },
+                "morph": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "lane": {
+                      "type": "integer",
+                      "description": "Which dynamic-slot lane drives the morph, in [0, 3]."
+                    },
+                    "from": {
+                      "type": "number",
+                      "description": "The lane value where the field before the shape shows alone (t = 0)."
+                    },
+                    "to": {
+                      "type": "number",
+                      "description": "The lane value where the shape shows alone (t = 1); must differ from From."
+                    }
+                  },
+                  "required": [
+                    "lane",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "Only with a MorphBlend, and required by it: the lane and range the morph runs over \u2014 see ShapeMorphDocument."
                 }
               },
               "required": [
@@ -2932,7 +3144,7 @@
                 "ramp"
               ],
               "additionalProperties": false,
-              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Scatter, in [0, 1], is the share of the medium\u0027s extinction that scatters the light-casting bodies\u0027 light toward the eye; absent scatters none. Axis, Spread, Fade, NoiseScale and NoiseDepth are flow-only controls: a flow\u0027s Width is its radius at the mouth, Spread its radius at the far end as a share of Width (absent, zero: the column tapers to a point), Fade the power of the remaining axial share its density falls by (absent, one: linearly to nothing), NoiseScale its noise-cell size in creation units (absent, Width), and NoiseDepth, in [0, 1], the share of its density the noise modulates (absent, one: all of it)."
+              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Scatter, in [0, 1], is the share of the medium\u0027s extinction that scatters the light-casting bodies\u0027 light toward the eye; absent scatters none. Axis, Spread, Fade, NoiseScale and NoiseDepth are flow-only controls: a flow\u0027s Width is its radius at the mouth, Spread its radius at the far end as a share of Width (absent, zero: the column tapers to a point), Fade the power of the remaining axial share its density falls by (absent, one: linearly to nothing), NoiseScale its noise-cell size in creation units (absent, Width), and NoiseDepth, in [0, 1], the share of its density the noise modulates (absent, one: all of it). Intensity is the luminance, in nits per unit of path, the ramp\u0027s colour emits at full density: a ray crossing a unit of a fully dense, unabsorbing medium of white colour gains that luminance."
             },
             "default": null,
             "description": "The bounded participating volumes (null = none), at most MaxVolumes \u2014 see VolumeDocument. Each rides the creation root\u0027s or a named shape\u0027s dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider."

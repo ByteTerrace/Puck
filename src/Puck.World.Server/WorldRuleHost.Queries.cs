@@ -266,7 +266,7 @@ public sealed partial class WorldRuleHost {
             return FixedQ4816.Zero;
         }
 
-        return (Host.Body(index: seat)?.ChannelReadComposed[ordinal] ?? FixedQ4816.Zero);
+        return (Host.Body(index: seat)?.ReadChannelScalar(ordinal: ordinal) ?? FixedQ4816.Zero);
     }
     // $pointer: — the local seat's pointer ray as its body integrated it that tick, under the occupancy convention
     // ReadChannelValue sets: an out-of-range or unoccupied seat carries no ray.
@@ -279,6 +279,38 @@ public sealed partial class WorldRuleHost {
         }
 
         return Host.Body(index: seat)?.ChannelReadComposed.SourceRay;
+    }
+    // $board:engaged|pointer|side: — one local seat at an engageable tabletop: whether its application set names the
+    // tabletop's placement, the cell its pointer ray meets on the playing surface, or the side its body stands on.
+    private long ReadBoardSeat(BoardSeatOperand operand) {
+        switch (operand.Facet) {
+            case BoardSeatFacet.Engaged:
+                var table = GrantSubject.Placement(id: operand.PlacementId);
+
+                foreach (var application in Host.GrantTable.Applications(principal: Principal.Seat(slot: operand.Seat))) {
+                    if (application.Target == table) {
+                        return 1L;
+                    }
+                }
+
+                return 0L;
+            case BoardSeatFacet.Pointer:
+                return (((ReadPointerRay(seat: operand.Seat) is { } ray) && WorldTabletopFrame.TryPointerCell(
+                    cell: out var cell,
+                    ray: in ray,
+                    surface: operand.Surface,
+                    topology: operand.Topology
+                ))
+                    ? cell
+                    : -1L);
+            default:
+                return ((Host.Body(index: operand.Seat) is { } body)
+                    ? WorldTabletopFrame.SideOf(
+                        position: body.FixedPosition,
+                        topology: operand.Topology
+                    )
+                    : -1L);
+        }
     }
     // $pointer: — one seat's mapped ray, or with "any" the first participant allowed to point at the screen whose ray
     // lands on its source: the local seats in order, then the live sessions by ordinal, each holding Control over the

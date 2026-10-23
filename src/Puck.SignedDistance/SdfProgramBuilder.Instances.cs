@@ -80,6 +80,12 @@ public sealed partial class SdfProgramBuilder {
                 "Invalid inset, weathering or paint layer."
             );
         }
+        if (!material.IsGlassValid) {
+            throw new ArgumentOutOfRangeException(
+                nameof(material),
+                $"A glass material needs a finite, positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}] and an albedo (its tint) in [0, 1]; got {material.Glass} with albedo {material.Albedo}."
+            );
+        }
         if (material.Paints is { Count: > SdfProgram.MaxPaintsPerMaterial } paints) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),

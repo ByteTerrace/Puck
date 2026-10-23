@@ -23,7 +23,7 @@ namespace Puck.SignedDistance;
 /// <c>passes/sdf-sky-environment-reduce.comp.hlsl</c> and the composite's lookup in <c>passes/sdf-sky-pass.hlsli</c>.
 /// </summary>
 public static partial class SdfSkyEnvironment {
-    /// <summary>The map's texels along each axis. SdfIsaHlsl generates it into the kernels as <c>SDF_SKY_ENVIRONMENT_SIZE</c>, read by
+    /// <summary>The map's texels along each axis. SdfRenderHlsl generates it into the kernels as <c>SDF_SKY_ENVIRONMENT_SIZE</c>, read by
     /// <c>shade/sdf-sky-environment.hlsli</c>.</summary>
     public const int Size = 64;
     /// <summary>The map's sampled directions. Layer evaluations follow each layer's visible directional domain.</summary>

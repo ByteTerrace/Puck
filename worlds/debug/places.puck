@@ -1,0 +1,40 @@
+// The debug world's named places and the console command that goes to them. Each place is a spawn point a few metres
+// from one of the world's features, facing it; `debug.go <place>` poses a body there and hands the view back to the
+// seat's chase camera, so one line reaches any feature from anywhere. The debug world imports this file whole, and
+// debug.md beside it lists the places. The painting wing's own places (portals, portal-garden, portal-night,
+// portal-link, portal-fall) are authored beside the paintings (paintings.puck).
+//
+// `debug.go` is an authored command: a `commands` row composing existing verbs, which the console answers beside the
+// engine's own (help, help --names, a binding row or wheel sector naming it). It runs each line under the caller's
+// own authority, as though the caller had typed it.
+
+spawnPoints [
+  // In Wonderland (wonderland.puck), 2.3 m in front of the deck's television on the west wall (devices.puck), facing
+  // it, with the Advanced Brick on her right and the Humble Brick on her left: posed here, she keeps whatever size she
+  // was.
+  { id: "devices", position [4, 0.05, 30.5], yawDegrees: 90 }
+  // At White's edge of the chess table in the gallery lobby (chess.puck), 1.6 m from the board's centre and facing it,
+  // inside the board's engage radius: the context button sits her down.
+  { id: "chess", position [12.2, 0.05, 18.4], yawDegrees: 180 }
+  // Behind the chair at the desktop computer in the gallery lobby (desktop.puck), facing its monitor, inside the
+  // screen's engage radius.
+  { id: "desktop", position [12.4, 0.05, 23.7], yawDegrees: 90 }
+  // Outside the gallery hall's entrance (hall.puck), facing in; the map board stands in the lobby ahead and left.
+  { id: "gallery", position [16, 0, 9], yawDegrees: 180 }
+]
+
+commands [
+  {
+    name: "debug.go"
+    help: "Poses a body at one of the debug world's places (stage, devices, chess, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, or any spawn point) and returns the view to the play layout's chase camera."
+    parameters [
+      { name: "place", kind: Spawn, default: "stage" }
+      { name: "body", kind: Body, default: "0" }
+    ]
+    lines [
+      "body.pose spawn:{place} {body}"
+      "view.override camera auto"
+      "view.override layout play"
+    ]
+  }
+]

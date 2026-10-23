@@ -52,7 +52,8 @@ public sealed partial class SdfWorldTables {
 
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
-        SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
+        SdfWorldPackage.ToonBands, SdfWorldPackage.ToonShadow, SdfWorldPackage.ToonOutline, SdfWorldPackage.ToonInk,
+        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
         SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
         SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
@@ -112,7 +113,10 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Parts.ShadowSecond:
                 hash.Add(value: shadow.Value);
                 break;
+            // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
+            // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see.
             case SdfWorldPackage.Parts.Views:
+            case SdfWorldPackage.Parts.GlassShade:
             case SdfWorldPackage.Resolve:
                 hash.Add(value: lighting.Value);
                 if (part == SdfWorldPackage.Resolve) {
@@ -228,6 +232,7 @@ public sealed partial class SdfWorldTables {
         hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].Quality.SkyFieldFraction));
+        hash.Add(value: ((ulong)frame.MeshCull));
         AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
         return hash.Value;

@@ -34,19 +34,37 @@
       },
       "reach": {
         "description": "An untrusted contributor\u0027s channel reach on a Drive row, carried alone: which declared ordinals this contributor may touch at all. Reach is not consent; a reached channel contributes nothing until the occupying seat authors a positive ceiling for it.",
-        "title": "ChannelReachMask",
         "type": [
-          "integer",
+          "object",
           "null"
-        ]
+        ],
+        "properties": {
+          "bits": {
+            "$ref": "./common.schema.json#/$defs/ChannelMask",
+            "description": "The numeric and button reach banks."
+          },
+          "registers": {
+            "description": "Independent target-register reach.",
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "title": "ChannelReachMask"
       },
       "consent": {
         "description": "The ordinals named by the occupying seat\u0027s ceiling gesture on its own Drive row. The seat may issue the gesture repeatedly to give different channels different ceilings; each gesture writes only the ordinals it names and leaves the rest unchanged, while revocation clears the whole ceiling value.",
-        "title": "ChannelConsentMask",
         "type": [
-          "integer",
+          "object",
           "null"
-        ]
+        ],
+        "properties": {
+          "bits": {
+            "$ref": "./common.schema.json#/$defs/ChannelMask",
+            "description": "The numeric and button banks, one bit per consented channel ordinal."
+          }
+        },
+        "additionalProperties": false,
+        "title": "ChannelConsentMask"
       },
       "ceiling": {
         "description": "The pool ceiling c (raw Q16.16, 0 \u003C c \u2264 One) bounding how far the untrusted pool may pull the channels Consent names away from the human\u0027s own value. It is one number per (seat, channel), authored by the seat, and the grant door enforces exactly that: a row carrying a ceiling must be the occupying seat\u0027s own row (seatN drive body:N) and must name the channels it applies to. It is never carried on a contributor\u0027s row and never derived across rows \u2014 no combination of contributor-declared numbers (max, sum, or min) is defensible, and a contract nobody can state as a single number is not one. 0 is refused at the door, mirroring Budget\u0027s 0 refusal verbatim: pool-but-never-reach is accepted-and-inert, so grant nothing instead of a ceiling that can never fire. A ceiling authored in the world document is withheld at boot (the row itself still applies) \u2014 see Server.WorldServer\u0027s constructor: the document may pre-wire a contributor\u0027s reach, but consent is a thing only a seated human grants live.",

@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the lead rules on each finding the pass still raises with a scoped fix, a recorded open item, or a dismissal with its reason.
+The response has the lead rule on the remaining findings—routing the blocker to a scoped fix (or dismissing an invalid finding with its reason) and routing the out-of-scope finding to a recorded open item or a named lane.

@@ -418,11 +418,18 @@ public sealed class WorldPeerHost : IDisposable {
                     (authentication.Kind != ((byte)WorldFederationRequest.Authenticate)) ||
                     !WorldFederationCodec.TryDecodeAuthentication(
                     body: authentication.Body.Span,
+                    challenge: out var clientChallenge,
                     failure: out _,
                     proof: out var federationProof
                 ) ||
+                    (clientChallenge.Length != m_authenticator.ChallengeBytes) ||
                     !m_authenticator.TryVerify(
-                    challenge: federationChallenge,
+                    challenge: WorldFederationCodec.BindProofChallenge(
+                        challenge: federationChallenge,
+                        counterChallenge: clientChallenge,
+                        clientKeyHash: client.Link.RemoteId.KeyHash,
+                        serverKeyHash: m_network.Peer.Id.KeyHash,
+                        serverProof: false),
                     proof: federationProof,
                     sourceAuthority: out var federationAuthority
                 ) ||
@@ -437,8 +444,22 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
 
+                byte[] serverProof;
+                try {
+                    serverProof = m_authenticator.Prove(challenge: WorldFederationCodec.BindProofChallenge(
+                        challenge: clientChallenge,
+                        counterChallenge: federationChallenge,
+                        clientKeyHash: client.Link.RemoteId.KeyHash,
+                        serverKeyHash: m_network.Peer.Id.KeyHash,
+                        serverProof: true,
+                        authority: m_server.AuthorityIdentity));
+                } catch (InvalidOperationException) {
+                    // A bearer-token client can already pin this transport key. A client without that pin must
+                    // reject this empty proof; a verify-only host never silently authenticates itself to one.
+                    serverProof = [];
+                }
                 await WorldFederationCodec.WriteResponseAsync(
-                    body: WorldFederationCodec.EncodeAuthorityIdentity(authority: m_server.AuthorityIdentity),
+                    body: WorldFederationCodec.EncodeAuthorityIdentity(authority: m_server.AuthorityIdentity, proof: serverProof),
                     ct: handshakeCt,
                     kind: WorldFederationResponse.Authenticated,
                     stream: stream

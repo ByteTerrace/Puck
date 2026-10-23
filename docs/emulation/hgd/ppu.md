@@ -26,13 +26,22 @@ bytes. Dots 1 to 256 fetch the tiles for the rest of the current line, and dots
 321 to 336 fetch the first two tiles of the next one. Each fetch drives its
 address on one dot and latches the data on the next, and the cartridge observes
 every address as it is driven, which is how a board that counts PPU A12 edges
-sees them.
+sees them. A pattern fetch drives its address a dot earlier still, so A12 rises
+at dot 260 for the sprite patterns and at dot 324 for the next line's first
+background pattern, the figures the
+[MMC3 page](https://www.nesdev.org/wiki/MMC3#IRQ_Specifics) gives. Outside
+rendering the address bus rests on `v`, so the increment after a $2007 access
+reaches the board too.
 
 Two 16-bit shift registers hold pattern bits and two more hold attribute bits.
 They shift once per dot from dot 2 to 257 and from 322 to 337, and dots 9, 17,
 …, 257, 329 and 337 reload their low bytes from the latches. The pixel at X
 reads bit 15 minus fine X of each register after that dot's shift, so the first
-pixel of a line shows the first tile fetched on the previous line.
+pixel of a line shows the first tile fetched on the previous line. Shifting
+brings a 0 into the low pattern plane, a 1 into the high plane, and each
+attribute register's reload latch; nothing shifts while rendering is off, so
+rendering re-enabled mid-line draws the stale bits until the fetches refill
+them (AccuracyCoin's BG Serial In).
 
 Scrolling follows the chip's internal registers: `v`, the current address; `t`,
 the address the next frame or line starts from; fine X; and the write toggle
@@ -98,6 +107,14 @@ reads return it wherever the PPU drives nothing.
 After power-on the PPU ignores writes to $2000, $2001, $2005 and $2006 until the
 first pre-render line, as the RP2C02G does.
 
+A write lands as M2 falls at the end of its CPU cycle; a read takes its data at
+the cycle's read point in the middle of M2's high phase (see
+[CPU and timing](cpu-and-timing.md#clock-edges-and-the-cpu)). The rendering
+pipeline sees a $2001 write two dots after it lands, the three to four dots
+after the write cycle begins that the
+[PPUMASK description](https://www.nesdev.org/wiki/PPU_registers#PPUMASK) gives,
+while the odd-frame dot skip follows the written value at once.
+
 Palette RAM is 32 bytes. $3F10, $3F14, $3F18 and $3F1C are the same cells as
 $3F00, $3F04, $3F08 and $3F0C, and every palette read returns six bits. With
 rendering off the picture is the backdrop colour, unless `v` points into palette
@@ -115,9 +132,9 @@ supplies its own 2 KiB for the upper two nametables.
 
 ## Not yet modelled
 
-The PPU is exact to the dot but not within a dot. A CPU access lands between two
-dots; the second write to $2006 reaches `v` at once rather than after the
-hardware's short delay; and the I/O latch holds its value without decaying. The
+A CPU access lands between two dots rather than within one; the second write to
+$2006 reaches `v` at once rather than after the hardware's short delay; and the
+I/O latch holds its value without decaying. The
 remaining $2002 race windows, OAMADDR corruption on the RP2C02G, and the other
 chip revisions belong to the NTSC accuracy package, which pins them against the
 PPU test suites.

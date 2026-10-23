@@ -19,7 +19,7 @@
         "type": "string"
       },
       "hash": {
-        "description": "The content-address integrity pin (sha256-64/{16 hex}). required \u2014 a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.",
+        "description": "The full content integrity pin (sha256/{64 lowercase hex}). Required \u2014 a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.",
         "type": "string"
       },
       "fuel": {

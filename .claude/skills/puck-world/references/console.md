@@ -32,7 +32,7 @@ module hits the analyzer complexity ceiling, carve by SUBJECT into more
 modules, never into shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
 X>()` in `WorldBootComposition`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
-its built-ins `help`, `wire.ack`, `wire.errors`).
+its built-ins `help`, `run`, `wire.ack`, `wire.errors`).
 
 A shared module in `Puck.World.Console` never takes a link at construction: a verb
 that submits resolves the instance the console addresses on each call
@@ -328,6 +328,17 @@ the World's first stdin read is treated as silent. A line that arrives after
 stepping has begun lands in whatever tick drains it, so put a `world.wait` in
 front of anything whose tick matters.
 
+`world.wait until <tick>` holds the session until the addressed world has
+completed an absolute authority tick (the tick `world.state.hash` and capture
+stills report, not the host-work clock `world.wait <ticks>` counts), answers
+at once when it already has, and releases with a refusal when the world
+pauses first. `world.at <tick>|+<n> <line>` and its one-line script form
+(`WorldTickScript`, `WorldTickScriptCommandModule`, published from
+`WorldHostStep` beside the capture scheduler) pin lines to ticks independently
+of any session's queue; every line of a tick runs in the drain after it, as
+the console, in arming order, with no read-after-write barrier between them.
+`WorldTickScriptLawTests` pins both against the real pump and server.
+
 `quit` (`TerminalCommandModule`; `SiloStdinRouter` routes it as
 a process verb) is Immediate, so the barrier and `world.wait` hold it behind
 everything its session queued earlier. Once it runs, `mayStep` refuses further
@@ -362,7 +373,11 @@ authored only (`bindingBar.*`, see [documents.md](documents.md)).
 
 ## Screenshots
 
-`world.screenshot <path.png>` (`WorldUiCommandModule`): Immediate; requests
+`world.screenshot [<path.png>]` (`WorldUiCommandModule`): Immediate; Bindable. With no argument it writes
+`screenshots/puck-<local date and time>.png` under the run's state root (`--state-dir`; numbered past a file of the
+same second), and that is the only form a binding, an authored command or any seat may run, since a document never
+chooses where a file lands: a path, `crossing` and `presented` are the operator's (a non-console principal is refused
+by name). The Debug page's Capture plate is that bind. Requests
 capture on the render host's OUTERMOST decorator, so it lands on the next
 COMPOSED frame — world plus overlay, what the player actually sees (the
 overlay node reads back its own render target; if the overlay drew nothing
@@ -392,6 +407,13 @@ The verb arms through `WorldCaptureScheduler.ArmUnscheduled`, so both rendered
 hosts hold their clock for it exactly as for a scheduled capture: no tick past
 the one it was armed after runs until a frame serves it or a hold budget
 refuses it, and a `world.wait <ticks>` after it has the capture behind it.
+`ArmUnscheduled` stamps a settled request with that tick and its state hashes
+(`FrameCaptureRequest.StateTick`/`StateStamp`) and, once it lands, prints
+`[still] <path> tick=<T> hash=<capture hash> pose=<pose hash> shown=<tick the
+frame shows>` on stderr. `world.screenshot <path.png> slots` also writes each
+slot of the active layout as `<stem>-<camera>.png` (`WorldSlotStills`). To land
+a still on a chosen tick, pin it with `world.at` ([schedules and
+tests](schedules-and-tests.md#tick-exact-debug-capture)).
 
 Arming a second capture while one is still pending is REFUSED by name
 (`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:
@@ -404,6 +426,45 @@ of capturing the departed image or a later arrival. A mutation barrier orders co
 application, but does not itself prove the capture has completed; use the
 capture outcome before reusing a path or claiming its bytes exist.
 
+### Settled stills and presented bursts
+
+The ordinary capture is **settled**: it holds presentation from the frame it is
+armed in (the residency renders the held frame, `SdfWorldResidency.HoldsFrame`;
+the frame context loses its presentation time; the presenter pins interpolation
+to the completed tick), temporal views converge over the held renders, and the
+PNG is a clean still. A settled capture therefore cannot show a defect that
+lives between frames: flicker (a still scene whose pixels change frame to frame, such as
+jitter moiré on a screen), ghosting and trails behind moving content.
+
+`world.screenshot <path.png> presented [<frames>] [region <x> <y> <w> <h>]`
+reads what the display **presented** instead (`FrameCaptureMode.Presented`): it
+holds nothing, settles nothing and holds no host clock, and the render-graph
+runtime reads back, after each frame's renders, the image it hands the display
+for the root (`RenderGraphRuntime.Presented.cs`), with that frame's jitter,
+history and motion. 1..120 frames (default 1) land at `<path.png>`, or at
+`<path>-000.png` onward for a burst. When the last PNG is written, stderr
+carries the report (`PresentedFrameReport`): a line per frame with its
+presentation index (consecutive indices differ by one, so a gap is a frame the
+burst could not read), the presentation its image was rendered on (an earlier
+one is marked `standing`: the display repeated an image), its tick, and against
+the frame before it the changed pixels and the mean and largest absolute Rec.
+709 luma change, over the region (fractions of the frame, origin top-left) or
+the whole frame; then a summary line. Fence it with `world.wait captures
+<seconds>`. The PNGs are encoded on the thread pool, so the pump pays only the
+readback per frame; a burst is still not free, since each readback waits for
+the GPU.
+
+Pick by question: a settled capture for how a still looks; a presented burst
+(8 frames is plenty for flicker) for whether it changes between frames. A
+presented capture keeps the external-content guarantee the same way a settled
+one does: while any capture is armed, the capture gate fills every external
+source, so the display itself shows the fills during a burst, and a frame whose
+image still read unfilled external content is skipped, never read. Under
+`world.temporal on`, a view whose history held an external screen's pixels has
+that history discarded on the burst's first frame, and the burst skips the
+eight renders it takes to converge again, so the first PNG is the steady image;
+the window shows that one reconvergence.
+
 Host integrations arm captures through `TextCommandSession.InvokeAsync` when
 they must follow the session's queued edits and waits. Await the returned
 `FrameCaptureRequest.Completion` off the pump. Success means the writer closed
@@ -411,6 +472,17 @@ the PNG; failure carries an exception, including disposal before service.
 `PendingCapturePath == null` is never proof of a successful capture, and a
 tick wait alone does not prove a particular request finished. Cancelling an
 await does not cancel the accepted capture or release its output path for reuse.
+
+`world.flag <exhibit> [note…]` (`WorldFlagCommandModule`): Immediate, Bindable;
+writes `<package>/flags/<exhibit>.json` beside the booted document (exhibit,
+note, tick, seat, the seat's `body.where` pose and its render camera) and arms
+a capture to `<package>/flags/<exhibit>.png` through the same
+`ArmUnscheduled` path, with the same stderr `[capture]` lines. The exhibit is
+a file-safe token and the folder is the package's own, so no argument names a
+path; host console or local seat only; headless or with a capture already
+pending, the record is written and the echo says no capture was armed. An
+authored command may call it (`world.screenshot` is Bindable, but only its no-argument form runs for a seat, and no
+argument of `world.flag` names a path).
 
 ### `world.sdf.dump` — the packed program
 

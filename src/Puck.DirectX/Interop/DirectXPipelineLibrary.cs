@@ -42,16 +42,13 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
     }
 
     private static ID3D12PipelineLibrary* CreateLibrary(ID3D12Device1* device, void* blob, nuint length) {
-        void* library;
-
         device->CreatePipelineLibrary(
             BlobLength: length,
             pLibraryBlob: blob,
-            ppPipelineLibrary: out library,
-            riid: ID3D12PipelineLibrary.IID_Guid
+            ppPipelineLibrary: out ID3D12PipelineLibrary* library
         );
 
-        return ((ID3D12PipelineLibrary*)library);
+        return library;
     }
     private static string NameOf(string kind, ReadOnlySpan<ReadOnlyMemory<byte>> parts) =>
         $"{kind}-{GpuPipelineCacheStore.ContentKeyOf(parts: parts)}";
@@ -85,10 +82,7 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
     public static DirectXPipelineLibrary Create(nint deviceHandle, GpuPipelineCacheFile file) {
         ArgumentNullException.ThrowIfNull(argument: file);
 
-        if (((IUnknown*)deviceHandle)->QueryInterface(
-            ppvObject: out var devicePointer,
-            riid: in ID3D12Device1.IID_Guid
-        ).Failed) {
+        if (((IUnknown*)deviceHandle)->QueryInterface(ppvObject: out ID3D12Device1* device).Failed) {
             Console.Error.WriteLine(value: "[pipeline-cache] directx: the device has no ID3D12Device1; pipelines are created uncached");
 
             return new DirectXPipelineLibrary(
@@ -97,8 +91,6 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
                 library: null
             );
         }
-
-        var device = ((ID3D12Device1*)devicePointer);
 
         try {
             var data = file.Read();
@@ -177,9 +169,9 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
             }
 
             device->CreateComputePipelineState(
-                pDesc: in description,
-                ppPipelineState: out pipeline,
-                riid: in iid
+                pDesc: pointer,
+                ppPipelineState: &pipeline,
+                riid: &iid
             );
             Store(
                 name: pName,
@@ -216,9 +208,9 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
             }
 
             device->CreateGraphicsPipelineState(
-                pDesc: in description,
-                ppPipelineState: out pipeline,
-                riid: in iid
+                pDesc: pointer,
+                ppPipelineState: &pipeline,
+                riid: &iid
             );
             Store(
                 name: pName,

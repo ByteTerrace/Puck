@@ -268,7 +268,7 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
-    // The hypercomplex bands. Each construction gets its own key so the frontier advances independently and two laws
+    // The hypercomplex bands. Each construction gets its own key for independent seeds, so two laws
     // over the same type never re-sweep one another's ground. Every narrow/wide gate in the family sits at 2¹⁷, 2²⁹,
     // 2³⁰, 2³¹, 2⁴⁰, 2⁴² or 2⁴⁵, and the committed edge set carries raws strictly on both sides of each, so every case
     // below straddles its own gate.

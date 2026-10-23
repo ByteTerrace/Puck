@@ -9,7 +9,7 @@ Read the relevant section when `SKILL.md` routes here.
 - [Legs](#3-legs-what-the-statement-stands-on)
 - [Oracles](#4-oracles)
 - [Domains](#5-domains)
-- [Coverage ratchet](#6-the-coverage-ratchet)
+- [Law completeness](#6-structural-law-completeness)
 - [Claim bodies](#7-claim-bodies)
 - [Mutation proof](#8-validating-that-a-new-law-actually-bites)
 - [Deliberate corrections](#9-rule-4--a-deliberate-correction-is-expected-to-move-values)
@@ -22,8 +22,8 @@ all: [what a law is for](../SKILL.md#what-a-law-is-for).
 
 Sources of record, all more detailed than this file:
 [tests/Puck.Maths.Tests/README.md](../../../../tests/Puck.Maths.Tests/README.md)
-(modules, tiers, ratchet, frontier, RESULTS) and the XML docs on `Legs.cs`,
-`Laws.cs`, `Domains.cs`, `Coverage.cs` and `LegLedger.cs`. When one of those
+(modules, tiers, structural completeness and deterministic sampling) and the XML docs on `Legs.cs`,
+`Laws.cs`, `Domains.cs`, `Coverage.cs` and `LawLegs.cs`. When one of those
 disagrees with this file, verify the current implementation and update this
 reference in the same change.
 
@@ -59,7 +59,7 @@ do), because the loader reads every `*.json` in the directory and keys by id.
 arguments. Copy the string verbatim from an existing row wherever the same member
 already appears rather than reconstructing it. `Flavor` is `None` unless `Kind`
 is `SharedSubstrate`. A row is materialized directly (`LegText.ToLeg`, into the
-`Leg` record in `Legs.cs`), and `LegLedgerTests` rejects an illegal slot
+`Leg` record in `Legs.cs`), and `LawLegTests` rejects an illegal slot
 combination, so the table is the vocabulary a row's slots follow:
 
 | Leg | Slots it fills |
@@ -117,10 +117,10 @@ Where things live, and nothing crosses:
 | `Oracles.cs` and its per-area partials | shared-nothing reference arithmetic | a `Puck.Maths` call |
 | `Domains.cs`, `Frontier.cs` | operand sources | anything law-specific |
 | `Laws.cs` | generic combinators, written once | per-subject logic |
-| `Coverage.cs` | member surface, waivers, ratchet | law logic |
-| `Legs.cs`, `LegLedger.cs` | leg vocabulary + gates | law logic |
+| `Coverage.cs` | member surface, waivers, completeness check | law logic |
+| `Legs.cs`, `LawLegs.cs` | leg vocabulary + gates | law logic |
 
-**Ids.** `<family>.<kebab-statement>`, ordinal-sorted in the ledger. The family
+**Ids.** `<family>.<kebab-statement>`, uniquely named in the declarations. The family
 set is the distinct prefixes before that first dot — not the file list under
 `laws/`, since a file groups cases by topic and a file's name need not match
 the family its cases declare (a `core.*` case can live in a topic file named
@@ -128,7 +128,7 @@ for the type it covers, not for `core`). Derive the live set rather than
 trusting a pasted list:
 
 ```
-grep -hoE '"Id": "[A-Za-z0-9-]+\.' tests/Puck.Maths.Tests/laws/*.json | sed -E 's/"Id": "|\.$//g' | sort -u
+puck search -M 0 '"Id": "[A-Za-z0-9-]+\.' tests/Puck.Maths.Tests/laws -g "*.json"
 ```
 
 Deep rows take the **tier** as their prefix instead: `deep.*`.
@@ -170,8 +170,8 @@ explicit, so plain `dotnet test` runs the Default tier.
 
 | Tier | Selected by | Measured | When it runs |
 |---|---|---|---|
-| Default | a plain run | about half a minute | **every change**, unconditionally |
-| Deep | `--explicit on --filter-trait tier=Deep` | about a minute | before any rounding change lands |
+| Default | a plain run | ordinary | **every change**, unconditionally |
+| Deep | `--explicit on --filter-trait tier=Deep` | broader | before any rounding change lands |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and explicitly selected expensive combinatorial-prime checks |
 
 Explicit cases never fire on a plain `dotnet test`, and without
@@ -187,19 +187,10 @@ Their declarations name the finite operands and explicitly disclaim a
 full-carrier proof; the tier is a scheduling choice, not an evidence upgrade.
 Cases without a measured runtime state their estimated algorithmic work;
 they do not claim a measured budget. `Exhaustive` is also the one tier whose cases must NOT consume
-a `Domain`: a domain hands out a sample by construction, and consuming one would
-advance the frontier counter its Default sibling reads, sliding that sibling's
-operands as a side effect of a sweep having run. Use `Laws.Claim` with its own
+a `Domain`: a domain hands out a sample by construction. Use `Laws.Claim` with its own complete
 basis there.
 
-The times are **measurements, not enforced budgets** (the project README
-states them), and **nothing records what a session cost** — `RESULTS.md`
-carries no duration, by design, because every figure in it is
-machine-independent and a wall time is not (see that file's own header). If you
-want to know what a case costs, time the run yourself on an idle machine and
-compare it only against that same machine. No law measures time: a claim about
-cost is stated as a deterministic count (an allocation meter reading, a
-case or operand count) or it is `puck bench`'s measurement, not a law.
+No law measures time; performance measurements belong to `puck bench`.
 
 **Tier placement.**
 
@@ -213,12 +204,11 @@ case or operand count) or it is `puck bench`'s measurement, not a law.
   more random operands (the 4096-draw batch against Default's 256) from its
   Default sibling's domain buys nothing and adds no line coverage; do not write
   one, and delete one you touch. Where a Deep row stays, say `MIRROR of <id>`
-  and what it adds in the leg so the ledger reads honestly.
+  and what it adds in the leg so the declaration reads honestly.
 - There is no Smoke tier: a sentinel repeated a Default statement on a tiny
   domain and added neither evidence nor line coverage.
 
-Deep and Default siblings normally share a domain **key**, so they advance one
-frontier counter together.
+Deep and Default siblings normally share a domain key and deterministic seed.
 
 ---
 
@@ -251,7 +241,7 @@ sibling copy" is the level of detail required; "they share rounding" is not.
 The gate rejects an empty `shared`, but only a reviewer can reject a vague one.
 
 **The trust vocabulary the leg prose uses** (three conditions; use these
-words, they are what the ledger's registers are read against):
+words, they are what the declarations are read against):
 
 - **(A) kernel envelope** — every kernel behaviour the leg leans on is
   independently pinned *over the regime this law uses*.
@@ -261,15 +251,14 @@ words, they are what the ledger's registers are read against):
   checks. A transcription is legal only when labelled as faithful carriage and
   never counted as independent evidence.
 
-**Markers that the registers and reviewers key on** — spell them exactly:
+**Markers that reviewers search for** — spell them exactly:
 
 - `ENVELOPE:` — what the law does *not* reach: an operand fold that saturates,
   a branch unreachable at legal operands, a host-specific path, a substituted
   divisor. An envelope that is real but unstated is the defect this marker
   exists to surface, so write it down.
 - `OWED:` opening a citation — the evidence named is not there yet. This is
-  the one spelling the owed-marker register keys on; a gap named in any other
-  words is invisible to it.
+  the spelling used to find missing evidence in authored declarations.
 - `MIRROR of <id> …` — a Deep row's Default sibling, with what the Deep row
   adds.
 - `UNCERTAIN (sweep):` — a classification you are not sure of, with the
@@ -277,17 +266,12 @@ words, they are what the ledger's registers are read against):
 
 **Doc gaps.** When behaviour and the member's XML doc disagree, pin the
 behaviour with a structural leg whose citation opens `DOC GAP:` and says what
-the XML doc claims — never a plain structural leg. The ledger's *behaviour pinned as
-observed* register is derived from that citation, a doc-gap citation on any
-other leg kind fails the leg gate, and one that does not say what the doc
-claims fails it too. In a `laws/*.json` row that is `"Kind": "Structural"` with
-`"Citation": "DOC GAP: <what the doc claims>"`. The register closes only by
-**correcting the code or the doc and re-spelling the leg**; editing
-`leg-ledger.md` closes nothing — the leg gate fails a hand-edited copy, and a
-recording run rewrites it.
+the XML doc claims — never a plain structural leg. A doc-gap citation on another leg kind fails the leg check, as does one that
+omits the documented claim. Close a gap by correcting the code or documentation
+and updating the authored leg.
 
 **What the leg gate checks.** Checks 1–2 run in
-`LegLedgerTests.LawLegsAreDeclared` at tier `Default`; check 3 runs inside
+`LawLegTests.LawLegsAreDeclared` at tier `Default`; check 3 runs inside
 `LawTests` on every case, so xUnit parallelism cannot make it vacuous.
 
 1. `DeclarationViolations` — every statement names ≥ 1 leg; an agreement names
@@ -345,91 +329,35 @@ shared-nothing by construction.
 
 ## 5. Domains
 
-`Domains.cs` is the only operand source; **no law generates its own operands**.
-Each law declares a `Domain` and receives three streams from it:
+`Domains.cs` combines fixed edge batteries, a seeded `Pcg32XshRr` sample
+and a stratified `DigitalNetSampler` window. Every run uses block index zero;
+no sampling counter persists. `Domain.Key` identifies the domain and derives
+its seed, while `Block` sets its stratified sample size. Default samples
+256 random operands and Deep 4096; Deep also reaches the full edge cross
+product where the combinator supports it. Keep exact-result assertions and
+independent oracles when changing a domain.
 
-1. the **edge battery** — `EdgeRaws` mapped through the domain: the committed
-   24-raw set of extremes and off-by-ones around every boundary the kernels
-   branch on (`0, ±1`, both carrier extremes, `±2³¹` and `±2⁴⁷` each with both
-   off-by-ones, `±65536`, `±32768`, `±256`). Exhaustive square for pairs; for
-   quads, a budget-bounded rotation at Default and the **full
-   four-operand cross product at Deep**.
-2. the **edge-biased random batch** — `Pcg32XshRr` seeded purely from the key
-   and the frontier counter; 256 draws at Default, 4096 at Deep.
-3. the **frontier block** — contiguous stratified `DigitalNetSampler` indices
-   mapped by `Domains.FrontierRaw`.
+## 6. Structural law completeness
 
-```csharp
-private static readonly Domain Thing = new(Key: "thing", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
-```
-
-`Key` is the persisted frontier key; `Block` the sample indices consumed per
-run; the two fractions steer the random mixture; `SublatticeShift` (when
-non-zero) folds every operand onto `2^shift` multiples bounded by an odd span,
-so pairwise products are exact and a rounding-free law can hold bit-for-bit.
-
-- **A new domain needs no code outside its declaration.** `Frontier.Consume`
-  registers an unseen key on first use and the ledger writes it into the
-  run's `frontier.json`; a recording run commits it. Do not hand-add an entry.
-- **Give a new law its own key** unless you deliberately want the shared-operand
-  bracket: cases sharing a key in one run read the *same* index and therefore
-  sweep bit-identical operands (some legs lean on exactly that, and say so).
-  The counter advances by **one per consuming GREEN run**, whatever the case
-  count. The advance is green-gated at PERSISTENCE: a session in which any law
-  failed writes `frontier.json` not at all, for no key, so re-running from the
-  persisted state reproduces the red at the same indices instead of sliding the
-  window past it. Consumption is unaffected — a domain still hands out its index
-  mid-sweep, so operand determinism within a run does not depend on how the run
-  ends. The non-law gates (ratchet, leg gate) do not gate it and
-  need not: they consume no domain, so their verdicts sweep no operands and
-  reproduce identically whatever the counters say.
-- **Fold at the domain only when the whole point is that nothing rounds**
-  (the sublattice bands). Otherwise fold inside the **subject and the oracle
-  alike** — the `Subjects.ClosedUnitRaw` / `Subjects.UnsignedRaw` pattern —
-  rather than shrinking the sampler, and declare the fold's bias as an
-  `ENVELOPE`.
-- Tune `EdgeFraction` down when every subject folds its operand onto a band
-  (see `scalar-transcendental` at 0.25): an edge-heavy mixture would otherwise
-  spend its draws on a handful of folded images.
-- **The vector buffers are REUSED across iterations.** `Domains.Vectors` and
-  `VectorTriples` yield the same arrays each step. A claim body that wants to
-  retain one must copy it.
-
----
-
-## 6. The coverage ratchet
-
-`CoverageManifestTests.ManifestRatchetHolds` (tier `Default`) reconciles the
-reflected public `Puck.Maths` surface against `coverage-manifest.json`. It
-fails when a member is **classified nowhere** — no committed state, no covering
-law, no waiver — or when one moved covered→uncovered. It never fails on the
-initial uncovered backlog: coverage only grows.
-
-**The workflow when you add or rename a public member:**
-
-1. Land it **with its classification in the same change**: a law case naming it
-   in `Members` via a `CoverRef(typeof(T), "MemberName")`, **or** an entry in
-   `Coverage.WaiverDeclarations` with a reason.
-2. Record the Default tier (`puck baselines maths-ledger`, below) and commit the
-   regenerated artifacts. A test run passes the ratchet but fails the manifest
-   check until the committed manifest matches the declarations.
-
-Land it with neither and the gate fails on **every** run and cannot heal
-itself: `Coverage.Generate` never writes a state for a member the committed
-manifest does not already mention, so the failing run cannot record it as
-uncovered.
+The owner's ruling removes the coverage ratchet, its floor, recorded registers
+and their generator. `LawCompletenessTests.EveryDeclaredMemberAndWaiverResolves`
+checks declared references and waiver reasons against the current public surface.
+`LawDeclarationTests` checks declaration/binding completeness. No check reads or
+writes a recorded artifact. A whole-public-surface law check needs the uncovered
+API classified first; the retired ratchet grandfathered it through saved state.
+A new or renamed member lands with its law or a precise waiver in the same change.
 
 Details that decide a declaration:
 
 - A `CoverRef` resolves by **declaring type (generic definition) + name**, so
-  it credits **all overloads** of that name at once. `CoverageManifestTests`
+  it credits **all overloads** of that name at once. `LawCompletenessTests`
   fails a reference that resolves to no member — a typo cannot silently
   under-count.
 - **Coverage is credited only from executed cases.** Every registry entry is a
   law `LawTests` runs and asserts.
 - **Cite only what the case could catch.** A citation is a claim that the case
   would fail if the member were wrong. Citing a member from every case in a
-  family records a breadth of coverage in the manifest that the evidence does
+  family records a breadth of coverage in declarations that the evidence does
   not support. A lane surface, for example, is cited only by cases that read
   lanes back and compare them lane for lane, and the registry says so at the
   declaration.
@@ -442,36 +370,6 @@ Details that decide a declaration:
   world for the renderer — are **not** automatically waivable: lane order and
   narrowing rounding are decidable in integers, so they take laws. A lossy map
   is still a decidable one.
-
-**Where a run writes.** A test run never changes the checkout: every run
-writes its ledger to `records/maths-ledger/` beside the test assembly in the
-build output, reading the previous frontier and `RESULTS.md` from there when an
-earlier run left them. Only `puck baselines` writes the committed artifacts: it
-clears that directory, runs the unfiltered Default tier, and promotes the run's
-ledger over them (`--check` compares the manifest and the leg ledger instead):
-
-```text
-puck baselines maths-ledger
-```
-
-Every run's ratchet gate fails when `coverage-manifest.json`
-differs from what the declarations generate, and the leg gate fails when
-`leg-ledger.md` differs from the rendered declarations; `frontier.json` and
-`RESULTS.md` are run records and fail nothing when stale. `LedgerOutputTests`
-holds the writer to this.
-
-**Never hand-edit `coverage-manifest.json`, `leg-ledger.md`, `RESULTS.md` or
-`frontier.json`.** All four are machine-written and every write is
-execution-gated: the manifest belongs to the ratchet gate, the leg ledger to
-the leg gate, each `RESULTS.md` tier block to that tier, the frontier to
-runs that consumed domains **and stayed green**. A filtered or single-tier run
-therefore leaves every other record exactly as its own last run left it — and
-can never quiet a gate it never ran. Because the ratchet and leg gate carry the
-`Default` trait, **only a run that includes the Default tier
-regenerates the manifest and the ledger**; a Deep-only run will
-not. Commit whatever a recording run regenerates as part of your change.
-
----
 
 ## 7. Claim bodies
 
@@ -562,17 +460,12 @@ id (`--filter-display-name '<law-id>*'`, with `--explicit on` for an opt-in tier
 The wildcard includes the runner's appended argument display; an exact bare id
 selects no row. Confirm from the run output
 what actually executed rather than assuming a filter composed with the tier
-gate the way you expected, and remember that a filtered run regenerates only
-the artifacts of the checks it ran; the run that produces what you commit is
-the unfiltered Default tier, recorded with `puck baselines maths-ledger`.
+gate the way you expected. Run the unfiltered Default tier for structural checks.
 
 **Reading a failure.** The enriched message carries the domain key, the derived
 seed, the frontier index `k` and the raw operands, so it reproduces without
 re-running the sweep: `Domain.Rng(k)` starts from exactly the reported seed.
-A leg-gate failure names the statement, the leg number and its kind. A ratchet
-failure lists the unclassified ids verbatim — `MemberSurface` ids, carrying the
-declaring type and the full parameter list, so each names exactly the
-`CoverRef(typeof(T), "Name")` (or waiver) it is missing.
+A leg-gate failure names the statement, the leg number and its kind. A member-reference failure names the law and unresolved reference.
 
 **What green means, and does not.** A green run means no probe *failed*. It
 does not mean nothing *diverged*: a defect that turns a subject predicate
@@ -594,9 +487,7 @@ correct a rounding, a fold or a claim:
   stable, and never add a path that reproduces old-wrong behaviour;
 - re-run the relevant tier to prove determinism still holds (the gates are
   self-referential and pin no historical values);
-- **re-record what the correction invalidated in the same change** — the
-  manifest, ledger, `RESULTS.md` and frontier that `puck baselines maths-ledger`
-  regenerates, and any expectation
-  ladder whose values genuinely changed. A hand-derived ladder that no longer
+- re-record any persisted replay or exact expectation ladder invalidated by the
+  deliberate correction. A hand-derived ladder that no longer
   matches is either a correction to re-derive from the definition or a bug the
   law just caught; decide which and say so in the leg.

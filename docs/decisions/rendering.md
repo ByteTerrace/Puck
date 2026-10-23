@@ -39,6 +39,162 @@ material blending at smooth seams do not survive the bake: the mesh carries no
 curvature, a rasterized pixel is covered or not, and the bake point-samples a
 quad's winning material.
 
+## A raster pass draws only what it can show
+
+Every raster pass skips the mesh draws it cannot show any of, by a world box per
+draw tested on the host (`SdfMeshBox`, `SdfMeshCull`): a view's mesh and glass
+passes against the view's frustum before the frame's far distance, a shadow
+cascade against its light's box and, swept along the light, against the
+receivers the view shows. A skipped draw lies wholly outside what the pass's
+rasterizer keeps, or casts only where no visible receiver reads, so the cull
+changes no pixel and needs no authoring: every world gets it, and every nested
+view culls by its own camera, which for a portal window is the frustum fitted
+through its glass. On the debug world it removed 31% to 95% of a frame's
+triangles across eight indoor, outdoor and through-portal views
+([P20](../plans/rendering.md#p20--visibility-areas-and-residency)). The test
+is conservative where exactness would risk a pixel: a pixel margin past the
+temporal jitter, a thousandth of the near distance in front of the near plane,
+the shadow filter's reach around receivers, and no box at all for a skinned
+draw whose vertices the GPU places. Occlusion, levels of detail and residency
+build on the same per-draw box; authored areas are not assumed, because the
+debug world's levels are open plan and name no rooms. Hidden geometry is found
+by a depth-based occlusion test that needs no authoring, not by authored rooms:
+each view's mesh pass draws what its previous frame found visible, builds a
+pyramid of the farthest depth it drew, tests every box the box cull keeps
+against it on the GPU and draws the newly visible in a second phase of the same
+frame, so the test is conservative and a disocclusion is never a frame late.
+Both phases keep the box cull's draw order, so depth ties resolve alike. Glass
+never occludes, the shadow cascades keep the box cull, and each nested view tests
+against its own depth. On the debug world it removed a further 34% to 61% of
+the mesh pass's triangles where walls and slabs hide exhibits
+([P20](../plans/rendering.md#p20--visibility-areas-and-residency)).
+`world.cull frustum` keeps the box cull alone for comparison.
+
+Anything that trades a visible change for cost, such as a level of detail, an
+unloaded residency ring or a culled small object, switches only beyond the
+distance at which the switch is barely perceptible (the owner's ruling). The
+switch distance is derived from the change's size on screen at the view's
+resolution, not fixed in metres.
+
+The lights follow the same rule: each view shades only the lights that can
+reach a surface it shows (`SdfLightSelection`), tested with the same
+`CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
+Skipping one changes no pixel, since a point or spot light's falloff is exactly
+zero at its range (below).
+
+Work that changes every frame updates less often where it is far or small on
+screen (the owner's request), by the same rule: a reduced rate is a visible
+trade-off, so each switches only where a held update jumps by at most two
+pixels on screen for the speed it is sized for (`SdfUpdateRateTiers`). A body's
+pose evaluation runs at 30 Hz at or below 30 pixels per metre and 15 Hz at or
+below 15, its root followed every frame; a nested portal or session view
+renders at 30 Hz at or below 120 display pixels high and 15 Hz at or below 60;
+a screen's source uploads at 30 Hz once shown at or below its own height and
+15 Hz at or below half of it; the far shadow cascade refreshes at 30 Hz, its
+fit held between refreshes so a static shadow stays exact. Rates are absolute,
+so a display at or below 30 Hz holds nothing at the 30 Hz tier. Everything is
+presentation: the simulation ticks every body and every machine runs at its own
+rate, so game timing, audio and replay hashes do not move. The levers extend
+the per-pass cadence and the render graph's refresh, never a second scheduler,
+and `world.rates` switches each for comparison. Measured on the debug world
+([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
+
+## Lights, screens and the camera are photometric
+
+**Every light, screen and emissive surface is authored in real units, and the
+frame shades in luminance (the owner's request).** A directional light's
+illuminance is in lux (a clear midday sun about 100,000), a point or spot
+light's luminous intensity in candela or its luminous power in lumens (a 60 W
+bulb about 800), with a colour or a colour temperature in kelvin; an emissive
+surface's, a sky layer's and a display's luminance is in nits (a CRT about 150).
+A light's colour is scaled to unit luminance, so it gives exactly its quantity.
+The frame's radiometric unit is the nit: a light record carries its illuminance
+(or intensity) over π, so a Lambertian albedo ρ under an illuminance E shows
+ρE/π, the irradiance volume traces and stores nits, and a light's specular lobe
+scales by its illuminance. `SdfPhotometry` owns the conversions, and the `.puck`
+language takes `lx`, `lm`, `cd`, `nit` and `K` on the fields that carry them.
+The sky is consistent with the sun because its colours are in units of a layer
+luminance whose default is a clear day's sky (10,000 nits) beside the default
+100,000-lux sun, so the sky lights the ground about a fifth as brightly as the
+sun does.
+
+**A camera exposure maps the luminance to the display, before the tonemap.**
+`render.exposure` is manual (an `EV100`) or automatic: a reflected-light meter
+reads the irradiance volume's luminance about each view's camera, weighted
+toward where it looks, and eases toward that reading less a compensation,
+within authored bounds, over presentation time. The eye adapts across a scene
+where a camera cannot, so an automatic exposure also adapts locally by an
+authored share (`render.exposure.local`): the views stage moves each surface's
+exposure from the view's toward the one its own illumination (the lights'
+diffuse terms and the volume's indirect light, read as a scene of 0.4 albedo)
+would meter, within six stops, so a room beside its sunlit windows reads as a
+room and the sunlit ground through the window as ground, while a dark paint
+under the same light stays dark; the composite scales the sky share so the
+sky's brightest texel reaches display white rather than clipping, and a window
+from a dim room shows the sky's gradient. The gain reads illumination, never a
+surface's own luminance, so no dark albedo is lifted by it, and the volume's share of that illumination is smooth over a cell, so the
+adaptation carries no halo across a depth edge and agrees between views of one
+world.
+Each view's composite multiplies its output by its exposure, so a dark lobby
+lit by its screens and a sunlit garden both read. A window onto another world
+and a sky layer's view carry the world beyond at an exposure between its own
+and the viewer's: the view beyond the glass applies its exposure to the window
+share (`SdfPhotometry.WindowAdaptation`, three quarters) and the view looking
+through applies the rest of its own, so the window shows
+`L · E_viewer · (E_window / E_viewer)^share`, a sunlit garden seen from a dim
+room reading as a garden rather than white, and a night field seen from a lit
+room as night rather than black; every level of windows within windows carries
+the same share, so the result is the same whatever the nesting. A display shows
+its picture at its peak luminance; terms that are display-referred by design
+(the editor grid, an unbound screen's glass) are divided by the exposure. The
+stylized curvature terms (the ridge light, the cavity and the ink line) apply
+to the exposed colour at the strength of the surface's own exposed
+illumination against the white the meter aims for (`SdfExposure.ReferenceWhite`),
+so a lit room keeps its crisp edges and a dark room's edges stay as dark as its
+walls rather than drawing light lines across them. Exposure is presentation only: it reads presentation time and the
+volume, and nothing in simulation state depends on it.
+
+**A point or spot light ends at a range derived from its intensity (the lead's
+decision, delegated by the owner).** Its falloff is the windowed inverse square
+`saturate(1 − (d/r)⁴)² / d²`, smooth and exactly zero at the range `r`, the
+distance at which a white surface facing the light shows 1/256 of display white
+at the darkest exposure the world adapts to. Past it the light darkens nothing a
+view would show, and a view whose frustum misses its sphere skips it, which
+lifts the old eight-light cap: a world's lights table holds 128, and each view's
+pass block carries a mask of the ones it shades.
+
+**A fixture that stands still is occluded and bounced by the irradiance
+volume.** The frame has no shadow path for a positional light (the cascades are
+the sun's), so a static point or spot light (one with no anchor,
+`SdfLight.IsTraced`) is traced where the bounce already is: each probe records
+which such lights its centre sees, one bit a table record, and lights its hits
+by them under a traced shadow ray, so their light bounces about their room; the
+views pass takes a light's visibility at a surface as the share of the probes
+about it that see it, so a downlight lights nothing through the slab under it,
+and a room's own fixtures light it indirectly. The occlusion has the volume's
+resolution, so the wall, slab and doorway are what it resolves and a plinth's
+shadow is the ambient occlusion's. An anchored light moves with its anchor,
+which the volume cannot follow, so it lights through every wall and bounces
+nothing.
+
+**A matte surface reflects little of the sky.** The specular lobe's reflection
+of the environment is its directional albedo, the split-sum environment BRDF
+(`sdfMaterialEnvironmentBrdf`) over the environment blurred toward its
+irradiance as the roughness widens the lobe, and a material with no specular
+response reflects none of it; a Fresnel edge at grazing that ignored the
+lobe's width made painted stairs and placards read as chrome.
+
+**Considered, and set aside.** Scene-referred values left as stylized weights
+with a global gain, since no gain makes a 150-nit screen and a 100,000-lux sun
+read in one frame; exposure from a GPU histogram of the lit image, which needs a
+reduction and a readback the irradiance volume already answers on the CPU; a
+cutoff radius authored per light, which would make the range a look decision
+for every light rather than one derived threshold; a cube or dual-paraboloid
+shadow map per positional light, six raster passes of the world a light a frame
+where the hall holds 68 of them, for a sharper shadow than the rooms need; and
+a window published unexposed for the viewer to expose, under which a sunlit
+world seen from a dim room blows to white.
+
 ## The pipeline foundation
 
 **Fixtures before features.** The first bounded deliverable is repeatable
@@ -554,11 +710,36 @@ data. Three destinations consume the mapping:
 
 Passthrough exists only for a source the local user opened. A world document
 arriving through a portal must never be able to type into the player's
-desktop. Focus stays with the input system, which reads the mapping.
+desktop. Focus stays with the input system, which reads the mapping. The local
+user opens a source in one of two ways, and nothing else counts: the
+`source.passthrough open` verb typed at the host's own console, or a physical
+press on the framed picture of a window capture's screen that a local seat
+engaged in the world the host booted (never a world reached through a portal
+or a session view), mapped through the screen's published mapping to the
+window's own pixel. A physical press is a pointer press the window pump
+delivers to the input filter, or a local pad's press: a binding's dispatch of a
+known `gamepad.*` control that a local device reported
+(`WorldPassthroughPad.IsLocalPad`). Engaging such a screen, by any principal
+(a console `body.engage`, a peer, an addon, a replay), only shows the window;
+the press opens it. The engage's own provenance is not what decides: a seat's
+channels can be driven by a co-driving addon or a scripted signal, so the
+engine cannot prove an engage was the local user's, while a press only the
+local machine's own devices produce can only be. A pad counts beside the mouse
+because its signals enter the input router only from the local gamepad
+capture, stamped with the device that reported them; every scripted or remote
+door into the router (`player.signal`, a wheel sector, an authored command, a
+typed line) carries no device or no binding origin, and a probe's axis is no
+gamepad source, so each is refused by name. A world document's binding page
+chooses which pad control means which pointer act (move, scroll, a button, an
+arrow key), and a route's `padPointer` its feel; neither makes an act happen.
+The source closes when the seat no longer frames the screen, as when it leaves
+(`WorldSourcePassthrough`), and the reserved chord, Control+Alt+Escape, leaves
+in one step while a seat frames such a window. A document still never authors
+a passthrough destination: `route.input: Passthrough` is refused by name.
 
 **The engine's generated declarations are committed and checked against their
 generator; compiled binaries are build outputs.** The includes the C# model
-owns, `sdf-isa.hlsli` and the `*.interface.hlsli` of each engine package and
+owns, `sdf-isa.hlsli`, `sdf-render.hlsli` and the `*.interface.hlsli` of each engine package and
 SDF kernel interface, are written by `puck shaders generate` and tracked in
 Git, because the engine's kernels include them from the source tree. CI runs
 `puck shaders generate --check`, which regenerates each in memory and fails on
@@ -639,9 +820,23 @@ of the world reads the same volume.
 owns its layout, costs and limits.
 
 **It is presentation and bounds no leak by proof.** The volume holds back light
-through walls with its back-face weight and inside-geometry test alone; there
-is no per-probe visibility. Moving bodies receive its light and cast none into
-it.
+through walls with its back-face weight, its inside-geometry test, the read's
+preference for the probes in front of a surface and each probe's depth cube,
+which stops it at the wall or slab its rays meet along each axis; there is no
+per-probe visibility of the surfaces it lights. The depth is the exact
+distance to a wall or slab across the axis, and a point a few centimetres past
+it takes nothing from the probe, because a point where a wall meets a floor
+lies level with the floor's surface, only the floor's thickness from a probe
+under it. A point every probe about it stands across a wall or slab from is
+enclosed and takes no indirect light; only a point no probe has traced takes
+the open sky. A probe also gives way to the other probes about a point in
+proportion to how few of them it sees, by the neighbour sight lines the trace
+already casts for the filter, so a probe outside a wall whose axis looks in
+through a window lights nothing inside. Each probe's cubes are averaged with the
+neighbouring probes its centre sees, since a probe's rays are few beside the
+contrast of a sunlit patch and the raw lattice showed as bands along a room's
+walls; a neighbour behind a wall takes no part. Moving bodies receive its light
+and cast none into it.
 
 **Considered, and set aside.**
 
@@ -668,3 +863,40 @@ authored fill, and no volume is traced.
 ---
 
 [Decisions](README.md) · [The programme](../plans/rendering.md)
+
+## In-world devices and screens
+
+**An engaged screen is the in-world screen, framed until it passes for an
+emulator (the owner's ruling).** Engaging eases the seat camera onto the
+screen and mattes the window to the screen's picture; no separate 2D image
+stands in for it. Framed, the picture is source-exact: whole window pixels per
+source row, no CRT treatment, post or bezel on those pixels, and the matte's
+fill around it, so the window is indistinguishable from a desktop emulator.
+Easing out fades the screen's glass, the CRT look and the room back in, which
+is the reveal that the player was in the world all along. One per-view value,
+the screen fidelity the ease drives, turns the treatment and post off, and the
+root's own placement of the seat's view shows only the picture's part of it, so
+no pass draws the source a second time. A 2D emulator view that cut to the
+source after the ease was rejected: it was a separate image that could disagree
+with the screen (it cropped lines the screen showed).
+
+**A device is modelled at the size a person who used one expects, and its
+screen glass is exactly its picture (the owner's ruling).** A screen row's half
+extents are the source's pixels times the device's pixel pitch, the pitch
+carrying the pixel aspect (a 4:3 tube for a 256 by 240 console gives 8:7), and
+the bezel lies outside the glass. Because the camera alone sets how large the
+glass appears, no object is ever resized for a window. Every device is shown at
+its real size (the owner's ruling), the pitch the real one, so the glass is
+exactly the picture. A small device reads by how it is displayed, never by
+being enlarged: the debug world stands its handhelds on low plinths near the
+walkway with an angled name placard, the way a museum shows a small object.
+
+**A screen lit by external content keeps lighting the room live (the owner's
+ruling), and captures complete anyway.** A desktop or camera screen's glow
+follows its pixels; every capture frame discards and re-derives each retained
+state that holds external content, so no unfilled pixel or light reaches a
+capture and no capture waits on it.
+
+**Glass is a surface of its own after opaque visibility (the owner's ruling).**
+A see-through shell, a window pane and a screen's front glass are drawn as
+transparent surfaces over the opaque image, not painted fakes.

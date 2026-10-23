@@ -148,6 +148,7 @@ namespace Puck.World.Server;
 /// <param name="OverlayRemainingTicks">Engine ticks remaining on the live overlay — a duration, not a deadline.</param>
 /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>body.press</c> — a
 /// duration per ordinal, copied defensively (never the live array).</param>
+/// <param name="RelativeRemainders">Conserved Q32.32 fractions below scalar precision.</param>
 /// <param name="ChannelTimerValues">The value each timed press in <paramref name="ChannelTimerTicks"/> holds while
 /// live, copied defensively.</param>
 /// <param name="BodyMotionProgramName">The live body-motion program's own name, reapplied through the same
@@ -212,6 +213,7 @@ public readonly record struct WorldBodyTransferState(
     ulong OverlayRemainingTicks,
     ulong[] ChannelTimerTicks,
     FixedQ4816[] ChannelTimerValues,
+    long[] RelativeRemainders,
     string BodyMotionProgramName,
     IntentSource Source,
     bool[] PreviousChannelBit,

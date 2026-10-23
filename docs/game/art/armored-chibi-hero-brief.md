@@ -14,9 +14,9 @@ choices supersede the island-ranger palette and helmet defaults below. The
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
 The [Moth concept pack](moth-concept-pack/README.md) expands the selected
-source into character views, facial and armor details, proposed wing mechanics,
-and movement studies. Its guide distinguishes the owner-selected design from
-generated mechanical proposals.
+source into a suited turnaround, construction details, poses and expressions,
+the off-suit Moth, and the flight-pack references. Its guide distinguishes the
+owner-selected design from generated proposals.
 
 The selected movement personality is nimble, with visible weight and function in
 the wings. Prioritize a convincing idle → run → takeoff → bank → land sequence.
@@ -183,7 +183,7 @@ Apply the palette, face, three identifying features, and restrained specular/emi
 
 Use existing material controls first. If the image still needs help, identify the precise defect with an A/B capture: washed-out plate boundaries, unstable highlights, or loss of shape in shade. Add only the reusable control that fixes that defect.
 
-Potential additions include a soft toon ramp, bounded rim contribution, or material-selectable highlight shaping. They are alternatives to evaluate, not a mandatory shopping list. Avoid hard lighting thresholds that crawl during rotation. A rim must not draw through occluders or brighten every dark edge. Full HDR, bloom, global outlines, and a new PBR stack are separate work unless evidence makes a small part essential.
+The optional `world.toon` mode supplies a soft cel ramp, bounded highlight patches and depth/normal outlines; `render.toon` tunes it independently of the default look ([cel shading](../../rendering/sdf/handbook/lighting-and-shading.md#cel-shading)). Judge the suited and out-of-suit Moth in motion as well as in stills: lighting thresholds must not crawl during rotation, and outlines must not trail. A rim must not draw through occluders or brighten every dark edge. Bloom and a different material stack remain separate work.
 
 **Exit:** armor, undersuit, face, and equipment lights remain visibly different under neutral, warm, cool, and shadowed conditions. Bright light does not clip away the character's color hierarchy. Any shared shader change has a no-change/default control on existing content.
 

@@ -264,26 +264,10 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
 
         return fixture;
     }
-    private static WorldDefinition WithCarrierScale(WorldDefinition source, FixedQ4816 scale) {
-        var row = new WorldStateRow(
-            Name: CellName.Parse(candidate: "scale"),
-            Kind: CellKind.Fixed,
-            Min: FixedQ4816.FromDouble(value: 0.05d).Value,
-            Max: FixedQ4816.One.Value,
-            Capacity: 8,
-            Cells: [new StateCell(
-                    Key: CellName.Parse(candidate: "0"),
-                    Value: CellValue.Fixed(rawBits: scale.Value)
-                )]
-        );
-
-        return source with {
-            PopulationRaw = source.Population with { ScaleRow = "scale" },
-            StateRaw = (source.StateRaw ?? new WorldStateSection()) with {
-                World = [.. (source.StateRaw?.World ?? []), row],
-            },
-        };
-    }
+    private static WorldDefinition WithCarrierScale(WorldDefinition source, FixedQ4816 scale) => Fixtures.WithBodyScale(
+        initial: scale,
+        source: source
+    );
 
     [Fact]
     public void CarryFacetRoundTripsThroughDocumentSerialization() {

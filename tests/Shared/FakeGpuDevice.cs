@@ -47,6 +47,8 @@ internal sealed class FakeGpuDevice :
 
     private readonly Dictionary<nint, Creation> m_trackedHandles = [];
     private readonly Lock m_trackGate = new();
+    // Pipeline builds record on worker threads, so every count goes through one gate.
+    private readonly Lock m_callGate = new();
 
     private readonly bool m_trackObjects;
 
@@ -235,7 +237,9 @@ internal sealed class FakeGpuDevice :
     }
     private void Hit(string key) {
         if (m_countCalls) {
-            CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
+            lock (m_callGate) {
+                CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
+            }
         }
 
         OnCall?.Invoke(obj: key);
@@ -260,6 +264,14 @@ internal sealed class FakeGpuDevice :
         OnDispatch?.Invoke(groupCountX, groupCountY, groupCountZ);
     }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
+    bool IGpuRecorder.CanDrawIndirectCount {
+        get {
+            Hit(key: "IGpuRecorder.CanDrawIndirectCount");
+
+            return true;
+        }
+    }
+    void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) => Hit(key: "IGpuRecorder.DrawIndirectCount");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         BufferClears?.Add(item: (bufferHandle, sizeBytes));

@@ -29,10 +29,12 @@ public static class MeshCommand {
     private const float HistoryReach = 0.001f;
     private const int HistorySamples = 512;
 
-    /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c> subverb.</summary>
+    /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c>, <c>scene</c> and <c>identity</c> subverbs.</summary>
     /// <returns>The verb.</returns>
     public static Command Create() => new(description: "Inspect the meshes the baked-mesh path stores.", name: "mesh") {
         AuditCommand(),
+        MeshSceneCommand.Create(),
+        MeshIdentityCommand.Create(),
     };
 
     private static Command AuditCommand() {
@@ -99,7 +101,7 @@ public static class MeshCommand {
 
         var identity = default(UInt128);
 
-        if (!request.Cpu && !TryIdentity(buildDirectory: buildDirectory, extension: extension, identity: out identity, request: request)) { return 2; }
+        if (!request.Cpu && !TryIdentity(build: request.Build, buildDirectory: buildDirectory, extension: extension, identity: out identity, named: request.Identity, verb: Verb)) { return 2; }
 
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
@@ -161,28 +163,43 @@ public static class MeshCommand {
 
         return 0;
     }
-    // The bake identity the meshes are read under: named, or the identity of the build in buildDirectory.
-    private static bool TryIdentity(AuditRequest request, string buildDirectory, string extension, out UInt128 identity) {
-        if (request.Identity is not null) {
-            if ((request.Build is null) && UInt128.TryParse(s: request.Identity, style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture, result: out identity)) { return true; }
+    /// <summary>Resolves the bake identity stored meshes are read under: the one named, or the identity of the build in
+    /// <paramref name="buildDirectory"/>; a refusal is written to the error stream under the verb's name.</summary>
+    /// <param name="named">The identity named (32 hex digits), or <see langword="null"/> to read the build's.</param>
+    /// <param name="build">The build directory named, which <paramref name="named"/> excludes.</param>
+    /// <param name="buildDirectory">The build directory to read the identity of.</param>
+    /// <param name="extension">The bytecode extension of the backend that baked.</param>
+    /// <param name="verb">The verb a refusal names.</param>
+    /// <param name="identity">The identity.</param>
+    /// <returns><see langword="true"/> when the identity was resolved.</returns>
+    internal static bool TryIdentity(string? named, string? build, string buildDirectory, string extension, string verb, out UInt128 identity) {
+        if (named is not null) {
+            if ((build is null) && UInt128.TryParse(s: named, style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture, result: out identity)) { return true; }
 
-            Console.Error.WriteLine(value: $"{Verb}: --identity takes 32 hex digits, and names the identity in place of --build.");
+            Console.Error.WriteLine(value: $"{verb}: --identity takes 32 hex digits, and names the identity in place of --build.");
             identity = default;
             return false;
         }
 
         try {
-            identity = SdfMeshStore.BuildIdentityOf(
-                code: SdfMeshStore.CodeIdentityOf(directory: buildDirectory),
-                kernels: SdfKernelSet.Load(bytecodeExtension: extension, directory: SdfKernelSet.PassesDirectory(tree: Path.Combine(buildDirectory, "Assets", "Shaders", "Sdf")))
-            );
+            identity = BuildIdentity(buildDirectory: buildDirectory, extension: extension).Value;
             return true;
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) {
-            Console.Error.WriteLine(value: $"{Verb}: cannot read the bake identity of the build in '{buildDirectory}' — {exception.Message}");
+            Console.Error.WriteLine(value: $"{verb}: cannot read the bake identity of the build in '{buildDirectory}' — {exception.Message}");
             identity = default;
             return false;
         }
     }
+    /// <summary>Reads the bake identity of the build deployed in a directory on a backend: the code its assemblies' bake
+    /// closure holds and its bake kernels' bytecode.</summary>
+    /// <param name="buildDirectory">The build's directory (its <c>Puck.World.dll</c>'s, or any holding its
+    /// <c>Puck.SdfVm.dll</c> and kernels).</param>
+    /// <param name="extension">The bytecode extension of the backend: <c>.dxil</c> or <c>.spv</c>.</param>
+    /// <returns>The identity.</returns>
+    internal static SdfMeshBakeIdentity BuildIdentity(string buildDirectory, string extension) => SdfMeshBakeIdentity.Of(
+        code: SdfMeshBakeClosure.Of(directory: buildDirectory),
+        kernels: SdfKernelSet.Load(bytecodeExtension: extension, directory: SdfKernelSet.PassesDirectory(tree: Path.Combine(buildDirectory, "Assets", "Shaders", "Sdf")))
+    );
     // Whether the request selects a group: by the prototype its body wears and by its label.
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);
@@ -301,7 +318,10 @@ public static class MeshCommand {
         if (outcome.Owner is { } owner) {
             builder.Append(provider: CultureInfo.InvariantCulture, handler: $" (author {Point(point: owner.ToAuthor(world: world))})");
         }
-        builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg");
+        builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg at {Point(point: outcome.ToWorld(arg: cluster.Worst))}");
+        if (cluster.WorstFacing != Vector3.Zero) {
+            builder.Append(provider: CultureInfo.InvariantCulture, handler: $" facing {Direction(direction: cluster.WorstFacing)} against gradient {Direction(direction: cluster.WorstGradient)}");
+        }
         if (cluster.Shapes.Count > 0) {
             builder.Append(value: "; nearest ");
             builder.AppendJoin(separator: ", ", values: cluster.Shapes.Select(selector: static shape => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{shape.Name} {Millimetres(metres: shape.Distance)} mm")));
@@ -313,6 +333,7 @@ public static class MeshCommand {
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {statistic.P50 * scale:0.00} p99 {statistic.P99 * scale:0.00} max {statistic.Max * scale:0.00} over {statistic.Over}/{statistic.Count}");
     private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{metres * 1000f:0.0}");
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
+    private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
     private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu);

@@ -103,7 +103,7 @@ public sealed partial class RenderGraphRuntime {
 
         if (Stands(index: index)) {
             MarkCurrent(index: index);
-        } else if ((PackageRefusalOf(index: index) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
+        } else if ((PackageReasonOf(index: index, refusal: true) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
             MarkStale(
                 index: index,
                 reason: $"the instance '{name}' cannot render: {refusal}",
@@ -137,8 +137,8 @@ public sealed partial class RenderGraphRuntime {
             );
         }
     }
-    // The first refusal a package of the instance's graph states for it, or null when none refuses.
-    private string? PackageRefusalOf(int index) {
+    // The first refusal or pending-content reason a package of the instance's graph states for it.
+    private string? PackageReasonOf(int index, bool refusal) {
         if (m_graphs[index] is not { } graph) {
             return null;
         }
@@ -153,9 +153,9 @@ public sealed partial class RenderGraphRuntime {
                     factory: out var factory,
                     package: step.Package
                 ) &&
-                (factory.RefusalOf(instance: name) is { } refusal)
+                ((refusal ? factory.RefusalOf(instance: name) : factory.WaitingOf(instance: name)) is { } reason)
             ) {
-                return refusal;
+                return reason;
             }
         }
 
@@ -179,7 +179,11 @@ public sealed partial class RenderGraphRuntime {
     // the output it bound is older than the frame the schedule has it read.
     private void MarkRendered(int index, RenderGraphSchedule schedule) {
         if (!MarkReadStale(index: index, schedule: schedule)) {
-            MarkCurrent(index: index);
+            if (PackageReasonOf(index: index, refusal: false) is { } waiting) {
+                MarkStale(index: index, reason: waiting);
+            } else {
+                MarkCurrent(index: index);
+            }
         }
     }
     // Only reads the schedule shows can affect completion. External producers and screen-sampling packages read
@@ -247,6 +251,10 @@ public sealed partial class RenderGraphRuntime {
         if ((m_capture.PendingPath is not null) && m_staleRefused[m_captureInstance] &&
             (m_stale[m_captureInstance] is { } refusal)) {
             m_capture.Refuse(error: new InvalidOperationException(message: refusal));
+        }
+        if ((PresentedPath is not null) && m_staleRefused[m_captureInstance] &&
+            (m_stale[m_captureInstance] is { } presentedRefusal)) {
+            RefusePresented(error: new InvalidOperationException(message: presentedRefusal));
         }
         if (m_stale[m_root] is { } reason) {
             Render = (m_staleRefused[m_root]

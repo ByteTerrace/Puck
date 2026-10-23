@@ -194,9 +194,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <summary>Gets the latest frame's schedule, or <see langword="null"/> before the first frame.</summary>
     public RenderGraphSchedule? Latest => m_latest;
     /// <inheritdoc/>
-    /// <remarks>The runtime holds one capture at a time, whichever instance it reads: a path armed here, or forwarded to
-    /// an instance's node or external producer and not yet served.</remarks>
-    public string? PendingCapturePath {
+    /// <remarks>The runtime holds one capture at a time, whichever instance it reads: a path armed here, a settled one
+    /// forwarded to an instance's node or external producer and not yet served, or a presented one still taking
+    /// frames.</remarks>
+    public string? PendingCapturePath => (PresentedPath ?? SettledCapturePath);
+
+    // The settled capture armed here, or forwarded and not yet served, or null.
+    private string? SettledCapturePath {
         get {
             if (m_capture.PendingPath is { } armed) {
                 return armed;
@@ -969,6 +973,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 output.Image.IsSameDeviceImage &&
                 Withholds(
                     previousFrame: binding.PreviousFrame,
+                    rendersThisFrame: RendersIn(producer: binding.Producer, schedule: schedule),
                     tainted: output.Tainted
                 )
             ) {
@@ -1114,6 +1119,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             condition: m_disposed,
             instance: this
         );
+        if (request.Mode == FrameCaptureMode.Presented) {
+            ArmPresented(
+                followsRoot: followsRoot,
+                index: index,
+                request: request
+            );
+
+            return;
+        }
         if ((request.Converge > 0) && !CanConverge(index: index)) {
             throw new InvalidOperationException(message: "A convergence capture requires a rendered graph instance.");
         }
@@ -1136,6 +1150,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         m_disposed = true;
         m_capture.Refuse(error: new ObjectDisposedException(objectName: nameof(RenderGraphRuntime)));
+        RefusePresented(error: new ObjectDisposedException(objectName: nameof(RenderGraphRuntime)));
         // The nodes first: each waits out its submissions and retires the leases they sampled, so every producer's
         // output is released before the producer is.
         DisposeAll(
@@ -1155,6 +1170,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>), as the root's node refuses one forwarded to it.</summary>
     public void OnDeviceLost() {
         m_capture.RefuseForDeviceLoss();
+        RefusePresented(error: new DeviceLostException(message: CaptureRequestSlot.DeviceLostReason));
         // Renders in flight on the lost device never complete, so a retired node owes nothing more.
         m_retiredOwing.Clear();
         m_releasingLostDevice = true;
@@ -1518,6 +1534,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         } finally {
             queue.FlushBatch();
         }
+
+        // The image the display presents this frame, read back once every node has submitted.
+        ServePresented(presentation: frame.Index);
 
         // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
         // retire displaced package owners against this actual reader fence, without another producer submission.

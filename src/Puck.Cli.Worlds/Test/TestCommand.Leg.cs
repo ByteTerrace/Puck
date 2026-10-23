@@ -106,6 +106,7 @@ public static partial class TestCommand {
                 fileName: "dotnet",
                 arguments: [
                     artifact,
+                    .. WorldDevices.NoneArguments,
                     "--world", world,
                     "--headless", "true",
                     "--unpaced", "true",
@@ -317,6 +318,7 @@ public static partial class TestCommand {
                 return false;
             }
             read.Add(item: new TestWorldExport(
+                Document: entry[propertyName: "document"]?.GetValue<string>(),
                 ExportBytes: bytes,
                 ExportTick: (document[propertyName: "tick"]?.GetValue<ulong>() ?? 0UL),
                 Verdicts: ReadVerdicts(export: document),
