@@ -120,6 +120,10 @@ the skip exception, so a test that wraps a call which can skip reports
 
 Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
 
+In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
+shell can split the colon-bearing switch before the lease receives it
+([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
+
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
 or offscreen `Puck.World` run, and any test run that can select a device law.
