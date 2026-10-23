@@ -954,8 +954,8 @@ public sealed class TextContractTests {
     private sealed class MemoryAssetSource(IReadOnlyDictionary<string, byte[]> assets) : IAssetSource {
         public bool Exists(string path) =>
             assets.ContainsKey(key: path);
-        public ReadOnlyMemory<byte> Read(string path) =>
-            assets[path];
+        public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) =>
+            assets[path].Length <= maximumBytes ? assets[path] : throw new InvalidDataException("Source exceeds limit.");
     }
     private sealed class RecordingFontAtlasGenerator : IFontAtlasGenerator {
         private readonly List<int> m_faceIndices = [];

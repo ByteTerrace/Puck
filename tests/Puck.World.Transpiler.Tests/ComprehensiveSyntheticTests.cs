@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Assets;
+using Puck.Testing;
 using Puck.World.Transpiler.Decompiler;
 using Xunit;
 
@@ -9,8 +11,9 @@ namespace Puck.World.Transpiler.Tests;
 public class ComprehensiveSyntheticTests {
     private static string CanonicalText(JsonObject node) =>
         Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
-    private static JsonObject Compile(string source, string? defaultSchema = null) =>
+    private static JsonObject Compile(string source, string? defaultSchema = null, string? basePath = null) =>
         WorldCompiler.Compile(
+            basePath: basePath,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: defaultSchema,
             source: source
@@ -175,7 +178,7 @@ public class ComprehensiveSyntheticTests {
 
             // Addon with auto-hashing
             addon "rules-engine" {
-                source: "addons/rules.wasm"
+                modulePath: "addons/rules.wasm"
                 hash: "auto"
             }
 
@@ -202,7 +205,10 @@ public class ComprehensiveSyntheticTests {
             """;
 
         // 1. Compile .puck into its document
-        var json = Compile(source: ComprehensivePuck);
+        using var directory = new TemporaryDirectory(prefix: "security-content-auto-pin-");
+        byte[] module = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
+        _ = directory.WriteBytes(bytes: module, name: "addons/rules.wasm");
+        var json = Compile(source: ComprehensivePuck, basePath: directory.RootPath);
 
         // Assert schema, basis, documentId
         Assert.Equal(
@@ -323,12 +329,13 @@ public class ComprehensiveSyntheticTests {
         var addonHash = addon0["hash"]?.ToString();
 
         Assert.NotNull(@object: addonHash);
+        Assert.Equal(ContentPin.Compute(module).ToString(), addonHash);
         Assert.StartsWith(
             actualString: addonHash,
-            expectedStartString: "sha256-64/"
+            expectedStartString: "sha256/"
         );
         Assert.Equal(
-            26,
+            71,
             addonHash.Length
         );
 

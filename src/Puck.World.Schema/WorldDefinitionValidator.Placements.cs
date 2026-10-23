@@ -2276,7 +2276,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path, resolved beside the document (forward slashes, no empty or dot segments).");
             }
 
-            if (!IsValidAddonHash(hash: font.Hash)) {
+            if (!IsValidFontHash(hash: font.Hash)) {
                 errors.Add(item: $"{path}.hash '{font.Hash}' must match sha256-64/{{16 lowercase hex}}.");
             }
 

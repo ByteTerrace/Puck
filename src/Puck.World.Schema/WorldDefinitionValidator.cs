@@ -625,7 +625,7 @@ public static partial class WorldDefinitionValidator {
         definition: definition,
         value: value
     );
-    private static bool IsValidAddonHash(string hash) => AssetContentHash.TryParse(
+    private static bool IsValidFontHash(string hash) => AssetContentHash.TryParse(
         hash: out _,
         text: hash
     );

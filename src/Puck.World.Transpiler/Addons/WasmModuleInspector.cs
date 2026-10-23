@@ -6,7 +6,7 @@ namespace Puck.World.Transpiler.Addons;
 /// <summary>Summary of WebAssembly guest module contract inspection.</summary>
 /// <param name="IsValid">Whether the module carries the WASM magic bytes and version and every section, length and
 /// name in it lies inside the bytes it claims. A module that is not valid reports no exports and no imports.</param>
-/// <param name="ContentHash">Canonical content integrity hash in 'sha256-64/{16 hex}' format.</param>
+/// <param name="ContentHash">Canonical full content integrity pin in 'sha256/{64 lowercase hex}' format.</param>
 /// <param name="Exports">Exported function and symbol names.</param>
 /// <param name="Imports">Imported host functions and symbols.</param>
 public sealed record WasmInspectionResult(
@@ -21,7 +21,7 @@ public static class WasmModuleInspector {
     /// <param name="wasmBytes">The raw WASM module bytes.</param>
     /// <returns>Inspection result with exports, imports, and canonical content hash.</returns>
     public static WasmInspectionResult Inspect(ReadOnlySpan<byte> wasmBytes) {
-        var contentHash = WorldDefinitionFileSource.ComputeContentHash(content: wasmBytes.ToArray());
+        var contentHash = ContentPin.Compute(content: wasmBytes).ToString();
 
         return (WasmModuleDeclarations.TryRead(
             declarations: out var declarations,

@@ -151,7 +151,7 @@ public sealed class TextSafetyTests {
     }
     [Fact]
     public void CacheWeightArithmeticDoesNotOverflow() {
-        var cache = new ContentAddressedLruCache<long>(
+        var cache = new ContentAddressedLruCache<AssetContentHash, long>(
             2,
             getWeight: x => x,
             weightCapacity: long.MaxValue
@@ -478,7 +478,7 @@ public sealed class TextSafetyTests {
     }
     [Fact]
     public void WeightedCacheHonorsRecencyReplacementAndOversizedBypass() {
-        var cache = new ContentAddressedLruCache<byte[]>(
+        var cache = new ContentAddressedLruCache<AssetContentHash, byte[]>(
             3,
             getWeight: x => x.Length,
             weightCapacity: 8
@@ -533,7 +533,8 @@ public sealed class TextSafetyTests {
 
     private sealed class MemorySource : IAssetSource {
         public bool Exists(string path) => true;
-        public ReadOnlyMemory<byte> Read(string path) => new byte[] { 42 };
+        public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) =>
+            maximumBytes >= 1 ? new byte[] { 42 } : throw new InvalidDataException("Source exceeds limit.");
     }
     private sealed class PixelGenerator : IFontAtlasGenerator {
         public int Calls { get; private set; }

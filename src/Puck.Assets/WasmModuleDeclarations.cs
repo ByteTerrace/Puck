@@ -20,12 +20,17 @@ public readonly record struct WasmMemoryDeclaration(ulong MinimumPages, int Page
         ? ulong.MaxValue
         : (MinimumPages << PageSizeLog2));
 }
+/// <summary>One table a WebAssembly module defines or imports, including unexported tables.</summary>
+/// <param name="MinimumElements">The declared minimum element count.</param>
+/// <param name="Imported">Whether the table is imported.</param>
+public readonly record struct WasmTableDeclaration(ulong MinimumElements, bool Imported);
 /// <summary>What a WebAssembly binary module declares at its boundary, read from its sections without compiling or
-/// instantiating it: its exports, its imports, and every linear memory it defines or imports.</summary>
+/// instantiating it: its exports, its imports, and every memory and table it defines or imports.</summary>
 /// <param name="Exports">Exported names, in section order.</param>
 /// <param name="Imports">Imported entities, in section order.</param>
 /// <param name="Memories">Every memory, imported ones first, as the module's memory index space orders them.</param>
-public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IReadOnlyList<WasmImport> Imports, IReadOnlyList<WasmMemoryDeclaration> Memories) {
+/// <param name="Tables">Every table, imported ones first, as the module's table index space orders them.</param>
+public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IReadOnlyList<WasmImport> Imports, IReadOnlyList<WasmMemoryDeclaration> Memories, IReadOnlyList<WasmTableDeclaration> Tables) {
     private const int DefaultPageSizeLog2 = 16;
 
     // Every read is checked against what remains, and a length is compared as the unsigned value it was encoded as
@@ -196,8 +201,15 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
         return true;
     }
     // A table's limits: flags (bit 0 a maximum, bit 2 64-bit indices), the minimum and the optional maximum.
-    private static bool TrySkipTableLimits(ref Reader reader) {
+    private static bool TryReadTable(ref Reader reader, bool imported, out WasmTableDeclaration table) {
+        table = default;
+
         if (
+            !reader.TryReadByte(value: out var elementType) ||
+            // The host admits ordinary reference tables. Explicit table initializers and other future forms
+            // are refused here, rather than misreading their bytes as resource limits.
+            ((elementType != 0x70) && (elementType != 0x6F) &&
+                (((elementType != 0x63) && (elementType != 0x64)) || !reader.TrySkipVarInt33())) ||
             !reader.TryReadByte(value: out var flags) ||
             ((flags & ~0x05) != 0)
         ) {
@@ -206,10 +218,13 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
 
         var bits = (((flags & 0x04) != 0) ? 64 : 32);
 
-        return (
-            reader.TryReadVarUInt(bits: bits, value: out _) &&
-            (((flags & 0x01) == 0) || reader.TryReadVarUInt(bits: bits, value: out _))
-        );
+        if (!reader.TryReadVarUInt(bits: bits, value: out var minimum) ||
+            (((flags & 0x01) != 0) && !reader.TryReadVarUInt(bits: bits, value: out _))) {
+            return false;
+        }
+
+        table = new WasmTableDeclaration(MinimumElements: minimum, Imported: imported);
+        return true;
     }
     private static bool TryReadExportSection(ReadOnlySpan<byte> payload, List<string> exports, out string error) {
         var reader = new Reader(bytes: payload);
@@ -238,7 +253,7 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
 
         return true;
     }
-    private static bool TryReadImportSection(ReadOnlySpan<byte> payload, List<WasmImport> imports, List<WasmMemoryDeclaration> memories, out string error) {
+    private static bool TryReadImportSection(ReadOnlySpan<byte> payload, List<WasmImport> imports, List<WasmMemoryDeclaration> memories, List<WasmTableDeclaration> tables, out string error) {
         var reader = new Reader(bytes: payload);
 
         if (!reader.TryReadVarUInt32(value: out var count)) {
@@ -275,9 +290,14 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
                 }
 
                 memories.Add(item: memory);
+            } else if (kind == 1) {
+                if (!TryReadTable(reader: ref reader, imported: true, table: out var table)) {
+                    error = Describe(what: "the imported table's type or limits are malformed or unsupported", where: where);
+                    return false;
+                }
+                tables.Add(item: table);
             } else if (!(kind switch {
                 0 => reader.TryReadVarUInt32(value: out _),
-                1 => (reader.TrySkipValueType() && TrySkipTableLimits(reader: ref reader)),
                 3 => (reader.TrySkipValueType() && reader.TryReadByte(value: out _)),
                 4 => (reader.TryReadByte(value: out _) && reader.TryReadVarUInt32(value: out _)),
                 _ => false,
@@ -333,12 +353,32 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
         return true;
     }
 
+    private static bool TryReadTableSection(ReadOnlySpan<byte> payload, List<WasmTableDeclaration> tables, out string error) {
+        var reader = new Reader(bytes: payload);
+
+        if (!reader.TryReadVarUInt32(value: out var count)) {
+            error = Describe(what: "its count is not a LEB128", where: "table section");
+            return false;
+        }
+
+        for (var index = 0U; index < count; index++) {
+            if (!TryReadTable(reader: ref reader, imported: false, table: out var table)) {
+                error = Describe(what: "its type or limits are malformed or unsupported", where: $"table section entry {index}");
+                return false;
+            }
+            tables.Add(item: table);
+        }
+
+        error = reader.AtEnd ? string.Empty : "table section: bytes follow its last entry";
+        return reader.AtEnd;
+    }
+
     /// <summary>Reads what a WebAssembly binary module declares at its boundary, without compiling it.</summary>
     /// <param name="module">The module's binary bytes.</param>
     /// <param name="declarations">The declarations, when the module is well formed as far as they reach.</param>
     /// <param name="error">Where and how the module is malformed, naming the section and entry, when it is.</param>
-    /// <returns>Whether the header and every section length lie inside the bytes, and the import, memory and export
-    /// sections parse.</returns>
+    /// <returns>Whether the header and every section length lie inside the bytes, and the import, memory, table
+    /// and export sections parse.</returns>
     public static bool TryRead(ReadOnlySpan<byte> module, [NotNullWhen(returnValue: true)] out WasmModuleDeclarations? declarations, out string error) {
         declarations = null;
 
@@ -366,6 +406,8 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
         var imports = new List<WasmImport>();
         var imported = new List<WasmMemoryDeclaration>();
         var defined = new List<WasmMemoryDeclaration>();
+        var importedTables = new List<WasmTableDeclaration>();
+        var definedTables = new List<WasmTableDeclaration>();
         var reader = new Reader(bytes: module[8..]);
 
         while (!reader.AtEnd) {
@@ -387,8 +429,10 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
                     error: out error,
                     imports: imports,
                     memories: imported,
+                    tables: importedTables,
                     payload: payload
                 ),
+                4 => TryReadTableSection(error: out error, tables: definedTables, payload: payload),
                 5 => TryReadMemorySection(
                     error: out error,
                     memories: defined,
@@ -410,7 +454,8 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
         declarations = new WasmModuleDeclarations(
             Exports: exports,
             Imports: imports,
-            Memories: [.. imported, .. defined]
+            Memories: [.. imported, .. defined],
+            Tables: [.. importedTables, .. definedTables]
         );
         error = string.Empty;
 

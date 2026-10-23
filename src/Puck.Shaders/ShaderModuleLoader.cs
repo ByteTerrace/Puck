@@ -7,7 +7,7 @@ public sealed class ShaderModuleLoader : IShaderModuleLoader {
     private const int DefaultMaxCachedShaders = 256;
 
     private readonly IAssetSource m_assetSource;
-    private readonly ContentAddressedLruCache<ReadOnlyMemory<byte>> m_shaderContentCache;
+    private readonly ContentAddressedLruCache<AssetContentHash, ReadOnlyMemory<byte>> m_shaderContentCache;
 
     internal ShaderModuleLoader(IAssetSource assetSource, int maxCachedShaders) {
         ArgumentNullException.ThrowIfNull(argument: assetSource);
@@ -21,7 +21,7 @@ public sealed class ShaderModuleLoader : IShaderModuleLoader {
         }
 
         m_assetSource = assetSource;
-        m_shaderContentCache = new ContentAddressedLruCache<ReadOnlyMemory<byte>>(maxCachedShaders);
+        m_shaderContentCache = new ContentAddressedLruCache<AssetContentHash, ReadOnlyMemory<byte>>(maxCachedShaders);
     }
 
     public ShaderModuleLoader(IAssetSource assetSource)

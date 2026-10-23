@@ -5,10 +5,9 @@ namespace Puck.Assets;
 /// <summary>
 /// The repo's one persistent content-addressed store: immutable object bytes keyed by their <see cref="ContentPin"/>,
 /// plus named refs pointing at objects. Doubles as the deterministic build cache — a derived artifact keyed by its
-/// input's pin never needs recomputing while the input is unchanged. Distinct from <see cref="AssetContentHash"/>/
-/// <see cref="ContentAddressedLruCache{TValue}"/>: those are in-memory session keys (a 64-bit truncation is plenty
-/// for a process-lifetime cache), while a store accreting objects for years needs the FULL 256-bit digest to keep
-/// collision risk negligible.
+/// input's pin never needs recomputing while the input is unchanged. Unlike the in-memory
+/// <see cref="ContentAddressedLruCache{TKey, TValue}"/>, this store persists bytes and always uses the full
+/// 256-bit digest. The cache lets its caller choose an identity; security-sensitive callers also use full pins.
 /// </summary>
 /// <remarks>
 /// Layout under <see cref="Root"/>: <c>objects/sha256/&lt;hex[0..2]&gt;/&lt;hex64&gt;</c> holds immutable object

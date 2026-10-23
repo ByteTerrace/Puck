@@ -79,6 +79,13 @@ and the ABI's mask bits and verdicts. The world document's channel table
 decides which channels a guest drives, and `WorldAddonRuntime` folds the
 validated acts into `PlayerIntent` channel vectors at the resolved ordinal.
 
+The ordinary mutation gates authorize a row before addon preparation. Within preparation,
+the source byte limit and document hash check precede native compilation; imports and declared
+memory/table limits are checked before compiling the binary. Channel descriptors still require
+the bounded, fuelled guest handshake, so channel-specific admission follows compilation.
+The [scripting resource contract](../../docs/reference/scripting.md#loading-ticking-faulting)
+owns source, cache and store limits; none of these grants a guest host authority.
+
 ## The read-back and the pump points
 
 `world.addons` is the joined configuration/runtime read-back—one segment

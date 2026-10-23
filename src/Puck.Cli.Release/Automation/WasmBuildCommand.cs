@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Text.Json;
-using Puck.World;
 
 namespace Puck.Cli.Automation;
 
@@ -103,8 +102,8 @@ public static class WasmBuildCommand {
 
                 // A module ships as content, so built outputs hold hard links to it: replace it, never write through it.
                 Puck.Assets.AtomicFile.WriteAllBytes(bytes: module, path: path);
-                // The host's hash: its pin reads the leading 64 SHA-256 bits little-endian.
-                Console.WriteLine(value: $"{output} {WorldDefinitionFileSource.ComputeContentHash(content: module)} (cargo {string.Join(separator: ' ', values: build.CargoArguments)})");
+                // Use the same full content pin the host checks before compiling a guest.
+                Console.WriteLine(value: $"{output} {Puck.Assets.ContentPin.Compute(content: module).ToString()} (cargo {string.Join(separator: ' ', values: build.CargoArguments)})");
             }
         }
 

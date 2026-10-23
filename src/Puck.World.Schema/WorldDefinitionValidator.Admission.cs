@@ -86,8 +86,8 @@ public static partial class WorldDefinitionValidator {
             // guest touches depend on a file on disk: a determinism hole first, a security one second.
             if (string.IsNullOrEmpty(value: addon.Hash)) {
                 errors.Add(item: $"addon '{addon.Name}' requires a hash — an unpinned module makes authoritative state depend on a file on disk.");
-            } else if (!IsValidAddonHash(hash: addon.Hash)) {
-                errors.Add(item: $"addon '{addon.Name}' hash '{addon.Hash}' must match sha256-64/{{16 hex}}.");
+            } else if (!Puck.Assets.ContentPin.TryParse(text: addon.Hash, pin: out _)) {
+                errors.Add(item: $"addon '{addon.Name}' hash '{addon.Hash}' must match sha256/{{64 lowercase hex}}.");
             }
 
             // WorldAddonRuntime narrows this ulong to a long FuelPerTick (0 means "use the host default", mirrored

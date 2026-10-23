@@ -23,18 +23,13 @@ namespace Puck.Scripting;
 /// <see cref="Tick"/> refuses to run unadmitted.</para>
 /// </remarks>
 public sealed class AddonInstance : IDisposable {
-    // A hard per-store linear-memory ceiling (256 wasm pages), enforced via the runtime store limiter the WS1
-    // spike confirmed on Wasmtime 44.0.0. Trusted, path-declared authors; generous but bounded.
-    private const long MaxMemoryBytes = (256L * WasmPageBytes);
-    private const long WasmPageBytes = 65536L;
-
     private readonly AddonChannelBinding[] m_channelBindings;
     private readonly IAddonChannelResolver? m_channelResolver;
     private readonly AddonChannelDescriptor[] m_channels;
     private readonly AddonOutCell[] m_decoded;
     private readonly ScriptingEngine? m_engine;
     private readonly long m_fuelPerTick;
-    private readonly AssetContentHash m_hash;
+    private readonly ContentPin? m_hash;
     private readonly IReadOnlyList<WasmMemoryDeclaration> m_memories;
     private readonly Module? m_module;
     private readonly string m_name;
@@ -87,7 +82,7 @@ public sealed class AddonInstance : IDisposable {
     // in a sticky faulted state so the run never crashes on a bad addon; there is nothing to revive — and
     // nothing to hand a channel resolver to: with no engine/module, Instantiate short-circuits before the
     // handshake's channel-name-table decode ever needs one.
-    internal AddonInstance(in AddonDescriptor descriptor, AssetContentHash hash, AddonFault fault) {
+    internal AddonInstance(in AddonDescriptor descriptor, ContentPin? hash, AddonFault fault) {
         m_channelBindings = [];
         m_channels = [];
         m_decoded = [];
@@ -119,8 +114,8 @@ public sealed class AddonInstance : IDisposable {
     public AddonFault Fault => m_fault;
     /// <summary>Gets the per-tick fuel budget this addon runs under.</summary>
     public long FuelPerTick => m_fuelPerTick;
-    /// <summary>Gets the content identity of the addon's module.</summary>
-    public AssetContentHash Hash => m_hash;
+    /// <summary>Gets the full content identity of the addon's module, or null when the load failure retained no identity.</summary>
+    public ContentPin? Hash => m_hash;
     /// <summary>Gets the guest's declared input-ring capacity in cells — the host-side ceiling on how many cells one
     /// <see cref="Tick"/> batch may carry.</summary>
     public int InputCellCapacity => m_inCap;
@@ -196,11 +191,15 @@ public sealed class AddonInstance : IDisposable {
 
         // Every memory the binary declares, exported or not, was read before the module was compiled, so one past
         // the store's ceiling is refused by name here and never handed to Wasmtime to allocate.
+        if (m_memories.Count > AddonModuleLimits.Memories) {
+            SetFault(kind: AddonFaultKind.MemoryLimit, reason: "MemoryLimit — only one linear memory is admitted, exported or not");
+            return;
+        }
         for (var index = 0; (index < m_memories.Count); index++) {
-            if (m_memories[index].MinimumBytes > MaxMemoryBytes) {
+            if (m_memories[index].MinimumBytes > AddonModuleLimits.MemoryBytes) {
                 SetFault(
                     kind: AddonFaultKind.MemoryLimit,
-                    reason: $"MemoryLimit — memory {index} declares {m_memories[index].MinimumPages} pages of 2^{m_memories[index].PageSizeLog2} bytes, past the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling"
+                    reason: $"MemoryLimit — memory {index} declares {m_memories[index].MinimumPages} pages of 2^{m_memories[index].PageSizeLog2} bytes, past the {AddonModuleLimits.MemoryBytes}-byte ceiling"
                 );
                 return;
             }
@@ -211,7 +210,9 @@ public sealed class AddonInstance : IDisposable {
         try {
             store = new Store(engine: m_engine.Engine);
 
-            store.SetLimits(memorySize: MaxMemoryBytes);
+            store.SetLimits(memorySize: AddonModuleLimits.MemoryBytes,
+                tableElements: AddonModuleLimits.TableElements, instances: 1,
+                memories: AddonModuleLimits.Memories, tables: AddonModuleLimits.Tables);
             store.Fuel = ((ulong)m_fuelPerTick);
 
             var instance = new Instance(
