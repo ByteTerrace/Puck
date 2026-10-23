@@ -1,13 +1,19 @@
 # The owner's ruling: Codex runs with the same rights as the Claude agents in this checkout, and its approval
 # requests go to the automatic reviewer rather than a person (Codex's counterpart of Claude Code's auto mode). A
 # permission profile carries it; a lane launched with `codex exec` (no --sandbox flag) runs under it. Probed on
-# Windows: the profile makes the shared leases under .claude/leases/ writable, but the native sandbox still denies
-# writes under .git and network access whatever the grants say, so a sandboxed command that needs either must
-# escalate through the reviewer. Codex takes absolute paths only, so these name this machine's checkout.
+# Windows: under MXC (prefer_mxc) the profile gives shell commands network access and makes the shared leases
+# under .claude/leases/ writable; writes under .git stay denied, so a sandboxed git commit or reset
+# escalates through the reviewer. Codex takes absolute paths only, so these name this machine's checkout.
 # .codex/rules/git.rules forbids every push and sends destructive git commands to review.
 default_permissions = "puck"
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
+# Live web search for research, as the Claude agents have; Codex defaults to cached results.
+web_search = "live"
+
+# MXC is the Windows sandbox that enforces a profile's network permission without administrator setup.
+[features]
+prefer_mxc = true
 
 [permissions.puck]
 extends = ":workspace"
@@ -19,7 +25,6 @@ extends = ":workspace"
 
 [permissions.puck.network]
 enabled = true
-mode = "full"
 
 [mcp_servers.puck]
 command = "pwsh"
