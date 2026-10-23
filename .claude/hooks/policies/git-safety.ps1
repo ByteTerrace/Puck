@@ -220,6 +220,11 @@ function Test-GitSafetyPolicy {
     }
     $unresolved = "git-safety cannot see {0}, which is known only at run time: $($Invocation.Text). Write it out literally."
     if ($git.Unresolved) { return New-PolicyRoleDecision $Context ($unresolved -f $git.Unresolved) ($unresolved -f $git.Unresolved) }
+    # A global option's value known only at run time leaves the verb known: for the lead it can change only where a
+    # push lands or what an alias expands to, so a builtin verb other than push goes on (`git -C $dir add`).
+    if ($git.UnresolvedValue -and ($Context.Role -eq 'lane' -or $git.Verb -eq 'push' -or $git.Verb -cnotin $script:GitBuiltins)) {
+        return New-PolicyRoleDecision $Context ($unresolved -f $git.UnresolvedValue) ($unresolved -f $git.UnresolvedValue)
+    }
     $git = Resolve-GitAlias $git
     if ($git.ContainsKey('Shell')) {
         if ($Depth -ge 3) { return New-PolicyRoleDecision $Context 'A git alias nests too deeply to inspect.' 'A git alias nests too deeply to inspect.' }
