@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/invocations.ps1"
 foreach ($file in Get-ChildItem -LiteralPath "$PSScriptRoot/policies" -Filter '*.ps1') { . $file.FullName }
 
-# Policy name, as -Only takes it, to the function that checks one invocation and returns @{ Decision; Reason } or
+# Policy name to the function that checks one invocation and returns @{ Decision; Reason } or
 # nothing. A decision is deny or ask; a policy with nothing to say abstains, so the tool's own rules decide.
 $script:PolicyChecks = [ordered]@{
     'git-safety'     = 'Test-GitSafetyPolicy'
@@ -87,7 +87,7 @@ function New-PolicyRoleDecision {
 }
 
 function Get-PolicyDecisions {
-    param([hashtable] $Context, [string[]] $Only)
+    param([hashtable] $Context)
     $invocations = @(Get-PolicyInvocations $Context.Command $Context.Dialect $Context.Cwd)
     if ($Context.Dialect -eq 'both' -and $Context.Command -is [string]) {
         # The stricter of the two readings: every invocation the POSIX reading finds counts too, except its opaque
@@ -95,7 +95,6 @@ function Get-PolicyDecisions {
         $invocations += @(Get-PolicyInvocations $Context.Command 'posix' $Context.Cwd | Where-Object { -not $_.Opaque })
     }
     foreach ($name in $script:PolicyChecks.Keys) {
-        if ($Only -and $name -notin $Only) { continue }
         foreach ($invocation in $invocations) {
             $decision = & $script:PolicyChecks[$name] $Context $invocation
             if ($null -ne $decision) { $decision }
@@ -121,11 +120,11 @@ function Format-PolicyReply {
 }
 
 function Invoke-AgentPolicy {
-    param([hashtable] $Payload, [string] $Tool, [string[]] $Only)
+    param([hashtable] $Payload, [string] $Tool)
     $context = New-PolicyContext $Payload $Tool
     if ($null -eq $context) { return $null }
     try {
-        $decisions = @(Get-PolicyDecisions $context $Only)
+        $decisions = @(Get-PolicyDecisions $context)
     } catch {
         $message = "The command policies failed on this command ($($_.Exception.Message)); fix .claude/hooks before relying on them."
         $decisions = @(New-PolicyRoleDecision $context $message $message)

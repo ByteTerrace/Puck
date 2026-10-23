@@ -2,8 +2,8 @@
 # CPU-only check of the command-policy hooks. Every case runs the dispatcher in process for each payload shape its
 # dialect reaches: the Claude lead and a Claude subagent (Bash or PowerShell), a Codex lane (shell tool and native
 # exec_command with workdir) and an Antigravity lane (workspacePaths). The lead's verdict and the lane's verdict are
-# separate columns. A second part runs the real scripts as processes (agent-policy.ps1 per tool, the wrappers
-# settings.json still registers, bash-transport.ps1, prose-doctrine.ps1). It executes no candidate command: the git
+# separate columns. A second part runs the real scripts as processes (agent-policy.ps1 per tool,
+# bash-transport.ps1, prose-doctrine.ps1). It executes no candidate command: the git
 # it runs only builds and reads the scratch repositories it creates.
 $ErrorActionPreference = 'Stop'
 $hooks = Split-Path -Parent $PSScriptRoot
@@ -421,9 +421,6 @@ try {
         @{ Name = 'shape decides the tool without -Tool'; Script = 'agent-policy.ps1'; Arguments = @(); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = @{ CommandLine = 'git stash' } } }; Expect = { $_.decision -eq 'deny' } }
         @{ Name = 'codex bash shell reads backticks as a substitution'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'codex'); Payload = @{ turn_id = 't'; tool_name = 'exec_command'; tool_input = @{ cmd = 'echo `git stash`'; shell = 'bash'; workdir = $topic } }; Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
         @{ Name = 'antigravity string args decode'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'agy'); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = '{"CommandLine":"git stash"}' } }; Expect = { $_.decision -eq 'deny' } }
-        @{ Name = 'wrapper no-coauthor refuses'; Script = 'no-coauthor.ps1'; Arguments = @(); Payload = (& $claude 'git commit -F trailer.txt'); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
-        @{ Name = 'wrapper world-devices runs only its policy'; Script = 'world-devices.ps1'; Arguments = @(); Payload = (& $claude 'git push origin main'); Expect = $null }
-        @{ Name = 'wrapper no-node-reuse refuses'; Script = 'no-node-reuse.ps1'; Arguments = @(); Payload = (& $claude 'dotnet build A'); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
         @{ Name = 'transport passes a short command'; Script = 'bash-transport.ps1'; Arguments = @(); Payload = (& $claude 'git push origin main'); Expect = $null }
         @{ Name = 'transport asks for a moved main push and quotes it'; Script = 'bash-transport.ps1'; Arguments = @(); Payload = (& $claude "$long && git push --dry-run origin main"); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'ask' -and $_.hookSpecificOutput.permissionDecisionReason -match 'git push --dry-run origin main' -and $_.hookSpecificOutput.updatedInput.command -match '^\. ' } }
         @{ Name = 'transport asks for a moved branch push'; Script = 'bash-transport.ps1'; Arguments = @(); Payload = (& $claude "$long && git push origin topic"); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'ask' } }
