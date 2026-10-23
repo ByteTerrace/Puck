@@ -9,6 +9,22 @@ namespace Puck.Launcher.Tests.Release;
 public sealed class FileUpdateApplierTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Apply_RefusesCaseAliasOfAnActiveDirectory(bool lastGood) {
+        var content = "verified bytes"u8.ToArray();
+        var file = new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+        StageFile(version: "1.0.1-alpha", relativePath: file.Path, content: content);
+        File.WriteAllText(path: Path.Combine(m_root.RootPath, "current"), contents: lastGood ? "1.0.0" : "1.0.1-Alpha");
+        if (lastGood) {
+            File.WriteAllText(path: Path.Combine(m_root.RootPath, "last-good"), contents: "1.0.1-Alpha");
+        }
+        var result = new FileUpdateApplier().Apply(manifest: ManifestFor(version: "1.0.1-alpha", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath);
+        Assert.False(condition: result.Applied);
+        Assert.Contains(expectedSubstring: "collides", actualString: result.RefusalReason!);
+    }
+
     [Fact]
     public void Apply_RefusesDowngradeAndReapplyAgainstTheCurrentPointer() {
         var content = "verified bytes"u8.ToArray();

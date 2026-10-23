@@ -17,6 +17,9 @@ using Puck.World.Machines;
 // a byte that is not UTF-8, while the command echoes beside them are UTF-8, so the run's output differs by machine.
 // The setter suppresses the byte-order mark.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+// Every line written through the console from here on is also held in a bounded ring that host.log reads, so an
+// Operator attachment reads what only this process's launcher otherwise sees.
+var hostLog = HostLog.CaptureConsole();
 // The run's state root, resolved from --state-dir once the command line parses; the method recorder reads it at exit.
 Puck.World.Server.WorldStateRoot? stateRoot = null;
 WorldMethodRecorder.StartIfBuiltIn(stateRoot: () => stateRoot);
@@ -471,6 +474,7 @@ var builder = Host.CreateApplicationBuilder(args: args);
 // and whichever thread writes it, goes to standard error beside the narration.
 builder.Logging.AddConsole(configure: static options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 var services = builder.Services;
+services.AddSingleton(implementationInstance: hostLog);
 if (hostSettings.Presentation == WorldHostPresentation.Windowed) {
     // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows, defined as data.
     // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/capture controller/verb module), but the

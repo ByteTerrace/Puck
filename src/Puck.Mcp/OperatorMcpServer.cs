@@ -19,7 +19,11 @@ public static class OperatorMcpServer {
     private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"tick":{"type":"integer","minimum":0,"description":"settled only: the simulation tick the still shows. The call holds until the world completes that tick, then arms the capture before the next tick steps and holds the world there until the frame is served, so the still is exactly that tick; a tick the world has already completed is refused. Omitted, the still shows the last tick completed when the call reaches the World. Give a timeoutMs that covers the wait."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the frame. When it passes, the attachment closes and the outcome is reported as unknown."},"mode":{"type":"string","enum":["settled","presented"],"default":"settled","description":"settled: one clean still; the capture holds presentation and temporal views converge over the held frame, so it hides frame-to-frame defects. presented: what the display actually showed; nothing is held or settled, and each frame is read back as composed for the display, with its jitter, temporal history and motion. Use presented for flicker, ghosting and trails."},"frames":{"type":"integer","minimum":1,"maximum":120,"default":1,"description":"presented only: the consecutive presented frames to read. One frame returns its PNG inline. More than one writes each PNG to a directory on the World's machine and returns, instead of images, a report: per frame its path, presentation index, the presentation its image was rendered on (earlier means the display repeated an image), its tick, and against the previous frame the changed-pixel count and the mean and largest absolute Rec. 709 luma change; then a summary line. Read only the frames the report flags."},"region":{"type":"object","description":"presented only: the rectangle the report's differences are measured over, in fractions of the frame (origin top-left), to isolate one screen or object; omitted, the whole frame.","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"width":{"type":"number","exclusiveMinimum":0,"maximum":1},"height":{"type":"number","exclusiveMinimum":0,"maximum":1}},"required":["x","y","width","height"],"additionalProperties":false}},"additionalProperties":false}""");
 
     private static readonly JsonElement WorldsInput = JsonElement.Parse("""{"type":"object","properties":{},"additionalProperties":false}""");
-    private static readonly JsonElement WorldsOutput = JsonElement.Parse("""{"type":"object","properties":{"worlds":{"type":"array","items":{"type":"object","properties":{"attachmentId":{"type":"string","description":"Names this World in a call's world argument."},"processId":{"type":"integer","description":"Also names this World in a call's world argument."},"document":{"type":["string","null"],"description":"The world document the World booted from."},"startedUtc":{"type":"string"},"current":{"type":"boolean","description":"True for the World a call that names none runs on."}},"required":["attachmentId","processId","document","startedUtc","current"],"additionalProperties":false}}},"required":["worlds"],"additionalProperties":false}""");
+    private static readonly JsonElement WorldsOutput = JsonElement.Parse("""{"type":"object","properties":{"worlds":{"type":"array","items":{"type":"object","properties":{"attachmentId":{"type":"string","description":"Names this World in a call's world argument."},"processId":{"type":"integer","description":"Also names this World in a call's world argument."},"document":{"type":["string","null"],"description":"The world document the World booted from."},"startedUtc":{"type":"string"},"current":{"type":"boolean","description":"True for the World a call that names none runs on."},"started":{"type":"boolean","description":"True for a World this adapter started with puck_world_start, the only Worlds puck_world_stop ends."}},"required":["attachmentId","processId","document","startedUtc","current","started"],"additionalProperties":false}}},"required":["worlds"],"additionalProperties":false}""");
+
+    private static readonly JsonElement StartInput = JsonElement.Parse("""{"type":"object","properties":{"document":{"type":"string","minLength":1,"default":"worlds/debug","description":"The world to boot: a package folder, .puck source or JSON document under the checkout's worlds/ directory, relative to the checkout or absolute."},"checkout":{"type":"string","minLength":1,"description":"The checkout whose src/Puck.World Release build boots, by absolute path: the adapter's own (the default) or a worktree of its repository, such as your lane's."},"windowed":{"type":"boolean","default":false,"description":"Boot windowed (GPU work, under the GPU lease) instead of headless."},"ownerPlay":{"type":"boolean","default":false,"description":"Only when the owner asked to play in this World: opens every physical input device (--devices all). Otherwise the World opens none (--devices none)."},"holder":{"type":"string","minLength":1,"default":"puck-mcp","description":"The lane name a windowed World's GPU lease records."},"timeoutSeconds":{"type":"integer","minimum":1,"maximum":540,"default":300,"description":"Seconds the start may take, waiting for the GPU lease included; a World that has not accepted an attachment by then is stopped."}},"additionalProperties":false}""");
+    private static readonly JsonElement StopInput = JsonElement.Parse("""{"type":"object","properties":{"world":{"type":"string","minLength":1,"description":"The processId or attachmentId puck_world_start returned."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds the World has to quit before its process tree is killed."}},"required":["world"],"additionalProperties":false}""");
+    private static readonly JsonElement RunOutput = JsonElement.Parse("""{"type":"object","properties":{"status":{"type":"string","enum":["started","stopped","refused"]},"output":{"type":"string"},"isError":{"type":"boolean"},"world":{"type":["object","null"],"description":"The started World, as puck_worlds lists it; null otherwise.","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"},"document":{"type":["string","null"]},"startedUtc":{"type":"string"}},"required":["attachmentId","processId","document","startedUtc"],"additionalProperties":false},"processId":{"type":["integer","null"]},"checkout":{"type":["string","null"]},"build":{"type":["string","null"],"description":"The Puck.World.dll that runs."},"stateDirectory":{"type":["string","null"]},"stdoutLog":{"type":["string","null"],"description":"Everything the World wrote to stdout, kept after it stops."},"stderrLog":{"type":["string","null"],"description":"Everything the World wrote to stderr, kept after it stops."},"exitCode":{"type":["integer","null"]},"killed":{"type":"boolean","description":"True when the World did not quit in time and its process tree was killed."},"leaseReleased":{"type":"boolean","description":"True when the World held the GPU lease, which is now released."}},"required":["status","output","isError","world","processId","checkout","build","stateDirectory","stdoutLog","stderrLog","exitCode","killed","leaseReleased"],"additionalProperties":false}""");
 
     /// <summary>The output schema every console-backed tool's structured result satisfies: <c>puck_exec</c>,
     /// <c>puck_capture_frame</c>, and <c>puck_state_vector_write</c>, locally and over HTTP.</summary>
@@ -222,6 +226,20 @@ public static class OperatorMcpServer {
         OutputSchema = WorldsOutput,
         Annotations = new() { DestructiveHint = false, IdempotentHint = true, OpenWorldHint = false, ReadOnlyHint = true },
     };
+    internal static Tool StartTool() => new() {
+        Name = "puck_world_start",
+        Description = "Boot a World of your own from a checkout's Release build of src/Puck.World (build it first: a stale build runs stale code) and return once it accepts an attachment, with its identity as puck_worlds lists it; name it by processId or attachmentId in every later call. It always passes --devices none (ownerPlay alone opens the machine's devices), its own state directory and --control; a windowed World first takes the GPU lease and holds it until it exits. Only a document under the checkout's worlds/ and only this repository's checkouts boot. Read its stdout and stderr with puck_exec host.log, and end it with puck_world_stop; the adapter stops every World it started when it exits.",
+        InputSchema = StartInput,
+        OutputSchema = RunOutput,
+        Annotations = new() { DestructiveHint = false, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
+    };
+    internal static Tool StopTool() => new() {
+        Name = "puck_world_stop",
+        Description = "Stop a World this adapter started with puck_world_start: send it quit, kill its process tree if it has not exited within timeoutMs, release its GPU lease, and report its exit code and log files. A World this adapter did not start is refused and left running.",
+        InputSchema = StopInput,
+        OutputSchema = RunOutput,
+        Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = false },
+    };
     internal static Tool WithWorldSelector(Tool source) {
         var schema = JsonNode.Parse(json: source.InputSchema.GetRawText())!.AsObject();
 
@@ -282,7 +300,7 @@ public static class OperatorMcpServer {
         Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
     };
 
-    private static CallToolResult ListWorlds(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment) {
+    private static CallToolResult ListWorlds(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment, OperatorWorlds worlds) {
         if (arguments is { Count: > 0 }) {
             return Error(
                 "Invalid argument: puck_worlds takes none.",
@@ -295,6 +313,7 @@ public static class OperatorMcpServer {
             Current: entry.Current,
             Document: entry.Info.World,
             ProcessId: entry.Info.ProcessId,
+            Started: worlds.Owns(processId: entry.Info.ProcessId),
             StartedUtc: entry.Info.StartedUtc
         ))]);
         var metadata = JsonSerializer.SerializeToElement(
@@ -363,7 +382,10 @@ public static class OperatorMcpServer {
     /// <param name="clock">Drives every adapter-side deadline: the attachment's connect and handshake, each call, the
     /// control connection's own call deadline, and each reply write. <see langword="null"/> is
     /// <see cref="TimeProvider.System"/>. The World's side runs its deadlines on its own clock.</param>
-    public static async Task RunAsync(string target, Stream input, Stream output, CancellationToken cancellationToken = default, TimeProvider? clock = null) {
+    /// <param name="launch">The checkout and GPU lease <c>puck_world_start</c> boots Worlds with, or
+    /// <see langword="null"/> for an adapter outside any checkout, whose start is refused. Every World the adapter
+    /// started is stopped when it shuts down.</param>
+    public static async Task RunAsync(string target, Stream input, Stream output, CancellationToken cancellationToken = default, TimeProvider? clock = null, OperatorWorldLaunch? launch = null) {
         ArgumentException.ThrowIfNullOrEmpty(target);
         clock ??= TimeProvider.System;
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
@@ -371,6 +393,8 @@ public static class OperatorMcpServer {
             clock: clock,
             target: target
         );
+        // Disposed before the attachments, so a World this adapter started is asked to quit while it is still attached.
+        using var worlds = new OperatorWorlds(clock: clock, launch: launch);
         using var bounded = new BoundedMcpInput(
             input,
             () => { attachment.Dispose(); lifetime.Cancel(); }
@@ -403,13 +427,20 @@ public static class OperatorMcpServer {
                     },
                 },
                 Handlers = new() {
-                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [WorldsTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
+                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [WorldsTool(), StartTool(), StopTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
                     CallToolHandler = async (context, token) => {
                         if (context.Params?.Name == "puck_worlds") {
                             return ListWorlds(
                                 arguments: context.Params.Arguments,
-                                attachment: attachment
+                                attachment: attachment,
+                                worlds: worlds
                             );
+                        }
+                        if (context.Params?.Name == "puck_world_start") {
+                            return await worlds.StartAsync(arguments: context.Params.Arguments, attachment: attachment, cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
+                        }
+                        if (context.Params?.Name == "puck_world_stop") {
+                            return await worlds.StopAsync(arguments: context.Params.Arguments, cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
                         }
 
                         var (selector, invalid) = SelectedWorld(parameters: context.Params);

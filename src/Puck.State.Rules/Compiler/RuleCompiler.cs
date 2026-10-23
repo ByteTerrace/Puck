@@ -84,8 +84,19 @@ public static partial class RuleCompiler {
                 poolBindingSlot = poolBinding.Slot;
             }
 
+            var compiledLocals = AllLocals(
+                context: context,
+                declared: locals
+            );
+
             var controls = new List<CellAccess>();
             RuleDataflow.CollectGate(gate: gate, into: controls);
+            foreach (var local in compiledLocals) {
+                RuleDataflow.CollectExpression(
+                    into: controls,
+                    tokens: local.Expression
+                );
+            }
             if (forEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: forEachOrdinal, Key: default)); }
             if (poolForEach is not null) { controls.Add(item: new CellAccess(RowOrdinal: poolForEach.DomainRowOrdinal, Key: default)); }
             RequireTransformControlAudience(effects: effects, controls: controls, context: context, ruleName: rule.Name);
@@ -97,11 +108,6 @@ public static partial class RuleCompiler {
             RuleDataflow.CollectEffectFacts(
                 effects: effects,
                 into: context.Needs
-            );
-
-            var compiledLocals = AllLocals(
-                context: context,
-                declared: locals
             );
 
             foreach (var local in compiledLocals) {
