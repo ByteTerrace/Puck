@@ -163,6 +163,8 @@ and none is run until the owner calls for qualification.
 
 ## Cross-plan maintenance
 
+- [ ] Stop committing the built addon guests. The eleven `wasm/*/dist/*.wasm` modules are compiled from the Rust crates beside them, and the owner's ruling makes a derived product a cache that is derived on a miss and never committed ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)). [wasm/README.md](../../wasm/README.md) records them as committed, with provenance no gate enforces. Deriving them on a miss puts the Rust `wasm32` toolchain on every machine and CI job that loads an addon, so measure that cost against edit-to-running before choosing how. A hand-written fixture module (such as the transpiler sample's 8-byte `Samples/addons/rules.wasm`) is source, not a derived product.
+
 - [ ] Close the skill eval graders that still fail with the skill loaded ([evaluating a skill](../development/documentation.md#evaluate-an-agent-skill)): puck-world w03 (`bom-less-utf8`, `pixel-versus-replay-proof`, `announcement-on-stderr`) and w04 (`compiled-in-memory`, `folds-through-the-rule-frame`), and verification v08 (`citations-boots-world`) and v12 (`shows-by-running`). For each, decide whether the skill lacks the teaching or the case is wrong, fix that, and rerun the skill's suite with a budget that judges every run.
 - [x] Restore `puck bench world`: its harness supplies the machine catalog, so the shipped world's arcade engines are admitted and measured.
 - [x] The `BenchRunner` help states that shipped-world server construction costs hundreds of milliseconds, a number `puck bench world` measures.
