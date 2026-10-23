@@ -90,9 +90,11 @@ flag was missed.
 - A failed build leaves the previous binaries in place, so a test or run after
   it measures old code. Run only after a build that exited 0 following your
   last edit; never pass `--no-build` otherwise.
-- Pass `-nodeReuse:false` to every build, test, msbuild and restore: a reused MSBuild node
+- Pass `-nodeReuse:false` to every build, msbuild and restore: a reused MSBuild node
   outlives the build and holds memory (`puck host load` counts them as
-  `reuseNodes`).
+  `reuseNodes`). Never pass it to `dotnet test`: Microsoft.Testing.Platform
+  rejects it and the run reports `error: 1, total: 0`. Build with the flag,
+  then run `dotnet test <project> --no-build`.
 - Do not edit the source tree while a canary, parity or test run reads it.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
 - MSBuild rebuilds by file time. A file copied back over a mutant keeps its
