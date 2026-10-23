@@ -101,12 +101,6 @@ public static partial class WorldFactsCompiler {
                 if (decision is not null) {
                     var controls = new List<CellAccess>();
                     RuleDataflow.CollectGate(gate: compiled.Gate, into: controls);
-                    foreach (var local in (compiled.Locals ?? [])) {
-                        RuleDataflow.CollectExpression(
-                            into: controls,
-                            tokens: local.Expression
-                        );
-                    }
                     RuleDataflow.CollectGate(gate: decision.Interrupt ?? [], into: controls);
                     if (compiled.ForEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: compiled.ForEachOrdinal, Key: default)); }
                     if (compiled.PoolForEach is { } pool) { controls.Add(item: new CellAccess(RowOrdinal: pool.DomainRowOrdinal, Key: default)); }

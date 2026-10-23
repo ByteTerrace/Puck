@@ -67,11 +67,7 @@ public static partial class ArenaTransforms {
                 case ArenaTransform.Nearest value:
                     Write(row: value.IntoRowOrdinal); Read(row: value.FromRowOrdinal); Read(row: value.WhereRowOrdinal); Vector(source: value.Query); break;
                 case ArenaTransform.PushRay value:
-                    var pool = catalog.Pools[value.PoolOrdinal];
-                    Read(row: pool.DomainRowOrdinal);
-                    Write(row: pool.Fields[value.CellFieldOrdinal].RowOrdinal, read: true);
-                    Read(row: pool.Fields[value.ValueFieldOrdinal].RowOrdinal);
-                    break;
+                    Write(row: value.CellFieldOrdinal, read: true); Read(row: value.ValueFieldOrdinal); break;
                 case ArenaTransform.Remember value:
                     Write(row: value.IntoRowOrdinal, read: true); Vector(source: value.From); break;
                 case ArenaTransform.SetRay value:

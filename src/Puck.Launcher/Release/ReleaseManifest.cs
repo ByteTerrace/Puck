@@ -104,7 +104,7 @@ public static class ReleaseCanonicalizer {
         }
 
         foreach (var segment in segments) {
-            if ((segment.Length == 0) || segment.StartsWith(value: ' ') || segment.EndsWith(value: '.') || segment.EndsWith(value: ' ')) {
+            if ((segment.Length == 0) || segment.EndsWith(value: '.') || segment.EndsWith(value: ' ')) {
                 return false;
             }
 
@@ -130,10 +130,9 @@ public static class ReleaseCanonicalizer {
             return;
         }
 
-        if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
-            file.Path.Equals(value: "state-generation", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (!IsPortablePath(value: file.Path, allowDirectories: true)) {
             errors.Add(item: new(
-                Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved 'state-generation' name, and no device names or alternate streams.",
+                Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, and no device names or alternate streams.",
                 Path: $"{path}.path"
             ));
         } else if (
@@ -296,9 +295,9 @@ public static class ReleaseCanonicalizer {
             ));
         }
 
-        if (!IsPortablePath(value: document.Channel, allowDirectories: false)) {
+        if (string.IsNullOrWhiteSpace(value: document.Channel)) {
             errors.Add(item: new(
-                Message: "a channel must be a single portable directory name.",
+                Message: "a channel is required.",
                 Path: "channel"
             ));
         }

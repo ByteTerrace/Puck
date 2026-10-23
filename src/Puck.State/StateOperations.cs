@@ -123,30 +123,6 @@ public abstract record StateTransform {
 
         var trimmed = spelling.Trim();
 
-        while (
-            (trimmed.Length >= 2) &&
-            (trimmed[0] == '(') &&
-            (trimmed[^1] == ')')
-        ) {
-            var depth = 0;
-            var enclosesAll = true;
-
-            for (var index = 0; index < (trimmed.Length - 1); index++) {
-                if (trimmed[index] == '(') {
-                    depth++;
-                } else if ((trimmed[index] == ')') && (--depth == 0)) {
-                    enclosesAll = false;
-                    break;
-                }
-            }
-
-            if (!enclosesAll || (depth != 1)) {
-                break;
-            }
-
-            trimmed = trimmed[1..^1].Trim();
-        }
-
         if (trimmed.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: "vector("

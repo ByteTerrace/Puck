@@ -81,23 +81,18 @@ public sealed class FileUpdateApplier : IUpdateApplier {
         );
 
         if (previousVersion is { Length: > 0 }) {
-            var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
-            var lastGoodVersion = File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null;
             if (recoverInterruptedApply && previousVersion == manifest.Version) {
                 var generationPath = Path.Combine(path1: versionDirectory, path2: "state-generation");
                 if (!File.Exists(path: generationPath) || File.ReadAllText(path: generationPath) != manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)) {
                     return UpdateApplyResult.Refuse(reason: "the current install's state generation does not match its pending intent");
                 }
-                return new UpdateApplyResult(Applied: true, PreviousVersion: lastGoodVersion, RefusalReason: null);
+                var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
+                return new UpdateApplyResult(Applied: true, PreviousVersion: File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null, RefusalReason: null);
             }
             // InstalledVersion belongs to the running process. A previous apply may already have advanced this
             // pointer without restarting it, so the on-disk version is the final downgrade gate.
             if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: previousVersion)) {
                 return UpdateApplyResult.Refuse(reason: $"version '{manifest.Version}' does not exceed the current install '{previousVersion}'");
-            }
-            if (string.Equals(a: manifest.Version, b: previousVersion, comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                (!string.IsNullOrEmpty(value: lastGoodVersion) && string.Equals(a: manifest.Version, b: lastGoodVersion, comparisonType: StringComparison.OrdinalIgnoreCase))) {
-                return UpdateApplyResult.Refuse(reason: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
             }
 
             AtomicFile.WriteAllText(
