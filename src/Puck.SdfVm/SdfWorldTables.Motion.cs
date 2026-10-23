@@ -181,7 +181,14 @@ public sealed partial class SdfWorldTables {
     // Compares a newly staged draw list with the one last staged: a draw whose identity at its index changed is seeded,
     // and one that kept its identity and moved its matrix is copied from the preceding upload's table.
     private void StageMeshMotion(ReadOnlySpan<uint> words, IReadOnlyList<SdfMeshDraw> draws) {
-        var old = m_meshRegion.Contents;
+        // Only the draw records are compared, so a region past what one span reaches is read at its front.
+        var old = m_meshRegion.ContentsAt(
+            length: ((int)Math.Min(
+                val1: m_meshRegion.ByteCount,
+                val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes)
+            )),
+            offset: 0
+        );
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             if (draws[draw].Identity is not { } identity) {

@@ -76,6 +76,22 @@ distance at which the switch is barely perceptible (the owner's ruling). The
 switch distance is derived from the change's size on screen at the view's
 resolution, not fixed in metres.
 
+The owner's rulings for levels of detail:
+
+- A coarser level of a baked mesh is drawn where its recorded geometric error
+  projects to at most one display pixel. A view switches back to the finer
+  level only above 1.1 pixels, so a level does not flicker at the boundary. A
+  shadow cascade takes the coarsest level whose error is within one of its
+  texels.
+- The first level is lossless: coplanar lattice quads merged into the polygons
+  they tile, changing no pixel.
+- The irradiance trace reads that merged mesh, which never changes with the
+  camera.
+- A static union larger than one chunk (the hall) is split into chunks only once
+  the merge's savings are measured.
+- On-screen sizes for levels of detail and update rates are measured in display
+  pixels, after upscaling, never in render-grid pixels.
+
 The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
 `CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
@@ -86,17 +102,38 @@ Work that changes every frame updates less often where it is far or small on
 screen (the owner's request), by the same rule: a reduced rate is a visible
 trade-off, so each switches only where a held update jumps by at most two
 pixels on screen for the speed it is sized for (`SdfUpdateRateTiers`). A body's
-pose evaluation runs at 30 Hz at or below 30 pixels per metre and 15 Hz at or
-below 15, its root followed every frame; a nested portal or session view
-renders at 30 Hz at or below 120 display pixels high and 15 Hz at or below 60;
-a screen's source uploads at 30 Hz once shown at or below its own height and
-15 Hz at or below half of it; the far shadow cascade refreshes at 30 Hz, its
-fit held between refreshes so a static shadow stays exact. Rates are absolute,
-so a display at or below 30 Hz holds nothing at the 30 Hz tier. Everything is
-presentation: the simulation ticks every body and every machine runs at its own
-rate, so game timing, audio and replay hashes do not move. The levers extend
-the per-pass cadence and the render graph's refresh, never a second scheduler,
-and `world.rates` switches each for comparison. Measured on the debug world
+pose evaluation updates at least 30 times a second at or below 30 pixels per
+metre and at least 15 at or below 15, its root followed every frame; a nested
+portal or session view renders at least 30 times a second at or below 120
+display pixels high and at least 15 at or below 60; a screen's source uploads
+at least 30 times a second once shown at or below its own height and at least
+15 at or below half of it; the far shadow cascade refreshes at least 30 times a
+second, its fit held between refreshes so a static shadow stays exact.
+
+A tier is a floor held by presentation time, since the two-pixel bound holds
+only if the content really updates that often: a rated item updates on the
+first frame where waiting one more frame, estimated from the latest frame's
+span, would pass its period (`PresentationRate.Holds`). Counting frames of the
+pacing target instead lets the real rate fall with the frame rate: paced at
+141 Hz on a variable-refresh display but rendering 70 frames a second, a
+five-frame hold is 14 Hz and four-pixel steps. On a fixed signal the period is a
+whole number of refreshes rounded down, so the cadence stays even and never
+falls below the tier, and a steady 60 Hz holds the same frames as a two- or
+four-frame divisor. Off a grid the comparison allows a millisecond for the
+jitter of a sampled frame time, without which a steady 60 Hz on a
+variable-refresh display refreshed the far cascade on three frames of every
+five instead of every second one.
+A tier above the display's rate holds nothing. Under
+lockstep the period is whole ticks, so a capture's frames do not depend on the
+display. A cap is the other meaning of a rate ("at most N Hz": an authored
+refresh, or a machine's own 59.7 Hz) and stays counted in presented frames,
+rounded up (`PresentationRate.FramesAtMost`); the two never share a rounding
+rule. Everything is presentation: the simulation ticks every body and every
+machine runs at its own rate, so game timing, audio and replay hashes do not
+move. The levers extend the per-pass cadence and the render graph's refresh
+(`RenderGraphRefresh.AtLeast`), never a second scheduler; `world.rates`
+switches each for comparison and prints each lever's longest interval between
+updates at each tier against the tier's period. Measured on the debug world
 ([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
 
 ## Lights, screens and the camera are photometric
@@ -225,13 +262,23 @@ contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
 
-**The frame-rate bar is the slowest frame at high quality.** On the RTX 2060,
-the lowest-powered desktop the programme targets, a shipped world at the shipped
-`world.quality high` preset (high shadows from two shadowed lights, ambient
-occlusion, temporal reconstruction, high indirect lighting, native render
-scale) holds a steady
-60 FPS: every frame under 16.7 ms, not the average. The RTX 4070 holds the same
-quality at a steady 120 FPS, every frame under 8.3 ms. An average hides the
+**The frame-rate bar is the slowest frame at the highest quality.** Until
+initial development is done, every machine runs the highest quality settings,
+and lower qualities wait (the owner's ruling). Today those settings are the
+`world.quality high` preset: high shadows from two shadowed lights, ambient
+occlusion, temporal reconstruction, high indirect lighting and native render
+scale. The bars, each the slowest frame and not the average:
+
+- the RTX 2060, the lowest-powered desktop the programme targets: a steady
+  60 FPS, every frame under 16.7 ms;
+- the RTX 4070: a rock-steady 60 FPS (the owner's ruling);
+- the Steam Deck: a rock-steady 45 FPS minimum, every frame under 22.2 ms (the
+  owner's ruling).
+
+Each machine still meets its bar with its own strengths
+([each machine runs to its own
+strengths](engine-design.md#each-machine-runs-to-its-own-strengths)), never by
+dropping below the highest quality. An average hides the
 hitch a player feels, so a periodic stall (a camera enumeration, a live
 mutation's apply, a pipeline compile) misses the bar even when the mean is
 fast, and a lower tier is never the fix for a missed bar. Counted work still

@@ -761,9 +761,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             time: 0f
         );
 
-        // The region holds twice the words the list needs, so meshes that land later fit without growing it.
+        // The region holds the need plus an eighth, to a granule, so meshes that land later fit without growing it.
         Assert.Equal(expected: words, actual: rig.Engine.MeshRegionWords);
-        Assert.Equal(expected: (2UL * bytes), actual: rig.Engine.MeshRegionBytes);
+        Assert.Equal(expected: bytes, actual: rig.Engine.MeshRegionUsedBytes);
+        Assert.Equal(expected: SdfWorldTables.MeshRegionGrownBytes(needBytes: bytes), actual: rig.Engine.MeshRegionBytes);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
             actual: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes)[..((int)bytes)]
@@ -823,6 +824,42 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: landedWords[(arena * sizeof(uint))..((int)bytes)]
         );
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: (((words + SdfMeshRecord.VertexWords) + 1) * sizeof(uint)), value: landedWords));
+    }
+
+    // The mesh region grows to the need plus an eighth, to a 16 MiB granule, and to no more than a region holds. The
+    // debug world's region has not reached 2 GiB, so the sizes past it are held by the arithmetic alone.
+    [Theory]
+    [InlineData(4UL, 16UL << 20)]
+    [InlineData(16UL << 20, 32UL << 20)]
+    [InlineData(1_500_000_000UL, 1_694_498_816UL)]
+    [InlineData(2UL << 30, 2_415_919_104UL)]
+    [InlineData(3UL << 30, 3_623_878_656UL)]
+    public void TheMeshRegionGrowsByAnEighthToAGranule(ulong need, ulong grown) {
+        Assert.Equal(
+            actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: need),
+            expected: grown
+        );
+        Assert.Equal(
+            actual: (grown % SdfWorldTables.MeshRegionGranuleBytes),
+            expected: 0UL
+        );
+        Assert.True(condition: (grown >= (need + (need / 8UL))));
+    }
+    [Fact]
+    public void TheMeshRegionGrowthStopsAtWhatARegionHolds() {
+        const ulong Most = SdfWorldTables.MostMeshRegionBytes;
+
+        Assert.Equal(expected: ((ulong)GpuRegion.MaxByteCount), actual: Most);
+        Assert.True(condition: (Most > (2UL << 30)));
+        Assert.Equal(expected: 0UL, actual: (Most % sizeof(uint)));
+        Assert.Equal(expected: Most, actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: Most));
+        Assert.Equal(expected: Most, actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: (Most - sizeof(uint))));
+        Assert.Equal(expected: Most, actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: (3_900_000_000UL)));
+
+        var refused = Assert.Throws<InvalidOperationException>(testCode: () => SdfWorldTables.MeshRegionGrownBytes(needBytes: (Most + sizeof(uint))));
+
+        Assert.Contains(expectedSubstring: "past the", actualString: refused.Message);
+        Assert.Contains(expectedSubstring: Most.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), actualString: refused.Message);
     }
 
     // One 64×64 view looking at the origin, at the given time, carrying the given transforms.

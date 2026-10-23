@@ -184,7 +184,7 @@ function Split-GitInvocation {
     $argv = $Invocation.Argv
     $flags = $Invocation.Dynamic
     $dynamic = { param([int] $k) $null -ne $flags -and $k -lt $flags.Count -and $flags[$k] }
-    $git = @{ Verb = $null; Rest = @(); RestDynamic = @(); Cwd = $Invocation.Cwd; Globals = [Collections.Generic.List[string]]::new(); Config = @{}; Redirected = $false; Unresolved = $null }
+    $git = @{ Verb = $null; Rest = @(); RestDynamic = @(); Cwd = $Invocation.Cwd; Globals = [Collections.Generic.List[string]]::new(); Config = @{}; Redirected = $false; Unresolved = $null; UnresolvedValue = $null }
     foreach ($key in $Invocation.Env.Keys) { if ($key -in $script:GitRedirectVariables) { $git.Redirected = $true } }
     for ($i = 1; $i -lt $argv.Count; $i++) {
         $t = $argv[$i]
@@ -203,7 +203,7 @@ function Split-GitInvocation {
         elseif ($t -match '^(--[a-z-]+)=(.*)$') { $name = $Matches[1]; $value = $Matches[2] }
         elseif ($t -cin $script:GitSeparateValues -and $i + 1 -lt $argv.Count) {
             $value = $argv[++$i]
-            if (& $dynamic $i) { $git.Unresolved = "the value of git $t" }
+            if (& $dynamic $i) { $git.UnresolvedValue = "the value of git $t" }
         }
         if ($name -cin $script:GitRedirects) { $git.Redirected = $true }
         if ($name -ceq '-C') { $git.Cwd = Resolve-PolicyPath $value $git.Cwd }

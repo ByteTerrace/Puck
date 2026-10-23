@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
@@ -81,13 +80,14 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
             );
         }
 
-        // Spans the written bytes alone: the rest of a mapping past 2 GiB does not fit a span's length.
-        var destination = new Span<byte>(
-            pointer: (((byte*)m_mapped) + destinationOffsetBytes),
-            length: checked((int)size)
-        );
-
-        MemoryMarshal.AsBytes(span: data).CopyTo(destination: destination);
+        fixed (T* source = data) {
+            Buffer.MemoryCopy(
+                destination: (((byte*)m_mapped) + destinationOffsetBytes),
+                destinationSizeInBytes: (SizeBytes - destinationOffsetBytes),
+                source: source,
+                sourceBytesToCopy: size
+            );
+        }
     }
     /// <inheritdoc/>
     public void Dispose() {

@@ -31,6 +31,13 @@ capability authentication.
   `ConsoleTapeStore`; `ConsoleLineEditor` owns the prompt row's caret-addressed
   buffer and command history. Renderers read `IConsoleTapeSource`; the window
   host bridges keystrokes in (`ConsoleInputSink` in `Puck.Launcher`).
+- *The host's output log:* `HostLog` keeps the newest lines the process wrote
+  to stdout and stderr (4096 lines and 1,048,576 characters at most, the
+  oldest evicted), each with the tick the host had completed when it was
+  written. `HostLog.CaptureConsole` tees `Console.Out` and `Console.Error` into
+  it, and `BufferedConsoleOutput` appends the refusals it writes past them;
+  every terminal shape answers `host.log` from it, so an attachment reads
+  announcements only the launching process otherwise sees.
 - *Presentation observability:* frame capture, latest-value publication, and
   emitted light remain outside the simulation trajectory.
 - *Source-watch debounce:* `DependencyWatch` polls comparable dependency facts

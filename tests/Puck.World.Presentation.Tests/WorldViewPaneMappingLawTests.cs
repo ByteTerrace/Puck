@@ -60,8 +60,13 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private WorldViewDefaults m_document = Views;
     private long m_frame;
     private RenderGraphHistory? m_history;
-    // The display rate each frame begins at, which the world.rates levers count a footprint's refresh in.
-    private int m_displayHertz;
+    // A 60 Hz display on a fixed signal, whose frames each span one refresh.
+    private static readonly PresentationRate Paced60 = new(DisplayHertz: 60, GridHertz: 60d);
+    // The engine ticks one 60 Hz frame spans.
+    private const ulong FrameTicks = (FixedTickConversion.TicksPerSecond / 60UL);
+
+    // The presentation rate each frame begins at; the world.rates levers rate footprints only on a paced one.
+    private PresentationRate m_rate;
 
     public WorldViewPaneMappingLawTests() {
         m_host = new WorldViewGraphHost(
@@ -104,7 +109,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     // The host's half of a frame, as the presenter's PrepareGraph drives it: begin, place, publish.
     private void Prepare(NormalizedRect? pane) {
         m_host.BeginFrame(
-            displayHertz: m_displayHertz,
+            rate: m_rate,
             tonemap: m_tonemap,
             views: m_document
         );
@@ -152,7 +157,11 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
                 Footprints: m_host.Footprints,
                 Index: m_frame,
                 Roots: m_roots
-            ),
+            ) {
+                FrameTicks = FrameTicks,
+                GridHertz = 60d,
+                PresentedTicks = (((ulong)m_frame) * FrameTicks),
+            },
             history: m_history,
             schedule: schedule,
             set: set

@@ -54,7 +54,9 @@ Every workflow installs the SDK through the `setup-dotnet` action's `global-json
 runner installs. The container builds pin the matching SDK image tag in each Dockerfile and track the
 `11.0` runtime image, whose base is Ubuntu 26.04. The Functions app builds with the `Azure.Functions.Sdk`
 MSBuild SDK, which supports .NET 11 where the `Microsoft.Azure.Functions.Worker.Sdk` package does not,
-and the Flex plan's runtime version names `11.0`.
+and the Flex plan's runtime version names `11.0`. This SDK generates function metadata into the worker assembly
+and enables worker indexing in `worker.config.json`; bundle assembly requires the host configuration, worker
+configuration and application assembly, never the retired SDK's `functions.metadata` file.
 The producer enables `PuckCaptureTestArtifacts`: MSBuild records each evaluated
 test project's output and optional run settings, and the archive carries that
 manifest alongside its source identity. Missing test outputs fail artifact production.
@@ -222,7 +224,11 @@ runs the automatic set alone and skips every GPU proof. See
 [the `puck canary` reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs).
 
 The Azure graph builds its two Linux container images independently of the Windows
-producer. The silo image's build restores the Linux shader cache and hands it to
+producer. The silo's Caddy stage uses Google's Docker Hub mirror with an exact index digest;
+both Docker Hub and ECR Public have rate-limited anonymous pulls on shared runners. When updating the pin,
+resolve the exact digest with `docker buildx imagetools inspect <image>:<version>@sha256:<digest>` and pull it
+with Docker before building the silo. A tag rebuild does not update the pinned image.
+The silo image's build restores the Linux shader cache and hands it to
 `docker build` as the `shader-cache` build context, which the Dockerfile mounts
 at its build's default cache directory; its DXC is the archive and checksum
 `setup-dxc` pins on Linux, and like the comparison it builds SPIR-V alone, so a
@@ -593,8 +599,9 @@ The `setup-dxc` action installs the checksum-pinned compiler before source build
 layout with its documentation page, the stable official browser engine/content,
 and Linux images for Actors and World.Silo. Dashboard tests use the real engine.
 Actors must answer `/healthz`; the silo must activate the primary world (`debug`),
-checkpoint it, accept a QUIC connection with the expected key, and repeat those
-checks after container replacement using the same store. The gate also executes
+checkpoint it (the smoke probe reads the authority root for that same hosted name),
+accept a QUIC connection with the expected key, and repeat those checks after
+container replacement using the same store. The gate also executes
 Caddy as its production UID with all Linux capabilities removed. The image strips
 Caddy's upstream low-port file capability because TLS binds port 8443.
 The candidate CLI and browser build use pinned DXC. Both official manifests

@@ -173,17 +173,18 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     }
     // The timer's period in stopwatch ticks, the presented rate the pacing targets in whole frames a second (zero when
     // unbounded), which the frame context carries to the render graph's rate sources, the display refreshes each
-    // present waits for when the swap chain paces the loop (zero when the timer does), and whether the timer also paces
-    // an iteration whose swap chain already had room.
-    private (long Period, int Hertz, uint Refreshes, bool TimerBoundsSwapChain) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
+    // present waits for when the swap chain paces the loop (zero when the timer does), whether the timer also paces
+    // an iteration whose swap chain already had room, and the grid presented frames land on (zero for none).
+    private (long Period, int Hertz, uint Refreshes, bool TimerBoundsSwapChain, double GridHertz) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
         var decision = PresentPacingPolicy.Resolve(
             requestedHertz: requestedHertz,
             timing: displayTiming
         );
+        var grid = PresentPacingPolicy.GridHertz(decision: decision, timing: displayTiming);
 
         if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
             m_logger.LogInformation(
-                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}); swap chain refreshes per present {Refreshes} (0 paces by timer); timer bounds the swap chain {TimerBounds}.",
+                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}); swap chain refreshes per present {Refreshes} (0 paces by timer); timer bounds the swap chain {TimerBounds}; rated updates hold by {Grid}.",
                 (displayTiming.Signal.IsKnown
                 ? $"{displayTiming.Signal.Hertz:0.###} Hz"
                 : "unknown"),
@@ -197,7 +198,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 decision.TargetHertz,
                 decision.Basis,
                 decision.RefreshesPerPresent,
-                decision.TimerBoundsSwapChain
+                decision.TimerBoundsSwapChain,
+                ((grid > 0d)
+                ? $"whole refreshes of {grid:0.###} Hz"
+                : "presentation time")
             );
         }
 
@@ -205,7 +209,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             decision.ToPeriodTicks(frequency: frequency),
             ((int)Math.Round(a: decision.TargetHertz)),
             decision.RefreshesPerPresent,
-            decision.TimerBoundsSwapChain
+            decision.TimerBoundsSwapChain,
+            grid
         );
     }
     private void RunWindowLoop(CancellationToken stoppingToken) {
@@ -338,7 +343,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // never reaches the fixed-step sim.
                 var presentPacingVersion = m_presentPacing.Version;
 
-                var (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
+                var (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain, gridHertz) = ResolveRenderPeriod(
                     displayTiming: displayTiming,
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
@@ -404,7 +409,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         displayConfigurationVersion = displayTimingInfo.DisplayConfigurationVersion;
                         displayTiming = DisplayTimingSnapshot.Unknown;
-                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain, gridHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -422,7 +427,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                         --displayTimingRetryAttemptsRemaining;
                         displayTiming = requeriedTiming;
-                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain, gridHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -441,7 +446,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // only — the fixed-step sim is untouched.
                     if (m_presentPacing.Version != presentPacingVersion) {
                         presentPacingVersion = m_presentPacing.Version;
-                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain, gridHertz) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -669,6 +674,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 DisplayHertz: displayHertz,
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
                                 FrameDeltaTicks: PresentPacingControl.FrameDeltaOf(simulates: (pump is not null), steppedTicks: (fixedSteps * stepTicks), tickLocked: tickLocked, wallTicks: deltaTicks),
+                                GridHertz: PresentPacingControl.GridOf(displayGridHertz: gridHertz, simulates: (pump is not null), stepTicks: stepTicks, tickLocked: tickLocked),
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
                                 TargetHeight: height,

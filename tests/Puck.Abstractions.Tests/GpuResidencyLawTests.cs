@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Testing;
 
@@ -1203,6 +1204,143 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.Contents.Length);
     }
 
+    // No run of the debug world reaches 2 GiB of mesh region, so a region past it is held here, through buffers that
+    // record their writes and hold no bytes. An in-place region owes its whole 3 GiB at first and writes it in pieces of
+    // at most a gibibyte, then a word at the region's end at its byte offset past 2 GiB.
+    [Fact]
+    public void AnInPlaceRegionPastTwoGiBFlushesInPiecesOfAtMostAGibibyte() {
+        const long Bytes = (3L << 30);
+        var gpu = new UploadModelGpu();
+        var buffers = new RecordingBuffers(inner: gpu.Services.BufferFactory);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: buffers,
+            byteCount: Bytes,
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.InPlace,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1
+        );
+
+        Assert.Equal(expected: Bytes, actual: region.ByteCount);
+        Assert.Equal(expected: ((ulong)Bytes), actual: region.CpuShadowBytes);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => region.Contents.Length);
+        Assert.True(condition: region.Write(bytes: [1, 2, 3, 4, 5], offset: ((2L << 30) + 2)));
+        Assert.True(condition: region.ContentsAt(length: 5, offset: ((2L << 30) + 2)).SequenceEqual(other: new byte[] { 1, 2, 3, 4, 5 }));
+        Assert.True(condition: region.ContentsAt(length: 4, offset: (Bytes - 4)).SequenceEqual(other: new byte[4]));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.ContentsAt(length: 5, offset: (Bytes - 4)).Length);
+        region.Flush(slot: 0);
+        Assert.Equal(
+            actual: buffers.Created[0].Writes.Select(selector: static write => (write.Offset, write.Length)),
+            expected: [(0UL, (1 << 30)), ((1UL << 30), (1 << 30)), ((2UL << 30), (1 << 30))]
+        );
+
+        buffers.Created[0].Writes.Clear();
+        Assert.True(condition: region.Write(bytes: [6, 7, 8, 9, 10, 11, 12, 13], offset: (Bytes - 8)));
+        region.Flush(slot: 0);
+
+        var tail = Assert.Single(collection: buffers.Created[0].Writes);
+
+        Assert.Equal(expected: ((ulong)(Bytes - 8)), actual: tail.Offset);
+        Assert.Equal(expected: new byte[] { 6, 7, 8, 9, 10, 11, 12, 13 }, actual: tail.Head);
+    }
+    // A staged region past 2 GiB over an external destination owes nothing until written; its copy runs name the region
+    // words past 2 GiB in uints, and the staging buffer carries only the owed words behind the header and run table.
+    [Fact]
+    public void AStagedRegionPastTwoGiBNamesWordsPastTwoGiBInItsCopyRuns() {
+        const long Bytes = (3L << 30);
+        var gpu = new UploadModelGpu();
+        var buffers = new RecordingBuffers(inner: gpu.Services.BufferFactory);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var destination = buffers.CreateDeviceLocal(
+            name: default,
+            sizeBytes: ((ulong)Bytes),
+            usage: GpuBufferUsage.Storage
+        );
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: buffers,
+            byteCount: Bytes,
+            copyPipeline: copy,
+            destination: destination,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1
+        );
+
+        Assert.False(condition: region.OwesCopy);
+        Assert.True(condition: region.Write(bytes: [1, 2, 3, 4], offset: (2L << 30)));
+        Assert.True(condition: region.Write(bytes: [5, 6, 7, 8, 9, 10, 11, 12], offset: (Bytes - 8)));
+        Assert.True(condition: region.OwesCopy);
+        region.Flush(slot: 0);
+
+        const int BlockBase = (GpuRegion.CopyHeaderWords + (GpuRegion.MaxCopyRuns * 2));
+        var staging = buffers.Created[1];
+        var header = Assert.Single(collection: staging.Writes, predicate: static write => (write.Offset == 0UL));
+        var words = MemoryMarshal.Cast<byte, uint>(span: header.Head.AsSpan(length: 32, start: 0)).ToArray();
+
+        Assert.Equal(
+            actual: words,
+            expected: [3U, 2U, ((uint)BlockBase), 0U, (uint)((2L << 30) / sizeof(uint)), 0U, (uint)((Bytes - 8) / sizeof(uint)), 1U]
+        );
+        Assert.Equal(
+            actual: staging.Writes.Where(predicate: static write => (write.Offset != 0UL)).Select(selector: static write => (write.Offset, write.Length)),
+            expected: [(((ulong)BlockBase) * sizeof(uint), 4), ((((ulong)BlockBase) + 1UL) * sizeof(uint), 8)]
+        );
+        Assert.Equal(
+            actual: staging.Writes.Single(predicate: static write => (write.Length == 8)).Head,
+            expected: [5, 6, 7, 8, 9, 10, 11, 12]
+        );
+    }
+    // A staged region grows past 2 GiB without a span over its host copy: the held bytes carry over, the new tail is
+    // zero and writable, and a region past what its storage view binds is refused by name.
+    [Fact]
+    public void AStagedRegionGrowsPastTwoGiBAndRefusesPastItsMost() {
+        const long Bytes = (3L << 30);
+        var gpu = new UploadModelGpu();
+        var buffers = new RecordingBuffers(inner: gpu.Services.BufferFactory);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: buffers,
+            byteCount: 4096,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1
+        );
+
+        _ = region.Write(bytes: [9, 8, 7, 6], offset: 100);
+
+        var replaced = region.Grow(byteCount: Bytes);
+
+        Assert.Equal(expected: 4096UL, actual: replaced.SizeBytes);
+        Assert.Equal(expected: Bytes, actual: region.ByteCount);
+        Assert.Equal(expected: ((ulong)Bytes), actual: region.Buffer(slot: 0).SizeBytes);
+        Assert.True(condition: region.ContentsAt(length: 4, offset: 100).SequenceEqual(other: new byte[] { 9, 8, 7, 6 }));
+        Assert.True(condition: region.ContentsAt(length: 4, offset: (2L << 30)).SequenceEqual(other: new byte[4]));
+        Assert.True(condition: region.Write(bytes: [1, 2, 3, 4], offset: (Bytes - 4)));
+        Assert.True(condition: region.ContentsAt(length: 4, offset: (Bytes - 4)).SequenceEqual(other: new byte[] { 1, 2, 3, 4 }));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Grow(byteCount: (GpuRegion.MaxByteCount + sizeof(uint))));
+        Assert.Equal(expected: Bytes, actual: region.ByteCount);
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: buffers,
+            byteCount: (GpuRegion.MaxByteCount + sizeof(uint)),
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1
+        ));
+        replaced.Dispose();
+    }
+
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },
@@ -1252,6 +1390,58 @@ public sealed class GpuResidencyLawTests {
                 }
 
                 break;
+        }
+    }
+
+    // A buffer factory whose buffers hold no bytes: each records the offset, length and first bytes of every host write, so a
+    // region of any size can be flushed. Readback buffers and buffers made from data are the wrapped factory's.
+    private sealed class RecordingBuffers(IGpuBufferFactory inner) : IGpuBufferFactory {
+        private long m_handle = 0x7000_0000L;
+
+        public List<RecordingBuffer> Created { get; } = [];
+
+        public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Add(sizeBytes: sizeBytes);
+        public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Add(sizeBytes: sizeBytes);
+        public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => inner.CreateHostVisible(
+            data: data,
+            name: name,
+            usage: usage
+        );
+        public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Add(sizeBytes: sizeBytes);
+        public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) => inner.CreateReadback(
+            name: name,
+            sizeBytes: sizeBytes
+        );
+
+        private RecordingBuffer Add(ulong sizeBytes) {
+            var buffer = new RecordingBuffer(
+                handle: ((nint)Interlocked.Increment(location: ref m_handle)),
+                sizeBytes: sizeBytes
+            );
+
+            Created.Add(item: buffer);
+
+            return buffer;
+        }
+    }
+    private sealed class RecordingBuffer(nint handle, ulong sizeBytes) : IGpuStorageBuffer {
+        // How many bytes of each write are kept: enough to read a header or a few words.
+        private const int HeadBytes = 64;
+
+        public nint BufferHandle { get; } = handle;
+        public ulong SizeBytes { get; } = sizeBytes;
+        public List<(ulong Offset, int Length, byte[] Head)> Writes { get; } = [];
+
+        public void Dispose() { }
+        public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => Write(
+            data: data,
+            destinationOffsetBytes: 0UL
+        );
+        public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged {
+            var bytes = MemoryMarshal.AsBytes(span: data);
+
+            Assert.True(condition: ((destinationOffsetBytes + ((ulong)bytes.Length)) <= SizeBytes));
+            Writes.Add(item: (destinationOffsetBytes, bytes.Length, bytes[..Math.Min(val1: bytes.Length, val2: HeadBytes)].ToArray()));
         }
     }
 }

@@ -280,10 +280,24 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
   ([sync pairs](sync-pairs.md#engine-buffers-groups-and-bindings)).
 - **One region holds every resident mesh, up to
-  `SdfWorldTables.MostMeshRegionBytes` (2 GiB).** It grows to twice its need,
-  so it reads full long before it is; `world.budget` prints the bytes the
-  staged draws use beside the bytes held and that ceiling. The debug world uses
-  about 1.4 GB of it, and a frame that needs more than the ceiling throws.
+  `SdfWorldTables.MostMeshRegionBytes` (`GpuRegion.MaxByteCount`, just under
+  4 GiB).** It grows to its need plus an eighth, rounded up to a 16 MiB granule
+  and capped at that ceiling (`SdfWorldTables.MeshRegionGrownBytes`, a pure
+  function), so it reads fuller than a doubling would; `world.budget` prints the
+  bytes the staged draws use (`MeshRegionUsedBytes`) beside the bytes held and
+  that ceiling. The debug world uses about 1.4 GB of it, and a frame that needs
+  more than the ceiling throws `InvalidOperationException` naming the need and
+  the ceiling. The ceiling is the whole uints below 4 GiB less the staging
+  buffer's header and run table, because a staged region's staging buffer binds
+  as one storage view and Vulkan states a view's range in a uint32. `GpuRegion`
+  counts bytes in a `long` and words in an `int`: a mesh's byte offset is
+  `((long)VertexWord) * sizeof(uint)`, `Contents` refuses past `int.MaxValue`
+  bytes, and a piece of the host copy is read through `ContentsAt(offset,
+  length)` (`StageMeshMotion` reads only the draw records that way). Host writes
+  go to a buffer in pieces of at most 1 GiB. No run of the debug world reaches
+  2 GiB, so `GpuResidencyLawTests` holds a 3 GiB region written and flushed
+  through buffers that record their writes, and `SdfWorldTablesUploadLawTests`
+  holds the growth arithmetic past 2 GiB.
 - **A jump in planned groups is usually a population change.** Every pooled
   body adds one dynamic group a slot, so a body that starts wearing a large
   creation multiplies `groups=` and `dynamic=` in the `[sdf.mesh-bake] start`

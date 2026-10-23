@@ -8,6 +8,12 @@ The ABI itself (cell layouts, exports, mount steps, determinism posture) is
 owned by `src/Puck.Scripting/README.md` — read it before touching the guest
 boundary; this file carries the World-relevant surface.
 
+The addon system is improved as it is used (the owner's ruling). A lane that
+finds a meaningful gap or refinement while writing or running a guest (a
+missing event, query or mutation kind, an awkward authoring path, a diagnostic
+it lacked) fixes it in the same change or records it in
+`docs/plans/open-items.md`. It never works around the gap inside the guest.
+
 For nondeterministic providers and external side effects — extension hosting,
 Azure's ARM provider, storage confinement, and configured collection reads —
 read `src/Puck.World.Server/Extensions.md`, `src/Puck.World.Server/ExtensionHosting.md`,

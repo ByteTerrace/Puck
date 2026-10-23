@@ -61,7 +61,7 @@ public sealed class RenderGraphInstanceSet {
             return $"is a source of package '{instance.ExternalPackage}', which names no producer id";
         }
         if (instance.Refresh != RenderGraphRefresh.EveryFrame) {
-            return $"is a source of package '{instance.ExternalPackage}' with refresh divisor {instance.Refresh.Divisor} and hertz {instance.Refresh.Hertz}; a source is paced by its producer's cadence and refreshes on every frame it allows";
+            return $"is a source of package '{instance.ExternalPackage}' with refresh divisor {instance.Refresh.Divisor}, hertz {instance.Refresh.Hertz} and floor {instance.Refresh.Floor}; a source is paced by its producer's cadence and refreshes on every frame it allows";
         }
 
         return ((instance.Output == ShaderPipelineResourceKind.Image)
@@ -216,7 +216,7 @@ public sealed class RenderGraphInstanceSet {
             if (!instance.Refresh.IsValid) {
                 refusal = Refuse(
                     RenderGraphInstanceRefusalCode.RefreshInvalid,
-                    $"Render-graph instance '{instance.Name}' refreshes with divisor {instance.Refresh.Divisor} and hertz {instance.Refresh.Hertz}; exactly one must be positive.",
+                    $"Render-graph instance '{instance.Name}' refreshes with divisor {instance.Refresh.Divisor}, hertz {instance.Refresh.Hertz} and floor {instance.Refresh.Floor}; exactly one must be positive.",
                     instance.Name
                 );
 

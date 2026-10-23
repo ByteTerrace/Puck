@@ -198,8 +198,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// the tables are built.</summary>
     public ulong MeshRegionBytes => (m_tables?.MeshRegionBytes ?? 0UL);
     /// <summary>Gets the bytes the latest staged frame's draw records and meshes take of the mesh region
-    /// (<see cref="SdfWorldTables.MeshRegionWords"/>), or zero before the tables are built.</summary>
-    public ulong MeshRegionUsedBytes => (((ulong)(m_tables?.MeshRegionWords ?? 0)) * sizeof(uint));
+    /// (<see cref="SdfWorldTables.MeshRegionUsedBytes"/>), or zero before the tables are built.</summary>
+    public ulong MeshRegionUsedBytes => (m_tables?.MeshRegionUsedBytes ?? 0UL);
     /// <summary>Gets the bytes the tables' regions hold, by the memory they live in (<see cref="SdfWorldTables.TableBytes"/>),
     /// or none before the tables are built.</summary>
     public GpuMemoryBytes TableBytes => (m_tables?.TableBytes ?? default);

@@ -414,7 +414,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var inputs = pass.PackageInputs!;
         var outputs = pass.PackageOutputs!;
         var region = pass.PassRegion!;
-        Span<byte> passBlock = stackalloc byte[region.ByteCount];
+        Span<byte> passBlock = stackalloc byte[checked((int)region.ByteCount)];
 
         // An input standing for another is handed over as the one it stands for, which the planned read of that one
         // left in the shader-readable layout every image read leaves.

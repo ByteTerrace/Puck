@@ -240,7 +240,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         var layout = m_frameLayout!;
-        Span<byte> block = stackalloc byte[region.ByteCount];
+        Span<byte> block = stackalloc byte[checked((int)region.ByteCount)];
 
         if (Sentinels) {
             ShaderInterfaceEcho.WriteSentinels(
@@ -268,7 +268,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // region owes a slot only the words that changed.
     private void WritePassBlock(RuntimePass pass) {
         var region = pass.PassRegion!;
-        Span<byte> block = stackalloc byte[region.ByteCount];
+        Span<byte> block = stackalloc byte[checked((int)region.ByteCount)];
 
         FillPassBlock(
             block: block,

@@ -65,6 +65,44 @@ public sealed partial class RenderGraphSchedulerLawTests {
 
         Assert.Equal(expected: 12, actual: RenderCount(name: "window", schedules: schedules, set: set));
     }
+    // A floor footprint holds its producer by the frame's presentation time, not its frame count: paced at 141 Hz but
+    // presenting 70 frames a second, a 30 Hz floor renders every second frame (35 Hz) where a count of the pacing
+    // target's frames would hold five (14 Hz). A held frame's row says the demand held it; a producer the frame names
+    // stale is never held.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AFloorFootprintHoldsItsProducerByPresentationTime(bool stale) {
+        var set = Set(
+            Screens("main", "window"),
+            Instance(name: "window")
+        );
+        const ulong Span = (Puck.Maths.FixedTickConversion.TicksPerSecond / 70UL);
+        var schedules = Run(
+            count: 20,
+            frame: index => (Frame(footprints: [(Shows(consumer: "main", producer: "window") with { Refresh = RenderGraphRefresh.AtLeast(hertz: 30) })], hertz: 141, index: index, roots: MainRoot) with {
+                FrameTicks = Span,
+                PresentedTicks = (((ulong)index) * Span),
+                Stale = (stale ? ["window"] : null),
+            }),
+            set: set
+        );
+
+        Assert.Equal(expected: (stale ? 20 : 10), actual: RenderCount(name: "window", schedules: schedules, set: set));
+        Assert.Equal(expected: (stale ? 0 : 10), actual: schedules.Count(predicate: schedule => Row(name: "window", schedule: schedule, set: set).Held));
+        Assert.Equal(expected: (19UL * Span), actual: schedules[^1].PresentedTicks);
+    }
+    [Fact]
+    public void AStaleNameNamingNoInstanceIsRefused() {
+        var set = Set(
+            Screens("main", "window"),
+            Instance(name: "window")
+        );
+        var frame = (Frame(index: 0, roots: MainRoot) with { Stale = ["nobody"] });
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => RenderGraphScheduler.Schedule(frame: frame, history: RenderGraphHistory.Empty(set: set), schedule: new RenderGraphSchedule(set: set), set: set));
+
+        Assert.StartsWith(expectedStartString: "Stale 'nobody' names no instance", actualString: refusal.Message);
+    }
     [Fact]
     public void AFootprintRefreshNamingNoRateIsRefused() {
         var set = Set(
