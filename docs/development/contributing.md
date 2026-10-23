@@ -751,6 +751,10 @@ unverified when no device run exists.
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build
   again; never test the binaries a failed build left behind.
+- In PowerShell, quote colon-bearing switches forwarded after `--`: use
+  `puck lease heavy --holder <lane> -- dotnet build Puck.slnx -c Release '-nodeReuse:false'`.
+  Without the quotes, PowerShell can hand the child `-nodeReuse:` and `false`
+  as separate arguments, which MSBuild refuses with MSB1041.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with
@@ -812,6 +816,10 @@ unverified when no device run exists.
   Git metadata for its fallback worktree. Report these as setup blocks, with
   no GPU or red-law verdict, and run them in an environment with those writes
   available; changing `LOCALAPPDATA` does not override Windows known folders.
+- If a sandboxed C# build reports CS0016 access denied for an output inside its
+  writable worktree, retry with `-p:UseSharedCompilation=false`. This runs the
+  compiler inside that build's sandbox instead of using a shared compiler server;
+  deleting the output alone does not resolve a server running with different access.
 - Git Bash's `kill` and `pkill` do not reach native Windows processes, even
   when they report success. Stop a process with PowerShell
   `Stop-Process -Id <pid>` and confirm it is gone. Never search from `/` in Git
@@ -1106,3 +1114,13 @@ The rules for coding agents live in one file, the root
 [`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code, which reads `AGENTS.md` natively only when no Claude Code memory
 file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
 directory or above it. The repository therefore commits none, at any level.
+
+## InternalsVisibleTo is forbidden
+
+No assembly grants another its internals, test assemblies included. If another
+project or a test needs a member, make the member public. A grant hands a whole
+assembly's internals to a friend, invisibly at every call site; widen the member
+instead. If a member looks wrong to make public, that is evidence about the
+design: say so. The build refuses both forms, the `[assembly:
+InternalsVisibleTo]` attribute and the csproj `<InternalsVisibleTo>` item, with
+IVT001 (`Puck.Analyzers`).

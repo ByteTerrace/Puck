@@ -808,6 +808,7 @@ public sealed partial class WorldBody {
                 value: segment.RemainingTicks
             );
             movement = segment.Intent;
+            segment.Intent = WithoutRelative(intent: segment.Intent);
             resolved = true;
 
             if (!(segment.RemainingTicks > 0)) {
@@ -848,8 +849,11 @@ public sealed partial class WorldBody {
         );
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
+            if (m_channelShapes[ordinal] == ChannelShape.Relative) { continue; }
             if (m_laneTimers[ordinal] > 0) {
-                channels[ordinal] = m_channelTimerValues[ordinal];
+                channels[ordinal] = ((m_channelShapes[ordinal] == ChannelShape.Binary)
+                    ? ((m_channelTimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
+                    : m_channelTimerValues[ordinal]);
             } else if (
                 m_source.IsLive &&
                 !m_roleChannels[ordinal]
@@ -866,7 +870,8 @@ public sealed partial class WorldBody {
         m_channelReadHeld = new PlayerIntent(Channels: heldOverlay);
         m_channelReadComposed = (movement with { Channels = channels });
 
-        return m_channelReadComposed;
+        m_channelReadScalar = ProjectRelative(intent: m_channelReadComposed);
+        return m_channelReadScalar;
     }
     // The planar (XZ) offset from one point to another, whose Yaw is the bearing from the first to the second.
     private static FixedVector3 PlanarOffset(in FixedVector3 from, in FixedVector3 to) =>
@@ -937,6 +942,7 @@ public sealed partial class WorldBody {
                 from: m_position,
                 to: scratch.SensorTarget.Position
             ).Yaw();
+
             var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
 
             scratch.Intent = m_roleOrdinals.Intent(
@@ -1908,6 +1914,7 @@ public sealed partial class WorldBody {
             m_obstructionWitness = FixedVector3.Zero;
         }
     }
+
     private struct BodyMotionScratch {
         public PlayerIntent Intent;
         public CompiledBodyProducer? Producer;

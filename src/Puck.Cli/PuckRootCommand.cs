@@ -90,6 +90,7 @@ public static class PuckRootCommand {
             HostCommand.Create(composition: Gate),
             LandingCommand.Create(),
             LawsCommand.Create(),
+            LeaseCommand.Create(clock: clock),
             LocksCommand.Create(),
             McpCommand.Create(),
             MotionCommand.Create(),

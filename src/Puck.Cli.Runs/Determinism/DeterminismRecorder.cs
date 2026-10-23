@@ -241,10 +241,11 @@ public static class DeterminismRecorder {
             return false;
         }
 
+        var channels = WorldChannelTable.For(definition: definition);
         var ordinals = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var ordinal = 0; (ordinal < definition.Channels.Count); ordinal++) {
-            ordinals[definition.Channels[ordinal].Name] = ordinal;
+            ordinals[definition.Channels[ordinal].Name] = channels.Address(declaration: ordinal);
         }
         foreach (var intent in scenario.Intents) {
             if (intent.Channels.FirstOrDefault(predicate: channel => !ordinals.ContainsKey(key: channel.Channel)) is { Channel: { } unknown }) {
@@ -321,7 +322,11 @@ public static class DeterminismRecorder {
                 var player = default(PlayerIntent);
 
                 foreach (var (channel, value) in intent.Channels) {
-                    player = player.WithChannel(ordinal: ordinals[channel], value: value);
+                    var address = ordinals[channel];
+
+                    player = ((channels.Shape(ordinal: address) == ChannelShape.Relative)
+                        ? player.WithRelative(ordinal: address, value: FixedQ3232.FromFixedQ4816(value: value))
+                        : player.WithChannel(ordinal: address, value: channels.Quantize(ordinal: address, value: value)));
                 }
 
                 body.SubmitIntent(intent: in player);

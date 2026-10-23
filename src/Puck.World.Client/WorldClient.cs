@@ -53,8 +53,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private int m_serverRevision;
     // The static-scene query field, rebuilt by WorldFramePresenter whenever the composed program changes and parked
     // here so every presentation consumer reads ONE evaluator: the chase camera's clearance sweep and the stamp
-    // pool's limb probes ask the same geometry the same way. Null before the first composed program, and for a world
-    // whose program carries render-only warps no fixed-point query can interpret.
+    // pool's limb probes ask the same geometry the same way. Unsupported placements are excluded individually;
+    // null means no program has been composed yet, or the remaining combined field could not be built.
     private SdfFieldEvaluator? m_staticField;
     private WorldTargetRegisterTable m_targets;
     private ulong m_tick;
@@ -170,8 +170,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_definition = definition;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters,
-            channelCount: m_channels.ChannelCount
+            registers: definition.TargetRegisters
         );
         m_composition = composition;
         m_levers = null;
@@ -709,6 +708,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             seat.View.CompleteTick();
         }
     }
+
     private void AdvanceSeatView(SeatController seat, int slot, float deltaSeconds) {
         var route = m_seatRouter.Route(slot: slot);
         var definition = route.Endpoint.Definition;
@@ -773,6 +773,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             deltaSeconds: deltaSeconds
         );
     }
+
     /// <summary>Attaches the accepted-lever applier. Composition-root wiring, done after construction because the
     /// presentation services it writes are themselves built around the client.</summary>
     /// <param name="levers">The applier accepted levers dispatch through.</param>
@@ -828,8 +829,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         BeginVersion(version: version);
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters,
-            channelCount: m_channels.ChannelCount
+            registers: definition.TargetRegisters
         );
         m_definitionRevision++;
         m_pendingStateInstall = true;
@@ -1061,8 +1061,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// follower reseeds whenever this changes, so it never chases across a jump.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public int PoseEpoch(int index) => m_poseEpoch[index];
+
     /// <inheritdoc/>
     public WorldPoseCarries Carries { get; } = new(capacity: EntityCapacity);
+
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];
@@ -1145,7 +1147,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                     bodyIndex: targets[slot],
                     endpoint: endpoint,
                     definition: definition,
-                    intent: seat.HeldIntent()
+                    intent: seat.ConsumeRelative(intent: seat.HeldIntent())
                 )
             );
             var heldChannels = seat.HeldChannels;

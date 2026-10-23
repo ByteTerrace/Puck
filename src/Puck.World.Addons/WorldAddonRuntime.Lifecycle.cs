@@ -958,7 +958,7 @@ public sealed partial class WorldAddonRuntime {
         var names = new List<string>();
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if ((undeclared.Bits & (1UL << ordinal)) != 0UL) {
+            if (undeclared.Contains(ordinal: ordinal)) {
                 names.Add(item: (channels.Name(ordinal: ordinal) ?? ordinal.ToString()));
             }
         }

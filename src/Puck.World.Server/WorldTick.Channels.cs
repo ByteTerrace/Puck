@@ -10,6 +10,8 @@ public sealed partial class WorldTick {
     // need. No ceiling accumulator to clear: the ceiling is durable grant-table state the seat authored, never a
     // per-tick derivation.
     private void ClearContribution(int bodyIndex) {
+        Array.Clear(array: m_relativeTrusted, index: (bodyIndex * ChannelLimits.MaxAxes), length: ChannelLimits.MaxAxes);
+        Array.Clear(array: m_relativeUntrusted, index: (bodyIndex * ChannelLimits.MaxAxes), length: ChannelLimits.MaxAxes);
         m_hasContribution[bodyIndex] = false;
         m_untrustedAcceptedMask[bodyIndex] = default;
 
@@ -87,6 +89,20 @@ public sealed partial class WorldTick {
                         ? Host.Population.Channels.Shape(ordinal: ordinal)
                         : ChannelShape.Bipolar
                     );
+
+                    if (shape == ChannelShape.Relative) {
+                        var relativeSlot = ((seat * ChannelLimits.MaxAxes) + ordinal);
+                        var pool = m_relativeUntrusted[relativeSlot];
+                        var radius = (((Int128)poolCeiling) << 16);
+                        var narrowed = ((poolCeiling > 0) ? Int128.Clamp(max: radius, min: -radius, value: pool) : pool);
+                        var raw = ((((Int128)h.Channels.Relative(ordinal: ordinal).Value) + narrowed) + m_relativeTrusted[relativeSlot]);
+
+                        folded = folded.WithRelative(ordinal: ordinal, value: Host.Population.Channels.ClampRelative(ordinal: ordinal, raw: raw));
+                        held = held.WithRelative(ordinal: ordinal, value: default);
+                        m_channelReadCeiling[slot] = (untrustedAccepted.Contains(ordinal: ordinal) ? poolCeiling : 0);
+                        m_channelReadClamped[slot] = (narrowed != pool);
+                        continue;
+                    }
                     var combinedHeld = WorldChannelTable.ComposeHeld(
                         a: ownerHeld[ordinal].Value,
                         b: contributedHeld,
@@ -310,6 +326,21 @@ public sealed partial class WorldTick {
                 ? Host.Population.Channels.Shape(ordinal: ordinal)
                 : ChannelShape.Bipolar
             );
+
+            if (shape == ChannelShape.Relative) {
+                var relativeSlot = ((bodyIndex * ChannelLimits.MaxAxes) + ordinal);
+                var raw = submission.Intent.Channels.Relative(ordinal: ordinal).Value;
+
+                if (isConsoleOrSeat || (isAddon && eligible.Contains(ordinal: ordinal))) {
+                    m_relativeTrusted[relativeSlot] += raw;
+                    acceptedMask = acceptedMask.With(ordinal: ordinal);
+                } else if (!trustedInFold && eligible.Contains(ordinal: ordinal)) {
+                    m_relativeUntrusted[relativeSlot] += raw;
+                    acceptedMask = acceptedMask.With(ordinal: ordinal);
+                    untrustedAccepted = untrustedAccepted.With(ordinal: ordinal);
+                }
+                continue;
+            }
             var isBipolar = (shape == ChannelShape.Bipolar);
 
             if (

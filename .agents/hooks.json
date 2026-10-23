@@ -1,0 +1,31 @@
+{
+  "puck-command-policies": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/world-devices.ps1",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/no-node-reuse.ps1",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/no-coauthor.ps1",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/git-safety.ps1",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

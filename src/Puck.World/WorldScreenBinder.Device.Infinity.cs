@@ -158,6 +158,7 @@ public sealed partial class WorldScreenBinder {
         var emitter = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains,
             onlyPrototypes: ((planned.Spec.Kind == InfinityViewKind.Far) ? new HashSet<string>(collection: (prototypes ?? []), comparer: StringComparer.Ordinal) : null)) {
             SkyLayers = SkyLayers,
+            ToonOverride = ToonOverride,
         };
         var entry = new InfinityEntry(emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root);
         var scene = new WorldInfinityViewScene(emitter, () => entry.Views, planned.Spec) {

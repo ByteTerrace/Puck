@@ -1,10 +1,5 @@
-// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
-// compile, never the '.world.json' beside it.
-//
-// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
-// 'for' in it, none of which the document carries.
-
 schema: "puck.world.definition.v1"
+import "../inputs"
 import "../quality"
 import "moth-head"
 
@@ -1636,87 +1631,7 @@ cameras [
   }
 ]
 
-channels [
-  {
-    composition: false
-    frame: Heading
-    name: "forward"
-    role: MoveAdvance
-    shape: Bipolar
-  }
-  {
-    composition: false
-    frame: Heading
-    name: "strafe"
-    role: MoveStrafe
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "turn"
-    role: Turn
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "faceX"
-    role: FaceX
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "faceZ"
-    role: FaceZ
-    shape: Bipolar
-  }
-  {
-    composition: false
-    name: "faceY"
-    role: FaceY
-    shape: Bipolar
-  }
-  {
-    composition: true
-    name: "jump"
-    shape: Binary
-  }
-  {
-    composition: true
-    name: "flight"
-    shape: Binary
-  }
-  // Held, it multiplies her speed (the kits' `speed.held`).
-  {
-    composition: true
-    name: "run"
-    shape: Binary
-  }
-  {
-    composition: false
-    name: "rise"
-    role: MoveUp
-    shape: Bipolar
-  }
-  // The pad's start button, which the Moth herself ignores: an engaged machine reads it as its own start.
-  {
-    composition: true
-    name: "start"
-    shape: Binary
-  }
-  // The pad's select button, which the Moth herself ignores: an engaged machine reads it as its own select.
-  {
-    composition: true
-    name: "select"
-    shape: Binary
-  }
-  // The context button, which the Moth herself ignores: beside an engageable screen naming it as its engage channel,
-  // a press engages that screen and the next press leaves it.
-  {
-    composition: true
-    name: "interact"
-    shape: Binary
-  }
-]
+
 
 collision {
   contactSkin: 0.02

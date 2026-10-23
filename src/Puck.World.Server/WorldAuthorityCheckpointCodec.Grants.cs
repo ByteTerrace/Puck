@@ -72,7 +72,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             subject: application.Target
         );
         writer.WriteString(value: (application.Kit ?? string.Empty));
-        writer.WriteUInt64(value: application.Reach.Bits);
+        WorldWireCodec.WriteChannelReach(writer, application.Reach);
     }
     private static ControlApplication ReadControlApplication(ref WireReader reader) {
         var target = WorldWireCodec.ReadSubject(reader: ref reader);
@@ -80,13 +80,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "control application kit",
             maxBytes: MaxStringBytes
         );
-        var reach = reader.ReadUInt64();
+        var reach = WorldWireCodec.ReadChannelReach(reader: ref reader);
 
         return new ControlApplication(
             Kit: ((kit.Length == 0)
             ? null
             : kit),
-            Reach: new ChannelReachMask(Bits: reach),
+            Reach: reach,
             Target: target
         );
     }
@@ -202,7 +202,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     subject: row.Subject,
                     writer: w
                 );
-                w.WriteUInt64(value: row.Bits);
+                WorldWireCodec.WriteChannelReach(reach: row.Reach, writer: w);
             }
         );
         writer.WriteArray(
@@ -385,9 +385,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "grants channel reach",
             readItem: static (ref WireReader r) => {
                 var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
-                var bits = r.ReadUInt64();
+                var reach = WorldWireCodec.ReadChannelReach(reader: ref r);
 
-                return (grantee, capability, subject, bits);
+                return (grantee, capability, subject, reach);
             },
             maximum: MaxCollectionCount
         );

@@ -17,7 +17,7 @@ namespace Puck.World.Server.Tests;
 /// </summary>
 public sealed class ShapingRowLawTests {
     private const int ForwardOrdinal = 0;
-    private const int JumpOrdinal = 3;
+    private const int JumpOrdinal = ChannelLimits.MaxAxes;
 
     private static readonly string[] DynamicsTrace240 = [
         "0000000000000000 0000000000000000 fffffffffffffffe 0000000000000000 fffffffffffffde6",
@@ -432,7 +432,7 @@ public sealed class ShapingRowLawTests {
 
                 if (holdDrift) {
                     intent = intent.WithChannel(
-                        ordinal: 3,
+                        ordinal: ChannelLimits.MaxAxes,
                         value: FixedQ4816.One
                     );
                 }

@@ -275,7 +275,7 @@ public sealed partial class WorldServer {
 
             var ceiling = m_tick.ChannelReadCeiling[slot];
 
-            segments.Add(item: $"{channels.Name(ordinal: ordinal)}:{ShapeWord(shape: channels.Shape(ordinal: ordinal))} folded={folded[ordinal]}({folded[ordinal].Value}) h={h[ordinal]}({h[ordinal].Value}) held={held[ordinal]}({held[ordinal].Value}) composed={composed[ordinal]}({composed[ordinal].Value}) trusted=[{string.Join(
+            segments.Add(item: $"{channels.Name(ordinal: ordinal)}:{ShapeWord(shape: channels.Shape(ordinal: ordinal))} folded={channels.DescribeValue(intent: folded, ordinal: ordinal)} h={channels.DescribeValue(intent: h, ordinal: ordinal)} held={channels.DescribeValue(intent: held, ordinal: ordinal)} composed={channels.DescribeValue(intent: composed, ordinal: ordinal)} trusted=[{string.Join(
                 separator: ",",
                 values: trustedTags
             )}] untrusted=[{string.Join(
@@ -497,6 +497,7 @@ public sealed partial class WorldServer {
     private static string ShapeWord(ChannelShape shape) => shape switch {
         ChannelShape.Unipolar => "unipolar",
         ChannelShape.Binary => "binary",
+        ChannelShape.Relative => "relative",
         _ => "bipolar",
     };
 }

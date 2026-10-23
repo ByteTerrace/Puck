@@ -56,6 +56,10 @@ public static partial class SdfFrameBlock {
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int LightMask = Offset(member: SdfWorldPackage.LightMask);
     private static readonly int Exposure = Offset(member: SdfWorldPackage.Exposure);
+    private static readonly int ToonBands = Offset(member: SdfWorldPackage.ToonBands);
+    private static readonly int ToonShadow = Offset(member: SdfWorldPackage.ToonShadow);
+    private static readonly int ToonOutline = Offset(member: SdfWorldPackage.ToonOutline);
+    private static readonly int ToonInk = Offset(member: SdfWorldPackage.ToonInk);
     private static readonly int ExposeShare = Offset(member: SdfWorldPackage.ExposeShare);
     private static readonly int AirLight = Offset(member: SdfWorldPackage.AirLight);
     private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
@@ -189,6 +193,18 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
+        var toon = frame.Toon;
+        WriteSingle(block: block, offset: ToonBands, value: toon.Enabled ? 1f : 0f);
+        WriteSingle(block: block, offset: ToonBands + 4, value: toon.Threshold);
+        WriteSingle(block: block, offset: ToonBands + 8, value: toon.Softness);
+        WriteSingle(block: block, offset: ToonBands + 12, value: toon.SpecularSize);
+        WriteVector3(block: block, offset: ToonShadow, value: toon.ShadowTint);
+        WriteSingle(block: block, offset: ToonShadow + 12, value: MathF.Pow(2f, toon.Exposure));
+        WriteSingle(block: block, offset: ToonOutline, value: toon.OutlineWidth * (float)snapshot.RenderGrid);
+        WriteSingle(block: block, offset: ToonOutline + 4, value: toon.OutlineDistance);
+        WriteSingle(block: block, offset: ToonOutline + 8, value: toon.OutlineNormal);
+        WriteSingle(block: block, offset: ToonOutline + 12, value: toon.Shoulder);
+        WriteVector3(block: block, offset: ToonInk, value: toon.OutlineTint);
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));

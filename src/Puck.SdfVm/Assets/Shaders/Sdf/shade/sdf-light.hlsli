@@ -8,6 +8,7 @@
 #define SHADE_SDF_LIGHT_HLSLI
 #ifdef SDF_VIEWS_PASS
 #include "sdf-mesh-irradiance.hlsli"
+#include "sdf-toon.hlsli"
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
@@ -182,8 +183,13 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion);
 
-        response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
-        response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, light.position, ((SDF_PI * light.weight) * occlusion)));
+        if (sdfToonEnabled()) {
+            response.diffuse = light.color * light.weight * sdfToonBand(lambert, occlusion);
+            response.specular = light.color * sdfToonSpecular(surface.material, normal, -surface.rayDirection, light.position, light.weight, occlusion);
+        } else {
+            response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
+            response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, light.position, ((SDF_PI * light.weight) * occlusion)));
+        }
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 pointDirection;
         float reach = (light.weight * sdfPointReach(light.record, light.position, surface.position, pointDirection));
@@ -194,8 +200,13 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         if (reach > 0.0) {
             float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
 
-            response.diffuse = (light.color * ((reach * pointLambert) * surface.ambientOcclusion));
-            response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, pointDirection, ((SDF_PI * reach) * surface.ambientOcclusion)));
+            if (sdfToonEnabled()) {
+                response.diffuse = light.color * reach * sdfToonBand(pointLambert, 1.0);
+                response.specular = light.color * sdfToonSpecular(surface.material, normal, -surface.rayDirection, pointDirection, reach, 1.0);
+            } else {
+                response.diffuse = (light.color * ((reach * pointLambert) * surface.ambientOcclusion));
+                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, pointDirection, ((SDF_PI * reach) * surface.ambientOcclusion)));
+            }
         }
     } else if (light.kind == SDF_LIGHT_RIM) {
         response.rim = ((light.weight * light.color) * pow((1.0 - saturate(dot(normal, -surface.rayDirection))), light.param));

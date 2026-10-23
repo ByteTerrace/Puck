@@ -12,8 +12,9 @@
 // pages. Every page binds the bar's twelve controls; the Go and Tour pages bind the debug world's places and gallery
 // (pad.puck) and read empty elsewhere. The View page is the old look modifier's: camera layouts, autorun and autofly on the
 // stick presses, recenter, free look and the engaged screen's frame toggle. The suit toggle sits on the Debug page
-// (suit.puck). The Debug page also holds the capture to the state root's screenshots folder, the history switch and the
-// inspector; the render levers (quality, update rates) sit on the Tour page. LB on Move opens the play wheel and wears its
+// (suit.puck), and so does noclip in the debug world (noclip.puck, the left stick's press, empty elsewhere). The Debug
+// page also holds the capture to the state root's screenshots folder, the history switch and the inspector toggle; the
+// render levers (quality, update rates) sit on the Tour page. LB on Move opens the play wheel and wears its
 // icon; RB on Move is the context button.
 //
 // Hold Tab (or LB) to open the play wheel, aim it with the mouse (or the right stick) and release to run the sector
@@ -104,6 +105,7 @@ icons {
     { name: "key.f2", label: "F2" }
     { name: "key.f3", label: "F3" }
     { name: "key.f4", label: "F4" }
+    { name: "key.f6", label: "F6" }
     { name: "key.z", label: "Z" }
     { name: "key.x", label: "X" }
     { name: "key.space", glyph { font: mono, glyph: "U+2423" } }
@@ -191,9 +193,9 @@ icons {
     { name: "view.wide", label: "WD" }
     { name: "view.auto", label: "AU" }
     { name: "view.face", label: "FC" }
-    // The Debug page: the inspector panel, the frame comparison, stopping, the suit.
+    // The Debug page: the inspector panel, noclip, the frame comparison, stopping, the suit.
     { name: "dbg.inspect", label: "IN" }
-    { name: "dbg.inspectOff", label: "IO" }
+    { name: "dbg.noclip", label: "NC" }
     { name: "dbg.hold", label: "HO" }
     { name: "dbg.split", label: "SP" }
     { name: "dbg.clear", label: "CL" }
@@ -223,6 +225,7 @@ icons {
     { name: "tour.motionOn", label: "M1" }
     { name: "tour.garden", label: "PG" }
     { name: "tour.night", label: "PN" }
+    { name: "tour.toon", label: "CE" }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -247,6 +250,7 @@ icons {
     { source: "keyboard.f2", icon: "key.f2" }
     { source: "keyboard.f3", icon: "key.f3" }
     { source: "keyboard.f4", icon: "key.f4" }
+    { source: "keyboard.f6", icon: "key.f6" }
     { source: "keyboard.space", icon: "key.space" }
     { source: "keyboard.controlLeft", icon: "key.ctrl" }
     { source: "keyboard.tab", icon: "key.tab" }
@@ -371,7 +375,7 @@ state {
       dbgCapture = "dbg.capture"
       dbgHistory = "dbg.history"
       dbgInspect = "dbg.inspect"
-      dbgInspectOff = "dbg.inspectOff"
+      dbgNoclip = "dbg.noclip"
       dbgDebugView = "act.view"
       dbgHold = "dbg.hold"
       dbgSplit = "dbg.split"
@@ -406,6 +410,7 @@ state {
       tourMotionOn = "tour.motionOn"
       tourGarden = "tour.garden"
       tourNight = "tour.night"
+      tourToon = "tour.toon"
     }
 
     // The bar draws one bar that swaps its page in place as a trigger is held, rather than every page's bank at once.
@@ -489,6 +494,7 @@ bindingOverlays [
         "gamepad.buttonEast"
         "gamepad.rightShoulder"
         "gamepad.rightStickPress"
+        "gamepad.back"
       ]
       // One bank a page, in the order of the pages: Move, then the left trigger, the right trigger, left then right and
       // right then left.
@@ -521,6 +527,9 @@ bindingOverlays [
             inset: 1.5
           }
           tables {
+            toon [
+              { source: "gamepad.back", x: 0, y: 0, badge [0, 1] }
+            ]
             left [
               { source: "gamepad.dpadUp", x: -4.333, y: 1, badge [0, 1] }
               { source: "gamepad.dpadRight", x: -3.333, y: 0, badge [1, 0] }
@@ -544,7 +553,7 @@ bindingOverlays [
             view { pieces: standardPieces, anchor: standardAnchor }
             debug { pieces: standardPieces, anchor: standardAnchor }
             go { pieces: standardPieces, anchor: standardAnchor }
-            tour { pieces: standardPieces, anchor: standardAnchor }
+            tour { pieces: concat(standardPieces, [{ table: "toon", at [0, 0] }]), anchor: standardAnchor }
           }
         }
       }
@@ -673,7 +682,7 @@ bindingOverlays [
   // The bar's four trigger pages, each the Moth's resting page with the bar's twelve controls rebound: the left trigger
   // (or Z) holds View, the right trigger (or X) holds Debug, and the two together hold Go when the left went down first
   // and Tour when the right did. The debug world's places and gallery fill Go and Tour (pad.puck); the suit toggle joins
-  // Debug (suit.puck). A page inherits `base`, so the sticks and the keyboard's movement keep working while it is held.
+  // Debug (suit.puck), and noclip joins it on the left stick's press in the debug world (noclip.puck). A page inherits `base`, so the sticks and the keyboard's movement keep working while it is held.
   // Close-ups the View page has no plate for (head, boots, shoulder) are `view.override layout <name>`, and the chase
   // camera and annotation are the play wheel's.
   {
@@ -719,8 +728,7 @@ bindingOverlays [
               { command: "world.history", id: "dbgHistory", label: "History on", text: "on", sources: padRight }
               { command: "console", id: "dbgConsole", label: "Console", sources: padDown }
               { command: "world.screenshot", id: "dbgCapture", label: "Capture", sources: padLeft }
-              { command: "world.inspect", id: "dbgInspect", label: "Inspector on", text: "on", sources: padLeftShoulder }
-              { command: "world.inspect", id: "dbgInspectOff", label: "Inspector off", text: "off", sources: padLeftStick }
+              { command: "world.inspect", id: "dbgInspect", label: "Inspector", text: "toggle", sources: padLeftShoulder }
               { command: "world.debug-view", id: "dbgDebugView", label: "Debug view", text: "next", sources: padNorth }
               { command: "world.compare", id: "dbgHold", label: "Hold frame", text: "hold", value: neverRead, sources: padWest }
               { command: "world.compare", id: "dbgSplit", label: "Compare", text: "split", value: neverRead, sources: padEast }
@@ -746,7 +754,9 @@ bindingOverlays [
             id: "pad-rt-lt"
             inherits: "base"
             label: "Tour"
-            entries []
+            entries [
+              { command: "world.toon", id: "tourToon", label: "Toon shading", text: "toggle", sources ["gamepad.back", "keyboard.f6"] }
+            ]
           }
         }
       ]

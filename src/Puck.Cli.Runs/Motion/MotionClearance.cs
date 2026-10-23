@@ -93,21 +93,7 @@ public sealed class MotionClearance : IMotionClearance {
         }
 
         var definition = admission!.Definition;
-        var usable = new List<WorldPlacement>();
-
-        // A placement the field query has no twin for (a render-only fold) is left out alone, as the presentation leaves out the
-        // whole field; the rest of the world still answers.
-        foreach (var placement in definition.Placements) {
-            try {
-                var builder = new SdfProgramBuilder();
-
-                WorldPlacementStamper.EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
-                _ = new SdfFieldEvaluator(program: builder.Build());
-                usable.Add(item: placement);
-            } catch (ArgumentException) {
-                continue;
-            }
-        }
+        var usable = WorldPlacementStamper.Queryable(definition: definition, placements: definition.Placements);
 
         var all = new SdfProgramBuilder();
 

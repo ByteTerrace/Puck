@@ -121,10 +121,10 @@ public static class FixedSymmetricSolve {
         out long invE,
         out long invF
     ) {
-        Debug.Assert(
-            condition: (outputFractionShift >= 0),
-            message: "TryInvertSymmetric3 requires a non-negative output fraction shift."
-        );
+        if (outputFractionShift < 0) {
+            invA = invB = invC = invD = invE = invF = 0L;
+            return false;
+        }
 
         var groupMax = Max(
             v0: FusedArithmetic.RawMagnitude(value: a),
@@ -1100,13 +1100,13 @@ public static class FixedSymmetricSolve {
     /// <param name="invB">The inverse's (0,1) = (1,0) entry on success; zero on refusal.</param>
     /// <param name="invD">The inverse's (1,1) entry on success; zero on refusal.</param>
     /// <returns><see langword="false"/> when the matrix is exactly singular, a result does not fit the raw carrier,
-    /// or the entries are large enough that <paramref name="outputFractionShift"/> plus the internal preconditioning
+    /// <paramref name="outputFractionShift"/> is negative, or the entries are large enough that it plus the internal preconditioning
     /// shift would be negative (see remarks); every <see langword="out"/> parameter is zero in that case.</returns>
     public static bool TryInvertSymmetric2(long a, long b, long d, int outputFractionShift, out long invA, out long invB, out long invD) {
-        Debug.Assert(
-            condition: (outputFractionShift >= 0),
-            message: "TryInvertSymmetric2 requires a non-negative output fraction shift."
-        );
+        if (outputFractionShift < 0) {
+            invA = invB = invD = 0L;
+            return false;
+        }
 
         var groupMax = Max(
             v0: FusedArithmetic.RawMagnitude(value: a),

@@ -50,7 +50,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private readonly int[] m_contextInstalls;
     private readonly WorldStateLease[] m_contextReads;
     private readonly WorldDefinition[] m_definitions;
-    private readonly string[][] m_effectiveChannelNames;
+    private readonly WorldChannel[][] m_effectiveChannels;
     // Exact effective-profile identity per seat. Reference changes are common at world-route seams; only a change to
     // the filtered composed document or channel-name ordinal map warrants resetting chord/page/latch state.
     private readonly byte[][] m_effectiveDocuments;
@@ -137,11 +137,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return layers;
     }
-    private static string[] ChannelNames(IReadOnlyList<WorldChannel> channels) {
-        var names = new string[channels.Count];
+    private static WorldChannel[] ChannelDefinitions(IReadOnlyList<WorldChannel> channels) {
+        var names = new WorldChannel[channels.Count];
 
         for (var index = 0; (index < names.Length); index++) {
-            names[index] = channels[index].Name;
+            names[index] = channels[index];
         }
 
         return names;
@@ -466,11 +466,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         }
 
         var documentBytes = SerializeEffectiveDocument(document: document);
-        var channelNames = ChannelNames(channels: m_channelSource[slot]);
+        var channelDefinitions = ChannelDefinitions(channels: m_channelSource[slot]);
 
         if (
             m_effectiveDocuments[slot].AsSpan().SequenceEqual(other: documentBytes) &&
-            m_effectiveChannelNames[slot].AsSpan().SequenceEqual(other: channelNames)
+            m_effectiveChannels[slot].AsSpan().SequenceEqual(other: channelDefinitions)
         ) {
             // A new document instance with the same effective profile is a true no-op: keep the live tracker,
             // armed chord rows, release latches, and held commands intact. Context references may be new even
@@ -487,6 +487,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
             var profile = BindingProfile.Compile(
                 document: document,
+                channelIsRelative: channel => IsRelative(channels: channels, reference: channel),
                 channelCommandName: channel => RoutedChannelCommandName(
                     channel: channel,
                     channels: channels
@@ -506,7 +507,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             Reloading?.Invoke(obj: slot);
             m_seats[slot].Reload(profile: profile);
             m_effectiveDocuments[slot] = documentBytes;
-            m_effectiveChannelNames[slot] = channelNames;
+            m_effectiveChannels[slot] = channelDefinitions;
         } catch (ArgumentException exception) {
             Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected ({exception.Message.ReplaceLineEndings(replacementText: " ")}); keeping the prior mapping.");
 
@@ -556,6 +557,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // built, against this seat's currently routed table; the resulting command lives in the fixed ordinal vocabulary
     // PlayerCommandModule registers in full. A late-mounted or remote world therefore needs no command-registry
     // mutation, while a malformed/undeclared name still refuses loudly at the same composition boundary.
+    private static bool IsRelative(WorldChannelTable channels, ChannelRef reference) => (channels.TryGetOrdinal(ordinal: out var ordinal, reference: reference) && (channels.Shape(ordinal: ordinal) == ChannelShape.Relative));
     private static string RoutedChannelCommandName(WorldChannelTable channels, ChannelRef channel) {
         if (
             (channel is ChannelRef.Name name) &&
@@ -1670,6 +1672,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
             var compiled = BindingProfile.Compile(
                 document: document,
+                channelIsRelative: channel => IsRelative(channels: channels, reference: channel),
                 channelCommandName: channel => RoutedChannelCommandName(
                     channel: channel,
                     channels: channels
@@ -1767,7 +1770,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_channelSource = new IReadOnlyList<WorldChannel>[SeatCount];
         m_channels = new WorldChannelTable[SeatCount];
         m_effectiveDocuments = new byte[SeatCount][];
-        m_effectiveChannelNames = new string[SeatCount][];
+        m_effectiveChannels = new WorldChannel[SeatCount][];
         m_definitions = new WorldDefinition[SeatCount];
         m_modeSource = new IReadOnlyList<WorldSeatModeFamily>[SeatCount];
         m_stateEntityIndices = new int[SeatCount];
@@ -1801,9 +1804,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         var seedDocument = ComposeSeat(slot: 0);
         var seedDocumentBytes = SerializeEffectiveDocument(document: seedDocument);
-        var seedChannelNames = ChannelNames(channels: bootChannels);
+        var seedChannels = ChannelDefinitions(channels: bootChannels);
         var seedBase = BindingProfile.Compile(
             document: seedDocument,
+            channelIsRelative: channel => IsRelative(channels: bootTable, reference: channel),
             channelCommandName: channel => RoutedChannelCommandName(
                 channel: channel,
                 channels: bootTable
@@ -1823,7 +1827,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             m_composed[slot] = seedDocument;
             m_seatReads[slot] = [];
             m_effectiveDocuments[slot] = seedDocumentBytes;
-            m_effectiveChannelNames[slot] = seedChannelNames;
+            m_effectiveChannels[slot] = seedChannels;
             SyncSeatModes(
                 current: definition.SeatModes,
                 previous: [],

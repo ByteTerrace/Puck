@@ -13,6 +13,8 @@ against a requested change is stale and is corrected in the same change. What
 the owner says in a session overrides this skill and is written into it in that
 session.
 
+Load [lane work](references/lane-work.md) before branch operations, delegation or a long run; it owns the detailed procedures.
+
 ## Plan from the milestone
 
 Plan backward from the milestone's critical path. Find the least-prepared item
@@ -43,9 +45,9 @@ the lead splits it into lanes.
 
 ## Write and track assignments
 
-[AGENTS.md](../../../AGENTS.md#delegated-work) owns what a brief holds and how
+[Lane work](references/lane-work.md#delegated-work) owns what a brief holds and how
 shared-file edits are sequenced; its report shape is the three headings that
-[Running long tasks](../../../AGENTS.md#running-long-tasks) names. Add to every
+[Running long tasks](references/lane-work.md#running-long-tasks) names. Add to every
 brief:
 
 - an id, used in the brief file name, the commit trailer and every message;
@@ -102,26 +104,37 @@ branch is the next piece of work, not a reason to stop landing.
 A brief that grants GPU legs carries a time box and what to do when a leg
 fails: rerun it once alone, then fix it or hand it back as open. Several lanes
 granted the GPU share it through one lease on the lead machine: before booting
-a World or running a WARP bake, a lane runs `mkdir <checkout>/.claude/leases/gpu`
-(atomic: it fails while another lane holds the lease), writes its lane name and
-the time into `leases/gpu/holder`, and removes the directory as soon as its
-World stops. Chain the boot on the `mkdir` (`mkdir … && …`), never run it as a
-separate step: a lane that carried on after a failed `mkdir` overwrote another
-lane's holder and then removed its lease. A lane that finds the lease taken does CPU work and tries again
-later, and never holds it longer than its batch of checks, at most 20 minutes.
+a World or running a WARP bake, a lane runs `puck lease gpu --holder <lane> --wait 1200 -- <command...>` from its private CLI copy. The verb takes the shared main checkout's lease atomically, records the lane, PID and time, and releases after the child exits, fails or is cancelled. A lane that finds the lease taken does CPU work and tries again later, and never holds it longer than its batch of checks, at most 20 minutes.
 Every World a lane boots passes `--devices none`, so the owner's pads and
 keyboard never drive it
 ([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
-The `.claude/leases/` directory is git-ignored, so the lead creates it once per
-checkout (`mkdir -p`). A Codex lane's sandbox writes only its worktree plus the
-writable root `.codex/config.toml` declares for `.claude/leases/` (an absolute
-path per machine), and never `.git`: a Codex lane runs in a worktree under
-`.claude/worktrees/<lane>/` branched from a tip carrying that config, leaves
-its changes uncommitted, and the lead commits them
-([`review-passes`](../review-passes/SKILL.md#before-launching)).
-A lease older than an hour whose World is gone is stale and may be removed. The
-same rule gives `Puck.World.Tests` one run at a time (`.claude/leases/heavy`),
-since a run takes about 7 GB of the lead machine's 32 GB. Investigating
+The `.claude/leases/` directory is git-ignored and created by the verb. Launch a Codex lane with `codex exec --cd <worktree> -m <model> -c
+model_reasoning_effort='"<effort>"' "$(cat <brief>)"` in the background, its
+output to a lane-named log: `.codex/config.toml`'s `puck` permission profile
+then applies, with `approvals_reviewer = "auto_review"` (Codex's counterpart
+of auto mode) and `.codex/rules/git.rules`. A sandbox-denied `git commit`
+escalates and the reviewer approves it, so the lane commits on its own
+branch; every `git push` is forbidden before review, so its work lands through
+the lead. The Codex companion's `task` forces `--sandbox workspace-write`,
+which overrides the profile: a lane launched through it cannot commit, and the
+lead commits its uncommitted changes
+([`review-passes`](../review-passes/SKILL.md#before-launching)). Under
+`prefer_mxc` the profile gives shell commands network access and live web
+search, and makes `.claude/leases/` writable (an absolute path per machine).
+
+An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
+its worktree, without `--mode`: headless `-p` judges the `--mode auto` flag
+before it signs in and refuses it ("rollout flag off"), while the user-level
+`agentMode: "auto"` applies once it has, on a personal Google account. Its
+rights come from the user-level `~/.gemini/antigravity-cli/settings.json`
+(allow, ask and deny; Antigravity reads no project permission file), its skills
+and `puck` MCP server from the committed `.agents/`. Commands run in its
+terminal sandbox: commits succeed there, the network does not, and a command
+on the ask list (a push to `main`) is refused headless, since it cannot prompt. A resumed
+Codex session keeps the sandbox it was launched with, so after a sandbox change
+relaunch the lane fresh with a continuation brief rather than `--resume-last`.
+A Codex brief uses the same verb, never a hand-chained mkdir/run/remove sequence.
+A lease older than an hour whose holder process is gone is reclaimed by the verb; unknown holder metadata is refused for inspection. The same rule gives `Puck.World.Tests` one run at a time through `puck lease heavy --holder <lane> --wait 1200 -- <command...>`, since a run takes about 7 GB of the lead machine's 32 GB. Investigating
 a failure is a lane of its own, never the integrator's.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
@@ -143,7 +156,7 @@ catalog (`puck verbs`, which boots a headless and a windowed World, a GPU leg) a
 The integration branch is where the lead lands work. Work reaches `main` in
 complete milestones, only when the owner asks and never on a lane's request,
 because a push to `main` deploys to Azure, under
-[AGENTS.md's branch authority](../../../AGENTS.md#branches-commits-and-pushes).
+[lane branch procedures](references/lane-work.md#branches-commits-and-pushes).
 
 ## Schedule machines
 
@@ -291,6 +304,23 @@ could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
+
+Antigravity is the third family, running Gemini 4 Argon (Google's flagship,
+on the owner's Google AI Ultra plan; an Antigravity lane launches as above). Its published results
+put it level with Astra overall (Artificial Analysis Intelligence Index about
+53) and ahead on repository issue fixing (DeepSWE), app and UI generation and
+security remediation (CWE-bench), behind Opus and Astra on long terminal-driven
+and long-horizon work (Terminal-bench, FrontierSWE), with a 1M-token context
+and about twice Astra's output per task; most figures are vendor-reported.
+Route it accordingly:
+
+| Give Argon | Keep from Argon |
+|---|---|
+| Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
+| Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
+| Whole-area analysis that needs a large context | Anything that must push, or run an ask-listed git command headless |
+| Portal, dashboard and other TypeScript/UI work | |
+| Research synthesis | |
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden

@@ -278,7 +278,8 @@ public static partial class WorldDefinitionValidator {
     private static WorldChannelTable? CompilableChannelTable(IReadOnlyList<WorldChannel> channels) {
         if (
             (channels is null) ||
-            (channels.Count > ChannelLimits.MaxChannels)
+            (channels.Count(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))) > ChannelLimits.MaxAxes) ||
+            (channels.Count(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))) > ChannelLimits.MaxButtons)
         ) {
             return null;
         }
@@ -1140,14 +1141,12 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             programs: programs
         );
-        // Channels and target registers share one Drive-reach ordinal space, and every per-ordinal table below is
-        // sized by ChannelLimits.MaxChannels. An over-budget count cannot be collected and walked past: the first
-        // compile that indexes one of those tables by an authored count faults out of its own array before the
-        // collected refusals are raised. This is a gate, not another collected error.
-        var declaredOrdinals = (definition.Channels.Count + definition.TargetRegisters.Count);
-
-        if (declaredOrdinals > ChannelLimits.MaxChannels) {
-            errors.Add(item: $"channels and targetRegisters declare {declaredOrdinals} shared Drive-reach ordinals; the maximum is {ChannelLimits.MaxChannels}.");
+        if (definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) {
+            errors.Add(item: $"targetRegisters declares {definition.TargetRegisters.Count} rows; the maximum is {WorldTargetRegisterTable.MaxRegisters}.");
+        }
+        if ((definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) ||
+            (definition.Channels.Count(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))) > ChannelLimits.MaxAxes) ||
+            (definition.Channels.Count(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))) > ChannelLimits.MaxButtons)) {
             RefuseCollected(errors: errors);
         }
         var kitNames = ValidateKits(

@@ -1,3 +1,4 @@
+import "inputs"
 // Physical chess: a table of 32 rigid piece bodies whose every settled arrangement is judged against the last legal
 // board (the tabletop primitive), with captures, promotion, castling, en passant, check, the draw limits and a
 // one-ply computer opponent. The debug world imports this file whole. The table stands in the gallery hall's lobby
@@ -804,10 +805,10 @@ rule "chess-play-buttons" {
   play[behindNow] = 0
   play[rightNow] = 0
   play[leftNow] = 0
-  if board(engaged, board, 1) == 1 and channel(1, boardPick) >= 0.5 {
+  if board(engaged, board, 1) == 1 and channel(1, confirm) >= 0.5 {
     play[pickNow] = 1
   }
-  if board(engaged, board, 1) == 1 and channel(1, boardCancel) >= 0.5 {
+  if board(engaged, board, 1) == 1 and channel(1, cancel) >= 0.5 {
     play[cancelNow] = 1
   }
   if board(engaged, board, 1) == 1 and channel(1, forward) >= 0.5 {
@@ -974,19 +975,8 @@ rule "chess-play-cursor-parked" {
   poseCell(key: `placement:boardCursor`, topology: chessBoard, expression: play[cursor], offset: [0, 0, 0])
 }
 
-// The pick and cancel buttons a seated player presses; the seat's movement channels move the cursor.
-channels [
-  {
-    composition: true
-    name: "boardPick"
-    shape: Binary
-  }
-  {
-    composition: true
-    name: "boardCancel"
-    shape: Binary
-  }
-]
+// The board consumes shared movement, confirm, cancel, and leave actions.
+
 
 // The board page, which the seat's controls switch to while it sits at a tabletop.
 bindingOverlays [
@@ -1011,8 +1001,8 @@ bindingOverlays [
               { channel: "strafe", id: "boardLeft", scale: -1, sources ["keyboard.a", "keyboard.arrowLeft", "gamepad.dpadLeft"] }
               { channel: "strafe", id: "boardRight", scale: 1, sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"] }
               { command: "player.move.strafe", id: "boardStick", sources ["gamepad.leftStick"] }
-              { channel: "boardPick", id: "boardPick", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
-              { channel: "boardCancel", id: "boardCancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
+              { channel: "confirm", id: "confirm", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
+              { channel: "cancel", id: "cancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
               { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
             ]
           }

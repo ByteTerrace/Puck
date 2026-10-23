@@ -80,6 +80,14 @@ public static partial class SdfWorldPackage {
     /// luminance it shades to the display by before the tonemap, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
     public const string Exposure = "exposure";
+    /// <summary>Cel response: enable, diffuse threshold, terminator width and specular size (<c>float4</c>).</summary>
+    public const string ToonBands = "toonBands";
+    /// <summary>Cel shadow tint and reflected-light exposure gain (<c>float4</c>).</summary>
+    public const string ToonShadow = "toonShadow";
+    /// <summary>Cel outline render-pixel radius, half-width distance, normal threshold and colour shoulder (<c>float4</c>).</summary>
+    public const string ToonOutline = "toonOutline";
+    /// <summary>Cel outline's linear RGB multiplier (<c>float3</c>).</summary>
+    public const string ToonInk = "toonInk";
     /// <summary>The pass-group value holding the power the composite raises <see cref="Exposure"/> to before applying it
     /// to the view's output (<c>float</c>): one for a view the display shows, and the window share
     /// (<c>SdfPhotometry.WindowAdaptation</c>) for a view that publishes its luminance for a window onto it, whose
@@ -283,6 +291,10 @@ public static partial class SdfWorldPackage {
         Value(name: LightCount, type: ShaderValueType.Uint),
         Value(name: LightMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
+        Value(name: ToonBands, type: ShaderValueType.Float4),
+        Value(name: ToonShadow, type: ShaderValueType.Float4),
+        Value(name: ToonOutline, type: ShaderValueType.Float4),
+        Value(name: ToonInk, type: ShaderValueType.Float3),
         Value(name: ExposeShare, type: ShaderValueType.Float),
         Value(name: AirLight, type: ShaderValueType.Float),
         Value(name: MeterLuminance, type: ShaderValueType.Float),

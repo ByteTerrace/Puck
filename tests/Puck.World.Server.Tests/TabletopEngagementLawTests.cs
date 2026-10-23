@@ -50,10 +50,10 @@ public sealed class TabletopEngagementLawTests {
                     Board: new WorldPlacementBoard(
                         Topology: TopologyName,
                         Occupancy: OccupancyRowName,
-                        Engage: (!engageable ? null : engage ?? new WorldTabletopEngage(
+                        Engage: (!engageable ? null : (engage ?? new WorldTabletopEngage(
                             Channel: Interact,
                             Radius: 3d
-                        ))
+                        )))
                     )
                 )]
             ),
@@ -122,16 +122,14 @@ public sealed class TabletopEngagementLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
         fixture.Server.Body(index: 0)!.Pose(
+            pitchRadians: 0f,
+            rollRadians: 0f,
             x: position.X,
             y: position.Y,
-            z: position.Z,
             yawRadians: 0f,
-            pitchRadians: 0f,
-            rollRadians: 0f
+            z: position.Z
         );
-        interactOrdinal = fixture.Server.Definition.Channels
-            .Select(selector: static (channel, index) => (channel.Name, index))
-            .Single(predicate: static entry => (entry.Name == Interact)).index;
+        Assert.True(condition: fixture.Server.Population.Channels.TryGetOrdinal(name: Interact, ordinal: out interactOrdinal));
 
         return fixture;
     }
@@ -186,7 +184,6 @@ public sealed class TabletopEngagementLawTests {
         Assert.Equal(expected: 0L, actual: Read(fixture: fixture, row: SeatedRowName));
         Assert.Equal(expected: -1L, actual: Read(fixture: fixture, row: PointedRowName));
     }
-
     [Fact]
     public void ASeatBeyondTheEngageRadiusSitsAtNothing() {
         using var fixture = Seated(interactOrdinal: out var interact, position: new Vector3(x: 4f, y: 0f, z: -3f));
@@ -203,13 +200,12 @@ public sealed class TabletopEngagementLawTests {
         // The policy body.engage applies names each refusal: the radius, a body that is not live, and a placement
         // carrying no engageable tabletop.
         Assert.False(condition: fixture.Server.CheckEngagePolicy(entityIndex: 0, reason: out var far, target: GrantSubject.Placement(id: TableId)));
-        Assert.Contains(expectedSubstring: "outside tabletop 'table''s engage radius (3 at its size)", actualString: far);
+        Assert.Contains(actualString: far, expectedSubstring: "outside tabletop 'table''s engage radius (3 at its size)");
         Assert.False(condition: fixture.Server.CheckEngagePolicy(entityIndex: 99, reason: out var gone, target: GrantSubject.Placement(id: TableId)));
-        Assert.Equal(expected: "body 99 is not live", actual: gone);
+        Assert.Equal(actual: gone, expected: "body 99 is not live");
         Assert.False(condition: fixture.Server.CheckEngagePolicy(entityIndex: 0, reason: out var none, target: GrantSubject.Placement(id: "chair")));
-        Assert.Equal(expected: "placement 'chair' carries no engageable tabletop", actual: none);
+        Assert.Equal(actual: none, expected: "placement 'chair' carries no engageable tabletop");
     }
-
     [Fact]
     public void ASeatWithoutControlOverTheTableSitsAtNothingUntilItIsGrantedTheTable() {
         using var fixture = Seated(interactOrdinal: out var interact, position: new Vector3(x: 4f, y: 0f, z: -1f));
@@ -242,7 +238,6 @@ public sealed class TabletopEngagementLawTests {
         Step(fixture: fixture, interactOrdinal: interact, value: Full);
         Assert.True(condition: fixture.Server.Body(index: 0)!.Engaged);
     }
-
     [Fact]
     public void TheFrameNamesTheSideAPositionStandsOnAndTheCellARayMeetsOnThePlayingSurface() {
         var topology = WorldTopologyCompilation.Find(
@@ -268,15 +263,14 @@ public sealed class TabletopEngagementLawTests {
             surface: surface,
             topology: topology
         ));
-        Assert.Equal(expected: 1, actual: cell);
+        Assert.Equal(actual: cell, expected: 1);
 
         // Rising, starting below the surface, or landing off the strip names no cell.
         Assert.False(condition: WorldTabletopFrame.TryPointerCell(cell: out _, ray: new SourceRay(Direction: new FixedVector3(X: FixedQ4816.Zero, Y: Full, Z: FixedQ4816.Zero), Origin: FixedVector3.FromVector3(value: new Vector3(x: 1f, y: 2f, z: 1f))), surface: surface, topology: topology));
         Assert.False(condition: WorldTabletopFrame.TryPointerCell(cell: out _, ray: new SourceRay(Direction: down, Origin: FixedVector3.FromVector3(value: new Vector3(x: 1f, y: 0.25f, z: 1f))), surface: surface, topology: topology));
         Assert.False(condition: WorldTabletopFrame.TryPointerCell(cell: out var off, ray: new SourceRay(Direction: down, Origin: FixedVector3.FromVector3(value: new Vector3(x: 9f, y: 2f, z: 1f))), surface: surface, topology: topology));
-        Assert.Equal(expected: -1, actual: off);
+        Assert.Equal(actual: off, expected: -1);
     }
-
     [Fact]
     public void AnEngageBlockNoProbeOrCameraCouldUseIsRefusedByName() {
         Assert.True(condition: WorldDefinitionValidator.TryValidate(
@@ -303,13 +297,13 @@ public sealed class TabletopEngagementLawTests {
             "board.engage.margin must be a finite non-negative distance",
             "board.engage.surface must be a finite non-negative height",
         }) {
-            Assert.Contains(expectedSubstring: expected, actualString: reason);
+            Assert.Contains(actualString: reason, expectedSubstring: expected);
         }
 
         // A seat read needs an engageable tabletop under the row and a seat the document seats.
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: Document(engageable: false), neighbours: null, reason: out var unseatable));
-        Assert.Contains(expectedSubstring: "whose topology 'strip' no placement's board facet anchors with an engage block", actualString: unseatable);
+        Assert.Contains(actualString: unseatable, expectedSubstring: "whose topology 'strip' no placement's board facet anchors with an engage block");
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: Document(seat: 9), neighbours: null, reason: out var unseated));
-        Assert.Contains(expectedSubstring: "does not spell '$board:engaged|pointer|side:<row>:<seat>'", actualString: unseated);
+        Assert.Contains(actualString: unseated, expectedSubstring: "does not spell '$board:engaged|pointer|side:<row>:<seat>'");
     }
 }

@@ -51,7 +51,7 @@ lists outlines but has no window to draw them in; offscreen draws no overlay.
 shapes alone and the whole creation; F4 in the debug world toggles the Moth's
 jetpack alone (`toggle moth pod* nozzle*`).
 
-`world.inspect on|off` toggles the acting seat's editor panel; bare
+`world.inspect on|off|toggle` shows or hides the acting seat's editor panel; bare
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,
 camera, ticks, render levers, counted work, capacity and reload refusal.

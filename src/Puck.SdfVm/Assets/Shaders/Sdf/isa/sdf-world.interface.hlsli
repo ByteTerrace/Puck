@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/abddbca2023f1b7d6429223952e20fd2c3f83b5a0d5e732adc1afd3bfabd5b61). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/5b32529d908b5b408dd0ee07d32e871869342c256c5f8e8aaac582a9004a8def). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -201,17 +201,26 @@ struct SdfWorldPass {
     [[vk::offset(736)]] float skyPeakLuminance;
     [[vk::offset(740)]] float tanHalfFieldOfView;
     [[vk::offset(744)]] uint temporal;
-    [[vk::offset(748)]] uint viewBase;
-    [[vk::offset(752)]] float3 viewForward;
-    [[vk::offset(764)]] uint _pad764;
-    [[vk::offset(768)]] float3 viewPosition;
+    [[vk::offset(748)]] uint _pad748;
+    [[vk::offset(752)]] float4 toonBands;
+    [[vk::offset(768)]] float3 toonInk;
     [[vk::offset(780)]] uint _pad780;
-    [[vk::offset(784)]] float3 viewRight;
-    [[vk::offset(796)]] uint _pad796;
-    [[vk::offset(800)]] float3 viewUp;
-    [[vk::offset(812)]] uint viewportCount;
-    [[vk::offset(816)]] uint workCounterRow;
-    [[vk::offset(820)]] uint workCounterRowDetail;
+    [[vk::offset(784)]] float4 toonOutline;
+    [[vk::offset(800)]] float4 toonShadow;
+    [[vk::offset(816)]] uint viewBase;
+    [[vk::offset(820)]] uint _pad820;
+    [[vk::offset(824)]] uint _pad824;
+    [[vk::offset(828)]] uint _pad828;
+    [[vk::offset(832)]] float3 viewForward;
+    [[vk::offset(844)]] uint _pad844;
+    [[vk::offset(848)]] float3 viewPosition;
+    [[vk::offset(860)]] uint _pad860;
+    [[vk::offset(864)]] float3 viewRight;
+    [[vk::offset(876)]] uint _pad876;
+    [[vk::offset(880)]] float3 viewUp;
+    [[vk::offset(892)]] uint viewportCount;
+    [[vk::offset(896)]] uint workCounterRow;
+    [[vk::offset(900)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa8A2B3C24 : register(b0, space3);
 #define passGroup passGroupIsa8A2B3C24

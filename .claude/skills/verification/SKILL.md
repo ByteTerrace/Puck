@@ -51,6 +51,15 @@ leave its closing brace unhit. Code that keeps its device work in a listed file
 reaches it from the CPU side through one expression (a conditional or `&&` over
 a helper there), not a guarded statement.
 
+GPU legs require the lead's grant.
+
+Judge performance by code, disassembly and load-independent counts; only
+  counts gate a change. Wall-clock and GPU timing are evidence
+  read beside those counts, never alone, and run on a quiet machine: the lead
+  keeps every agent's builds, tests and GPU legs off the machine while one
+  runs ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
+
+
 ## Run verbs from your own CLI copy
 
 Build `src/Puck.Cli` in Release in your worktree, copy
@@ -81,9 +90,11 @@ flag was missed.
 - A failed build leaves the previous binaries in place, so a test or run after
   it measures old code. Run only after a build that exited 0 following your
   last edit; never pass `--no-build` otherwise.
-- Pass `-nodeReuse:false` to every build and restore: a reused MSBuild node
+- Pass `-nodeReuse:false` to every build, msbuild and restore: a reused MSBuild node
   outlives the build and holds memory (`puck host load` counts them as
-  `reuseNodes`).
+  `reuseNodes`). Never pass it to `dotnet test`: Microsoft.Testing.Platform
+  rejects it and the run reports `error: 1, total: 0`. Build with the flag,
+  then run `dotnet test <project> --no-build`.
 - Do not edit the source tree while a canary, parity or test run reads it.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
 - MSBuild rebuilds by file time. A file copied back over a mutant keeps its
@@ -106,6 +117,13 @@ the skip exception, so a test that wraps a call which can skip reports
 **Skipped** instead of failing; catch it with `try`/`catch` and assert on it.
 
 ## What uses the GPU
+
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
+
+In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
+shell can split the colon-bearing switch before the lease receives it
+([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
+
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
 or offscreen `Puck.World` run, and any test run that can select a device law.

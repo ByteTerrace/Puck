@@ -7,12 +7,12 @@ namespace Puck.World.Protocol.Tests;
 
 /// <summary>
 /// The pointer-ray laws for the one intent layout every intent path shares (<see cref="WorldWireCodec.WriteIntent"/>):
-/// the sixteen channel lanes cross unchanged, an absent ray costs one flag byte, a present ray adds its six raw
+/// the numeric and packed button banks cross unchanged, an absent ray costs one flag byte, a present ray adds its six raw
 /// fixed-point values, and a ray quantized once at the host crosses the wire bit for bit, so the server maps exactly
 /// the ray the seat produced.
 /// </summary>
 public sealed class IntentRayWireLawTests {
-    private const int LaneBytes = (ChannelLimits.MaxChannels * sizeof(long));
+    private const int LaneBytes = ((ChannelLimits.MaxAxes * sizeof(long)) + sizeof(ulong));
 
     private static byte[] Encode(PlayerIntent intent) {
         var writer = new WireWriter();
@@ -41,10 +41,18 @@ public sealed class IntentRayWireLawTests {
             value: FixedQ4816.One
         )
         .WithChannel(
-            ordinal: (ChannelLimits.MaxChannels - 1),
+            ordinal: (ChannelLimits.MaxAxes - 1),
             value: -FixedQ4816.Epsilon
-        );
+        ).WithChannel(ordinal: (ChannelLimits.MaxChannels - 1), value: FixedQ4816.One);
 
+    [Fact]
+    public void RelativePrecisionCrossesTheWireWithoutNarrowing() {
+        var intent = Channels().WithRelative(ordinal: 2, value: FixedQ3232.FromRawBits(value: 1));
+        var decoded = Decode(bytes: Encode(intent: intent));
+
+        Assert.Equal(actual: decoded, expected: intent);
+        Assert.Equal(FixedQ3232.Epsilon, decoded.Channels.Relative(ordinal: 2));
+    }
     [Fact]
     public void AnAbsentRayCostsOneByte_AndAPresentRayAddsItsSixFixedValues() {
         var absent = Encode(intent: Channels());
@@ -63,7 +71,7 @@ public sealed class IntentRayWireLawTests {
             actual: present.Length,
             expected: ((LaneBytes + 1) + (6 * sizeof(long)))
         );
-        // The sixteen lanes are unchanged by the ray: both encodings open with the same lane bytes.
+        // The banks are unchanged by the ray: both encodings open with the same lane bytes.
         Assert.Equal(
             actual: present.AsSpan(
                 length: LaneBytes,

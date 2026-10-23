@@ -67,6 +67,7 @@ public sealed partial class WorldBody {
             OverlayRemainingTicks: m_overlayRemaining,
             ChannelTimerTicks: Own(alias: alias, buffers: buffers, live: m_laneTimers),
             ChannelTimerValues: Own(alias: alias, buffers: buffers, live: m_channelTimerValues),
+            RelativeRemainders: Own(alias: alias, buffers: buffers, live: m_relativeRemainders),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
             PreviousChannelBit: Own(alias: alias, buffers: buffers, live: m_previousChannelBit),
@@ -415,6 +416,7 @@ public sealed partial class WorldBody {
             m_ordinaryAdvanceAdmitted = false;
         }
 
+        CopyClamped(source: state.RelativeRemainders, destination: m_relativeRemainders);
         var ticks = state.ChannelTimerTicks;
         var values = state.ChannelTimerValues;
         var timedCount = Math.Min(
@@ -708,7 +710,7 @@ public sealed partial class WorldBody {
             ? residue.LastContactFieldVersion
             : (residue.ContactFieldObservationCurrent
                 ? currentVersion
-                : unchecked(currentVersion - 1UL)
+                : unchecked((currentVersion - 1UL))
             )
         );
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;

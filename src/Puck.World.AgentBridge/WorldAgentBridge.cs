@@ -64,8 +64,10 @@ public sealed class WorldAgentBridge {
         var channels = CurrentChannels();
         var result = new WorldAgentChannel[channels.ChannelCount];
 
-        for (var ordinal = 0; (ordinal < result.Length); ordinal++) {
-            result[ordinal] = new WorldAgentChannel(
+        for (var index = 0; (index < result.Length); index++) {
+            var ordinal = channels.Address(declaration: index);
+
+            result[index] = new WorldAgentChannel(
                 IsMotionRole: channels.IsRole(ordinal: ordinal),
                 Name: channels.Name(ordinal: ordinal)!,
                 Ordinal: ordinal,

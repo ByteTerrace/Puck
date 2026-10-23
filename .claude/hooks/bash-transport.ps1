@@ -61,10 +61,17 @@ $body = $command.EndsWith("`n") ? $command : ($command + "`n")
 
 $toolInput['command'] = ". '$scriptPath'"
 
-# Escape non-ASCII so the reply survives whatever encoding the console output uses.
-ConvertTo-Json -Compress -Depth 4 -EscapeHandling EscapeNonAscii -InputObject @{
-    hookSpecificOutput = @{
-        hookEventName = 'PreToolUse'
-        updatedInput  = $toolInput
-    }
+$output = @{
+    hookEventName = 'PreToolUse'
+    updatedInput  = $toolInput
 }
+
+# Permission rules then see only the `.` line, so a push or a Codex launch inside the script would slip past the
+# ask rules that name them: ask for those explicitly.
+if ($command -match '(?s)\bgit\b.*\bpush\b|\bcodex(\.exe)?\s+exec\b') {
+    $output['permissionDecision'] = 'ask'
+    $output['permissionDecisionReason'] = "The command moved to $scriptPath contains a git push or a codex exec, which the ask rules cannot see there."
+}
+
+# Escape non-ASCII so the reply survives whatever encoding the console output uses.
+ConvertTo-Json -Compress -Depth 4 -EscapeHandling EscapeNonAscii -InputObject @{ hookSpecificOutput = $output }

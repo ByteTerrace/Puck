@@ -1074,17 +1074,45 @@ export type CellValueJsonConverterVectorShape = {
   value: number[];
 };
 
-export type ChannelConsentMask = number;
+export type ChannelConsentMask = {
+  /**
+   * The numeric and button banks, one bit per consented channel ordinal.
+   */
+  bits?: ChannelMask;
+};
 
 export type ChannelFrame = "World" | "Camera" | "Heading";
 
-export type ChannelReachMask = number;
+/**
+ * Independent support masks for the numeric and button banks.
+ */
+export type ChannelMask = {
+  /**
+   * One bit per numeric lane.
+   */
+  axes?: number;
+  /**
+   * One bit per button lane.
+   */
+  buttons?: number;
+};
+
+export type ChannelReachMask = {
+  /**
+   * The numeric and button reach banks.
+   */
+  bits?: ChannelMask;
+  /**
+   * Independent target-register reach.
+   */
+  registers?: number;
+};
 
 export type ChannelRef = unknown;
 
 export type ChannelRole = "MoveAdvance" | "MoveStrafe" | "Turn" | "MoveUp" | "Pitch" | "Roll" | "FaceX" | "FaceY" | "FaceZ" | "MoveX" | "MoveY" | "MoveZ";
 
-export type ChannelShape = "Bipolar" | "Unipolar" | "Binary";
+export type ChannelShape = "Bipolar" | "Unipolar" | "Binary" | "Relative";
 
 export type ClosedBitset256 = unknown;
 
@@ -4413,6 +4441,10 @@ export type WorldChannel = {
    * What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.
    */
   frame?: ChannelFrame;
+  /**
+   * Required units, sensitivity and limit for Relative channels; absent on levels.
+   */
+  relative?: WorldRelativeChannel | null;
 };
 
 export type WorldClock = {
@@ -9365,6 +9397,21 @@ export type WorldReference = {
   world?: SafeName | null;
 };
 
+export type WorldRelativeChannel = {
+  /**
+   * An authored unit name shared by producers and consumers.
+   */
+  unit: string;
+  /**
+   * Units per device sample, applied before host quantization.
+   */
+  sensitivity: number;
+  /**
+   * The positive absolute displacement limit in authored units.
+   */
+  maximumPerStep: number;
+};
+
 /**
  * An air kind's height profile: its density falls by a factor of e over each Falloff world units above Base, and rises as much below it, so a ray's optical depth through it has a closed form.
  */
@@ -9517,6 +9564,10 @@ export type WorldRenderDefaults = {
    * The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day's.
    */
   exposure?: WorldRenderExposure | null;
+  /**
+   * Optional cel shading and its tuning. Absent is off.
+   */
+  toon?: WorldRenderToon | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -10823,6 +10874,53 @@ export type WorldRenderSkyTwinkle = {
    * The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no state row.
    */
   rate?: BindableScalar;
+};
+
+export type WorldRenderToon = {
+  /**
+   * Whether the world boots with cel shading on; absent is off.
+   */
+  enabled?: boolean;
+  /**
+   * Diffuse band threshold in [0, 1].
+   */
+  threshold?: number;
+  /**
+   * Full terminator width in [0.001, 0.5].
+   */
+  softness?: number;
+  /**
+   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   */
+  shadowTint?: DocumentVector3;
+  /**
+   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   */
+  outlineWidth?: number;
+  /**
+   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   */
+  outlineDistance?: number;
+  /**
+   * Crease normal cosine in [0, 0.95].
+   */
+  outlineNormal?: number;
+  /**
+   * Outline multiplier, three linear RGB values in [0, 1].
+   */
+  outlineTint?: DocumentVector3;
+  /**
+   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+   */
+  specularSize?: number;
+  /**
+   * Reflected-light exposure compensation in stops, in [-4, 4].
+   */
+  exposure?: number;
+  /**
+   * Hue-preserving highlight compression in [0, 2]; zero disables it.
+   */
+  shoulder?: number;
 };
 
 export type WorldRigid = {

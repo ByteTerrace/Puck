@@ -41,7 +41,7 @@ public sealed class ClockPhaseErrorLawTests {
     private static string ReadGradeAfterPress(int restSteps) {
         using var directory = new TemporaryDirectory();
         var document = ClockDocument(directory: directory);
-        var pressOrdinal = document.Channels.Count;
+        var pressOrdinal = ChannelLimits.MaxAxes;
         var pressed = new ActionPredicate.CompareState(
             State: $"$channel:1:press",
             Comparison: ExpressionOp.GreaterOrEqual,

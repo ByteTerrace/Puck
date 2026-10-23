@@ -16,10 +16,15 @@ public static class FixedPointRounding {
     /// <param name="denominator">The exact denominator, of either sign and non-zero.</param>
     /// <param name="fractionBitCount">The result's fraction bit count, which must be non-negative.</param>
     /// <returns>The rounded value, exactly — no width guard, no narrowing.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionBitCount"/> is negative.</exception>
+    /// <exception cref="DivideByZeroException"><paramref name="denominator"/> is zero, even when the numerator is zero.</exception>
     /// <remarks>The core every narrowing rounding in this family reduces to: <see cref="TryRoundRational"/> adds the
     /// signed-64-bit width guard and narrowing; <c>SecondOrderExactMath.RoundToGuardScale</c> and
     /// <c>FixedPointConvert.ScaleDecimalWide</c> call it directly at their own working scale.</remarks>
     public static BigInteger RoundRational(BigInteger numerator, BigInteger denominator, int fractionBitCount) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: fractionBitCount);
+        if (denominator.IsZero) { throw new DivideByZeroException(); }
+
         var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
         var magnitude = BigInteger.Abs(value: numerator);
 

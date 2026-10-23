@@ -106,6 +106,7 @@ public static partial class TestCommand {
                 fileName: "dotnet",
                 arguments: [
                     artifact,
+                    .. WorldDevices.NoneArguments,
                     "--world", world,
                     .. WorldDevices.NoneArguments,
                     "--headless", "true",

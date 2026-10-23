@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/8829dd5d2072bf7355bcd86d17f822ece4454b2f40a847a3163d2f8e1ad86b66). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/d97fbe8d0eebe27f974591c9a4987faeafa9de92ccd3a6c460fa38a7029c08e1). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -208,18 +208,27 @@ struct SdfSkyPass {
     [[vk::offset(768)]] float4 skyViews[40];
     [[vk::offset(1408)]] float tanHalfFieldOfView;
     [[vk::offset(1412)]] uint temporal;
-    [[vk::offset(1416)]] uint viewBase;
+    [[vk::offset(1416)]] uint _pad1416;
     [[vk::offset(1420)]] uint _pad1420;
-    [[vk::offset(1424)]] float3 viewForward;
-    [[vk::offset(1436)]] uint _pad1436;
-    [[vk::offset(1440)]] float3 viewPosition;
+    [[vk::offset(1424)]] float4 toonBands;
+    [[vk::offset(1440)]] float3 toonInk;
     [[vk::offset(1452)]] uint _pad1452;
-    [[vk::offset(1456)]] float3 viewRight;
-    [[vk::offset(1468)]] uint _pad1468;
-    [[vk::offset(1472)]] float3 viewUp;
-    [[vk::offset(1484)]] uint viewportCount;
-    [[vk::offset(1488)]] uint workCounterRow;
-    [[vk::offset(1492)]] uint workCounterRowDetail;
+    [[vk::offset(1456)]] float4 toonOutline;
+    [[vk::offset(1472)]] float4 toonShadow;
+    [[vk::offset(1488)]] uint viewBase;
+    [[vk::offset(1492)]] uint _pad1492;
+    [[vk::offset(1496)]] uint _pad1496;
+    [[vk::offset(1500)]] uint _pad1500;
+    [[vk::offset(1504)]] float3 viewForward;
+    [[vk::offset(1516)]] uint _pad1516;
+    [[vk::offset(1520)]] float3 viewPosition;
+    [[vk::offset(1532)]] uint _pad1532;
+    [[vk::offset(1536)]] float3 viewRight;
+    [[vk::offset(1548)]] uint _pad1548;
+    [[vk::offset(1552)]] float3 viewUp;
+    [[vk::offset(1564)]] uint viewportCount;
+    [[vk::offset(1568)]] uint workCounterRow;
+    [[vk::offset(1572)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa8A2B3C24 : register(b0, space3);
 #define passGroup passGroupIsa8A2B3C24

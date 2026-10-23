@@ -17,10 +17,10 @@ namespace Puck.World.Server.Tests;
 /// kit authoring no row, where the same kit with one is admitted.
 /// </summary>
 public sealed class DriveLawTests {
-    private const int BoostOrdinal = 4;
-    private const int DriftOrdinal = 3;
+    private const int BoostOrdinal = (ChannelLimits.MaxAxes + 1);
+    private const int DriftOrdinal = ChannelLimits.MaxAxes;
     private const int ForwardOrdinal = 0;
-    private const int PitchOrdinal = 5;
+    private const int PitchOrdinal = 3;
     private const int TurnOrdinal = 2;
 
     // Per tick: position x/y/z, planar velocity x/y/z, vertical velocity, yaw, drive pitch — each the raw

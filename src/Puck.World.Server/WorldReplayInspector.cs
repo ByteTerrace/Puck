@@ -162,7 +162,7 @@ public sealed class WorldReplayInspector {
         var labelled = false;
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if (before[ordinal] == after[ordinal]) {
+            if ((before[ordinal] == after[ordinal]) && ((channels.Shape(ordinal: ordinal) != ChannelShape.Relative) || (after.Channels.Relative(ordinal: ordinal).Value == 0))) {
                 continue;
             }
 
@@ -179,7 +179,9 @@ public sealed class WorldReplayInspector {
             edges.Append(value: lane);
             edges.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
             edges.Append(value: '=');
-            edges.Append(value: DescribeValue(value: after[ordinal]));
+            edges.Append(value: ((channels.Shape(ordinal: ordinal) == ChannelShape.Relative)
+                ? channels.DescribeValue(intent: after, ordinal: ordinal)
+                : DescribeValue(value: after[ordinal])));
         }
 
         previous[index] = after;

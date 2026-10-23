@@ -15,7 +15,7 @@ regression to repair.
 
 | Tree | Was | Quarantined |
 |---|---|---|
-| `Puck.Post` | `src/Puck.Post` | 2026-08-02 |
+| [Puck.Post](Puck.Post/) | src/Puck.Post (former root path) | 2026-08-02 |
 | `scripts/world` | `src/Puck.World/scripts/` | 2026-08-02 |
 | `scripts/recording` | `src/Puck.Recording/scripts/` | 2026-08-02 |
 | `Puck.BareMetal` | (never in the build) | — |
@@ -77,9 +77,7 @@ verified by running — never un-quarantining a tree.
 
 **Retiring eclipsed code.** The deletion rides in the same squash as the
 landing that eclipses it, so the evidence sits beside the removal and every
-deletion line stays accounted for. "Eclipsed" is a claim that needs a
-mechanical check behind it, not an impression — bring it to the lead for a
-decision rather than deciding alone.
+deletion line stays accounted for. Account for the deleted lines and show what live code eclipses them.
 
 ## The debt this created, deliberately not paid here
 
@@ -87,3 +85,25 @@ Documents and skills across the repository still cite paths that moved. Those
 citations are stale and will be corrected where they live — in `docs/`,
 `.claude/skills/`, and the project READMEs — never by editing anything in this
 tree.
+
+## Reference-tree rules
+
+Read and cite `experimental/` as prior art, the way you read git history, and
+delete code there once live code has eclipsed it. Never improve, fix, build or
+run it, or run its tests; its builds are expected to break as deletions land.
+It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
+`Puck.Platform.Switch`, each firewalled from the root build
+([experimental/README.md](../experimental/README.md)). The engine contract
+`Puck.Post` covered is a live gap: `puck parity --world <file>` covers a slice of
+it once a parity world exists, and none does while the campaign runs
+([contributing](../docs/development/contributing.md#engine-changes-and-verification-coverage)). While the current campaign
+runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
+hold every world but the debug world (the package `worlds/debug/`,
+the one live world), each file at its old repository
+path, with the fixtures, laws, baselines and ledgers that only booted or tested
+them ([decision](../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs),
+[quarantined gates](../docs/plans/open-items.md#quarantined-gates)). Anything there
+that must keep working is rewritten as a real project or a `puck` verb. A
+deletion rides in the same change as the landing that eclipses it. Documents
+citing the old `tools/…`, `src/Puck.World/scripts/…` or former Post locations
+are stale; correct them where they live.

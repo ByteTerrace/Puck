@@ -8,6 +8,7 @@ public sealed partial class WorldDocument {
     // Set only while the single-threaded mutation apply call is running. It lets the deferred typed completion carry
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
+
     // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
     // State slices; overwritten by the next snapshot, like the entry array itself.
     private long[] m_snapshotState = [];
@@ -58,7 +59,7 @@ public sealed partial class WorldDocument {
                 principal: principal,
                 subject: sourceSubject
             )
-                    || !reach.Contains(ordinal: Host.Population.TargetRegisters.ReachOrdinal(index: registerIndex)))
+                    || !reach.ContainsRegister(index: registerIndex))
             ) {
                 return Refuse(
                     $"{principal.Describe()} Drive reach does not include target register '{designation.Register}'",

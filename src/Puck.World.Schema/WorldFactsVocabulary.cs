@@ -102,24 +102,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <summary>Returns a declared channel's ordinal, or <c>-1</c>.</summary>
     /// <param name="name">The channel name.</param>
     /// <returns>The ordinal, or <c>-1</c>.</returns>
-    public int ChannelOrdinal(string name) {
-        var channels = Definition.Channels;
-
-        for (var ordinal = 0; (ordinal < channels.Count); ordinal++) {
-            if (
-                (channels[ordinal] is { } channel) &&
-                string.Equals(
-                a: channel.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return ordinal;
-            }
-        }
-
-        return -1;
-    }
+    public int ChannelOrdinal(string name) => (WorldChannelTable.For(definition: Definition).TryGetOrdinal(name: name, ordinal: out var ordinal) ? ordinal : -1);
     /// <inheritdoc/>
     public override Draw? FindDraw(StateRow row) {
         ArgumentNullException.ThrowIfNull(argument: row);

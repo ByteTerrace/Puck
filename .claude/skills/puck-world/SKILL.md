@@ -241,7 +241,9 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices
 
 ### An agent's World opens no physical device
 
-The owner's ruling: any World an agent boots passes `--devices none`. Without it
+The owner's ruling: any World an agent boots passes `--devices none`; a World the
+owner asked to play in passes `--devices all` explicitly, and the
+`world-devices` hook refuses a boot that names neither. Without the flag
 a windowed World opens every physical controller (GameInput, XInput, HID pads)
 and keeps reading them while its window is in the background, so the owner's
 pad presses drive the agent's test World (one boot opened the owner's Xbox pad
@@ -397,6 +399,27 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
   and a lift.
+- Input has independent budgets of 32 numeric axes and 64 packed buttons. The
+  debug modules import one vocabulary in `worlds/debug/inputs.puck`; chess uses
+  shared `confirm` and `cancel`, independently of machine `select`. Resolve
+  names through `WorldChannelTable`: a declaration index is not a storage
+  address. Target-register reach has its own mask and budget. Relative input
+  shares the numeric bank as Q32.32 displacement: use the table's typed reader,
+  never a held-level reader. The host accumulates samples and drains once per
+  routed tick; rules read a Q48.16 projection with authoritative fractional
+  residue. Binding compilation must receive the routed channel shapes.
+  [Input channels](../../../docs/decisions/input-channels.md) owns this model
+  and the remaining authoritative-mode, release and timed-history steps.
+  Switching modes releases by default; declared same-meaning holds and toggles
+  may continue, while changed meanings and transition edges never cross the
+  epoch barrier.
+- A kit whose collider differs from the body's last one (a kit `select` by a
+  body register: the suit, noclip) steps the body to the nearest pose up its
+  axis or along world X or Z where the new volume is not embedded
+  (`WorldBody.EscapeEmbedding`), never down: the ordinary solve's shallowest
+  push from deep inside a box can be down through the floor. The debug world's
+  noclip (`worlds/debug/noclip.puck`) is a collider-less free-flight kit
+  selected through the `form` register (suit + 2 × noclip).
 - A moving floor is an attached solid placement riding a body (`attach` plus
   `solid`, analytic provider only); a body grounded on it rides it. The gallery
   lift moves its car body with a rule that `poseCell`s it along a box topology

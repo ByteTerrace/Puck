@@ -193,6 +193,65 @@ public sealed partial class WorldBody {
         }
     }
 
+    // The embedding escape's search: eighth-metre steps out to eight metres, and the push a free pose may still take
+    // (a body resting on a floor is pushed by up to its contact skin).
+    private const int EmbeddingEscapeSteps = 64;
+    private static readonly FixedQ4816 EmbeddingEscapeStep = FixedQ4816.FromRawBits(value: (1L << (FixedQ4816.FractionBitCount - 3)));
+    private static readonly FixedQ4816 EmbeddingFreePushSquared = FixedQ4816.FromRawBits(value: (1L << (FixedQ4816.FractionBitCount - 8)));
+
+    // Moves a body whose kit just handed it a different collider out of any static geometry that collider finds it
+    // embedded in: a body leaving a volumeless kit inside a wall, or one whose new volume is taller than the room it
+    // stands in. The ordinary solve pushes each volume out along its shallowest axis, which from deep inside a box can
+    // be down through the floor beneath it, so this searches the nearest free pose up the body's axis and along world
+    // X and Z, never down, and takes the first at the least distance (up wins a tie). A body nowhere free within the
+    // search keeps its pose and the ordinary solve resolves it.
+    private void EscapeEmbedding() {
+        if (
+            (m_contactField is not { } field) ||
+            (m_collider is null) ||
+            IsRigid ||
+            !IsEmbeddedAt(field: field, position: m_position)
+        ) {
+            return;
+        }
+
+        ReadOnlySpan<FixedVector3> directions = [m_up, FixedVector3.UnitX, -FixedVector3.UnitX, FixedVector3.UnitZ, -FixedVector3.UnitZ];
+
+        for (var step = 1; (step <= EmbeddingEscapeSteps); step++) {
+            var distance = (EmbeddingEscapeStep * FixedQ4816.FromInteger(value: step));
+
+            foreach (var direction in directions) {
+                var candidate = (m_position + (direction * distance));
+
+                if (!IsEmbeddedAt(field: field, position: candidate)) {
+                    WakeUp();
+                    m_position = candidate;
+
+                    return;
+                }
+            }
+        }
+    }
+    private static bool SameVolumes(FixedWorldCollider? left, FixedWorldCollider? right) =>
+        ((left is { } leftCollider) && (right is { } rightCollider))
+            ? leftCollider.Volumes.SequenceEqual(other: rightCollider.Volumes)
+            : (left.HasValue == right.HasValue);
+    // Whether the static solve pushes this body's volumes further than a resting contact would at a pose.
+    private bool IsEmbeddedAt(IContactField field, FixedVector3 position) {
+        var resolved = position;
+        var velocity = FixedVector3.Zero;
+
+        _ = field.Resolve(
+            orientation: in m_orientation,
+            position: ref resolved,
+            up: in m_up,
+            velocity: ref velocity,
+            volumes: ScaledColliderVolumes()
+        );
+
+        return ((resolved - position).LengthSquared > EmbeddingFreePushSquared);
+    }
+
     /// <summary>Applies one deterministic body-contact depenetration without turning it into a teleport. A body whose
     /// sweep was refused this tick (<see cref="SweepRefusedThisTick"/>) is immovable until the tick ends, so the
     /// correction is not applied.</summary>
