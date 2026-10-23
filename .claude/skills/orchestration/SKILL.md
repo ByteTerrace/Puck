@@ -143,8 +143,11 @@ An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
 its worktree, without `--mode`: headless flag validation rejects `--mode auto`
 before sign-in, while the user-level `agentMode: "auto"` applies afterwards.
 Auto mode ignores the ask list; git-safety refuses pushes and shared-state Git
-operations. The non-secret home policy still needs the owner's supplied block;
-login and trust material stay local. The workspace plugin exposes the MCP
+operations. A headless run executes only commands its user-level allow list
+names (`git`, `dotnet`, `pwsh`, `node`); any other command, such as `rm` or
+`Remove-Item`, is auto-denied and ends the run with no output, so a brief that
+deletes files says to use `git rm`. The home policy is the block contributing
+records; login and trust material stay local. The workspace plugin exposes the MCP
 configuration because a bare `.agents/mcp_config.json` is not a discovery root.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
