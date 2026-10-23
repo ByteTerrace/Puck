@@ -315,7 +315,7 @@ public sealed class MachineExtensionCatalogLawTests {
     private sealed class TinyContentProvider(string engineId, byte value) : IMachineContentProvider {
         public string EngineId => engineId;
 
-        public PreparedMachineContent Prepare(ReadOnlyMemory<byte> content) => new(
+        public PreparedMachineContent Prepare(ReadOnlyMemory<byte> content, string contentPath) => new(
             Image: [value],
             SourceHash: WorldDefinitionFileSource.ComputeContentHash(content: content.Span),
             Symbols: new Dictionary<string, MachineContentSymbol> {

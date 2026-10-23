@@ -249,6 +249,16 @@ Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
 never again becomes a slave to a recorded artifact, as it did with the deleted
 ledgers and the bake derivation fingerprint.
 
+The owner explicitly includes compiled cartridge JSON twins in this decision.
+Only their authored sources are committed; consumers compile those sources,
+and semantic compile/decompile round trips compare results produced in the run.
+The owner also includes the Maths coverage ratchet, its numeric floor and all
+recorded Maths registers in the no-recorded-ledgers ruling. The structural checks
+hold declaration/binding parity, member-reference resolution and waiver reasons;
+they read no recorded file and write no register. The retired ratchet
+grandfathered uncovered public members, so whole-public-surface completeness
+requires that remaining API to be classified in authored declarations first.
+
 ## Verification must match the claim
 
 Validate physical limits and report useful failures rather than silently

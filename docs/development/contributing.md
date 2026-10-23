@@ -101,9 +101,8 @@ macOS, and nothing here is verified there.
 - **Antigravity.** Install its CLI and sign in with the owner's account. Run
   `agy -p "<brief>" --output-format text` from the worktree, without `--mode`.
   Headless auto behavior comes from `agentMode: "auto"` in the home-only
-  `~/.gemini/antigravity-cli/settings.json`; the owner still needs to supply
-  or approve its necessary non-secret permission block. Do not copy credentials
-  or other home state. Auto mode does not consult the ask list; shared
+  `~/.gemini/antigravity-cli/settings.json`; the owner-approved settings below
+  record its necessary non-secret policy. Auto mode does not consult the ask list; shared
   git-safety refuses lane pushes and shared-state operations.
   The committed `.agents/hooks.json` and `.agents/skills.json` supply hooks
   and skills; hooks run with `.agents/` as their working directory. MCP is
@@ -126,6 +125,49 @@ macOS, and nothing here is verified there.
   ignored, so a checkout from then may hold untracked copies, and `git pull`
   refuses to overwrite them. Move them aside, pull, fold anything worth sharing
   from the old copies into `.claude/settings.json`, and delete the rest.
+
+### Antigravity user settings
+
+The owner approved recording this home settings file verbatim. The D:/Source
+paths name this machine's checkout; use the actual checkout paths on another
+machine. Login and trust state stays local; the workspace trust entry below
+records the approved configuration, not portable login or trust state.
+
+```json
+{
+  "agentMode": "auto",
+  "model": "Gemini 4 Argon (High)",
+  "permissions": {
+    "allow": [
+      "command(git)",
+      "command(dotnet)",
+      "command(pwsh)",
+      "command(node)",
+      "read_url(*)",
+      "mcp(puck/*)",
+      "write_file(D:/Source/ByteTerrace/Puck)",
+      "write_file(D:/Source/ByteTerrace/Puck/.git)"
+    ],
+    "ask": [
+      "command(regex:git push.*\\b(main|refs/heads/main)\\b)",
+      "command(regex:git push.*(--force|\\s-f\\b|--delete|--mirror|\\s:))",
+      "command(git reset)",
+      "command(git clean)",
+      "command(git branch -D)",
+      "command(git worktree remove)",
+      "command(git stash drop)",
+      "command(git stash clear)",
+      "command(git stash pop)",
+      "command(git checkout --)",
+      "command(git restore)",
+      "command(git filter-branch)"
+    ]
+  },
+  "trustedWorkspaces": [
+    "D:\\Source\\ByteTerrace\\Puck"
+  ]
+}
+```
 
 ## Find code and references
 

@@ -4,8 +4,7 @@ namespace Puck.Maths.Tests;
 
 /// <summary>
 /// The leg gate. Every gate statement in this suite declares the legs it stands on, and this fact proves the
-/// declarations exist and are well formed. It also claims the <c>leg-ledger.md</c> artifact for the run: the assembly
-/// ledger regenerates the file only when this gate ran, so a filtered run can neither refresh nor half-write it.
+/// declarations exist and are well formed.
 /// </summary>
 /// <remarks>
 /// What this gate DOES check: every statement names at least one leg; every leg carries the text its kind requires (an
@@ -19,20 +18,18 @@ namespace Puck.Maths.Tests;
 /// classical that actually shares an algorithm passes. Detecting a lying classification is the adversarial review's
 /// job.
 /// </remarks>
-public sealed class LegLedgerTests {
+public sealed class LawLegTests {
     [Fact]
     [Trait(name: "tier", value: "Default")]
     public void LawLegsAreDeclared() {
-        LedgerState.RecordLawLegGate();
-
-        var rows = LegLedger.LawRows();
+        var rows = LawLegs.LawRows();
 
         Assert.Equal(
             expected: LawRegistry.All.Count,
             actual: rows.Count
         );
 
-        var violations = LegLedger.DeclarationViolations(rows: rows);
+        var violations = LawLegs.DeclarationViolations(rows: rows);
 
         Assert.True(
             condition: (violations.Count == 0),
@@ -42,7 +39,7 @@ public sealed class LegLedgerTests {
             )}"
         );
 
-        var unresolved = LegLedger.UnresolvedSiblings(rows: rows);
+        var unresolved = LawLegs.UnresolvedSiblings(rows: rows);
 
         Assert.True(
             condition: (unresolved.Count == 0),
@@ -52,10 +49,5 @@ public sealed class LegLedgerTests {
             )}"
         );
 
-        // The committed ledger changes only through `puck baselines maths-ledger`, so every run holds it to the declarations.
-        Assert.True(
-            condition: (File.ReadAllText(path: TestPaths.Artifact(fileName: "leg-ledger.md")).ReplaceLineEndings(replacementText: "\n") == LegLedger.Render(lawRows: rows).ReplaceLineEndings(replacementText: "\n")),
-            userMessage: $"leg-ledger.md does not match the declarations; record it with {TestPaths.RecordCommand} and commit the result."
-        );
     }
 }

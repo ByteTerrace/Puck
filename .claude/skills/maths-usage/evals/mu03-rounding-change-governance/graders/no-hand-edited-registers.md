@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the generated registers (coverage-manifest.json, leg-ledger.md, frontier.json, RESULTS.md) are never hand-edited.
+The response classifies affected public members through authored law declarations or reasoned waivers and runs the relevant tier without generating or committing recorded registers.

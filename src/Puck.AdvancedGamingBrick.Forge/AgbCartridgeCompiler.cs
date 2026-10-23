@@ -31,6 +31,12 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint SceneAddress = 0x020000C1u;
 
     /// <inheritdoc />
+    bool Puck.Abstractions.Machines.IMachineContentProvider.Recognizes(string contentPath) =>
+        Puck.GamingBricks.Transpiler.CartridgeSource.Recognizes(path: contentPath);
+    Puck.Abstractions.Machines.PreparedMachineContent Puck.Abstractions.Machines.IMachineContentProvider.Prepare(ReadOnlyMemory<byte> content, string contentPath) =>
+        Puck.GamingBricks.Transpiler.CartridgeSource.Prepare(compiler: this, content: content, contentPath: contentPath);
+
+    /// <inheritdoc/>
     public string EngineId => "advanced-gaming-brick";
     /// <inheritdoc />
     public IReadOnlyList<string> Targets { get; } = ["agb"];

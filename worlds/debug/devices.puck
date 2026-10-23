@@ -1153,7 +1153,7 @@ machines [
       schema: "puck.gaming-brick.configuration.v1"
       model: "cgb"
       content {
-        path: "cartridges/cgb/tetromino.cgb.cartridge.json"
+        path: "cartridges/cgb/tetromino.cgb.puck"
       }
     }
     contentFolders ["cartridges/cgb", "cartridges/dmg", "../../roms/hgb"]
@@ -1165,7 +1165,7 @@ machines [
     configuration {
       schema: "puck.advanced-gaming-brick.config.v1"
       content {
-        path: "cartridges/agb/pip.agb.cartridge.json"
+        path: "cartridges/agb/pip.agb.puck"
       }
     }
     contentFolders ["cartridges/agb", "../../roms/agb"]

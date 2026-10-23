@@ -397,8 +397,7 @@ internal static class BinaryFieldWideDegreeClaims {
         );
     /// <summary>The scale sibling of <see cref="WideDegreeIrreducibilityCertificatesSurface"/>: sixteen thousand moduli
     /// scanned at each wide degree with EVERY accepted one certified, and sixty reducible constructions per degree
-    /// rejected. Written inline rather than through a <c>Domain</c>, because an Exhaustive case that consumed one would
-    /// advance the frontier counter its Default sibling reads.</summary>
+    /// rejected. Written inline rather than through a <c>Domain</c>, because this finite sweep has its own explicit basis.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? WideDegreeIrreducibilitySweepSurface() =>
         WideDegreeIrreducibilityFailure(

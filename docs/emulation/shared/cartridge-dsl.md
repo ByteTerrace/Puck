@@ -4,15 +4,16 @@ Authors `puck.cartridge.v1` documents in the Puck DSL. The language itself—par
 formatter, units—is [`Puck.Transpiler`](../../reference/dsl.md); this project is the vocabulary that knows
 what a cartridge's sections mean, the peer of `Puck.World.Transpiler`.
 
-Both artifacts are committed: the source and the cartridge document it generates. The regeneration gate in
-`tests/Puck.GamingBricks.Transpiler.Tests` compiles the committed source and compares it byte for byte against the
-committed document, so the two can never drift apart quietly.
+Only authored sources are committed. Compiled cartridge documents are derived
+caches: consumers compile the source when needed. The round-trip suite compiles
+each source, decompiles the fresh document, and checks semantic equivalence after
+recompilation.
 
 ## Round trip
 
 ```bash
-puck decompile worlds/debug/cartridges/cgb/tetromino.cgb.cartridge.json --output tetromino.cgb.puck
-puck compile tetromino.cgb.puck --output tetromino.cgb.cartridge.json --validate
+puck compile worlds/debug/cartridges/cgb/tetromino.cgb.puck --output .claude/scratch/example-cartridge.cartridge.json --validate
+puck decompile .claude/scratch/example-cartridge.cartridge.json --output .claude/scratch/example-cartridge.puck
 ```
 
 `--validate` runs the forge's own document validation (`CartridgeDocuments.Validate`) over the lowered JSON:
@@ -21,7 +22,7 @@ lowering only proves the source was well formed, never that the cartridge is leg
 `puck lint` and the CLI language server select this vocabulary from `schema: "puck.cartridge.v1"`, use the same
 forge validation, and locate errors at their authored rows or properties. Editor completions also follow the
 schema. Without `--output`, compile writes `<source>.cartridge.json` for a cartridge and `<source>.world.json`
-for a world. The regeneration gate covers every committed `.puck` cartridge source.
+for a world. The semantic round-trip check covers every committed `.puck` cartridge source.
 
 Runtime value fields accept ordinary expressions: `x: cursor + 1` and `map(row: cursor + 1, column: 0, tile: 0)`
 have the same meaning as quoted operand spellings, including fields inside object literals and generated arrays.

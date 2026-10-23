@@ -41,11 +41,16 @@ agent works in that mode by default, without asking:
     Post expectation ledgers (`Expectations.json`,
     `AccuracyCoinExpectations.json`, `--accept`, `--lane`) and the recorded
     snapshot layout hashes are deleted, with the verbs and analyzers that
-    maintained them.
+    maintained them. The owner explicitly includes the Maths coverage ratchet,
+    its floor, and all recorded Maths registers; structural declaration/binding
+    completeness and member references are checked from current LawRegistry
+    data, without a recorded file.
   - Shipped derived products (baked meshes and the like) are caches, never the
     truth: identity computed from inputs, never recorded; a miss is derived
     again and counted, never refused; never committed; never compared by a
-    gate ([decision](docs/decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+    gate. The owner explicitly includes cartridge JSON twins: commit the
+    authored `.puck` sources and compile them when needed
+    ([decision](docs/decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
   - Direct3D 12 is the primary backend during development; Vulkan catches up
     when the owner calls for qualification.
   - Every project stays in the build.

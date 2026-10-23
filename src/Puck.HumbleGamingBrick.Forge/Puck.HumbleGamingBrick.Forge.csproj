@@ -12,6 +12,7 @@
         <RootNamespace>Puck.HumbleGamingBrick.Forge</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="../Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
         <ProjectReference Include="../Puck.GamingBricks.Forge/Puck.GamingBricks.Forge.csproj" />
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
         <ProjectReference Include="../Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />

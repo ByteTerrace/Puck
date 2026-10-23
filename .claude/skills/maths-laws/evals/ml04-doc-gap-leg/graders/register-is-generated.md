@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says leg-ledger.md is generated and never hand-edited, and that the divergence closes only by correcting the code or the doc and re-spelling the leg.
+The response records the mismatch in the authored structural leg, and says it closes by correcting the code or documentation and updating that leg, without generating or editing a recorded register.

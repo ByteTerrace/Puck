@@ -1,6 +1,6 @@
 # Cartridge Forge and puck.cartridge.v1 authoring
 
-Players author ROMs as `puck.cartridge.v1` JSON documents. This package owns
+Players author ROMs as `.puck` sources lowering to `puck.cartridge.v1` documents. This package owns
 the source model, validation, canonical source hash, JSON Pointer editor, and
 compiler contract. It has no World or platform dependency. The
 [HGB compiler](../hgb/forge.md) emits CGB and DMG cartridges;
@@ -9,8 +9,8 @@ cartridges. The exported bytes run on their native emulators without a managed
 game interpreter. There are no embedded sample games.
 
 `ICartridgeCompiler` implements the neutral `IMachineContentProvider` contract
-from `Puck.Abstractions.Machines`. The adapter recognizes cartridge document
-paths, validates and compiles their bytes, and exports source identity, named
+from `Puck.Abstractions.Machines`. The native providers recognize cartridge .puck sources and JSON documents,
+resolve source imports beside the resolved content path, validate and compile the document, and exports source identity, named
 bus addresses, and the `puck.cartridge.v1` format marker only after successful
 preparation. Generic machine hosts consume `PreparedMachineContent` without
 referencing this package or its cartridge schema. Each forge registers its

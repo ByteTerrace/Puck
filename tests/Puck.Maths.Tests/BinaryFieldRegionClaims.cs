@@ -19,7 +19,7 @@ namespace Puck.Maths.Tests;
 /// <see cref="BinaryFieldRegionTier"/> are public, so <see cref="RegionTiersVsScalarRungSurface"/>,
 /// <see cref="WideRegionTiersVsScalarRungSurface"/> and <see cref="RegionLengthsVsScalarRungSurface"/> invoke every
 /// named rung directly, bypassing dispatch, exactly as the byte and wide region-tier walks below do, and the coverage
-/// manifest credits each rung, its lane operations and its tier label to them. What is NOT covered is the
+/// declaration binds each rung, its lane operations and its tier label to them. What is NOT covered is the
 /// process relaunch under instruction-set-suppression environment knobs, which forced one host through every
 /// fallback regardless of its own hardware; this suite has no relaunch primitive, so a rung this host's hardware does
 /// not support is skipped rather than forced — see each new law's ENVELOPE legs. <see cref="LawRegistry"/> invokes

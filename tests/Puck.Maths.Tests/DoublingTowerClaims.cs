@@ -311,7 +311,7 @@ internal static class DoublingTowerClaims {
 
     // ---------------------------------------------------------------------------------------------------------
     // FLOOR 1: DoublingAlgebra<FixedScalarRing> vs FixedComplex, full raw range — Add, Subtract, Negate, Conjugate
-    // and Norm were entirely uncovered in the ratchet (Multiply is credited generically via the octonion-floor twin
+    // and Norm were entirely without law bindings (Multiply is credited generically via the octonion-floor twin
     // laws, but no case had ever exercised the Floor 1 delegation itself before this law).
 
     public static string? DoublingFloor1MatchesFixedComplexSurface() {
@@ -572,7 +572,7 @@ internal static class DoublingTowerClaims {
     }
     // ---------------------------------------------------------------------------------------------------------
     // QuadraticAlgebra<FixedQ4816>.{Add,Subtract,Negate,Conjugate} at the (0,-1) relation, full raw range — these
-    // four members were entirely uncovered in the ratchet (only Multiply/Norm/MobiusStep have twin laws).
+    // four members were entirely without law bindings (only Multiply/Norm/MobiusStep have twin laws).
 
     public static string? QuadraticTwinLinearOpsFullRangeSurface() {
         var algebra = QuadraticAlgebra<FixedQ4816>.Create(

@@ -38,7 +38,7 @@ namespace Puck.Maths.Tests;
 /// </para>
 /// <para>
 /// The declaration in <see cref="LawRegistry"/> invokes this method as a Default-tier law, so it participates in both
-/// the ordinary test gate and the mechanically generated public-member coverage ledger.
+/// the ordinary test gate and the structural public-member law-completeness check.
 /// </para>
 /// </remarks>
 internal static class WorldCoordClaims {

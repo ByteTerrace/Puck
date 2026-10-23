@@ -1,6 +1,6 @@
 ---
 name: maths-laws
-description: "Authors Puck.Maths.Tests laws: laws/*.json rows, LawRegistry bindings, oracles, legs, waivers, the coverage ratchet, puck baselines maths-ledger. Primitive choice: maths-usage."
+description: "Authors Puck.Maths.Tests laws: laws/*.json rows, LawRegistry bindings, oracles, legs, waivers, structural law completeness. Primitive choice: maths-usage."
 ---
 
 # Writing a Puck.Maths law that bites
@@ -25,10 +25,9 @@ decision here.
   coverage; write one only for a domain Default cannot reach (the exhaustive
   edge cross product, a whole finite carrier, a longer ladder), and delete a
   mirror you touch that does not.
-- The suite's own machinery (the coverage ratchet, the leg gate, declaration
-  parity, the recorded registers) was written by agents and is a tool, not a
-  precondition. When it blocks a deletion, rename or restructure, change it in
-  the same change.
+- The owner's ruling deletes the Maths coverage ratchet, its floor, all recorded
+  registers and their generator. Keep structural declaration/binding completeness and member-reference checks
+  against current LawRegistry data; write no recorded artifact.
 
 ## Required workflow
 
@@ -37,7 +36,7 @@ decision here.
    `tests/Puck.Maths.Tests/laws/<family>.json`, and one binding in
    `LawRegistry.cs` or its per-family partial (`ClaimCase`, `SweptCase`, or
    `Case(id, run)` for any other run). A bare `[Fact]` runs but credits no
-   member to the ratchet and declares no leg. A declaration without a binding,
+   member to the structural completeness check and declares no leg. A declaration without a binding,
    or a binding without a declaration, fails
    `LawDeclarationTests.EveryDeclarationHasExactlyOneCase` by name.
 2. Choose the cheapest honest tier by measured cost, not by whether the word
@@ -50,14 +49,11 @@ decision here.
 5. Give the claim independent evidence. A second expression of the same
    implementation is not an oracle: reference arithmetic lives in `Oracles.cs`,
    computed in `BigInteger`, and never calls a `Puck.Maths` kernel.
-6. Classify every affected public Maths member in the coverage ratchet with a
-   covering law (`Members` in the declaration) or a precise waiver
-   (`Coverage.WaiverDeclarations`). The ratchet fails on every run for a member
-   classified nowhere and cannot heal itself.
-7. Regenerate the machine-owned registers with `puck baselines maths-ledger`
-   and commit them; never hand-edit `coverage-manifest.json`, `leg-ledger.md`,
-   `frontier.json` or `RESULTS.md`. A test run writes only to the build output.
-8. When it is in doubt whether a new law can fail, apply a plausible one-line
+6. Classify every affected public Maths member with a covering law (`Members`
+   in its declaration) or a precise waiver (`Coverage.WaiverDeclarations`).
+   `LawCompletenessTests` validates those references and waiver reasons without a
+   baseline; declaration/binding parity lives in `LawDeclarationTests`.
+7. When it is in doubt whether a new law can fail, apply a plausible one-line
    mutation in a worktree of your own and watch the law go red, or run
    `puck laws prove <law> --fix <commit>` (`--file-list` for an uncommitted
    fix). Most laws are rows of one theory, which `puck laws prove` cannot
@@ -65,10 +61,8 @@ decision here.
    the intended assertion, and name the mutation in the commit. Never
    hand-revert files in a shared tree.
 
-Deleting a law removes its JSON row, its binding and any oracle only it used,
-then regenerates the registers. The frontier writer drops keys whose Domain
-fields no longer exist in LawRegistry; active domains a filtered run skips
-keep their counters.
+Deleting a law removes its JSON row, binding and any oracle only it used.
+Every run uses the same deterministic operand window; no counter is persisted.
 
 ## Run a tier
 
@@ -81,7 +75,7 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 
 `dotnet test` forwards switches it does not know to the test host, which exits
 5, so `-nodeReuse:false` belongs to the build step only. The plain run is the
-Default tier (about half a minute) and includes the ratchet and leg gates,
+Default tier and includes the completeness and leg checks,
 which only a run that includes the Default tier checks. Deep and Exhaustive
 cases are explicit:
 `--explicit on --filter-trait tier=<tier>`, and without `--explicit on` such a

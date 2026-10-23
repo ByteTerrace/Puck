@@ -13,7 +13,7 @@ namespace Puck.GamingBricks.Transpiler.Tests;
 public class CartridgeRoundTripTests {
     // The shipped tetromino cartridge, which exercises every action kind, both condition kinds, all eight arithmetic
     // operations and nested control flow.
-    private static readonly string TetrominoPath = RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/tetromino.cgb.cartridge.json");
+    private static readonly string TetrominoPath = RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges/cgb/tetromino.cgb.puck");
 
     // Both sides go through the emitter's own canonicalizer, so the comparison is about content rather than about
     // which order the two producers happened to write their keys in.
@@ -275,44 +275,6 @@ public class CartridgeRoundTripTests {
             step["value"]?.GetValue<string>()
         );
     }
-    [MemberData(nameof(CommittedSources))]
-    [Theory]
-    public void TestCommittedSourceCompilesToTheCommittedDocument(string sourcePath) {
-        var diagnostics = new DiagnosticBag();
-        var parsed = PuckParser.ParseDocumentWithDiagnostics(
-            source: File.ReadAllText(path: sourcePath),
-            diagnostics: diagnostics
-        ).Value;
-
-        Assert.NotNull(@object: parsed);
-
-        var lowered = CartridgeDocumentEmitter.LowerSource(
-            cancellationToken: TestContext.Current.CancellationToken,
-            diagnostics: diagnostics,
-            document: parsed,
-            sourcePath: sourcePath
-        );
-
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: string.Join(
-                separator: "\n",
-                values: diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
-            )
-        );
-
-        var compiled = CanonicalJsonDocument.Serialize(node: lowered.Value!);
-
-        // Both artifacts are committed, so this is the regeneration gate: the source and the document it generates
-        // can never drift apart without failing here.
-        Assert.Equal(
-            File.ReadAllBytes(path: Path.ChangeExtension(
-                extension: ".cartridge.json",
-                path: sourcePath
-            )),
-            compiled
-        );
-    }
     [Fact]
     public void TestAnImportThatDoesNotResolveRefusesTheSource() {
         var diagnostics = new DiagnosticBag();
@@ -339,7 +301,7 @@ public class CartridgeRoundTripTests {
     }
     [Fact]
     public void TestCompilingTwiceProducesTheSameBytes() {
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse(File.ReadAllText(path: TetrominoPath)));
+        var original = Assert.IsType<JsonObject>(@object: CartridgeSource.Lower(content: File.ReadAllBytes(path: TetrominoPath), sourcePath: TetrominoPath));
         var source = CartridgeDecompiler.Decompile(document: original);
 
         Assert.Equal(
@@ -559,10 +521,7 @@ public class CartridgeRoundTripTests {
     [MemberData(nameof(CommittedSources))]
     [Theory]
     public void TestEveryCommittedCartridgeSurvivesADecompileAndRecompile(string sourcePath) {
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse(File.ReadAllText(path: Path.ChangeExtension(
-            extension: ".cartridge.json",
-            path: sourcePath
-        ))));
+        var original = Assert.IsType<JsonObject>(@object: CartridgeSource.Lower(content: File.ReadAllBytes(path: sourcePath), sourcePath: sourcePath));
         var canonicalOriginal = Canonical(document: original);
 
         var source = CartridgeDecompiler.Decompile(document: original);

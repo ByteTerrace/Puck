@@ -32,7 +32,7 @@ public sealed class MachineCartridgeLawTests {
     // worth asserting is self-referential and lives below: the same document binds to the same image every time, and
     // the settled frame is a real picture rather than a blank one.
     /// <summary>The shipped cartridge these laws drive. They assert nothing about which game it is.</summary>
-    private const string CartridgeFile = "hgb-mirror.cgb.cartridge.json";
+    private const string CartridgeFile = "hgb-mirror.cgb.puck";
     private const string CgbEngine = "gaming-brick";
     private const int MachineScreen = 8;
     private const int SettleFrames = 12;
@@ -40,14 +40,14 @@ public sealed class MachineCartridgeLawTests {
     // The machine-host laws carry their OWN cartridges rather than reading whichever ones the game ships. A law
     // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
     // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
-    // A shipped cartridge sits in the folder its target names: <name>.<target>.cartridge.json under cartridges/<target>.
+    // A shipped cartridge sits in the folder its target names: <name>.<target>.puck under cartridges/<target>.
     private static string CartridgePath(string file) => Path.Combine(
         path1: RepositoryPaths.Resolve(relativePath: "worlds/debug/cartridges"),
         path2: file.Split(separator: '.')[1],
         path3: file
     );
     private static CartridgeCompilation CompileOutOfBand(string engine, string path) =>
-        ((ICartridgeCompiler)TestMachines.Catalog().ContentProviders[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));
+        ((ICartridgeCompiler)TestMachines.Catalog().ContentProviders[engine]).Compile(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: path));
     // The compiled image's picture after SettleFrames frames from reset, on the forge's own verify driver, folded
     // FNV-1a over the pixel words; the distinct-pixel count rides along as the content gate (a blank frame never
     // reaches the pinned comparison).
@@ -171,7 +171,7 @@ public sealed class MachineCartridgeLawTests {
     }
 
     [InlineData(CartridgeFile, CgbEngine, "cgb")]
-    [InlineData("pip.agb.cartridge.json", AgbEngine, "stub")]
+    [InlineData("pip.agb.puck", AgbEngine, "stub")]
     [Theory]
     public void ACartridgePathBindsAndTheMachineRunsTheCompiledImage(string file, string engine, string options) {
         var path = CartridgePath(file: file);
@@ -269,7 +269,7 @@ public sealed class MachineCartridgeLawTests {
     [Fact]
     public void AMalformedCartridgeRefusesTheBindWithTheForgesOwnMessage() {
         using var files = new TemporaryDirectory();
-        var good = JsonNode.Parse(json: File.ReadAllText(path: CartridgePath(file: "hgb-mirror.cgb.cartridge.json")))!.AsObject();
+        var good = Puck.GamingBricks.Transpiler.CartridgeSource.Lower(content: File.ReadAllBytes(path: CartridgePath(file: "hgb-mirror.cgb.puck")), sourcePath: CartridgePath(file: "hgb-mirror.cgb.puck"));
 
         // Three colors in a background palette where the CGB target needs four — the forge's own validator names it.
         good["palettes"]!["background"] = new JsonArray(new JsonArray(
@@ -301,7 +301,7 @@ public sealed class MachineCartridgeLawTests {
     }
     [Fact]
     public void TheSameDocumentCompilesToByteIdenticalImagesAcrossTwoBinds() {
-        var path = CartridgePath(file: "hgb-mirror.cgb.cartridge.json");
+        var path = CartridgePath(file: "hgb-mirror.cgb.puck");
         using var first = Fixtures.FreshServer(
             definition: WithMachineScreen(
                 contentPath: path,
@@ -327,7 +327,7 @@ public sealed class MachineCartridgeLawTests {
         Assert.NotNull(value: second.Server.Machines.InstanceState(name: "cabinet"));
     }
     [InlineData(CartridgeFile, CgbEngine)]
-    [InlineData("pip.agb.cartridge.json", AgbEngine)]
+    [InlineData("pip.agb.puck", AgbEngine)]
     [Theory]
     public void WorldCheckpointPreservesSteppedMachineAndItsContinuation(string file, string engine) {
         var definition = WithMachineScreen(

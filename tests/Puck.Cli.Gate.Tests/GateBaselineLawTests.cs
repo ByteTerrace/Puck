@@ -7,7 +7,7 @@ namespace Puck.Cli.Gate.Tests;
 
 public sealed class GateBaselineLawTests : GateRunLaws {
     [InlineData("worlds/debug/game.puck", "corpus-inventory")]
-    [InlineData("build/trigger.props", "browser-parity,corpus-inventory,maths-ledger")]
+    [InlineData("build/trigger.props", "browser-parity,corpus-inventory")]
     [InlineData("docs/only.md", "")]
     [Theory]
     public void ReachedBaselinesRunOnceInOrderThroughAdmissionAndBothLogsBeforeGpu(string path, string names) {
@@ -62,7 +62,7 @@ public sealed class GateBaselineLawTests : GateRunLaws {
         var lines = text.ToString().Split(separator: Environment.NewLine, options: StringSplitOptions.RemoveEmptyEntries);
         var printed = new List<string[]>();
 
-        foreach (var name in new[] { "browser-parity", "corpus-inventory", "maths-ledger" }) {
+        foreach (var name in new[] { "browser-parity", "corpus-inventory" }) {
             var index = Array.IndexOf(array: lines, value: ("baseline " + name));
 
             Assert.True(condition: (index >= 0), userMessage: $"Missing baseline {name} line.");

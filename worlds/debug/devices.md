@@ -148,7 +148,7 @@ has two.
 The shipped cartridges sit one folder per forge target, `cartridges/cgb/`,
 `cartridges/dmg/` and `cartridges/agb/`, each source beside its compiled
 document. A device lists every file in its folders, each mountable or refused
-with the reason: a brick mounts the `.cartridge.json` documents and any raw
+with the reason: a brick mounts the `.puck` documents and any raw
 image whose header it runs (the header checksum holds and the mapper is one it
 implements), whatever the file's extension, so a cartridge's `.puck` source is
 listed as refused; the advanced brick mounts an image whose header holds the

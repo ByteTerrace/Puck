@@ -31,16 +31,6 @@
     }]
   },
   {
-    "Id": "core.frontier-drops-retired-domains",
-    "Tier": "Default",
-    "Members": [],
-    "Legs": [{
-      "Kind": "Structural", "Flavor": "None",
-      "Subject": "A green consuming run removes retired domains, advances consumed active domains once and preserves dormant active domains; failed and non-consuming runs change nothing.",
-      "Against": "", "Shared": "", "Citation": "", "Absolute": ""
-    }]
-  },
-  {
     "Id": "symmetric-solve.inverse-shift-refusal",
     "Tier": "Default",
     "Members": [

@@ -75,13 +75,13 @@ public sealed class MachineContentFolderLawTests {
         _ = Directory.CreateDirectory(path: local);
         _ = Directory.CreateDirectory(path: junk);
         _ = Directory.CreateDirectory(path: root.PathOf(name: "empty"));
-        File.Copy(destFileName: Path.Combine(path1: carts, path2: "mirror.cgb.cartridge.json"), sourceFileName: Shipped(relativePath: "cartridges/cgb/hgb-mirror.cgb.cartridge.json"));
-        File.Copy(destFileName: Path.Combine(path1: carts, path2: "gun.cgb.cartridge.json"), sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.cartridge.json"));
-        File.Copy(destFileName: Path.Combine(path1: carts, path2: "gun.dmg.cartridge.json"), sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.cartridge.json"));
-        File.Copy(destFileName: Path.Combine(path1: carts, path2: "mirror.cgb.puck"), sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.puck"));
+        File.WriteAllBytes(path: Path.Combine(path1: carts, path2: "mirror.cgb.cartridge.json"), bytes: Puck.GamingBricks.Forge.CartridgeDocuments.Canonicalize(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: Shipped(relativePath: "cartridges/cgb/hgb-mirror.cgb.puck"))).Bytes);
+        File.WriteAllBytes(path: Path.Combine(path1: carts, path2: "gun.cgb.cartridge.json"), bytes: Puck.GamingBricks.Forge.CartridgeDocuments.Canonicalize(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.puck"))).Bytes);
+        File.WriteAllBytes(path: Path.Combine(path1: carts, path2: "gun.dmg.cartridge.json"), bytes: Puck.GamingBricks.Forge.CartridgeDocuments.Canonicalize(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.puck"))).Bytes);
+        File.Copy(destFileName: Path.Combine(path1: carts, path2: "source.cgb.puck"), sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.puck"));
         File.WriteAllBytes(bytes: BrickImage(type: 0x00), path: Path.Combine(path1: local, path2: "plain.rom"));
         File.WriteAllBytes(bytes: BrickImage(type: 0x20), path: Path.Combine(path1: local, path2: "banked.rom"));
-        File.Copy(destFileName: Path.Combine(path1: local, path2: "gun.cgb.cartridge.json"), sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.cartridge.json"));
+        File.WriteAllBytes(path: Path.Combine(path1: local, path2: "gun.cgb.cartridge.json"), bytes: Puck.GamingBricks.Forge.CartridgeDocuments.Canonicalize(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.puck"))).Bytes);
         File.WriteAllText(contents: "not a cartridge", path: Path.Combine(path1: junk, path2: "notes.txt"));
         File.WriteAllBytes(bytes: new byte[0x40], path: Path.Combine(path1: junk, path2: "short.rom"));
 
@@ -134,7 +134,6 @@ public sealed class MachineContentFolderLawTests {
 
         return (fixture, new CommandRegistry(modules: [new WorldMachineCommandModule(authority: new FixtureAuthority(instance: instance))]));
     }
-
     // Re-applies the cabinet document through the reload leaf, as world.reload does, and runs the tick it lands in.
     private static void Reload(WorldFixture fixture, TemporaryDirectory root) {
         var path = Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json");
@@ -234,7 +233,7 @@ public sealed class MachineContentFolderLawTests {
             Assert.Contains(expectedSubstring: "no machine 'nobody'", actualString: registry.Submit(line: "machine.default nobody plain.rom").Output);
             Assert.Contains(
                 expectedSubstring: "requires a local console or seat",
-                actualString: registry.SubmitSession(line: "machine.default cabinet plain.rom", session: new TextCommandSource(registry: registry).CreateSession(principal: Principal.Peer(index: 0, generation: 0))).Output
+                actualString: registry.SubmitSession(line: "machine.default cabinet plain.rom", session: new TextCommandSource(registry: registry).CreateSession(principal: Principal.Peer(generation: 0, index: 0))).Output
             );
 
             // A folder whose settings cannot be written refuses by name.
@@ -289,18 +288,19 @@ public sealed class MachineContentFolderLawTests {
         Assert.Throws<ArgumentException>(testCode: () => WorldMachineContentFolder.WriteSettings(folder: local, name: WorldMachineContentFolder.SettingsFile));
         Assert.Throws<ArgumentException>(testCode: () => WorldMachineContentFolder.WriteSettings(folder: local, name: ".."));
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: WithCabinet(contentFolders: null, preferFolderDefault: true), machines: TestMachines.Catalog(), neighbours: null, reason: out var unfoldered));
-        Assert.Contains(expectedSubstring: "preferFolderDefault needs contentFolders", actualString: unfoldered);
+        Assert.Contains(actualString: unfoldered, expectedSubstring: "preferFolderDefault needs contentFolders");
     }
     [Fact]
     public void TheFoldersListWhatTheEngineMountsAndASwapMountsItByName() {
         using var root = Layout();
+
         var (fixture, registry) = Boot(contentFolders: ["../carts", "../local", "../missing", "../empty", "../junk"], root: root);
 
         using (fixture) {
             var listed = registry.Submit(line: "machine.content cabinet");
 
             Assert.False(condition: listed.IsError, userMessage: listed.Output);
-            Assert.Contains(expectedSubstring: $"mounted={Mirror} mountable=5 refused=4", actualString: listed.Output);
+            Assert.Contains(expectedSubstring: $"mounted={Mirror} mountable=6 refused=3", actualString: listed.Output);
             Assert.Contains(expectedSubstring: "| folder path=../carts", actualString: listed.Output);
             Assert.Contains(expectedSubstring: "present=true files=4", actualString: listed.Output);
             // A folder that does not exist, and one that is empty, are listed, never refused.
@@ -312,7 +312,7 @@ public sealed class MachineContentFolderLawTests {
             // A raw image is admitted by its header, whatever its extension; the rest are refused with the reason.
             Assert.Contains(expectedSubstring: "| plain.rom folder=../local mounted=false |", actualString: listed.Output);
             Assert.Contains(expectedSubstring: "| banked.rom folder=../local mounted=false refused=\"cartridge type 0x20 names a mapper the machine does not implement\"", actualString: listed.Output);
-            Assert.Contains(expectedSubstring: "| mirror.cgb.puck folder=../carts mounted=false refused=\"no gaming-brick cartridge header", actualString: listed.Output);
+            Assert.Contains(expectedSubstring: "| source.cgb.puck folder=../carts mounted=false |", actualString: listed.Output);
             Assert.Contains(expectedSubstring: "| short.rom folder=../junk mounted=false refused=\"the image is 64 bytes, shorter than its 0x150-byte header\"", actualString: listed.Output);
             Assert.Contains(expectedSubstring: "| notes.txt folder=../junk mounted=false refused=", actualString: listed.Output);
 
@@ -338,7 +338,7 @@ public sealed class MachineContentFolderLawTests {
             Assert.Contains(expectedSubstring: "status=Applied", actualString: registry.Submit(line: "machine.swap cabinet ../local/gun.cgb.cartridge.json").Output);
             Assert.Contains(expectedSubstring: "mounted=../local/gun.cgb.cartridge.json", actualString: registry.Submit(line: "machine.content cabinet").Output);
 
-            // A stem two mountable files share names neither; a refused source sharing a stem does not count.
+            // A stem two mountable files share names neither; source files are mountable alongside JSON documents.
             Assert.Contains(expectedSubstring: "give the whole file name", actualString: registry.Submit(line: "machine.swap cabinet gun").Output);
             Assert.Contains(expectedSubstring: "status=Applied", actualString: registry.Submit(line: "machine.swap cabinet mirror").Output);
             Assert.Contains(expectedSubstring: $"mounted={Mirror}", actualString: registry.Submit(line: "machine.content cabinet").Output);
@@ -356,6 +356,7 @@ public sealed class MachineContentFolderLawTests {
     [Fact]
     public void AMachineWhoseContentAndFoldersAreAbsentBootsWithNoCartridge() {
         using var root = Layout();
+
         var (fixture, registry) = Boot(contentFolders: ["../missing", "../empty"], contentPath: "../missing/boot.cgb.cartridge.json", root: root);
 
         using (fixture) {
@@ -389,6 +390,7 @@ public sealed class MachineContentFolderLawTests {
     [Fact]
     public void AFolderThatVanishesWhileTheWorldRunsLeavesTheMountedCartridgeRunning() {
         using var root = Layout();
+
         var (fixture, registry) = Boot(contentFolders: ["../carts", "../local"], root: root);
 
         using (fixture) {
@@ -425,6 +427,7 @@ public sealed class MachineContentFolderLawTests {
     [Fact]
     public void AReloadedDocumentResolvesItsMachineContentBesideItsFile() {
         using var root = Layout();
+
         var (fixture, registry) = Boot(contentFolders: ["../carts"], root: root);
 
         using (fixture) {
@@ -469,7 +472,7 @@ public sealed class MachineContentFolderLawTests {
         var outside = Path.Combine(path1: root.PathOf(name: "world"), path2: "outside.cgb.cartridge.json");
         var nested = Path.Combine(path1: root.PathOf(name: "carts"), path2: "nested");
 
-        File.Copy(destFileName: outside, sourceFileName: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.cartridge.json"));
+        File.WriteAllBytes(path: outside, bytes: Puck.GamingBricks.Forge.CartridgeDocuments.Canonicalize(document: Puck.GamingBricks.Transpiler.CartridgeSource.Read(sourcePath: Shipped(relativePath: "cartridges/cgb/light-gun.cgb.puck"))).Bytes);
         _ = Directory.CreateDirectory(path: nested);
         File.Copy(destFileName: Path.Combine(path1: nested, path2: "deep.cgb.cartridge.json"), sourceFileName: outside);
 
@@ -504,6 +507,7 @@ public sealed class MachineContentFolderLawTests {
     [Fact]
     public void AMachineWithNoFoldersListsNothingAndMountsOnlyItsOwnContent() {
         using var root = Layout();
+
         var (bare, bareRegistry) = Boot(contentFolders: null, root: root);
 
         using (bare) {
@@ -550,7 +554,7 @@ public sealed class MachineContentFolderLawTests {
             machine: tunes,
             reason: out var unresolved
         ));
-        Assert.Contains(expectedSubstring: "contentFolders", actualString: unresolved);
+        Assert.Contains(actualString: unresolved, expectedSubstring: "contentFolders");
     }
     // Each engine judges a raw image by its header alone: its own format and a board it implements run, anything
     // else is refused with the reason, and an engine that judges no image refuses every one.
@@ -562,22 +566,22 @@ public sealed class MachineContentFolderLawTests {
         agb[0x0B2] = 0x96;
         agb[0x0BD] = AgbCartridgeHeader.ComputeComplementChecksum(rom: agb);
 
-        byte[] Nes(byte flags6) => [(byte)'N', (byte)'E', (byte)'S', 0x1A, 1, 1, flags6, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        byte[] Nes(byte flags6) => [((byte)'N'), ((byte)'E'), ((byte)'S'), 0x1A, 1, 1, flags6, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
         Assert.Equal(expected: CartridgeHeader.Length, actual: catalog.ImageHeaderLength(engineId: "gaming-brick"));
-        Assert.Null(@object: catalog.RefuseImage(engineId: "gaming-brick", header: BrickImage(type: 0x1B).AsSpan(start: 0, length: CartridgeHeader.Length), imageLength: 0x8000));
+        Assert.Null(@object: catalog.RefuseImage(engineId: "gaming-brick", header: BrickImage(type: 0x1B).AsSpan(length: CartridgeHeader.Length, start: 0), imageLength: 0x8000));
         Assert.Null(@object: catalog.RefuseImage(engineId: "advanced-gaming-brick", header: agb, imageLength: 0x10000));
-        Assert.Contains(expectedSubstring: "no advanced-gaming-brick cartridge header", actualString: catalog.RefuseImage(engineId: "advanced-gaming-brick", header: BrickImage(type: 0x00).AsSpan(start: 0, length: AgbCartridgeHeader.Length), imageLength: 0x8000));
-        Assert.Null(@object: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x00), imageLength: (16 + 16384 + 8192)));
-        Assert.Contains(expectedSubstring: "Unimplemented mapper 2 (UxROM)", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x20), imageLength: (16 + 16384 + 8192)));
-        Assert.Contains(expectedSubstring: "Unimplemented MMC3 (mapper 4, submapper 0) memory layout", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x40), imageLength: (16 + 16384 + 8192)));
+        Assert.Contains(expectedSubstring: "no advanced-gaming-brick cartridge header", actualString: catalog.RefuseImage(engineId: "advanced-gaming-brick", header: BrickImage(type: 0x00).AsSpan(length: AgbCartridgeHeader.Length, start: 0), imageLength: 0x8000));
+        Assert.Null(@object: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x00), imageLength: ((16 + 16384) + 8192)));
+        Assert.Contains(expectedSubstring: "Unimplemented mapper 2 (UxROM)", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x20), imageLength: ((16 + 16384) + 8192)));
+        Assert.Contains(expectedSubstring: "Unimplemented MMC3 (mapper 4, submapper 0) memory layout", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x40), imageLength: ((16 + 16384) + 8192)));
         Assert.Contains(expectedSubstring: "Damaged NROM payload", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: Nes(flags6: 0x00), imageLength: 16));
-        Assert.Contains(expectedSubstring: "no iNES or NES 2.0 header signature", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: agb.AsSpan(start: 0, length: 16), imageLength: 0x10000));
+        Assert.Contains(expectedSubstring: "no iNES or NES 2.0 header signature", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: agb.AsSpan(length: 16, start: 0), imageLength: 0x10000));
 
         var damaged = Nes(flags6: 0x00);
 
         damaged[12] = 1;
-        Assert.Contains(expectedSubstring: "Ambiguous or damaged iNES header", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: damaged, imageLength: (16 + 16384 + 8192)));
+        Assert.Contains(expectedSubstring: "Ambiguous or damaged iNES header", actualString: catalog.RefuseImage(engineId: "humble-gaming-deck", header: damaged, imageLength: ((16 + 16384) + 8192)));
         Assert.Equal(expected: 0, actual: catalog.ImageHeaderLength(engineId: "tune-instrument"));
         Assert.Contains(expectedSubstring: "judges no image by its header", actualString: catalog.RefuseImage(engineId: "tune-instrument", header: [], imageLength: 0));
     }
@@ -589,12 +593,12 @@ public sealed class MachineContentFolderLawTests {
         Assert.Contains(expectedSubstring: "cartridge type 0x20 names a mapper", actualString: Assert.Throws<ArgumentException>(testCode: () => engine.Create(options: "cgb fast", contentBytes: BrickImage(type: 0x20))).Message);
         Assert.Contains(expectedSubstring: "shorter than its 0x150-byte header", actualString: Assert.Throws<ArgumentException>(testCode: () => engine.Create(options: null, contentBytes: new byte[16])).Message);
     }
-    [Theory]
     [InlineData("/cartridges")]
     [InlineData("C:/cartridges")]
     [InlineData("../cartridges/")]
     [InlineData("./cartridges")]
     [InlineData("..\\cartridges")]
+    [Theory]
     public void AFolderSpelledOutsideThePortableRelativeFormIsRefusedByName(string folder) {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
             definition: WithCabinet(contentFolders: ["../cartridges/cgb", folder]),
@@ -602,7 +606,7 @@ public sealed class MachineContentFolderLawTests {
             neighbours: null,
             reason: out var reason
         ));
-        Assert.Contains(expectedSubstring: $"contentFolders[1] '{folder}'", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: $"contentFolders[1] '{folder}'");
     }
     // Validation reads only the spelling, never the disk: a folder absent on this machine is accepted, while an empty
     // list and a folder named twice are refused by name.
@@ -618,8 +622,8 @@ public sealed class MachineContentFolderLawTests {
             userMessage: accepted
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: WithCabinet(contentFolders: []), machines: TestMachines.Catalog(), neighbours: null, reason: out var empty));
-        Assert.Contains(expectedSubstring: "contentFolders names no folder", actualString: empty);
+        Assert.Contains(actualString: empty, expectedSubstring: "contentFolders names no folder");
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: WithCabinet(contentFolders: ["../a", "../a"]), machines: TestMachines.Catalog(), neighbours: null, reason: out var twice));
-        Assert.Contains(expectedSubstring: "contentFolders[1] '../a' is listed twice", actualString: twice);
+        Assert.Contains(actualString: twice, expectedSubstring: "contentFolders[1] '../a' is listed twice");
     }
 }

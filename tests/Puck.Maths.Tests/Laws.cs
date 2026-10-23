@@ -95,10 +95,7 @@ internal static class Laws {
     public static void BinaryMatchesOracle(string lawId, Domain domain, Tier tier, BinaryElemOp subject, BinaryElemOp oracle) {
         LawShapes.Report(shape: LawShape.OracleAgreement);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u1, v1, u2, v2) in Domains.Quads(
             domain: domain,
@@ -144,10 +141,7 @@ internal static class Laws {
     public static void ConjugateSymmetry(string lawId, Domain domain, Tier tier, BinaryElemOp mul, UnaryElemOp conj) {
         LawShapes.Report(shape: LawShape.SelfContained);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u1, v1, u2, v2) in Domains.Quads(
             domain: domain,
@@ -199,10 +193,7 @@ internal static class Laws {
     public static void DivergenceCanary(string lawId, Domain domain, Tier tier, int width, VectorBinaryOp fused, VectorBinaryOp perProduct, int minimumDivergences) {
         LawShapes.Report(shape: LawShape.Divergence);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
         var a = new long[width];
         var b = new long[width];
         var cases = 0L;
@@ -246,10 +237,7 @@ internal static class Laws {
     public static void IdentityElement(string lawId, Domain domain, Tier tier, BinaryElemOp op, long identityU, long identityV) {
         LawShapes.Report(shape: LawShape.SelfContained);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u, v) in Domains.Pairs(
             domain: domain,
@@ -298,10 +286,7 @@ internal static class Laws {
     public static void MobiusMatchesOracle(string lawId, Domain domain, Tier tier, UnaryElemOp subject, ScalarBinaryOp oracleNumerator) {
         LawShapes.Report(shape: LawShape.OracleAgreement);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (n, d) in Domains.Pairs(
             domain: domain,
@@ -336,10 +321,7 @@ internal static class Laws {
     public static void NormMultiplicativity(string lawId, Domain domain, Tier tier, BinaryElemOp mul, ScalarElemOp norm, ScalarBinaryOp combineNorms) {
         LawShapes.Report(shape: LawShape.SelfContained);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u1, v1, u2, v2) in Domains.Quads(
             domain: domain,
@@ -384,10 +366,7 @@ internal static class Laws {
     public static void PureBinary(string lawId, Domain domain, Tier tier, BinaryElemOp op) {
         LawShapes.Report(shape: LawShape.SelfContained);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u1, v1, u2, v2) in Domains.Quads(
             domain: domain,
@@ -419,10 +398,7 @@ internal static class Laws {
     public static void PureScalarBinary(string lawId, Domain domain, Tier tier, ScalarBinaryOp op) {
         LawShapes.Report(shape: LawShape.SelfContained);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (a, b) in Domains.Pairs(
             domain: domain,
@@ -450,10 +426,7 @@ internal static class Laws {
     public static void RoundTrip(string lawId, Domain domain, Tier tier, UnaryElemOp forward, UnaryElemOp inverse) {
         LawShapes.Report(shape: LawShape.SelfContained);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u, v) in Domains.Pairs(
             domain: domain,
@@ -484,10 +457,7 @@ internal static class Laws {
     public static void ScalarBinaryMatchesOracle(string lawId, Domain domain, Tier tier, ScalarBinaryOp subject, ScalarBinaryOp oracle) {
         LawShapes.Report(shape: LawShape.OracleAgreement);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (a, b) in Domains.Pairs(
             domain: domain,
@@ -536,10 +506,7 @@ internal static class Laws {
 
         if (witness is not null) { LawShapes.Report(shape: LawShape.Witnessed); }
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u, v) in Domains.Pairs(
             domain: domain,
@@ -587,10 +554,7 @@ internal static class Laws {
     public static void SweptClaim(string lawId, Domain domain, Tier tier, int width, Func<long[], long[], string?> claim) {
         LawShapes.Report(shape: LawShape.Claim);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (left, right) in Domains.Vectors(
             domain: domain,
@@ -628,10 +592,7 @@ internal static class Laws {
 
         if (witness is not null) { LawShapes.Report(shape: LawShape.Witnessed); }
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (u1, v1, u2, v2) in Domains.Quads(
             domain: domain,
@@ -694,10 +655,7 @@ internal static class Laws {
 
         if (witness is not null) { LawShapes.Report(shape: LawShape.Witnessed); }
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
 
         foreach (var (p, q) in Domains.Pairs(
             domain: domain,
@@ -749,10 +707,7 @@ internal static class Laws {
     public static void VectorMatchesOracle(string lawId, Domain domain, Tier tier, int width, VectorBinaryOp subject, VectorBinaryOp oracle) {
         LawShapes.Report(shape: LawShape.OracleAgreement);
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
         var actual = new long[width];
         var expected = new long[width];
 
@@ -802,10 +757,7 @@ internal static class Laws {
 
         if (witness is not null) { LawShapes.Report(shape: LawShape.Witnessed); }
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
         var x = new long[width];
         var y = new long[width];
         var z = ((witness is null)
@@ -885,10 +837,7 @@ internal static class Laws {
 
         if (witness is not null) { LawShapes.Report(shape: LawShape.Witnessed); }
 
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
+        var index = 0L;
         var a = new long[width];
         var b = new long[width];
         var c = ((witness is null)

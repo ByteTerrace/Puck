@@ -238,7 +238,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
     // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
     // bytes and the executable image without depending on a provider's source-document or compiler types.
-    private bool TryResolveContent(IMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
+    private bool TryResolveContent(IMachineEngine engine, string contentPath, string? documentDirectory, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
         _ = Catalog.ContentProviders.TryGetValue(
             key: engine.Id,
             value: out var compiler
@@ -250,7 +250,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         ) {
             try {
                 WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
-                compilation = compiler.Prepare(content: content);
+                compilation = compiler.Prepare(content: content, contentPath: WorldDocumentPaths.Resolve(documentDirectory: documentDirectory, path: contentPath));
                 bytes = compilation.Image;
                 cartridge = new WorldMachineCartridge(
                     Path: contentPath,
@@ -826,17 +826,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return new WorldMachineState(
             Assigned: false,
-            Engine: null,
-            FramesStepped: 0L,
-            PendingSteps: 0L,
-            MaximumPendingSteps: 0,
             BackpressureEvents: 0L,
-            Fault: null,
             Cartridge: null,
-            Content: null
+            Content: null,
+            Engine: null,
+            Fault: null,
+            FramesStepped: 0L,
+            MaximumPendingSteps: 0,
+            PendingSteps: 0L
         );
     }
-
     /// <inheritdoc/>
     public (bool Ok, string Message) TryLink(string name, IReadOnlyList<int> members) {
         if (m_disposed) {

@@ -3,15 +3,15 @@ using System.Reflection;
 namespace Puck.Maths.Tests;
 
 /// <summary>A reference from a law case to a public member it exercises, by declaring type and member name. Resolved
-/// against <see cref="MemberSurface"/> at run time, so the covered ids always match the reflection ids exactly — the
-/// manifest is built mechanically, never by hand-transcribed id strings.</summary>
+/// against <see cref="MemberSurface"/> at run time, so the covered ids always match the reflection ids exactly — member
+/// classification is computed directly from the current declarations.</summary>
 /// <param name="Type">The declaring type (open or closed generic; normalized on resolution).</param>
 /// <param name="Name">The member name (for example <c>op_Multiply</c>, <c>Norm</c>, <c>MobiusStep</c>).</param>
 internal readonly record struct CoverRef(Type Type, string Name);
 /// <summary>
 /// The reflected public surface of Puck.Maths: every public member of every public (or public-nested) type, each with a
-/// stable id. Record/object boilerplate and property accessors are excluded so the manifest tracks real API. The id
-/// formatter is the single source of member identity — both the manifest and the <see cref="CoverRef"/> resolver use
+/// stable id. Record/object boilerplate and property accessors are excluded so classification tracks real API. The id
+/// formatter is the single source of member identity — both the surface and the <see cref="CoverRef"/> resolver use
 /// it, so covered ids can never drift from surface ids.
 /// </summary>
 internal static class MemberSurface {
@@ -23,8 +23,6 @@ internal static class MemberSurface {
 
     /// <summary>Gets every enumerated public member, ordered by id.</summary>
     public static IReadOnlyList<Record> All { get; } = Enumerate();
-    /// <summary>Gets the set of all current member ids.</summary>
-    public static IReadOnlySet<string> Ids { get; } = All.Select(selector: record => record.Id).ToHashSet();
 
     private static IReadOnlyList<Record> Enumerate() {
         var assembly = typeof(FixedQ4816).Assembly;
@@ -213,30 +211,7 @@ internal static class MemberSurface {
     /// <param name="Name">The member name.</param>
     public sealed record Record(string Id, Type DeclaringType, string Name);
 }
-/// <summary>One member's coverage state in the committed manifest.</summary>
-internal sealed class ManifestEntry {
-    /// <summary>Gets or sets the law/fact ids covering this member (present only when <see cref="State"/> is covered).</summary>
-    public List<string>? CoveredBy { get; set; }
-    /// <summary>Gets or sets the member id.</summary>
-    public string Id { get; set; } = "";
-    /// <summary>Gets or sets the mandatory waiver reason (present only when <see cref="State"/> is waived).</summary>
-    public string? Reason { get; set; }
-    /// <summary>Gets or sets the state: <c>covered</c>, <c>waived</c>, or <c>uncovered</c>.</summary>
-    public string State { get; set; } = "uncovered";
-}
-/// <summary>The committed coverage manifest.</summary>
-internal sealed class Manifest {
-    /// <summary>Gets the per-member states, ordered by id.</summary>
-    public List<ManifestEntry> Members { get; init; } = [];
-}
-/// <summary>
-/// Module 4 — the coverage ratchet. Enumerates the public Puck.Maths surface, derives the covered set mechanically from
-/// the <see cref="LawRegistry"/> member declarations, and reconciles against the committed manifest. The gate fails iff
-/// a public member is classified nowhere — neither by the committed manifest nor by a declaration (new API appeared
-/// silently) — or a member moved covered→uncovered. It never fails on the large initial uncovered backlog: coverage
-/// only grows. Classification is explicit — a law case covering the member, or a waiver naming it — and
-/// <see cref="Generate"/> never invents one, so an unclassified member keeps failing the gate on every run.
-/// </summary>
+/// <summary>Resolves public members to their declared laws or reasoned waivers.</summary>
 internal static class Coverage {
     private const string CurvatureSplineCoefficientScaleReason = "A documentation constant naming the scale every CurvatureSplineSegment raw is carried at; every law in the curvature-spline family reads and compares those raws, so a wrong value here would desynchronize every comparison in the family rather than fail one case that names it — the constant has no operand domain, subject shape or oracle of its own.";
     private const string CurvatureSplineUnreachableArcErrorReason = "Named refusal with no reachable trigger through legal authored knots: composite-Simpson error scales with the FOURTH power of the panel width, so each doubling divides the Richardson error estimate by roughly sixteen; CheckInteriorCusp already certifies every admitted segment's speed stays at or above MinSpeedFloor everywhere on [0, 1] (an exact, interval-isolated bound), which keeps the integrand's own higher derivatives from the kind of near-singular blowup that would demand many doublings, so the panel count converges within a handful of doublings for every admitted segment this suite or a hand-constructed adversarial one has reached — nowhere near the 65,536-panel budget. The refusal stays as the defensive catch-all a bounded search demands, not because a law can drive it.";
@@ -256,7 +231,8 @@ internal static class Coverage {
 
     /// <summary>The waived members: intentionally outside the algebra law suite, each with a mandatory reason. Declared
     /// by reference (type + name) so the ids resolve mechanically.</summary>
-    private static readonly (CoverRef Reference, string Reason)[] WaiverDeclarations = [
+    /// <summary>The authored member waivers and their category reasons.</summary>
+    public static readonly (CoverRef Reference, string Reason)[] WaiverDeclarations = [
         // Three FixedPoint presentation seams are deliberately NOT waived here — FixedComplex.ToComplex,
         // FixedQuaternion.ToQuaternion and FixedQ4816's explicit conversion to double. "Presentation-only; the algebra
         // laws pin the exact raw contract instead" is false about the thing each of them decides alone: the lane ORDER
@@ -644,150 +620,4 @@ internal static class Coverage {
             Type: type
         ), KernelShapeReason));
 
-    /// <summary>Counts the manifest states.</summary>
-    /// <param name="manifest">The manifest.</param>
-    /// <returns>The covered/waived/uncovered counts.</returns>
-    public static (int Covered, int Waived, int Uncovered) Counts(Manifest manifest) {
-        var covered = manifest.Members.Count(predicate: entry => (entry.State == "covered"));
-        var waived = manifest.Members.Count(predicate: entry => (entry.State == "waived"));
-        var uncovered = manifest.Members.Count(predicate: entry => (entry.State == "uncovered"));
-
-        return (covered, waived, uncovered);
-    }
-    /// <summary>Builds the map from covered member id to the sorted law ids covering it, from the registry. Every case
-    /// in <see cref="LawRegistry.All"/> is a law the runner executes, so coverage is only ever credited from a case
-    /// that can run and assert.</summary>
-    /// <returns>The covered map.</returns>
-    public static IReadOnlyDictionary<string, IReadOnlyList<string>> CoveredMembers() {
-        var covered = new Dictionary<string, SortedSet<string>>(comparer: StringComparer.Ordinal);
-
-        foreach (var lawCase in LawRegistry.All) {
-            foreach (var reference in lawCase.Members) {
-                foreach (var id in MemberSurface.Resolve(reference: reference)) {
-                    if (!covered.TryGetValue(
-                        key: id,
-                        value: out var laws
-                    )) {
-                        laws = new SortedSet<string>(comparer: StringComparer.Ordinal);
-                        covered[id] = laws;
-                    }
-
-                    _ = laws.Add(item: lawCase.Id);
-                }
-            }
-        }
-
-        return covered.ToDictionary(
-            keySelector: pair => pair.Key,
-            elementSelector: IReadOnlyList<string> (pair) => [.. pair.Value],
-            comparer: StringComparer.Ordinal
-        );
-    }
-    /// <summary>Regenerates the manifest mechanically: upgrades to covered, applies waivers, keeps a previously-covered
-    /// member covered (so a regression stays visible until fixed), and re-emits every other member with the state the
-    /// committed manifest already gave it. A member the committed manifest does not mention is NOT written: an
-    /// unclassified member is exactly what <see cref="Ratchet"/> fails on, so persisting it as uncovered would let the
-    /// failing run heal itself. Bootstrapping — no committed manifest at all — is the one place the uncovered backlog
-    /// is written wholesale, because there is no ratchet to satisfy yet. Only current members are emitted; removed
-    /// members drop out.</summary>
-    /// <param name="existing">The committed manifest, if any.</param>
-    /// <returns>The regenerated manifest.</returns>
-    public static Manifest Generate(Manifest? existing) {
-        var covered = CoveredMembers();
-        var waived = WaivedMembers();
-        var bootstrapping = (existing is null);
-        var previous = (existing?.Members ?? []).ToDictionary(
-            keySelector: entry => entry.Id,
-            elementSelector: entry => entry,
-            comparer: StringComparer.Ordinal
-        );
-        var members = new List<ManifestEntry>();
-
-        foreach (var id in MemberSurface.Ids) {
-            if (covered.TryGetValue(
-                key: id,
-                value: out var laws
-            )) {
-                members.Add(item: new ManifestEntry { CoveredBy = [.. laws], Id = id, State = "covered" });
-            } else if (
-                previous.TryGetValue(
-                key: id,
-                value: out var prior
-            ) &&
-                (prior.State == "covered")
-            ) {
-                // Sticky: a member that was covered but no longer is stays covered in the manifest so the ratchet keeps
-                // failing until coverage is restored (grow-only never silently downgrades).
-                members.Add(item: new ManifestEntry { CoveredBy = prior.CoveredBy, Id = id, State = "covered" });
-            } else if (waived.TryGetValue(
-                key: id,
-                value: out var reason
-            )) {
-                members.Add(item: new ManifestEntry { Id = id, Reason = reason, State = "waived" });
-            } else if (
-                bootstrapping ||
-                previous.ContainsKey(key: id)
-            ) {
-                members.Add(item: new ManifestEntry { Id = id, State = "uncovered" });
-            }
-        }
-
-        members.Sort(comparison: static (left, right) => string.CompareOrdinal(
-            strA: left.Id,
-            strB: right.Id
-        ));
-
-        return new Manifest { Members = members };
-    }
-    /// <summary>Applies the ratchet against the committed manifest. A member counts as classified when the committed
-    /// manifest gives it a state OR a declaration does — a law case covering it, or a waiver naming it — so landing a
-    /// new member together with its law or its waiver passes on the first run, while a member with neither fails on
-    /// every run (<see cref="Generate"/> never writes it, so the failure cannot heal itself).</summary>
-    /// <param name="committed">The committed manifest.</param>
-    /// <returns>The violations: unclassified members and covered→uncovered regressions. Empty means the gate holds.</returns>
-    public static (IReadOnlyList<string> NewMembers, IReadOnlyList<string> Regressions) Ratchet(Manifest committed) {
-        var covered = CoveredMembers();
-        var waived = WaivedMembers();
-        var known = committed.Members.ToDictionary(
-            keySelector: entry => entry.Id,
-            elementSelector: entry => entry,
-            comparer: StringComparer.Ordinal
-        );
-        var newMembers = new List<string>();
-        var regressions = new List<string>();
-
-        foreach (var id in MemberSurface.Ids) {
-            if (!known.ContainsKey(key: id)) {
-                if (
-                    !covered.ContainsKey(key: id) &&
-                    !waived.ContainsKey(key: id)
-                ) {
-                    newMembers.Add(item: id);
-                }
-            } else if (
-                (known[id].State == "covered") &&
-                !covered.ContainsKey(key: id)
-            ) {
-                regressions.Add(item: id);
-            }
-        }
-
-        newMembers.Sort(comparison: StringComparer.Ordinal.Compare);
-        regressions.Sort(comparison: StringComparer.Ordinal.Compare);
-
-        return (newMembers, regressions);
-    }
-    /// <summary>The waived member ids resolved from the declarations.</summary>
-    /// <returns>The map from waived member id to reason.</returns>
-    public static IReadOnlyDictionary<string, string> WaivedMembers() {
-        var waived = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var (reference, reason) in WaiverDeclarations) {
-            foreach (var id in MemberSurface.Resolve(reference: reference)) {
-                waived[id] = reason;
-            }
-        }
-
-        return waived;
-    }
 }
