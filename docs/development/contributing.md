@@ -9,8 +9,8 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
 
 - A run uses a versioned `puck.world.definition.v1` JSON document. CLI conveniences
   synthesize the same model; they do not create a second execution path.
-- Vulkan and Direct3D 12 implement the same neutral GPU contracts. Shared GPU
-  changes must be verified on both backends.
+- Vulkan and Direct3D 12 implement the same neutral GPU contracts. Direct3D 12 is the
+  development backend; verify there, and qualify Vulkan when the owner calls for it.
 - `Puck.World` composes the running application. Run it to verify rendering and
   complete game interaction. The World test suite covers document, protocol,
   authoritative simulation, and shipped game state programs; other checks below
@@ -24,7 +24,7 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
 ## Setting up a machine
 
 A machine builds and verifies Puck once it carries the toolchain below. The
-list is the same for a person and for an agent; the Claude Code and Codex items
+list is the same for a person and for an agent; the Claude Code, Codex and Antigravity items
 apply to any machine an agent session runs on. CI runs on Windows and Ubuntu
 runners, so a Linux machine differs only where this list says; no runner is
 macOS, and nothing here is verified there.
@@ -55,18 +55,20 @@ macOS, and nothing here is verified there.
   describes, for running verbs by hand. An installed tool keeps its commit while
   the checkout moves on: `puck --version` warns on stderr when the two differ, so
   reinstall after pulling. The agents' MCP server never uses it: it runs the
-  checkout's Release build of `src/Puck.Cli` through `.claude/hooks/puck-mcp.ps1`,
-  building it first on a fresh clone
+  checkout's existing Release build of `src/Puck.Cli`, falling back to the main
+  checkout's, through `.claude/hooks/puck-mcp.ps1`. The launcher reports the
+  selected source and stamp, which do not establish HEAD freshness; it builds
+  only when neither checkout has an existing build
   ([the MCP adapter](../../src/Puck.Mcp/README.md)).
 - **Claude Code.** The project's settings are shared and versioned:
   `.claude/settings.json` turns auto memory off, selects the Concise output
   style, enables the `puck` server from `.mcp.json` and the Codex plugin, names
   the plugin's marketplace, and registers the hooks, and `.claude/launch.json`
   holds the debug world's launch (`debug-world`: `--world worlds/debug
-  --control`) and the preview configurations. Trust the folder when Claude Code asks,
-  because the marketplace entry loads only in a trusted project. Settings are
-  repository-wide: keep no per-machine settings file, and put a setting every
-  machine should share in `.claude/settings.json`. There is no Claude-specific memory file, on purpose: Claude Code reads
+  --control --devices all`) and the preview configurations. Trust the folder when Claude Code asks,
+  because the marketplace entry loads only in a trusted project. Version every project-supported setting in `.claude/settings.json`.
+  The necessary home-only policy is `{"permissions":{"defaultMode":"auto"}}`;
+  keep login and trust state local. There is no Claude-specific memory file, on purpose: Claude Code reads
   [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
   ([documentation policy](#documentation-policy)).
 - **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
@@ -75,13 +77,46 @@ macOS, and nothing here is verified there.
   so Claude Code offers the install when it loads the project, and
   `/codex:setup` checks the CLI afterwards. The versioned
   `.codex/config.toml` registers the `puck` MCP server for Codex, which reads
-  it only once the project is trusted; everything else a Codex run writes
-  under `.codex/` stays untracked. Codex finds skills under `.agents/skills/`,
-  so make that one directory link to `.claude/skills` (on Windows,
-  `New-Item -ItemType Junction -Path .agents/skills -Target .claude/skills`),
-  never a link per skill, which goes stale as skills are added and renamed;
-  `.agents/` is listed in `.git/info/exclude`. The Windows sandbox's permission
-  cautions are under [hardware and toolchain cautions](#hardware-and-toolchain-cautions).
+  it only once the project is trusted. In the checkout, open `/hooks`, review
+  and trust each current definition in `.codex/hooks.json`. New or changed
+  definitions are skipped until reviewed and trusted again
+  ([official hook contract](https://learn.chatgpt.com/docs/hooks)). Test a supported
+  shell path with the harmless policy probe `git --no-pager push --dry-run origin HEAD:main`:
+  a lane must report refusal without executing it. A successful help command
+  does not establish hook activation. Hooks are guardrails on supported tool
+  paths, not a complete execution boundary.
+  Build and copy the CLI using [verification](../../.claude/skills/verification/SKILL.md#run-verbs-from-your-own-cli-copy),
+  then run `puck agents link` in each main checkout and fresh worktree;
+  `puck agents link --check` verifies it. This creates one junction on Windows
+  or directory symlink elsewhere from `.agents/skills` to that checkout's
+  `.claude/skills`, refusing an ordinary directory or a link aimed elsewhere.
+  Only the link is ignored; the project JSON files remain tracked
+  ([native skill discovery](https://learn.chatgpt.com/docs/build-skills)).
+  The [launch capability table](../../.claude/skills/orchestration/SKILL.md#launch-capabilities)
+  distinguishes native exec from companion `task`. A linked worktree's common
+  Git and lease directories may lie outside its workspace: discover the common
+  directory with `git rev-parse --path-format=absolute --git-common-dir` and
+  grant those actual paths in the permission profile. Do not require a fixed
+  Windows checkout path. Login and hook trust remain per-user, never copied.
+- **Antigravity.** Install its CLI and sign in with the owner's account. Run
+  `agy -p "<brief>" --output-format text` from the worktree, without `--mode`.
+  Headless auto behavior comes from `agentMode: "auto"` in the home-only
+  `~/.gemini/antigravity-cli/settings.json`; the owner still needs to supply
+  or approve its necessary non-secret permission block. Do not copy credentials
+  or other home state. Auto mode does not consult the ask list; shared
+  git-safety refuses lane pushes and shared-state operations.
+  The committed `.agents/hooks.json` and `.agents/skills.json` supply hooks
+  and skills; hooks run with `.agents/` as their working directory. MCP is
+  exposed through the workspace plugin in `.agents/plugins.json`, whose
+  plugin MCP configuration starts the shared launcher. A bare
+  `.agents/mcp_config.json` is not a discovered server registration. Use a
+  positive operation timeout of 600 seconds; `-1` fails the validator.
+  [Launch capabilities](../../.claude/skills/orchestration/SKILL.md#launch-capabilities)
+  separates the terminal sandbox from the host's rights.
+- **Optional managed-stack diagnostics.** The owner may install
+  `dotnet tool install -g dotnet-stack`; an agent uses an existing installation
+  to capture a hung process before stopping it. Installation changes the machine
+  outside this repository and remains owner-only.
 - **A GPU machine** also follows [GPU support and shader builds](#gpu-support-and-shader-builds)
   and the [hardware and toolchain cautions](#hardware-and-toolchain-cautions),
   and runs GPU gates one at a time per GPU under the
@@ -293,8 +328,10 @@ What the C# loop costs:
   keeps shared agent machines free of lingering nodes and makes every agent
   build cold; an agent timing this loop says which it measured. The switch
   belongs to the build and the restore alone: `dotnet test` on the xUnit v3
-  projects forwards switches it does not know to the test host, which exits 5,
-  so an agent builds with `-nodeReuse:false` and then runs `dotnet test --no-build`.
+  projects can forward unknown switches to the test host;
+  [verification](../../.claude/skills/verification/SKILL.md#build-before-you-test)
+  records the observed refusal. Build with `-nodeReuse:false`, then run
+  `dotnet test --no-build`.
 - **One compile.** An edit that keeps its project's public surface keeps its
   reference assembly, so no dependent recompiles: a body edit in `Puck.SdfVm`
   compiles `Puck.SdfVm` alone. The rest of the build is MSBuild's check of the
@@ -354,29 +391,21 @@ build's analysis.
 
 ### Verify a change
 
-`puck gate` is the batch qualification, run from a copy of the candidate's own
-CLI outside the checkout. It checks every lock file with a locked restore
-before anything builds, builds the solution and the file app, copies the CLI it
-built, runs the affected selection against the merge base, and checks the
-repository's ledgers and generated files: every cheap static check CI runs
-([which CI checks the gate runs](ci.md#which-ci-checks-the-local-gate-runs)).
-Every restore is locked, so a package or project reference change fails the
-build until [`puck locks`](../reference/cli.md#puck-locksrestore-lock-files)
-re-records the lock files it drifted. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
-is shared with help and held by laws. The affected suites run side by side
-(`--suite-jobs`). `--gpu` adds the affected canaries, side by side up to
-`--gpu-jobs` legs on the GPU, then parity, device suites, every recorded
-counters workload and docs citations, one step after another. `--record` requires `--gpu` and refreshes canary coverage only after
-every qualification step passes. Admission uses host load's defaults before
-heavy steps; the kept log and step timeline name each result. The affected selection comes from
-[`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
-chosen from the project graph and recorded canary coverage.
-The full sets run only when the owner asks for them. See
-[`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate) for the
-steps and the log the run keeps.
+The [verification skill](../../.claude/skills/verification/SKILL.md) owns the
+landing bar, CLI-copy procedure, GPU/heavy leases and interpretation of results.
+Run the changed behavior and the affected tests on the merged head. Broader
+qualification runs when the owner asks for it.
 
-A new law proves its own fix: `puck laws prove <law> --fix <commit>`, or
-`--file-list` naming the files of an uncommitted fix, withholds the fix in a
+`puck gate` performs batch qualification: locked restore, solution build,
+affected selection and static repository checks; `--gpu` adds device work.
+The [CLI reference](../reference/cli.md#puck-gatethe-change-scoped-gate) owns its
+ordered steps, concurrency, admission, recording and output, and
+[CI](ci.md#which-ci-checks-the-local-gate-runs) maps those steps to hosted checks.
+A package or project-reference change that drifts a locked restore needs
+[`puck locks`](../reference/cli.md#puck-locksrestore-lock-files).
+
+When a red proof would help, optionally run `puck laws prove <law> --fix <commit>`,
+or pass `--file-list` naming the files of an uncommitted fix. It withholds the fix in a
 worktree of its own, requires the law to fail there and pass once the fix is
 restored, and prints the evidence block for the commit body. A law that passes
 with its fix withheld cannot fail and is reported so; a build that fails in
@@ -430,8 +459,7 @@ backends. A bare `puck canary` runs only the automatic set, so it never runs a
 GPU proof. A GPU runs one canary or parity run at a time, since runs compete
 for the device and for ports, and heavy CPU work beside one can push a leg past
 its time bounds. Run the merge gate from a copy of the candidate's own CLI. `puck canary --merge --plan`
-prints what the gate would run without a GPU, and a gate that outgrows its
-declared ceiling is refused before it builds. For a per-change GPU check on one
+prints what the gate would run without a GPU. For a per-change GPU check on one
 backend, `puck canary --capability gpu --backend vulkan` (or `directx`) runs
 those proofs on that backend alone and names it in the verdict; it is not the
 merge gate, which refuses `--backend` and holds both.
@@ -856,7 +884,7 @@ unverified when no device run exists.
   pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
-- The pinned .NET 11 JIT (`11.0.100-rc.2.26504.105`, as RC1 before it) can emit GC info that
+- The pinned .NET 11 JIT (`11.0.100-rc.2.26504.105`) can emit GC info that
   reports a GC pointer live in a callee-saved register (`rbx`, `rsi`, `rdi`,
   `r12` to `r15`) at the return address of an inline P/Invoke, which the
   runtime's rule forbids: a thread inside the call is walked from its
@@ -1114,6 +1142,8 @@ The rules for coding agents live in one file, the root
 [`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code, which reads `AGENTS.md` natively only when no Claude Code memory
 file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
 directory or above it. The repository therefore commits none, at any level.
+Antigravity also reads `AGENTS.md`; no `GEMINI.md` exists, on purpose. A second
+rules file duplicates instructions and consumes its shared rules budget.
 
 ## InternalsVisibleTo is forbidden
 

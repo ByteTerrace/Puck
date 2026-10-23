@@ -35,8 +35,8 @@ overrides this skill and is written into it in that session.
 
 ## Before launching
 
-Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
-
+Use [verification](../verification/SKILL.md#what-uses-the-gpu) for private CLI
+copies, granted GPU legs and heavy-work leases.
 
 - Run the pass in a worktree of the author's own working branch, at the lane's
   head: the author's worktree when it is clean, or one detached at that head,
@@ -50,9 +50,12 @@ Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <comma
   builds from: an edit mid-run changes the source state that run reuses. Wait
   for the run to finish or give the pass a separate worktree.
 - Restore and build the review worktree before the pass starts, so `obj/` and
-  `bin/` exist: a Codex sandbox has no network, so the brief tells the pass to
-  build with `--no-restore`. A documentation-only pass needs no build unless XML
+  `bin/` exist: the companion `task --write` sandbox has no network, so the
+  brief tells the pass to build with `--no-restore`. A documentation-only pass needs no build unless XML
   comments change.
+- Native `codex exec` and Antigravity `agy -p` passes use the
+  [launch capability table](../orchestration/SKILL.md#launch-capabilities) and
+  recipes there; native writers commit their WIP on their own branch.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
   and `--resume-last` (with `--resume` and `--fresh`).
@@ -71,9 +74,9 @@ Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <comma
   grep a job log for words such as "completed", which also match echoed
   commands. `--resume-last` sees only jobs the current Claude session started;
   another session continues a Codex thread with `codex exec resume
-  <session-id>`. A Codex sandbox cannot write `.git` or reach the network, so
+  <session-id>`. The companion `task --write` sandbox cannot write `.git` or reach the network, so
   merges, commits and restores run outside it.
-- A pass cannot read this conversation, message a session or ask a question, so
+- A companion pass cannot read this conversation or message a peer session, so
   the brief carries every string, decision and path it needs, and tells it to
   answer its own questions from the code and the brief. A Codex pass that ends
   on a question has done nothing: answer it in a prompt file, keeping what the
@@ -85,9 +88,9 @@ Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <comma
   agent runs in a worktree of its own, branched from the lead's HEAD, and is
   refused git work in any other tree, so its brief names the lane's head commit
   and tells it to run `git checkout --detach <lane head>` in its own worktree
-  before reading anything. It may commit its WIP there, since nothing sandboxes
-  its `.git`; the lead then fast-forwards the author's branch to the verified
-  head as in step 4 below.
+  before reading anything. It may commit WIP as
+  `review: <lane> pass, unverified`; the lead then fast-forwards the author's
+  branch to the verified head as in step 4 below.
 - Preserve the launch's working-directory spelling for `status`, `result` and
   `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
   launch is invisible to a PowerShell `C:/...` query, and the reverse. A job
@@ -98,10 +101,10 @@ Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <comma
   `/PID` into a path and makes `cancel` fail. Then stop the companion's
   app-server broker for that working directory before removing the worktree;
   the broker can outlive the job and hold the worktree open.
-- Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
+- Write the brief to a lane-named file (`<worktree>/.claude/scratch/<lane>-review.md`) so the
   verifier can reuse it.
-- Name a scratch directory outside the tree in the brief for any CLI copy or
-  temporary files; otherwise the pass can write them inside the worktree.
+- Use lane-named scratch as [lane work](../orchestration/references/lane-work.md#delegated-work)
+  describes, including its worktree-removal caveat.
 
 ## The brief
 
@@ -112,7 +115,9 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    simulation; a render-graph runtime over Vulkan and Direct3D 12; federation
    authority and recipients). Add "thorough" for a large or risky lane.
 2. **Tree.** The worktree's absolute path and branch, and "Edit only in this
-   tree; don't commit." For a detached tree, name its head and the author's
+   tree." Add "don't commit" for companion `task`; for a native writer or
+   Claude pass add "commit WIP as `review: <lane> pass, unverified`."
+   For a detached tree, name its head and the author's
    working branch that will receive its commits.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
    commit when the integration branch may move. Two dots compare the two tips
@@ -138,7 +143,7 @@ Write the parts in this order. Each is short; the hunt list is the longest.
      where it should refuse by name;
    - cadence and history: a state reset by a refresh gap, or kept across a
      real cut;
-   - determinism: a float, clock or RNG reaching simulation state, or a port
+   - determinism: a float, wall clock or ambient randomness reaching simulation state, or a port
      or generated twin diverging from its source;
    - concurrency: the frame thread against a build or capture thread, and
      dispose against in-flight work;
@@ -157,13 +162,13 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    often needs in front of it:
 
    ```text
-   Repo rules: AGENTS.md at the worktree root holds the repository's rules; follow it. In particular: no backwards compatibility, ever (never preserve old wrong behaviour; no compat aliases, shims or read-side tolerance for old shapes). No InternalsVisibleTo (make a member public instead). No environment variables. One spelling per thing. LF everywhere; never raise newline issues. Docs state current behaviour in present tense with no dates or SHAs. Determinism: no wall clock, RNG or float in simulation state.
+   Repo rules: AGENTS.md at the worktree root holds the repository's rules; follow it. In particular: no backwards compatibility, ever (never preserve old wrong behaviour; no compat aliases, shims or read-side tolerance for old shapes). No InternalsVisibleTo (make a member public instead). No environment variable switches Puck code. One spelling per thing. LF everywhere; never raise newline issues. Docs state current behaviour in present tense with no dates or SHAs. Determinism: no wall clock, ambient randomness or float in simulation state; randomness is a seeded Puck.Maths stream whose state is persisted.
    ```
 
 8. **Instructions block,** verbatim:
 
    ```text
-   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear; add a test only where running cannot show the fix and the test will outlive the next rewrite. Otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Don't commit. End with a list, one line per finding: <id> file:line - fixed (files) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
+   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear; add a test only where running cannot show the fix and the test will outlive the next rewrite. Otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Follow the Tree paragraph's launch-specific commit instruction. End with a list, one line per finding: <id> file:line - fixed (files) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
    ```
 
    For a documentation-only pass, append: "Edit only Markdown, eval case files,
@@ -222,10 +227,10 @@ no brief, so it raises compatibility findings and tries to run tests.
    `Co-Authored-By` trailer.
 5. **Hand over.** Merge the integration branch's current tip into the working
    branch and rebuild what it touched. Once the
-   [landing bar](../verification/SKILL.md#the-landing-bar) holds, push the
-   working branch, fast-forward only; a local subagent's branch is never
-   pushed. Only the lead merges it into the integration branch the lead's
-   brief names.
+   [landing bar](../verification/SKILL.md#the-landing-bar) holds on that merged
+   head, the lead handles any push. A local lane never pushes; a separately
+   authorized remote partner follows AGENTS.md's explicit-refspec rule.
+   Only the lead merges it into the integration branch the lead's brief names.
 
 ## Route adjacent work
 

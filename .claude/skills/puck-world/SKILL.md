@@ -32,9 +32,10 @@ verdict fixtures are quarantined under `experimental/`; do not boot, repair or
 retarget them, and read the references' mentions of them as prior art
 ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
 
-**The live World is shared.** The World the owner pairs in runs the main
+## The live World is shared
+ The World the owner pairs in runs the main
 checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
-tools:
+tools (in Claude, ToolSearch `select:mcp__puck__puck_worlds,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
 `puck_worlds` lists the running Worlds, and `puck_exec`, `puck_capture_frame`
 and `puck_state_vector_write` take a `world` argument (attachment id or
 process id) that reaches exactly that World; name it whenever more than one
@@ -149,7 +150,9 @@ on the wire, `CommandContext.Principal` for console text); handlers read
 `context.Principal` and never construct a principal, which would launder an
 identity. A refusal distinguishes what a grant composes from whether the subject
 is legitimate for the actor. Client code never mutates local state before the
-server's verdict. [references/authority.md](references/authority.md)
+server's verdict. Trace the acting principal stamped at ingress when debugging
+a refusal; constructing a `Principal` in a test bypasses the path under investigation.
+[references/authority.md](references/authority.md)
 
 **Read through the caller's disclosure.** A console read-back reads the
 `WorldStateReadView` its acting principal is minted
@@ -263,7 +266,7 @@ offscreen boot opens no device either way, and the flag is harmless there. The
 verbs that boot a windowed or offscreen World for you (`puck canary`, `puck
 parity`, `puck counters`, `puck verbs`, `puck docs citations`, `puck bench
 startup`) pass it themselves (`WorldDevices.NoneArguments`). The owner's own World
-(`.claude/launch.json`'s `debug-world`) omits it. Never inject real input to
+(`.claude/launch.json`'s `debug-world`) explicitly passes `--devices all`. Never inject real input to
 check the flag: the owner may be holding the pad.
 
 - **Build first.** A failed build leaves the previous binaries in place, so a
@@ -342,6 +345,9 @@ check the flag: the owner may be holding the pad.
   [tick-exact debug capture](references/schedules-and-tests.md#tick-exact-debug-capture).
 - **A denial check needs a control.** Pair it with an actor who holds the grant
   and succeeds, and keep actor and target different (every seat is seeded wide).
+  For a fixture whose other player's row is `state:players$other`, inspect
+  `world.why peer:1:1 edit state:players$other`; the peer must be admitted and
+  must not own that target. Trace the actual ingress-stamped principal too.
 - **Pixels are not a replay proof.** `replay.verify` MATCH proves the hashed
   authoritative state trajectory, not the HUD or the image
   ([references/replay.md](references/replay.md)).

@@ -221,7 +221,7 @@ record of when this repository changed:
 
 Three registers share one standard. Human narrative (READMEs and `docs/`)
 serves people, students included; XML documentation serves developers reading
-the API; agent material (`AGENTS.md`, `.claude/skills/`) serves agents mid-task.
+the API; agent material (`AGENTS.md`, `.claude/skills/`, `.claude/agents/`, `.codex/`, `.agents/`) serves agents mid-task.
 Every surface owes complete sentences, neutral professional confidence,
 task-oriented headings and concrete detail ahead of abstraction.
 
@@ -347,13 +347,24 @@ directory) and `description`: a double-quoted string (a bare `: ` breaks strict
 YAML parsers such as Codex's), third person, at most 200 characters, naming the
 capability and the words a request that should load it uses (files, types,
 verbs, symptoms), with at most a short pointer to the sibling that owns a
-look-alike area. `claude plugin eval` lists a longer description by the skill's
+look-alike area. A trailing "Use for/when …" trigger clause is allowed after
+the third-person opening. `claude plugin eval` lists a longer description by the skill's
 name alone, so its triggering goes unmeasured, and every session carries every
 description. It closes with a routing table to its sibling skills, which names
 the owner of each excluded area. A skill stays only while its evaluation
 shows it changes outcomes ([evaluating a skill](#evaluate-an-agent-skill)).
 
 ## Evaluate an agent skill
+
+These evals measure Claude in the named harness and model, not Codex or
+Antigravity. Report the harness, model and ablation arms with the result.
+Separate executed grader passes/failures from skipped and errored runs and
+from skill activation. Compute each ratio over executed graders only: one
+pass plus two cost-ceiling skips is 1/1 with two skips; all-skipped cases are
+unmeasured. A max-turn or API error is infrastructure evidence, never failed
+teaching. Show incomplete or unpaired ablation arms explicitly. Inspect the
+prompt, grader and actual response before adding teaching; repair a stale
+fixture or grader when the skill already teaches the behavior.
 
 `claude plugin eval .claude/skills/<name>` runs a skill's `evals/` cases, one
 directory per case: `prompt.md` (frontmatter `max_turns` and `allowed_tools`,

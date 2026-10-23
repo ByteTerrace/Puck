@@ -20,6 +20,9 @@ ONE server-side table authorizes every write: `WorldGrants`
 - Refusals and read-backs
 - Verifying
 
+Trace the acting principal stamped at ingress when debugging a refusal;
+constructing a `Principal` in a test bypasses that ingress path.
+
 ## Vocabulary
 
 - `WorldCapability` (5 members): `Drive`, `Observe`, `Control`, `Mutate`,

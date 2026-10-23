@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: "Leads Puck lanes and partners. Use for briefs, choosing agents or Codex models, landing lanes, merging to main, GPU and build scheduling, idle partners, routing findings; review-passes runs passes."
+description: "Leads Puck lanes and partners. Use for briefs, choosing agents or Codex models, landing lanes, Antigravity, GPU and build scheduling, idle partners, routing findings; review-passes runs passes."
 ---
 
 # Orchestration
@@ -51,7 +51,12 @@ shared-file edits are sequenced; its report shape is the three headings that
 brief:
 
 - an id, used in the brief file name, the commit trailer and every message;
-- the base commit, verified by the lead before the brief goes out.
+- the base commit, verified by the lead before the brief goes out;
+- a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
+  startup repository text while preserving current owner and system precedence.
+
+When a lane demonstrates stale-rule behavior, the lead starts a fresh session
+before launching its continuation. Editing a skill alone does not require a new session.
 
 Verify each premise of a brief yourself before sending it; a wrong premise costs
 every lane that received it. When a brief proves wrong, recall every lane working
@@ -73,7 +78,7 @@ Brief: <id> blocked: <question>
 ```
 
 The lead's ledger and plan files that a delegate never writes are the lead's
-own scratch checklists in the session scratchpad. The repository's documents,
+own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
 to no one lane: a delegate edits them for what its change delivers, ticking an
 item it closed and correcting text its change made stale, and the brief says so.
@@ -101,41 +106,45 @@ parity, canaries and counters checks run when the owner asks for a
 qualification, on the head the owner names. A red check on the integration
 branch is the next piece of work, not a reason to stop landing.
 
-A brief that grants GPU legs carries a time box and what to do when a leg
-fails: rerun it once alone, then fix it or hand it back as open. Several lanes
-granted the GPU share it through one lease on the lead machine: before booting
-a World or running a WARP bake, a lane runs `puck lease gpu --holder <lane> --wait 1200 -- <command...>` from its private CLI copy. The verb takes the shared main checkout's lease atomically, records the lane, PID and time, and releases after the child exits, fails or is cancelled. A lane that finds the lease taken does CPU work and tries again later, and never holds it longer than its batch of checks, at most 20 minutes.
-Every World a lane boots passes `--devices none`, so the owner's pads and
-keyboard never drive it
-([the ruling](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
-The `.claude/leases/` directory is git-ignored and created by the verb. Launch a Codex lane with `codex exec --cd <worktree> -m <model> -c
-model_reasoning_effort='"<effort>"' "$(cat <brief>)"` in the background, its
-output to a lane-named log: `.codex/config.toml`'s `puck` permission profile
-then applies, with `approvals_reviewer = "auto_review"` (Codex's counterpart
-of auto mode) and `.codex/rules/git.rules`. A sandbox-denied `git commit`
-escalates and the reviewer approves it, so the lane commits on its own
-branch; every `git push` is forbidden before review, so its work lands through
-the lead. The Codex companion's `task` forces `--sandbox workspace-write`,
-which overrides the profile: a lane launched through it cannot commit, and the
-lead commits its uncommitted changes
-([`review-passes`](../review-passes/SKILL.md#before-launching)). Under
-`prefer_mxc` the profile gives shell commands network access and live web
-search, and makes `.claude/leases/` writable (an absolute path per machine).
+Use [verification](../verification/SKILL.md#what-uses-the-gpu) for GPU grants,
+lease acquisition, time boxes and failure handling. Load it before a GPU leg or
+classifying a flake. Investigation of a failure is a lane of its own.
+
+### Launch capabilities
+
+This table describes configured capabilities and known launch behavior; a grant
+is not proof a command succeeded. Record runtime probes in the landing commit.
+
+| Launch | Network | Git writes | Push | GPU | MCP | Hooks | Skills |
+|---|---|---|---|---|---|---|---|
+| Native `codex exec` | Configured on | Own-branch commits; checkout and common Git directory granted by profile | Refused for a lane | Lead grant and lease | Project `puck` registration | Current definitions trusted through `/hooks` | `.agents/skills` link |
+| Codex companion `task --write` | Sandbox has no network | `workspace-write` excludes Git; lead commits | Refused | No sandbox GPU; lead verifies | Project `puck` registration | Same per-user trust, on supported tool paths | Same link |
+| Claude worktree agent | Harness permissions | Own-branch commits; own-tree isolation | Refused | Lead grant and lease | Shared `puck` server | Project registration | `.claude/skills` |
+| Antigravity `agy -p` | Terminal sandbox has no network | Own-branch commits | Refused by git-safety | No sandbox GPU; lead verifies | Workspace plugin registration | `.agents/hooks.json`; hooks start in `.agents/` | `.agents/skills.json` |
+
+A native Codex lane commits directly; git-safety and git.rules guard shared
+state. Linked worktrees need a grant to their separate common Git directory
+and the main checkout's shared lease directory; discover them rather than
+requiring one machine's checkout path. An untrusted Codex hook is skipped:
+review and trust each current definition and re-review changed definitions.
+Hooks cover supported activated tool paths, not every possible execution path.
+See [machine setup](../../../docs/development/contributing.md#setting-up-a-machine).
+
+Before launching Codex in a main checkout or fresh worktree, build/copy its CLI
+as [verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)
+describes and run `dotnet <lane>-cli/Puck.Cli.dll agents link` there. Then launch
+`codex exec --cd <worktree> -m <model> -c model_reasoning_effort='"<effort>"' "$(cat <brief>)"`.
+Keep the output in a lane-named log. A resumed Codex session retains its launch
+sandbox; after changing permissions, start a fresh continuation instead of
+`--resume-last`. Companion restrictions are specific to `task`, not native exec.
 
 An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
-its worktree, without `--mode`: headless `-p` judges the `--mode auto` flag
-before it signs in and refuses it ("rollout flag off"), while the user-level
-`agentMode: "auto"` applies once it has, on a personal Google account. Its
-rights come from the user-level `~/.gemini/antigravity-cli/settings.json`
-(allow, ask and deny; Antigravity reads no project permission file), its skills
-and `puck` MCP server from the committed `.agents/`. Commands run in its
-terminal sandbox: commits succeed there, the network does not, and a command
-on the ask list (a push to `main`) is refused headless, since it cannot prompt. A resumed
-Codex session keeps the sandbox it was launched with, so after a sandbox change
-relaunch the lane fresh with a continuation brief rather than `--resume-last`.
-A Codex brief uses the same verb, never a hand-chained mkdir/run/remove sequence.
-A lease older than an hour whose holder process is gone is reclaimed by the verb; unknown holder metadata is refused for inspection. The same rule gives `Puck.World.Tests` one run at a time through `puck lease heavy --holder <lane> --wait 1200 -- <command...>`, since a run takes about 7 GB of the lead machine's 32 GB. Investigating
-a failure is a lane of its own, never the integrator's.
+its worktree, without `--mode`: headless flag validation rejects `--mode auto`
+before sign-in, while the user-level `agentMode: "auto"` applies afterwards.
+Auto mode ignores the ask list; git-safety refuses pushes and shared-state Git
+operations. The non-secret home policy still needs the owner's supplied block;
+login and trust material stay local. The workspace plugin exposes the MCP
+configuration because a bare `.agents/mcp_config.json` is not a discovery root.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
@@ -184,8 +193,10 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
 - On capacity, admit the next job. A heavy job (a solution build plus a full
   suite, about 7 GB at its peak) is one at a time per machine: a full
   `Puck.World.Tests` or `Puck.World.Presentation.Tests` run never runs beside
-  another, and `puck gate` and `puck affected` already wait for one another's
-  heavy suites machine-wide.
+  another. `puck gate` and `puck affected` acquire the existing heavy lease
+  around each heavy suite, sample headroom while holding it, and release it on
+  every exit. Nested runs under `puck lease heavy` serialize on child leases
+  after validating the ancestor holder's process identity.
 - On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
   step only with more free memory than the capacity threshold and more free
   disk than the pressure threshold, so a running agent waits rather than being
@@ -213,8 +224,7 @@ Every build, a Codex brief's included, passes `-nodeReuse:false`
 
 ## Select models and route findings
 
-Codex and Claude both implement, and no model in either family is restricted or
-reserved. Choose the model and effort per lane by fit: put the strongest available
+All three families implement, and model selection is by fit. Choose the model and effort per lane by fit: put the strongest available
 model on subtle or correctness-heavy work. Codex's two models, Astra
 (`gpt-6-astra`, the frontier model) and Sol (`gpt-6.1-sol`, the workhorse), are
 both free to use and encouraged, for implementation and for review-and-fix
@@ -236,7 +246,7 @@ allows, in order of rising cost:
 
 | Agent | Model | Effort | Use for |
 |---|---|---|---|
-| `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. It edits nothing. |
+| `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
 | `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
 | `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
 | `principal` | Fable 5.1 | high | Correctness-critical or long-horizon work: determinism and fixed-point maths, the bake and its kernels, renderer architecture, a defect other lanes failed to crack. |
@@ -318,7 +328,7 @@ Route it accordingly:
 |---|---|
 | Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
 | Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
-| Whole-area analysis that needs a large context | Anything that must push, or run an ask-listed git command headless |
+| Whole-area analysis that needs a large context | Anything that must push or mutate shared Git state |
 | Portal, dashboard and other TypeScript/UI work | |
 | Research synthesis | |
 
@@ -345,7 +355,7 @@ thing the owner cares about, not machine load alone:
 - implementation slots (Codex and agent) not implementing right now;
 - the board's age against the newest lane change.
 
-Arm a recurring audit as a background monitor, which reports while the lead is
+In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the
 drift it exists for. On each audit, act on what degraded in the same turn: a
 lane waiting more than an hour to land, an idle slot with ready work, a review
@@ -369,14 +379,18 @@ trade-off. Change a test only to match the ruled behavior.
 
 ## Message partners
 
+Cross-session messaging below is Claude-only. Codex's in-session agent messaging
+is not a bridge to an independent peer session. Codex and Antigravity use a
+shared lane-named file, the hand-back report and the `Brief:` trailer when no
+peer-session transport is available.
+
 Keep messages short, with a self-contained first line:
 
 ```text
 [<brief id>] <started|progress|done|blocked|question>: <sentence>
 ```
 
-Put large content in a lane-named file in the session scratchpad or the lane's
-own worktree, and carry its path in the message. Large content never goes on a
+Put large content in a lane-named file under `<worktree>/.claude/scratch/<lane>-*`, and carry its path in the message. Large content never goes on a
 pushed branch: a branch carries the lane's commits, not its analyses, logs or
 notes. Silence is not agreement.
 

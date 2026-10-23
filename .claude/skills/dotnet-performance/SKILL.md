@@ -1,6 +1,6 @@
 ---
 name: dotnet-performance
-description: "Puck .NET 11 performance: allocation, LINQ, Vector<T>, SIMD, tiering, AllocationWindow, puck bench, AOT analysis (IsAotCompatible, IL2026). Simulation-value numerics: maths-usage."
+description: "Tunes Puck .NET 11 performance: allocation, LINQ, Vector<T>, SIMD, tiering, AllocationWindow, puck bench, AOT analysis (IsAotCompatible, IL2026). Simulation-value numerics: maths-usage."
 ---
 
 # .NET 11 performance
@@ -46,7 +46,8 @@ project file before changing code.
   several suites set `System.Runtime.TieredCompilation` to `false` so allocation
   laws measure optimized code. Read the test project's own
   `RuntimeHostConfigurationOption` entries before comparing numbers across
-  hosts.
+  hosts. Counts are not comparable across different GC modes or tiering
+  configurations.
 - **`System.Numerics.Tensors` is a NuGet package outside the shared framework,**
   and no Puck project references it directly (it arrives transitively through
   `Microsoft.Extensions.AI`, which `Puck.World.Embeddings` uses). Adding a direct
@@ -81,19 +82,18 @@ on every run, machine and backend. Some of the references' strongest
 recommendations are unsafe on that path, and they do not say so because they
 are not written about this repository.
 
-- **`Vector<T>` is machine-width.** Any result that depends on `Vector<T>.Count`
-  (a float reduction, a lane-order hash, chunking that reaches the output)
-  differs between hosts. Fixed-width `Vector128/256/512` with an explicit lane
-  count, an explicit lane-combine order and a scalar tail is the deterministic
-  form.
-- **`TensorPrimitives` promises no evaluation order for its reductions.** Over
-  integer element types the result is exact and order cannot move it; over
-  `float` or `double` it can differ by ISA. Throughput alone never justifies a
-  float fast path whose value is compared, hashed or replayed.
-- **Reordering a float reduction changes its bits.** Moving to a fixed-width
-  formulation is a deliberate correction: the value moves once, then stays
-  stable. Prove bit-identity across runs first (`puck test --reproduce`), then
-  measure.
+- Decide whether a value is simulation-significant before measuring. Route
+  simulation numerics to [maths-usage](../maths-usage/SKILL.md): use the appropriate
+  fixed-point or integer operation. A stable float reduction is still forbidden
+  on a simulation or replayed-value path. Throughput alone does not justify a
+  changed simulation value; justify a deliberate correction and show repeatability
+  with `puck test --reproduce` before measuring it.
+- **Presentation-only float SIMD.** `Vector<T>` is machine-width; a float
+  reduction can change its order and bits across machines. Fixed-width
+  `Vector128/256/512` with explicit lane-combine order and scalar tail gives
+  a controlled reduction order when the presentation needs one. Reordering is
+  a deliberate presentation choice, not a route for floats into simulation.
+  `TensorPrimitives` makes no reduction-order guarantee over float/double.
 - **Randomness and parallel completion order are not optimization knobs.**
   `Random.Shared`, `RandomNumberGenerator` and `Parallel.*` never touch a value
   path; [`maths-usage`](../maths-usage/SKILL.md) names the reproducible

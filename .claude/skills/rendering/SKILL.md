@@ -307,8 +307,9 @@ compares and fails naming the file that drifted, it writes nothing.
   GPU cost.
 - **Unbounded is a state, not a number** (`SdfBoundAlgebra.Unbounded`); bounds
   compose through the set operations in `SdfBoundAlgebra`.
-- **`SdfShapeType.Path` is presentation-only;** the fixed-point evaluator
-  refuses it.
+- **Deterministic versus presentation geometry:** use
+  [sdf-authoring](../sdf-authoring/SKILL.md#render-only-versus-deterministic);
+  the fixed-point evaluator supports `SdfShapeType.Path` through `SdfPathSolid`.
 
 ## Capacity and emission
 
