@@ -135,4 +135,87 @@ public sealed class TransformDisclosureLawTests {
             Assert.Equal(before, TransformFixture.Listing(arena: host.Arena, rowOrdinal: deck));
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HiddenRuleLocalsCannotControlAPublicTransform(bool runtime) {
+        var section = runtime ? WithPolicies() : WithPolicies("rankValue");
+        var context = TransformFixture.Context(section: section);
+        Assert.True(ExpressionSpelling.TryParse(text: "1 / (rankValue + 1)", program: out var program, error: out var error), error);
+        var rule = new Rule(
+            Name: TransformFixture.Name(value: "localControl"),
+            Mode: ActionTriggerMode.Level,
+            Locals: [new RuleLocal(Name: TransformFixture.Name(value: "probe"), Expression: program!)],
+            Effects: [new ActionEffect.TransformState(Transform: new StateTransform.Sort(Row: "deck", By: [new SortKey(Row: "rank")]))]);
+        if (!runtime) {
+            var exception = Assert.Throws<RuleException>(() => RuleCompiler.CompileAll(context: context, rules: [rule]));
+            Assert.Contains("TransformWidensAudience", exception.Message);
+            return;
+        }
+        var rules = RuleCompiler.CompileAll(context: context, rules: [rule]);
+        var host = TransformFixture.Host(context: context, section: section);
+        Assert.True(host.Arena.TryWriteVisibility(
+            rowOrdinal: TransformFixture.Ordinal(context: context, name: "rankValue"),
+            key: host.Arena.Keys.Intern(name: StateRow.SlotKey),
+            visibility: Private));
+        var evaluator = new RuleEvaluator(host: host);
+        _ = evaluator.Evaluate(latch: new RuleLatch(), rules: rules, stepTicks: 1UL);
+        Assert.Contains(evaluator.Diagnostics(), diagnostic => diagnostic.ToString()!.Contains("TransformWidensAudience", StringComparison.Ordinal));
+        Assert.Equal("a=1,b=2,c=3", TransformFixture.Listing(arena: host.Arena, rowOrdinal: TransformFixture.Ordinal(context: context, name: "deck")));
+    }
+
+    [Fact]
+    public void PushRayDisclosureChecksThePoolsOwnBackingRows() {
+        var cellField = TransformFixture.Name(value: "cell");
+        var kindField = TransformFixture.Name(value: "kind");
+        var poolName = TransformFixture.Name(value: "pieces");
+        var section = new StateSection(
+            Lattices: [new LatticeTopology.Grid(Name: TransformFixture.Name(value: "map"), Origin: new Puck.Assets.Documents.DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1)],
+            Rows: [new StateRow(Name: TransformFixture.Name(value: "secretSlot"), Kind: CellKind.Int, Visibility: Private, Cells: [TransformFixture.Cell(key: StateRow.SlotKey.Value, value: 0L)])],
+            Records: [new StateRecord(Name: TransformFixture.Name(value: "Piece"), Fields: [
+                new StatePoolField(Name: cellField, Kind: CellKind.Int, Min: 0, Max: long.MaxValue),
+                new StatePoolField(Name: kindField, Kind: CellKind.Int),
+            ])],
+            Pools: [new StatePool(Name: poolName, Record: TransformFixture.Name(value: "Piece"), Capacity: 4, Initial: [
+                new StatePoolSeed(Slot: 0, Values: [new StatePoolValue(Field: cellField, Value: CellValue.Int(value: 0L)), new StatePoolValue(Field: kindField, Value: CellValue.Int(value: 1L))]),
+                new StatePoolValue[] { new(Field: cellField, Value: CellValue.Int(value: 1L)), new(Field: kindField, Value: CellValue.Int(value: 1L)) } is var second ? new StatePoolSeed(Slot: 1, Values: second) : default!,
+            ])]
+        );
+        var catalog = StateCatalog.Compile(section: section);
+        var runRow = new PatternRow(Name: TransformFixture.Name(value: "pushable"), Kind: CellKind.Int,
+            Symbols: [new PatternSymbol(Name: TransformFixture.Name(value: "push"), Min: 1, Max: 1), new PatternSymbol(Name: TransformFixture.Name(value: "empty"), Min: 0, Max: 0)],
+            Pattern: new PatternNode.Sequence(Items: [new PatternNode.Plus(Item: new PatternNode.Symbol(Name: "push")), new PatternNode.Symbol(Name: "empty")]));
+        var pushRow = new PatternRow(Name: TransformFixture.Name(value: "push"), Kind: CellKind.Int,
+            Symbols: [new PatternSymbol(Name: TransformFixture.Name(value: "push"), Min: 1, Max: 1)],
+            Pattern: new PatternNode.Symbol(Name: "push"));
+        var stopRow = new PatternRow(Name: TransformFixture.Name(value: "stop"), Kind: CellKind.Int,
+            Symbols: [new PatternSymbol(Name: TransformFixture.Name(value: "stop"), Min: 2, Max: 2)],
+            Pattern: new PatternNode.Symbol(Name: "stop"));
+        var context = new RuleCompileContext(section: section, catalog: catalog, tables: null, patterns: [runRow, pushRow, stopRow], generators: null, simulationRateHz: 60, vocabulary: RuleVocabulary.Core);
+        var compiled = RuleCompiler.Compile(context: context, rule: new Rule(Name: TransformFixture.Name(value: "push"), Effects: [new ActionEffect.ForEachPool(
+            Pool: poolName.Value,
+            Binding: TransformFixture.Name(value: "mover"),
+            Effects: [new ActionEffect.TransformState(Transform: new StateTransform.PushRay(
+                Pool: poolName, Cell: cellField, Value: kindField,
+                From: StateChannelRef.OfBindingField(binding: "mover", field: "cell"),
+                Topology: TransformFixture.Name(value: "map"), Direction: TransformFixture.Name(value: "E"),
+                Pattern: "pushable", PushPattern: "push", StopPattern: "stop", Empty: 0))]
+        )]));
+        var host = new ArenaEffectHost(arena: new StateArena(catalog: catalog, options: null, section: section, time: ArenaTime.Origin));
+        var evaluator = new RuleEvaluator(host: host);
+
+        _ = evaluator.Evaluate(latch: new RuleLatch(), rules: [compiled], stepTicks: 1UL);
+
+        Assert.Empty(evaluator.Diagnostics());
+        Assert.True(catalog.TryGetPool(name: poolName, pool: out var pool));
+        Assert.True(host.Arena.TryPoolKey(slot: 1, key: out var slotKey));
+        Assert.Equal(CellValue.Int(value: 3L), host.Arena.Read(rowOrdinal: pool!.Fields[0].RowOrdinal, key: slotKey));
+    }
+
+    [Fact]
+    public void ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject() {
+        var remember = new StateTransform.Remember(Into: "dest", Key: "k", From: "(secretVec[a])", UnlessWithin: "0.5");
+        Assert.Contains(new StateSubject(Name: "secretVec", Access: StateAccess.Read), remember.Subjects());
+    }
 }

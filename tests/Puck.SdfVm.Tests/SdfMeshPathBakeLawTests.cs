@@ -58,6 +58,31 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         Assert.True(condition: (block.Length > 60), userMessage: $"the block holds {block.Length} vertices");
     }
+    // Four plates 48 m long, 7 cm thick and 40 cm wide, 6 m apart, one static copy and nothing else: the coarse lattice
+    // over their box narrows to a flat box whose long axes are sampled far coarser than a plate, so a plate lying between
+    // two sample rows changes no sign and lies more than half the finest spacing from every sample. The narrowing keeps
+    // the rows a sheet passes between, and the mesh holds every plate, on its surface.
+    [Fact]
+    public void AStaticCopyOfThinPlatesBetweenSampleRowsKeepsEveryPlate() {
+        var plates = new[] { 13.6f, 19.6f, 25.6f, 31.6f }.Select(selector: static z => new Shape(Center: new Vector3(x: 45f, y: 4.215f, z: z), Half: new Vector3(x: 24f, y: 0.035f, z: 0.2f), Rotation: Quaternion.Identity, Material: 0)).ToArray();
+        var (program, materials) = Program(oneCopy: true, shapes: plates);
+        var bake = new SdfMeshPathBake { Residency = "plates" };
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
+
+        Drive(bake: bake, frame: frame, materials: materials, shapes: plates);
+
+        var positions = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray();
+
+        foreach (var plate in plates) {
+            var own = positions.Count(predicate: point => (MathF.Abs(x: Field(shape: plate, point: point)) < 0.001f));
+
+            Assert.True(condition: (own > 1_000), userMessage: $"the plate at z {plate.Center.Z} holds {own} vertices of {positions.Length}: {bake.Describe()}");
+        }
+
+        var worst = positions.Max(selector: point => MathF.Abs(x: Nearest(count: plates.Length, first: 0, point: point, shapes: plates).Value));
+
+        Assert.True(condition: (worst < 0.004f), userMessage: $"a vertex lies {worst} from the plates");
+    }
     // Two slabs of two materials side by side, one static copy turned 30 degrees about up, share a flat top: their
     // boundary crosses the face along no crease and across the lattice's cells. The mesh cuts its triangles along it, so
     // all but a thousandth of the top within 3 cm of the boundary takes the material of the slab it lies over, where
