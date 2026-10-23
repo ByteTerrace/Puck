@@ -64,6 +64,10 @@ frame-time bar is judged by; `world.fps` reads a two-second window and counts
 the frame in progress at the moment it runs, so a script reads it once before
 it measures, or the first call's compilation lands in the reading.
 
+Every terminal shape answers `host.log`, which reads the `HostLog` ring of the
+process's stdout and stderr lines by sequence, tick, category, stream and text
+([hosting](../../docs/reference/hosting.md)).
+
 Each host loop runs on its own thread, and its hosted service's task faults
 with whatever the loop threw, so a failing loop stops the host instead of
 killing the process. A presenter whose `Activate` throws is reported as
