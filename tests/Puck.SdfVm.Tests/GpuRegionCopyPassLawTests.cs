@@ -98,12 +98,12 @@ public sealed class GpuRegionCopyPassLawTests {
                 random.NextBytes(buffer: bytes);
                 _ = region.Write(
                     bytes: bytes,
-                    offset: random.Next(maxValue: (region.ByteCount - bytes.Length))
+                    offset: random.Next(maxValue: (((int)region.ByteCount) - bytes.Length))
                 );
                 Copy(gpu: gpu, region: region, slot: slot);
                 Assert.Equal(
                     expected: region.Contents.ToArray(),
-                    actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..region.ByteCount]
+                    actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..((int)region.ByteCount)]
                 );
             }
         }

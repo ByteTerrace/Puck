@@ -7219,7 +7219,7 @@ history and `experimental/`):
   seat shows it, so a crossing never stalls: the debug frame's garden is the
   closed-door-adjacent area at world granularity. Within a world, every baked
   mesh is resident: the mesh region holds the debug world's 1,265 draws in
-  2 GiB (`world.budget`, the most a `GpuRegion` holds; twice the need), the
+  under 4 GiB (`world.budget`, the most a `GpuRegion` holds; the need plus an eighth), the
   arena lands owed meshes at most 2 MB of words a frame, and the mesh store
   keeps meshes across boots. Field scopes bound a field's Lipschitz reach in
   the bake; they decide nothing about drawing or residency.

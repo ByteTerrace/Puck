@@ -1108,7 +1108,7 @@ mesh is still owed waits out of the staged records until it lands, so a body
 whose meshes all arrive at once, as when it crosses into a world, lands over a
 few frames. Every mesh is written again at once only when the arena outgrows
 its draw reserve or packs; a region that grows, to
-twice its need, takes the words it held without waiting for the device: the
+its need plus an eighth, takes the words it held without waiting for the device: the
 next upload clears the new buffer and copies the old one into it on the GPU,
 and the old buffer is disposed once that upload has completed. The bake keys each group by its
 geometry (`SdfMeshGeometryBuilder`), a 128-bit hash of what determines its
@@ -1308,7 +1308,7 @@ then each distinct mesh's positions and indices once) only when the frame hands
 a different draw list. Each scene emitter states its draws, a static placement's
 fixed at its rebuild and a stamp's posed at its root each frame, and returns the
 same list while none moved, so a still scene packs nothing. The region starts with one draw record when the tables are built
-and grows to twice the need when a list outgrows it. The mesh pass reads its triangles,
+and grows to the need plus an eighth when a list outgrows it. The mesh pass reads its triangles,
 and the surface pass reads the winning draw's material.
 
 A host-baked brick reaches the brick pool through a staged region whose

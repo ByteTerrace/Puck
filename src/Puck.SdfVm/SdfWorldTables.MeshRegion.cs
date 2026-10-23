@@ -11,8 +11,8 @@ namespace Puck.SdfVm;
 // already placed. Newly placed meshes land within a frame's share of words (MeshLandingWords), in the list's order, and a
 // draw whose mesh is still owed waits out of the staged records until it lands, so a body crossing into a world with all
 // its meshes at once lands over a few frames. A plan that relocates every mesh writes every word at once. The
-// region is created with the tables, one draw record long so every set that binds it binds a buffer, and grows to twice
-// the need without waiting for the device, the next upload carrying the words it held on the GPU; a frame without draws
+// region is created with the tables, one draw record long so every set that binds it binds a buffer, and grows to the need
+// plus an eighth without waiting for the device, the next upload carrying the words it held on the GPU; a frame without draws
 // keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
@@ -40,6 +40,7 @@ public sealed partial class SdfWorldTables {
     // renders.
     private long m_meshRevision;
     private ulong m_meshRegionBytes;
+    private ulong m_meshRegionUsedBytes;
     // The draws the frame being rendered rasterizes, from its staged draw list, and how many of them are glass.
     private uint m_meshDrawCount;
     private uint m_glassDrawCount;
@@ -52,12 +53,36 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the words the mesh region's draw records and meshes take for the draws the latest frame staged; zero
     /// before a frame draws a mesh.</summary>
     public int MeshRegionWords => m_meshArena.Words;
-    /// <summary>The most bytes one mesh region holds, a whole number of words (<see cref="GpuRegion"/> counts its bytes in an
-    /// <see cref="int"/>): the baked meshes a frame draws must fit it, and a frame that needs more throws.</summary>
-    public const ulong MostMeshRegionBytes = (((ulong)int.MaxValue / sizeof(uint)) * sizeof(uint));
+    /// <summary>The most bytes one mesh region holds, a whole number of words (<see cref="GpuRegion.MaxByteCount"/>): the
+    /// baked meshes a frame draws must fit it, and a frame that needs more throws.</summary>
+    public const ulong MostMeshRegionBytes = ((ulong)GpuRegion.MaxByteCount);
+    /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB.</summary>
+    public const ulong MeshRegionGranuleBytes = (16UL << 20);
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
     /// needs more. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
+    /// <summary>Gets the bytes of the mesh region the latest planned draw list uses: its draw records and the meshes it
+    /// places, which <see cref="MeshRegionBytes"/> holds with room to grow. Safe to read from any thread.</summary>
+    public ulong MeshRegionUsedBytes => Volatile.Read(location: ref m_meshRegionUsedBytes);
+
+    /// <summary>Returns the size a mesh region grows to when its meshes need <paramref name="needBytes"/>: the need plus an
+    /// eighth, rounded up to <see cref="MeshRegionGranuleBytes"/> and capped at <see cref="MostMeshRegionBytes"/>. The size
+    /// is never below the need and is a whole number of words.</summary>
+    /// <param name="needBytes">The bytes the planned draws and meshes use; at most <see cref="MostMeshRegionBytes"/>.</param>
+    /// <returns>The region's new size in bytes.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="needBytes"/> is past <see cref="MostMeshRegionBytes"/>.</exception>
+    public static ulong MeshRegionGrownBytes(ulong needBytes) {
+        if (needBytes > MostMeshRegionBytes) {
+            throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {MostMeshRegionBytes} one region holds.");
+        }
+
+        var wanted = (needBytes + (needBytes / 8UL));
+
+        return Math.Min(
+            val1: (((wanted + (MeshRegionGranuleBytes - 1UL)) / MeshRegionGranuleBytes) * MeshRegionGranuleBytes),
+            val2: MostMeshRegionBytes
+        );
+    }
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
     public uint MeshDrawCount => m_meshDrawCount;
     /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass (<see cref="SdfMeshDraw.Glass"/>): the glass pass
@@ -83,6 +108,10 @@ public sealed partial class SdfWorldTables {
             (revision != m_meshSourceRevision)
         ) {
             m_meshArena.Plan(draws: draws);
+            Volatile.Write(
+                location: ref m_meshRegionUsedBytes,
+                value: (((ulong)m_meshArena.Words) * sizeof(uint))
+            );
 
             if (m_meshArena.Words > 0) {
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
@@ -192,13 +221,14 @@ public sealed partial class SdfWorldTables {
                 SkinWord: ((placement.SkinWord == 0) ? 0 : (placement.SkinWord - placement.VertexWord))
             )
         );
-        _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (placement.VertexWord * sizeof(uint)));
+        // The byte offset is a long: a mesh placed past 512 M words starts past 2 GiB.
+        _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (((long)placement.VertexWord) * sizeof(uint)));
     }
-    // Grows the region to twice the need, or to the most a region holds (GpuRegion counts its bytes in an int) when twice
-    // is past that, without waiting for the device (GpuRegion.Grow): the next upload clears the new buffer and copies the
-    // words the old one held into it on the GPU, so every placed mesh stands where it was written and nothing it held is
-    // staged again, and the old buffer is disposed once that upload completes (Retire). The region keeps its reserved
-    // copy sets, so growing takes no descriptor range.
+    // Grows the region to MeshRegionGrownBytes of the need, refusing by name past what a region holds, without waiting for
+    // the device (GpuRegion.Grow): the next upload clears the new buffer and copies the words the old one held into it on
+    // the GPU, so every placed mesh stands where it was written and nothing it held is staged again, and the old buffer is
+    // disposed once that upload completes (Retire). The region keeps its reserved copy sets, so growing takes no
+    // descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
@@ -206,9 +236,9 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        var grown = ((bytes <= MostMeshRegionBytes) ? Math.Min(val1: ((((2UL * bytes) + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint)), val2: MostMeshRegionBytes) : throw new InvalidOperationException(message: $"The baked meshes need {bytes} bytes of mesh region, past the {MostMeshRegionBytes} one region holds."));
+        var grown = MeshRegionGrownBytes(needBytes: bytes);
 
-        Retire(replaced: m_meshRegion.Grow(byteCount: checked((int)grown)));
+        Retire(replaced: m_meshRegion.Grow(byteCount: ((long)grown)));
         m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(

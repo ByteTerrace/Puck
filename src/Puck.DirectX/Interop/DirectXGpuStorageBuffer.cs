@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
