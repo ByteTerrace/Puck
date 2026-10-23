@@ -212,4 +212,10 @@ public sealed class TransformDisclosureLawTests {
         Assert.True(host.Arena.TryPoolKey(slot: 1, key: out var slotKey));
         Assert.Equal(CellValue.Int(value: 3L), host.Arena.Read(rowOrdinal: pool!.Fields[0].RowOrdinal, key: slotKey));
     }
+
+    [Fact]
+    public void ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject() {
+        var remember = new StateTransform.Remember(Into: "dest", Key: "k", From: "(secretVec[a])", UnlessWithin: "0.5");
+        Assert.Contains(new StateSubject(Name: "secretVec", Access: StateAccess.Read), remember.Subjects());
+    }
 }
