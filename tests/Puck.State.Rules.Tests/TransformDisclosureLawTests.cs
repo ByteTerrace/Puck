@@ -135,4 +135,33 @@ public sealed class TransformDisclosureLawTests {
             Assert.Equal(before, TransformFixture.Listing(arena: host.Arena, rowOrdinal: deck));
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HiddenRuleLocalsCannotControlAPublicTransform(bool runtime) {
+        var section = runtime ? WithPolicies() : WithPolicies("rankValue");
+        var context = TransformFixture.Context(section: section);
+        Assert.True(ExpressionSpelling.TryParse(text: "1 / (rankValue + 1)", program: out var program, error: out var error), error);
+        var rule = new Rule(
+            Name: TransformFixture.Name(value: "localControl"),
+            Mode: ActionTriggerMode.Level,
+            Locals: [new RuleLocal(Name: TransformFixture.Name(value: "probe"), Expression: program!)],
+            Effects: [new ActionEffect.TransformState(Transform: new StateTransform.Sort(Row: "deck", By: [new SortKey(Row: "rank")]))]);
+        if (!runtime) {
+            var exception = Assert.Throws<RuleException>(() => RuleCompiler.CompileAll(context: context, rules: [rule]));
+            Assert.Contains("TransformWidensAudience", exception.Message);
+            return;
+        }
+        var rules = RuleCompiler.CompileAll(context: context, rules: [rule]);
+        var host = TransformFixture.Host(context: context, section: section);
+        Assert.True(host.Arena.TryWriteVisibility(
+            rowOrdinal: TransformFixture.Ordinal(context: context, name: "rankValue"),
+            key: host.Arena.Keys.Intern(name: StateRow.SlotKey),
+            visibility: Private));
+        var evaluator = new RuleEvaluator(host: host);
+        _ = evaluator.Evaluate(latch: new RuleLatch(), rules: rules, stepTicks: 1UL);
+        Assert.Contains(evaluator.Diagnostics(), diagnostic => diagnostic.ToString()!.Contains("TransformWidensAudience", StringComparison.Ordinal));
+        Assert.Equal("a=1,b=2,c=3", TransformFixture.Listing(arena: host.Arena, rowOrdinal: TransformFixture.Ordinal(context: context, name: "deck")));
+    }
 }
