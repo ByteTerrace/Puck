@@ -160,6 +160,7 @@ and none is run until the owner calls for qualification.
 
 ## Cross-plan maintenance
 
+- [ ] Close the skill eval graders that still fail with the skill loaded ([evaluating a skill](../development/documentation.md#evaluate-an-agent-skill)): puck-world w03 (`bom-less-utf8`, `pixel-versus-replay-proof`, `announcement-on-stderr`) and w04 (`compiled-in-memory`, `folds-through-the-rule-frame`), and verification v08 (`citations-boots-world`) and v12 (`shows-by-running`). For each, decide whether the skill lacks the teaching or the case is wrong, fix that, and rerun the skill's suite with a budget that judges every run.
 - [x] Restore `puck bench world`: its harness supplies the machine catalog, so the shipped world's arcade engines are admitted and measured.
 - [x] The `BenchRunner` help states that shipped-world server construction costs hundreds of milliseconds, a number `puck bench world` measures.
 - [ ] Finish the listing-order rollout: nothing a listing's order reaches differs between hosts. The directory listings that reach an output, a message or a tie are sorted ordinally. Still open:
