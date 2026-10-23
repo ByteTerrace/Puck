@@ -10549,6 +10549,103 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderExposure"
+        },
+        "toon": {
+          "description": "Optional cel shading and its tuning. Absent is off.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Whether the world boots with cel shading on; absent is off.",
+              "type": "boolean",
+              "default": false
+            },
+            "threshold": {
+              "description": "Diffuse band threshold in [0, 1].",
+              "type": "number",
+              "default": 0.45
+            },
+            "softness": {
+              "description": "Full terminator width in [0.001, 0.5].",
+              "type": "number",
+              "default": 0.08
+            },
+            "shadowTint": {
+              "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+              "default": null,
+              "title": "DocumentVector3",
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                }
+              ]
+            },
+            "outlineWidth": {
+              "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+              "type": "number",
+              "default": 1.5
+            },
+            "outlineDistance": {
+              "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+              "type": "number",
+              "default": 12
+            },
+            "outlineNormal": {
+              "description": "Crease normal cosine in [0, 0.95].",
+              "type": "number",
+              "default": 0.65
+            },
+            "outlineTint": {
+              "description": "Outline multiplier, three linear RGB values in [0, 1].",
+              "default": null,
+              "title": "DocumentVector3",
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                }
+              ]
+            },
+            "specularSize": {
+              "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
+              "type": "number",
+              "default": 0.025
+            },
+            "exposure": {
+              "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
+              "type": "number",
+              "default": 0.5
+            },
+            "shoulder": {
+              "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
+              "type": "number",
+              "default": 0.65
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderToon"
         }
       },
       "additionalProperties": false,

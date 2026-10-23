@@ -9517,6 +9517,10 @@ export type WorldRenderDefaults = {
    * The camera exposure each view maps the luminance it shades to the display by, before the tonemap. Absent is a manual exposure at SdfExposure.DefaultEv100, a sunlit day's.
    */
   exposure?: WorldRenderExposure | null;
+  /**
+   * Optional cel shading and its tuning. Absent is off.
+   */
+  toon?: WorldRenderToon | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -10823,6 +10827,53 @@ export type WorldRenderSkyTwinkle = {
    * The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no state row.
    */
   rate?: BindableScalar;
+};
+
+export type WorldRenderToon = {
+  /**
+   * Whether the world boots with cel shading on; absent is off.
+   */
+  enabled?: boolean;
+  /**
+   * Diffuse band threshold in [0, 1].
+   */
+  threshold?: number;
+  /**
+   * Full terminator width in [0.001, 0.5].
+   */
+  softness?: number;
+  /**
+   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   */
+  shadowTint?: DocumentVector3;
+  /**
+   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   */
+  outlineWidth?: number;
+  /**
+   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   */
+  outlineDistance?: number;
+  /**
+   * Crease normal cosine in [0, 0.95].
+   */
+  outlineNormal?: number;
+  /**
+   * Outline multiplier, three linear RGB values in [0, 1].
+   */
+  outlineTint?: DocumentVector3;
+  /**
+   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+   */
+  specularSize?: number;
+  /**
+   * Reflected-light exposure compensation in stops, in [-4, 4].
+   */
+  exposure?: number;
+  /**
+   * Hue-preserving highlight compression in [0, 2]; zero disables it.
+   */
+  shoulder?: number;
 };
 
 export type WorldRigid = {

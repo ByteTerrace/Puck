@@ -92,6 +92,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   the draw there.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
+- **Cel shading is an optional material response, not a whole-image filter.**
+  `world.toon` and `render.toon` feed `SdfFrame.Toon` through the generated pass
+  block. `shade/sdf-toon.hlsli` shapes lights; `sdf-toon-outline.hlsli` reads
+  depth/normal edges in views, before temporal resolve. Keep screen pictures,
+  portal pictures, sky and self-emission out of both the banding and ink. Nested
+  worlds take the live enable override but retain their own document tuning.
+  The tuning belongs to the lighting cadence signature, never the bake closure.
 - **The frame shades luminance in nits, and each view's composite applies its
   exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
   A light record carries illuminance or intensity over π; emission, sky layers
@@ -409,6 +416,17 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   parity (`puck parity --world <file>`) needs a parity world with its contract
   beside it, and none exists while the debug world is the one live world; until
   one does, compare the two backends' captures and counts yourself.
+- Capture fixtures in a sandbox without a desktop monitor must replace both
+  the debug desktop graph and its screen producer with `source.color`, and
+  remove that screen's `padPointer`. Offscreen hosting alone still tries to
+  open the authored capture source. Use a private copy of the whole package
+  with the same entry filenames: a renamed wrapper changes document identity,
+  so garden/night back-references can instantiate another debug world. Keep
+  device-machine screens intact and disclose the desktop substitution in the
+  capture report. After a suit change, allow its rule to run and wait for
+  `world.wait bakes` before capturing; a tick wait alone can show the old mesh
+  stretched over the new rig. Clear an operator camera with
+  `view.override camera auto` before switching to a following motion layout.
 - GPU captures, device faults and the validation layers:
   [kernels](references/kernels.md#captures-faults-and-validation).
 

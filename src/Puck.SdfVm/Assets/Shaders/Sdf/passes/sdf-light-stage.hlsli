@@ -14,6 +14,7 @@
 #include "../shade/sdf-surface-shading.hlsli"
 #include "../shade/sdf-light.hlsli"
 #include "../shade/sdf-grid.hlsli"
+#include "../shade/sdf-toon-outline.hlsli"
 #ifdef SDF_VIEWS_PASS
 #include "../shade/sdf-mesh-irradiance.hlsli"
 
@@ -170,6 +171,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.probes = probes;
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
+            bool toon = sdfToonEnabled();
+            if (toon) { radiance *= passGroup.toonShadow.rgb; }
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
@@ -192,20 +195,28 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             }
 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
+            if (toon) {
+                // Metals retain their paint and a discrete highlight rather than a blurred environment lobe.
+                color = shadeMaterial.albedo * radiance;
+            }
 
             float3 indirect = float3(0.0, 0.0, 0.0);
 
             if (meshIndirect) {
                 indirect = sdfMeshIndirect(probes, normal);
+                if (toon) { indirect *= passGroup.toonShadow.rgb; }
                 color += indirect * shadeMaterial.albedo
                     * passGroup.indirectApply.rgb
-                    * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
+                    * ((toon ? 1.0 : (1.0 - shadeMaterial.metal)) * shadeMaterial.receive * passGroup.indirectApply.w
                         * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
             }
             // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface. It never
             // adds a second approximation while the volume is on.
             if (!meshIndirect) {
-                color += ((shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance()) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
+                float fill = toon ? 1.0 - sdfToonBand(dot(normal, keyDirection), 1.0)
+                    : 1.0 - max(dot(normal, keyDirection), 0.0);
+                float3 fillTint = toon ? passGroup.toonShadow.rgb : 1.0;
+                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion * fillTint;
             }
 
             // The environment the specular lobe reflects, for a material with a specular response: the lighting-visible
@@ -214,7 +225,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; with the
             // irradiance volume on, only as far as the volume sees the sky open that way, and the surroundings' light
             // where not.
-            if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
+            if (!toon && ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0))) {
                 float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
                 float3 viewDirection = -p.rayDirection;
                 float nDotV = saturate(dot(normal, viewDirection));
@@ -229,11 +240,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
             // material's specular answers. The occluders then dim reflected light; self-emission stays.
-            color += rim;
+            if (!toon) { color += rim; }
             color += specular;
 
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
-            color = selfEmission + (color - selfEmission) * attenuation;
+            color = toon ? color * attenuation : selfEmission + (color - selfEmission) * attenuation;
 
             // The local adaptation (SdfExposure.Local): the surface's exposure moves that share of the way from the
             // view's toward the one its own illumination would meter, the light arriving at it (the lights' diffuse
@@ -254,7 +265,12 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // The stylized curvature terms (cavity darkening, ridge light, ink outline) apply to the color the view's
             // exposure shows, at the strength the surface's exposed illumination reaches against a white surface the
             // meter aims for: a lit room keeps its edge highlights and ink, and a dim room's edges stay dim.
-            if (curvatureShading) {
+            if (toon) {
+                color = sdfToonExpose(color);
+                float ink = sdfToonOutline(p, s, surfacePoint);
+                color *= lerp(1.0, passGroup.toonInk, ink);
+                color += selfEmission;
+            } else if (curvatureShading) {
                 float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);
 
                 color = (applyCurvatureShading((color * passGroup.exposure), s.curvature, lit) / max(passGroup.exposure, 1.0e-12));

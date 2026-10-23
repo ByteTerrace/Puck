@@ -6,6 +6,7 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
+        ValidateToon(definition.Render.Toon, errors);
         ValidateIndirect(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
@@ -34,6 +35,25 @@ public static partial class WorldDefinitionValidator {
             if ((quality.Tier is { } selected) && (definition.Render.Preset(tier: selected) is null)) {
                 errors.Add(item: $"views.quality[{quality.Name}].tier names no {selected} preset.");
             }
+        }
+    }
+    private static void ValidateToon(WorldRenderToon? toon, List<string> errors) {
+        if (toon is null) { return; }
+        RequireRange(toon.Threshold, 0f, 1f, "render.toon.threshold", errors);
+        RequireRange(toon.Softness, .001f, .5f, "render.toon.softness", errors);
+        RequireRange(toon.OutlineWidth, 0f, 4f, "render.toon.outlineWidth", errors);
+        RequireRange(toon.OutlineDistance, .1f, 1000f, "render.toon.outlineDistance", errors);
+        RequireRange(toon.OutlineNormal, 0f, .95f, "render.toon.outlineNormal", errors);
+        RequireRange(toon.SpecularSize, .001f, .25f, "render.toon.specularSize", errors);
+        RequireRange(toon.Exposure, -4f, 4f, "render.toon.exposure", errors);
+        RequireRange(toon.Shoulder, 0f, 2f, "render.toon.shoulder", errors);
+        Color(toon.ShadowTint, "shadowTint");
+        Color(toon.OutlineTint, "outlineTint");
+        void Color(DocumentVector3? color, string name) {
+            if (color is not { } value) { return; }
+            RequireRange(value.X, 0f, 1f, $"render.toon.{name}[0]", errors);
+            RequireRange(value.Y, 0f, 1f, $"render.toon.{name}[1]", errors);
+            RequireRange(value.Z, 0f, 1f, $"render.toon.{name}[2]", errors);
         }
     }
     private static void ValidateSkyFieldScale(float value, string path, List<string> errors) {

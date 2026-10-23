@@ -104,6 +104,7 @@ icons {
     { name: "key.f2", label: "F2" }
     { name: "key.f3", label: "F3" }
     { name: "key.f4", label: "F4" }
+    { name: "key.f6", label: "F6" }
     { name: "key.z", label: "Z" }
     { name: "key.x", label: "X" }
     { name: "key.space", glyph { font: mono, glyph: "U+2423" } }
@@ -223,6 +224,7 @@ icons {
     { name: "tour.motionOn", label: "M1" }
     { name: "tour.garden", label: "PG" }
     { name: "tour.night", label: "PN" }
+    { name: "tour.toon", label: "CE" }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -247,6 +249,7 @@ icons {
     { source: "keyboard.f2", icon: "key.f2" }
     { source: "keyboard.f3", icon: "key.f3" }
     { source: "keyboard.f4", icon: "key.f4" }
+    { source: "keyboard.f6", icon: "key.f6" }
     { source: "keyboard.space", icon: "key.space" }
     { source: "keyboard.controlLeft", icon: "key.ctrl" }
     { source: "keyboard.tab", icon: "key.tab" }
@@ -406,6 +409,7 @@ state {
       tourMotionOn = "tour.motionOn"
       tourGarden = "tour.garden"
       tourNight = "tour.night"
+      tourToon = "tour.toon"
     }
 
     // The bar draws one bar that swaps its page in place as a trigger is held, rather than every page's bank at once.
@@ -489,6 +493,7 @@ bindingOverlays [
         "gamepad.buttonEast"
         "gamepad.rightShoulder"
         "gamepad.rightStickPress"
+        "gamepad.back"
       ]
       // One bank a page, in the order of the pages: Move, then the left trigger, the right trigger, left then right and
       // right then left.
@@ -521,6 +526,9 @@ bindingOverlays [
             inset: 1.5
           }
           tables {
+            toon [
+              { source: "gamepad.back", x: 0, y: 0, badge [0, 1] }
+            ]
             left [
               { source: "gamepad.dpadUp", x: -4.333, y: 1, badge [0, 1] }
               { source: "gamepad.dpadRight", x: -3.333, y: 0, badge [1, 0] }
@@ -544,7 +552,7 @@ bindingOverlays [
             view { pieces: standardPieces, anchor: standardAnchor }
             debug { pieces: standardPieces, anchor: standardAnchor }
             go { pieces: standardPieces, anchor: standardAnchor }
-            tour { pieces: standardPieces, anchor: standardAnchor }
+            tour { pieces: concat(standardPieces, [{ table: "toon", at [0, 0] }]), anchor: standardAnchor }
           }
         }
       }
@@ -746,7 +754,9 @@ bindingOverlays [
             id: "pad-rt-lt"
             inherits: "base"
             label: "Tour"
-            entries []
+            entries [
+              { command: "world.toon", id: "tourToon", label: "Toon shading", text: "toggle", sources ["gamepad.back", "keyboard.f6"] }
+            ]
           }
         }
       ]
