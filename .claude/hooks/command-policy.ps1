@@ -31,8 +31,7 @@ function Deny-PolicyCommand {
 
 function Complete-PolicyCommand {
     param($InputData)
-    # Claude and Codex abstain; Antigravity requires an explicit decision.
-    if ($null -ne $InputData -and $InputData.Payload.ContainsKey('toolCall')) { '{"decision":"allow"}' }
+    # Every tool abstains, so its own permission rules decide. Antigravity's "allow" would override its ask list.
     exit 0
 }
 
