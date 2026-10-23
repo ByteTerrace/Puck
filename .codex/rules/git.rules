@@ -1,0 +1,54 @@
+# Git safety for Codex lanes. A Codex lane's work lands through the lead, so a lane never pushes; a push to `main`
+# deploys to Azure and is the owner's alone (AGENTS.md, "Branches, commits and pushes"). Destructive local history
+# and worktree commands go to review rather than running unasked.
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "A Codex lane never pushes: leave the work for the lead, who lands and pushes it.",
+    match = [
+        "git push origin HEAD:refs/heads/lead/catch-up",
+        "git push origin main",
+        "git push --force origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["reset", "clean", "filter-branch", "filter-repo", "update-ref", "reflog"]],
+    decision = "prompt",
+    justification = "Rewrites or discards history or files; the lead decides.",
+    match = [
+        "git reset --hard HEAD~1",
+        "git clean -fdx",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "branch", ["-D", "-d", "--delete", "-f", "--force", "-m", "-M"]],
+    decision = "prompt",
+    justification = "Deletes or moves a branch; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "worktree", ["remove", "prune", "move"]],
+    decision = "prompt",
+    justification = "Removes or moves a worktree another lane may hold; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "stash", ["drop", "clear", "pop"]],
+    decision = "prompt",
+    justification = "The stash stack is shared by every worktree; never pop or drop another lane's entry.",
+)
+
+prefix_rule(
+    pattern = ["git", "checkout", "--"],
+    decision = "prompt",
+    justification = "Discards uncommitted work; the lead decides.",
+)
+
+prefix_rule(
+    pattern = ["git", "restore"],
+    decision = "prompt",
+    justification = "Can discard uncommitted work; the lead decides.",
+)

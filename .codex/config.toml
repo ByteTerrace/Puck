@@ -1,12 +1,29 @@
+# The owner's ruling: Codex runs with the same rights as the Claude agents in this checkout, and its approval
+# requests go to the automatic reviewer rather than a person (Codex's counterpart of Claude Code's auto mode). A
+# permission profile carries it; a lane launched with `codex exec` (no --sandbox flag) runs under it. Probed on
+# Windows: the profile makes the shared leases under .claude/leases/ writable, but the native sandbox still denies
+# writes under .git and network access whatever the grants say, so a sandboxed command that needs either must
+# escalate through the reviewer. Codex takes absolute paths only, so these name this machine's checkout.
+# .codex/rules/git.rules forbids every push and sends destructive git commands to review.
+default_permissions = "puck"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+
+[permissions.puck]
+extends = ":workspace"
+
+[permissions.puck.filesystem]
+'D:\Source\ByteTerrace\Puck\.git' = "write"
+'D:/Source/ByteTerrace/Puck/.git/**' = "write"
+'D:\Source\ByteTerrace\Puck\.claude\leases' = "write"
+
+[permissions.puck.network]
+enabled = true
+mode = "full"
+
 [mcp_servers.puck]
 command = "pwsh"
 args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/hooks/puck-mcp.ps1"]
 startup_timeout_sec = 600
 tool_timeout_sec = 120
 enabled = true
-
-# A Codex lane's GPU legs take the shared leases under .claude/leases/, outside its worktree. Codex takes writable
-# roots as absolute paths only, so each machine's checkout adds its own entry; a path no machine has is inert. Codex
-# keeps .git read-only whatever this says, so the lead commits a Codex lane's work.
-[sandbox_workspace_write]
-writable_roots = ["D:/Source/ByteTerrace/Puck/.claude/leases"]
