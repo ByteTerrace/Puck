@@ -73,7 +73,7 @@ Several pieces exist with nothing using them:
   height fields upload their bricks into it (`WorldFieldEmitter`), and the bake
   samples them.
 
-The inspector (E5) is in place. `world.inspect on|off` is bindable and draws a
+The inspector (E5) is in place. `world.inspect on|off|toggle` is bindable and draws a
 panel on the `Editor` overlay channel (`InspectorWriter`); `world.inspect` alone
 prints the same text, because `WorldInspectorText` in `Puck.World.Client` is the
 one formatter both read and `WorldInspectionCommandModule` registers the verb.
@@ -514,7 +514,7 @@ the canary.
 read-back verb and reads its output in a terminal.
 
 **Delivers:** an inspector panel drawn on the `Editor` overlay channel, toggled
-by the bindable `world.inspect on|off`. It shows the placement under the
+by the bindable `world.inspect on|off|toggle`. It shows the placement under the
 pointer (id, prototype, material and its name, world position, normal, distance
 from the camera), a summary of the selection, the camera's pose and field of
 view, the simulation and presentation ticks, the render scale, the active debug

@@ -397,6 +397,24 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
   and a lift.
+- A world declares at most 16 channels (`ChannelLimits.MaxChannels`, the
+  intent's wire slots), and the debug world declares all 16 (the chess
+  board's cancel rides the Moth's `select`). This is the current implementation,
+  not the target contract: the owner asks for more capacity, economical reuse,
+  and generic action, shooting, fighting, rhythm, board, and UI support.
+  [Input channels](../../../docs/decisions/input-channels.md) owns the accepted
+  typed-storage, authoritative-mode, authored continuity, and timed-history design
+  and its migration. Switching releases by default; declared same-meaning holds
+  and toggles may continue, while changed meanings and transition edges never
+  cross the epoch barrier. Follow its steps; do not couple another action to an
+  unrelated name to preserve the sixteen-slot ceiling.
+- A kit whose collider differs from the body's last one (a kit `select` by a
+  body register: the suit, noclip) steps the body to the nearest pose up its
+  axis or along world X or Z where the new volume is not embedded
+  (`WorldBody.EscapeEmbedding`), never down: the ordinary solve's shallowest
+  push from deep inside a box can be down through the floor. The debug world's
+  noclip (`worlds/debug/noclip.puck`) is a collider-less free-flight kit
+  selected through the `form` register (suit + 2 × noclip).
 - A moving floor is an attached solid placement riding a body (`attach` plus
   `solid`, analytic provider only); a body grounded on it rides it. The gallery
   lift moves its car body with a rule that `poseCell`s it along a box topology

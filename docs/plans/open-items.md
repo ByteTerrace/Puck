@@ -4,7 +4,41 @@ One checkbox per package, grouped by [programme](README.md); the programme page
 holds each package's owner, deliverables, and check, so follow the link before
 starting work, and tick or remove an item in the same change that closes it.
 
+## Input channels
+
+The [input channel decision](../decisions/input-channels.md) owns the model,
+migration inventory, genre checks, and each step's completion criteria. The
+runtime still has sixteen uniform channel slots; the design record is complete.
+
+- [ ] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
+  buttons, separate target-register reach, all consumers and codecs migrated,
+  shared debug declarations, and chess `confirm`/`cancel` without Select coupling.
+- [ ] C2 relative input: Q32.32 displacement in the numeric bank, authored
+  units/sensitivity/bounds, single consumption, and no tick-rate scaling.
+- [ ] C3 authoritative modes: finite state selectors, composed live sets,
+  per-combination allocation and permissions, directed family-transition keep
+  sets, named capacity/continuity refusals, and the debug form/flight/engagement
+  migration policy. Deliver with C4 before enabling slot reuse.
+- [ ] C4 switch barrier and continuity: input epochs, release by default,
+  authored same-meaning held/toggle carry, consumed transition activations,
+  cancellation and neutral rearming for released/rebound sources,
+  reload/disconnect/route handling, bounded source provenance and
+  taped/checkpointed contributions, toggle, rearm and hold
+  continuity. Show run/autorun surviving compatible forms, autofly starting
+  flight and clearing on flight exit, and neutral board/screen entry and exit.
+- [ ] C5 timed ingress and history: sub-tick events, lateness admission,
+  calibration, bounded rings and overflow outcomes, held-origin continuation
+  across epochs, replay and hash coverage.
+- [ ] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
+  patterns, consumption, tick buffers, event-time beat judgement, and held-note
+  and charge continuity across a declared mode transition without a new press.
+- [ ] C7 read-back and cleanup: current-mode action names in `body.rig`,
+  `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
+  ordinal surfaces removed, and executable checks of the genre table.
+
 ## Standalone
+
+- [ ] Keep the run channel held through the motion scenarios' steady-run captures. `body.press run 1 4` is capped by the default Drive grant to two seconds; `run-steady` and `pilot-run-steady` start capturing at tick 60, when that hold expires. Their samples therefore show the transition back to walking. Re-press within the hold budget or grant the scenario session the required duration before using those sheets to judge a 10 m/s run.
 
 - [ ] Owner decision: whether the engine ships or requires the GameInput redistributable (the `Microsoft.GameInput` package's runtime). Without it the Xbox path cannot see the Series X|S Share button or the Elite paddles, cannot identify a pad by device rather than XInput slot, and is capped at four pads; the inbox GameInput v0 runtime, where `GameInputCreate` accepts it, reaches only the impulse-trigger motors. See [device input](../reference/input.md#limits-and-hardware-evidence).
 - [ ] Run the controller paths the protocol tests pin that no hardware run has shown yet: the DualSense and Switch Pro over Bluetooth, the DualSense Edge, one DualSense on USB and Bluetooth at once, the classic Steam Controller, the Triton's reports `0x45`/`0x47`, its pairing events, its wired, Bluetooth and Nereid transports, its trackpad haptics (including which pad each side code of reports `0x82` to `0x85` drives) and the firmware watchdog setting (lizard emulation staying off without the 3-second re-assert), the Switch Pro's HD rumble at other carriers and its Home LED patterns, and an Xbox pad with a headset attached. Note what each run shows in its commit. See [device input](../reference/input.md#limits-and-hardware-evidence).

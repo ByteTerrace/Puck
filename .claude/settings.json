@@ -1,13 +1,13 @@
 {
   "autoMemoryEnabled": false,
-  "env": {
-    "MCP_TIMEOUT": "600000"
-  },
   "enabledMcpjsonServers": [
     "puck"
   ],
   "enabledPlugins": {
     "codex@openai-codex": true
+  },
+  "env": {
+    "MCP_TIMEOUT": "600000"
   },
   "extraKnownMarketplaces": {
     "openai-codex": {
@@ -22,7 +22,13 @@
       {
         "hooks": [
           {
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/bash-transport.ps1"],
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/bash-transport.ps1"
+            ],
             "command": "pwsh",
             "timeout": 30,
             "type": "command"
@@ -33,7 +39,13 @@
       {
         "hooks": [
           {
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/prose-doctrine.ps1"],
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/prose-doctrine.ps1"
+            ],
             "command": "pwsh",
             "timeout": 30,
             "type": "command"
@@ -46,7 +58,13 @@
       {
         "hooks": [
           {
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PROJECT_DIR}/.claude/hooks/prose-doctrine.ps1"],
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/prose-doctrine.ps1"
+            ],
             "command": "pwsh",
             "timeout": 30,
             "type": "command"
@@ -57,6 +75,31 @@
     ]
   },
   "outputStyle": "Concise",
+  "permissions": {
+    "allow": [
+      "Read(/.codex/**)",
+      "Edit(/.codex/**)",
+      "Write(/.codex/**)",
+      "Read(/.agents/**)",
+      "Edit(/.agents/**)",
+      "Write(/.agents/**)"
+    ],
+    "ask": [
+      "Bash(git push * main)",
+      "Bash(git push * main *)",
+      "Bash(git push *:main*)",
+      "Bash(git push *refs/heads/main*)",
+      "Bash(git push *--force*)",
+      "Bash(git push * -f*)",
+      "Bash(git push *--delete*)",
+      "Bash(git push *--mirror*)",
+      "PowerShell(git push *main*)",
+      "PowerShell(git push *--force*)",
+      "PowerShell(git push * -f*)",
+      "PowerShell(git push *--delete*)",
+      "PowerShell(git push *--mirror*)"
+    ]
+  },
   "worktree": {
     "baseRef": "head"
   }

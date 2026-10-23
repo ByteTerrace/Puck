@@ -118,7 +118,12 @@ writable root `.codex/config.toml` declares for `.claude/leases/` (an absolute
 path per machine), and never `.git`: a Codex lane runs in a worktree under
 `.claude/worktrees/<lane>/` branched from a tip carrying that config, leaves
 its changes uncommitted, and the lead commits them
-([`review-passes`](../review-passes/SKILL.md#before-launching)).
+([`review-passes`](../review-passes/SKILL.md#before-launching)). A resumed
+Codex session keeps the sandbox it was launched with, so after a sandbox change
+relaunch the lane fresh with a continuation brief rather than `--resume-last`.
+Codex's approval review may refuse a chained `mkdir … && run; rm …` line, so a
+Codex brief spells the lease as separate steps, the run only after the `mkdir`
+succeeded.
 A lease older than an hour whose World is gone is stale and may be removed. The
 same rule gives `Puck.World.Tests` one run at a time (`.claude/leases/heavy`),
 since a run takes about 7 GB of the lead machine's 32 GB. Investigating

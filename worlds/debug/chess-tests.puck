@@ -59,7 +59,7 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
     ticks 5
     seat1: body.press boardPick
     ticks 5
-    seat1: body.press boardCancel
+    seat1: body.press select
     ticks 150
     seat1: body.press strafe -1
     ticks 4

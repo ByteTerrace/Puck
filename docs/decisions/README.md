@@ -12,6 +12,9 @@ contracts belong in the subsystem guides; proposed changes belong in
   state substrate, its ceilings as prices, the language as a projection with
   modules, records, pools, and tests as worlds, the costing model, and the
   acceptance games.
+- [Input channels](input-channels.md): typed packed input, shared action names,
+  authoritative modes and slot allocation, authored switch continuity, timed input
+  history, and the live-document migration.
 - [Runtime and delivery](runtime-and-delivery.md): products and their
   manifests, the ROM ledger, compiled worlds, release pairs, the runtime's
   ownership boundaries, the presentation view and its two transports, and

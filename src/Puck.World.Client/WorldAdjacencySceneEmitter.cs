@@ -430,7 +430,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// <param name="includeEntities">Whether each band's bodies are emitted too.</param>
     /// <param name="meshDraws">Receives the mesh draws of the neighbours' static placements, mapped into this world, or
     /// <see langword="null"/> to collect none.</param>
-    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false, ICollection<SdfMeshDraw>? meshDraws = null) {
+    /// <param name="queryOnly">Admit only placements the static contact evaluator supports, for presentation queries.</param>
+    public void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false, ICollection<SdfMeshDraw>? meshDraws = null, bool queryOnly = false) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
         // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
@@ -508,11 +509,15 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     colors: colors,
                     definition: image,
                     creations: image.Creations,
-                    placements: new ArraySegment<WorldPlacement>(
+                    placements: (queryOnly ? WorldPlacementStamper.Queryable(
+                        definition: image,
+                        placements: new ArraySegment<WorldPlacement>(array: m_mappedPlacements, count: mappedCount, offset: 0),
+                        excluded: (placement, reason) => Console.Error.WriteLine(value: $"[world.presentation-field: excluded adjacency '{projection.Name}' placement '{placement.Id}': {reason}]")
+                    ) : new ArraySegment<WorldPlacement>(
                         array: m_mappedPlacements,
                         count: mappedCount,
                         offset: 0
-                    ),
+                    )),
                     palettes: m_palettes,
                     meshDraws: meshDraws,
                     meshScope: projection.Name
