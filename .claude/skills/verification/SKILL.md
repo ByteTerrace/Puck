@@ -1,6 +1,6 @@
 ---
 name: verification
-description: "Verifies a Puck change. Use for the landing bar, a failed or timed-out canary or test (flake or failure), GPU legs and what runs beside them, the puck CLI copy, coverage, branch bases."
+description: "Verifies Puck changes: landing bar, builds, stale DLLs, flaky tests, GPU/heavy leases, coverage, source-scan or regex laws versus type/compiler enforcement, and writing tests."
 ---
 
 # Verification
@@ -64,7 +64,7 @@ Judge performance by code, disassembly and load-independent counts; only
 
 Build `src/Puck.Cli` in Release in your worktree, copy
 `src/Puck.Cli/bin/Release/net11.0/` to a directory only your lane uses
-(`<scratchpad>/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
+(`<worktree>/.claude/scratch/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
 the worktree root. Never run the globally installed `puck` on PATH: it is
 another build of another head. Refresh the copy after a change the CLI reaches.
 A generator verb (`schema`, `registry`, `vocabulary`, `locks`, `baselines`,
@@ -90,17 +90,23 @@ flag was missed.
 - A failed build leaves the previous binaries in place, so a test or run after
   it measures old code. Run only after a build that exited 0 following your
   last edit; never pass `--no-build` otherwise.
-- Pass `-nodeReuse:false` to every build, msbuild and restore: a reused MSBuild node
+- The shared Claude and Codex environment sets `MSBUILDDISABLENODEREUSE=1`.
+  Keep the hook in all three tools until a probe establishes effective inheritance;
+  Antigravity has no project env block. Explicit command overrides still matter.
+  Pass `-nodeReuse:false` (or `-nr:false`) to build, msbuild, restore, pack and publish: a reused MSBuild node
   outlives the build and holds memory (`puck host load` counts them as
   `reuseNodes`). Never pass it to `dotnet test`: Microsoft.Testing.Platform
-  rejects it and the run reports `error: 1, total: 0`. Build with the flag,
+  has rejected it with `error: 1, total: 0` in the observed run; exact text
+  and exit status vary by version. Build with the flag,
   then run `dotnet test <project> --no-build`.
 - Do not edit the source tree while a canary, parity or test run reads it.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
 - MSBuild rebuilds by file time. A file copied back over a mutant keeps its
   older time, so the build keeps the mutated assembly although `git diff` shows
   the source restored. Restore with `git restore` or touch the file, rebuild,
-  and confirm from the run that the fix is what executed. `puck laws prove
+  and confirm the test host loaded the freshly built assembly, using its
+  write time/path or a diagnostic in the output; `git diff` and exit 0 alone
+  prove neither. `puck laws prove
   <law> --fix <revision>` proves a law against its fix in its own clone and
   never touches your tree.
 
@@ -118,7 +124,12 @@ the skip exception, so a test that wraps a call which can skip reports
 
 ## What uses the GPU
 
-Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation.
+Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
+`gate` and `affected` hold the same heavy lease through each heavy suite and
+check host headroom after acquisition. When an ancestor already owns it,
+validated PID/start-time ancestry admits a serialized child lease, so a run
+does not wait on itself and siblings still exclude one another; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
 
 In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
 shell can split the colon-bearing switch before the lease receives it
@@ -161,8 +172,8 @@ heavy build beside it.
   value, update the check; otherwise fix the code.
 
 Before stopping a hung test host or World process, capture its managed stacks
-with `dotnet-stack report -p <pid>` (a global tool:
-`dotnet tool install -g dotnet-stack`).
+with an existing `dotnet-stack report -p <pid>`. The optional installation is
+owner-only [machine setup](../../../docs/development/contributing.md#setting-up-a-machine).
 
 ## Branches
 

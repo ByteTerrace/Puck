@@ -1,6 +1,6 @@
 ---
 name: gaming-bricks
-description: "Fixes and diagnoses Puck's GB/GBC/GBA emulators (SM83 STOP/HALT/EI, PPU/STAT timing, APU, serial and SIOCNT links, snapshots) and their Post batteries (--cosim, --filter). Cartridges are rom-forge."
+description: "Fixes Puck GB/GBC/GBA and NES/Famicom (HGD) emulators: CPU, PPU/STAT timing, APU, links, snapshots and Post batteries (--cosim, --filter). Cartridges: rom-forge."
 ---
 
 # Gaming Bricks
@@ -157,7 +157,8 @@ dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier A
 `--tier`; Tier A needs no assets, Tier B runs over the fetched corpora, Tier C
 covers serial, link and infrared exchange. A stage whose asset is absent skips
 (`--require-assets` turns that into an infrastructure failure), and the report
-lists every skip. Exit 0 is pass or skip, 1 a failed check (a corpus ROM that does
+lists every skip. Report stage and skip counts from stdout; exit 0 alone does
+not prove a stage ran. Exit 0 is pass or skip, 1 a failed check (a corpus ROM that does
 not pass included), 2 infrastructure. `tests/Puck.HumbleGamingBrick.Tests` runs the
 Humble battery with an empty corpus cache, so CPU suites cover the self-contained
 stages.

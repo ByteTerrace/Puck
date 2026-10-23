@@ -29,7 +29,7 @@ is still recorded, not fixed. A finding recorded nowhere was dropped, not left.
 Before calling a code change done, state its contract delta (names, behavior,
 inputs, outputs, errors, units, layouts, commands, configuration, procedures)
 and search for every surface that teaches it, beyond the edited directory, by
-the old and new names (`puck search -M 0 -l`, see `content-search`; for a C#
+the old and new names (or the existing symbol/concept when no name changes) (`puck search -M 0 -l`, see `content-search`; for a C#
 symbol, `puck references`, see `symbol-analysis`):
 
 - XML API documentation on the changed members;
@@ -40,11 +40,12 @@ symbol, `puck references`, see `symbol-analysis`):
   output of `puck docs build`, never edited by hand;
 - agent material: the owning skill, its references or evals, `AGENTS.md`;
 - a `.puck` source and its compiled twin: regenerate the other half.
+- Report any surface you could not synchronize, including a file another lane owns.
 
 Update the authoritative home and let other surfaces link to it. A
 behavior-preserving private refactor can finish the audit with no
 documentation diff; do not touch nearby docs to show you looked, and keep no
-persistent checklist. Report any surface you could not synchronize.
+persistent checklist.
 
 ## What a fix owes
 

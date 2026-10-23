@@ -16,18 +16,26 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
     );
 
     /// <inheritdoc/>
-    public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) => Captured(
-        run: CliProcess.RunCaptured(
-            arguments: arguments,
-            fileName: "dotnet",
-            input: string.Empty,
-            clock: clock,
-            cancellationToken: cancellationToken,
-            timeout: ((arguments[0] == "build") ? BuildTimeout : StepTimeout),
-            workingDirectory: repositoryRoot
-        ),
-        timeout: ((arguments[0] == "build") ? BuildTimeout : StepTimeout)
-    );
+    public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {
+        var heavy = ((arguments[0] == "test") ? arguments.FirstOrDefault(predicate: static argument => HostProcesses.IsHeavyTestAssembly(assembly: Path.GetFileNameWithoutExtension(path: argument))) : null);
+        using var lease = ((heavy is null) ? null : HostAdmission.AcquireHeavy(cancellationToken: cancellationToken, clock: clock, repositoryRoot: repositoryRoot, step: heavy));
+
+        if ((heavy is not null) && !WaitForCapacity(device: true, heavySuite: true, repositoryRoot: repositoryRoot, step: heavy)) {
+            return new GateStepResult(ExitCode: CliExit.Refused, Output: "Heavy-suite host capacity did not return while holding the lease.");
+        }
+        return Captured(
+            run: CliProcess.RunCaptured(
+                arguments: arguments,
+                fileName: "dotnet",
+                input: string.Empty,
+                clock: clock,
+                cancellationToken: cancellationToken,
+                timeout: ((arguments[0] == "build") ? BuildTimeout : StepTimeout),
+                workingDirectory: repositoryRoot
+            ),
+            timeout: ((arguments[0] == "build") ? BuildTimeout : StepTimeout)
+        );
+    }
     /// <inheritdoc/>
     public bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite) {
         var probe = new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars);

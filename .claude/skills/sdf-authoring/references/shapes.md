@@ -75,7 +75,7 @@ outline at any scale, and a stroke stays a run of round disks whose radii scale
 by the geometric mean of X and Y: a stroke stretched in one axis keeps its
 width round rather than flattening with the stretch. Panel, trims (including a trim referencing a Path), rounding, and
 chamfer are refused. Curves compile once into a packed edge table. Consult
-`docs/rendering/sdf/reference/materials-and-primitives.md#curved-path-profiles`
+[curved path profiles](../../../../docs/rendering/sdf/reference/materials-and-primitives.md#curved-path-profiles)
 for fields and semantics; `experimental/tests/Puck.Parity/paths.puck` is the forcing fixture.
 
 A convex hull's points must lie in [-1, 1] on both axes, be distinct and

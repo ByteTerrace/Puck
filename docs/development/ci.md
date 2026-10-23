@@ -1034,11 +1034,14 @@ script, and never as inline PowerShell in a workflow. Workflows orchestrate
 `puck` verbs and the bash composite actions under `.github/actions/`, and every
 CI job installs the run's own candidate CLI. Formatting of PR branches is
 appended by CI; install no Git hooks and change no Git configuration during
-builds. `.claude/hooks/` holds Claude Code harness hooks, registered in the
-shared `.claude/settings.json`, and the MCP launcher the checkout's MCP
+builds. `.claude/hooks/` holds shared harness policies, registered in
+`.claude/settings.json`, `.codex/hooks.json` and `.agents/hooks.json`, and the MCP launcher the checkout's MCP
 configurations start (`puck-mcp.ps1`); they run inside the agent's harness
-rather than as repository automation, so the script rule does not cover them. [CI and releases](../../docs/development/ci.md) owns these rules, and
+rather than as repository automation, so the script rule does not cover them.
 [C# file apps](../../docs/development/contributing.md#c-file-apps) owns the
 conventions for `src/Puck.Azure.Resources/bootstrap.cs`, the one file-based app.
 
-The [agent command hooks](../../.claude/hooks/README.md) enforce physical-device isolation, MSBuild node cleanup and commit attribution at the harness boundary.
+The [agent command hooks](../../.claude/hooks/README.md) guard physical-device
+isolation, MSBuild node cleanup, commit attribution and shared Git state in
+Claude and Antigravity, and in Codex once each current hook is trusted. They
+cover supported activated tool paths. The prose reminder remains Claude-only.

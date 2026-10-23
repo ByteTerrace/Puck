@@ -28,7 +28,7 @@ static const float ScreenGlassSunTint = 0.15;
 // pixel's own sample on the unjittered grid).
 float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out float3 rayDirection) {
     rayDirection = p.rayDirection;
-    if (passGroup.temporal == 0u) {
+    if ((passGroup.temporal == 0u) || !sdfScreenSurfaceShades(material)) {
         return surfacePoint;
     }
 

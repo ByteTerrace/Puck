@@ -84,7 +84,11 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   pyramid from the target's fourth channel (forward depth) and tests every kept
   box, phase two draws the newly visible over phase one's target and depth. The
   recorder moves the mesh target between the phases itself and returns it in
-  its attachment layout. Draws a kernel issues are counted on the GPU past the
+  its attachment layout. The early occlusion dispatch binds a sampled filler;
+  only the late set binds the target after its transition. Vulkan requires the
+  descriptor's image layout even when the selected kernel branch never samples
+  it, and rewriting one shared set changes both recorded dispatches.
+  Draws a kernel issues are counted on the GPU past the
   counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
   `gpu.vertices` include them. An object `world.cull frustum` brings back is the
   occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
@@ -190,6 +194,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 
 ## Editing kernels
 
+- **Check screen eligibility before reading a screen table.** A material is
+  not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
+  source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal
+  ray helpers need that check before their own table reads too; a later sample
+  function's guard cannot protect them. An ordinary material becomes a huge
+  unsigned index otherwise, which can lose the Vulkan device while Direct3D 12
+  returns zero for the out-of-bounds read.
 - **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
   the only GPU kernel that walks the field, and it does so through one rolled
   `[loop]` over its samples. Every call site is a full inlined copy of the
@@ -307,8 +318,9 @@ compares and fails naming the file that drifted, it writes nothing.
   GPU cost.
 - **Unbounded is a state, not a number** (`SdfBoundAlgebra.Unbounded`); bounds
   compose through the set operations in `SdfBoundAlgebra`.
-- **`SdfShapeType.Path` is presentation-only;** the fixed-point evaluator
-  refuses it.
+- **Deterministic versus presentation geometry:** use
+  [sdf-authoring](../sdf-authoring/SKILL.md#render-only-versus-deterministic);
+  the fixed-point evaluator supports `SdfShapeType.Path` through `SdfPathSolid`.
 
 ## Capacity and emission
 

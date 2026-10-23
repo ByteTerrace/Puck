@@ -26,10 +26,7 @@ public static class LeaseCommand {
                 var directory = leaseRoot;
 
                 if (directory is null) {
-                    var checkout = RepositoryPaths.RequireRoot();
-                    var common = (await CliGit.CaptureAsync(arguments: ["rev-parse", "--path-format=absolute", "--git-common-dir"], cancellationToken: cancellationToken, repository: checkout).ConfigureAwait(continueOnCapturedContext: false)).Trim();
-
-                    directory = Path.Combine(path1: Path.GetDirectoryName(path: common)!, path2: ".claude/leases");
+                    directory = await CliLease.RootAsync(checkout: RepositoryPaths.RequireRoot(), cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 }
                 using var lease = await CliLease.AcquireAsync(root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: TimeSpan.FromSeconds(seconds: seconds), clock: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 var tokens = parse.GetValue(argument: arguments)!;

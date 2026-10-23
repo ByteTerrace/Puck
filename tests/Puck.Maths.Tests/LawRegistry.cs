@@ -744,6 +744,8 @@ internal static partial class LawRegistry {
     public static IReadOnlyList<LawCase> All { get; }
     /// <summary>Gets the case lookup by id.</summary>
     public static IReadOnlyDictionary<string, LawCase> ById { get; }
+    /// <summary>Gets the operand domain keys declared by this registry, including domains a filtered run does not consume.</summary>
+    public static IReadOnlySet<string> DomainKeys { get; }
 
     // The registry is built in the static constructor, never a field initializer: initializers run in an unspecified
     // order across this class's partial files, and a binding that captures a partial's Domain field while Build runs
@@ -754,6 +756,10 @@ internal static partial class LawRegistry {
             keySelector: lawCase => lawCase.Id,
             comparer: StringComparer.Ordinal
         );
+        DomainKeys = typeof(LawRegistry).GetFields(BindingFlags.Static | BindingFlags.NonPublic)
+            .Where(field => field.FieldType == typeof(Domain))
+            .Select(field => ((Domain)field.GetValue(null)!).Key)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     // Relation coefficients as raw Q16 longs.

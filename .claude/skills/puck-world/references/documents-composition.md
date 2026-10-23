@@ -407,7 +407,7 @@ here".
   (`entity`/`entityPart`/`placement`/`group`/`seat`/`recentSpeaker`), `WorldCameraProgramOp`
   (`anchor`/`offset`/`lookAt`/`orbit`/`path`/`dynamics`/`clampPitch`/`fieldOfView`/`blend`/`selectProgram`) and
   `WorldCameraSubject` (`reference`/`placement`/`worldPoint`), `WorldSpeakerSource`
-  (`none`/`machine`/`tune`/`synth`); `grep JsonPolymorphic src/Puck.World.Schema`
+  (`none`/`machine`/`tune`/`synth`); `puck search -M 0 JsonPolymorphic src/Puck.World.Schema`
   lists the rest. A state row is not a `$type` union: its `kind` member picks the
   `CellKind`. `$type` failures do NOT all surface as
   `JsonException` — `WorldJsonPayload.IsParseFailure` is the complete set;

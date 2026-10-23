@@ -87,6 +87,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private const int MeshSetGlassSums = 4;
     private const int MeshSetBuffers = 5;
     private const int MeshSetOcclusionBuffers = 5;
+    private const int OcclusionSetsPerMesh = 2;
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
     // The mesh part's occlusion (SdfMeshOcclusion): its state, the render pass its second phase draws in, loading what
@@ -97,8 +98,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly IGpuFramebuffer[] m_lateFramebuffers = [];
     private readonly IGpuBuffer?[][] m_meshSetOcclusion = [];
     private readonly nint[] m_meshSetTargets = [];
-    // The occlusion kernel's sets, one beside each mesh set through the kernel's compute layout, binding what the mesh
-    // set binds and the occlusion's buffers and target.
+    // Early and late compute sets beside each mesh set. Early binds a sampled filler while the target is an attachment;
+    // late binds the target that RecordLate transitions for sampling. A descriptor remains valid even on a branch that
+    // does not read it, and rewriting one shared set would change both recorded dispatches.
     private readonly nint[] m_occlusionSets = [];
     private readonly IGpuBuffer?[][] m_occlusionSetBuffers = [];
     private readonly nint[] m_occlusionSetTargets = [];
@@ -184,7 +186,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
 
             if (occludes) {
-                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
+                for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
+                    sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
+                }
             }
         }
 
@@ -201,9 +205,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_meshSetBuffers = new IGpuBuffer?[sets][];
             m_meshSetOcclusion = new IGpuBuffer?[sets][];
             m_meshSetTargets = new nint[sets];
-            m_occlusionSets = (occludes ? new nint[sets] : []);
-            m_occlusionSetBuffers = (occludes ? new IGpuBuffer?[sets][] : []);
-            m_occlusionSetTargets = (occludes ? new nint[sets] : []);
+            var occlusionSets = (occludes ? (sets * OcclusionSetsPerMesh) : 0);
+            m_occlusionSets = new nint[occlusionSets];
+            m_occlusionSetBuffers = new IGpuBuffer?[occlusionSets][];
+            m_occlusionSetTargets = new nint[occlusionSets];
 
             for (var set = 0; (set < sets); set++) {
                 var slot = (set / SdfWorldTables.FrameRingSize);
@@ -212,24 +217,27 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 m_meshSetOcclusion[set] = new IGpuBuffer?[MeshSetOcclusionBuffers];
 
                 if (occludes) {
-                    m_occlusionSetBuffers[set] = new IGpuBuffer?[MeshSetBuffers + MeshSetOcclusionBuffers];
-                    m_occlusionSets[set] = bindings.AllocateSet(
-                        descriptorSetLayoutHandle: tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
-                        name: new GpuObjectName(
-                            detail: "occlusion group",
-                            index: set,
-                            owner: context.Instance,
-                            part: context.Pass
-                        ),
-                        poolHandle: m_meshPool
-                    );
-                    bindings.WriteConstantBuffer(
-                        arrayElement: 0,
-                        binding: 0,
-                        bufferHandle: groups.PassBlocks[slot].BufferHandle,
-                        bufferSize: groups.PassBlocks[slot].SizeBytes,
-                        descriptorSetHandle: m_occlusionSets[set]
-                    );
+                    for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
+                        var occlusionSet = ((set * OcclusionSetsPerMesh) + phase);
+                        m_occlusionSetBuffers[occlusionSet] = new IGpuBuffer?[MeshSetBuffers + MeshSetOcclusionBuffers];
+                        m_occlusionSets[occlusionSet] = bindings.AllocateSet(
+                            descriptorSetLayoutHandle: tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
+                            name: new GpuObjectName(
+                                detail: "occlusion group",
+                                index: occlusionSet,
+                                owner: context.Instance,
+                                part: context.Pass
+                            ),
+                            poolHandle: m_meshPool
+                        );
+                        bindings.WriteConstantBuffer(
+                            arrayElement: 0,
+                            binding: 0,
+                            bufferHandle: groups.PassBlocks[slot].BufferHandle,
+                            bufferSize: groups.PassBlocks[slot].SizeBytes,
+                            descriptorSetHandle: m_occlusionSets[occlusionSet]
+                        );
+                    }
                 }
 
                 m_meshSets[set] = bindings.AllocateSet(
@@ -767,16 +775,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[meshSet], boundTarget: ref m_meshSetTargets[meshSet], first: 0, set: set, tables: tables);
 
             if (occlusion is not null) {
-                var occlusionSet = m_occlusionSets[meshSet];
-                var bound = m_occlusionSetBuffers[meshSet];
-
                 occlusion.Stage(boxes: tables.MeshDrawBoxes, count: count, cull: in cull, draws: draws!, height: recording.Height, slot: slot, width: recording.Width);
-                tables.WriteMeshTables(bound: bound, set: occlusionSet, slot: tables.CurrentSlot);
-                tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
-                tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
-                tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
-                occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[meshSet], first: MeshSetBuffers, set: occlusionSet, tables: tables, target: target.ImageViewHandle);
-                occlusion.RecordEarly(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: occlusionSet);
+                for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
+                    var index = ((meshSet * OcclusionSetsPerMesh) + phase);
+                    var occlusionSet = m_occlusionSets[index];
+                    var bound = m_occlusionSetBuffers[index];
+
+                    tables.WriteMeshTables(bound: bound, set: occlusionSet, slot: tables.CurrentSlot);
+                    tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
+                    tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
+                    tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
+                    occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
+                        target: ((phase == 0) ? tables.SampledFiller.ImageViewHandle : target.ImageViewHandle));
+                }
+                occlusion.RecordEarly(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[(meshSet * OcclusionSetsPerMesh)]);
             }
         }
 
@@ -814,7 +826,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if ((occlusion is not null) && (occlusion.CandidateCount > 0)) {
             // The second phase: what the test found visible that the first phase did not draw, over the first's target
             // and depth.
-            occlusion.RecordLate(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[meshSet], target: target.ImageHandle);
+            occlusion.RecordLate(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[((meshSet * OcclusionSetsPerMesh) + 1)], target: target.ImageHandle);
             recorder.BeginRenderPass(
                 area: area,
                 commandBufferHandle: commandBuffer,

@@ -128,7 +128,7 @@ for the type it covers, not for `core`). Derive the live set rather than
 trusting a pasted list:
 
 ```
-grep -hoE '"Id": "[A-Za-z0-9-]+\.' tests/Puck.Maths.Tests/laws/*.json | sed -E 's/"Id": "|\.$//g' | sort -u
+puck search -M 0 '"Id": "[A-Za-z0-9-]+\.' tests/Puck.Maths.Tests/laws -g "*.json"
 ```
 
 Deep rows take the **tier** as their prefix instead: `deep.*`.

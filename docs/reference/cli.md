@@ -83,6 +83,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | Verb | What it is |
 |---|---|
 | [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites and worlds, and `--run --gpu` the canaries too. |
+| [`puck agents`](#puck-agents-linknative-skill-discovery) | creates or checks the checkout's native skills link. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -106,7 +107,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
-| [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
+| [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU or heavy-work resource. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
@@ -910,10 +911,10 @@ projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
 side on that build, then `puck test` on the chosen worlds,
 and exits 1 when any of them fails. At most `--suite-jobs` suites run at
 once (default: a quarter of the logical processors). A heavy suite
-(`Puck.World.Tests` or `Puck.World.Presentation.Tests`) starts first and, before its run, waits on the one
-machine-wide heavy-suite admission the gate uses (see
-[`puck gate`](#puck-gatethe-change-scoped-gate)): no other process running a
-heavy suite, and memory and disk headroom. Each suite prints one verdict line with its wall time
+(`Puck.World.Tests` or `Puck.World.Presentation.Tests`) starts first and holds
+the shared `heavy` lease through host admission and its whole run. Admission
+also samples unleased heavy processes and memory/disk headroom
+(see [`puck gate`](#puck-gatethe-change-scoped-gate)). Each suite prints one verdict line with its wall time
 as it ends; a failed one follows it with its whole report, each failed test
 with its message and stack, and a failed build prints its errors and runs no
 suite, so the log `puck gate` keeps names every failure. `--gpu`, which needs
@@ -1025,11 +1026,11 @@ device (the canaries, parity, each device suite, counters, citations and
 recording, the steps that run only with `--gpu`) also waits for an idle GPU; the
 build, affected run and baseline checks run no `Gpu`-trait test and never wait
 on a GPU holder. A heavy suite (`Puck.World.Tests` or `Puck.World.Presentation.Tests`, whatever its filter) also
-waits while another process on the machine runs one, since two at once exhaust
-its memory: the gate's `Puck.World.Tests` device suite waits before it starts,
-and `affected --run` waits before each heavy suite's run, so a CPU run inside one
-gate and another gate's run never overlap. The waiting process's own descendants
-never hold it back. A step with what it needs admits immediately. Otherwise the
+holds the same `heavy` lease as `puck lease heavy` through admission and execution.
+It samples capacity only after acquiring that lease, so two sampled-idle runs
+cannot overlap. A validated ancestor lease admits one child lease at a time;
+nested runs do not wait on their parent and siblings remain exclusive. Unleased
+heavy processes still hold capacity back. A step with what it needs admits immediately. Otherwise the
 gate reports waiting on stderr, naming the holder again when it changes, samples
 every ten seconds, prints a still-waiting line after ten silent minutes, and
 reports when capacity returns. A step waits at most thirty minutes and a heavy
@@ -1681,9 +1682,7 @@ dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll canary pipeline-feedback pi
 
 ---
 
-## `puck landing`—git-loss check, then the automatic canary set
-
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+## `puck landing`—git-loss check
 
 `puck landing --against <tip> --base <authoring-base>` refuses a commit that
 drops content its author never worked from — the shape a `git reset --soft
@@ -1697,12 +1696,11 @@ re-parented tree, which would make every deletion look intended — and a
 `<base>` equal to `<tip>`, or one HEAD does not descend from, is refused for
 the same reason.
 
-The git-loss check runs first, and only once it passes does `puck landing`
-run the nonempty automatic canary set (`puck canary`'s headless,
-no-environmental-requirement subset). There is no flag to skip either
-component. Exit codes: 0 both components passed; 1 unaccounted deletions or
-an observed canary failure; 2 usage, manifest, build, or infrastructure
-refusal.
+Preserve the authoring base across integration merges. Merge the integration
+tip and inspect deleted content; reconstruct a re-parented tree from the
+intended change instead of guessing a new base. The verb reads Git state only,
+builds nothing and boots no World. Exit codes: 0 deletions accounted for;
+1 unaccounted deletions; 2 invalid input or Git refusal.
 
 ---
 
@@ -4141,4 +4139,21 @@ Run `puck lease gpu --holder <lane> [--wait <seconds>] -- <executable> <argument
 
 The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the lane name, UTC acquisition time, process ID and process start ticks on four lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
+Heavy suites in `gate` and `affected` use this same lease through admission
+and execution. When a live ancestor already holds it, verified process ancestry
+and start ticks admit a `child` lease inside that holder's directory. Sibling
+suites compete for that child lease, so an enclosing lease neither deadlocks
+its own work nor permits its children to overlap. Wait messages name the holder.
+
 A leftover directory is reclaimed only after one hour and only when its recorded process has exited or its PID has been reused. Missing or malformed holder metadata cannot establish that the holder is gone and is refused for inspection. An uncatchable process termination leaves the directory for this stale check. Do not remove a live holder or its guard file. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
+
+## `puck agents link`—native skill discovery
+
+Run `puck agents link` from each checkout or worktree. It creates
+`.agents/skills` pointing to that checkout's `.claude/skills`: a junction on
+Windows, a directory symlink elsewhere. Repeated runs leave a correct link
+alone. `--check` inspects without writing. An ordinary file or directory, a
+link aimed elsewhere, or a missing source is refused without replacement.
+Only the link is ignored; the `.agents/` JSON configurations remain tracked.
+Exit 0 means the link is correct, exit 1 means `--check` found drift, and exit 2
+means creation was refused or failed. The verb never edits home configuration or hook trust.

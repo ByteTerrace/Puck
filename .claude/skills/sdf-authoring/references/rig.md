@@ -198,7 +198,7 @@ every frame labelled by tick. Read `<scenario>/sheet.png` first, then the
 camera's own sheet for the part you changed; `puck motion --reproduce` shows
 that a repeat stills the same poses. Add a case by editing
 `worlds/debug/motion.scenarios.json`
-([the verb](../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
+([the verb](../../../../docs/reference/cli.md#puck-motiontick-pinned-motion-stills-and-contact-sheets)).
 
 The root shape is the pelvis, so a swing on it carries the whole body; the
 upper body undoes part of it through the torso and helmet, and each thigh's

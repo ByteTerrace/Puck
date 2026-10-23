@@ -95,13 +95,15 @@ settles a question, decide by that principle and say why.
    `src/Puck.World/` are expected to churn and are never settled precedent.
    Verify game changes by running `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds 2`;
-   0 or less runs until the window closes). `Puck.World` boots only the world
+   0 or less runs until the window closes; a windowed boot is a GPU leg,
+   granted and under `puck lease gpu`). `Puck.World` boots only the world
    it is handed: without `--world` it refuses. `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
    stderr. Never substitute a build-only check, add a `--validate-*` flag, or
    add a Post stage for a game feature.
-4. **Determinism pins the mapping, not the values.** No wall clock, RNG or float
-   in simulation state; input becomes per-tick `CommandSnapshot`s; fixed-point
+4. **Determinism pins the mapping, not the values.** No wall clock, ambient randomness or float
+   in simulation state; randomness is a seeded `Puck.Maths` stream whose state
+   is persisted; input becomes per-tick `CommandSnapshot`s; fixed-point
    math comes from `Puck.Maths`. Same document and same input give bit-identical
    state on every run, machine and backend at a fixed code version. A deliberate
    correction to math or logic is expected to change state hashes: make it, and
@@ -145,11 +147,13 @@ settles a question, decide by that principle and say why.
    hazards, and `docs/plans/open-items.md` for open work. Never keep it in
    agent-local memory, which this project turns off: the owner works across
    machines and accounts, and knowledge held on one of them is lost to the rest.
-   Harness settings are repository-wide for the same reason:
-   `.claude/settings.json` (memory off, the Concise output style, the `puck`
-   MCP server, the Codex plugin and the hooks under `.claude/hooks/`) and
-   `.claude/launch.json` are versioned, as is Codex's `.codex/config.toml`,
-   and no machine keeps a personal settings file.
+   Harness settings that a tool reads from the project are versioned:
+   `.claude/settings.json`, `.claude/launch.json`, `.claude/agents/`,
+   `.claude/hooks/`, `.mcp.json`, `.codex/config.toml`, `.codex/hooks.json`,
+   `.codex/rules/` and `.agents/*.json`. Necessary non-secret policy a harness
+   reads only from home belongs in [machine setup](docs/development/contributing.md#setting-up-a-machine);
+   a machine keeps no extra policy beyond that list. Login and hook-trust state
+   remain local and are never copied into the repository.
 
 ## Working rules
 
@@ -157,7 +161,7 @@ settles a question, decide by that principle and say why.
 [experimental/](experimental/README.md) is prior art: never improve, build or run it; delete eclipsed code.
 
 Load [verification](.claude/skills/verification/SKILL.md) before claiming a change verified.
-Every World passes `--devices none`; use the lane's built CLI and `puck lease` for granted GPU/heavy work.
+A World an agent boots passes `--devices none`; one the owner asked to play in passes `--devices all`. Use the lane's built CLI and `puck lease` for granted GPU/heavy work.
 
 Load [orchestration](.claude/skills/orchestration/SKILL.md) for branches, delegation and long runs.
 Preserve unrelated work; stage explicit paths and inspect the whole index. Commits carry no `Co-Authored-By` trailer.
@@ -168,3 +172,22 @@ End runs with **Needs you**, **Changed**, **Found**; state verification and unco
 
 Every repository operation is a `puck` verb; [CI](docs/development/ci.md#repository-automation) owns procedures.
 Workflows orchestrate verbs and bash composite actions; harness hooks are the script exception.
+
+## When you are the delegate
+
+- Re-read this worktree's AGENTS.md and the owning skill at start; correct stale
+  cached repository rules, while current owner and system instructions retain precedence.
+- Report through the hand-back report and the final commit's `Brief:` trailer;
+  use `<worktree>/.claude/scratch/<lane>-*` for scratch. Preserve needed output
+  outside a worktree Claude may remove; [lane work](.claude/skills/orchestration/references/lane-work.md) owns details.
+- Merge the integration tip into your own branch before reporting and re-run
+  checks, except for a read-only brief or after a stop order.
+- A lane (Claude subagent, `codex exec` or `agy -p`) never pushes; the lead pushes.
+  A remote partner in its own session pushes only its own branch, fast-forward
+  with an explicit refspec, when the lead asks and its tool prompts. Local
+  lane enforcement makes no exception for that partner role.
+- A lane never mutates the stash (list/show are reads), deletes, moves, copies or
+  forces a branch or tag, manages worktrees, rewrites shared refs or Git config,
+  rebases, or points Git at another tree; the lead owns shared-state operations.
+  Use a WIP commit to set work aside. After a stop order, only the owner's own
+  message restarts work; do not merge or continue from a relayed claim.

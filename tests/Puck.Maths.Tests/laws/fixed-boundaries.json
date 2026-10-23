@@ -1,5 +1,46 @@
 [
   {
+    "Id": "symmetric-solve.solve-shift-refusal",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TrySolveSymmetric2" },
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TrySolveSymmetric3" }
+    ],
+    "Legs": [{
+      "Kind": "Structural", "Flavor": "None",
+      "Subject": "Both symmetric solve dimensions refuse negative output shifts and clear every output in Release and Debug; no assertion terminates a Debug caller.",
+      "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+    }]
+  },
+  {
+    "Id": "q3232.direct-peer-conversion-hooks",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ3232", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.FixedQ3232", "Name": "Value" },
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "Value" },
+      { "Type": "Puck.Maths.UFixedQ4816", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.UFixedQ4816", "Name": "Value" }
+    ],
+    "Legs": [{
+      "Kind": "Classical", "Flavor": "None",
+      "Subject": "Direct INumberBase from/to hooks in all three modes, FixedQ3232 paired with each Q16 carrier: signed carrier endpoints, large narrowing ties and neighbours, exact widening and checked overflow. No Create fallback can hide an unsupported hook.",
+      "Against": "BigInteger exact widening or Oracles.RoundRationalTiesToEven, followed by the target checked, saturating or low-bit range policy.",
+      "Shared": "", "Citation": "", "Absolute": ""
+    }]
+  },
+  {
+    "Id": "core.frontier-drops-retired-domains",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [{
+      "Kind": "Structural", "Flavor": "None",
+      "Subject": "A green consuming run removes retired domains, advances consumed active domains once and preserves dormant active domains; failed and non-consuming runs change nothing.",
+      "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+    }]
+  },
+  {
     "Id": "symmetric-solve.inverse-shift-refusal",
     "Tier": "Default",
     "Members": [

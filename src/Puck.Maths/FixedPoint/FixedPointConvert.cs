@@ -629,6 +629,12 @@ public static class FixedPointConvert {
             return true;
         }
 
+        if (typeof(TSelf) == typeof(FixedQ4816) && typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TOther, FixedQ3232>(source: ref value);
+            result = FromRaw<TSelf>(raw: other.ToFixedQ4816().Value);
+            return true;
+        }
+
         result = default;
 
         return false;
@@ -663,6 +669,12 @@ public static class FixedPointConvert {
             return true;
         }
 
+        if (typeof(TSelf) == typeof(FixedQ4816) && typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TOther, FixedQ3232>(source: ref value);
+            result = FromRaw<TSelf>(raw: other.ToFixedQ4816().Value);
+            return true;
+        }
+
         result = default;
 
         return false;
@@ -691,6 +703,12 @@ public static class FixedPointConvert {
             return true;
         }
 
+        if (typeof(TSelf) == typeof(FixedQ4816) && typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TOther, FixedQ3232>(source: ref value);
+            result = FromRaw<TSelf>(raw: other.ToFixedQ4816().Value);
+            return true;
+        }
+
         result = default;
 
         return false;
@@ -704,6 +722,14 @@ public static class FixedPointConvert {
             result = Unsafe.As<UFixedQ4816, TOther>(source: ref converted);
 
             return true;
+        }
+
+        if (typeof(TSelf) == typeof(FixedQ4816) && typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TSelf, FixedQ4816>(source: ref value);
+            var supported = TryConvertPeerFromChecked<FixedQ3232, FixedQ4816>(
+                value: other, fractionBitCount: FixedQ3232.FractionBitCount, result: out var converted);
+            result = Unsafe.As<FixedQ3232, TOther>(source: ref converted);
+            return supported;
         }
 
         return TryConvertWidePeerToQ4816(
@@ -726,6 +752,14 @@ public static class FixedPointConvert {
             return true;
         }
 
+        if (typeof(TSelf) == typeof(FixedQ4816) && typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TSelf, FixedQ4816>(source: ref value);
+            var supported = TryConvertPeerFromSaturating<FixedQ3232, FixedQ4816>(
+                value: other, fractionBitCount: FixedQ3232.FractionBitCount, result: out var converted);
+            result = Unsafe.As<FixedQ3232, TOther>(source: ref converted);
+            return supported;
+        }
+
         return TryConvertWidePeerToQ4816(
             fractionBitCount: fractionBitCount,
             result: out result,
@@ -741,6 +775,14 @@ public static class FixedPointConvert {
             result = Unsafe.As<UFixedQ4816, TOther>(source: ref converted);
 
             return true;
+        }
+
+        if (typeof(TSelf) == typeof(FixedQ4816) && typeof(TOther) == typeof(FixedQ3232)) {
+            var other = Unsafe.As<TSelf, FixedQ4816>(source: ref value);
+            var supported = TryConvertPeerFromTruncating<FixedQ3232, FixedQ4816>(
+                value: other, fractionBitCount: FixedQ3232.FractionBitCount, result: out var converted);
+            result = Unsafe.As<FixedQ3232, TOther>(source: ref converted);
+            return supported;
         }
 
         return TryConvertWidePeerToQ4816(
