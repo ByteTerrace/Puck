@@ -6,22 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/world-devices.ps1",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/no-node-reuse.ps1",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/no-coauthor.ps1",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/git-safety.ps1",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File ../.claude/hooks/agent-policy.ps1 -Tool agy",
             "timeout": 30
           }
         ]

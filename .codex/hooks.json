@@ -6,17 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.claude/hooks/world-devices.ps1')\"",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.claude/hooks/no-node-reuse.ps1')\"",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.claude/hooks/no-coauthor.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.claude/hooks/agent-policy.ps1') -Tool codex\"",
             "timeout": 30
           }
         ]
