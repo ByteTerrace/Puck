@@ -726,19 +726,27 @@ public sealed partial class SdfMeshPathBake {
         return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances };
     }
     // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
-    private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => (Array.IndexOf(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), value: true) >= 0);
-    // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign, every sample whose
-    // value is within half the lattice's finest spacing of the surface, and every pair of samples a sheet thinner than
-    // the spacing passes between (SdfSampledLattice.SheetsBetween: a plate lying between two sample rows of a lattice
-    // narrowed to a flat box, whose long axes are sampled coarsely; kept within half the cell's diagonal instead, the box
-    // stays so fat the final lattice steps over the plate), widened by one cell along each axis. A group with no such
-    // cell has no surface. Once the box stops shrinking, the group's next lattice is the final one.
+    private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
+    // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign and every sample
+    // whose value is within half the lattice's finest spacing of the surface, widened by one cell along each axis, and
+    // every pair of samples neither of which is within that reach that a sheet thinner than the spacing passes between
+    // (SdfSampledLattice.SheetsBetween: a plate lying between two sample rows of a lattice narrowed to a flat box, whose
+    // long axes are sampled coarsely; kept within half the cell's diagonal instead, the box stays so fat the final
+    // lattice steps over the plate). A pair with a sample within reach is left to that sample, so the pair test moves
+    // the box only where the distance test loses the sheet. A group with no such cell has no surface. Once the box
+    // stops shrinking, the group's next lattice is the final one.
     private void Refine(Group group, in SdfMeshBakeRequest request, float[] values) {
         var (sx, sy, sz) = request.Dims;
         var near = (0.5f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
         var low = new Vector3(value: float.PositiveInfinity);
         var high = new Vector3(value: float.NegativeInfinity);
-        var between = SdfSampledLattice.SheetsBetween(cell: request.Cell, dims: request.Dims, values: values);
+        var between = SdfSampledLattice.SheetsBetween(cell: request.Cell, dims: request.Dims, near: near, values: values);
+        // A sample of a pair a sheet passes between joins the box with one cell about it: the sheet lies between the
+        // pair along the line and within the line's reach of the sample across it, and the cell beyond the pair keeps
+        // the sheet off the next lattice's edge, whose outermost pair no line can test. A sample near the surface or
+        // beside a sign change can hold the surface anywhere within its cell, so its cell joins and the box widens by one.
+        var sheetLow = new Vector3(value: float.PositiveInfinity);
+        var sheetHigh = new Vector3(value: float.NegativeInfinity);
 
         int Index(int x, int y, int z) => (x + (sx * (y + (sy * z))));
 
@@ -746,7 +754,14 @@ public sealed partial class SdfMeshPathBake {
             for (var y = 0; (y < sy); y++) {
                 for (var x = 0; (x < sx); x++) {
                     var value = values[Index(x: x, y: y, z: z)];
-                    var candidate = ((MathF.Abs(x: value) <= near) || between[Index(x: x, y: y, z: z)]);
+                    var point = (request.Origin + (new Vector3(x: x, y: y, z: z) * request.Cell));
+
+                    if (between[Index(x: x, y: y, z: z)] != 0) {
+                        sheetLow = Vector3.Min(value1: sheetLow, value2: (point - request.Cell));
+                        sheetHigh = Vector3.Max(value1: sheetHigh, value2: (point + request.Cell));
+                    }
+
+                    var candidate = (MathF.Abs(x: value) <= near);
 
                     if (!candidate) {
                         var inside = (value < 0f);
@@ -756,15 +771,18 @@ public sealed partial class SdfMeshPathBake {
                             (((z + 1) < sz) && ((values[Index(x: x, y: y, z: (z + 1))] < 0f) != inside)));
                     }
                     if (!candidate) { continue; }
-
-                    var point = (request.Origin + (new Vector3(x: x, y: y, z: z) * request.Cell));
-
                     low = Vector3.Min(value1: low, value2: point);
                     high = Vector3.Max(value1: high, value2: (point + request.Cell));
                 }
             }
         }
 
+        if (low.X <= high.X) {
+            low -= request.Cell;
+            high += request.Cell;
+        }
+        low = Vector3.Min(value1: low, value2: sheetLow);
+        high = Vector3.Max(value1: high, value2: sheetHigh);
         if (!(low.X <= high.X)) {
             group.Outcome = $"no surface after {group.Refinements} refinements";
             Library.StoreEmpty(geometry: group.Sealed);
@@ -775,8 +793,6 @@ public sealed partial class SdfMeshPathBake {
             return;
         }
 
-        low -= request.Cell;
-        high += request.Cell;
         var before = (group.High - group.Low);
         var after = (high - low);
 

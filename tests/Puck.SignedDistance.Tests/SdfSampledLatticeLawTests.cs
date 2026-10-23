@@ -309,8 +309,9 @@ public sealed class SdfSampledLatticeLawTests {
     }
 
     // A plate thinner than the spacing lying between two sample rows changes no edge's sign, and SheetsBetween names both
-    // rows' samples over the plate along the axis across it alone: the lines along the plate hold a constant field, and a
-    // field that reads at a fifth of the distance names the same samples.
+    // rows' samples over the plate along the axis across it alone: the lines along the plate hold a constant field, a
+    // field that reads at a fifth of the distance names the same samples, and the lines a cell beyond the plate's rim,
+    // which graze its edge and fall toward its rows from both sides, name none, since their falls meet above the surface.
     [InlineData(1f)]
     [InlineData(0.2f)]
     [Theory]
@@ -323,8 +324,9 @@ public sealed class SdfSampledLatticeLawTests {
         for (var index = 0; (index < plate.Length); index++) {
             var at = (new Vector3(x: (index % Side), y: ((index / Side) % Side), z: (index / (Side * Side))) * Cell);
 
-            // The plate is 2 mm thick between rows 3 and 4 along y, 1 to 6 across in x and z.
-            plate[index] = (scale * MathF.Max(x: (MathF.Abs(x: (at.Y - (3.5f * Cell))) - 0.001f), y: MathF.Max(x: (MathF.Abs(x: (at.X - (3.5f * Cell))) - (2.5f * Cell)), y: (MathF.Abs(x: (at.Z - (3.5f * Cell))) - (2.5f * Cell)))));
+            // The plate is 2 mm thick between rows 3 and 4 along y, and reaches six tenths of a cell short of rows 1 and
+            // 6 in x and z.
+            plate[index] = (scale * MathF.Max(x: (MathF.Abs(x: (at.Y - (3.5f * Cell))) - 0.001f), y: MathF.Max(x: (MathF.Abs(x: (at.X - (3.5f * Cell))) - (1.9f * Cell)), y: (MathF.Abs(x: (at.Z - (3.5f * Cell))) - (1.9f * Cell)))));
         }
 
         Assert.All(collection: plate, action: static value => Assert.True(condition: (value > 0f)));
@@ -333,9 +335,9 @@ public sealed class SdfSampledLatticeLawTests {
 
         for (var index = 0; (index < between.Length); index++) {
             var (x, y, z) = ((index % Side), ((index / Side) % Side), (index / (Side * Side)));
-            var over = ((x is >= 1 and <= 6) && (z is >= 1 and <= 6) && (y is 3 or 4));
+            var over = ((x is >= 2 and <= 5) && (z is >= 2 and <= 5) && (y is 3 or 4));
 
-            Assert.True(condition: (between[index] == over), userMessage: $"sample ({x}, {y}, {z}) {(between[index] ? "named" : "not named")}");
+            Assert.True(condition: (between[index] == (over ? 2 : 0)), userMessage: $"sample ({x}, {y}, {z}) named along axes {between[index]}");
         }
 
         Assert.Throws<ArgumentException>(testCode: () => SdfSampledLattice.SheetsBetween(cell: cell, dims: dims, values: plate.AsSpan(start: 1)));

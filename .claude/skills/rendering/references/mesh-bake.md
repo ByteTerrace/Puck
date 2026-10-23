@@ -131,16 +131,29 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   narrowing (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's
   finest spacing of the surface, beside a sign change, or in a pair of rows a
   sheet thinner than the spacing passes between
-  (`SdfSampledLattice.SheetsBetween`: the field falls toward the pair from both
-  sides and the falls meet below the surface, measured against the field's own
-  slope), and a final lattice all of one sign refines when that test finds a
-  sheet rather than finishing empty. The pair test is what keeps a 6 cm strip
-  lying between sample rows of a 1.8 m coarse cube in the box while its
-  neighbour a row lands near is kept by the distance test
-  (`SdfMeshPathBakeLawTests`, the plates law: four standalone 48 m strips);
-  keeping samples within half a cell's diagonal instead fattens the converged
-  box until the final lattice steps over the plates and the group bakes
-  nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
+  (`SdfSampledLattice.SheetsBetween`), and a final lattice all of one sign
+  refines when that test finds a sheet rather than finishing empty. The pair
+  test reads one line: the field falls toward the pair from both sides, the
+  falls meet strictly below the surface (a sheet's meet below it by half its
+  thickness; the falls either side of a solid's grazed edge meet above it), the
+  field changes across the line by under three quarters of a step at the
+  line's own slope (a line a step over a plate's top or a step out from a
+  board's face falls or rises by the whole step across it), and neither sample
+  is within the distance test's reach, so the pair moves the box only where
+  the distance test loses the sheet. A pair's samples join the box with one
+  cell about them, which keeps the sheet off the next lattice's edge, whose
+  outermost pair no line can test. Loosened, each of these moved the box of
+  groups that never needed it by a coarse cell and changed their final
+  lattice's alignment (the ground slab's lattice went from flat to cubic and
+  its clean mesh to 1.3 M rippled triangles; a canvas or sign scored four times
+  worse or better by where its faces fell), so a change here is measured by
+  `puck mesh audit --cpu` over the whole debug world against the previous
+  build's. The pair test is what keeps a 6 cm strip lying between sample rows
+  of a 1.8 m coarse cube in the box while its neighbour a row lands near is
+  kept by the distance test (`SdfMeshPathBakeLawTests`, the plates law: four
+  standalone 48 m strips); keeping samples within half a cell's diagonal
+  instead fattens the converged box until the final lattice steps over the
+  plates and the group bakes nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
   trim of the solid they hang from, which also keeps a level's lit and dark
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.
