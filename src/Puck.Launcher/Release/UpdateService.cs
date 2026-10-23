@@ -187,9 +187,14 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         var currentPath = Path.Combine(path1: root, path2: "current");
         var current = File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null;
         var alreadyCurrent = recovering && current == manifest.Version;
-        if (!alreadyCurrent && !string.IsNullOrEmpty(value: current) &&
-            !ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: current)) {
-            return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
+        if (!alreadyCurrent && !string.IsNullOrEmpty(value: current)) {
+            if (manifest.MinimumSupported is { } minimumSupported &&
+                ReleaseVersion.IsStrictlyGreaterThan(left: minimumSupported, right: current)) {
+                return new UpdateApplyOutcome(Applied: false, Detail: $"current install '{current}' is below this release's minimumSupported floor '{minimumSupported}'");
+            }
+            if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: current)) {
+                return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
+            }
         }
 
         // Never restage the running directory, including when an interrupted apply already swapped current.
