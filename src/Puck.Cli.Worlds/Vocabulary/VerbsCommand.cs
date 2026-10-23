@@ -90,7 +90,7 @@ public static class VerbsCommand {
 
             var verbs = new Dictionary<string, CommandMetadata>(comparer: StringComparer.Ordinal);
 
-            using (lease) {
+            using (world) {
                 foreach (var headless in (headlessOnly ? new[] { true } : new[] { true, false })) {
                     if (Boot(artifact: artifact, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory, cacheDirectory: cacheDirectory) is not { } shape) {
                         return 1;
