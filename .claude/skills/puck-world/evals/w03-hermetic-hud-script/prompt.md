@@ -1,6 +1,6 @@
 ---
-max_turns: 8
+max_turns: 12
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-Write a hermetic stdin script that mutates HUD state, reads it back, and captures the composed overlay for a pixel assertion.
+In Puck.World, write a hermetic stdin script for `worlds/debug` that mutates HUD state, reads it back, and captures the composed overlay for a pixel assertion.
