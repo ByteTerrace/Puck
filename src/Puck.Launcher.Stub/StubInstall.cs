@@ -32,7 +32,7 @@ public static class StubInstall {
                 !manifest.TryGetProperty(propertyName: "version", value: out var version) || version.ValueKind != JsonValueKind.String) {
                 throw new JsonException(message: "pending install intent has no manifest version");
             }
-            if (string.Equals(a: version.GetString(), b: failedVersion, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(a: version.GetString()?.Trim(), b: failedVersion.Trim(), comparisonType: StringComparison.Ordinal)) {
                 File.Delete(path: intentPath);
             }
         }
