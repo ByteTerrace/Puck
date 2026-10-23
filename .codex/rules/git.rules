@@ -1,6 +1,7 @@
-# Git safety for Codex lanes. A Codex lane's work lands through the lead, so a lane never pushes; a push to `main`
-# deploys to Azure and is the owner's alone (AGENTS.md, "Branches, commits and pushes"). Destructive local history
-# and worktree commands go to review rather than running unasked.
+# Git safety for Codex lanes. A push to `main` deploys to Azure and must prompt the owner (AGENTS.md, "Branches,
+# commits and pushes"). A Codex lane runs headless, so a `prompt` decision here reaches the automatic reviewer, not
+# the owner; every push is therefore forbidden, and a lane's work lands through the lead, whose own pushes to `main`
+# prompt the owner. Destructive local history and worktree commands go to the reviewer rather than running unasked.
 
 prefix_rule(
     pattern = ["git", "push"],
