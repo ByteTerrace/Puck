@@ -255,6 +255,7 @@ public static class FixedSurfaceQuery {
         return (Point: box.ToWorld(local: surfaceLocal), Normal: box.ToWorldOffset(local: normal));
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
+        FixedStaticColliderKind.Cylinder => NearestOnCylinder(collider: in collider, probe: probe),
         FixedStaticColliderKind.Sphere => NearestOnSphere(
         center: collider.Center,
         probe: probe,
@@ -280,6 +281,12 @@ public static class FixedSurfaceQuery {
     ),
         _ => throw new InvalidOperationException(message: $"Unknown collider kind {collider.Kind}."),
     };
+    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnCylinder(in FixedStaticCollider collider, FixedVector3 probe) {
+        var nearest = FixedCylinderContact.Nearest(point: collider.Rotation.RotateInverse(vector: (probe - collider.Center)),
+            radius: collider.Extent.X, halfHeight: collider.Extent.Y);
+
+        return ((collider.Center + collider.Rotation.Rotate(vector: nearest.Point)), collider.Rotation.Rotate(vector: nearest.Normal));
+    }
     // The frame change is the unit rotation's own fused kernel, one rounding per component, rather than the box's
     // three axis projections: the query then runs on the axis-aligned box at the origin, exactly.
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnOrientedBox(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation, FixedVector3 probe) {

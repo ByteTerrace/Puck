@@ -12,6 +12,8 @@ public enum FixedStaticColliderKind : byte {
     OrientedBox,
     /// <summary>A half-space whose normal points toward its permitted side.</summary>
     HalfSpace,
+    /// <summary>A capped circular cylinder along its rotated local Y axis.</summary>
+    Cylinder,
 }
 /// <summary>A deterministic depenetration response without any body-state or gameplay policy.</summary>
 /// <param name="Normal">The unit push direction.</param>
@@ -20,12 +22,12 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// <summary>An analytic fixed-point static collider.</summary>
 /// <remarks>A sphere carries its radius in <see cref="Extent"/>.X, an axis-aligned box carries world-axis
 /// half-extents, an oriented box carries its own half-extents and the unit <see cref="Rotation"/> that turns its axes
-/// into world space, and a half-space carries its unit normal in <see cref="Extent"/> and one boundary point in
-/// <see cref="Center"/>. Only an oriented box reads <see cref="Rotation"/>.</remarks>
+/// into world space. A cylinder carries radius in X/Z and half-height in Y, with the same local-to-world rotation.
+/// A half-space carries its unit normal in <see cref="Extent"/> and one boundary point in <see cref="Center"/>.</remarks>
 /// <param name="Kind">The analytic shape kind.</param>
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
 /// <param name="Extent">The radius carrier, box half-extents, or half-space normal.</param>
-/// <param name="Rotation">An oriented box's box-to-world rotation; unread by every other kind.</param>
+/// <param name="Rotation">The oriented box or cylinder's local-to-world rotation.</param>
 public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default) {
     // The point of a segment nearest to a point: the point less the one segment witness every segment query shares.
     private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) =>
@@ -286,11 +288,13 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             )
         );
     }
+
     // A rotated unit axis that lands exactly on a world axis: two of its components are exactly zero and the third is
     // exactly one in magnitude.
     private static bool IsWorldAxis(FixedVector3 axis) =>
         ((((((axis.X == FixedQ4816.Zero) ? 1 : 0) + ((axis.Y == FixedQ4816.Zero) ? 1 : 0)) + ((axis.Z == FixedQ4816.Zero) ? 1 : 0)) == 2) &&
          (((FixedQ4816.Abs(value: axis.X) + FixedQ4816.Abs(value: axis.Y)) + FixedQ4816.Abs(value: axis.Z)) == FixedQ4816.One));
+
     /// <summary>Creates a static half-space.</summary>
     public static FixedStaticCollider HalfSpace(FixedVector3 point, FixedVector3 normal) =>
         new(
@@ -298,6 +302,15 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             Extent: normal,
             Kind: FixedStaticColliderKind.HalfSpace
         );
+    /// <summary>Creates a capped circular cylinder, including a thin disc.</summary>
+    /// <param name="center">The cylinder center.</param>
+    /// <param name="radius">The circular radius.</param>
+    /// <param name="halfHeight">The half-height along local Y.</param>
+    /// <param name="rotation">The cylinder-to-world rotation.</param>
+    /// <returns>The cylinder collider.</returns>
+    public static FixedStaticCollider Cylinder(FixedVector3 center, FixedQ4816 radius, FixedQ4816 halfHeight, FixedQuaternion rotation) =>
+        new(Kind: FixedStaticColliderKind.Cylinder, Center: center,
+            Extent: new FixedVector3(X: radius, Y: halfHeight, Z: radius), Rotation: rotation.Normalize());
     /// <summary>Creates a static sphere.</summary>
     public static FixedStaticCollider Sphere(FixedVector3 center, FixedQ4816 radius) =>
         new(
@@ -323,6 +336,8 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) => Kind switch {
+        FixedStaticColliderKind.Cylinder => FixedCylinderContact.TryPush(cylinder: in this, orientation: in orientation,
+            position: position, push: out push, skin: skin, volume: in volume),
         FixedStaticColliderKind.Sphere => TrySpherePush(
         orientation: in orientation,
         position: position,

@@ -184,6 +184,31 @@ carries every box axis exactly onto a world axis. Against either box a capsule
 or box body is measured by its bounds in the box's frame, which is exact for
 an upright capsule on a box's faces and conservative at its edges.
 
+Circular cylinders and thin discs compile to `FixedStaticCollider.Cylinder`,
+including their rotation, radius and half-height. `FixedCylinderContact`
+shares the cap, side and rim closest-point geometry with `FixedSurfaceQuery`.
+Sphere and capsule contact uses that surface, so the corners of a cylinder's
+bounding box carry nothing. Upright capsule queries are analytic; a tilted
+capsule uses a bounded fixed-point segment search. Box bodies retain their
+bounds in the cylinder frame, tested against the circular cross-section;
+tilted box edges are still conservative. Elliptical and carved primitives
+remain bounded approximations in the analytic provider.
+
+A walking body's `motion.groundSnap` is a downward reach, scaled with the
+body (0.3 m by default; zero disables it). The controller projects its walking
+velocity onto the current support, then uses `FixedStepUp.TrySnap` to find
+walkable support below the completed step. The same bounded landing search
+serves step-up and snap. A crest removes the climb's upward velocity; a
+descent follows its surface. Jump and upward launch operations release
+grounding before integration, and a drop past the reach becomes a fall.
+The old inward-speed `groundStick` setting is removed.
+
+Attached kinematic support uses the same narrowphase and walkable-normal
+test against the previous tick's geometry. Its change of position and yaw
+carries the rider's foot point before the rider advances. A yawed box is
+rideable, as are the other supported analytic primitives; body orientation
+remains the motion program's responsibility.
+
 `IContactField` is the seam a grounded body resolves its swept position
 against, and `FixedStaticContactSolver` is the analytic provider's half of it:
 the relaxation over a static collider set, written once. It takes two collider

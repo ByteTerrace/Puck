@@ -19,7 +19,7 @@ namespace Puck.World.Server;
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. A slab's <c>Round</c> and a creation's boolean carving, smoothing, rounded box corners, and non-box primitive
-/// surfaces are deliberately not modelled. An isotropically scaled sphere is exact; every other finite placement
+/// surfaces are deliberately not modelled. Spheres and circular cylinders use their closest-point geometry; other finite placement
 /// primitive uses its own bounding box, turned with it (<see cref="FixedStaticCollider.Box"/>): exact for a sharp box
 /// at any yaw, conservative for rounded or non-box geometry, and axis-aligned whenever its axes land on world axes. A
 /// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. No broadphase:
@@ -41,8 +41,11 @@ internal sealed class WorldColliderSet : IContactField {
     // at each: the difference is the displacement a body standing on the row rides (TryRideDisplacement).
     private FixedVector3[] m_attachedOrigins;
     private FixedVector3[] m_previousAttachedOrigins;
+    private FixedQuaternion[] m_attachedRotations;
+    private FixedQuaternion[] m_previousAttachedRotations;
     private bool[] m_attachedResolved;
     private bool[] m_previousAttachedResolved;
+
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
     // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick. Attached
@@ -74,6 +77,8 @@ internal sealed class WorldColliderSet : IContactField {
         m_attachedRows = attachedRows;
         m_attachedOrigins = new FixedVector3[attachedRows.Count];
         m_previousAttachedOrigins = new FixedVector3[attachedRows.Count];
+        m_attachedRotations = new FixedQuaternion[attachedRows.Count];
+        m_previousAttachedRotations = new FixedQuaternion[attachedRows.Count];
         m_attachedResolved = new bool[attachedRows.Count];
         m_previousAttachedResolved = new bool[attachedRows.Count];
         m_solver = new FixedStaticContactSolver(
@@ -219,10 +224,12 @@ internal sealed class WorldColliderSet : IContactField {
         hash.Add(value: collider.Rotation.Z.Value);
         hash.Add(value: collider.Rotation.W.Value);
     }
-    // A finite primitive's oriented bound, grown by the row's margin on every face. A copy whose axes land on world
-    // axes keeps the axis-aligned collider.
+    // A circular cylinder retains its surface; other finite primitives retain an oriented bound.
     private static FixedStaticCollider PlacementBox(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) =>
-        FixedStaticCollider.Box(
+        (((copy.Shape.Type == SdfSolidPrimitive.Cylinder) && (copy.LocalHalfExtents.X == copy.LocalHalfExtents.Z))
+        ? FixedStaticCollider.Cylinder(center: copy.Center, radius: (copy.LocalHalfExtents.X + margin),
+            halfHeight: (copy.LocalHalfExtents.Y + margin), rotation: copy.Rotation)
+        : FixedStaticCollider.Box(
             center: copy.Center,
             halfExtents: (copy.LocalHalfExtents + new FixedVector3(
                 X: margin,
@@ -230,7 +237,7 @@ internal sealed class WorldColliderSet : IContactField {
                 Z: margin
             )),
             rotation: copy.Rotation
-        );
+        ));
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.
@@ -442,6 +449,7 @@ internal sealed class WorldColliderSet : IContactField {
         (m_previousAttachedColliders, m_attachedColliders) = (m_attachedColliders, m_previousAttachedColliders);
         (m_previousAttachedColliderRows, m_attachedColliderRows) = (m_attachedColliderRows, m_previousAttachedColliderRows);
         (m_previousAttachedOrigins, m_attachedOrigins) = (m_attachedOrigins, m_previousAttachedOrigins);
+        (m_previousAttachedRotations, m_attachedRotations) = (m_attachedRotations, m_previousAttachedRotations);
         (m_previousAttachedResolved, m_attachedResolved) = (m_attachedResolved, m_previousAttachedResolved);
         m_attachedColliders.Clear();
         m_attachedColliderRows.Clear();
@@ -484,6 +492,8 @@ internal sealed class WorldColliderSet : IContactField {
                 angle: fixedYaw,
                 axis: FixedVector3.UnitY
             );
+
+            m_attachedRotations[row] = stampRotation;
 
             CreationStampEmitter.VisitFixedPrimitiveCopies(
                 document: creation.EngineDocument,
@@ -546,90 +556,50 @@ internal sealed class WorldColliderSet : IContactField {
             AttachedRevision++;
         }
     }
-    /// <summary>Finds the attached solid a body was standing on before the latest <see cref="RefreshAttached"/> and
-    /// how far its carrier moved it: a moving platform carries what stands on it. The body stood on a collider of the
-    /// previous refresh when the bottom of its volumes' world bounds lay within two contact skins above that
-    /// collider's top and the two overlapped horizontally; of several, the highest top carries it. Only axis-aligned
-    /// boxes carry (an attached box keeps that kind under its carrier's yaw only at quarter turns), and only the
-    /// carrier's translation: a turning platform does not turn what rides it.</summary>
-    /// <param name="position">The body's foot point, as the previous tick left it.</param>
+
+    /// <summary>Finds a walkable contact against the previous attached geometry and returns its carrier's
+    /// transform displacement. The same narrowphase and slope limit as ordinary contact decide support; a yawed box is
+    /// therefore just as rideable as an axis-aligned one. Ties retain placement and volume order.</summary>
+    /// <param name="position">The body's previous foot point.</param>
     /// <param name="orientation">The body's orientation.</param>
+    /// <param name="up">The body's unit up axis.</param>
     /// <param name="volumes">The body's scaled collider volumes.</param>
-    /// <param name="displacement">The carrier's translation between the two refreshes, or zero when nothing carries
-    /// the body.</param>
-    /// <returns><see langword="true"/> when an attached box that moved was under the body.</returns>
-    public bool TryRideDisplacement(FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 displacement) {
+    /// <param name="displacement">The foot point's displacement under the carrier's translation and yaw.</param>
+    /// <returns>Whether a moving support was found.</returns>
+    public bool TryRideDisplacement(FixedVector3 position, in FixedQuaternion orientation, in FixedVector3 up,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 displacement) {
         displacement = FixedVector3.Zero;
-
-        if (
-            (m_previousAttachedColliders.Count == 0) ||
-            volumes.IsEmpty
-        ) {
-            return false;
-        }
-
-        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
-        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
-
-        foreach (ref readonly var volume in volumes) {
-            var (center, extent) = FixedColliderBounds.WorldBounds(
-                orientation: in orientation,
-                position: position,
-                volume: in volume
-            );
-            var lower = (center - extent);
-            var upper = (center + extent);
-
-            low = new FixedVector3(
-                X: FixedQ4816.Min(x: low.X, y: lower.X),
-                Y: FixedQ4816.Min(x: low.Y, y: lower.Y),
-                Z: FixedQ4816.Min(x: low.Z, y: lower.Z)
-            );
-            high = new FixedVector3(
-                X: FixedQ4816.Max(x: high.X, y: upper.X),
-                Y: FixedQ4816.Max(x: high.Y, y: upper.Y),
-                Z: FixedQ4816.Max(x: high.Z, y: upper.Z)
-            );
-        }
-
-        var skin = m_solver.ContactSkin;
         var found = false;
-        var bestTop = FixedQ4816.MinValue;
+        var bestDepth = FixedQ4816.Zero;
+        var skin = ((m_solver.ContactSkin + m_solver.ContactSkin) + FixedQ4816.Epsilon);
 
         for (var index = 0; (index < m_previousAttachedColliders.Count); index++) {
             var collider = m_previousAttachedColliders[index];
             var row = m_previousAttachedColliderRows[index];
 
-            if (
-                (collider.Kind != FixedStaticColliderKind.AxisAlignedBox) ||
-                !m_attachedResolved[row] ||
-                !m_previousAttachedResolved[row]
-            ) {
+            if (!m_attachedResolved[row] || !m_previousAttachedResolved[row]) {
                 continue;
             }
+            foreach (ref readonly var volume in volumes) {
+                if (!collider.TryGetPush(orientation: in orientation, position: position, push: out var push,
+                    skin: skin, volume: in volume) ||
+                    (FixedVector3.Dot(left: push.Normal, right: up) < m_solver.GroundedThreshold) ||
+                    (found && (push.Penetration <= bestDepth))) {
+                    continue;
+                }
+                found = true;
+                bestDepth = push.Penetration;
+                if (m_attachedRotations[row] == m_previousAttachedRotations[row]) {
+                    displacement = (m_attachedOrigins[row] - m_previousAttachedOrigins[row]);
+                } else {
+                    var local = m_previousAttachedRotations[row].RotateInverse(vector: (position - m_previousAttachedOrigins[row]));
 
-            var top = (collider.Center.Y + collider.Extent.Y);
-
-            if (
-                (low.Y < top) ||
-                (low.Y > (top + (skin + skin))) ||
-                (low.X >= (collider.Center.X + collider.Extent.X)) ||
-                (high.X <= (collider.Center.X - collider.Extent.X)) ||
-                (low.Z >= (collider.Center.Z + collider.Extent.Z)) ||
-                (high.Z <= (collider.Center.Z - collider.Extent.Z)) ||
-                (found && (top <= bestTop))
-            ) {
-                continue;
+                    displacement = ((m_attachedOrigins[row] + m_attachedRotations[row].Rotate(vector: local)) - position);
+                }
             }
-
-            found = true;
-            bestTop = top;
-            displacement = (m_attachedOrigins[row] - m_previousAttachedOrigins[row]);
         }
-
         return (found && (displacement != FixedVector3.Zero));
     }
-
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
