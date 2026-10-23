@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response rejects using machine-width `Vector<T>` or `TensorPrimitives` float reductions for replayed simulation state (either because simulation state uses `Puck.Maths` fixed-point/integer math rather than floats, or because throughput alone never justifies non-deterministic reductions).
+The response rejects any float reduction for replayed simulation state, machine-width `Vector<T>` and `TensorPrimitives` included, because simulation state uses `Puck.Maths` fixed-point or integer math, never floats. Objecting only that the reduction is nondeterministic, or proposing a deterministic float formulation for the replayed state, fails.
