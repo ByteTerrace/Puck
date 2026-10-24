@@ -5,7 +5,7 @@ deterministic WebAssembly guest. World-side runtime:
 `src/Puck.World.Addons/WorldAddonRuntime.cs` + `WorldAddonWire.cs`, behind the
 `IWorldAddonHost` seam `src/Puck.World.Server/IWorldAddonHost.cs` declares.
 The ABI itself (cell layouts, exports, mount steps, determinism posture) is
-owned by `src/Puck.Scripting/README.md` — read it before touching the guest
+owned by `docs/reference/scripting.md` (`src/Puck.Scripting/README.md` links it) — read it before touching the guest
 boundary; this file carries the World-relevant surface.
 
 The addon system is improved as it is used (the owner's ruling). A lane that
@@ -437,7 +437,7 @@ withheld-request example.
 
 ## Puck.Scripting in one paragraph
 
-`src/Puck.Scripting/README.md` is the single home of the ABI contract:
+`docs/reference/scripting.md` is the single home of the ABI contract:
 cell/descriptor byte tables, the guest exports, the ten-step mount order,
 the per-tick batch order, fault-vs-verdict postures. Determinism: Wasmtime
 pinned EXACTLY (the package version is the native engine version; fuel

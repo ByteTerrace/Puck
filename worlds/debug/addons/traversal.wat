@@ -168,7 +168,7 @@
         (else
           (if (i32.ne (local.get $v) (i32.const 10)) (then
             (global.set $refused (i64.add (global.get $refused) (i64.const 1)))))
-          (if (i32.eq (local.get $v) (i32.const 9)) (then (memory.fill (i32.const 0x3000) (i32.const 0) (i32.const 32))))))))
+          (if (i32.eq (local.get $v) (i32.const 9)) (then (memory.fill (i32.const 0x3000) (i32.const 0) (i32.const 40))))))))
       (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $next))))
 
 

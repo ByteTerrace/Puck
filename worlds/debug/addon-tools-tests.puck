@@ -43,6 +43,23 @@ test "the traversal bot reports a deliberately unreachable waypoint" {
   }
 }
 
+test "a traversal pass starts at the selected route entry" {
+  when {
+    seat1: world.state.cell.set traversal start 1
+    seat1: world.state.cell.set traversal count 2
+    seat1: world.state.cell.set traversal timeout 10
+    seat1: world.state.cell.set traversalRoute 1y 100
+    seat1: world.state.cell.set traversal run 1
+    ticks 30
+  }
+  expect {
+    traversal[done] == 1
+    traversal[missed] == 1
+    traversalFailures[0] == 0
+    traversalFailures[1] > 0
+  }
+}
+
 test "the scope samples its selected stand-in into the history rows" {
   when {
     seat1: world.state.cell.set scope body 43

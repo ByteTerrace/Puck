@@ -48,7 +48,8 @@ world, guest receipts and the ticks at which the switch and other inputs changed
 **Traversal.** Set `traversal[run]` to 1 for a pass. `traversalRoute` contains
 world-space fixed-point coordinates with keys `0x`, `0y`, `0z`, and so on;
 the route includes both studio steps, both ramps, the stairs, the round dais,
-the gallery's two flights, and calling/riding the lift. `count`, `timeout`
+the gallery's two flights, and calling/riding the lift. `start` (default 0)
+selects the first entry and `count` the exclusive end. `timeout`
 (ticks per waypoint, default 600) and `tolerance` (raw Q16 horizontal tolerance,
 default 32768) are authored controls. Vertical tolerance is 0.6 m. The bot
 walks and strafes without teleporting or using flight. A timeout records the
@@ -56,8 +57,13 @@ tick in `traversalFailures[waypoint]` and a small red marker at the body's
 position; a fall faster than 4 m/s and more than 1 m below the goal records
 `traversalFalls[event]` and another marker. `reached`, `missed` and `falls`
 are cumulative counters; `waypoint`, `tick`, `done` and `run` describe the
-current pass. It switches `run` off when done. A miss is a route probe finding,
+current pass. A new pass clears `done`; it switches `run` off when done. A miss is a route probe finding,
 not proof of a physics bug: inspect its approach and authored tolerance.
+Before entering the lift it waits for `liftAt` to reach level one's 72
+sixteenth-metre cells. The studio is sealed: the default pass reaches the
+fifteen studio goals, then reports the closed wall and the unreachable gallery
+goals. For an independent stairwell probe, pose body 43 at (11.2, 0.05, 32.5)
+from the host, set `start` to 17, and run a fresh pass. The guest itself never poses a body.
 
 **Scope.** Set `scope[body]` to a body index (0–44), then `scope[enabled]` to
 1. It queries settled kinematics each tick and records `scopeHeight`,
@@ -77,10 +83,22 @@ kinematics, strict per-cell mutation decoding and bounded guest logs. The
 owns their layouts and fuel charges. Text/vector authored reads and a cheaper
 transactional cell-write path are recorded in [open items](../../docs/plans/open-items.md#addon-system).
 
+Measured headlessly over MCP: fuzzer 10,159 fuel/tick while driving, traversal
+6,477 on an ordinary route tick (before adding its start/lift readiness reads),
+and scope 22,103 while sampling. The one-million budget was ample; no answers
+or events dropped and no mutation budget exhausted. The scope used thirteen
+of its sixteen cell mutations per tick; full document validation and narration
+were the limiting host work. A 300-step seeded fuzz pass was clean under the
+watchdog, and its 346-tick recording verified `MATCH`. The separate gallery
+leg reached seven of eight goals, with one missed car-entry waypoint and one
+fall even after waiting for the car. This is a probe finding requiring diagnosis,
+not a confirmed lift-physics defect.
+
 ## The watchdog
 
 The watchdog reads the pose of every body but the chess pieces every tick, and
-of four pieces a tick in turn, and listens for collision begins. It records:
+of up to four pieces a tick in turn (two with every range/tool body present),
+and listens for collision begins. It records:
 
 | Violation | When |
 |---|---|
