@@ -100,8 +100,9 @@ order, so it takes the stairs and doors she took. It stops 2 m from her. A crumb
 more than 6 m from the one before, which a teleport makes, restarts the trail
 from her, and when it makes no progress for a second at full speed it jumps once
 and skips a crumb. Measured headless: posed 14 m away it closes to 2.5 m in
-about three seconds, and it follows her up both flights of the stairs to level
-1, stopping 1.9 m from her.
+about three seconds; it trails her by 2.25 m while she walks at 4.25 m/s and
+settles 1.9 m from her when she stops; and it follows her up both flights of
+the stairs to level 1, stopping 1.9 m from her.
 
 It cannot follow a teleport (`debug.go`, `gallery.go`, a respawn): a guest
 drives a body through intents only and cannot pose it, so the companion walks
