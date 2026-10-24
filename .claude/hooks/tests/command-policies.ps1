@@ -319,6 +319,17 @@ Add-Case git-safety 'verb=stash; git $verb' ask deny posix
 Add-Case git-safety 'git push x HEAD:$target' ask deny
 Add-Case git-safety 'git push origin "$(git branch --show-current)"' ask deny posix
 Add-Case git-safety 'git -C $dir push' ask deny
+Add-Case git-safety 'git -C:$dir push' ask deny pwsh
+Add-Case git-safety 'git push --repo:$target origin topic' ask deny pwsh
+Add-Case git-safety 'git branch -D:$branch' pass deny pwsh
+Add-Case git-safety 'gh api repos/o/r/pulls -X:$method' ask deny pwsh
+Add-Case git-safety 'git --attr-source HEAD push origin main' ask deny
+Add-Case git-safety 'git --attr-source HEAD stash' pass deny
+Add-Case git-safety 'cd $dir && git push' ask deny
+Add-Case git-safety 'Set-Location $dir; git push' ask deny pwsh
+Add-Case git-safety 'env -C $dir git push' ask deny posix
+Add-Case git-safety 'GIT_DIR=$dir git push' ask deny posix
+Add-Case git-safety 'git fetch origin -- $refspec' pass deny
 Add-Case git-safety 'git stash $sub' pass deny
 Add-Case git-safety 'git branch $flag topic' pass deny
 Add-Case git-safety 'git log -n $count' pass pass

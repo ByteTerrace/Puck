@@ -93,6 +93,35 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Equal(expected: (19UL * Span), actual: schedules[^1].PresentedTicks);
     }
     [Fact]
+    public void AFloorFootprintDoesNotHoldAConsumerShowingAStaleProducer() {
+        var set = Set(
+            Screens("main", "pane"),
+            Screens("pane", "window"),
+            Instance(name: "window")
+        );
+        const ulong Span = (Puck.Maths.FixedTickConversion.TicksPerSecond / 70UL);
+        var schedules = Run(
+            count: 4,
+            frame: index => (Frame(
+                footprints: [
+                    (Shows(consumer: "main", producer: "pane") with { Refresh = RenderGraphRefresh.AtLeast(hertz: 30) }),
+                    (Shows(consumer: "pane", producer: "window") with { Refresh = RenderGraphRefresh.AtLeast(hertz: 30) }),
+                ],
+                hertz: 141,
+                index: index,
+                roots: MainRoot
+            ) with {
+                FrameTicks = Span,
+                PresentedTicks = (((ulong)index) * Span),
+                Stale = ["window"],
+            }),
+            set: set
+        );
+
+        Assert.Equal(expected: 4, actual: RenderCount(name: "pane", schedules: schedules, set: set));
+        Assert.Equal(expected: 4, actual: RenderCount(name: "window", schedules: schedules, set: set));
+    }
+    [Fact]
     public void AStaleNameNamingNoInstanceIsRefused() {
         var set = Set(
             Screens("main", "window"),

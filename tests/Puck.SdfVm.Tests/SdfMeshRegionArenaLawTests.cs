@@ -34,6 +34,29 @@ public sealed class SdfMeshRegionArenaLawTests {
         Assert.Equal(expected: [other], actual: arena.Placements.Keys);
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfMeshRegionArena(retainedSlackWords: -1));
     }
+    [Fact]
+    public void TheArenaPacksDroppedMeshesBeforeAppendingPastWhatARegionHolds() {
+        var template = new SdfMesh(
+            indices: new uint[] { 0, 0, 0 },
+            positions: new Vector3[4_000_000]
+        );
+        var kept = Enumerable.Range(count: 25, start: 0).Select(selector: _ => Draw(mesh: (template with { }))).ToArray();
+        var dropped = Enumerable.Range(count: 19, start: 0).Select(selector: _ => Draw(mesh: (template with { }))).ToArray();
+        var arena = new SdfMeshRegionArena();
+
+        arena.Plan(draws: [.. kept, .. dropped]);
+        Assert.True(condition: ((((ulong)arena.Words) * sizeof(uint)) <= SdfWorldTables.MostMeshRegionBytes));
+
+        arena.Plan(draws: kept);
+        Assert.False(condition: arena.Relocated);
+
+        var added = Draw(mesh: (template with { }));
+
+        arena.Plan(draws: [.. kept, added]);
+        Assert.True(condition: arena.Relocated);
+        Assert.True(condition: ((((ulong)arena.Words) * sizeof(uint)) <= SdfWorldTables.MostMeshRegionBytes));
+        Assert.Equal(expected: (kept.Length + 1), actual: arena.Placements.Count);
+    }
 
     private static SdfMesh Triangle(float offset) => new(
         indices: new uint[] { 0, 1, 2 },
