@@ -239,9 +239,9 @@ public sealed record WorldScheduleSection(int SettleTicks, IReadOnlyList<WorldSc
     );
 
     /// <summary>The submission manifest's file name inside the run's <c>--schedule-dir</c>.</summary>
-    public const string ManifestFileName = "schedule.json";
+    public const string ManifestFileName = "test-run.json";
     /// <summary>The submission manifest's schema id.</summary>
-    public const string ManifestSchemaId = "puck.world.schedule-manifest.v1";
+    public const string ManifestSchemaId = "puck.world.test-run.v1";
     /// <summary>The manifest outcome of a row still waiting for the tick lane to apply it when the export was
     /// written.</summary>
     public const string OutcomePending = "pending";
@@ -258,9 +258,6 @@ public sealed record WorldScheduleSection(int SettleTicks, IReadOnlyList<WorldSc
     /// submitted for it. The manifest carries one entry per declared row, so this is what a dropped step reads as
     /// rather than an absent entry.</summary>
     public const string OutcomeUnreached = "unreached";
-    /// <summary>The manifest outcome of a row whose authored principal has no ingress in the boot that ran
-    /// it.</summary>
-    public const string OutcomeUnroutable = "unroutable";
 
     /// <summary>Gets the exact tick the state export is written at: the last scheduled command's tick plus the
     /// settle margin, or the margin alone when nothing is scheduled.</summary>

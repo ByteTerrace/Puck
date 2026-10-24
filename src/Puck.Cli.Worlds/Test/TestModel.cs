@@ -10,7 +10,6 @@ internal enum TestHost {
     /// <summary>The browser-wasm engine host.</summary>
     Browser,
 }
-
 /// <summary>One world a <c>puck test</c> run boots: the name it is reported under and the document the leg boots.</summary>
 /// <param name="Name">The world's name: the generated world's name, or a document's own file name.</param>
 /// <param name="Path">The full path of the document the leg boots.</param>
@@ -28,6 +27,7 @@ internal sealed record TestWorld(string Name, string Path, IReadOnlyList<WorldTe
         Path: path
     );
 }
+
 /// <summary>One verdict row as the export declares and resolves it.</summary>
 /// <param name="Name">The verdict row's name.</param>
 /// <param name="Gate">The expectation the row's <c>verdict.gate</c> claims.</param>
@@ -46,7 +46,7 @@ public sealed record TestVerdict(string Name, string Gate, long Status, ulong? F
         : WorldVerdict.NotEvaluated
     );
 }
-/// <summary>One local edit verdict the run's schedule manifest recorded.</summary>
+/// <summary>One local edit verdict the run's test-run manifest recorded.</summary>
 /// <param name="Rejected">Whether the edit was refused.</param>
 /// <param name="Message">The server's own reason or confirmation.</param>
 public sealed record TestEcho(bool Rejected, string Message);

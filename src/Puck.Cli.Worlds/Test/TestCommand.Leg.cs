@@ -219,6 +219,11 @@ public static partial class TestCommand {
             return false;
         }
 
+        if (manifest[propertyName: "schema"]?.GetValue<string>() != WorldScheduleSection.ManifestSchemaId) {
+            error.WriteLine(value: $"ERROR: the leg for {world} did not write a {WorldScheduleSection.ManifestSchemaId} test-run manifest.");
+            return false;
+        }
+
         var exportTick = (manifest[propertyName: "exportTick"]?.GetValue<ulong>() ?? 0UL);
         var declaredTick = (export[propertyName: "tick"]?.GetValue<ulong>() ?? 0UL);
 
@@ -229,8 +234,6 @@ public static partial class TestCommand {
         }
 
         if (!TryReadWorlds(
-            bootBytes: exportBytes,
-            bootExport: export,
             error: error,
             manifest: manifest,
             scheduleDirectory: scheduleDirectory,
@@ -252,26 +255,18 @@ public static partial class TestCommand {
 
         return true;
     }
-    // Every world the run exported, in the manifest's own order. A manifest with no `worlds` list is a run over one
-    // world: the booted export is the whole reading. A sibling the run could not start refuses the leg by name —
+    // Every world the run exported, in the manifest's own order. The booted world is always listed too.
+    // A sibling the run could not start refuses the leg by name —
     // a world the document armed and the host never ran measured nothing, which is a usage refusal rather than a
     // verdict.
-    private static bool TryReadWorlds(string world, string scheduleDirectory, JsonObject manifest, JsonObject bootExport, byte[] bootBytes, TextWriter error, out IReadOnlyList<TestWorldExport>? worlds) {
+    private static bool TryReadWorlds(string world, string scheduleDirectory, JsonObject manifest, TextWriter error, out IReadOnlyList<TestWorldExport>? worlds) {
         var read = new List<TestWorldExport>();
 
         worlds = null;
 
-        if (manifest[propertyName: "worlds"] is not JsonArray rows) {
-            worlds = [
-                new TestWorldExport(
-                ExportBytes: bootBytes,
-                ExportTick: (bootExport[propertyName: "tick"]?.GetValue<ulong>() ?? 0UL),
-                Verdicts: ReadVerdicts(export: bootExport),
-                World: WorldScheduleSection.BootWorldName
-            ),
-            ];
-
-            return true;
+        if ((manifest[propertyName: "worlds"] is not JsonArray rows) || (rows.Count == 0)) {
+            error.WriteLine(value: $"ERROR: the leg for {world} wrote no world exports in its test-run manifest.");
+            return false;
         }
 
         foreach (var node in rows) {
@@ -506,7 +501,7 @@ public static partial class TestCommand {
         };
         var reproduceOption = new Option<bool>(name: "--reproduce") {
             DefaultValueFactory = static _ => false,
-            Description = "Run every test world a second time and require byte-identical state exports and schedule manifests. Use for determinism qualification; ordinary authored tests run once.",
+            Description = "Run every test world a second time and require byte-identical state exports and test-run manifests. Use for determinism qualification; ordinary authored tests run once.",
         };
         var jobsOption = new Option<int>(name: "--jobs") {
             DefaultValueFactory = static _ => Math.Min(

@@ -334,7 +334,6 @@ public sealed class TestReconciliationLawTests {
     }
     [InlineData(WorldScheduleSection.OutcomeFaulted, "crashed its handler")]
     [InlineData(WorldScheduleSection.OutcomePending, "was still awaiting its answer")]
-    [InlineData(WorldScheduleSection.OutcomeUnroutable, "had no ingress")]
     [Theory]
     public void AnOutcomeTheHostRatherThanTheWorldAnsweredIsUnmeasuredWhateverTheRowExpected(string outcome, string named) {
         foreach (var expect in new[] { WorldScheduleExpectation.Submitted, WorldScheduleExpectation.Refused }) {

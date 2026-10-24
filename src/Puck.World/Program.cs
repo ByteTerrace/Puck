@@ -54,10 +54,6 @@ var entryOption = new Option<string?>(name: "--entry") {
     DefaultValueFactory = static _ => null,
     Description = "The declared world a --world composition source boots, in place of the world it declares `entry world`. The whole composition is staged either way, so its borders stay real. A name the source does not declare, or a --world that is not a composition, refuses the boot by name.",
 };
-var recordingOption = new Option<string?>(name: "--recording") {
-    DefaultValueFactory = static _ => null,
-    Description = "The recording document (puck.recording.configuration.v1) the capture verbs use; a missing or invalid file falls back loudly to the baked default. Default: Assets/recordings/default.recording.json beside the executable.",
-};
 var storageUriOption = new Option<string?>(name: "--storage-uri") {
     DefaultValueFactory = static _ => null,
     Description = "The per-user blob endpoint (a service URI for the platform edge, or a dev/emulator connection string), overriding the world doc's storage.endpoint. With a resolved user identity it wires storage.push/storage.pull; storage.status echoes it.",
@@ -187,7 +183,6 @@ var launchCommand = new RootCommand(description: "Puck World") {
     heightOption,
     listenOption,
     presentModeOption,
-    recordingOption,
     storageDiscoveryUriOption,
     storageUriOption,
     updateConfigFileOption,
@@ -465,9 +460,9 @@ if (parseResult.GetValue(option: captureToolOption) is { } captureToolName) {
 }
 var physicalDevices = (parseResult.GetValue(option: devicesOption) != "none");
 if (!physicalDevices) {
-    Console.Error.WriteLine(value: (hostSettings.Presentation == WorldHostPresentation.Windowed)
+    Console.Error.WriteLine(value: ((hostSettings.Presentation == WorldHostPresentation.Windowed)
         ? "[world.host] physical input devices are off (--devices none): no gamepad is opened, and no key, text or pointer event from the OS reaches a seat; scripted input still drives the World."
-        : "[world.host] physical input devices are off (--devices none); this boot shape opens none either way.");
+        : "[world.host] physical input devices are off (--devices none); this boot shape opens none either way."));
 }
 var builder = Host.CreateApplicationBuilder(args: args);
 // Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
@@ -475,24 +470,6 @@ var builder = Host.CreateApplicationBuilder(args: args);
 builder.Logging.AddConsole(configure: static options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 var services = builder.Services;
 services.AddSingleton(implementationInstance: hostLog);
-if (hostSettings.Presentation == WorldHostPresentation.Windowed) {
-    // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows, defined as data.
-    // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/capture controller/verb module), but the
-    // document resolution itself can fail-and-exit, so it stays here beside World's other --world/--recording
-    // loaders. Skipped headless and offscreen: neither composes the capture verbs, so neither needs a valid
-    // recordings asset.
-    if (!RecordingDocumentLoader.TryResolve(
-        explicitPath: parseResult.GetValue(option: recordingOption),
-        source: out var recordingSource,
-        failure: out var recordingFailure
-    )) {
-        Console.Error.WriteLine(value: recordingFailure);
-
-        return 1;
-    }
-
-    services.AddSingleton(implementationInstance: recordingSource);
-}
 // Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
 // the same collection through the same method.
 services.AddWorldBoot(inputs: new WorldBootInputs(

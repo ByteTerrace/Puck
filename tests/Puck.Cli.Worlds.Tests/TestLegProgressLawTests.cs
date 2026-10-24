@@ -13,7 +13,7 @@ namespace Puck.Cli.Worlds.Tests;
 /// CONTRACT UNDER TEST: a <c>puck test</c> leg is bounded by its host's progress, never by how long its ticks take. A
 /// host that keeps advancing, however slowly the machine lets it tick, runs to its export tick; it is never handed an
 /// exit that ends the run first. The host here is a stand-in World compiled for the law: it answers each
-/// <c>world.wait</c> as it starts it, spends a fixed wall time on every tick, writes its schedule manifest and state
+/// <c>world.wait</c> as it starts it, spends a fixed wall time on every tick, writes its test-run manifest and state
 /// export at the export tick, and, as the real host does, ends at its own <c>--exit-after-seconds</c>, exporting the tick
 /// it reached. Its ticks are slow enough that the run outlasts twenty seconds plus the export tick at the document's
 /// rate.
@@ -52,7 +52,7 @@ public sealed class TestLegProgressLawTests {
             if (exported) { return; }
             exported = true;
             Directory.CreateDirectory(schedule);
-            File.WriteAllText(Path.Combine(schedule, "{{WorldScheduleSection.ManifestFileName}}"), "{\"exportTick\":" + tick + "}");
+            File.WriteAllText(Path.Combine(schedule, "{{WorldScheduleSection.ManifestFileName}}"), "{\"schema\":\"{{WorldScheduleSection.ManifestSchemaId}}\",\"exportTick\":" + tick + ",\"worlds\":[{\"world\":\"boot\",\"started\":true,\"export\":\"{{WorldScheduleSection.ExportFileName}}\"}]}");
             File.WriteAllText(Path.Combine(schedule, "{{WorldScheduleSection.ExportFileName}}"), "{\"tick\":" + tick + "}");
         }
 

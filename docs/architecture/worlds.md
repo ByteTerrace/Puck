@@ -76,7 +76,7 @@ written: worlds staged together reach each other by name. A `captures`
 directory the document names also resolves beside it. A `schedule` names no
 output directory at all: `--schedule-dir` both arms it and says where it writes.
 
-Files the engine ships (fonts, shaders, probe kinds, the default recording)
+Files the engine ships (fonts, shaders, probe kinds)
 resolve beside the executable through `PuckPaths.Shipped`. The engine ships no
 world. Neither resolver falls back to the other.
 

@@ -38,7 +38,7 @@ output's root, and every other file of the package. A source boot has no store
 and compiles a pipeline on first use.
 
 **The engine ships no content.** `Puck.World` and its siblings ship engine data
-only: shaders, fonts, overlays, probe kinds and the default recording, each
+only: shaders, fonts, overlays and probe kinds, each
 owned by the project that uses it. Document schemas live with the document
 model (`src/Puck.World.Schema/Schemas/`) and ship in the CLI package, because
 only CLI tooling reads them. Worlds, cartridges, music, addons and art belong
@@ -54,6 +54,22 @@ and icon, which a world may not override; channels; the release manifest
 pinning package content; and the desktop artifact carrying no content. A
 compiled world stays a cache with a strong key inside a package, never the
 packaged unit, because its bytes change with every engine build.
+
+## Replay and tick scheduling
+
+**One replay system and one scheduler (lead decision).** `replay.*` records,
+persists, verifies and drives debug and player sessions, including addon guests.
+`world.at` arms commands at exact ticks. Test worlds lower their `when` blocks
+to the `schedule` document section; `WorldTestRun` adapts those rows to the same
+`WorldTickScript` dispatcher and `WorldTickSchedule` queue. The test adapter
+retains seat authority, expected refusals, edit echoes, truncated-run detection
+and exports from sibling worlds, because `puck test --reproduce` measures those
+results. Its manifest is `puck.world.test-run.v1`, written as `test-run.json`.
+
+The removed World recording integration encoded native video and audio; it was
+not a replay system and had no debug-world caller. Its boot flag, default asset
+and capture verbs are deleted. The reusable `Puck.Recording` library remains in
+the build. `WorldProbes`, `probe.*` and probe tracks remain for the stretch goal.
 
 ## ROMs
 

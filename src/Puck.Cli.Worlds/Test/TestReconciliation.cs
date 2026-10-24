@@ -131,7 +131,6 @@ public static class TestReconciliation {
         why = recorded.Outcome switch {
             WorldScheduleSection.OutcomeUnreached => "was never reached",
             WorldScheduleSection.OutcomePending => "was still awaiting its answer when the export was written",
-            WorldScheduleSection.OutcomeUnroutable => $"had no ingress ({(recorded.Detail ?? string.Empty)})",
             WorldScheduleSection.OutcomeFaulted => $"crashed its handler ({(recorded.Detail ?? string.Empty)})",
             _ => string.Empty,
         };

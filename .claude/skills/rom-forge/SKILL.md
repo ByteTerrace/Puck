@@ -43,7 +43,7 @@ into a C# template. `Puck.GamingBricks.Forge` depends on Abstractions, Assets an
    A world screen whose `source` is a machine may instead name the
    `.puck` source as its `contentPath`; its content provider resolves imports
    and compiles the source at bind.
-4. Look at it: `capture.start`, or a screenshot. Cartridges are verified in a
+4. Look at it with `world.screenshot`. Cartridges are verified in a
    world, never in a bespoke driver.
 
 `puck decompile <name>.cartridge.json --output <name>.cgb.puck` turns a document

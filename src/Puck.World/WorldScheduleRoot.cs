@@ -3,7 +3,7 @@ namespace Puck.World;
 /// <summary>The schedule output directory a boot's <c>--schedule-dir</c> names. A document carries no output path of
 /// its own, so two runs of the same document write sibling directories without two document copies. Immutable; the
 /// boot registers one and every consumer takes it from the service collection.</summary>
-/// <remarks>The directory is also what arms the section: <see cref="WorldScheduleRunner"/> submits a row only when
+/// <remarks>The directory is also what arms the section: <see cref="WorldTestRun"/> submits a row only when
 /// <see cref="IsArmed"/>, so a boot that did not ask for schedule output runs no scheduled command at all.</remarks>
 public sealed class WorldScheduleRoot {
     private readonly string? m_directory;

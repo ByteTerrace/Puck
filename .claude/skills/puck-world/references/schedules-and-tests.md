@@ -206,6 +206,16 @@ pins the tick and state hash of every PNG through repeated delayed frames.
 
 ## Schedules, verdicts, and `test` blocks
 
+`world.at` owns command scheduling through `WorldTickScript`, backed by
+`WorldTickSchedule` (also used by capture rows). `replay.*` owns session
+recording, persistence, MATCH verification and driving back to a tick, including
+addon guests. A test's `schedule` section is retained as the lowering target for
+`when` blocks: `WorldTestRun` arms its seat-bound lines through that same script
+and exports their exact session answers, edit echoes and sibling-world states.
+It is test-run bookkeeping, not a second scheduler or replay. The native video
+recording boot path and capture verbs have been removed; probes and probe tracks
+remain independent.
+
 A world may author a `schedule` section, the command-side sibling of
 `captures`: rows of `(tick, principal, command)` submitted at that
 completed-tick coordinate through a session bound to the authored seat, so
@@ -223,7 +233,7 @@ or authority verb (`quit`, `world.rate`, `world.save`, `world.load`,
 the SUBMISSION — an `Immediate` verb runs inline in it, a `Simulation` verb
 applies at `tick + 1`. At `max(rows[].tick) + settleTicks` the host writes
 `WorldStateExport`'s canonical `state-export.json` plus a
-`puck.world.schedule-manifest.v1` `schedule.json` into the armed directory.
+`puck.world.test-run.v1` `test-run.json` into the armed directory.
 The manifest carries one entry per DECLARED row (a row whose tick the run
 never reached reads `outcome: "unreached"`, never an absent entry), every
 local edit echo including refusals, and `authoredExportTick`/`truncated`
@@ -235,8 +245,7 @@ row mints so it may take the reserved `$` prefix; the row's other cells are
 the values the gate saw, status 0/1/2 = never-evaluated/pass/fail). A verdict row is kind Int, so what its gate saw of
 a Fixed or Bool row sits in a row of that kind carrying `witness: "<verdict
 row>"`, which the same doors refuse and which freezes with its verdict.
-`world.schedule` and `world.verdicts` are the
-read-backs; `puck test <path>` boots each such world through the real
+`world.verdicts` reads the verdict rows; `puck test <path>` boots each such world through the real
 executable and prints one line per verdict, and `--reproduce` boots it twice
 and refuses one whose two exports differ. A `schedule` declaring `instances`
 arms those sibling worlds beside the booted one (the `world.instance.start`
@@ -271,7 +280,7 @@ sibling document of that name, in the instance the crossing starts:
 `WorldTestWorld.Foreign` carries it, `TryStageTestWorld` lowers it into the
 sibling's staged copy as `expect$<line>` with a rule gated on the claim (it
 passes on any tick the claim holds, since the instance starts when the traveller
-arrives), and `WorldScheduleRunner` exports every instance the run started whose
+arrives), and `WorldTestRun` exports every instance the run started whose
 document carries a verdict row, recording its document id in the manifest so the
 report reads `garden/expect$1`. A run that started no such instance fails the
 claim by name; an absent body reads `0`, so a claim of `0` pairs with a

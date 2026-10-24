@@ -84,7 +84,7 @@ repeats with an interrupted deployment and an interrupted rollback.
 (`puck.asset-package.v1`), package resolution in `Puck.World` (`--world
 <folder>`), `puck compile --tree`, `puck world prepare`, `puck world release
 prepare`, `puck official build`, `puck azure build`, the silo image, and the
-eviction of everything under `src/Puck.World/Assets` but the default recording.
+eviction of world content from `src/Puck.World/Assets`.
 
 **Delivered:** the debug world is the package `worlds/debug/`; `Puck.World`
 boots a package folder (its manifest's entry) and refuses to boot without

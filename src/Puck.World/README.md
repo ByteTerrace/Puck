@@ -1147,7 +1147,7 @@ Facts a script needs:
   (`world.resize`) by the offscreen shape alone; `WorldCommandModule.cs`
   (frame rate, FPS target, cameras), `WorldShaderReloadCommandModule.cs`
   (`world.shaders.reload`/`.status`), `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
-  `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
+  and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,
   `WorldWheelCommandModule.cs`, `WorldViewCommandModule.cs`, and
   `WorldPipelineCommandModule.cs` are core-registered but refuse by name at
@@ -1155,8 +1155,7 @@ Facts a script needs:
   is registered in every boot shape; `player.wheel.*` are the rows a world's
   own wheel-hold page binds.
 - `WorldDefinitionLoader.cs`—resolves and validates the boot world
-  document; `RecordingDocumentSource.cs` does the same for
-  `puck.recording.configuration.v1`.
+  document.
 - [`Puck.World.Client`](../Puck.World.Client/README.md)—the per-machine
   client half: seats and device intents, the snapshot-fed entity view and
   render interpolation, the fly camera application, the
@@ -1178,10 +1177,7 @@ Facts a script needs:
   (below).
 - `WorldRenderProbe.cs`—the probed capacity envelope live placement is
   validated against.
-- `WorldRecordingCommandModule.cs`—the recording-session command surface;
-  generic frame capture lives in Hosting and is driven by Launcher.
-- `Assets/`—the engine's own content: the default recording. The World ships no
-  world. While the current campaign runs, the one live world is the asset
+- The World ships no world. While the current campaign runs, the one live world is the asset
   package `worlds/debug/` at the repository root (`--world worlds/debug`): its
   entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
@@ -1210,8 +1206,7 @@ Facts a script needs:
   closed against the island's own (much larger) edge placement; each shard
   also drops the one imported-module navigation domain and camera its
   wholesale `placements` replacement leaves dangling. See
-  `src/Puck.World.Schema/README.md`, "Document composition"), the default recording document
-  (`recordings/`), two shipped
+  `src/Puck.World.Schema/README.md`, "Document composition"), two
   WASM addons (`addons/`: `default`, `hudbuilder`; no shipped world mounts
   either), and an example `puck.sdf.v1` document (`sdf/`).
 
@@ -2063,27 +2058,6 @@ what keeps two seats' otherwise-identical bare camera panels (both authoring
 no `seat`) from collapsing onto the same feed. A `portrait` panel—a mirrored,
 rounded picture-in-picture of the color camera—is the shape such an element
 takes.
-
-## Native capture
-
-The world records itself to WebM/Matroska through the recording graph in
-`Puck.Recording` (`puck.recording.configuration.v1`—resolved at boot from `--recording`
-or `Assets/recordings/default.recording.json`). `capture.start` arms Hosting's
-generic frame-capture controller with a `RecordingSession`; Launcher supplies
-the exact final root surface immediately before presentation, and the active
-presenter reads GPU surfaces back to CPU pixels. The session composites
-capture-only overlays that never appear in the game window. While idle the
-controller performs no readback or sink work.
-
-Playback time is WALL-CLOCK time, not engine time: the shipped document sets
-`clock: "Wall"`, so blocks are stamped from QPC when the frame reaches the
-sink. `Sim` stamps from the engine tick clock instead but forbids audio rows.
-The two diverge under capture. GPU readback is synchronous per captured frame
-and can reduce live throughput; `world.fps` exposes that impact while
-`capture.status` reports frames the recording queue dropped separately.
-A `Timecode` overlay reads its own clock and is not rebased, while the
-container timeline is, so the burnt-in number leads playback position by the
-arm-to-first-packet latency.
 
 ## Probes
 

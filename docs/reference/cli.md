@@ -1804,7 +1804,7 @@ travels and any boot can be asked to load one:
 - The section runs only when the boot **arms** it with `--schedule-dir`, which
   `puck test` supplies. Any other boot of a document carrying a schedule
   submits no row, writes no export, and prints one line saying the section is
-  present and unarmed; `world.schedule` reports the same either way.
+  present and unarmed.
 - A row's `command` opens with a verb from a closed step vocabulary — state
   mutations, guarded transforms, body intents and poses, and joining or leaving
   a seat. Anything that touches the process, the clock or the filesystem
@@ -1838,7 +1838,7 @@ puck test <path> --keep <dir>          run in <dir> and keep it: every generated
                                        and manifests
 puck test <path> --jobs <n>            run at most n isolated test worlds concurrently
 puck test <path> --reproduce           rerun every world and require byte-identical state
-                                       exports and schedule manifests
+                                       exports and test-run manifests
 puck test -h / --help                  this text
 ```
 
@@ -1876,7 +1876,7 @@ different trajectory from the one the export was asked for.
 
 Ordinary authoring runs every isolated test world once. `--reproduce` adds the
 determinism qualification pass: each world runs twice into sibling leg
-directories, and a world whose two exports or two `schedule.json` manifests
+directories, and a world whose two exports or two `test-run.json` manifests
 differ byte for byte is refused rather than reported. The manifest records only
 facts a rerun reproduces exactly: a row's authored tick, outcome and detail. A
 recorded edit verdict carries no tick because an echo reaches the runner when
@@ -1904,7 +1904,7 @@ tick and can never pass.
 One line per verdict, naming the row, the status, the gate it claims, the values
 it saw, and the firing tick. Refusals the run recorded (a scheduled command the
 world refused, which a test world often schedules on purpose) print beside the
-verdicts, read from the run's own `schedule.json` manifest.
+verdicts, read from the run's own `test-run.json` manifest.
 
 Exit codes: 0 every verdict passed and every row answered what it declared, 1 a
 verdict failed or a row's recorded outcome was not the one it declared, 2 usage —

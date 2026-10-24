@@ -40,8 +40,7 @@ document and the files it names therefore move together, whether they are
 copied into a build's output, staged under a state directory, or saved
 somewhere new.
 
-The engine's own content is different. Fonts, shaders, probe kinds and the
-default recording ship beside the executable and resolve there; the engine ships
+The engine's own content is different. Fonts, shaders and probe kinds ship beside the executable and resolve there; the engine ships
 no world, and a boot names the asset package it runs with `--world`. The two kinds of
 lookup never share a resolver, and neither falls back to the other: a
 document-relative path that is missing beside its document is refused, rather

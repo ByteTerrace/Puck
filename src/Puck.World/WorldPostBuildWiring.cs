@@ -287,7 +287,7 @@ public static class WorldPostBuildWiring {
             echoes: services.GetRequiredService<WorldDeferredVerbEchoes>(),
             registry: consoleRegistry
         );
-        var scheduleRunner = services.GetRequiredService<WorldScheduleRunner>();
+        var scheduleRunner = services.GetRequiredService<WorldTestRun>();
 
         // The boot row is admitted by the time this runs, so a sibling world the armed document declares can start
         // beside it before the first step.

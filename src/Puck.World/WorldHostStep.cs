@@ -13,7 +13,7 @@ namespace Puck.World;
 /// shell's post-step, then finish the seat intents. The host-work clock a <c>world.wait</c> counts in lives here. Also
 /// the <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IWorldSimulationClock {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -21,9 +21,8 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private readonly WorldPeerHost m_peerHost = peerHost;
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
-    // The schedule runner publishes LAST: a scheduled command submitted here is attributed to the tick that just
-    // completed, so the capture station's state hash and the schedule's own export describe the state before this
-    // tick's commands, never a half-applied mixture.
+    // Test exports publish LAST, before world.at drains this tick's lines: captures and exports both describe
+    // the completed state, never a half-applied mixture of this tick's submissions.
     private readonly Action<ulong> m_publishStep = tick => {
         waitGate.PublishTick(tick: tick);
         captureScheduler.PublishTick(tick: (server.NextInputTick - 1UL));

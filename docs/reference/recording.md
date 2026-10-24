@@ -6,7 +6,9 @@ model, video lane, audio rows, and capture-only overlays—and
 `RecordingSession` drives that document against caller-supplied video-encoder
 and audio-source factories, muxing what lands into a hand-rolled deterministic
 Matroska/WebM container. The document is the primitive that lives above any
-one game: World, the demo, or a headless render all drive the same shape.
+one game: a host can drive the same shape from a window or a headless render.
+`Puck.World` does not compose this native video library; its session recording
+and playback use `replay.*`.
 
 Everything that talks to real hardware—Media Foundation's encoder ladder,
 WASAPI loopback and microphone capture—lives outside this project, behind

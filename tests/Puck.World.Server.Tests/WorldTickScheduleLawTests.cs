@@ -59,6 +59,23 @@ public sealed class WorldTickScheduleLawTests {
         );
     }
     [Fact]
+    public void TakingAndClearingRowsClaimsThemBeforeDispatch() {
+        var schedule = new WorldTickSchedule<string>();
+
+        schedule.Add(row: "later", tick: 9UL);
+        schedule.Add(row: "first", tick: 5UL);
+        schedule.Add(row: "second", tick: 5UL);
+        Assert.Equal(expected: ["first", "second", "later"], actual: schedule.Pending.Select(selector: static entry => entry.Row));
+        Assert.True(condition: schedule.TryTake(rows: out var due, tick: 5UL));
+        Assert.Equal(actual: due, expected: ["first", "second"]);
+        Assert.False(condition: schedule.TryTake(rows: out _, tick: 5UL));
+        Assert.Equal(expected: 1, actual: schedule.PendingCount);
+        Assert.Equal(expected: 1, actual: schedule.Clear());
+        Assert.Empty(collection: schedule.Pending);
+        Assert.Equal(expected: 0, actual: schedule.PendingCount);
+        Assert.Equal(expected: 0, actual: schedule.Publish(tick: 9UL, state: due, fire: static (_, _) => throw new InvalidOperationException()));
+    }
+    [Fact]
     public void PublishingAllocatesNothing() {
         // A published row is claimed and never fires again, so every window publishes ticks of its own.
         const ulong TicksPerWindow = 63UL;

@@ -47,6 +47,22 @@ public sealed class WorldTickScriptLawTests {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
                 bindability: CommandBindability.Unbindable,
+                description: "Breaks without judging a test step.",
+                handler: (_, _) => throw new InvalidOperationException(message: "broken handler"),
+                name: "probe.fault",
+                routing: CommandRouting.Simulation
+            );
+            yield return CommandDefinition.WithWireArgs(
+                bindability: CommandBindability.Unbindable,
+                description: "Answers under the submitting seat's own principal.",
+                handler: (context, _) => ((context.Principal == Principal.Seat(slot: 0))
+                    ? CommandResult.Error(output: "seat1 refused")
+                    : new CommandResult(Output: context.Principal.Describe())),
+                name: "probe.actor",
+                routing: CommandRouting.Simulation
+            );
+            yield return CommandDefinition.WithWireArgs(
+                bindability: CommandBindability.Unbindable,
                 description: "Records the completed tick.",
                 handler: (_, _) => {
                     log.Add(item: $"read@{completed()}");
@@ -79,6 +95,7 @@ public sealed class WorldTickScriptLawTests {
 
             var gate = new WorldConsoleWaitGate();
             var server = m_row.Server;
+
             ulong Completed() => (server.NextInputTick - 1UL);
 
             CommandRegistry? registry = null;
@@ -145,6 +162,30 @@ public sealed class WorldTickScriptLawTests {
     }
 
     [Fact]
+    public void TestStepsAndOperatorLinesShareTicksButKeepTheirOwnAnswers() {
+        using var host = new Host();
+
+        Assert.Null(@object: host.Script.ArmSeat(tick: 20UL, text: "probe.actor", slot: 0, router: () => host.Router, line: out var refused));
+        Assert.Null(@object: host.Script.ArmSeat(tick: 20UL, text: "probe.actor", slot: 1, router: () => host.Router, line: out var accepted));
+        Assert.Null(@object: host.Script.ArmSeat(tick: 21UL, text: "probe.read", slot: 1, router: () => host.Router, line: out var immediate));
+        Assert.Null(@object: host.Script.ArmSeat(tick: 22UL, text: "probe.fault", slot: 1, router: () => host.Router, line: out var faulted));
+        Assert.NotNull(@object: host.Script.ArmSeat(tick: 23UL, text: "quit", slot: 1, router: () => host.Router, line: out _));
+        host.Answers.Enqueue(line: "world.at 20 probe.actor");
+        Assert.Equal(expected: "unreached", actual: refused.Outcome);
+        host.Burst(steps: 40UL);
+        Assert.Equal(expected: "refused", actual: refused.Outcome);
+        Assert.Equal(expected: "seat1 refused", actual: refused.Answer);
+        Assert.Equal(expected: "ran", actual: accepted.Outcome);
+        Assert.Equal(expected: "seat2", actual: accepted.Answer);
+        Assert.Equal(expected: "ran", actual: immediate.Outcome);
+        Assert.Equal(expected: "faulted", actual: faulted.Outcome);
+        Assert.Contains(expectedSubstring: "ran: probe.actor -> console", actualString: host.Script.Describe());
+        // A rewind cannot submit any of these lines twice.
+        host.Script.PublishTick(tick: 20UL);
+        host.Source.Collect();
+        Assert.Equal(expected: 0, actual: host.Script.PendingCount);
+    }
+    [Fact]
     public void PinnedLinesRunRightAfterTheirTicksInsideOneBurst() {
         using var host = new Host();
 
@@ -169,7 +210,7 @@ public sealed class WorldTickScriptLawTests {
         host.Burst(steps: 40UL);
 
         Assert.Equal(expected: ["read@25", "write@25"], actual: host.Log);
-        Assert.Contains(collection: host.Output, filter: static line => line.Contains(value: "already at tick 25", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: host.Output, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "already at tick 25"));
     }
     [Fact]
     public void ARefusedScriptArmsNothing() {
@@ -186,7 +227,7 @@ public sealed class WorldTickScriptLawTests {
         host.Burst(steps: 20UL);
 
         Assert.Empty(collection: host.Log);
-        Assert.Equal(expected: 5, actual: host.Output.Count(predicate: static line => line.StartsWith(value: "[world.at: refused", comparisonType: StringComparison.Ordinal) || line.Contains(value: "step 0 is not", comparisonType: StringComparison.Ordinal) || line.Contains(value: "not JSON", comparisonType: StringComparison.Ordinal)));
-        Assert.Contains(collection: host.Output, filter: static line => line.Contains(value: "cleared 1 armed line", comparisonType: StringComparison.Ordinal));
+        Assert.Equal(expected: 5, actual: host.Output.Count(predicate: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.at: refused") || line.Contains(comparisonType: StringComparison.Ordinal, value: "step 0 is not") || line.Contains(comparisonType: StringComparison.Ordinal, value: "not JSON"))));
+        Assert.Contains(collection: host.Output, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "cleared 1 armed line"));
     }
 }

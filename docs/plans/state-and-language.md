@@ -656,7 +656,7 @@ names the gate and the values it saw.
 
 The runner half is landed and is what the construct lowers to: the `schedule`
 document section (rows of tick/principal/command/expect plus the derived export
-tick), the `verdict` state-row trait, `world.schedule`/`world.verdicts`, and
+tick), the `verdict` state-row trait, `world.verdicts`, and
 `puck test` over `experimental/tests/Puck.World.Verdicts`.
 
 What a green run now means. The section submits nothing unless the boot armed it
@@ -714,7 +714,7 @@ command ingress, no acting principal and no authoritative server — so
 `--host browser` is refused by name and server-versus-browser determinism is
 unproven; native Windows against Linux is held by `puck determinism`. A
 scheduled command's own mutation verdict is recorded as a run-level echo in
-`schedule.json` rather than attributed to the row that submitted it, because a
+`test-run.json` rather than attributed to the row that submitted it, because a
 verb registers its correlation id inside its own submission; so an echo refusal
 no row expected is printed rather than failing the run, and a rule operand over
 recorded refusals would let a world assert on its own refusal directly instead of

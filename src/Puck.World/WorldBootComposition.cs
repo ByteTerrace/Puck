@@ -715,19 +715,17 @@ public static class WorldBootComposition {
         // The schedule section's tick-scheduled command submission and its state export, wired at the SAME
         // publishTick call site as the wait gate and the capture scheduler. CORE, but inert unless --schedule-dir
         // armed the boot (the registered WorldScheduleRoot.IsArmed): the runner is always composed and submits nothing otherwise.
-        // Registered as the observer too: a Simulation-routed scheduled line's own verdict arrives on the observer
-        // path when its tick applies, and nothing else can correlate it back to the row.
-        services.AddSingleton(implementationFactory: static sp => new WorldScheduleRunner(
+        // The runner arms seat-bound lines through world.at's script and reads their own settled answers.
+        services.AddSingleton(implementationFactory: static sp => new WorldTestRun(
             definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
             instances: sp.GetRequiredService<WorldInstanceHost>(),
-            registry: sp.GetRequiredService<Func<CommandRegistry>>(),
             router: sp.GetRequiredService<Func<InputRouter>>(),
             scheduleRoot: sp.GetRequiredService<WorldScheduleRoot>(),
             server: sp.GetRequiredService<WorldServer>(),
-            source: () => sp.GetRequiredService<TextCommandSource>()
+            tickScript: sp.GetRequiredService<WorldTickScript>()
         ));
-        services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldScheduleRunner>());
-        services.AddSingleton<ICommandModule, WorldScheduleCommandModule>();
+
+        services.AddSingleton<ICommandModule, WorldVerdictCommandModule>();
         // Console lines pinned to exact boot ticks (world.at), published at the same call site as the schedule rows.
         services.AddSingleton(implementationFactory: static sp => {
             var server = sp.GetRequiredService<WorldServer>();
@@ -1426,18 +1424,6 @@ public static class WorldBootComposition {
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
         services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
-        // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows. Presentation-only:
-        // AddWindowsRecordingPlatform/AddLinuxRecordingPlatform register the encoder ladder, audio-source factory,
-        // and shared session clock. The launcher drives the generic FrameCaptureController with the exact root
-        // surface immediately before presentation; the world command module owns the concrete recording session it
-        // arms here.
-        if (OperatingSystem.IsWindows()) {
-            services.AddWindowsRecordingPlatform();
-        } else {
-            services.AddLinuxRecordingPlatform();
-        }
-        services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
-
         // Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll
         // thread), the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the
         // hosted service that governs device lifetime (hotplug rescans every ~1.5 s). Presentation-only — a headless
