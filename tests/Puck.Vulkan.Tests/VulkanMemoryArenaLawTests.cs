@@ -97,6 +97,13 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         _ = Assert.Throws<VulkanException>(testCode: () => arena.Bind(image: false, memoryTypeIndex: Unmappable, requirements: in small, resource: 7, role: GpuMemoryRole.HostVisibleDeviceLocal));
         Assert.Equal(expected: [$"alloc 1004 {Block} type={Unmappable}", "map 1004", "free 1004"], actual: Calls);
 
+        // A resource's own block, larger than a shared one, is freed when it empties although the pool keeps no other
+        // empty block, so no later resource binds into it and holds it.
+        Calls.Clear();
+        Assert.Equal(expected: 1005, actual: arena.Bind(image: false, memoryTypeIndex: 2, requirements: new VkMemoryRequirements { Alignment = 1UL, Size = (2UL * Block) }, resource: 8, role: GpuMemoryRole.DeviceLocal));
+        Assert.True(condition: arena.Release(image: false, resource: 8));
+        Assert.Equal(expected: [$"alloc 1005 {2UL * Block} type=2", "bind buffer 8 1005 0", "free 1005"], actual: Calls);
+
         // Destroying a resource the arena bound returns its range; any other resource frees its own memory.
         Calls.Clear();
         device.Destroy(destroy: device.DestroyBuffer, handle: 6, memoryHandle: 1000);

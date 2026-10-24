@@ -1288,6 +1288,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldSdfCommandModule>();
         // world.host — the RESOLVED presentation column reports "offscreen" (see WorldHostCommandModule.DescribeHost).
         services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+        services.AddSingleton<ICommandModule, HostMemoryCommandModule>();
 
         // See the windowed factory's own remarks (AddWorldAuthoritativeCore) — the same shared runtime, built once
         // GPU services are live (WorldOffscreenGpuActivation runs before this factory resolves, at the same point
@@ -1421,6 +1422,7 @@ public static class WorldBootComposition {
         // The host-section READ-BACK — world.host, the DOCUMENT/RESOLVED/LIVE three-way read; the section is
         // written through world.row.set host <json>. Presentation-only: window/backend/present/pacing knobs.
         services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+        services.AddSingleton<ICommandModule, HostMemoryCommandModule>();
         // world.lockstep: the window pump presents in lockstep with the simulation, as the offscreen host always does.
         services.AddSingleton<ICommandModule, WorldLockstepCommandModule>();
         // The audio READ-BACK + lever surface — world.speakers/audio.state/speaker.state/world.volume/

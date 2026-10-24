@@ -9,8 +9,8 @@ namespace Puck.Vulkan;
 /// within the buffer-image granularity), each resource bound at an offset a block's free ranges hand out
 /// (<see cref="GpuMemoryRanges"/>). A resource larger than half a block gets a block of its own. A block holding
 /// host-visible memory is mapped once for its life, and a resource's mapping is the block's at its offset. A block every
-/// resource left is freed, but one empty block a pool keeps, so a bake that frees and makes staging buffers does not
-/// allocate again. The device's memory counts (<see cref="GpuDeviceMemoryWork"/>) count blocks, the memory the device
+/// resource left is freed, but a pool keeps one empty shared block, so a bake that frees and makes staging buffers does
+/// not allocate again; a resource's own block goes with it. The device's memory counts (<see cref="GpuDeviceMemoryWork"/>) count blocks, the memory the device
 /// actually holds. A block is the arena's alone to free (<see cref="Owns"/>), exactly once: by the release that leaves a
 /// pool a second empty block, or by <see cref="FreeAll"/>, which unmaps and frees every block left as the device is torn
 /// down, whatever resources are still bound to it (a device loss leaves them so; freeing memory a lost device's resources
@@ -114,8 +114,9 @@ public sealed unsafe class VulkanMemoryArena {
             if (block.Ranges.IsEmpty) {
                 var pool = m_pools[block.Key];
 
-                // The pool keeps one empty block for the next resource; a second goes.
-                if (pool.Any(predicate: other => (!ReferenceEquals(objA: other, objB: block) && other.Ranges.IsEmpty))) {
+                // The pool keeps one empty shared block for the next resource; a second goes, and so does a resource's
+                // own block, whose size no other resource asked for.
+                if ((block.Ranges.Capacity != BlockBytes) || pool.Any(predicate: other => (!ReferenceEquals(objA: other, objB: block) && other.Ranges.IsEmpty))) {
                     _ = pool.Remove(item: block);
                     Free(block: block);
                 }
