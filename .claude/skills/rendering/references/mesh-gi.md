@@ -13,6 +13,26 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Keep `Incoming` and `sdfMeshProbesAt`/`sdfMeshIrradianceAt` together. A sky
   fallback in the CPU read feeds later bounce sweeps even if the final pixel
   read rejects it.
+- Scene readiness is `SdfMeshPathBake.IrradiancePending`, not the whole bake's
+  `Pending`: only opaque static groups enter the scene. An animated rebake,
+  glass or a diagnostic slice must not postpone its first measurement or a
+  refresh. `world.wait bakes` still waits for all geometry; an initial
+  `world.exposure` reading with `meter=none` is not a backend-parity result.
+- A cold bake with `world.wait bakes` still pending, `sdf.mesh-gi.scenes=0`,
+  and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
+  Read the wait's bake description twice: its meshes, pending groups,
+  dispatches and samples distinguish progress from a stopped scheduler.
+  Plain `lead/catch-up` at `3870e5e0e`, without the two `codex-gi2` fixes,
+  also failed to finish a cold Direct3D bake within nearly nine minutes. Its mesh
+  draw count kept rising. `host.frames` showed eight simulation catch-up steps
+  taking roughly 400 ms a frame; `world.rate pause` on the boot instance
+  reduced frame time to about 19 ms and accelerated baking. Pause only a
+  diagnostic run, never the owner's play session, and disclose that change
+  when comparing times. A nested world's `[sdf.mesh-gi] done` does not certify
+  the gallery: check the main residency's counter and meter too.
+  The scheduler's separate saved-pose/input-capacity defect has a focused
+  boundary test; it is not the established cause of this slow gallery boot.
+  See [mesh baking](mesh-bake.md#groups-poses-and-materials).
 - A depth axis stores its first hit. Averaging it with rays that escape beside
   a blocker, or choosing the farther distance, erases that blocker.
 - At the volume boundary, clamp the lookup to the boundary probes, then test
@@ -92,6 +112,16 @@ Read the primary view's meter after the scene and lighting settle, and during
 changes: an initial `meter=none` alone cannot establish that a settled room has
 no visible probe. Keep the authored exposure bounds and world headroom intact.
 
+The `codex-gi2` continuation captured a cold Vulkan shaft before and after
+the main GI trace. The near-black early view had no meter; after 496 static
+draws were ready and the three-sweep GI completed, the shaft and hall beauty
+views looked close to Direct3D. This narrows the large darkness difference
+to readiness in that run, not a demonstrated Vulkan shading failure. It is
+not full parity qualification: other geometry was still baking, and the
+shaft's probe meter was 4.087 nits versus Direct3D's 6.576 (both at EV100 7).
+Repeat on the same source state with all geometry settled to isolate that
+remaining difference.
+
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the
 toroidal volume creates no rectangular wall patch or bright distance band.
@@ -102,6 +132,43 @@ before/after comparison found a remaining triangular bright patch there in both
 indirect and final shading; its cause is unconfirmed and tracked in
 [open items](../../../../docs/plans/open-items.md). Do not infer a clean roof
 from the lower reference view.
+
+## Gallery isolation checks
+
+Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
+`view.override camera look` poses are:
+
+| Exhibit | Body pose | Camera look |
+|---|---|---|
+| SPHERE, level 0 | `18 0.07 15 0 0 0` | `23 2.4 14 23 1.1 16` |
+| REVOLVED, level 0 | `18 0.07 31 0 0 0` | `30.8 2.4 30 30.8 1.1 34` |
+| SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
+| COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
+
+The SPHERE step and REVOLVED floor rectangle reproduce in `indirect`; the
+floor is shadowed in `shadow`. Do not attribute those patches to sun cascades.
+Removing mutual-probe weighting alone leaves the SPHERE step. Removing depth
+rejection reduces the discontinuity but admits light through walls; smoothing
+the directional planes while dropping axis rejection reopens the high teal
+roof junction. Neither is a valid repair. The six first-hit depths and 26
+planes are coarse support, and can reject visible receivers beside a finite
+occluder; normalization cannot recover light when all accepted weights vanish.
+The SPIN dotted ceiling seam reproduces in beauty but not in indirect and
+needs a separate geometry/direct-light investigation. Settled normal and
+shadow captures do not show the dotted seam either; that does not yet isolate
+its cause. A 27-probe quadratic support experiment still left the SPHERE
+step and was discarded; wider filtering alone is not a demonstrated repair.
+
+COAT's authored `specular: 0.35` is dielectric F0, not coat strength: it
+reflects a substantial neutral environment over its red diffuse albedo.
+`coat` currently adds a direct-light lobe in `sdfMaterialSpecular`; it is not
+read by the environment-reflection branch in `sdf-light-stage.hlsli`. Compare
+the material with coat disabled separately from changing its base F0 before
+attributing a pale colour to the coat layer. The continuation's settled
+Direct3D captures confirm this isolation: coat zero leaves the salmon colour;
+keeping coat at 0.5 and reducing base F0 from 0.35 to 0.04 restores a saturated
+red. These were live diagnostic edits, restored before the run ended, not a
+change to the authored exhibit or exposure.
 
 See the [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 for the lighting model and [verification](../../verification/SKILL.md) for GPU

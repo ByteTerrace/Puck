@@ -36,16 +36,16 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
         var names = new List<string>();
 
         if (world.MeshPathBake.Pending || !ReferenceEquals(objA: world.MeshPathBake.Program, objB: presenter.Composed.Program)) {
-            names.Add(item: world.Name);
+            names.Add(item: world.MeshPathBake.Describe());
         }
         foreach (var residency in m_routedResidencies.Values) {
-            if (residency.MeshPathBake.Pending) { names.Add(item: residency.Name); }
+            if (residency.MeshPathBake.Pending) { names.Add(item: residency.MeshPathBake.Describe()); }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (view.Residency.MeshPathBake.Pending) { names.Add(item: view.Residency.Name); }
+            if (view.Residency.MeshPathBake.Pending) { names.Add(item: view.Residency.MeshPathBake.Describe()); }
         }
         foreach (var entry in InfinityEntries()) {
-            if (entry.Residency is { MeshPathBake.Pending: true } residency) { names.Add(item: residency.Name); }
+            if (entry.Residency is { MeshPathBake.Pending: true } residency) { names.Add(item: residency.MeshPathBake.Describe()); }
         }
 
         return $"still baking: {string.Join(separator: ", ", values: names)}";

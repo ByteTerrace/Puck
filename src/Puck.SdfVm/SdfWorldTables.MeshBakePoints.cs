@@ -15,14 +15,17 @@ public sealed partial class SdfWorldTables {
 
     private readonly GpuRegion m_meshBakePointRegion;
 
-    /// <summary>Writes the points a bake dispatch samples into the point table, from its first entry; the upload of the
-    /// frame sends what differs.</summary>
-    /// <param name="points">The points, the fourth component unused; at most <see cref="SdfWorldPackage.MeshBakeMaxSamples"/>.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="points"/> holds more points than the table.</exception>
+    /// <summary>Writes a bake dispatch's sample points followed by its saved poses. The input table grows independently
+    /// of the fixed sample readback budget, so a full lattice still has room for its poses; the upload sends what differs.</summary>
+    /// <param name="points">The sample points and saved pose rows.</param>
     public void WriteMeshBakePoints(ReadOnlySpan<Vector4> points) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: points.Length, other: SdfWorldPackage.MeshBakeMaxSamples);
-
         if (points.IsEmpty) { return; }
+        var bytes = (((long)points.Length) * 16);
+
+        if (bytes > m_meshBakePointRegion.ByteCount) {
+            Retire(replaced: m_meshBakePointRegion.Grow(byteCount: Math.Max(val1: bytes, val2: (2 * m_meshBakePointRegion.ByteCount))));
+            m_bindingRevision++;
+        }
         _ = m_meshBakePointRegion.Write(bytes: MemoryMarshal.AsBytes(span: points), offset: 0);
     }
 }

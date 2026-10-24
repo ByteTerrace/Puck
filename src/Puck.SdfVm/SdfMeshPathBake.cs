@@ -250,6 +250,21 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
+    /// frame. Only these groups enter the irradiance scene: animated groups, glass and diagnostic field slices must
+    /// not hold its first lighting measurement or a later static-scene refresh behind unrelated work.</summary>
+    public bool IrradiancePending {
+        get {
+            lock (m_gate) {
+                if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
+                foreach (var group in m_groups) {
+                    if (!group.Dynamic && !group.Glass && !group.Done) { return true; }
+                }
+                return false;
+            }
+        }
+    }
+
     /// <summary>Queues a field slice, whose lattices the frame's bake dispatch takes before any group's, one reference
     /// frame's share at a time; its completion action runs on the thread that answers its last lattice, and a new program
     /// restarts it. One slice samples at a time.</summary>
@@ -378,7 +393,6 @@ public sealed partial class SdfMeshPathBake {
                 tickets.Clear();
                 m_takenPoses.Clear();
                 var samples = 0;
-                var entries = 0;
                 var taps = 0;
                 // A slice's lattices come first, within the same share, so a long bake never holds a diagnostic back.
                 while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
@@ -388,7 +402,6 @@ public sealed partial class SdfMeshPathBake {
                         break;
                     }
                     samples += next.Samples;
-                    entries += next.Samples;
                     taps += next.Taps;
                     lattices.Add(item: next);
                     tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
@@ -399,14 +412,13 @@ public sealed partial class SdfMeshPathBake {
 
                     if (group.Done || group.InFlight || group.Contouring || (group.Next is not { } next)) { continue; }
                     if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
-                    // The point table holds the samples' points and the lattices' poses after them.
-                    if (((entries + next.Samples) + group.PoseRows.Length) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
+                    // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
+                    // in a growable input table; charging them here strands a full 65-cubed lattice forever.
                     // A frame's lattices stay within its share of field evaluations; its first is always taken, and no
                     // lattice holds more than a share.
                     if ((lattices.Count > 0) && ((taps + next.Taps) > m_frameBudget)) { break; }
                     group.InFlight = true;
                     samples += next.Samples;
-                    entries += (next.Samples + group.PoseRows.Length);
                     taps += next.Taps;
                     lattices.Add(item: next);
                     tickets.Add(item: group);
@@ -443,7 +455,7 @@ public sealed partial class SdfMeshPathBake {
         }
 
         if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return; }
-        if (m_pointTable.Length < batch.TableEntries) { m_pointTable = new Vector4[SdfWorldPackage.MeshBakeMaxSamples]; }
+        if (m_pointTable.Length < batch.TableEntries) { m_pointTable = new Vector4[Math.Max(val1: batch.TableEntries, val2: SdfWorldPackage.MeshBakeMaxSamples)]; }
         if (batch.WritePoints(table: m_pointTable)) {
             tables.WriteMeshBakePoints(points: m_pointTable.AsSpan(length: batch.TableEntries, start: 0));
         }

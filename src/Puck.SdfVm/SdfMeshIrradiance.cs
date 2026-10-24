@@ -177,7 +177,7 @@ public sealed class SdfMeshIrradiance {
     /// <param name="frame">The frame, its baked draws dressed in.</param>
     /// <param name="tables">The residency's tables.</param>
     /// <param name="tier">The indirect tier the views asked for; Off reads no volume.</param>
-    /// <param name="bakePending">Whether the mesh bake still owes meshes, when the scene waits for it.</param>
+    /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes, when the scene waits for it.</param>
     /// <returns>The parameters the views pass reads.</returns>
     public SdfMeshIrradianceParameters Stage(SdfFrame frame, SdfWorldTables tables, SdfIndirectTier tier, bool bakePending) {
         ArgumentNullException.ThrowIfNull(argument: tables);
@@ -195,7 +195,7 @@ public sealed class SdfMeshIrradiance {
     /// does, writing the volume table through a delegate rather than a residency's tables.</summary>
     /// <param name="frame">The frame, its baked draws dressed in.</param>
     /// <param name="tier">The indirect tier the views asked for; Off reads no volume.</param>
-    /// <param name="bakePending">Whether the mesh bake still owes meshes, when the scene waits for it.</param>
+    /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes, when the scene waits for it.</param>
     /// <param name="write">Receives the volume's probe slots, <see cref="SdfMeshIrradianceProbe.ProbeWords"/> words each,
     /// whenever a frame changes them.</param>
     /// <returns>The parameters the views pass reads.</returns>

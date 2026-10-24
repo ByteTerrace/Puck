@@ -28,7 +28,10 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var bake = new SdfMeshPathBake { Residency = "copies" };
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
+        _ = bake.Dress(frame: frame);
+        Assert.True(condition: bake.IrradiancePending);
         Drive(bake: bake, frame: frame, materials: materials, shapes: Shapes);
+        Assert.False(condition: bake.IrradiancePending);
 
         return (bake, frame);
     });
