@@ -83,6 +83,11 @@ public sealed unsafe class GpuRegion : IDisposable {
     public const long MaxByteCount = ((((long)(uint.MaxValue / sizeof(uint))) * sizeof(uint)) - (((long)CopyBlockBase) * sizeof(uint)));
     // The most bytes one host write moves: a span's length is an int, so a longer run is written in pieces.
     private const int WriteChunkBytes = (1 << 30);
+    /// <summary>The staging bytes a staged slot keeps however little it owes: 16 MiB, or the whole region's reserve when
+    /// smaller. A slot's staging buffer holding more than four times what a flush stages and more than this is replaced
+    /// by one of twice the flush, at least this, so one flush of a whole large region holds its host memory only until
+    /// that slot's next flush.</summary>
+    public const ulong StagingFloorBytes = (16UL << 20);
 
     // The host's copy of the region, ByteCount bytes of native memory the region frees when disposed.
     private byte* m_contents;
@@ -668,6 +673,71 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return replaced;
     }
+    /// <summary>Shrinks a staged region that owns its destination to <paramref name="byteCount"/> bytes without waiting
+    /// for any submission: it creates a destination of the new size, keeps the first <paramref name="byteCount"/> bytes
+    /// of <see cref="Contents"/> and frees the rest, drops any carry a grow still owed, and owes every word of the
+    /// new size, since the new destination holds nothing yet. A staging buffer larger than the next flush needs is
+    /// replaced at that flush (<see cref="StagingFloorBytes"/>).</summary>
+    /// <param name="byteCount">The new size in bytes; positive, smaller than <see cref="ByteCount"/> and a whole number of
+    /// uints.</param>
+    /// <returns>The destination the region replaced, which the caller now owns and disposes once every submission
+    /// recorded before the shrink has completed.</returns>
+    /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not smaller than
+    /// <see cref="ByteCount"/> or not a whole number of uints.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public IGpuBuffer Shrink(long byteCount) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (
+            (Policy != GpuResidencyPolicy.Staged) ||
+            m_external
+        ) {
+            throw new InvalidOperationException(message: "Only a staged region that owns its destination shrinks.");
+        }
+        if (
+            (byteCount <= 0) ||
+            (byteCount >= ByteCount) ||
+            ((byteCount % sizeof(uint)) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: byteCount,
+                message: $"A region shrinks to a positive whole number of uints below its {ByteCount} bytes.",
+                paramName: nameof(byteCount)
+            );
+        }
+
+        var replacement = m_buffers.CreateDeviceLocal(
+            name: m_name,
+            sizeBytes: ((ulong)byteCount),
+            usage: GpuBufferUsage.Storage
+        );
+        var replaced = m_destination!;
+        var contents = ((byte*)NativeMemory.Alloc(byteCount: ((nuint)byteCount)));
+
+        System.Buffer.MemoryCopy(
+            destination: contents,
+            destinationSizeInBytes: byteCount,
+            source: m_contents,
+            sourceBytesToCopy: byteCount
+        );
+        NativeMemory.Free(ptr: m_contents);
+        m_contents = contents;
+        _ = m_ownedBuffers.Remove(item: replaced);
+        m_ownedBuffers.Add(item: replacement);
+        m_carrySource = null;
+        m_carryBytes = 0;
+        m_destination = replacement;
+        ByteCount = byteCount;
+        m_knownWords = ((int)(byteCount / sizeof(uint)));
+        m_copySets!.ForgetWriter(region: this);
+        OweAll(slot: 0);
+
+        return replaced;
+    }
     /// <summary>Records a grown region's carry: the clear of its destination, then the copy of the bytes the destination
     /// it replaced held, each ordered after the last, and the barrier handing the destination to the next access, the
     /// copy kernel's write when <paramref name="copies"/> and otherwise <paramref name="readers"/>. The replaced
@@ -1187,6 +1257,10 @@ public sealed unsafe class GpuRegion : IDisposable {
         var owed = m_owed[0];
 
         if (owed.Count == 0) {
+            _ = StagingFor(
+                bytes: (((ulong)CopyBlockBase) * sizeof(uint)),
+                slot: slot
+            );
             m_stagedSlot = slot;
 
             return;
@@ -1228,22 +1302,41 @@ public sealed unsafe class GpuRegion : IDisposable {
         ));
         m_stagedSlot = slot;
     }
-    // Returns the slot's staging buffer, replaced first by one of at least the bytes asked, twice its size or the whole
-    // region's reserve if larger, when it holds fewer; the copy sets are written again before each slot's next copy.
+    // Returns the slot's staging buffer, replaced first when it holds fewer than the bytes asked, by one of at least them,
+    // twice its size or the whole region's reserve if larger, or when it holds more than StagingFloorBytes and four times
+    // them, by one of twice them, at least StagingFloorBytes, within the reserve. The copy sets are written again before
+    // each slot's next copy.
     private IGpuStorageBuffer StagingFor(int slot, ulong bytes) {
         var buffer = m_hostBuffers[slot];
+        var reserve = ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)ByteCount));
+        var grows = (bytes > buffer.SizeBytes);
 
-        if (bytes <= buffer.SizeBytes) {
+        if (
+            !grows &&
+            (buffer.SizeBytes <= Math.Max(
+                val1: StagingFloorBytes,
+                val2: (4UL * bytes)
+            ))
+        ) {
             return buffer;
         }
 
         var replacement = m_buffers.CreateHostVisible(
             name: m_name.At(index: slot),
-            sizeBytes: Math.Max(
-                val1: bytes,
-                val2: Math.Min(
-                    val1: (2UL * buffer.SizeBytes),
-                    val2: ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)ByteCount))
+            sizeBytes: (grows
+                ? Math.Max(
+                    val1: bytes,
+                    val2: Math.Min(
+                        val1: (2UL * buffer.SizeBytes),
+                        val2: reserve
+                    )
+                )
+                : Math.Min(
+                    val1: reserve,
+                    val2: Math.Max(
+                        val1: StagingFloorBytes,
+                        val2: (2UL * bytes)
+                    )
                 )
             ),
             usage: m_usage

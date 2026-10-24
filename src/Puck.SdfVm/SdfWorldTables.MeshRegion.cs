@@ -114,6 +114,9 @@ public sealed partial class SdfWorldTables {
             );
 
             if (m_meshArena.Words > 0) {
+                if (m_meshArena.Relocated) {
+                    FitMeshRegion(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
+                }
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
                 // Every mesh is written again at once when the arena moved them or none was written yet, since no mesh's
                 // words stand where its draw reads them; otherwise only the meshes this list placed are owed, and land over
@@ -229,6 +232,24 @@ public sealed partial class SdfWorldTables {
     // the GPU, so every placed mesh stands where it was written and nothing it held is staged again, and the old buffer is
     // disposed once that upload completes (Retire). The region keeps its reserved copy sets, so growing takes no
     // descriptor range.
+    // Shrinks the region to MeshRegionGrownBytes of the need when a relocation leaves it holding more than half as much
+    // again, so the meshes no list names any more give back their device-local, staging and host-copy bytes. A
+    // relocation writes every word anyway, so the shrunk region, which owes every word, costs that upload nothing more.
+    private void FitMeshRegion(ulong bytes) {
+        var fitted = MeshRegionGrownBytes(needBytes: bytes);
+
+        if (((ulong)m_meshRegion.ByteCount) <= (fitted + (fitted / 2UL))) {
+            return;
+        }
+
+        Retire(replaced: m_meshRegion.Shrink(byteCount: ((long)fitted)));
+        m_seedMeshHistory = true;
+        m_bindingRevision++;
+        Volatile.Write(
+            location: ref m_meshRegionBytes,
+            value: fitted
+        );
+    }
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 

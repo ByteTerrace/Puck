@@ -154,6 +154,7 @@
     { "name": "help", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "host.frames", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "host.log", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
+    { "name": "host.memory", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "identity.bindings.save", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "identity.create", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "identity.deliver", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

@@ -12,7 +12,8 @@ namespace Puck.DirectX;
 /// apart as resource heap tier 1 asks; a render target or depth stencil stays committed, see
 /// <see cref="DirectXTextures.Create"/>) and role, each resource placed at an offset a heap's free ranges hand out
 /// (<see cref="GpuMemoryRanges"/>) at the alignment the device reports for it. A resource larger than half a heap gets a
-/// heap of its own. A heap every resource left is released, but one empty heap a pool keeps. The device's memory counts
+/// heap of its own. A heap every resource left is released, but a pool keeps one empty shared heap; a resource's own
+/// heap goes with it, so a large staging buffer holds no memory once released. The device's memory counts
 /// (<see cref="GpuDeviceMemoryWork"/>) count heaps, the memory the device actually holds, and a placed resource's release
 /// (<see cref="DirectXDeviceMemory.CountReleased"/>) returns its range (<see cref="Release"/>), found through a token the
 /// resource itself carries (private data under <see cref="TokenKey"/>), never through its address, which a later resource
@@ -170,11 +171,12 @@ public sealed unsafe class DirectXHeapArena {
         }
     }
 
-    // Returns a range to its heap; a heap left empty goes when its pool already keeps another empty one.
+    // Returns a range to its heap; a heap left empty goes when it is a resource's own heap, or its pool already keeps
+    // another empty one.
     private void Return(Heap heap, ulong offset, ulong size) {
         heap.Ranges.Free(offset: offset, size: size);
         if (!heap.Ranges.IsEmpty || !m_pools.TryGetValue(key: heap.Key, value: out var pool)) { return; }
-        if (pool.Any(predicate: other => (!ReferenceEquals(objA: other, objB: heap) && other.Ranges.IsEmpty))) {
+        if ((heap.Ranges.Capacity != HeapBytes) || pool.Any(predicate: other => (!ReferenceEquals(objA: other, objB: heap) && other.Ranges.IsEmpty))) {
             _ = pool.Remove(item: heap);
             Free(heap: heap);
         }
