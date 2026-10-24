@@ -8,6 +8,44 @@ namespace Puck.Cli.Mcp;
 // OAuth-protected HTTP extension composed over an owned World silo. The command validator is what guarantees a
 // complete pair reaches RunAsync, so the branch there reads a non-null path without re-checking its partner.
 public static class McpCommand {
+    // The World build of a checkout's current sources, from the same content-keyed store `puck test` and `puck canary`
+    // use: an unchanged source state reuses its build, a changed one is built once (into the store, never over the
+    // checkout's bin/Release, which a running World may hold open), and a concurrent build of one state is shared. The
+    // build blocks, so it runs on its own thread; a cancelled start abandons it and releases whatever it finishes with.
+    private static async Task<OperatorWorldBuild> ResolveBuildAsync(string checkout, TimeSpan budget, CancellationToken cancellationToken) {
+        var logs = RunDirectory.CreatePath(prefix: "puck-mcp-build-");
+        var build = Task.Run(function: () => {
+            var resolved = WorldArtifactBuild.TryResolve(
+                artifact: out var artifact,
+                error: out var error,
+                logDirectory: logs,
+                repositoryRoot: checkout,
+                timeout: budget,
+                verb: "mcp"
+            );
+
+            if (resolved) {
+                RunDirectory.TryDelete(path: logs);
+            }
+
+            return (resolved
+                ? new OperatorWorldBuild(Error: null, Lease: artifact, Path: artifact!.Path)
+                : new OperatorWorldBuild(Error: error, Lease: null, Path: null));
+        }, cancellationToken: CancellationToken.None);
+
+        try {
+            return await build.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (OperationCanceledException) {
+            _ = build.ContinueWith(
+                continuationAction: static (Task<OperatorWorldBuild> finished) => finished.Result.Lease?.Dispose(),
+                cancellationToken: CancellationToken.None,
+                continuationOptions: TaskContinuationOptions.OnlyOnRanToCompletion,
+                scheduler: TaskScheduler.Default
+            );
+
+            throw;
+        }
+    }
     private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, CancellationToken cancellationToken) {
         // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
         // so every console interrupt is a graceful drain rather than a tear-down mid-session.
@@ -53,7 +91,8 @@ public static class McpCommand {
                         root: await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false),
                         wait: wait
                     ).ConfigureAwait(continueOnCapturedContext: false),
-                    Checkout: checkout
+                    Checkout: checkout,
+                    ResolveBuild: ResolveBuildAsync
                 ));
 
             // Worlds publish their capability files in the user's temporary directory, so following the newest World

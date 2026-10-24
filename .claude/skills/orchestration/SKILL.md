@@ -327,8 +327,8 @@ World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
 the lead merges and reloads, or in a World of its own, named by `world` on
 every call. A brief tells such a lane to start that World with
-`puck_world_start` from its worktree's Release build (`checkout`: the worktree's
-absolute path) and to end it with `puck_world_stop`, never with a hand-written
+`puck_world_start` (`checkout`: the worktree's absolute path; it boots the build
+of the worktree's current sources, building it first when no run has) and to end it with `puck_world_stop`, never with a hand-written
 boot line or a PID kill; the tool passes `--devices none`, a state directory
 of its own and `--control`, and a `windowed: true` start, the GPU grant's leg,
 holds the GPU lease until the World exits. Reads and captures of the live World are always

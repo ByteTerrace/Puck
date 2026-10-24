@@ -91,7 +91,9 @@ harness: `puck_worlds` lists the running Worlds, and the `world` argument of `pu
 `puck_state_vector_write` (an attachment id or process id) reaches exactly that World or is refused; an unnamed call
 runs on the adapter's current World and the result's `world` member names it, so name your own World when several
 run. `puck_world_start` boots a World of the agent's own from a checkout of this repository (`OperatorWorlds`:
-`--devices none`, its own state directory, `--control`, the GPU lease held for a windowed one) and `puck_world_stop`
+the build of the checkout's current sources from the [World build store](../../../../docs/reference/cli.md#where-the-world-artifact-is-built),
+built first when the store lacks that source state, so never older than its inputs; `--devices none`, its own state
+directory, `--control`, the GPU lease held for a windowed one, taken after the build) and `puck_world_stop`
 ends only a World the adapter started; the console verb `host.log` reads any World's `HostLog` ring of its stdout and
 stderr lines (`Puck.Hosting`, teed from `Console` in `Program.cs`, refusals appended by `BufferedConsoleOutput`,
 ticks anchored in `WorldPostBuildWiring`). The file protects a mutual-authenticated
