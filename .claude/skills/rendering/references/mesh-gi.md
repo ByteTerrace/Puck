@@ -112,6 +112,16 @@ Read the primary view's meter after the scene and lighting settle, and during
 changes: an initial `meter=none` alone cannot establish that a settled room has
 no visible probe. Keep the authored exposure bounds and world headroom intact.
 
+The `codex-gi2` continuation captured a cold Vulkan shaft before and after
+the main GI trace. The near-black early view had no meter; after 496 static
+draws were ready and the three-sweep GI completed, the shaft and hall beauty
+views looked close to Direct3D. This narrows the large darkness difference
+to readiness in that run, not a demonstrated Vulkan shading failure. It is
+not full parity qualification: other geometry was still baking, and the
+shaft's probe meter was 4.087 nits versus Direct3D's 6.576 (both at EV100 7).
+Repeat on the same source state with all geometry settled to isolate that
+remaining difference.
+
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the
 toroidal volume creates no rectangular wall patch or bright distance band.
@@ -144,7 +154,10 @@ roof junction. Neither is a valid repair. The six first-hit depths and 26
 planes are coarse support, and can reject visible receivers beside a finite
 occluder; normalization cannot recover light when all accepted weights vanish.
 The SPIN dotted ceiling seam reproduces in beauty but not in indirect and
-needs a separate geometry/direct-light investigation.
+needs a separate geometry/direct-light investigation. Settled normal and
+shadow captures do not show the dotted seam either; that does not yet isolate
+its cause. A 27-probe quadratic support experiment still left the SPHERE
+step and was discarded; wider filtering alone is not a demonstrated repair.
 
 COAT's authored `specular: 0.35` is dielectric F0, not coat strength: it
 reflects a substantial neutral environment over its red diffuse albedo.
