@@ -22,6 +22,8 @@
   (global $x (mut i64) (i64.const 0))
   (global $y (mut i64) (i64.const 0))
   (global $z (mut i64) (i64.const 0))
+  (global $qy (mut i64) (i64.const 0))
+  (global $qw (mut i64) (i64.const 65536))
   (global $vy (mut i64) (i64.const 0))
   (global $facts (mut i64) (i64.const 0))
   (global $contacts (mut i64) (i64.const 0))
@@ -158,6 +160,8 @@
             (if (i32.eqz (local.get $part)) (then
               (global.set $x (i64.load offset=16 (local.get $p))) (global.set $y (i64.load offset=24 (local.get $p)))))
             (if (i32.eq (local.get $part) (i32.const 1)) (then (global.set $z (i64.load offset=16 (local.get $p)))))
+            (if (i32.eq (local.get $part) (i32.const 2)) (then (global.set $qy (i64.load offset=24 (local.get $p)))))
+            (if (i32.eq (local.get $part) (i32.const 3)) (then (global.set $qw (i64.load offset=24 (local.get $p)))))
             (global.set $poseParts (i32.or (global.get $poseParts) (i32.shl (i32.const 1) (local.get $part))))))
           (if (i32.eq (local.get $o) (global.get $kin)) (then
             (if (i32.eqz (local.get $part)) (then
@@ -185,6 +189,7 @@
 
   (func (export "puck_on_tick") (param $count i32) (result i32)
     (local $i i32) (local $dx i64) (local $dy i64) (local $dz i64) (local $r i32) (local $p i32)
+    (local $cos i64) (local $sin i64) (local $right i64)
     (call $drain (local.get $count))
     (global.set $out (i32.const 0))
     
@@ -193,7 +198,9 @@
         (global.set $active (i32.const 1)) (global.set $steps (i64.const 0)) (global.set $state (i64.const 0))
         (drop (call $next)) (global.set $state (i64.add (global.get $state) (i64.load (i32.const 17416)))) (drop (call $next))
         (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49217)) (i64.const 24) (i64.const 0)))))
-      (if (i32.and (i32.eq (global.get $poseParts) (i32.const 15)) (i32.eq (global.get $kinParts) (i32.const 3))) (then
+      ;; The enable read is one tick behind our cell write. Stop locally at the limit as well.
+      (if (i32.and (i64.lt_s (global.get $steps) (i64.load (i32.const 17424)))
+        (i32.and (i32.eq (global.get $poseParts) (i32.const 15)) (i32.eq (global.get $kinParts) (i32.const 3)))) (then
         (local.set $r (call $next))
         (local.set $dx (i64.shl (i64.sub (i64.extend_i32_u (i32.rem_u (local.get $r) (i32.const 3))) (i64.const 1)) (i64.const 16)))
         (local.set $dz (i64.shl (i64.sub (i64.extend_i32_u (i32.rem_u (i32.shr_u (local.get $r) (i32.const 2)) (i32.const 3))) (i64.const 1)) (i64.const 16)))
@@ -202,12 +209,18 @@
         (if (i64.gt_s (global.get $x) (i64.sub (i64.load (i32.const 17440)) (i64.const 65536))) (then (local.set $dx (i64.const -65536))))
         (if (i64.lt_s (global.get $z) (i64.add (i64.load (i32.const 17448)) (i64.const 65536))) (then (local.set $dz (i64.const -65536))))
         (if (i64.gt_s (global.get $z) (i64.sub (i64.load (i32.const 17456)) (i64.const 65536))) (then (local.set $dz (i64.const 65536))))
-        (call $act (i32.const 44) (i32.const 1) (local.get $dx))
-        (call $act (i32.const 44) (i32.const 0) (local.get $dz))
+        ;; Convert the world-space guard direction to body-local channels after random yaw turns.
+        (local.set $cos (i64.sub (i64.const 65536) (i64.shr_s (i64.mul (global.get $qy) (global.get $qy)) (i64.const 15))))
+        (local.set $sin (i64.shr_s (i64.mul (global.get $qy) (global.get $qw)) (i64.const 15)))
+        (local.set $right (i64.shr_s (i64.add (i64.mul (local.get $cos) (local.get $dx)) (i64.mul (local.get $sin) (local.get $dz))) (i64.const 16)))
+        (local.set $dz (i64.shr_s (i64.sub (i64.mul (local.get $cos) (local.get $dz)) (i64.mul (local.get $sin) (local.get $dx))) (i64.const 16)))
+        (call $act (i32.const 44) (i32.const 1) (call $clamp (local.get $right)))
+        (call $act (i32.const 44) (i32.const 0) (call $clamp (local.get $dz)))
         (call $act (i32.const 44) (i32.const 2) (i64.shl (i64.sub (i64.extend_i32_u (i32.rem_u (i32.shr_u (local.get $r) (i32.const 4)) (i32.const 3))) (i64.const 1)) (i64.const 16)))
         (call $act (i32.const 44) (i32.const 3) (i64.extend_i32_u (i32.shl (i32.eqz (i32.and (local.get $r) (i32.const 31))) (i32.const 16))))
         (call $act (i32.const 44) (i32.const 4) (i64.extend_i32_u (i32.shl (i32.eqz (i32.and (local.get $r) (i32.const 63))) (i32.const 16))))
         (call $act (i32.const 44) (i32.const 5) (i64.extend_i32_u (i32.shl (i32.eqz (i32.and (local.get $r) (i32.const 127))) (i32.const 16))))
+        (call $act (i32.const 44) (i32.const 6) (i64.shl (i64.sub (i64.extend_i32_u (i32.rem_u (i32.shr_u (local.get $r) (i32.const 8)) (i32.const 3))) (i64.const 1)) (i64.const 16)))
         (global.set $steps (i64.add (global.get $steps) (i64.const 1)))
         (call $beginPayload)
         (call $puts (i32.const 49250)) (call $puts (i32.const 49242))

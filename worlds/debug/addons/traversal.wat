@@ -201,9 +201,15 @@
     (global.set $out (i32.const 0))
     
     (if (i64.eqz (i64.load (i32.const 17408))) (then (global.set $active (i32.const 0))))
-    (if (i32.and (i32.eq (global.get $reads) (i32.const 7)) (i64.ne (i64.load (i32.const 17408)) (i64.const 0))) (then
+    (if (i32.and (i32.eq (global.get $reads) (i32.const 9)) (i64.ne (i64.load (i32.const 17408)) (i64.const 0))) (then
       (if (i32.eqz (global.get $active)) (then
-        (global.set $active (i32.const 1)) (global.set $waypoint (i64.const 0)) (global.set $age (i64.const 0))
+        (global.set $active (i32.const 1)) (global.set $waypoint (i64.load (i32.const 17440))) (global.set $age (i64.const 0))
+        ;; The old route query belongs to waypoint zero; request the selected start before steering.
+        (global.set $poseParts (i32.const 0))
+        (call $beginPayload)
+        (call $puts (i32.const 49412)) (call $puts (i32.const 49677))
+        (call $puts (i32.const 49381)) (call $putInt (i64.const 0)) (call $put (i32.const 125))
+        (call $mutate (i32.const 2) (i64.const 47))
         (global.set $liftStage (i32.const 0))
         (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49324)) (i64.const 22) (i64.const 0)))))
       (if (i32.and (i32.eq (global.get $poseParts) (i32.const 15)) (i32.eq (global.get $kinParts) (i32.const 3))) (then
@@ -263,8 +269,10 @@
             (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49596)) (i64.const 56) (i64.const 0)))
             (global.set $waypoint (i64.add (global.get $waypoint) (i64.const 1))) (global.set $age (i64.const 0)))
           (else
-            (call $act (i32.const 43) (i32.const 1) (call $clamp (local.get $dx)))
-            (call $act (i32.const 43) (i32.const 0) (call $clamp (i64.sub (i64.const 0) (local.get $dz))))))))
+            ;; Wait on the landing until the authored car state reaches level one (72 sixteenths).
+            (if (i32.or (i64.ne (global.get $waypoint) (i64.const 22)) (i64.eq (i64.load (i32.const 17448)) (i64.const 72))) (then
+              (call $act (i32.const 43) (i32.const 1) (call $clamp (local.get $dx)))
+              (call $act (i32.const 43) (i32.const 0) (call $clamp (i64.sub (i64.const 0) (local.get $dz))))))))))
         (call $beginPayload)
         (call $puts (i32.const 49412)) (call $puts (i32.const 49653))
         (call $puts (i32.const 49381))
@@ -294,10 +302,13 @@
 (call $ask (i32.const 1) (i32.const 5) (i32.const 49162) (i32.const 14) (i64.const 2))
 (call $ask (i32.const 2) (i32.const 3) (i32.const 49177) (i32.const 5) (i64.const 8))
 (call $ask (i32.const 3) (i32.const 3) (i32.const 49183) (i32.const 10) (i64.const 8))
+(call $ask (i32.const 4) (i32.const 5) (i32.const 50016) (i32.const 6) (i64.const 2))
 (call $read (i32.const 0) (i32.const 49194) (i32.const 3) (i32.const 17408))
 (call $read (i32.const 0) (i32.const 49198) (i32.const 5) (i32.const 17416))
 (call $read (i32.const 0) (i32.const 49204) (i32.const 7) (i32.const 17424))
 (call $read (i32.const 0) (i32.const 49212) (i32.const 9) (i32.const 17432))
+(call $read (i32.const 0) (i32.const 50000) (i32.const 5) (i32.const 17440))
+(call $read (i32.const 4) (i32.const 50024) (i32.const 6) (i32.const 17448))
     (if (i64.ne (i64.load (i32.const 0x4400)) (i64.const 0)) (then
       (call $bodyQueries (i32.const 43))
       (global.set $cursor (i32.const 0x5100)) (call $putInt (global.get $waypoint)) (call $put (i32.const 120))
@@ -336,4 +347,7 @@
   (data (i32.const 49671) "\22\72\75\6e\22\00")
   (data (i32.const 49677) "\22\64\6f\6e\65\22\00")
   (data (i32.const 49684) "\74\72\61\76\65\72\73\61\6c\20\70\61\73\73\20\63\6f\6d\70\6c\65\74\65\00")
+  (data (i32.const 50000) "start\00")
+  (data (i32.const 50016) "liftAt\00")
+  (data (i32.const 50024) "$value\00")
 )

@@ -19,7 +19,9 @@ them when they need them (the owner's ruling). The `addonHud` state row
 (`worlds/debug/addon-hud.puck`) gates every addon panel: each panel's `visible`
 is an `all` of `state.addonHud` equal to 1 and its own condition. Today those
 are the watchdog's panel, while a violation is recorded, and the gallery
-guide's, in front of an exhibit. `world.state.cell.set addonHud $value 1` shows
+guide's, in front of an exhibit, and the kinematics scope's while `scope[enabled]`
+is nonzero. The scope is an off-by-default development tool, not part of normal
+play. `world.state.cell.set addonHud $value 1` shows
 them and `0` hides them. A new addon panel takes the same gate.
 
 ## Contents

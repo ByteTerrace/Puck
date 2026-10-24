@@ -177,6 +177,12 @@ public sealed partial class WorldAddonRuntime {
                 // (8192), which fits in an int with room to spare.
                 var length = ((int)lengthUnsigned);
 
+                // Cell writes are new host work: meter the bounded copy and decode against remaining guest fuel.
+                if ((kindOrdinal == 47 || kindOrdinal == 48) && !ChargeHostFuel(addon, (ulong)length + 64)) {
+                    SetReservedVerdict(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
+                    continue;
+                }
+
                 if ((addon.MutateBytesThisTick + length) > AddonAbi.MaxMutationBytesPerTickPerAddon) {
                     SetReservedVerdict(
                         addon: addon,

@@ -22,7 +22,8 @@ namespace Puck.World.Addons;
 /// (<see cref="WorldMutation.UpsertHudPanel"/>/<see cref="WorldMutation.RemoveHudPanel"/>/
 /// <see cref="WorldMutation.UpsertHudElement"/>/<see cref="WorldMutation.RemoveHudElement"/>/
 /// <see cref="WorldMutation.SetHudDefaults"/>) — the ones <c>wasm/puck-addon-hudbuilder</c> exercises — plus the
-/// state section's two kinds (<see cref="WorldMutation.UpsertStateRow"/>/<see cref="WorldMutation.RemoveStateRow"/>)
+/// state rows and cells (<see cref="WorldMutation.UpsertStateRow"/>/<see cref="WorldMutation.RemoveStateRow"/>,
+/// <see cref="WorldMutation.UpsertStateCell"/>/<see cref="WorldMutation.RemoveStateCell"/>)
 /// and the placement rows (<see cref="WorldMutation.UpsertPlacement"/>/<see cref="WorldMutation.RemovePlacement"/>,
 /// the full <see cref="WorldPlacement"/> wire shape the document validator accepts — every facet: transform, distribution,
 /// mirror, emission, solid, inhabit, faceSources, region, attach), plus <see cref="WorldMutation.SetInputHold"/>. Other

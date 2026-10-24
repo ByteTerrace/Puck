@@ -180,10 +180,12 @@ public static class AddonAbi {
         public const int BodyPoseAnswerParts = 4;
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
-        /// fewer verbs (<c>3</c>).</summary>
+        /// fewer verbs.</summary>
         public const int Count = 6;
         /// <summary>Reads height/vertical world velocity, then body facts/contact flags (two answer parts).</summary>
         public const int BodyKinematics = 3;
+        /// <summary>The number of answer cells for height/velocity and facts/contact flags.</summary>
+        public const int BodyKinematicsAnswerParts = 2;
         /// <summary>Reads one numeric cell through an Observe/State handle. A/B name UTF-8 key bytes; C is zero.
         /// The answer carries its raw value and CellKind ordinal. Text and vector cells are refused.</summary>
         public const int ReadStateCell = 4;

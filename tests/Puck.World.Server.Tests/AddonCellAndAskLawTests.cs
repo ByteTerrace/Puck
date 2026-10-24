@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Assets;
+using Puck.Commands;
 using Puck.Scripting;
 using Puck.World.Addons;
 using Puck.World.Protocol;
@@ -68,6 +69,25 @@ public sealed class AddonCellAndAskLawTests {
         Assert.Equal(allowed, decoded);
         if (allowed) {
             var cell = Assert.IsType<WorldMutation.UpsertStateCell>(mutation);
+            Assert.Equal("config", cell.Row);
+            Assert.Equal("seed", cell.Key);
+        } else {
+            Assert.Null(mutation);
+            Assert.NotEmpty(error);
+        }
+    }
+
+    [Theory]
+    [InlineData("{\"row\":\"config\",\"key\":\"seed\"}", true)]
+    [InlineData("{\"row\":\"config\",\"key\":\"seed\",\"extra\":1}", false)]
+    [InlineData("{\"row\":\"config\",\"row\":\"other\",\"key\":\"seed\"}", false)]
+    public void CellRemovalUsesTheSameStrictDecoder(string payload, bool allowed) {
+        var ordinal = WorldMutationKindCatalog.All().Single(entry => entry.Type == typeof(WorldMutation.RemoveStateCell)).Ordinal;
+        var decoded = WorldAddonMutationDecoder.TryDecode(ordinal, WorldSection.State, Encoding.UTF8.GetBytes(payload),
+            Principal.Addon("guest"), out var mutation, out var error);
+        Assert.Equal(allowed, decoded);
+        if (allowed) {
+            var cell = Assert.IsType<WorldMutation.RemoveStateCell>(mutation);
             Assert.Equal("config", cell.Row);
             Assert.Equal("seed", cell.Key);
         } else {

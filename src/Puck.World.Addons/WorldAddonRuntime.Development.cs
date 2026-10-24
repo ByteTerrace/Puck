@@ -46,7 +46,7 @@ public sealed partial class WorldAddonRuntime {
     }
 
     private void ResolveLog(MountedAddon addon, in AddonQuerySubmission query) {
-        if (addon.LoggedThisTick) {
+        if (!ChargeHostFuel(addon, 16) || addon.LoggedThisTick) {
             QueueAnswer(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
             return;
         }

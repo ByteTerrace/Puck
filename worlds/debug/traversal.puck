@@ -32,6 +32,7 @@ state {
   world {
     table traversal {
       run = 0
+      start = 0
       count = length(traversalGoals)
       timeout = 600
       tolerance = 32768 // raw Q16: half a metre
@@ -92,6 +93,7 @@ addon "traversal" {
   requests [
     { capability: Observe, subject: "state:traversal" }
     { capability: Observe, subject: "state:traversalRoute" }
+    { capability: Observe, subject: "state:liftAt" }
     { capability: Observe, subject: "body:43" }
     { capability: Drive, subject: "body:43" }
     { capability: Mutate, subject: "section:State" }
@@ -104,8 +106,9 @@ addon "traversal" {
 }
 
 grants [
-  { grantee: "addon:traversal", capability: Observe, subject: "state:traversal", budget: 4 }
+  { grantee: "addon:traversal", capability: Observe, subject: "state:traversal", budget: 5 }
   { grantee: "addon:traversal", capability: Observe, subject: "state:traversalRoute", budget: 3 }
+  { grantee: "addon:traversal", capability: Observe, subject: "state:liftAt", budget: 1 }
   { grantee: "addon:traversal", capability: Observe, subject: "body:43", budget: 2 }
   { grantee: "addon:traversal", capability: Drive, subject: "body:43", budget: 3 }
   { grantee: "addon:traversal", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 10 }

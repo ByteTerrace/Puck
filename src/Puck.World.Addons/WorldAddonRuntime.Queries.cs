@@ -109,15 +109,17 @@ public sealed partial class WorldAddonRuntime {
                     : GrantSubject.All
                 );
             } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
-                if (ask.SubjectKind == AddonSubjectKind.State && !ChargeHostFuel(addon, 64)) {
-                    QueueAnswer(addon, ask.Ordinal, AddonVerdict.QuotaExhausted);
-                    continue;
-                }
-                if (!TryResolveSectionAskName(
+                string sectionName;
+                if (ask.SubjectKind == AddonSubjectKind.State) {
+                    if (!TryReadUtf8(addon, ask.SubjectIndex, ask.NameLength, AddonAbi.MaxSectionNameBytes, out sectionName, out var refusal)) {
+                        QueueAnswer(addon, ask.Ordinal, refusal);
+                        continue;
+                    }
+                } else if (!TryResolveSectionAskName(
                     addon: addon,
                     ask: in ask,
                     error: out var copyError,
-                    name: out var sectionName,
+                    name: out sectionName,
                     refusal: out var copyRefusal
                 )) {
                     Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} ask ordinal {ask.Ordinal} refused {copyRefusal} — {copyError}]");

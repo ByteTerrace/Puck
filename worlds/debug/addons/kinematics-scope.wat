@@ -186,7 +186,7 @@
       ;; A selection change discards the in-flight old body's answer; the next tick reads the chosen body.
       (if (i64.ne (global.get $selected) (i64.load (i32.const 17416))) (then
         (global.set $selected (i64.load (i32.const 17416))) (global.set $previous (i64.const -1))
-        (memory.fill (i32.const 0x5000) (i32.const 32) (i32.const 48)))
+        (memory.fill (i32.const 0x5000) (i32.const 32) (i32.const 128)))
       (else
         (local.set $p (i32.wrap_i64 (i64.and (global.get $samples) (i64.const 127))))
         (call $beginPayload)
@@ -252,15 +252,15 @@
         (call $puts (i32.const 49205))
         (call $putInt (global.get $contacts)) (call $put (i32.const 125))
         (call $mutate (i32.const 2) (i64.const 47))
-        (memory.copy (i32.const 0x5000) (i32.const 0x5001) (i32.const 47))
-        (i32.store8 (i32.const 0x502f)
+        (memory.copy (i32.const 0x5000) (i32.const 0x5001) (i32.const 127))
+        (i32.store8 (i32.const 0x507f)
           (if (result i32) (i32.ne (local.get $r) (i32.const 0)) (then (i32.const 43)) (else
             (if (result i32) (i64.ne (i64.and (global.get $facts) (i64.const 1)) (i64.const 0)) (then (i32.const 95)) (else
               (if (result i32) (i64.gt_s (global.get $vy) (i64.const 0)) (then (i32.const 94)) (else (i32.const 118))))))))
         (call $beginPayload) (call $puts (i32.const 49441))
         (local.set $i (i32.const 0))
         (loop $trace (call $put (i32.load8_u (i32.add (i32.const 0x5000) (local.get $i))))
-          (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $trace (i32.lt_u (local.get $i) (i32.const 48))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $trace (i32.lt_u (local.get $i) (i32.const 128))))
         (call $puts (i32.const 49508)) (call $mutate (i32.const 2) (i64.const 47))))))
 
     (call $ask (i32.const 0) (i32.const 5) (i32.const 49152) (i32.const 5) (i64.const 2))
