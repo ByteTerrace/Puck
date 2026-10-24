@@ -21,6 +21,7 @@ $shared = @(
     @('deny', 'git tag -d v1'), @('deny', 'git tag -fa v1'), @('deny', 'git remote add o ../x'), @('deny', 'git notes add -m x'),
     @('deny', 'git config --unset user.name'), @('deny', 'git config set user.name x'), @('deny', 'git -C ../x status'),
     @('deny', 'git -c foo=bar status'), @('deny', 'git symbolic-ref -d HEAD'), @('deny', 'git replace -d x'),
+    @('deny', 'git -C ../x add -- file.txt'), @('deny', 'git -C ../x commit -q -m wip'),
     @('deny', 'git maintenance run'), @('deny', 'gh pr merge 1'), @('deny', 'gh pr create --fill'), @('deny', 'gh repo sync'),
     @('deny', 'gh api -X POST repos/o/r/merges'), @('deny', 'gh workflow run deploy'),
     @('pass', 'git stash list'), @('pass', 'git stash show -p'), @('pass', 'git status'), @('pass', 'git branch -a'),
@@ -32,7 +33,8 @@ $shared = @(
 )
 $hookOnly = @(
     'git stash', 'git config user.name x', 'git config alias.p push', 'git fetch origin main:main', 'git -C../x status',
-    'git branch --quiet -D x', 'gh api repos/o/r/merges -f base=main'
+    'git branch --quiet -D x', 'gh api repos/o/r/merges -f base=main',
+    'git --attr-source HEAD stash', 'git --shallow-file shallow.txt stash', 'git fetch origin -- main:main'
 )
 
 function Get-HookVerdict {

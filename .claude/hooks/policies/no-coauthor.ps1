@@ -79,7 +79,7 @@ function Test-NoCoauthorPolicy {
     param([hashtable] $Context, $Invocation)
     if ($Invocation.Name -ne 'git') { return }
     $git = Resolve-GitAlias (Split-GitInvocation $Invocation)
-    if ($git.ContainsKey('Shell')) { return }
+    if ($git.ContainsKey('Shell') -or -not $git.Verb) { return }
     if ($git.Verb -eq 'cherry-pick') {
         if (Test-GitOption $git.Rest '' '' @('--continue', '--abort', '--skip', '--quit')) { return }
         $revisions = @(Get-GitOperands $git.Rest 'mX' @('--mainline', '--strategy', '--strategy-option', '--cleanup'))
