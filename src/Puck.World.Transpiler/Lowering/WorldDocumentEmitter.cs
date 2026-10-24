@@ -1306,6 +1306,27 @@ public static partial class WorldDocumentEmitter {
             wasmBytes = CompileInputs.ReadAllBytes(path: sourcePath);
         }
 
+        if (
+            isAddon &&
+            (wasmBytes is not null) &&
+            !wasmBytes.AsSpan().StartsWith(value: WasmBinaryFormat.WasmMagic)
+        ) {
+            // WebAssembly text is source: the pin covers its bytes exactly as the loader checks them before converting,
+            // and the conversion, export check and import refusal run at mount, where the engine that converts it is.
+            if (
+                string.Equals(
+                a: hashToken,
+                b: "auto",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ) ||
+                string.IsNullOrEmpty(value: hashToken)
+            ) {
+                addon["hash"] = ContentPin.Compute(content: wasmBytes).ToString();
+            }
+
+            return;
+        }
+
         if (wasmBytes is not null) {
             // Inspect WebAssembly binary
             var inspection = WasmModuleInspector.Inspect(wasmBytes: wasmBytes);

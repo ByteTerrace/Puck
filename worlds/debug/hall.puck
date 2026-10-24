@@ -13,8 +13,8 @@
 // unions of boxes, never a subtraction, because the analytic contact provider collides a carved shape as its whole
 // bounding box. The shell, floors, stairs and shaft are solid, so the Moth walks the floors and climbs the stairs (each
 // riser 0.25 m, under her 0.3 m step height) and the chase camera's clearance keeps the eye inside the rooms. The
-// ceiling light strips are emissive and not solid. The debug world imports this file whole, before chess.puck so the
-// lift car's body takes the highest population slot, followed by the chess cursor and pieces. `galleryPopulation`
+// ceiling light strips are emissive and not solid. The debug world imports this file after companion.puck and before
+// chess.puck: the companion takes the highest slot, then the lift car, chess cursor and pieces. `galleryPopulation`
 // also sets debug.puck's population capacity. shapes.md says how to get around and what each level shows.
 //
 // Creation shapes are authored in a frame turned 180 degrees about up from the world's, so a shape at author
@@ -100,10 +100,10 @@ template hallStrips(top, aisles) {
 // placements. The car moves only by the rules below: `liftAt` is its height in
 // sixteenths of a metre, `liftTarget` where it is going, and every tick `lift-ride` poses the car at cell `liftAt` of
 // the `liftShaft` box topology, a column of 1/16 m layers, so the car climbs exactly 1/16 m a tick (1.875 m/s at 30 Hz)
-// and stops exactly at each floor (level k is cell 72k). A call (`liftCall`, written by a pad or `gallery.lift`) names
+// and stops exactly at each floor (level k is cell 72k). A call (`liftCall`, written by a button or `gallery.lift`) names
 // a level. The car's body root rides 2.25 m over its floor, clear of the platform and ceiling it carries, so its own
 // collider never meets its own platform.
-let liftBody = (galleryPopulation - 1)
+let liftBody = (galleryPopulation - 2)
 let liftRoot = 2.25
 let liftCells = 72
 let liftX = 15.9

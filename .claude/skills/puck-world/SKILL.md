@@ -450,8 +450,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   jump and launch operations release grounding. The gallery
   lift moves its car body with a rule that `poseCell`s it along a box topology
   of 1/16 m layers each tick, so its speed and floor stops are exact.
-  Its numeric attachment index must track the population capacity: the gallery
-  shares `galleryPopulation` between its capacity and highest-slot lift body.
+  Its numeric attachment index must track population capacity and import order:
+  the gallery shares `galleryPopulation` between its capacity and lift body,
+  which is immediately below the companion imported ahead of it.
   A stale index can attach the platform to a different inhabitant while the
   placement-keyed car still moves; inspect `body.where` before changing physics.
 - An attached placement can also `respond` to state: the shown prototype and

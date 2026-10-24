@@ -234,7 +234,8 @@ public static class AddonAbi {
         /// <c>Server.WorldEventFeed</c>'s own remarks).</summary>
         public const int EventMachineMemoryChanged = 9;
         /// <summary>A body entered a named region. <c>A</c> = the body's 0-based entity index; <c>B</c> = the
-        /// region's 0-based ordinal (document order among placements carrying a region facet).</summary>
+        /// region's 0-based position among the <c>Observe/region:&lt;name&gt;</c> requests of the addon's own
+        /// manifest, in authored order, so a guest's table of regions follows the row it is mounted from.</summary>
         public const int EventRegionEnter = 1;
         /// <summary>A body left a named region. Same payload shape as <see cref="EventRegionEnter"/>.</summary>
         public const int EventRegionExit = 2;

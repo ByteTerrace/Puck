@@ -1,0 +1,88 @@
+// The companion: a stand-in body that follows the Moth at a comfortable distance, driven by a WebAssembly addon
+// (addons/companion.wat) through Drive and pose queries alone. It walks the trail she leaves, so it takes the stairs and
+// doors she took, stops 2 m from her, and jumps once when it stops making progress. The debug world imports this file
+// before hall.puck so the companion's body takes the population's highest slot and the lift car and chess pieces keep
+// theirs; addons.md beside this file says how to read it.
+
+let companionBody = 42
+let mothBody = 0
+
+prototypes {
+  // A plain grey-teal stand-in, inside the walker kit's capsule (0.35 m radius, 2.06 m tall).
+  prototype "companion" {
+    document {
+      name: "companion"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#5E8C88", roughness: 0.55, specular: 0.1 }
+        { color: "#E8E2D4", roughness: 0.4, specular: 0.2 }
+      ]
+      shape Capsule "torso" {
+        material: 0
+        position [0, 0.95, 0]
+        scale [0.3, 0.6, 0.3]
+      }
+      shape Sphere "head" {
+        material: 0
+        position [0, 1.78, 0]
+        scale [0.24, 0.24, 0.24]
+      }
+      shape Box "visor" {
+        material: 1
+        position [0, 1.8, 0.2]
+        scale [0.16, 0.05, 0.05]
+      }
+    }
+  }
+}
+
+looks {
+  rows [
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "companion"
+      scale: 1
+      source: creation(prototypeId: companion)
+    }
+  ]
+}
+
+placements {
+  placement "companion" {
+    prototype: "companion"
+    position [-2, 0, 2.5]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "companion"
+      source: "Idle"
+    }
+  }
+}
+
+addon "companion" {
+  modulePath: "addons/companion.wat"
+  hash: "auto"
+  fuel: 0
+  enabled: true
+  requests [
+    { capability: Drive, subject: $"body:{companionBody}" }
+    { capability: Observe, subject: $"body:{companionBody}" }
+    { capability: Observe, subject: $"body:{mothBody}" }
+  ]
+}
+
+// Drive over its own body (forward, strafe and a jump each tick at most) and one pose query a tick over each body.
+grants [
+  { grantee: "addon:companion", capability: Drive, subject: $"body:{companionBody}", budget: 4 }
+  { grantee: "addon:companion", capability: Observe, subject: $"body:{companionBody}", budget: 1 }
+  { grantee: "addon:companion", capability: Observe, subject: $"body:{mothBody}", budget: 1 }
+]

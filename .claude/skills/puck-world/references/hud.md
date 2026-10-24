@@ -14,6 +14,11 @@ on-screen UI the debug world wants: add no other panel, chip or hint row (a
 mouse chord stays off the bar; the bar's `modifiers` row stays off). Every
 control the bar shows has a sensible keyboard equivalent bound beside it, for
 example WASD beside the d-pad (`worlds/debug/avatars/moth.puck`, `moth.md`).
+The debug world's addons author the two panels it has, each hidden until it
+has something to say: the watchdog's while a violation is recorded and the
+gallery guide's in front of an exhibit (`worlds/debug/addons.md`). A lead's
+brief asked for them, not the owner, so whether they stay beside the ruling
+above is the owner's decision.
 
 ## Contents
 

@@ -128,7 +128,7 @@ stairwell, which is open between floors.
 | Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow and indirect (the irradiance volume's light alone, exposed); a view's name selects it |
 | Slice an exhibit's field | `gallery.slice [exhibit] [axis] [offset]`, or `B` for the one at hand: `world.slice.save` cuts the field through the exhibit's placement, by default on the level plane 1.2 m over its floor (an x or z cut wants offset 0), and writes `worlds/debug/slices/<exhibit>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
-The lift car is a population body (`lift-car`, the highest population slot) carrying the attached
+The lift car is a population body (`lift-car`, body 41, below the companion) carrying the attached
 solid platform, cab shell and car doors. The shell encloses the car with side
 and back walls and a lit ceiling. Rules move
 it: `liftCall` names the level a button or command called, `liftTarget` and
@@ -143,8 +143,8 @@ doors before travel starts, then opens the car and only the landing at its
 destination. Each door has two leaves that retract behind the jambs; both
 variants collide as drawn. `liftLevel` records the last level reached and
 drives the display inside the car and beside each landing's call button.
-`galleryPopulation` sets both the debug world's capacity and the highest-slot
-attachment index, keeping the car separate from the chess cursor below it.
+`galleryPopulation` sets the debug world's capacity; the car's attachment
+index is two below it, keeping the car between the companion and chess cursor.
 The buttons are unlit wall plates; there are no emissive floor pads. Ceiling
 strips stop outside the enclosed shaft, and the cab's ceiling hides the slabs
 above it.

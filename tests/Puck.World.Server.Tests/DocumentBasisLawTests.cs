@@ -458,6 +458,73 @@ public sealed class DocumentBasisLawTests {
         );
     }
     [Fact]
+    public void Imports_GrantRows_MergeByGranteeCapabilityAndSubject() {
+        using var files = new TemporaryDirectory();
+
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
+        files.WriteText(
+            name: "importA.world.json",
+            text: /*lang=json*/ """{ "grants": [ { "grantee": "seat1", "capability": "Drive", "subject": "body:1", "exclusive": false }, { "grantee": "seat1", "capability": "Drive", "subject": "body:2", "exclusive": false } ] }"""
+        );
+        files.WriteText(
+            name: "importB.world.json",
+            text: /*lang=json*/ """{ "grants": [ { "grantee": "seat1", "capability": "Drive", "subject": "body:2", "exclusive": false }, { "grantee": "seat2", "capability": "Drive", "subject": "body:2", "exclusive": false } ] }"""
+        );
+        files.WriteText(
+            name: "importC.world.json",
+            text: /*lang=json*/ """{ "grants": [ { "grantee": "seat1", "capability": "Drive", "subject": "body:2", "exclusive": true } ] }"""
+        );
+        // An empty list beside either side authors no row to collide with.
+        files.WriteText(
+            name: "importEmpty.world.json",
+            text: /*lang=json*/ """{ "grants": [] }"""
+        );
+        files.WriteText(
+            name: "importEmptyToo.world.json",
+            text: /*lang=json*/ """{ "grants": [] }"""
+        );
+
+        var mergedPath = files.WriteText(
+            name: "merged.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis", "imports": [{ "document": "importEmpty" }, { "document": "importA" }, { "document": "importEmptyToo" }, { "document": "importB" }] }
+            """
+        );
+
+        Assert.True(
+            condition: Fixtures.TryLoadDrawn(
+                path: mergedPath,
+                definition: out var merged,
+                contentHash: out _,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        // importB's first row restates importA's second exactly, so it merges into it; its second row is a new grantee.
+        Assert.Equal(
+            expected: [Protocol.GrantSubject.Body(index: 1), Protocol.GrantSubject.Body(index: 2), Protocol.GrantSubject.Body(index: 2)],
+            actual: merged!.Grants!.Select(selector: static grant => grant.Subject)
+        );
+        Assert.Equal(
+            expected: 2,
+            actual: merged.Grants!.Select(selector: static grant => grant.Grantee).Distinct().Count()
+        );
+
+        // The same triple authored with a different value by two imports is one row both claim.
+        var collidingPath = files.WriteText(
+            name: "colliding.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis", "imports": [{ "document": "importA" }, { "document": "importC" }] }
+            """
+        );
+
+        Assert.Contains(
+            actualString: RefusalOf(path: collidingPath),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "both author this row"
+        );
+    }
+    [Fact]
     public void Imports_SiblingCollision_RefusedByName_UnlessTheImportingFileRestates() {
         using var files = new TemporaryDirectory();
 

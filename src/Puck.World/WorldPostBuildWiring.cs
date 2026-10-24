@@ -336,11 +336,20 @@ public static class WorldPostBuildWiring {
                 graphHost?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
             }
 
-            // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
-            toasts?.Publish(
-                message: echo.Message,
-                isError: echo.Rejected
+            // An addon's applied edit is the guest's ordinary output, which a world may write every few ticks: it reaches
+            // the console narration below, never a toast or a cue. Its refusals still toast.
+            var addonApplied = (
+                !echo.Rejected &&
+                (echo.Mutation?.Principal.Kind == PrincipalKind.Addon)
             );
+
+            // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
+            if (!addonApplied) {
+                toasts?.Publish(
+                    message: echo.Message,
+                    isError: echo.Rejected
+                );
+            }
             // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
             // capacity reason too long for the toast stays readable where the operator is already looking.
             consoleSessions.RecordAdministrativeEcho(
@@ -358,7 +367,10 @@ public static class WorldPostBuildWiring {
                     eventToken: WorldAudioCue.GrantDenied,
                     site: null
                 );
-            } else if (echo.Kind != WorldEditEchoKind.GrantTable) {
+            } else if (
+                (echo.Kind != WorldEditEchoKind.GrantTable) &&
+                !addonApplied
+            ) {
                 audioDirector.SubmitCue(
                     eventToken: (echo.Rejected
                     ? WorldAudioCue.MutationRejected

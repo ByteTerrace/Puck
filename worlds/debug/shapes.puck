@@ -18,7 +18,7 @@
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
-let galleryPopulation = 42
+let galleryPopulation = 43
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 
 // The axis of the painting wing's endless fall (paintings.puck): a painting in level 0's floor under its twin in the

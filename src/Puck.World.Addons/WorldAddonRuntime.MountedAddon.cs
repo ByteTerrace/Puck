@@ -39,6 +39,17 @@ public sealed partial class WorldAddonRuntime {
             Principal = Principal.Addon(name: instance.Name);
             Pump = new AddonSimulationPump();
             Requests = requests;
+            RegionOrdinals = new Dictionary<GrantSubject, int>();
+
+            foreach (var request in (requests ?? [])) {
+                if (
+                    (request.Capability == WorldCapability.Observe) &&
+                    (request.Subject.Kind == GrantSubjectKind.Region)
+                ) {
+                    _ = RegionOrdinals.TryAdd(key: request.Subject, value: RegionOrdinals.Count);
+                }
+            }
+
             ResponseChannel = ResolveResponseChannel(instance: instance);
             SourceRow = sourceRow;
             MemoryWatches = memoryWatches;
@@ -153,6 +164,10 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets the adapter crossing that drives this guest and validates its vocabulary.</summary>
         public AddonSimulationPump Pump { get; }
         public bool QuotaDropReported { get; set; }
+        /// <summary>Gets each region the manifest observes by its position among the manifest's
+        /// <c>Observe/region:&lt;name&gt;</c> requests, in authored order: the ordinal a region event's <c>B</c> lane
+        /// carries, so a guest's own table of regions follows the row it is mounted from.</summary>
+        public Dictionary<GrantSubject, int> RegionOrdinals { get; }
         /// <summary>Gets the row's manifest — the left half of requests ∧ grants. Null means the row asked for nothing, so
         /// nothing materializes.</summary>
         public IReadOnlyList<WorldCapabilityRequest>? Requests { get; }

@@ -173,6 +173,19 @@ These items belong to no single programme.
     - The technical ones are per-cell variation within the 367-shape budget (a repeat domain that reads a state table, or many placements), computing in rules with new builtins rather than an addon, and what a per-tick update costs.
   - [x] The gallery's section signs hang on rods from the ceiling above each row's first exhibit, facing the landing down the hall. The lobby map hangs too; per-exhibit labels stay on the plinths.
 
+## Addon system
+
+The addon system is improved as it is used ([addons](../../.claude/skills/puck-world/references/addons.md)).
+These gaps came up writing the debug world's three guests ([worlds/debug/addons.md](../../worlds/debug/addons.md)).
+
+- [ ] Let a guest read authored data. The gallery guide's exhibit names and notes are copied into `worlds/debug/addons/guide.wat` in the gallery's walking order, so `shapes.puck` and the guest drift apart unless edited together. Either the row carries a text payload the host writes into guest memory at mount (through an optional export pair naming where), or a query verb reads a cell of a state row the guest is granted `Observe` over.
+- [ ] Give federation link events the manifest-order index region events carry: their `A` lane is still the `adjacencies` row's document ordinal, which a guest cannot resolve to a name.
+- [ ] Read more bodies a tick. A pose query answers in four cells, so a 64-cell input ring reads about fifteen bodies a tick, and the watchdog reads the chess pieces four a tick in turn. A batched pose query over every body a guest observes, or an event when a body crosses a height, would let a watchdog check every body every tick.
+- [ ] Wire the per-cell `UpsertStateCell`/`RemoveStateCell` into the addon mutation decoder. A guest rewrites a whole row to change one cell, and an `Edit` row's `verbs:UpsertStateCell,RemoveStateCell` narrowing cannot apply to a guest.
+- [ ] Compare text in a test or rule gate. An `expect` line reads numbers only, so the guide and the watchdog write numeric rows (`guideAt`, `watchdog`) beside their text rows for their tests to read.
+- [ ] Let an agent attached over MCP record a world with addons. A recording with mounted guests must arm before the world's first step, since no checkpoint holds a guest's memory, and an MCP attachment arrives after it, so the World has to start with `replay.record` on stdin. Re-instantiating every guest at the arm, as a drive's boot-image reset now does, would let a recording start from a checkpoint.
+- [ ] Quiet the offline re-drive's narration: `replay.stop` and `replay.verify` print every shadow guest's mount and disclosure lines, so each addon's mount narrates again after a recording.
+
 ## Quarantined gates
 
 While the debug world is the one live world

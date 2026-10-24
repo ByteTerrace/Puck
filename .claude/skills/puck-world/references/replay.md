@@ -607,9 +607,12 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   `RateMismatch`/zero ticks/target out of range; refuse when the live joined
   player set differs from the tape's seat set (a seat cannot be respawned
   through the session door — `player.join`/`player.leave` to match first),
-  when the tape pins addons and a guest has pumped (the
-  rebuild door reuses an unchanged row's guest with its state), or when an
-  engagement is in flight. Stepped machines and applied screen ops are no
+  or when an engagement is in flight. Mounted addons are no obstacle: the
+  forced load below prepares every guest fresh
+  (`WorldDocument.ReinstantiateAddonsOnNextRebuild`, which hands the addon
+  host `current: null`), so each starts from its module's initial state as the
+  recording's own did, and a drive in the session that recorded the tape
+  reproduces its guests tick for tick. Stepped machines and applied screen ops are no
   obstacle: the forced load keeps an unchanged machine row's runtime running
   (and re-creates a changed one from its content), and the checkpoint restore
   below installs the tape's core images, screen slots and links over it, each

@@ -1,0 +1,64 @@
+// The debug world's three addons (addons.md), each scenario booted in the whole debug world:
+// `puck test worlds/debug/addons-tests.puck`. The watchdog (watchdog.puck) counts violations in `watchdog`, the
+// gallery guide (guide.puck) names the exhibit she stands at by its walking-order position in `guideAt`, and the
+// companion (companion.puck) is body 42. A test gate reads numbers, so the rows' text twins are read with
+// `world.state` instead.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "addons-tests"
+
+test "the watchdog stays quiet through an ordinary boot" {
+  when {
+    ticks 90
+  }
+  expect {
+    watchdog[count] == 0
+  }
+}
+
+test "the watchdog records the tick a body is first under the floor" {
+  when {
+    seat1: body.pose 5 -3 5 0 0 0 0
+    ticks 10
+  }
+  expect {
+    watchdog[count] == 1
+    watchdog[first] == 2
+    watchdog[tick] == 2
+  }
+}
+
+test "the guide names the exhibit the Moth stands before" {
+  when {
+    seat1: body.pose spawn:shape-shear 0
+    ticks 10
+  }
+  expect {
+    guideAt == 45
+  }
+}
+
+test "the guide clears when she walks away" {
+  when {
+    seat1: body.pose spawn:shape-shear 0
+    ticks 10
+    seat1: body.pose spawn:gallery 0
+    ticks 10
+  }
+  expect {
+    guideAt == -1
+  }
+}
+
+test "the companion comes within 2.5 m of her and keeps clear of her" {
+  when {
+    seat1: body.pose 10 0.05 10 0 0 0 0
+    ticks 150
+  }
+  expect {
+    bodyPosition(body, 42, x) > 7.5 and bodyPosition(body, 42, x) < 12.5
+    bodyPosition(body, 42, z) > 7.5 and bodyPosition(body, 42, z) < 12.5
+    watchdog[count] == 0
+  }
+}
