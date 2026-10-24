@@ -53,6 +53,22 @@ public sealed class CoverageReportLawTests {
         Assert.Equal(expected: [true, true, true], actual: merged["src/Puck.A/A.cs"].Values);
     }
     [Fact]
+    public void AVerificationHarnessIsNeitherMeasuredNorRequiredToLoad() {
+        using var directory = new TemporaryDirectory();
+        var files = CoverageReport.Merge(reports: [
+            Report(directory: directory, fileName: "src/Puck.A/A.cs", lines: [(1, 1)], name: "0.cobertura.xml"),
+            Report(directory: directory, fileName: "src/Puck.A.Post/Stages/S.cs", lines: [(1, 0)], name: "1.cobertura.xml"),
+        ]);
+        using var writer = new StringWriter();
+
+        Assert.True(condition: CoverageReport.IsHarness(path: "src/Puck.A.Post/S.cs"));
+        Assert.True(condition: CoverageReport.IsHarness(path: "src/Puck.A.Post/"));
+        Assert.False(condition: CoverageReport.IsHarness(path: "src/Puck.A/Post/S.cs"));
+        Assert.False(condition: CoverageReport.IsHarness(path: "tests/Puck.A.Post/S.cs"));
+        Assert.True(condition: CoverageReport.Judge(files: files, hardwareOnly: [], projects: ["src/Puck.A/", "src/Puck.A.Post/"], writer: writer));
+        Assert.StartsWith(expectedStartString: "Line coverage: 1 of 1 measured lines", actualString: writer.ToString());
+    }
+    [Fact]
     public void TheHardwareOnlyListLeavesItsLinesAndProjectsOut() {
         using var directory = new TemporaryDirectory();
         var files = CoverageReport.Merge(reports: [

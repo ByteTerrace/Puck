@@ -321,7 +321,8 @@ report beside its TRX report (`build/CodeCoverage.config` selects the `Puck.*`
 assemblies), kept in its compact form (`.coverage.tsv`: per file, the lines hit and missed). `coverage` merges every report, Cobertura or compact, under `--results` (default
 `artifacts/test-results`), writes the verdict and every uncovered line range to
 `coverage.txt` there, and exits 1 unless every measured `src/` line is covered and
-every `src/` project in `Puck.slnx` was loaded, leaving out the prefixes
+every `src/` project in `Puck.slnx` was loaded, leaving out the verification harnesses (the `Puck.*.Post` emulator
+batteries, which the suites run to reach the cores they check) and the prefixes
 `build/CoverageHardwareOnly.txt` lists as reachable only on real hardware (a GPU, or a real mouse and foreground window). `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
