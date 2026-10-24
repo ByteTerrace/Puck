@@ -208,6 +208,9 @@ test against the previous tick's geometry. Its change of position and yaw
 carries the rider's foot point before the rider advances. A yawed box is
 rideable, as are the other supported analytic primitives; body orientation
 remains the motion program's responsibility.
+The solid must attach to the actual carrier: population ordering can move an
+authored numeric body index. Confirm the placement's resolved body and the
+attachment together before diagnosing a rider left behind as a contact failure.
 
 `IContactField` is the seam a grounded body resolves its swept position
 against, and `FixedStaticContactSolver` is the analytic provider's half of it:

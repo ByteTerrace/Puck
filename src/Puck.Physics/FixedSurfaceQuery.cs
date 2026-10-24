@@ -33,7 +33,8 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// The nearest-surface-point primitive surface holds (attach/conform) and grappling (tether anchor selection)
 /// both resolve against — one deterministic query over the same analytic collider vocabulary
 /// <see cref="FixedStaticContactSolver"/> depenetrates a body out of: <see cref="FixedStaticColliderKind.Sphere"/>,
-/// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, <see cref="FixedStaticColliderKind.OrientedBox"/>, and <see cref="FixedStaticColliderKind.HalfSpace"/>. A
+/// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, <see cref="FixedStaticColliderKind.OrientedBox"/>,
+/// <see cref="FixedStaticColliderKind.Cylinder"/>, and <see cref="FixedStaticColliderKind.HalfSpace"/>. A
 /// later slice reads a candidate's <see cref="FixedSurfaceAttachCandidate.Point"/> as the anchor and
 /// <see cref="FixedSurfaceAttachCandidate.Normal"/> as the surface-tangent-plane basis; nothing here decides grip,
 /// rope length, or reach — every distance and angle is caller-supplied, never a constant baked in.

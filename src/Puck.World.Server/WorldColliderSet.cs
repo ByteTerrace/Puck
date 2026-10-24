@@ -19,7 +19,7 @@ namespace Puck.World.Server;
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. A slab's <c>Round</c> and a creation's boolean carving, smoothing, rounded box corners, and non-box primitive
-/// surfaces are deliberately not modelled. Spheres and circular cylinders use their closest-point geometry; other finite placement
+/// surfaces beyond spheres and circular cylinders are deliberately not modelled. Those two use their closest-point geometry; each other finite placement
 /// primitive uses its own bounding box, turned with it (<see cref="FixedStaticCollider.Box"/>): exact for a sharp box
 /// at any yaw, conservative for rounded or non-box geometry, and axis-aligned whenever its axes land on world axes. A
 /// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. No broadphase:
@@ -94,8 +94,12 @@ internal sealed class WorldColliderSet : IContactField {
     public ulong AttachedRevision { get; private set; }
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
+    /// <summary>Gets the number of solid circular cylinders in the set.</summary>
+    public int CylinderCount { get; private init; }
     /// <summary>Gets the number of placement-derived boxes in the set.</summary>
     public int PlacementBoxCount { get; private init; }
+    /// <summary>Gets the number of placement-derived circular cylinders in the set.</summary>
+    public int PlacementCylinderCount { get; private init; }
     /// <summary>Gets the number of placement-derived half-spaces in the set.</summary>
     public int PlacementPlaneCount { get; private init; }
     /// <summary>Gets the number of placement-derived spheres in the set.</summary>
@@ -103,7 +107,7 @@ internal sealed class WorldColliderSet : IContactField {
     /// <summary>Gets the number of solid half-spaces in the set.</summary>
     public int PlaneCount { get; private init; }
     /// <summary>Gets the total collider count.</summary>
-    public int SolidCount => ((SphereCount + BoxCount) + PlaneCount);
+    public int SolidCount => (((SphereCount + BoxCount) + CylinderCount) + PlaneCount);
     /// <summary>Gets the number of solid spheres in the set.</summary>
     public int SphereCount { get; private init; }
 
@@ -117,6 +121,7 @@ internal sealed class WorldColliderSet : IContactField {
         var planes = 0L;
         var placementSpheres = 0L;
         var placementBoxes = 0L;
+        var placementCylinders = 0L;
         var placementPlanes = 0L;
         var unsupported = 0L;
 
@@ -176,6 +181,9 @@ internal sealed class WorldColliderSet : IContactField {
                         left: placementSpheres,
                         right: shapeCopies
                     );
+                } else if ((shape.Type == SdfSolidPrimitive.Cylinder) &&
+                    (MathF.Abs(x: shape.Scale.X) == MathF.Abs(x: shape.Scale.Z))) {
+                    placementCylinders = AddSaturated(left: placementCylinders, right: shapeCopies);
                 } else {
                     placementBoxes = AddSaturated(
                         left: placementBoxes,
@@ -200,7 +208,9 @@ internal sealed class WorldColliderSet : IContactField {
 
         return new WorldContactCensus(
             BoxCount: boxes,
+            CylinderCount: placementCylinders,
             PlacementBoxCount: placementBoxes,
+            PlacementCylinderCount: placementCylinders,
             PlacementPlaneCount: placementPlanes,
             PlacementSphereCount: placementSpheres,
             PlaneCount: planes,
@@ -225,7 +235,7 @@ internal sealed class WorldColliderSet : IContactField {
         hash.Add(value: collider.Rotation.W.Value);
     }
     // A circular cylinder retains its surface; other finite primitives retain an oriented bound.
-    private static FixedStaticCollider PlacementBox(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) =>
+    private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) =>
         (((copy.Shape.Type == SdfSolidPrimitive.Cylinder) && (copy.LocalHalfExtents.X == copy.LocalHalfExtents.Z))
         ? FixedStaticCollider.Cylinder(center: copy.Center, radius: (copy.LocalHalfExtents.X + margin),
             halfHeight: (copy.LocalHalfExtents.Y + margin), rotation: copy.Rotation)
@@ -283,6 +293,7 @@ internal sealed class WorldColliderSet : IContactField {
         var planes = 0;
         var placementSpheres = 0;
         var placementBoxes = 0;
+        var placementCylinders = 0;
         var placementPlanes = 0;
 
         foreach (var screen in definition.Screens) {
@@ -395,12 +406,16 @@ internal sealed class WorldColliderSet : IContactField {
                             spheres++;
                             placementSpheres++;
                         } else {
-                            placementCollider = PlacementBox(
+                            placementCollider = PlacementFinite(
                                 copy: copy,
                                 margin: margin
                             );
-                            boxes++;
-                            placementBoxes++;
+                            if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
+                                placementCylinders++;
+                            } else {
+                                boxes++;
+                                placementBoxes++;
+                            }
                         }
 
                         colliders.Add(item: placementCollider);
@@ -422,7 +437,9 @@ internal sealed class WorldColliderSet : IContactField {
             attachedRows: attachedRows
         ) {
             BoxCount = boxes,
+            CylinderCount = placementCylinders,
             PlacementBoxCount = placementBoxes,
+            PlacementCylinderCount = placementCylinders,
             PlacementPlaneCount = placementPlanes,
             PlacementSphereCount = placementSpheres,
             PlaneCount = planes,
@@ -536,7 +553,7 @@ internal sealed class WorldColliderSet : IContactField {
                             hash: ref hash
                         );
                     } else {
-                        attached = PlacementBox(
+                        attached = PlacementFinite(
                             copy: copy,
                             margin: margin
                         );

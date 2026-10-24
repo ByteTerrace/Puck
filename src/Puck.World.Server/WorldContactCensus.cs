@@ -22,10 +22,12 @@ internal interface IEntityContactField : IContactField {
 /// <summary>The analytic collider vocabulary's live document census, measured from the definition by
 /// <see cref="WorldColliderSet.Measure"/> whichever contact provider the world selects.</summary>
 /// <param name="SphereCount">All sphere colliders.</param>
-/// <param name="BoxCount">All axis-aligned box colliders.</param>
+/// <param name="BoxCount">All box colliders.</param>
+/// <param name="CylinderCount">All circular cylinder colliders.</param>
 /// <param name="PlaneCount">All half-space colliders.</param>
 /// <param name="PlacementSphereCount">Sphere colliders derived from creation placements.</param>
 /// <param name="PlacementBoxCount">Box colliders derived from creation placements.</param>
+/// <param name="PlacementCylinderCount">Cylinder colliders derived from creation placements.</param>
 /// <param name="PlacementPlaneCount">Half-space colliders derived from creation placements.</param>
 /// <param name="UnsupportedPlacementCount">Placement primitive copies with no analytic representation.</param>
 /// <param name="SolidBakeHash">The hash of everything the solid field's distance grid is baked from — the compiled
@@ -34,15 +36,17 @@ internal interface IEntityContactField : IContactField {
 public readonly record struct WorldContactCensus(
     long SphereCount,
     long BoxCount,
+    long CylinderCount,
     long PlaneCount,
     long PlacementSphereCount,
     long PlacementBoxCount,
+    long PlacementCylinderCount,
     long PlacementPlaneCount,
     long UnsupportedPlacementCount,
     ulong SolidBakeHash = 0UL
 ) {
     /// <summary>Gets all analytic colliders derived from placements.</summary>
-    public long PlacementColliderCount => ((PlacementSphereCount + PlacementBoxCount) + PlacementPlaneCount);
+    public long PlacementColliderCount => (((PlacementSphereCount + PlacementBoxCount) + PlacementCylinderCount) + PlacementPlaneCount);
     /// <summary>Gets all analytic colliders.</summary>
-    public long SolidCount => ((SphereCount + BoxCount) + PlaneCount);
+    public long SolidCount => (((SphereCount + BoxCount) + CylinderCount) + PlaneCount);
 }
