@@ -168,6 +168,9 @@ These items belong to no single programme.
   - [x] A grounded walker follows crests, descents and small drops within `motion.groundSnap` (default 0.3 m), with velocity projected onto its support. The four-tick debug ramp samples previously peaked airborne at y=2.46 and landed near z=-64.07; now every sample stays grounded, the sampled crest is y=1.62 and the straight slopes give vy=+/-2.17 m/s. The second rise is a staircase with flat treads, so its zero vertical walking velocity is expected; its descending treads now remain grounded too.
   - [x] A circular cylinder/disc placement collides as its surface instead of its bounding box. At the studio dais's false corner (50.8, -50.8), the old implementation held a body at y=0.32; the corrected one stands on the floor at y=0.03. The reported (47.5, -48.7) lies inside the actual radius-3 disc centred at (48, -48), and correctly remains at y=0.32. General carved/elliptical placement geometry and conservative capsule-versus-box contact remain open above.
   - [ ] Walking backward, the Moth's legs cross behind each other.
+  - [ ] Tabled by the owner for later: a maths room in the gallery with a 2D grid (a walkable board) and a 3D grid (a floating lattice) whose cells `Puck.Maths` computes in the simulation, so they are bit-identical on every machine.
+    - The open questions are the owner's: the audience (a showpiece or a tool for us), how animated it is, how interactive, which maths leads, and where it goes.
+    - The technical ones are per-cell variation within the 367-shape budget (a repeat domain that reads a state table, or many placements), computing in rules with new builtins rather than an addon, and what a per-tick update costs.
   - [ ] The gallery's section and wayfinding signs stand on poles in the aisles. They hang from the ceiling above the exhibits instead (the owner's call), and per-exhibit labels stay on the plinths.
 
 ## Quarantined gates
