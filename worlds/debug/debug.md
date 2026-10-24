@@ -89,6 +89,13 @@ gallery hall's level 0 (x 51 to 69.7, z 12.3 to 39.7), behind a doorway in a
 partition wall. [paintings.md](paintings.md) lists them, says how to get in, what
 to watch, how to get out of the endless fall and what the ripple does.
 
+## Rate range
+
+[range.puck](range.puck) lays a lane on the open ground at x = -100 for judging
+the `world.rates` levers: walking Moths, screens and windows at marked
+distances in each tier, a tier view (`world.debug-view rates`, F8) and an A/B
+key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
+
 ## Going places
 
 [places.puck](places.puck) names a spot a few metres from each feature and
@@ -119,6 +126,7 @@ case, `stage` when omitted:
 | `gallery` | (16, 0, 9), outside the gallery hall's entrance | +Z, through the door |
 | `gallery-level-0` .. `gallery-level-3` | (15.9, 4.5k + 0.05, 34), each level's landing in the hall | +Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |
+| `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |
 
 The chase camera keeps its world heading when a body is posed, so a place
 facing -Z frames from behind the body as the boot view does, and `gallery`
@@ -143,7 +151,7 @@ wheel are [`controls.puck`](controls.puck), and the key layout is
 |---|---|---|
 | nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)): run, flight, jump, descend, fly, the context button (RB); LB opens the play wheel (`WH`) |
 | LT or Z | View | Camera layouts (chase, three-quarter, front, rear, wide, face), autorun (L3), autofly (R3), recenter, free look, the frame toggle, the jetpack alone |
-| RT or X | Debug | Where, history on, console, capture (`world.screenshot` to the state root's `screenshots/`), the inspector, the debug view, frame hold and compare, stop, and the suit toggle |
+| RT or X | Debug | Where, history on, console, capture (`world.screenshot` to the state root's `screenshots/`), the inspector, the debug view, frame hold and compare, stop, and the suit toggle; the pad's View button switches `world.rates` ([`range.md`](range.md)) |
 | LT then RT | Go | `debug.go` to the stage, gallery, portals, Wonderland, hero studio, devices, chess, computer and the four gallery levels |
 | RT then LT | Tour | The gallery tour (next, previous, flag, slice), `world.quality next`, `world.rates toggle`, its lights and motion, and the garden and night paintings |
 

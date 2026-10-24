@@ -1,0 +1,443 @@
+// The rate range: a lane of open ground on the debug world's west side for judging the world.rates levers (range.md).
+// Six Moths walk loops at marked distances down the lane, so a body's pose shows at every tier the bodies lever has;
+// three televisions play a bouncing ball and three windows look into the garden, at distances that put each lever's
+// work in its 30 Hz and 15 Hz tiers at 1280x900 and at 3840x2160; signs stand on both sides of every body threshold,
+// each saying how far it is and which tier a body standing there takes at each size. `debug.go range` stands her at
+// the lane's head, facing down it. `world.debug-view rates` (F8) tints each rated item by its tier and
+// `world.rates toggle` (F7, or the pad's View button on the Debug page) switches every lever, for an A/B of one scene.
+// The debug world imports this file whole.
+//
+//   x = -100, z 118 .. -52   the lane, running -Z from the spawn; D below is the distance down it from the spawn
+//   x = -100                 the walkers, each looping within about 3 m of its home
+//   x = -94 and beyond       the signs, on the lane's right
+//   x = -108                 the televisions, on the lane's left
+//   x = -112                 the windows, further left
+//
+// The tiers switch by a body's pixels per metre (SdfUpdateRateTiers): 30 Hz at or below 30 and 15 Hz at or below 15.
+// The default chase camera (avatars/moth.puck: 4.2 m behind her at a 0.3 rad pitch, 0.96 rad high) sees a body at its
+// nearest point, so a body whose home is D down the lane stands about 0.9553 D + 2.39 m deep in the view, and its pixels
+// per metre are the display's height over 1.0432 times that depth. The thresholds fall at D = 27.6 and 57.7 m at
+// 1280x900, and at 69.7 and 142 m at 3840x2160.
+
+import "pad-kit"
+
+let laneX = -100
+let laneHead = 118
+
+// The walkers' homes, D down the lane, and the tier each takes at the two sizes with the camera at rest at the spawn.
+let walkers = [
+  { name: "range-walker-10", d: 10 }
+  { name: "range-walker-42", d: 42 }
+  { name: "range-walker-64", d: 64 }
+  { name: "range-walker-90", d: 90 }
+  { name: "range-walker-115", d: 115 }
+  { name: "range-walker-165", d: 165 }
+]
+
+// The signs, on both sides of each body threshold: D, then the tier a body standing beside it takes at 1280x900 and at
+// 3840x2160.
+let signs = [
+  { d: 25, k: 1, low: "60 Hz", high: "60 Hz" }
+  { d: 30, k: 1, low: "30 Hz", high: "60 Hz" }
+  { d: 55, k: 1.375, low: "30 Hz", high: "60 Hz" }
+  { d: 60, k: 1.5, low: "15 Hz", high: "60 Hz" }
+  { d: 67, k: 1.675, low: "15 Hz", high: "60 Hz" }
+  { d: 72, k: 1.8, low: "15 Hz", high: "30 Hz" }
+  { d: 138, k: 3.45, low: "15 Hz", high: "30 Hz" }
+  { d: 146, k: 3.65, low: "15 Hz", high: "15 Hz" }
+]
+
+// The televisions: a deck each, playing the bouncing ball, 2 m of picture high. A screen's source uploads at 30 Hz once
+// it shows at or below its 240 rows on the display and at 15 Hz at or below 120: at D 9 that is 30 Hz at 1280x900 and
+// every frame at 3840x2160, at D 24 15 and 30 Hz, and at D 50 15 Hz at both.
+let televisions = [
+  { name: "range-deck-9", d: 9, index: 4 }
+  { name: "range-deck-24", d: 24, index: 5 }
+  { name: "range-deck-50", d: 50, index: 6 }
+]
+let tvHalfHeight = 1
+let tvHalfWidth = 1.22
+let tvCentre = 1.6
+
+// The windows: doors into the garden (garden.puck) like the garden painting, each showing the garden through the
+// garden's arrival frame as the viewer moves, its canvas the painting's 2.24 by 2.84 m so a crossing keeps a traveller's
+// size. A nested view renders at 30 Hz at or below 120 display pixels high and at 15 Hz at or below 60: at D 27 that is
+// 30 Hz at 1280x900 and every frame at 3840x2160, at D 69 15 and 30 Hz, and at D 121 15 Hz at both. Each window is a
+// session of its own, so each takes its own tier.
+let windows = [
+  { name: "range-window-27", d: 27 }
+  { name: "range-window-69", d: 69 }
+  { name: "range-window-121", d: 121 }
+]
+let windowHalfWidth = 1.12
+let windowHalfHeight = 1.42
+let windowCentre = 1.52
+let windowRim = 0.02
+
+// Palette slots the range's prototypes share.
+let rangeBoard = 0
+let rangeInk = 1
+let rangePost = 2
+let rangeLine = 3
+let rangePalette = [
+  { color: "#F2EEE4", roughness: 0.6 }
+  { color: "#20242B", roughness: 0.6 }
+  { color: "#3A3F47", roughness: 0.7 }
+  { color: "#E8E2D0", roughness: 0.8 }
+]
+
+spawnPoints [
+  // The lane's head, facing down it (-Z).
+  { id: "range", position [laneX, 0, laneHead], yawDegrees: 0 }
+]
+
+commands [
+  {
+    name: "range.tiers"
+    help: "Shows each rated item's update tier (rates: 30 Hz amber, 15 Hz magenta, every frame untinted), flashes the tint on the frames each updates (flash), or restores the final image (off)."
+    parameters [
+      { name: "view", kind: Choice, values ["rates", "rate-flash", "off"], default: "rates" }
+    ]
+    lines [
+      "world.debug-view {view}"
+    ]
+  }
+]
+
+// The walkers' loop: no target to sense, so the producer roams. Each walks at three tenths of the kit's 5 m/s, a walk,
+// weaving gently, and once it is 2.5 m from its home it turns back towards it, so it loops about its home for as long
+// as the world runs.
+bodyMotionPrograms [
+  {
+    kind: Producer
+    name: "rangeLoop"
+    operations [ProduceSteeringIntent]
+    version: "puck.body.program.v1"
+  }
+]
+
+kits {
+  rows [
+    {
+      name: "range-walker"
+      bodyMotionProgram: "walk"
+      collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
+      motion {
+        facingSnap: false
+        groundStick: 2
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 1.2
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+          {
+            name: "fall"
+            bond: Free
+            hold: Gravity
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+        ]
+        moveFrame: World
+        shaping [
+          {
+            along {
+              engage: 40
+              release: 50
+            }
+            turnScale: 1
+          }
+        ]
+        speed {
+          value: 5
+        }
+        stepHeight: 0.3
+        turn {
+          falloff: 1
+          maxPitch: 1.2
+          pitchRate: 0
+          rate: 2.5
+        }
+      }
+      producers {
+        rangeLoop {
+          scalars {
+            forward: 0.3
+            softRadius: 2.5
+            weaveAmplitude: 0.6
+            inwardGain: 2
+            turnScale: 1
+            weaveFrequencyBase: 0.8
+            weaveFrequencyRange: 0
+            altitudeGain: 0
+            activityRateBase: 0
+            activityRateRange: 0
+            strafeWave: 0
+            turnWave: 0
+            upWave: 0
+            pitchWave: 0
+            rollTurn: 0
+            pressThreshold: 0
+            altitudeBase: 0
+            altitudeRange: 0
+          }
+          channels {}
+        }
+      }
+    }
+  ]
+}
+
+// Each television's deck plays the bouncing ball.
+machines: map(televisions, tv => {
+  name: tv.name
+  engine: "humble-gaming-deck"
+  configuration {
+    schema: "puck.humble-gaming-deck.configuration.v1"
+    content {
+      path: "cartridges/deck/moving-sprite.nes"
+    }
+  }
+}
+)
+
+// The televisions' pictures, each facing +Z, back up the lane.
+screens: map(televisions, tv => {
+  index: tv.index
+  origin [(laneX - 8), tvCentre, (laneHead - tv.d)]
+  right [1, 0, 0]
+  up [0, 1, 0]
+  halfWidth: tvHalfWidth
+  halfHeight: tvHalfHeight
+  halfDepth: 0.003
+  round: 0
+  source: machine(instance: tv.name, output: "video")
+  // An outdoor LED wall's peak, so the picture reads in full sun; a television's 150 nits shows black under the daylight
+  // exposure.
+  luminance: 10000nit
+  // Nobody plays them: the ball bounces by itself.
+  route {
+    engageable: false
+    engageRadius: 0
+  }
+}
+)
+
+prototypes {
+  // The lane: a pale stripe down its middle, from the spawn to past the last walker.
+  prototype "range-lane" {
+    document {
+      name: "range-lane"
+      schema: "puck.creation.v1"
+      palette: rangePalette
+      shape Box "stripe" {
+        material: rangeLine
+        position [0, 0.005, -85]
+        scale [0.06, 0.005, 85]
+      }
+    }
+  }
+
+  // A sign, its board growing with its distance so its numbers stay readable from the spawn.
+  for sign in signs {
+    prototype $"range-sign-{sign.d}" {
+      document {
+        name: $"range-sign-{sign.d}"
+        schema: "puck.creation.v1"
+        palette: rangePalette
+        shape Box "post" {
+          material: rangePost
+          position [0, (0.6 * sign.k), -0.06]
+          scale [0.05, (0.6 * sign.k), 0.05]
+        }
+        shape Box "board" {
+          material: rangeBoard
+          position [0, (1.8 * sign.k), 0]
+          scale [(1.2 * sign.k), (0.6 * sign.k), 0.02]
+        }
+        textRuns [
+          { text: $"{sign.d} m", position [0, (2.0 * sign.k), 0.02], rotation [0, 0, 0, 1], emHeight: (0.38 * sign.k), depth: 0.01, mode: "emboss", material: rangeInk, align: "center" }
+          { text: $"1280x900 {sign.low}", position [0, (1.7 * sign.k), 0.02], rotation [0, 0, 0, 1], emHeight: (0.16 * sign.k), depth: 0.006, mode: "emboss", material: rangeInk, align: "center" }
+          { text: $"3840x2160 {sign.high}", position [0, (1.45 * sign.k), 0.02], rotation [0, 0, 0, 1], emHeight: (0.16 * sign.k), depth: 0.006, mode: "emboss", material: rangeInk, align: "center" }
+        ]
+      }
+    }
+  }
+
+  // A television's case behind its picture, on a post.
+  prototype "range-television" {
+    document {
+      name: "range-television"
+      schema: "puck.creation.v1"
+      palette: rangePalette
+      shape Box "case" {
+        material: rangeInk
+        position [0, tvCentre, -0.06]
+        scale [(tvHalfWidth + 0.08), (tvHalfHeight + 0.08), 0.05]
+      }
+      shape Box "post" {
+        material: rangePost
+        position [0, ((tvCentre - tvHalfHeight) / 2), -0.06]
+        scale [0.08, ((tvCentre - tvHalfHeight) / 2), 0.08]
+      }
+    }
+  }
+
+  // A window: face 0, the rim, names the glass, which fills it a centimetre short of its faces, its centre carved away
+  // as a painting's is (paintings.puck); a dark frame stands behind it.
+  prototype "range-window" {
+    document {
+      behavior {
+        faces [{ name: "glass", shapeId: 0 }]
+      }
+      name: "range-window"
+      schema: "puck.creation.v1"
+      palette: rangePalette
+      shape Box "rim" {
+        material: rangeInk
+        position [0, windowCentre, 0]
+        scale [windowHalfWidth, windowHalfHeight, 0.04]
+      }
+      shape Box "opening" {
+        blend: Subtraction
+        material: rangeInk
+        position [0, windowCentre, 0]
+        scale [(windowHalfWidth - windowRim), (windowHalfHeight - windowRim), 0.3]
+      }
+      shape Box "frame" {
+        material: rangePost
+        position [0, windowCentre, -0.1]
+        scale [(windowHalfWidth + 0.1), (windowHalfHeight + 0.1), 0.04]
+      }
+    }
+  }
+}
+
+placements {
+  placement "range-lane" {
+    prototype: "range-lane"
+    position [laneX, 0, laneHead]
+    yawDegrees: 180
+  }
+
+  for sign in signs {
+    placement $"range-sign-{sign.d}" {
+      prototype: $"range-sign-{sign.d}"
+      position [(laneX + (4 + (1.2 * sign.k))), 0, (laneHead - sign.d)]
+      yawDegrees: 180
+    }
+  }
+
+  for tv in televisions {
+    placement $"{tv.name}" {
+      prototype: "range-television"
+      position [(laneX - 8), 0, (laneHead - tv.d)]
+      yawDegrees: 180
+    }
+  }
+
+  // Each window is a door into the garden, as the garden painting is: a crossing arrives out of the garden's arrival
+  // frame, and its glass shows the garden from there.
+  for window in windows {
+    placement $"{window.name}" {
+      prototype: "range-window"
+      position [(laneX - 12), 0, (laneHead - window.d)]
+      yawDegrees: 180
+      faceSources [
+        {
+          face: "glass"
+          filter: linear
+          portal {
+            arrival: "mapped"
+            counterpart: "arrival/glass"
+            destination: "garden"
+            travel: "body"
+          }
+          source {
+            $type: "session"
+            destination: "garden"
+            fallback: "#FF9A4D"
+            projection: window
+          }
+        }
+      ]
+    }
+  }
+
+  // The walkers: a Moth each, looping about its home. The debug world imports this file last, so they take the
+  // population's lowest free slots, below the chess pieces.
+  for walker in walkers {
+    placement $"{walker.name}" {
+      prototype: "moth"
+      position [laneX, 0, (laneHead - walker.d)]
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "range-walker"
+        look: "moth"
+        source: producer(name: "rangeLoop")
+      }
+    }
+  }
+}
+
+// F7 switches every world.rates lever, the same scene with and without them; F8 shows the tier view and puts the final
+// image back. The pad's Debug page (the right trigger, or X) carries the switch on View.
+bindingOverlays [
+  {
+    id: "range-keys"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers: padModifiers
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              { command: "world.rates", id: "ratesToggle", label: "Rates A/B", text: "toggle", sources ["keyboard.f7"] }
+              { command: "world.debug-view", id: "ratesView", label: "Rate tiers", text: "toggle rates", sources ["keyboard.f8"] }
+            ]
+          }
+        }
+        {
+          chord ["rt"]
+          group: "play"
+          page {
+            id: "pad-rt"
+            inherits: "base"
+            label: "Debug"
+            entries [
+              { command: "world.rates", id: "dbgRates", label: "Rates A/B", text: "toggle", sources ["gamepad.back"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

@@ -30,6 +30,7 @@ import "wonderland"
 import "places"
 import "noclip"
 import "size"
+import "range"
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA
@@ -125,14 +126,14 @@ bodies {
 }
 
 placements {
-  // Eight derived face screens: the painting wing's six canvases (paintings.puck) and the Wonderland doors' two
-  // (wonderland.puck).
+  // Eleven derived face screens: the painting wing's six canvases (paintings.puck), the Wonderland doors' two
+  // (wonderland.puck) and the rate range's three windows (range.puck).
   policy {
     authoringHeadroomPlacements: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    derivedFaceScreens: 8
+    derivedFaceScreens: 11
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
