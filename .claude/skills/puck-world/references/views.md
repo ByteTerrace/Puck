@@ -23,8 +23,8 @@ Primary code:
 - `Puck.World.Client/WorldSeatViewState.cs` — the one live state per occupied
   seat, including yaw/pitch, the cached compiled rig, and the boom follower.
 - `Puck.World.Client/WorldCameraClearance.cs` and `WorldChaseBody.cs` — where the
-  chase eye stands: out of the static field and out of the framed body's kit
-  collider (see "Chase eye clearance" below).
+  chase eye stands: a per-seat spring arm out of the static field and out of the
+  framed body's kit collider and drawn shapes (see "Chase eye clearance" below).
 - `Puck.World/WorldSeatViewInput.cs` — the pointer adapter that turns the seat camera; `WorldDragMotion.cs` decides what each pointer event's motion does to a drag (counted from the press, cut at the release).
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
@@ -191,33 +191,59 @@ For each fixed tick:
 ## Chase eye clearance
 
 After the boom ease, a seat framing its own body through `views.seatRig` places
-the eye with `WorldCameraClearance.Resolve`, in the world the seat is presented
-in only (a seat presented elsewhere keeps the eased eye). The eye is a sphere of
-`EyeRadius` (0.3 m) kept out of two things: the presenter's static query field
-(`WorldClient.StaticField`, the solid placements, screens and adjacency, never a
-body), and the framed body itself (`WorldChaseBody`: the perceived body's kit
-`collider`, compiled once per delivered definition, posed at the drawn pose and
-scaled by the body's live scale). The target sits inside the body, so the body's
-keep-out is how far along the boom the eye must travel before it leaves the
-inflated collider.
+the eye on its own spring arm (`WorldCameraClearance`, owned by the seat's
+`WorldSeatViewState`, `Clear`), in the world the seat is presented in only; a
+seat presented elsewhere or framing through `views.cameraRig` keeps the eased eye
+and drops the arm's state. The eye is a sphere of `EyeRadius` (0.3 m) kept out
+of two things: the presenter's static query field (`WorldClient.StaticField`,
+the solid placements, screens and adjacency, never a body), and the framed body
+itself (`WorldChaseBody`): the perceived body's kit `collider`, compiled once per
+delivered definition, and the bounding sphere of every shape its creation draws
+that adds material (`WorldChaseBody.DrawnVolumes`, rest pose, a shape that only
+cuts or clips adds none), both posed at the drawn pose and scaled by the body's
+live scale. The drawn shapes count because her armour, helmet and pack reach
+past the collider, and an eye inside one starts its view inside her. The target
+sits inside the body, so the body's keep-out is how far along the boom the eye
+must travel before it leaves the inflated volumes.
+
+Each frame answers where the eye belongs:
 
 1. The boom sweeps out from the target; geometry shortens it along its own
    direction, so long as the shortened eye still clears the body.
 2. When no length of the boom clears both (a body backed into a wall or a
    corner, its boom pointing in), the boom rises toward the seat's up on the
-   same heading: a coarse scan up to `LiftCeiling` (1.4 rad), then bisection,
-   finds the lowest rise where it clears. Against a wall behind, rising gains no
-   room until the boom passes over the body's head, so the eye moves over the
-   head in one step rather than sliding there.
-3. When no rise clears both, the eye stands just outside the body on whichever
-   tried direction leaves it farthest from geometry.
+   same heading: a coarse scan up to `LiftCeiling` (1.1 rad, short of an
+   overhead view that turns her upside down on screen), then bisection, finds
+   the lowest rise where it clears.
+3. When no rise clears both (her back against a wall), the answer is up and
+   over at the ceiling, just outside the body; the eye may then stand in or
+   beyond the wall, so the camera's near plane (`WorldCameraClearance.Near`,
+   composed into the snapshot's `Near` by `WorldFramePresenter`) begins the
+   image at the wall's face on her side, a cutaway that stops short of every
+   part of her in view (`WorldChaseBody.NearestDepth`, her volumes' nearest
+   depth along the view, not only on the sightline). The same cutaway covers
+   the frames an eased rise lags behind an obstruction.
+
+The arm does not jump to that answer. It holds a fraction of the authored boom
+and a rise, never a length, and eases both toward each frame's answer on the
+chase rig's own `dynamics` row (the `camera-boom` row in the debug world; no
+dynamics op lands on the answer at once). A pull-in and a rise are therefore
+smoothed, and once the obstruction clears the arm eases back out to the authored
+boom rather than keeping the pulled-in length. Two limits hold on the eased
+value every frame: the eye's centre never comes nearer than `SurfaceSkin`
+(0.1 m) to geometry along the boom, so a sudden obstruction cuts the eye in to
+there and the ease carries it the rest of the way, and the eye never comes
+within its radius of the body; the body wins where the two conflict.
 
 The heading never changes: the frame the seat steers in stays the frame it sees.
 A target inside geometry (a portal frame around the pivot) skips a 1.1 m shell
 before sweeping and keeps the authored boom where that shell reaches past it.
-The eye radius, the ceiling and the scan are engine constants; the body volume
-is the kit's authored collider. `WorldCameraClearanceLawTests` holds these on
-the CPU.
+The eye radius, the ceiling, the skin and the scan are engine constants; the
+body volume is the kit's authored collider and the creation's own shapes; the
+ease is the rig's authored dynamics. `world.view.camera` echoes the arm's latest
+frame (`eye=`, `target=`, `boom=<placed>/<authored>`, `rise=` in degrees,
+`near=` in metres, `clearance=open|shortened|risen|crowded`). `WorldCameraClearanceLawTests` holds
+the keep-out and the ease back out on the CPU.
    A frame between two ticks presents the last tick's look step at the
    fraction the body is drawn at (`WorldSeatViewState.PresentedLook`, fed by
    `BeginTick`/`CompleteTick` around step 1), so a steered body and the
@@ -432,8 +458,9 @@ Free Cam do not alter the logical movement basis.
 ## Verbs
 
 - `world.view.camera [player]` — reads the routed structure, portable
-  preference, held free-look state, motion-control gate/sample, and the exact
-  live yaw/pitch state used by movement/rendering.
+  preference, held free-look state, motion-control gate/sample, the exact
+  live yaw/pitch state used by movement/rendering, and where the chase eye's
+  arm last placed the eye (see "Chase eye clearance").
 - `world.view.state` — reads active layout, selection reason, transition, and
   slot occupants; an instance slot prints as `instance:<name>`, or
   `instance:<name>:missing` when the runtime has no such instance.

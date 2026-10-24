@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance.Queries;
 
 namespace Puck.World.Client;
 
@@ -12,6 +13,7 @@ namespace Puck.World.Client;
 public sealed class WorldSeatViewState {
     private readonly Lock m_gate = new();
     private readonly SdfCameraBoomFollower m_boom = new();
+    private readonly WorldCameraClearance m_clearance = new();
     private Quaternion m_upAlignment = Quaternion.Identity;
     private Vector3 m_alignedUp = Vector3.UnitY;
     private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
@@ -206,6 +208,48 @@ public sealed class WorldSeatViewState {
             } else if (m_boom.Seeded) {
                 m_boom.Reseed();
             }
+        }
+    }
+    /// <summary>Places the chase eye clear of geometry and of the framed body on this seat's spring arm
+    /// (<see cref="WorldCameraClearance.Resolve"/>), or, when <paramref name="enabled"/> is <see langword="false"/>,
+    /// drops the arm's eased state and passes the eye through.</summary>
+    /// <param name="enabled">Whether the seat frames its own body through its chase rig in the world it is presented
+    /// in this frame.</param>
+    /// <param name="field">The static geometry the eye keeps out of, or <see langword="null"/> for none.</param>
+    /// <param name="eye">The eye the eased boom resolved, in world units; placed in place.</param>
+    /// <param name="target">The point the eye looks at, in world units.</param>
+    /// <param name="subject">The body the eye frames and keeps out of.</param>
+    /// <param name="up">The seat's up axis.</param>
+    /// <param name="dynamics">The chase rig's boom dynamics, which the arm eases on.</param>
+    /// <param name="deltaSeconds">The frame step, in seconds.</param>
+    /// <returns>The near-plane distance, in world units, the eye's image begins at
+    /// (<see cref="WorldCameraClearance.Near"/>); zero when <paramref name="enabled"/> is <see langword="false"/>.</returns>
+    public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds) {
+        lock (m_gate) {
+            if (!enabled) {
+                m_clearance.Reset();
+
+                return 0f;
+            }
+
+            eye = m_clearance.Resolve(
+                deltaSeconds: deltaSeconds,
+                desiredEye: eye,
+                dynamics: in dynamics,
+                field: field,
+                subject: in subject,
+                target: target,
+                up: up
+            );
+
+            return m_clearance.Near;
+        }
+    }
+    /// <summary>Returns the chase eye's latest placement (<see cref="WorldCameraClearance.Describe"/>).</summary>
+    /// <returns>The read-back text.</returns>
+    public string DescribeClearance() {
+        lock (m_gate) {
+            return m_clearance.Describe();
         }
     }
     /// <summary>The total orbit pitch — the authored rig pitch plus the live delta — in radians.</summary>
