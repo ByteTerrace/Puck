@@ -114,6 +114,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool m_readsHistory;
 
     private readonly SdfWorldPickReadback? m_pick;
+    private readonly SdfWorldPickReadback? m_diagnosticPick;
 
     public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
@@ -167,6 +168,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (string.Equals(a: m_part, b: SdfWorldPackage.Parts.Views, comparisonType: StringComparison.Ordinal)) {
                 m_pick = new SdfWorldPickReadback(picker: owner.PickerOf(instance: context.Instance), context: context);
+                m_diagnosticPick = new SdfWorldPickReadback(picker: owner.DiagnosticPickerOf(instance: context.Instance), context: context);
             }
 
             return;
@@ -328,6 +330,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_disposed = true;
         m_pick?.Dispose();
+        m_diagnosticPick?.Dispose();
         if (m_bakeSlots.Length > 0) { m_owner.ReadBakes(reader: this, reads: false); }
         foreach (var slot in m_bakeSlots) {
             slot.Batch?.Bake?.Abandon(batch: slot.Batch);
@@ -501,6 +504,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
                 cut: frame.Views[view].CutRevision);
+            m_diagnosticPick?.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
+                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
+                sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
+                cut: frame.Views[view].CutRevision);
         }
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
@@ -545,7 +552,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
         if (m_pick is not null) {
-            return m_pick.Take(index: index, readback: out readback, slot: slot);
+            return m_pick.Take(index: 0, readback: out readback, slot: slot) ||
+                m_diagnosticPick!.Take(index: 0, readback: out readback, slot: slot);
         }
         if ((m_bakeSlots.Length > 0) && (index == 0) && m_bakeSlots[slot].Record) {
             var target = m_bakeSlots[slot];
@@ -564,7 +572,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         return false;
     }
 
-    public ulong ReadbackBytes => ((m_pick?.ReadbackBytes ?? 0UL) + (ulong)m_bakeSlots.Sum(selector: static slot => (long)(slot.Buffer?.SizeBytes ?? 0UL)));
+    public ulong ReadbackBytes => ((m_pick?.ReadbackBytes ?? 0UL) + (m_diagnosticPick?.ReadbackBytes ?? 0UL) + (ulong)m_bakeSlots.Sum(selector: static slot => (long)(slot.Buffer?.SizeBytes ?? 0UL)));
 
     public void Submitted(int slot, IGpuSubmissionFence fence) {
         if ((m_bakeSlots.Length > 0) && m_bakeSlots[slot].Submit) {
@@ -572,6 +580,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_bakeSlots[slot].Fence = fence;
         }
         m_pick?.Submitted(fence: fence, slot: slot);
+        m_diagnosticPick?.Submitted(fence: fence, slot: slot);
     }
 
     private int InputIndexOf(string member) {

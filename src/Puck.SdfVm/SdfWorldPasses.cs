@@ -163,6 +163,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <param name="instance">The view instance name.</param>
     /// <returns>The shared picker used by hover and editor clients.</returns>
     public SdfWorldPicker PickerOf(string instance) => Refresh(instance: instance).Picker;
+    /// <summary>A dedicated asynchronous witness sampler; never replaces the pointer or console pick.</summary>
+    /// <param name="instance">The rendered view instance.</param>
+    /// <returns>The view's diagnostic sampler.</returns>
+    public SdfWorldPicker DiagnosticPickerOf(string instance) => Refresh(instance: instance).DiagnosticPicker;
     /// <summary>Finds the picker of an instance whose SDF package the runtime has requested.</summary>
     /// <param name="instance">The rendered instance name.</param>
     /// <returns>The picker, or null when no SDF package is registered for the instance.</returns>
@@ -198,6 +202,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         return (
             !entry.Picker.Pending &&
+            !entry.DiagnosticPicker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
@@ -283,7 +288,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Binding: entry.Bindings,
             Ceiling: snapshot.RenderScale,
             Cut: snapshot.CutRevision,
-            Debug: debug,
+            Debug: (DebugViewModes.PreservesScene(mode: debug) ? 0 : debug),
             Enabled: (temporal || (entry.Convergence is { IsActive: true })),
             Height: height,
             Temporal: temporal,
@@ -344,6 +349,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public void OnGraphReleased(string instance) {
         if (m_entries.TryGetValue(key: instance, value: out var entry)) {
             entry.Picker.Clear();
+            entry.DiagnosticPicker.Clear();
             entry.Temporal.Reset();
             entry.TemporalFrame = -1;
             entry.RenderedBindings = -1;
@@ -354,6 +360,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public void OnDeviceLost() {
         foreach (var entry in m_entries.Values) {
             entry.Picker.Clear();
+            entry.DiagnosticPicker.Clear();
             entry.Temporal.Reset();
         }
         foreach (var residency in m_residencies.Keys) {
@@ -548,6 +555,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         entry.View = view;
         entry.Picker.Follow(view: view);
+        entry.DiagnosticPicker.Follow(view: view);
 
         return entry;
     }
@@ -574,6 +582,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // on the frame thread and read by a pass's build on the thread pool.
     private sealed partial class Entry : IShaderPipelineStorageCounter, IShaderPipelineRenderExtent {
         public SdfWorldPicker Picker { get; } = new();
+        public SdfWorldPicker DiagnosticPicker { get; } = new();
 
         private readonly Lock m_gate = new();
 

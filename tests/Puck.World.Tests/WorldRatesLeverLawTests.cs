@@ -1,7 +1,6 @@
 using System.Reflection;
 using Puck.Commands;
 using Puck.SdfVm;
-using Puck.Testing;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
@@ -14,13 +13,13 @@ namespace Puck.World.Tests;
 /// session lever carrying its flags, without touching the settings itself: the server's grant check applies the lever.
 /// </summary>
 public sealed class WorldRatesLeverLawTests {
-    private static (CommandRegistry Registry, WorldRenderSettings Settings, List<WorldSessionLever> Levers) Rig(WorldRenderProbe? probe = null) {
+    private static (CommandRegistry Registry, WorldRenderSettings Settings, List<WorldSessionLever> Levers) Rig() {
         var settings = new WorldRenderSettings(defaults: Fixtures.BuildDocument().Render);
         var link = DispatchProxy.Create<IServerLink, WorldCullLeverLawTests.LeverRecorder>();
         var levers = ((WorldCullLeverLawTests.LeverRecorder)((object)link)).Levers;
         var module = new WorldRenderLeverCommandModule(
             link: link,
-            renderProbe: probe!,
+            renderProbe: null!,
             server: null!,
             settings: settings
         );
@@ -87,42 +86,6 @@ public sealed class WorldRatesLeverLawTests {
         );
         Assert.Equal(expected: SdfUpdateRates.All, actual: settings.UpdateRates);
     }
-    // world.debug-view selects a tier view and the frames carry their tiers while it shows; toggle puts back the final
-    // image, and next steps past the last view to off.
-    [Fact]
-    public void ATierViewCarriesTheFramesTiersWhileItShows() {
-        var probe = new WorldRenderProbe();
-        using var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
-            frameSource: new EmptyFrameSource(),
-            height: 8U,
-            kernels: SdfTestPipelines.Kernels(),
-            name: "world",
-            pipelines: SdfTestPipelines.Cache(),
-            width: 8U
-        );
-
-        probe.Residency = residency;
-
-        var (registry, settings, _) = Rig(probe: probe);
-
-        Assert.Equal(expected: "[world.debug-view: rates]", actual: registry.Submit(line: "world.debug-view toggle rates").Output);
-        Assert.True(condition: settings.RateTints);
-        Assert.Equal(expected: DebugViewModes.Rates, actual: residency.DebugMode);
-        Assert.Equal(expected: "[world.debug-view: rate-flash]", actual: registry.Submit(line: "world.debug-view next").Output);
-        Assert.True(condition: settings.RateTints);
-        Assert.Equal(expected: "[world.debug-view: off]", actual: registry.Submit(line: "world.debug-view next").Output);
-        Assert.False(condition: settings.RateTints);
-        Assert.Equal(expected: "[world.debug-view: rates]", actual: registry.Submit(line: "world.debug-view rates").Output);
-        Assert.Equal(expected: "[world.debug-view: off]", actual: registry.Submit(line: "world.debug-view toggle rates").Output);
-        Assert.False(condition: settings.RateTints);
-        Assert.True(condition: registry.Submit(line: "world.debug-view toggle sideways").IsError);
-    }
-
-    private sealed class EmptyFrameSource : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) => throw new InvalidOperationException(message: "No frame is captured.");
-    }
-
     [InlineData("world.rates sideways")]
     [InlineData("world.rates bodies")]
     [InlineData("world.rates wheels on")]

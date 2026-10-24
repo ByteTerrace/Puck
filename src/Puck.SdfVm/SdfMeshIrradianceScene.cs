@@ -14,7 +14,7 @@ namespace Puck.SdfVm;
 /// reaches a distance unblocked. Presentation only: the tracing is single-precision and nothing it answers reaches
 /// simulation state.
 /// </summary>
-public sealed class SdfMeshIrradianceScene {
+public sealed partial class SdfMeshIrradianceScene {
     /// <summary>The most triangles of geometry no draw of a scene uses that the scene keeps for a later scene built from
     /// it, the most recently drawn first: a responding placement toggled back takes its earlier geometry again.</summary>
     public const long RetainedTriangles = 8_000_000L;
@@ -203,11 +203,23 @@ public sealed class SdfMeshIrradianceScene {
     /// <param name="normal">The hit triangle's geometric unit normal in world space, wound as its mesh winds it.</param>
     /// <param name="material">The hit triangle's program material.</param>
     /// <returns><see langword="true"/> when the ray meets a triangle.</returns>
-    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material) {
+    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material) =>
+        Intersect(origin, direction, maximum, out distance, out normal, out material, out _);
+    /// <summary>Finds the nearest retained triangle and the uncertainty of its own contour lattice.</summary>
+    /// <param name="origin">World-space ray origin.</param>
+    /// <param name="direction">Unit ray direction.</param>
+    /// <param name="maximum">Search distance in metres.</param>
+    /// <param name="distance">Hit distance in metres.</param>
+    /// <param name="normal">Geometric surface normal.</param>
+    /// <param name="material">Program material.</param>
+    /// <param name="bakeHalfDiagonal">Half of the hit draw's world-space contour cell diagonal; zero for authored triangles.</param>
+    /// <returns>Whether a retained triangle was hit.</returns>
+    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal) {
         var inverse = Reciprocal(direction: direction);
         var nearest = new DrawLeaves(any: false, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin);
 
         distance = maximum;
+        bakeHalfDiagonal = 0;
         if (Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
             Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0);
         }
@@ -221,6 +233,7 @@ public sealed class SdfMeshIrradianceScene {
 
         normal = hit.NormalOf(triangle: nearest.Triangle);
         material = hit.MaterialOf(triangle: nearest.Triangle);
+        bakeHalfDiagonal = hit.BakeHalfDiagonal;
         return true;
     }
     /// <summary>Returns whether a ray reaches a distance without meeting a triangle.</summary>
@@ -412,6 +425,7 @@ public sealed class SdfMeshIrradianceScene {
         public required bool Identity { get; init; }
         public required int Material { get; init; }
         public required ReadOnlyMemory<uint> TriangleMaterials { get; init; }
+        public float BakeHalfDiagonal { get; init; }
 
         // A draw whose transform has no inverse (a zero scale) draws nothing a ray can meet.
         public static bool TryCreate(in SdfMeshDraw draw, Geometry geometry, out Instance instance) {
@@ -432,6 +446,7 @@ public sealed class SdfMeshIrradianceScene {
                 ObjectToWorld = matrix,
                 TriangleMaterials = draw.Mesh.TriangleMaterials,
                 WorldToObject = inverse,
+                BakeHalfDiagonal = 0.5f * Vector3.TransformNormal(draw.Mesh.BakeCell, matrix).Length(),
             };
             return true;
         }

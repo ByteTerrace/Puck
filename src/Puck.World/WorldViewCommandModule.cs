@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
 /// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
-internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldStampPool stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null) : ICommandModule {
+internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldStampPool stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null, WorldDiagnostics? diagnostics = null, WorldSeatViewports? viewports = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -375,7 +375,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.pick",
-            description: "Requests or reads a presentation-only GPU pixel pick: world.view.pick <instance> [<x> <y>] — normalized coordinates in [0,1) request one visibility pixel; omitting them echoes pending or the completed geometry kind, source ordinal, material, host placement or body, and the winning shape's transform slot. The asynchronous readback belongs to the captured frame's identity table and never sends simulation input.",
+            description: "Requests or reads a presentation-only GPU pixel pick: world.view.pick <view-or-instance> [<x> <y>] — normalized coordinates in [0,1) request one visibility pixel; omitting them echoes pending or the completed geometry kind, source ordinal, material, host placement or body, and the winning shape's transform slot. world.view.pick <view-or-instance> finding <id> resolves primary to the first seat's rendered instance (world before presentation) and returns a retained diagnostic finding even while its view is off; run world.debug-view report first to populate findings. The record carries its snapshot, provenance, predicate, measurements and budget. The asynchronous readback belongs to the captured frame's identity table and never sends simulation input.",
             handler: (context, args) => Pick(args: args),
             routing: CommandRouting.Immediate
         );
