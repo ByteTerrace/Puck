@@ -4,14 +4,14 @@ namespace Puck.Cli;
 
 /// <summary>Runs one command while holding a shared machine-work lease.</summary>
 public static class LeaseCommand {
-    /// <summary>Creates the gpu and heavy lease commands.</summary>
+    /// <summary>Creates the build, gpu and heavy lease commands.</summary>
     /// <param name="clock">The CLI clock.</param>
     /// <param name="leaseRoot">An explicit lease directory, or null for the main checkout's shared directory.</param>
     /// <returns>The lease command.</returns>
     public static Command Create(TimeProvider clock, string? leaseRoot = null) {
-        var root = new Command(description: "Run a command under an exclusive GPU or heavy-work lease.", name: "lease");
+        var root = new Command(description: "Run a command under an exclusive World-build, GPU or heavy-work lease.", name: "lease");
 
-        foreach (var name in new[] { "gpu", "heavy" }) {
+        foreach (var name in new[] { "build", "gpu", "heavy" }) {
             var holder = new Option<string>(name: "--holder") { Description = "Lane name recorded with the holder process and acquisition time.", Required = true };
             var wait = new Option<int>(name: "--wait") { Description = "Seconds to wait for the lease; zero refuses immediately (default)." };
             var arguments = CliOptions.Forwarded(description: "Executable and arguments after --; no shell expansion is performed.", name: "command");

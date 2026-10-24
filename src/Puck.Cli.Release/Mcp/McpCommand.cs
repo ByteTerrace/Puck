@@ -12,7 +12,9 @@ public static class McpCommand {
     // use: an unchanged source state reuses its build, a changed one is built once (into the store, never over the
     // checkout's bin/Release, which a running World may hold open), and a concurrent build of one state is shared. The
     // build blocks, so it runs on its own thread; a cancelled start abandons it and releases whatever it finishes with.
-    private static async Task<OperatorWorldBuild> ResolveBuildAsync(string checkout, TimeSpan budget, CancellationToken cancellationToken) {
+    // A build that is needed takes the machine's build lease first, so lanes with different source states build one at
+    // a time; a Vulkan start builds with SPIR-V, which keys it apart from the Direct3D 12 build.
+    private static async Task<OperatorWorldBuild> ResolveBuildAsync(string checkout, bool spirv, TimeSpan budget, CancellationToken cancellationToken) {
         var logs = RunDirectory.CreatePath(prefix: "puck-mcp-build-");
         var build = Task.Run(function: () => {
             var resolved = WorldArtifactBuild.TryResolve(
@@ -20,6 +22,7 @@ public static class McpCommand {
                 error: out var error,
                 logDirectory: logs,
                 repositoryRoot: checkout,
+                spirv: spirv,
                 timeout: budget,
                 verb: "mcp"
             );

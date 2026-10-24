@@ -49,7 +49,10 @@ tool resolves the World build of the checkout's current sources from the same
 content-keyed store `puck test` and `puck canary` use, building it first when
 no run has built that source state (an unchanged tree reuses its build), so it
 never boots a binary older than the sources and documents you edited; a
-failed build refuses the start with its first errors. Its build is not the
+failed build refuses the start with its first errors. Builds of different source
+states queue on the machine's `build` lease, one at a time, and `backend: vulkan`
+builds with SPIR-V (a separate build in the store) and passes `--backend vulkan`,
+which the default Direct3D 12 build refuses. Its build is not the
 worktree's `bin/Release`, so no manual build is needed first. Never hand-write that boot
 line: the tool passes `--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)),
 a state directory of its own and `--control`, takes and holds the GPU lease

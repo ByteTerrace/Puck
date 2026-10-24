@@ -192,9 +192,15 @@ public static class AddonAbi {
         public const int MachineHash = 8;
         /// <summary>Control/screen: A=0 capture, 1 restore, 2 release; B=C=0. One bounded checkpoint per mount.</summary>
         public const int MachineSnapshot = 9;
-        /// <summary>Drive/body: A screen index or -1 to dissolve; B=C=0. Requires requested Control on affected screens.</summary>
+        /// <summary>Drive/body: A screen index or -1 to dissolve; B=C=0. The manifest must request Control on each
+        /// affected screen, which only narrows what the guest may touch and confers nothing. The authority is the
+        /// addon's Drive grant over the body, the engage policy (the screen is engageable, in reach and has a machine
+        /// to control), and the engage check (Control) over each target that the compose or dissolve makes.</summary>
         public const int Engage = 10;
-        /// <summary>Control/screen: A/B point to a UTF-8 {operation,payload} envelope; C zero. Also requires named-machine Control.</summary>
+        /// <summary>Control/screen: A/B point to a UTF-8 {operation,payload} envelope; C zero. The manifest must
+        /// request Control on the named machine instance, which only narrows what the guest may touch. The authority is
+        /// the addon's Control grant over the screen handle and the Control grant over the machine instance that
+        /// the server checks when it applies the operation.</summary>
         public const int MachineOperation = 11;
         /// <summary>Observe/screen: all payload lanes zero. Returns runtime status and completed steps.</summary>
         public const int MachineStatus = 12;
