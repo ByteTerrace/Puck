@@ -39,8 +39,6 @@ by the stage rather than escaping from a background thread.
 | `--parallelism <n>` | Cases run at once inside a corpus stage; default one per logical processor. |
 | `--roms <directory>` | A reference-ROM root instead of the cached `game-boy-test-roms` corpus. |
 | `--sst <directory>` | A SingleStepTests/sm83 root instead of the cached `sm83-sst` corpus. |
-| `--link-rom <file>` | A link-capable commercial cartridge for `link-game-replay`; the stage skips without it. |
-| `--trade-rom <file>` | The cross-generation trade cartridge for the scripted trade stages; they skip without it. |
 | `--artifacts <directory>` | Override `artifacts/gb-post`. |
 | `--require-assets` | A suite with no discovered case fails infra (exit 2) instead of skipping—catches a corpus missing entirely, not just one absent ROM. |
 | `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
@@ -59,8 +57,8 @@ reporter reads). A failing screenshot case also leaves
 `<stage>/<path>[model].actual.png` and `.diff.png` beside them, for the first
 twenty failures of a stage.
 
-The self-contained Tier-A and Tier-C stages need no corpus. The
-commercial-cartridge stages run only when their cartridge is named.
+The self-contained Tier-A and Tier-C stages need no corpus. No stage reads a
+commercial cartridge.
 
 The `embedding` Tier-A stage exercises default factory composition and the
 public synchronous core: input, native pixels, stereo audio, nonpositive
@@ -87,7 +85,7 @@ that.
 |---|---|---|
 | A | determinism; snapshot and battery-save round trips; victory metadata; fork determinism; AGB costume; bundled-firmware startup and restoration; live firmware-reconfiguration boundary; authored-boot-ROM handoff; trio lockstep; camera capture; queued-host substrate contract; live cable-linked queued hosts and their coupled rewind; throughput; zero-alloc-per-frame | none |
 | B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the corpus ROM suites—every suite under the reference-ROM root, see [Corpus suites](#corpus-suites); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
-| C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; commercial link-game replay; cross-gen trade-cart save acceptance and complete trade | synthetic stages need none; commercial stages need `--link-rom` or `--trade-rom` |
+| C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; infrared exchange; light gun | none |
 
 Missing optional assets produce a skip rather than a failure (or, under
 `--require-assets`, an infra failure) rather than a check failure. External
@@ -196,7 +194,7 @@ and resolving. Individual roots remain configurable with `--roms` and
 `--sst`. The stages resolve the cache without additional configuration. Bumping
 a version in the manifest is what changes which bytes every machine, including
 a build agent, measures against. Commercial cartridges are never in the
-manifest; they are named per run with `--link-rom` and `--trade-rom`.
+manifest and no stage reads one.
 
 ## The authored boot ROM
 
@@ -340,10 +338,6 @@ hand-verified against the BESS spec.
   framebuffer capture for a selected ROM. Without `--boot` the machine starts at
   the seeded post-boot state; `--boot puck` runs the forge's authored boot ROM
   for the model from reset, so an early capture shows the boot itself.
-- `--link-explore <rom>` records a two-machine link trace. `--model`,
-  `--frames`, `--dump-every`, and `--out` refine the run.
-- `--trade-explore`, `--trade-export`, and the related `--trade-*` arguments inspect
-  the cross-gen-cart trade harness. These are diagnostics, not battery stages.
 - `--dump-snapshot [--frames N] [--rom <path>] [--out <file>]` boots the
   synthetic ROM (or `--rom`), runs `N` frames (default 300), and writes the raw
   snapshot image plus a `<file>.sections.txt` sidecar (name/offset/length per

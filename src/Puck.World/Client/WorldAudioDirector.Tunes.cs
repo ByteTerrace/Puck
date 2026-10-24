@@ -3,7 +3,7 @@ using Puck.World.Audio;
 
 namespace Puck.World.Client;
 
-internal sealed partial class WorldAudioDirector {
+public sealed partial class WorldAudioDirector {
     // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by WorldDefinitionValidator —
     // this load is expected to succeed by construction, the same discipline WorldServer's music/judge loads take.
     private static TuneHost CreateTuneHost(string? documentDirectory, WorldTune tune, AudioMixer mixer) {

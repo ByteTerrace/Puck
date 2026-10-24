@@ -109,7 +109,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
-| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU or heavy-work resource. |
+| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -321,7 +321,8 @@ report beside its TRX report (`build/CodeCoverage.config` selects the `Puck.*`
 assemblies), kept in its compact form (`.coverage.tsv`: per file, the lines hit and missed). `coverage` merges every report, Cobertura or compact, under `--results` (default
 `artifacts/test-results`), writes the verdict and every uncovered line range to
 `coverage.txt` there, and exits 1 unless every measured `src/` line is covered and
-every `src/` project in `Puck.slnx` was loaded, leaving out the prefixes
+every `src/` project in `Puck.slnx` was loaded, leaving out the verification harnesses (the `Puck.*.Post` emulator
+batteries, which the suites run to reach the cores they check) and the prefixes
 `build/CoverageHardwareOnly.txt` lists as reachable only on real hardware (a GPU, or a real mouse and foreground window). `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
@@ -1615,6 +1616,16 @@ checkout's current sources. A second run over an unchanged checkout builds
 nothing. `puck test --world-artifact <dll>` and `puck canary --world-artifact
 <dll>` bypass the store and launch the named entry assembly as given, which is
 how `puck qualify` runs canaries on a published package.
+
+A build the store lacks takes the machine's `build` lease first
+(`puck lease build`), so runs over different source states build one at a
+time rather than all at once; a run that finds its build in the store takes no
+lease, and a run that finds another building the same source state waits for
+that build instead. The `build` lease is separate from `heavy`, which a gate holds for a whole
+suite. A start with `puck_world_start`'s `backend: vulkan` builds with
+`-p:PuckShaderSpirvEnabled=true`, a different source state in the store from the
+Direct3D 12 build, because a Windows build of one project otherwise ships no
+SPIR-V and a Vulkan boot refuses.
 
 The store is the `world-builds` subdirectory of the
 [per-user Puck directory](../development/contributing.md#per-user-directory):
@@ -4131,7 +4142,7 @@ can be found. The authoritative asset map and variant rationale live in
 
 ## puck lease—exclusive machine work
 
-Run `puck lease gpu --holder <lane> [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite. Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
+Run `puck lease gpu --holder <lane> [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
 
 The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the lane name, UTC acquisition time, process ID and process start ticks on four lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 

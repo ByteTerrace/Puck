@@ -48,6 +48,11 @@ worktree root and retry. `declarations` needs neither a restore nor a build.
 
 ## Evidence rules
 
+- Inventory a family with `declarations`, then query named symbols one at a
+  time. An empty-name `references "" --contains --containing <family>` can
+  retain gigabytes of workspace and reference state while searching every
+  matching member; narrowing the containing name does not make that broad
+  query cheap. Use `search` for a textual family inventory.
 - `references` loads a project graph and resolves symbols. Narrowing with
   `--project` changes the closure and therefore the question.
 - Read the definition on each `ref` line: it is the resolved symbol, which is

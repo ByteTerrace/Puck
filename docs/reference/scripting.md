@@ -488,8 +488,8 @@ as any other malformed record—the moment a declared ordinal repeats.
 | 7 | `MachineRead` | Observe/Screen; A is a bus address, B is 1–8 bytes, C=0 | One cell: packed little-endian bytes in A, native frame index in B (-1 if unsupported) |
 | 8 | `MachineHash` | Observe/Screen; A is a bus address, B is 1–262144 bytes, C=0 | One cell: FNV-1a-64 in A, native frame index in B |
 | 9 | `MachineSnapshot` | Control/Screen; A=0 capture, 1 restore, 2 release; B=C=0 | One cell: Applied or refusal, checkpoint byte length in A |
-| 10 | `Engage` | Drive/Body; A is a screen index or -1 to dissolve; B=C=0 | One cell: Applied or refusal; requested Control on every affected screen is also required |
-| 11 | `MachineOperation` | Control/Screen; A/B name a UTF-8 JSON envelope up to 2048 bytes, C=0 | One cell: provider status in A; Applied or refusal; also requires requested and granted Control on the named machine |
+| 10 | `Engage` | Drive/Body; A is a screen index or -1 to dissolve; B=C=0 | One cell: Applied or refusal; the manifest must request Control on every affected screen (a narrowing, not authority); the authority is the Drive grant over the body, the engage policy, and the engage check over each target |
+| 11 | `MachineOperation` | Control/Screen; A/B name a UTF-8 JSON envelope up to 2048 bytes, C=0 | One cell: provider status in A; Applied or refusal; the manifest must request Control on the named machine (a narrowing, not authority); the authority is the granted Control on the screen and on the machine instance, which the server checks when it applies the operation |
 | 12 | `MachineStatus` | Observe/Screen; A=B=C=0 | One cell: runtime status in A, completed steps in B |
 
 Orientation is the body's canonical `FixedQuaternion`, never a yaw scalar; any derived heading
@@ -562,8 +562,10 @@ exhaustion faults the mount. `world.addons` includes the peak whole-tick spend.
 A machine operation envelope is `{operation,payload,contentName?}`. For content.insert,
 `contentName` resolves through the machine's ordinary content-folder listing/name matcher
 and supplies payload.content.path. Provider schemas, admission, generations and commit
-remain host-owned. Addon operations are recomputed during receipt-pinned replay,
-including when recording; ordinary untaped console provider operations still refuse.
+remain host-owned. An addon-derived operation (`addonDerived` on `WorldServer.ApplyMachineOperation`) is
+re-derived by its deterministic guest during receipt-pinned replay, including when recording; ordinary
+untaped console provider operations still refuse. `content.insert` reads its content folder when the
+operation applies, so a re-driven tape diverges if the folder changed.
 
 `State` asks use the same manifest-before-existence and live grant gates as body reads.
 `ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key.

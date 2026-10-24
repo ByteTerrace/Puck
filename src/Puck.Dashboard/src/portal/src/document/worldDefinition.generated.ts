@@ -6094,6 +6094,10 @@ export type WorldHudElement = {
    * How long a Frame element cross-fades when its winning candidate changes; 0 cuts. Finite and non-negative.
    */
   fadeSeconds?: number;
+  /**
+   * Optional Text voice. Speaks the resolved literal, binding or template once on visible arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.
+   */
+  voice?: WorldVoiceProfile | null;
 };
 
 /**
@@ -13029,15 +13033,30 @@ export type WorldViewSlot = {
   instance?: string | null;
 };
 
+/**
+ * A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.
+ */
 export type WorldVoiceProfile = {
   /**
    * The referenced Name (must resolve when declared).
    */
   patchId?: string | null;
   /**
-   * The base inter-syllable tick spacing (must be positive when declared).
+   * The base spacing in 240 Hz audio ticks: 1..240 for HUD text, any positive value for count-based identity babble.
    */
   cadenceTicks?: number | null;
+  /**
+   * Pitch relative to the patch, 250..4000; 1000 leaves it unchanged.
+   */
+  pitchThousandths?: number;
+  /**
+   * Vowel formant frequency scale, 250..4000.
+   */
+  formantThousandths?: number;
+  /**
+   * Speech speed, 250..4000; 2000 halves each character's interval.
+   */
+  paceThousandths?: number;
 };
 
 /**

@@ -49,7 +49,10 @@ tool resolves the World build of the checkout's current sources from the same
 content-keyed store `puck test` and `puck canary` use, building it first when
 no run has built that source state (an unchanged tree reuses its build), so it
 never boots a binary older than the sources and documents you edited; a
-failed build refuses the start with its first errors. Its build is not the
+failed build refuses the start with its first errors. Builds of different source
+states queue on the machine's `build` lease, one at a time, and `backend: vulkan`
+builds with SPIR-V (a separate build in the store) and passes `--backend vulkan`,
+which the default Direct3D 12 build refuses. Its build is not the
 worktree's `bin/Release`, so no manual build is needed first. Never hand-write that boot
 line: the tool passes `--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)),
 a state directory of its own and `--control`, takes and holds the GPU lease
@@ -293,6 +296,14 @@ check the flag: the owner may be holding the pad.
   last edit and the same script, rerun through this recipe with its own
   `--state-dir`, shows the behavior. Report what ran (build, command, script,
   what it showed); the commit body carries it.
+- **Keep a windowed World's life short.** A windowed debug World's working set
+  grows while it runs (14.4, 16.0, then 17.3 GB over some 50 minutes of
+  gallery captures; 19 GB within about 20 minutes in another run), enough to
+  starve the machine and get lanes killed. Boot, pose, capture and stop in one
+  batch of under 10 minutes; tune light values on a headless World or with
+  `world.reload` inside a batch, never by holding a World open between steps.
+  Arm a whole batch with `world.rate pause`, `world.at` scripts at absolute
+  ticks and `world.rate resume`, since the World steps on between calls.
 - `--exit-after-seconds 0` or absent runs until the window closes. `--world`
   is required: a package folder (its `manifest.json` names the entry), a
   `.puck` source or a JSON document; without it the boot refuses. `Program.cs` parses the full flag surface;
@@ -419,9 +430,15 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   apply-time capacity gate.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
-  empty): spheres and circular cylinders have closest-point contact, while
-  other finite primitives use oriented boxes. The Moth's capsule has a 0.35 m
-  radius and is 2.06 m tall; capsule/box edges remain conservative. Every
+  empty): spheres, circular cylinders and Boxes have surface contact. Box
+  fillets derive from `SdfSolidGeometry.BoxCornerRadius`; chamfered Boxes use
+  conservative inside rounded boxes with the outer face planes retained;
+  deep chamfers use three inside rounded axis rods retaining surviving face
+  centres, with a smaller support footprint. Other finite primitives use
+  oriented bounds. The Moth's capsule has a 0.35 m radius and is 2.06 m tall;
+  sharp and rounded boxes use closest segment/box features. Lateral edge/rim
+  approach requires enough step height to clear the top support plane;
+  resting and falling still meet the rounded surface. Every
   boolean carve collides as the uncarved shape. Build a doorway,
   window or stairwell as a union of boxes around the opening, never a
   subtraction, and keep 2.4 m of headroom over every tread and landing (her

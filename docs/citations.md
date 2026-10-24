@@ -52,7 +52,6 @@ oracles and conformance evidence only:
 - ares—<https://ares-emu.net/>
 - jsmolka `gba-tests`—<https://github.com/jsmolka/gba-tests>
 - FuzzARM—<https://github.com/DenSinH/FuzzARM>
-- AGS aging cartridge test spec (AGSTests)—<https://github.com/DenSinH/AGSTests>
 - GBATEK hardware reference—<https://problemkaputt.de/gbatek.htm>
 
 ## Puck.Maths: the presented charged algebra

@@ -7,6 +7,6 @@ public enum PostTier {
     A,
     /// <summary>Reference-corpus behavioural checks. Need an external asset; skip (never fail) when it is absent.</summary>
     B,
-    /// <summary>Cross-machine link or commercial-scenario determinism.</summary>
+    /// <summary>Cross-machine link determinism over self-contained synthetic cartridges.</summary>
     C,
 }

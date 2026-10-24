@@ -806,6 +806,14 @@ public static partial class WorldDefinitionValidator {
             );
 
             foreach (var element in panel.Elements) {
+                if (element.Voice is { } voice) {
+                    var voicePath = $"{panelPath}.elements['{element.Id}'].voice";
+
+                    if (element.Kind != WorldHudElementKind.Text) {
+                        errors.Add(item: $"{voicePath} is only available on Text elements.");
+                    }
+                    ValidateVoiceProfile(voice, definition.Patches.Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal), voicePath, true, errors);
+                }
                 if (element.Kind != WorldHudElementKind.Frame) {
                     continue;
                 }
@@ -865,18 +873,27 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        ValidateVoiceProfile(errors: errors, patchIds: patchIds, path: "identity.voice", required: false, voice: voice);
+    }
+    private static void ValidateVoiceProfile(WorldVoiceProfile voice, HashSet<string> patchIds, string path, bool required, List<string> errors) {
+        if (required && ((voice.PatchId is null) || (voice.CadenceTicks is null))) {
+            errors.Add(item: $"{path} requires patchId and cadenceTicks.");
+        }
         if (
             (voice.PatchId is { } patchId) &&
             (string.IsNullOrWhiteSpace(value: patchId) || !patchIds.Contains(item: patchId))
         ) {
-            errors.Add(item: $"identity.voice.patchId '{patchId}' names no patch row.");
+            errors.Add(item: $"{path}.patchId '{patchId}' names no patch row.");
         }
 
         if (
             (voice.CadenceTicks is { } cadenceTicks) &&
-            (cadenceTicks <= 0)
+            ((cadenceTicks <= 0) || (required && (cadenceTicks > 240)))
         ) {
-            errors.Add(item: $"identity.voice.cadenceTicks {cadenceTicks} must be positive.");
+            errors.Add(item: $"{path}.cadenceTicks {cadenceTicks} must be {(required ? "in [1, 240]" : "positive")}.");
+        }
+        if ((voice.PitchThousandths is < 250 or > 4000) || (voice.FormantThousandths is < 250 or > 4000) || (voice.PaceThousandths is < 250 or > 4000)) {
+            errors.Add(item: $"{path} pitchThousandths, formantThousandths and paceThousandths must each be in [250, 4000].");
         }
     }
     private static void ValidateLattice(WorldDistributionRegion.Lattice lattice, string path, List<string> errors) {

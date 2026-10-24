@@ -165,6 +165,15 @@ watchdog records `below-floor` for body 0 on the next settled tick.
 
 ## The gallery guide
 
+With `addonHud` on, the guide speaks the exhibit note its panel shows, once
+per arrival or changed note. Hiding the panel stops the utterance. The map
+board's directions also speak in a lower voice while a joined seat is within
+2.5 m of the board and the same HUD toggle is on. Both voices are authored in
+[guide.puck](guide.puck); the shared synth patch is
+[patches/guide-voice.patch.json](patches/guide-voice.patch.json). The
+[audio reference](../../docs/reference/audio.md#text-speech) explains the
+profile and `audio.render`'s device-free WAV export.
+
 Every exhibit in the gallery hall has a region in [guide.puck](guide.puck): a
 sphere of 1.29 m radius on the level's floor, 1.7 m out from the plinth on its
 label's side, where the exhibit's spawn point stands. The guide observes every

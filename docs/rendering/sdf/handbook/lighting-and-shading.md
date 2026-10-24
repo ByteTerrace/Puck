@@ -234,7 +234,14 @@ in the frame.
   sources, the bounces or what the materials reflect and emit (a bound
   color's move, a placement showing another creation over the same meshes, as
   the gallery hall's light switches do) retraces them over the same scene. Old probes keep
-  drawing until new ones land. `puck mesh scene --world <file>` times the
+  drawing, and remain available to the exposure meter and neighbour filter,
+  until each cell completes its replacement sweeps. The tracer distinguishes
+  generations instead of clearing those samples. A layout change clears the
+  staging volume, but the GPU keeps its previous table and coordinates until
+  every slot in the new window has a first measurement; a moving window follows
+  the same rule. Unwritten cells never become an open-sky fallback. Before the
+  initial scene supplies a volume, indirect light has no measured value.
+  `puck mesh scene --world <file>` times the
   scene over a world's stored static meshes on the CPU: a full build, one
   sweep of a High window, and the update for one draw's new geometry, a move
   and a return. On the debug world's 250 stored static groups (16.9 million
@@ -333,7 +340,14 @@ camera, which carries every traced light's bounce, aims for
 `log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
 over the adaptation time of presentation time, snapping at a camera cut
 (`SdfViewExposures`). A camera with no visible lattice probe measures its own
-surroundings through the same radiance tracer. An unavailable scene or a camera
+surroundings through the same radiance tracer. Its six directional values are
+cached by camera cell and scene/lighting generation, with storage bounded by the
+view count. Turning the camera reweights them; movement within the cell reuses
+them only across an unblocked segment from their actual origin. The cache
+refreshes once more when the volume finishes its bounce sweeps, so an early
+measurement does not retain incomplete bounce lighting. The `camera-traces`
+counter under `world.counters sdf.mesh-gi` stays constant on steady reads.
+An unavailable scene or a camera
 inside opaque geometry supplies no reading: exposure, local adaptation's meter
 and sky visibility hold
 their previous values, using the authored EV only before the first reading.

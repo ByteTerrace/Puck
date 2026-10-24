@@ -382,8 +382,6 @@ self-checking Post stage or golden replay is a gate.
   counters can reset at frame boundaries, so compare per-instruction deltas;
   Puck's exposed ARM PC is four bytes ahead because of pipeline
   representation; direct boot and BIOS boot have different initial state.
-- Use the TCHK10 AGS aging-cartridge revision when reproducing its configured
-  evidence. Other revisions need not match the same patch offsets.
 - The SingleStepTests/sm83 corpus has documented conflicts for STOP (`10`) and
   EI (`fb`). The corpus models STOP as a flat one-byte instruction, while the
   core consumes the pad byte when no interrupt is pending and leaves it when
@@ -395,11 +393,10 @@ self-checking Post stage or golden replay is a gate.
   `sst-sm83` stage, not silent exclusions.
 - BESS import/export is diagnostic cross-emulator evidence. Its
   self-consistency checks do not turn a foreign emulator into a gate.
-- The Advanced commercial link-game stage currently documents an unmodeled
-  Multiplayer SIOCNT SD/SI ready-line derived from cable-partner presence.
-  Verify `AgbSerialController.PackSioControl` and
-  `LinkGameReplayStage` before relying on this limitation; when implemented,
-  update the stage and this reference together.
+- The Multiplayer SIOCNT SD/SI ready lines, derived from cable-partner
+  presence, are unmodeled. Verify `AgbSerialController.PackSioControl` before
+  relying on this limitation; when implemented, add a stage over a committed
+  partner-polling micro-ROM and update this reference with it.
 
 Keep proprietary ROMs, retail BIOS images, and external corpora outside the repository.
 Original bundled Puck firmware is the exception: its generated images and

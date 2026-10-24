@@ -151,8 +151,7 @@ verification ROMs; the cartridges' move into the product.
    in place of the rocket that ends the second mode. Nothing outside the
    cartridge's own tests pinned its hash.
 5. External images resolve from one local store beside the corpus cache, keyed
-   by id; `--bios`, `--games`, `--ags`, `--accuracy-suite`, `--link-game`,
-   `--solar-rom`, `--link-rom`, `--trade-rom`, both `--boot` spellings, the
+   by id; `--bios`, `--accuracy-suite`, both `--boot` spellings, the
    engine's `bios=` option, and `firmware.path` become ledger ids; a stage given
    an image with an unaccepted hash refuses it by entry id and a stage missing
    one skips naming the id.

@@ -47,6 +47,7 @@ public sealed partial class WorldBody {
                 m_bodyMotionProgram.OwnsVerticalContactState &&
                 !HoldOwnsVerticalChannel &&
                 FixedStepUp.TryStep(
+                    requiredStepHeight: contactResolution.RequiredStepHeight,
                     blocked: in scratch.NextPosition,
                     intended: in intended,
                     result: out var stepped,

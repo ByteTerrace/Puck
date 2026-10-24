@@ -111,9 +111,9 @@ public enum ContactRefusal {
 /// consults, plus measured walkable and non-walkable contact normals. The obstruction normal is read-back only;
 /// an integrator may adopt the ground normal according to its own body-frame policy.</summary>
 /// <param name="Grounded"><see langword="true"/> when the body is standing on a walkable surface after resolution.</param>
-/// <param name="ObstructionNormal">The last resolved non-walkable contact's unit surface normal this call, or
-/// <see cref="FixedVector3.Zero"/> when nothing obstructed the body. A walkable push (the ground, a ramp) never
-/// writes this — only a contact whose alignment fails the grounded test does.</param>
+/// <param name="ObstructionNormal">The last resolved obstruction's unit surface normal this call, or
+/// <see cref="FixedVector3.Zero"/> when nothing obstructed the body. Ground and ramp support never write this.
+/// An approached analytic edge is an obstruction even when its normal lies in the walkable cone.</param>
 /// <param name="GroundNormal">The unit surface normal of the last WALKABLE push, or <see cref="FixedVector3.Zero"/>
 /// when the body did not ground. This is a measured contact fact, not an instruction to rotate the body; the
 /// consuming integrator's frame policy decides whether to adopt it.</param>
@@ -122,4 +122,6 @@ public enum ContactRefusal {
 /// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
 /// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
 /// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false);
+/// <param name="RequiredStepHeight">The lift needed to clear an approached edge's support plane, measured from the
+/// pre-move body's bottom. A step must buy this whole clearance, even when it first lands partway up the edge.</param>
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false, FixedQ4816 RequiredStepHeight = default);

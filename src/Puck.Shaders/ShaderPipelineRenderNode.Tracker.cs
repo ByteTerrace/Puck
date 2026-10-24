@@ -130,6 +130,12 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             var resource = m_resources[access.Storage];
+            if (!access.PreviousFrame && !access.Use.Writes && (resource.Alias.Target is not null)) {
+                // Package inputs resolve through the forwarded image, already shader-readable from the read that
+                // established the alias. This allocation was not read or written; preserve its state for a later draw.
+                SkipAccess(access: access, slot: slot);
+                continue;
+            }
             var instance = InstanceIndex(
                 previous: access.PreviousFrame,
                 resource: resource,

@@ -61,32 +61,9 @@
       "default": null
     },
     "voice": {
+      "$ref": "./common.schema.json#/$defs/WorldVoiceProfile",
       "description": "The identity\u0027s authored voice-babble selectors, or null for none (see WorldVoiceProfile).",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "patchId": {
-          "description": "The referenced Name (must resolve when declared).",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "cadenceTicks": {
-          "description": "The base inter-syllable tick spacing (must be positive when declared).",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "default": null,
-      "title": "WorldVoiceProfile"
+      "default": null
     },
     "facts": {
       "description": "The facts row this identity carries and its capacity, or null for Default.",

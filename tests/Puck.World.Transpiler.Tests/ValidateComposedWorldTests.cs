@@ -39,6 +39,30 @@ public sealed class ValidateComposedWorldTests : IDisposable {
 
     public void Dispose() => m_directory.Dispose();
     [Fact]
+    public void RelativePatchSourcesResolveBesideTheRootDuringSemanticValidation() {
+        var patch = new Puck.Assets.Documents.SynthPatchDocument(
+            Schema: "puck.synthesizer-patch.v1", Name: "voice", Oscillator: Puck.Assets.Documents.SynthOscillator.Saw,
+            DutyThousandths: null, Polynomial: null, AttackFrames: 96, DecayFrames: 240,
+            SustainThousandths: 650, ReleaseFrames: 240, PitchMillihertz: 240000);
+        var canonical = Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(document: patch, source: "voice");
+
+        File.WriteAllText(Path.Combine(path1: m_directory.RootPath, path2: "voice.patch.json"),
+            System.Text.Json.JsonSerializer.Serialize(patch, Puck.Assets.Documents.DocumentJsonOptions.Shared));
+        var source = $$"""
+            schema: "puck.world.definition.v1"
+            patches [{ name: "voice", source: "voice.patch.json", hash: "{{canonical.Hash}}" }]
+            """;
+        var path = Path.Combine(path1: m_directory.RootPath, path2: "world.puck");
+        var compiled = WorldCompiler.Compile(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
+        var diagnostics = new DiagnosticBag();
+
+        Assert.True(condition: WorldSemanticValidator.ValidateComposedWorld(compiled.Json!, compiled.SourceMap, diagnostics, path),
+            userMessage: string.Join(separator: "\n", values: diagnostics));
+        var diagnosed = WorldSourceDiagnostics.Diagnose(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(condition: diagnosed.HasErrors, userMessage: string.Join(separator: "\n", values: diagnosed));
+    }
+    [Fact]
     public void ValidateComposedWorld_ComposesBasisBeforeValidating() {
         File.WriteAllText(
             Path.Combine(

@@ -34,7 +34,8 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// both resolve against — one deterministic query over the same analytic collider vocabulary
 /// <see cref="FixedStaticContactSolver"/> depenetrates a body out of: <see cref="FixedStaticColliderKind.Sphere"/>,
 /// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, <see cref="FixedStaticColliderKind.OrientedBox"/>,
-/// <see cref="FixedStaticColliderKind.Cylinder"/>, and <see cref="FixedStaticColliderKind.HalfSpace"/>. A
+/// <see cref="FixedStaticColliderKind.RoundedBox"/>, <see cref="FixedStaticColliderKind.Cylinder"/>, and
+/// <see cref="FixedStaticColliderKind.HalfSpace"/>. A
 /// later slice reads a candidate's <see cref="FixedSurfaceAttachCandidate.Point"/> as the anchor and
 /// <see cref="FixedSurfaceAttachCandidate.Normal"/> as the surface-tangent-plane basis; nothing here decides grip,
 /// rope length, or reach — every distance and angle is caller-supplied, never a constant baked in.
@@ -256,6 +257,7 @@ public static class FixedSurfaceQuery {
         return (Point: box.ToWorld(local: surfaceLocal), Normal: box.ToWorldOffset(local: normal));
     }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
+        FixedStaticColliderKind.RoundedBox => NearestOnRoundedBox(collider: in collider, probe: probe),
         FixedStaticColliderKind.Cylinder => NearestOnCylinder(collider: in collider, probe: probe),
         FixedStaticColliderKind.Sphere => NearestOnSphere(
         center: collider.Center,
@@ -282,6 +284,13 @@ public static class FixedSurfaceQuery {
     ),
         _ => throw new InvalidOperationException(message: $"Unknown collider kind {collider.Kind}."),
     };
+    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnRoundedBox(in FixedStaticCollider collider, FixedVector3 probe) {
+        var nearest = FixedRoundedBoxContact.Nearest(point: collider.Rotation.RotateInverse(vector: (probe - collider.Center)),
+            halfExtents: collider.Extent);
+
+        return ((collider.Center + collider.Rotation.Rotate(vector: (nearest.Point + (nearest.Normal * collider.Radius)))),
+            collider.Rotation.Rotate(vector: nearest.Normal));
+    }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnCylinder(in FixedStaticCollider collider, FixedVector3 probe) {
         var nearest = FixedCylinderContact.Nearest(point: collider.Rotation.RotateInverse(vector: (probe - collider.Center)),
             radius: collider.Extent.X, halfHeight: collider.Extent.Y);

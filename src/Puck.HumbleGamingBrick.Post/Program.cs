@@ -4,7 +4,7 @@ using Puck.HumbleGamingBrick.Post;
 // machine is validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check
 // failed, a ROM that does not pass its suite included), or 2 (a stage could not run). There is no rich CLI:
 // hand-parsed knobs for where artifacts land, an optional tier/name subset for iterating, the corpus roots and
-// commercial cartridges, and --require-assets. No expectation file is read or written: each corpus ROM's own result
+// --require-assets. No expectation file is read or written: each corpus ROM's own result
 // is the run's result.
 
 if (!CommandLineArguments.TryValidateValues(
@@ -70,15 +70,6 @@ var sstRoot = corpora.Resolve(
     flag: "--sst",
     name: "sm83-sst"
 );
-// The two commercial cartridges are per-machine assets named on the command line; their stages skip without them.
-var linkRomPath = ExistingFile(path: CommandLineArguments.Value(
-    args: args,
-    name: "--link-rom"
-));
-var tradeRomPath = ExistingFile(path: CommandLineArguments.Value(
-    args: args,
-    name: "--trade-rom"
-));
 var requireAssets = args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,
     value: "--require-assets"
@@ -95,12 +86,10 @@ var stages = PostStages.Create()
     .ToArray();
 var context = new PostContext(
     artifactsDirectory: artifactsDirectory,
-    linkRomPath: linkRomPath,
     parallelism: parallelism,
     requireAssets: requireAssets,
     sstRoot: sstRoot,
-    testRomRoot: testRomRoot,
-    tradeRomPath: tradeRomPath
+    testRomRoot: testRomRoot
 );
 var report = new PostBattery<PostContext>(
     banner: "Puck.HumbleGamingBrick.Post - HumbleGamingBrick machine power-on self-test",
@@ -114,9 +103,3 @@ if (report.Abandoned) {
 }
 
 return report.ExitCode;
-
-static string? ExistingFile(string? path) =>
-    (((path is not null) && File.Exists(path: path))
-        ? path
-        : null
-    );

@@ -58,8 +58,10 @@ public sealed class SdfMeshIrradiance {
     public static readonly WorkKind TrianglesBuilt = new(name: "sdf.mesh-gi.triangles-built", unit: "triangles", workClass: WorkClass.Pacing);
     /// <summary>Counts each probe sweep traced.</summary>
     public static readonly WorkKind Probes = new(name: "sdf.mesh-gi.probes", unit: "sweeps", workClass: WorkClass.Pacing);
+    /// <summary>Counts camera radiance traces, including rejected samples inside opaque geometry.</summary>
+    public static readonly WorkKind CameraTraces = new(name: "sdf.mesh-gi.camera-traces", unit: "samples", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Probes];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Probes, CameraTraces];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -114,6 +116,12 @@ public sealed class SdfMeshIrradiance {
     private int m_materialsKey;
     private int m_generation;
     private Layout m_layout;
+    private SdfMeshIrradianceParameters m_published;
+    private int m_unwritten;
+
+    private CameraSample?[] m_cameraSamples = [];
+
+    private int m_nextCameraSample;
     private (int X, int Y, int Z) m_low;
     private Vector3 m_camera;
     private bool m_windowValid;
@@ -207,6 +215,10 @@ public sealed class SdfMeshIrradiance {
             if (!bakePending) { _ = RefreshScene(frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             m_camera = frame.Views[0].Camera.Position;
+            if (m_cameraSamples.Length != frame.Views.Count) {
+                m_cameraSamples = new CameraSample?[frame.Views.Count];
+                m_nextCameraSample = 0;
+            }
 
             var low = (
                 X: (((int)MathF.Floor(x: (m_camera.X / layout.Spacing))) - (layout.Dims.X / 2)),
@@ -263,23 +275,26 @@ public sealed class SdfMeshIrradiance {
                 m_worker = null;
                 throw new InvalidOperationException(message: "The irradiance volume's trace failed.", innerException: faulted.Exception);
             }
-            if ((m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true })) {
+            if (m_owed && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true })) {
                 m_worker = Task.Run(action: Trace);
             }
-            if (m_dirty) {
+            // A new window keeps the previous GPU table and its coordinates until every replacement slot has a
+            // measured sample. Publishing an empty slot would invent darkness; filling it with sky invents a leak.
+            if (m_dirty && (m_unwritten == 0)) {
                 write(obj: m_volume.AsMemory(length: (layout.Count * SdfMeshIrradianceProbe.ProbeWords), start: 0));
                 m_dirty = false;
                 m_wrote = true;
+                m_published = new SdfMeshIrradianceParameters(Dims: layout.Dims, Enabled: true, Low: m_low, Spacing: layout.Spacing);
             }
+            return (m_published.Enabled ? m_published : new SdfMeshIrradianceParameters(Dims: layout.Dims, Enabled: true, Low: m_low, Spacing: layout.Spacing));
         }
-
-        return new SdfMeshIrradianceParameters(Dims: layout.Dims, Enabled: true, Low: m_low, Spacing: layout.Spacing);
     }
     /// <summary>Reads the volume as a center-weighted reflected-light meter at a camera: the luminance the traced probes
     /// about the camera see along each of their six axes, the light the surfaces about it reflect and emit under every
     /// traced light and the sky through the openings it sees, averaged with each axis weighted by the squared cosine of
     /// its angle to where the camera looks plus <see cref="MeterSurround"/>, so the axis ahead counts about four fifths of
-    /// the reading. When no visible lattice probe answers, traces the same radiance at the camera itself.
+    /// the reading. When no visible lattice probe answers, reads a camera radiance sample cached by cell and generation,
+    /// refreshed when the bounce trace finishes. Reuse within a cell requires visibility from the sample's origin.
     /// An anchored light and the screens are no part of the reading.</summary>
     /// <param name="position">The camera's position, in world units.</param>
     /// <param name="forward">The camera's unit forward axis.</param>
@@ -312,9 +327,12 @@ public sealed class SdfMeshIrradiance {
                 var offset = new Vector3(x: corner & 1, y: (corner >> 1) & 1, z: (corner >> 2) & 1);
                 var cell = (((int)(floor.X + offset.X)), ((int)(floor.Y + offset.Y)), ((int)(floor.Z + offset.Z)));
 
-                if (!m_cache.TryGetValue(key: cell, value: out var probe) || probe.Invalid) {
+                if (!m_cache.TryGetValue(key: cell, value: out var cached)) {
                     continue;
                 }
+                var probe = Readable(probe: cached);
+
+                if (probe.Invalid) { continue; }
 
                 var probePoint = (new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing);
                 var toward = (probePoint - position);
@@ -340,18 +358,14 @@ public sealed class SdfMeshIrradiance {
             if (total <= 0f) {
                 if (m_scene is not { } scene) { return false; }
 
-                // Small spaces need not contain a lattice centre. Measure where the camera actually is instead of
-                // borrowing another room's probes or holding the exposure of the room the camera just left.
-                Span<float> sky = stackalloc float[6];
-                Span<Vector3> radiance = stackalloc Vector3[6];
+                var sampleAtCamera = CameraRadiance(lighting: lighting, position: position, scene: scene);
 
-                if (!TraceRadiance(origin: position, rotation: Quaternion.Identity, layout: m_layout, lighting: lighting,
-                    low: m_low, scene: scene, sweep: (m_layout.Sweeps - 1), sky: sky, radiance: radiance)) { return false; }
+                if (sampleAtCamera.Invalid) { return false; }
                 for (var axis = 0; (axis < 6); axis++) {
-                    var skyLight = (lighting.Sky ? (lighting.SkyIrradiance(normal: Axes[axis]) * (sky[axis] * lighting.Gains.Sky)) : Vector3.Zero);
+                    var skyLight = (lighting.Sky ? (lighting.SkyIrradiance(normal: Axes[axis]) * (sampleAtCamera.Sky[axis] * lighting.Gains.Sky)) : Vector3.Zero);
 
-                    axes[axis] = SdfPhotometry.LuminanceOf(color: (radiance[axis] + skyLight));
-                    open += (sky[axis] / 6f);
+                    axes[axis] = SdfPhotometry.LuminanceOf(color: (sampleAtCamera.Radiance[axis] + skyLight));
+                    open += (sampleAtCamera.Sky[axis] / 6f);
                 }
                 total = 1f;
                 source = SdfExposureMeterSource.CameraTrace;
@@ -376,6 +390,35 @@ public sealed class SdfMeshIrradiance {
             return true;
         }
     }
+
+    private CameraSample CameraRadiance(Vector3 position, SdfMeshIrradianceScene scene, Lighting lighting) {
+        var cell = (((int)MathF.Floor(x: (position.X / m_layout.Spacing))), ((int)MathF.Floor(x: (position.Y / m_layout.Spacing))), ((int)MathF.Floor(x: (position.Z / m_layout.Spacing))));
+
+        foreach (var sample in m_cameraSamples) {
+            if ((sample is null) || (sample.Generation != m_generation) || (sample.Cell != cell) || (sample.Settled != !m_owed)) { continue; }
+            if (sample.Position == position) { return sample; }
+            if (sample.Invalid) { continue; }
+
+            var toward = (position - sample.Position);
+            var distance = toward.Length();
+
+            if (scene.Unblocked(direction: (toward / distance), maximum: distance, origin: sample.Position)) { return sample; }
+        }
+
+        // A cell can straddle a partition. A sample belongs to its actual origin, never an assumed open cell centre.
+        var sky = new float[6];
+        var radiance = new Vector3[6];
+        var valid = TraceRadiance(origin: position, rotation: Quaternion.Identity, layout: m_layout, lighting: lighting,
+            low: m_low, scene: scene, sweep: (m_layout.Sweeps - 1), sky: sky, radiance: radiance);
+        var traced = new CameraSample(Cell: cell, Generation: m_generation, Invalid: !valid, Position: position,
+            Radiance: radiance, Settled: !m_owed, Sky: sky);
+
+        Counters.Count(kind: CameraTraces);
+        m_cameraSamples[m_nextCameraSample] = traced;
+        m_nextCameraSample = ((m_nextCameraSample + 1) % m_cameraSamples.Length);
+        return traced;
+    }
+
     /// <summary>Describes the volume: its tier's layout, the static scene, the lights it traces, the probes cached and
     /// the rays traced.</summary>
     /// <returns>One line.</returns>
@@ -419,7 +462,6 @@ public sealed class SdfMeshIrradiance {
                 m_scene = scene;
                 m_sceneKey = key;
                 m_buildingKey = 0;
-                m_cache.Clear();
                 m_generation++;
                 m_owed = true;
                 m_reported = false;
@@ -446,7 +488,6 @@ public sealed class SdfMeshIrradiance {
 
         m_lightingKey = key;
         m_lighting = Lighting.Capture(frame: frame);
-        m_cache.Clear();
         m_generation++;
         m_owed = true;
         m_reported = false;
@@ -477,12 +518,16 @@ public sealed class SdfMeshIrradiance {
     private void FillFromCache() {
         var dims = m_layout.Dims;
 
+        m_unwritten = m_layout.Count;
         for (var z = m_low.Z; (z < (m_low.Z + dims.Z)); z++) {
             for (var y = m_low.Y; (y < (m_low.Y + dims.Y)); y++) {
                 for (var x = m_low.X; (x < (m_low.X + dims.X)); x++) {
                     var slot = SlotOf(dims: dims, x: x, y: y, z: z);
 
-                    if ((m_volume[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag)) { continue; }
+                    if ((m_volume[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag)) {
+                        m_unwritten--;
+                        continue;
+                    }
                     if (m_cache.ContainsKey(key: (x, y, z))) { Store(cell: (x, y, z)); }
                 }
             }
@@ -491,13 +536,16 @@ public sealed class SdfMeshIrradiance {
     // Writes a cached cell's probe into its slot: its cubes averaged with the neighbours its centre sees, its own light
     // visibility.
     private void Store((int X, int Y, int Z) cell) {
-        if (!m_cache.TryGetValue(key: cell, value: out var probe)) { return; }
+        if (!m_cache.TryGetValue(key: cell, value: out var cached)) { return; }
+
+        var probe = Readable(probe: cached);
 
         var words = m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims) * SdfMeshIrradianceProbe.ProbeWords));
         Span<float> sky = stackalloc float[6];
         Span<Vector3> radiance = stackalloc Vector3[6];
 
         Filter(cell: cell, probe: probe, radiance: radiance, sky: sky);
+        if ((words[0] & ~SdfMeshIrradianceProbe.InvalidFlag) != (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag)) { m_unwritten--; }
         words[0] = (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag) | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u);
         for (var pair = 0; (pair < 3); pair++) {
             words[(1 + pair)] = Pack(low: sky[(2 * pair)], high: sky[((2 * pair) + 1)]);
@@ -540,7 +588,7 @@ public sealed class SdfMeshIrradiance {
 
         if (major > 0f) {
             var direction = (toward / major);
-            var index = NeighbourIndex(x: ((int)MathF.Round(x: direction.X)), y: ((int)MathF.Round(x: direction.Y)), z: ((int)MathF.Round(x: direction.Z)));
+            var index = NearestPlane(direction: direction);
             var plane = probe.Planes[index];
             var past = (Vector3.Dot(vector1: new Vector3(x: plane.X, y: plane.Y, z: plane.Z), vector2: toward) - plane.W);
 
@@ -548,6 +596,16 @@ public sealed class SdfMeshIrradiance {
         }
         return visibility;
     }
+
+    /// <summary>Returns the neighbour plane nearest a nonzero direction normalized by its largest absolute component.
+    /// Halfway components select the diagonal, away from zero, as in <c>sdfMeshProbeDepthVisibility</c>.</summary>
+    /// <param name="direction">The direction, with largest absolute component one.</param>
+    /// <returns>The index among the 26 neighbour planes.</returns>
+    public static int NearestPlane(Vector3 direction) => NeighbourIndex(
+        x: ((int)MathF.Round(mode: MidpointRounding.AwayFromZero, x: direction.X)),
+        y: ((int)MathF.Round(mode: MidpointRounding.AwayFromZero, x: direction.Y)),
+        z: ((int)MathF.Round(mode: MidpointRounding.AwayFromZero, x: direction.Z)));
+
     // A probe's cubes averaged with those of the cached, valid neighbours it and they see each other across, by the
     // filter weights; an invalid probe keeps its own.
     private void Filter((int X, int Y, int Z) cell, Probe probe, Span<float> sky, Span<Vector3> radiance) {
@@ -564,7 +622,10 @@ public sealed class SdfMeshIrradiance {
 
             var offset = NeighbourOffsets[index];
 
-            if (!m_cache.TryGetValue(key: ((cell.X + offset.X), (cell.Y + offset.Y), (cell.Z + offset.Z)), value: out var neighbour) || neighbour.Invalid) { continue; }
+            if (!m_cache.TryGetValue(key: ((cell.X + offset.X), (cell.Y + offset.Y), (cell.Z + offset.Z)), value: out var cached)) { continue; }
+            var neighbour = Readable(probe: cached);
+
+            if (neighbour.Invalid) { continue; }
             if ((neighbour.Neighbours & (1u << (25 - index))) == 0u) { continue; }
 
             var weight = FilterWeights[index];
@@ -634,7 +695,7 @@ public sealed class SdfMeshIrradiance {
             for (var z = low.Z; (z < (low.Z + layout.Dims.Z)); z++) {
                 for (var y = low.Y; (y < (low.Y + layout.Dims.Y)); y++) {
                     for (var x = low.X; (x < (low.X + layout.Dims.X)); x++) {
-                        var sweeps = (m_cache.TryGetValue(key: (x, y, z), value: out var cached) ? cached.Sweeps : 0);
+                        var sweeps = ((m_cache.TryGetValue(key: (x, y, z), value: out var cached) && (cached.Generation == generation)) ? cached.Sweeps : 0);
 
                         if (sweeps >= layout.Sweeps) { continue; }
 
@@ -646,8 +707,9 @@ public sealed class SdfMeshIrradiance {
             }
             if (candidates.Count == 0) {
                 lock (m_gate) {
-                    if (generation == m_generation) { m_owed = false; }
-                    if (!m_reported && (generation == m_generation)) {
+                    if ((generation != m_generation) || (low != m_low) || (layout != m_layout)) { continue; }
+                    m_owed = false;
+                    if (!m_reported) {
                         m_reported = true;
                         Console.Error.WriteLine(value: $"[sdf.mesh-gi] done probes={m_cache.Count} traced={m_traced} rays={m_rays} triangles={scene.TriangleCount} lights={lighting.Points.Length} sweeps={layout.Sweeps} seconds={m_clock.Elapsed.TotalSeconds:0.000}");
                     }
@@ -663,14 +725,22 @@ public sealed class SdfMeshIrradiance {
             _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
                 var candidate = candidates[index];
 
-                results[index] = TraceProbe(cell: candidate.Cell, layout: layout, lighting: lighting, low: low, scene: scene, sweep: candidate.Sweeps);
+                results[index] = TraceProbe(cell: candidate.Cell, generation: generation, layout: layout, lighting: lighting, low: low, scene: scene, sweep: candidate.Sweeps);
             });
 
             lock (m_gate) {
                 if (generation != m_generation) { continue; }
                 for (var index = 0; (index < count); index++) {
-                    m_cache[candidates[index].Cell] = results[index];
-                    m_landed.Enqueue(item: (candidates[index].Cell, results[index]));
+                    var cell = candidates[index].Cell;
+                    var result = results[index];
+
+                    // Bounce sweeps read the new generation, but viewers keep the previous complete measurement
+                    // until this cell's replacement converges. Flatten the link if another edit interrupts it.
+                    if (!result.Invalid && (result.Sweeps < layout.Sweeps) && m_cache.TryGetValue(key: cell, value: out var previous)) {
+                        result = result with { Previous = ((previous.Generation == generation) ? previous.Previous : Readable(probe: previous)) };
+                    }
+                    m_cache[cell] = result;
+                    if (result.Previous is null) { m_landed.Enqueue(item: (cell, result)); }
                 }
                 m_traced += count;
                 m_rays += (((long)count) * layout.Rays);
@@ -681,7 +751,7 @@ public sealed class SdfMeshIrradiance {
     // One sweep of one probe: its rays against the scene, each hit shaded under the captured lighting, the sweeps after
     // the first adding the light the hit reflects from the cached probes about it; then which traced lights and which
     // neighbouring probes its centre sees.
-    private Probe TraceProbe((int X, int Y, int Z) cell, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep) {
+    private Probe TraceProbe((int X, int Y, int Z) cell, int generation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep) {
         var origin = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
         var rotation = RotationOf(cell: cell);
         var sky = new float[6];
@@ -691,6 +761,7 @@ public sealed class SdfMeshIrradiance {
 
         var probe = new Probe(
             Depth: new float[6],
+            Generation: generation,
             Invalid: !valid,
             Lights: new uint[SdfMeshIrradianceProbe.LightWords],
             Neighbours: 0u,
@@ -1011,7 +1082,14 @@ public sealed class SdfMeshIrradiance {
     // One probe: its sky visibility, radiance and depth cubes, the traced lights its centre sees (one bit a lights-table
     // index), the neighbouring probes it sees (one bit an entry of NeighbourOffsets), the sweeps it holds and whether it
     // lies inside geometry.
-    private sealed record Probe(float[] Sky, Vector3[] Radiance, float[] Depth, Vector4[] Planes, uint[] Lights, uint Neighbours, int Sweeps, bool Invalid);
+    private sealed record Probe(float[] Sky, Vector3[] Radiance, float[] Depth, Vector4[] Planes, uint[] Lights, uint Neighbours, int Sweeps, int Generation, bool Invalid) {
+        public Probe? Previous { get; init; }
+    }
+
+    private static Probe Readable(Probe probe) => (probe.Previous ?? probe);
+
+    // Bounded by the frame's view count, not by how far the camera has travelled.
+    private sealed record CameraSample((int X, int Y, int Z) Cell, int Generation, Vector3 Position, float[] Sky, Vector3[] Radiance, bool Settled, bool Invalid);
     // The eight probes about a point a read gathers, held without an allocation on the trace's hot path.
     [System.Runtime.CompilerServices.InlineArray(8)]
     private struct Corners {

@@ -14,6 +14,16 @@ namespace Puck.SdfVm.Tests;
 /// and the meter reads the upper room lit and the lower room dark.
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
+    [Fact]
+    public void AHalfwayDepthDirectionSelectsTheDiagonalOnEitherSideOfZero() {
+        foreach (var sign in new[] { -1, 1 }) {
+            Assert.Equal(expected: ((sign < 0) ? 19 : 23),
+                actual: SdfMeshIrradiance.NearestPlane(direction: new Vector3(x: 1f, y: (sign * 0.5f), z: (-sign * 0.5f))));
+            Assert.Equal(expected: 21,
+                actual: SdfMeshIrradiance.NearestPlane(direction: new Vector3(x: 1f, y: (sign * MathF.BitDecrement(x: 0.5f)), z: (-sign * MathF.BitDecrement(x: 0.5f)))));
+        }
+    }
+
     // A box between two corners, its faces wound outward, as the bake winds them.
     private static SdfMesh Box(Vector3 low, Vector3 high) {
         Vector3[] positions = [
@@ -60,13 +70,33 @@ public sealed class SdfMeshIrradianceLawTests {
         };
     }
     // Stages the volume until its trace lands, returning the parameters and the last words it wrote.
-    private static (SdfMeshIrradianceParameters Parameters, uint[] Words) Trace(SdfMeshIrradiance volume, SdfFrame frame) {
+    private static (SdfMeshIrradianceParameters Parameters, uint[] Words) Trace(SdfMeshIrradiance volume, SdfFrame frame, SdfIndirectTier tier = SdfIndirectTier.High) {
         var words = Array.Empty<uint>();
         var parameters = default(SdfMeshIrradianceParameters);
         var deadline = DateTime.UtcNow.AddSeconds(value: 120d);
 
         do {
-            parameters = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => words = memory.ToArray());
+            var wrote = false;
+
+            parameters = volume.Stage(bakePending: false, frame: frame, tier: tier, write: memory => {
+                wrote = true;
+                words = memory.ToArray();
+                for (var offset = 0; (offset < words.Length); offset += SdfMeshIrradianceProbe.ProbeWords) {
+                    Assert.NotEqual(expected: 0u, actual: words[offset] & SdfMeshIrradianceProbe.WrittenFlag);
+                }
+            });
+            if (wrote) {
+                for (var z = parameters.Low.Z; (z < (parameters.Low.Z + parameters.Dims.Z)); z++) {
+                    for (var y = parameters.Low.Y; (y < (parameters.Low.Y + parameters.Dims.Y)); y++) {
+                        for (var x = parameters.Low.X; (x < (parameters.Low.X + parameters.Dims.X)); x++) {
+                            var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: x, y: y, z: z);
+
+                            Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag,
+                                actual: words[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag);
+                        }
+                    }
+                }
+            }
             Thread.Sleep(millisecondsTimeout: 20);
         } while (volume.Settling && (DateTime.UtcNow < deadline));
 
@@ -96,6 +126,27 @@ public sealed class SdfMeshIrradianceLawTests {
         return sum;
     }
 
+    [Fact]
+    public void AResizedOrMovedWindowPublishesOnlyAfterItsCellsHaveMeasurements() {
+        var frame = Frame() with { IndirectBounces = 0 };
+        var volume = new SdfMeshIrradiance();
+
+        _ = Trace(frame: frame, volume: volume);
+        var (resized, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
+
+        Assert.Equal(expected: 2f, actual: resized.Spacing);
+        var view = frame.Views[0];
+
+        frame = frame with {
+            Views = [view with {
+            Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: 6f, y: 2f, z: 0f),
+                target: new Vector3(x: 7f, y: 2f, z: 0f), viewportHeight: 4u, viewportWidth: 4u),
+        }],
+        };
+        var (moved, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
+
+        Assert.Equal(expected: (resized.Low.X + 3), actual: moved.Low.X);
+    }
     /// <summary>A lockstep frame waits for its scene and window's trace, including a cold scene and a replacement:
     /// each writes the same probes the asynchronous trace lands over many frames, in one staging.</summary>
     [Fact]
@@ -181,6 +232,12 @@ public sealed class SdfMeshIrradianceLawTests {
         // The camera can approach the slab without reading the lit probes beyond it.
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (nearSlab < (0.01f * lit)));
+
+        var (_, unlitWords) = Trace(frame: frame with { Lights = new SdfLights() }, volume: volume);
+        var unlitUpper = Probe(parameters: in parameters, words: unlitWords, x: 0, y: 5, z: 0);
+
+        Assert.Equal(expected: 0f, actual: Luminance(face: 3, probe: unlitUpper));
+        Assert.Equal(expected: 0u, actual: unlitUpper[SdfMeshIrradianceProbe.LightsWord]);
     }
     [Fact]
     public void ASpaceBetweenLatticeCentresMetersItsOwnLightingWithoutOpeningTheWalls() {
@@ -208,6 +265,16 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.Equal(actual: source, expected: SdfExposureMeterSource.CameraTrace);
         Assert.True(condition: (lit > 0f));
         Assert.InRange(actual: sky, high: 0.1f, low: 0f);
+        var traces = volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces);
+
+        for (var read = 0; (read < 100); read++) {
+            Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+                luminance: out var repeated, skyVisibility: out _, source: out _));
+            Assert.Equal(actual: repeated, expected: lit);
+        }
+        Assert.True(condition: volume.TryMeter(position: (frame.Views[0].Camera.Position + new Vector3(x: 0f, y: 0.05f, z: 0f)),
+            forward: Vector3.UnitY, luminance: out _, skyVisibility: out _, source: out _));
+        Assert.Equal(expected: traces, actual: volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces));
         var exposures = new SdfViewExposures();
 
         exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 1d);
@@ -228,6 +295,14 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.False(condition: volume.TryMeter(position: new Vector3(x: 0.3f, y: 2f, z: 0f), forward: Vector3.UnitX,
             luminance: out _, skyVisibility: out _, source: out source));
         Assert.Equal(actual: source, expected: SdfExposureMeterSource.None);
+
+        frame = frame with { Lights = new SdfLights() };
+        _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
+        Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+            luminance: out var unlit, skyVisibility: out _, source: out source));
+        Assert.Equal(actual: source, expected: SdfExposureMeterSource.CameraTrace);
+        Assert.Equal(actual: unlit, expected: 0f);
+        Assert.True(condition: (volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces) > traces));
     }
     [Fact]
     public void AnOpeningBesideAnAxisDoesNotEraseItsFirstBlocker() {

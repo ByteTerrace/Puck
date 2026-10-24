@@ -40,6 +40,8 @@ public enum AudioSourceKind {
     Tune,
     /// <summary>The world voice synth, identified by patch id; voices arrive via <see cref="SynthTrigger"/>.</summary>
     Synth,
+    /// <summary>A text utterance rendered by the same voice synth, with a sample-frame syllable schedule.</summary>
+    Speech,
 }
 /// <summary>One source identity — the key the mixer's per-block single-pull dedupes on and the seam live hosting
 /// binds to. <see cref="Slot"/> carries machine identity; <see cref="Id"/> carries tune/patch identity;
@@ -50,6 +52,8 @@ public enum AudioSourceKind {
 /// <param name="MachineInstance">The named machine instance for <see cref="AudioSourceKind.Machine"/>.</param>
 /// <param name="MachineOutput">The named machine output for <see cref="AudioSourceKind.Machine"/>.</param>
 public readonly record struct AudioSourceKey(AudioSourceKind Kind, int Slot, string? Id, string? MachineInstance = null, string? MachineOutput = null) {
+    /// <summary>Creates a text-speech source key.</summary>
+    public static AudioSourceKey Speech(string id) => new(Kind: AudioSourceKind.Speech, Slot: 0, Id: id);
     /// <summary>Creates a machine-source key.</summary>
     /// <param name="slot">The screen slot hosting the machine.</param>
     /// <returns>The key.</returns>

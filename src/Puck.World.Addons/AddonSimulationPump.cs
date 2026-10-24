@@ -120,7 +120,7 @@ public sealed class AddonSimulationPump {
             (cell.Verb != ((ushort)AddonSubjectKind.Screen)) &&
             (cell.Verb != ((ushort)AddonSubjectKind.State))
         ) {
-            error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
+            error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Screen)} = Screen, {((byte)AddonSubjectKind.Section)} = Section, {((byte)AddonSubjectKind.State)} = State)";
             return false;
         }
 

@@ -3633,6 +3633,7 @@ public static partial class WorldModelShape {
                 M("opacity", typeof(global::System.Single), typeof(global::Puck.World.WorldHudElement), "Opacity", Read | Write, static value => ((global::Puck.World.WorldHudElement)value).Opacity),
                 M("sources", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldHudFrameCandidate>), typeof(global::Puck.World.WorldHudElement), "Sources", Read | Write, static value => ((global::Puck.World.WorldHudElement)value).Sources),
                 M("fadeSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldHudElement), "FadeSeconds", Read | Write, static value => ((global::Puck.World.WorldHudElement)value).FadeSeconds),
+                M("voice", typeof(global::Puck.World.WorldVoiceProfile), typeof(global::Puck.World.WorldHudElement), "Voice", Read | Write, static value => ((global::Puck.World.WorldHudElement)value).Voice),
                 M("frameCandidates", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldHudFrameCandidate>), typeof(global::Puck.World.WorldHudElement), "FrameCandidates", None),
             ],
             []),
@@ -6171,6 +6172,9 @@ public static partial class WorldModelShape {
             [
                 M("patchId", typeof(global::System.String), typeof(global::Puck.World.WorldVoiceProfile), "PatchId", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).PatchId),
                 M("cadenceTicks", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldVoiceProfile), "CadenceTicks", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).CadenceTicks),
+                M("pitchThousandths", typeof(global::System.Int32), typeof(global::Puck.World.WorldVoiceProfile), "PitchThousandths", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).PitchThousandths),
+                M("formantThousandths", typeof(global::System.Int32), typeof(global::Puck.World.WorldVoiceProfile), "FormantThousandths", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).FormantThousandths),
+                M("paceThousandths", typeof(global::System.Int32), typeof(global::Puck.World.WorldVoiceProfile), "PaceThousandths", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).PaceThousandths),
             ],
             []),
         T(typeof(global::System.Collections.Generic.IDictionary<global::System.String, global::System.Text.Json.JsonElement>), true, JsonTypeInfoKind.Dictionary, typeof(global::System.Text.Json.JsonElement),

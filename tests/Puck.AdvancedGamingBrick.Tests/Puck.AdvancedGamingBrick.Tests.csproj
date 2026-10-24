@@ -11,4 +11,8 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- The battery fact launches the battery executable. -->
+        <ProjectReference Include="../../src/Puck.AdvancedGamingBrick.Post/Puck.AdvancedGamingBrick.Post.csproj" />
+    </ItemGroup>
 </Project>

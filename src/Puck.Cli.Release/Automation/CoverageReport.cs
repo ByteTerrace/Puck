@@ -9,7 +9,7 @@ namespace Puck.Cli.Automation;
 /// produced the report spelled (a local checkout, or <c>/_/</c> under a CI build's path mapping). Lines under a prefix of
 /// the hardware-only list (<c>build/CoverageHardwareOnly.txt</c>) are left out: the runners measuring coverage have no
 /// GPU and no real mouse or foreground window, and the list is the one place that says which code only that hardware
-/// reaches.
+/// reaches. The verification harnesses (<see cref="IsHarness"/>, the <c>Puck.*.Post</c> projects) are left out the same way.
 /// </summary>
 public static class CoverageReport {
     /// <summary>The repository-relative path of the hardware-only list.</summary>
@@ -27,6 +27,18 @@ public static class CoverageReport {
             return ((comment < 0) ? line : line[..comment]).Trim().Replace(oldChar: '\\', newChar: '/');
         })
         .Where(predicate: static line => (line.Length != 0))];
+    /// <summary>Returns whether a repository-relative <c>src/</c> path lies in a verification harness: a project whose
+    /// name ends <c>.Post</c> (the emulator batteries and their shared scaffold). A harness is test infrastructure that
+    /// the suites run, not engine code, so its lines are neither measured nor required.</summary>
+    /// <param name="path">The repository-relative path of a file or project directory.</param>
+    /// <returns><see langword="true"/> when the path is under a <c>src/Puck.*.Post</c> project.</returns>
+    public static bool IsHarness(string path) {
+        if (!path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/")) { return false; }
+        var end = path.IndexOf(startIndex: 4, value: '/');
+        var project = (end < 0) ? path[4..] : path[4..end];
+
+        return project.EndsWith(comparisonType: StringComparison.Ordinal, value: ".Post");
+    }
     /// <summary>Returns the repository-relative <c>src/</c> path a report spells for a source file, or
     /// <see langword="null"/> for a file outside <c>src/</c> or generated under an <c>obj</c> directory.</summary>
     /// <param name="fileName">The report's file name, absolute or mapped.</param>
@@ -131,7 +143,7 @@ public static class CoverageReport {
     /// <returns><see langword="true"/> when every measured line outside the hardware-only list is covered and every project
     /// outside it was loaded.</returns>
     public static bool Judge(SortedDictionary<string, SortedDictionary<int, bool>> files, IEnumerable<string> projects, IReadOnlyList<string> hardwareOnly, TextWriter writer) {
-        bool Excluded(string path) => hardwareOnly.Any(predicate: prefix => path.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix));
+        bool Excluded(string path) => IsHarness(path: path) || hardwareOnly.Any(predicate: prefix => path.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix));
         var measured = 0;
         var covered = 0;
         var uncovered = new StringBuilder();

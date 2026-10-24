@@ -33,11 +33,21 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             clearValues.Add(item: VkClearValue.OfDepth(depth: depth.ClearDepth));
         }
 
+        // Vulkan indexes clear values by attachment, but only needs entries through the last attachment that clears.
+        // A pass that only loads or discards attachments needs no clear payload.
+        var count = clearValues.Count;
+        while ((count > 0) && (((count > description.Colors.Count)
+            ? description.Depth!.Value.Load
+            : description.Colors[(count - 1)].Load) != GpuAttachmentLoad.Clear)) {
+            count--;
+        }
+        clearValues.RemoveRange(index: count, count: (clearValues.Count - count));
+
         ClearValues = clearValues;
     }
 
-    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, the declared
-    /// <see cref="GpuDepthAttachment.ClearDepth"/> for the depth.</summary>
+    /// <summary>Gets clear values in attachment order through the last cleared attachment, or an empty list when none
+    /// clears: opaque black for a color, the declared <see cref="GpuDepthAttachment.ClearDepth"/> for the depth.</summary>
     public IReadOnlyList<VkClearValue> ClearValues { get; }
     /// <inheritdoc/>
     public GpuRenderPassDescription Description { get; }
