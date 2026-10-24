@@ -171,6 +171,11 @@ These items belong to no single programme.
   - [ ] Diagnostic views that flag suspect values without covering them ([decision](../decisions/rendering.md#a-diagnostic-view-never-covers-its-evidence)).
     - [ ] Phase 1: the shared machinery (preserve-scene path, finding records, `report`, pins and exterior marks, capture triplets, pick and goto by finding) with the `colliders` and `contacts` views.
     - [ ] Phase 2: the `probes` view (a final contributing probe whose segment to the receiver is blocked) and the `exposure` view (checks against the probe-based meter, `SdfMeshIrradiance.TryMeter`).
+  - [ ] Repurpose `view.annotate` as the human half of the diagnostics, after diagnostics phase 1:
+    - the diagnostic pins, contours and calipers extend its `AnnotationWriter`, with no second overlay writer;
+    - a circle runs `world.view.pick` inside it and lists what it holds (stamp, creation, node, body) and any findings there;
+    - each circle is anchored to its picked world point, so it follows the thing and `goto` reaches it.
+  - [ ] `puck_world_start` boots whatever Release build the checkout holds, even one older than the sources. Twice it failed on a document that a newer schema had changed (`groundSnap`, then `derivedFaceScreens`), with a schema refusal rather than "the build is stale". It should refuse a build older than the world documents and sources it boots, by naming the newest input, or build first.
   - [ ] Tabled by the owner for later: a maths room in the gallery with a 2D grid (a walkable board) and a 3D grid (a floating lattice) whose cells `Puck.Maths` computes in the simulation, so they are bit-identical on every machine.
     - The open questions are the owner's: the audience (a showpiece or a tool for us), how animated it is, how interactive, which maths leads, and where it goes.
     - The technical ones are per-cell variation within the 367-shape budget (a repeat domain that reads a state table, or many placements), computing in rules with new builtins rather than an addon, and what a per-tick update costs.
