@@ -87,11 +87,11 @@ let liftBase = [
 ]
 let liftLamps = [
   { color: "#4A3B24", roughness: 0.5, specular: 0.05 }
-  { color: "#FFB24A", roughness: 0.5, emissive: 900nit }
+  { color: "#FFA52E", roughness: 0.5, emissive: 450nit }
 ]
 let liftFaces = [
   { color: "#C9C5BA", roughness: 0.45, specular: 0.1 }
-  { color: "#FFC46B", roughness: 0.4, emissive: 700nit }
+  { color: "#FF9F2E", roughness: 0.4, emissive: 260nit }
 ]
 
 // A round button standing on its plate: a chrome bezel and a face of the lit or unlit slot, on the +Z side of the origin.
