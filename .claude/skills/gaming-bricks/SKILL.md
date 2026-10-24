@@ -81,7 +81,7 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   dominates it). Give a CPU-stream comparison at least 120 frames and check that the
   record count differs per ROM before believing a clean result.
 - **Know which AGB BIOS ran before blaming firmware.** Advanced Post
-  diagnostics (`--render`, `--probe`, `--trace-crash` and the rest) boot the
+  diagnostics (`--render`, `--trace-crash` and the rest) boot the
   bundled Puck firmware unless `--bios` names another image, as a World does;
   only the battery runs the zeroed stub, where any SWI or IRQ runs off into
   zeroed BIOS memory. A hosted core or `AgbLinkSession` console that stops
@@ -111,14 +111,20 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   never another emulator or a game's look. A Deck program that clears the CPU's I flag inhibits the APU
   frame IRQ (`$4017 = $40`) first, or the shared IRQ line never drops.
 - **GBA multiplayer SIOCNT has an unmodeled ready line.** `AgbSerialController.PackSioControl`
-  does not derive the SD/SI bits from cable-partner presence, and
-  `LinkGameReplayStage` records how far a commercial link game gets without it.
-  Implementing it flips that stage; update the stage and the reference together,
-  and derive the bits from the modeled `AgbLinkCable` partner, never from ambient
-  state.
-- **No licensed image is ever a committed default or a bundled payload.** Retail
-  ROMs and BIOS images are named per run (`--link-rom`, `--bios`, `--ags`) and
-  stay out of the repository, its builds, packages, logs and commit messages. A
+  does not derive the SD/SI bits from cable-partner presence, so a program that
+  polls the ready lines to find a partner never sees one. No committed stage
+  covers a partner-polling program; the Tier C `link-replay` and `link-churn`
+  micro-ROMs poll IF with IME off. Implementing the bits adds a stage for it:
+  derive them from the modeled `AgbLinkCable` partner, never from ambient state,
+  update the reference, and close the gap in
+  [open items](../../../docs/plans/open-items.md#machines-and-cartridges).
+- **Tests never depend on a commercial ROM or a retail BIOS** (owner ruling). A
+  stage, test or CI step runs on committed sources and the fetched homebrew and
+  test-cartridge corpora, and a stage whose only input is a licensed image is
+  deleted, not kept (a retail-BIOS control inside a stage runs only when `--bios`
+  names one by hand). A commercial ROM or retail BIOS is a local, by-hand input to
+  a diagnostic (`--render`, `--bios`) and stays out of the repository, its builds,
+  packages, logs and commit messages. A
   world device boots one only as the owner's local default: the git-ignored
   folder's own `folder.json`, written by `machine.default` (`puck-world`,
   [engagement](../puck-world/references/engagement.md)), so nothing committed
@@ -184,9 +190,10 @@ covers serial, link and infrared exchange. A stage whose asset is absent skips
 (`--require-assets` turns that into an infrastructure failure), and the report
 lists every skip. Report stage and skip counts from stdout; exit 0 alone does
 not prove a stage ran. Exit 0 is pass or skip, 1 a failed check (a corpus ROM that does
-not pass included), 2 infrastructure. `tests/Puck.HumbleGamingBrick.Tests` runs the
-Humble battery with an empty corpus cache, so CPU suites cover the self-contained
-stages.
+not pass included), 2 infrastructure. `tests/Puck.HumbleGamingBrick.Tests` and
+`tests/Puck.AdvancedGamingBrick.Tests` run their battery with an empty corpus cache,
+so CPU suites cover the self-contained stages (and the cores they check). The
+`Puck.*.Post` harnesses are outside the 100% coverage denominator.
 
 ## Load references selectively
 

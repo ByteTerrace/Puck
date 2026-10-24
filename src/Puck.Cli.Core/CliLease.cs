@@ -17,7 +17,7 @@ public sealed class CliLease : IDisposable {
 
     /// <summary>Acquires a named lease, waiting at most the supplied interval.</summary>
     /// <param name="root">The shared lease directory.</param>
-    /// <param name="name">The resource, gpu or heavy.</param>
+    /// <param name="name">The resource: build (one World store build at a time), gpu or heavy.</param>
     /// <param name="holder">The lane name.</param>
     /// <param name="wait">The maximum wait.</param>
     /// <param name="clock">The deadline and stale-age clock.</param>
@@ -27,8 +27,8 @@ public sealed class CliLease : IDisposable {
     /// <exception cref="ArgumentException">The name, holder or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
     public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null) {
-        if ((name is not ("gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)) {
-            throw new ArgumentException(message: "A lease requires gpu or heavy, a single-line holder, and a nonnegative wait.");
+        if ((name is not ("build" or "gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)) {
+            throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder, and a nonnegative wait.");
         }
         Directory.CreateDirectory(path: root);
         var directory = Path.Combine(path1: root, path2: name);

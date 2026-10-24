@@ -17,11 +17,12 @@ namespace Puck.Mcp;
 /// and returns the held lease, which releases on disposal; throws <see cref="TimeoutException"/> when it stays held.</param>
 /// <param name="ResolveBuild">Resolves the World build of a checkout's current sources, given the checkout and the time
 /// it may take, building it only when no earlier run built those sources; the CLI answers it with its content-keyed
-/// World build store, so the build a start boots can never be older than the sources it boots.</param>
+/// World build store, so the build a start boots can never be older than the sources it boots. Its boolean asks for a
+/// build that carries Vulkan SPIR-V, which a Vulkan start needs.</param>
 public sealed record OperatorWorldLaunch(
     string Checkout,
     Func<string, TimeSpan, CancellationToken, Task<IDisposable>> AcquireGpuLease,
-    Func<string, TimeSpan, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
+    Func<string, bool, TimeSpan, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
 );
 /// <summary>The World build a start boots, or why none could be made.</summary>
 /// <param name="Path">The full path of <c>Puck.World.dll</c>, or <see langword="null"/> when no build is available.</param>
@@ -82,6 +83,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     /// <param name="cancellationToken">Cancels the start; a World already launched is stopped.</param>
     /// <returns>The started World, or a refusal.</returns>
     public async Task<CallToolResult> StartAsync(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment, CancellationToken cancellationToken) {
+        string? backend = null;
         string? checkoutArgument = null;
         var document = "worlds/debug";
         var holder = "puck-mcp";
@@ -92,6 +94,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
             if ((key == "document") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString())) {
                 document = value.GetString()!;
+            } else if ((key == "backend") && (value.ValueKind == JsonValueKind.String) && (value.GetString() is "directx" or "vulkan")) {
+                backend = value.GetString();
             } else if ((key == "checkout") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString())) {
                 checkoutArgument = value.GetString();
             } else if ((key == "windowed") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
@@ -129,7 +133,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         // The build comes before the GPU lease, so a long build never holds the machine's GPU.
-        var resolved = await launch.ResolveBuild(checkout, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var resolved = await launch.ResolveBuild(checkout, (backend == "vulkan"), budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         if (resolved.Path is not { } build) {
             resolved.Lease?.Dispose();
@@ -153,7 +157,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         Started started;
 
         try {
-            started = Launch(build: build, buildLease: resolved.Lease, checkout: checkout, document: path, lease: lease, ownerPlay: ownerPlay, target: attachment.Target, windowed: windowed);
+            started = Launch(backend: backend, build: build, buildLease: resolved.Lease, checkout: checkout, document: path, lease: lease, ownerPlay: ownerPlay, target: attachment.Target, windowed: windowed);
         } catch (Exception error) when ((error is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)) {
             lease?.Dispose();
             resolved.Lease?.Dispose();
@@ -181,7 +185,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 if (world is { } reached) {
                     started.AttachmentId = reached.AttachmentId;
 
-                    return Result(metadata: Metadata(output: $"Started World process {started.Process.Id} ({(windowed ? "windowed, holding the GPU lease" : "headless")}, --devices {(ownerPlay ? "all" : "none")}) from {build}; name it by processId or attachmentId in every call, read its output with host.log, and end it with puck_world_stop.", started: started, status: "started", world: reached));
+                    return Result(metadata: Metadata(output: $"Started World process {started.Process.Id} ({(windowed ? "windowed, holding the GPU lease" : "headless")}{((backend is null) ? string.Empty : $", --backend {backend}")}, --devices {(ownerPlay ? "all" : "none")}) from {build}; name it by processId or attachmentId in every call, read its output with host.log, and end it with puck_world_stop.", started: started, status: "started", world: reached));
                 }
                 if (clock.GetElapsedTime(startingTimestamp: begun) >= budget) {
                     _ = Stop(grace: TimeSpan.Zero, started: started);
@@ -318,7 +322,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             ? (wanted, null)
             : (null, $"Refused: {wanted} is not a checkout of this repository ({own} or one of its worktrees); a start boots only those."));
     }
-    private Started Launch(string build, IDisposable? buildLease, string checkout, string document, IDisposable? lease, bool ownerPlay, string target, bool windowed) {
+    private Started Launch(string? backend, string build, IDisposable? buildLease, string checkout, string document, IDisposable? lease, bool ownerPlay, string target, bool windowed) {
         var runDirectory = Path.Combine(
             path1: target,
             path2: "puck-mcp-worlds",
@@ -345,6 +349,10 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             "--control",
         }) {
             info.ArgumentList.Add(item: argument);
+        }
+        if (backend is not null) {
+            info.ArgumentList.Add(item: "--backend");
+            info.ArgumentList.Add(item: backend);
         }
 
         // The World publishes its attachment file in its temporary directory, which must be the one this adapter follows.

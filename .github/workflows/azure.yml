@@ -46,7 +46,8 @@ jobs:
       prebuilt: true
   # Outside deploy's needs: it reports on every push to main and holds no deploy while the suite climbs to 100%.
   # Every shard writes a Cobertura report per assembly; the union must cover every live line outside the hardware-only
-  # list (build/CoverageHardwareOnly.txt), and every live project must be loaded by some run.
+  # list (build/CoverageHardwareOnly.txt), and every live project must be loaded by some run. The Puck.*.Post emulator
+  # batteries are harnesses and sit outside both rules; the emulator test suites run them to cover the cores.
   coverage:
     if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     name: Check line coverage

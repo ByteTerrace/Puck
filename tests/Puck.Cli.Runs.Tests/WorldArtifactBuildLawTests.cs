@@ -363,6 +363,77 @@ public sealed class WorldArtifactBuildLawTests {
         }
     }
     [Fact]
+    public async Task BuildsOfDifferentSourceStatesQueueOnTheBuildLeaseAndSpirvKeysApart() {
+        using var checkout = new Checkout();
+        using var leases = new TemporaryDirectory();
+        var store = checkout.Store;
+        var running = 0;
+        var peak = 0;
+        var spirvArguments = 0;
+        var builds = 0;
+
+        CliProcessResult Build(IReadOnlyList<string> arguments, TimeSpan timeout) {
+            var now = Interlocked.Increment(location: ref running);
+
+            InterlockedMax(location: ref peak, value: now);
+            _ = Interlocked.Increment(location: ref builds);
+
+            if (arguments.Contains(value: "-p:PuckShaderSpirvEnabled=true")) {
+                _ = Interlocked.Increment(location: ref spirvArguments);
+            }
+
+            Thread.Sleep(millisecondsTimeout: 400);
+            File.WriteAllText(contents: "built", path: Path.Combine(path1: arguments[^1], path2: WorldArtifactBuild.ArtifactName));
+            _ = Interlocked.Decrement(location: ref running);
+
+            return new CliProcessResult(ExitCode: 0, OutputLines: [], Stderr: string.Empty, Stdout: "Build succeeded.", TimedOut: false);
+        }
+        WorldArtifact Resolve(bool spirv) {
+            Assert.True(
+                condition: WorldArtifactBuild.TryResolve(
+                artifact: out var artifact,
+                builder: Build,
+                error: out var error,
+                leaseRoot: () => leases.RootPath,
+                logDirectory: checkout.LogDirectory,
+                repositoryRoot: checkout.Root,
+                spirv: spirv,
+                store: store,
+                timeout: TestLiveness.Bound,
+                verb: "law"
+            ),
+                userMessage: error
+            );
+
+            return artifact;
+        }
+
+        var artifacts = await Task.WhenAll(
+            Task.Run(function: () => Resolve(spirv: false)),
+            Task.Run(function: () => Resolve(spirv: true))
+        );
+
+        try {
+            Assert.Equal(expected: 2, actual: Volatile.Read(location: ref builds));
+            Assert.Equal(expected: 1, actual: Volatile.Read(location: ref peak));
+            Assert.Equal(expected: 1, actual: Volatile.Read(location: ref spirvArguments));
+            Assert.NotEqual(actual: artifacts[0].Path, expected: artifacts[1].Path);
+            Assert.False(condition: Directory.Exists(path: Path.Combine(path1: leases.RootPath, path2: "build")));
+        } finally {
+            foreach (var artifact in artifacts) {
+                artifact.Dispose();
+            }
+        }
+
+        static void InterlockedMax(ref int location, int value) {
+            int seen;
+
+            do {
+                seen = Volatile.Read(location: ref location);
+            } while ((value > seen) && (Interlocked.CompareExchange(location1: ref location, value: value, comparand: seen) != seen));
+        }
+    }
+    [Fact]
     public void APublishThatLosesTheRaceDiscardsItsOwnBuildAndTakesTheWinners() {
         using var checkout = new Checkout();
         var store = checkout.Store;

@@ -2,6 +2,7 @@
   "schema": "puck.console.verbs.v1",
   "verbs": [
     { "name": "audio.emitters", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "audio.render", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "audio.state", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "backend", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "body.attach", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

@@ -9,12 +9,12 @@ hardware details, sources, and diagnostic procedures.
 |---|---|---|
 | CPU and bus | ARM/Thumb execution, pipeline-visible open bus, Game Pak prefetch, WAITCNT mirror timing, multiply early termination | smoke vectors, jsmolka, FuzzARM, cycle diagnostics |
 | DMA | channel-local latches, start latency, count/source/destination latching, forced non-sequential fetch, video-capture timing | `--oracle`, mGBA suite |
-| Timers and IRQ | per-cycle prescalers, cascade, overflow/reload/IRQ latency, IE/IF/IME synchronization, HALT and STOP distinction | `--oracle`, mGBA suite, AGS |
-| PPU | scanline rendering, OBJ cycle budget and dropout, affine reference latches, windows, blending, HBlank raster effects | render hashes, mGBA suite, AGS |
+| Timers and IRQ | per-cycle prescalers, cascade, overflow/reload/IRQ latency, IE/IF/IME synchronization, HALT and STOP distinction | `--oracle`, mGBA suite |
+| PPU | scanline rendering, OBJ cycle budget and dropout, affine reference latches, windows, blending, HBlank raster effects | render hashes, mGBA suite |
 | APU | DMG-derived PSG channels, Direct Sound ring/playing-buffer model, FIFO DMA threshold, narrow writes, deterministic integer samples | `--oracle`, audio inspection |
 | Cartridge | EEPROM, SRAM, Flash, save overrides, RTC, undersized-image validation | jsmolka save stages, save round trip |
 | Determinism | full mid-frame snapshot/restore/fork, section-localized hash divergence | Tier A state and fork stages, `--hash-divergence` |
-| Link | Normal and multiplayer SIO, cable identity and partner state, deterministic multi-console session | Tier C `link-replay` and commercial replay |
+| Link | Normal and multiplayer SIO, cable identity and partner state, deterministic multi-console session | Tier C `link-replay` and `link-churn` |
 | Time travel | machine-neutral rewind (keyframe plus deterministic replay, no delta encode) and two-instance runahead at the host layer; no console verb exposes either yet | `queued-host-time-travel` (Tier A, both batteries), `MachineTimeTravel<TInput>` (`src/Puck.Machines`) |
 
 ## Accuracy work

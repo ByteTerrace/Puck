@@ -334,17 +334,5 @@ internal static class PostStages {
             // light through RP only while the gun is aimed at a white pixel, the aim survives a snapshot, and a rerun
             // is identical (self-contained synthetic ROM; runs anywhere).
             new LightGunStage(),
-            // Tier C — the rule-#3/M5 golden replay of a REAL commercial game across a Cgb↔Agb pair (needs a
-            // link-capable cartridge via --link-rom; skips cleanly when absent).
-            new LinkGameReplayStage(),
-            // Tier C — the cross-gen-cart trade-harness foundation: two Cgb machines boot the real trade cartridge with
-            // distinct crafted saves, linked through a SerialLinkSession, proving CONTINUE-acceptance onto the Cable Club
-            // floor + churn transparency (needs the trade cartridge via --trade-rom; skips cleanly when absent).
-            new ScriptedTradeContinueStage(),
-            // Tier C — the full scripted two-machine cross-gen-cart Cable Club trade: ScriptedTradeDriver's peek-gated phase
-            // machine walks both Cgb machines through the rendezvous, block exchange, mon offer/confirm, trade + auto-save,
-            // and CANCEL exit; the gate asserts the $01/$02 roles, the committed lead-species swap, replay- and
-            // churn-identical traffic/snapshots/SRAMs (needs the trade cartridge via --trade-rom; skips cleanly absent).
-            new ScriptedTradeLinkLockStage(),
         ];
 }

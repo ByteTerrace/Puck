@@ -1,31 +1,19 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-/// <summary>Where a render-hash floor's ROM is sourced from.</summary>
-internal enum RenderFloorSource {
-    /// <summary>Under the reference conformance-corpus root (the gba-tests corpus, or <c>--roms</c>).</summary>
-    Corpus,
-    /// <summary>Under the commercial-ROM directory (<c>--games</c>).</summary>
-    Games,
-}
-/// <summary>One deterministic render-hash floor: a ROM run for a fixed number of CPU steps whose framebuffer must hash
-/// to a known value.</summary>
-/// <param name="Source">Which root the ROM lives under.</param>
-/// <param name="RelativePath">The ROM path relative to that root (forward slashes).</param>
+/// <summary>One deterministic render-hash floor: a corpus ROM run for a fixed number of CPU steps whose framebuffer must
+/// hash to a known value.</summary>
+/// <param name="RelativePath">The ROM path relative to the conformance-corpus root (forward slashes).</param>
 /// <param name="Name">The floor's display name.</param>
 /// <param name="Steps">The number of CPU steps, including halted idle steps, before hashing.</param>
-/// <param name="ExpectedHash">The known-good FNV-1a framebuffer hash (captured with a real BIOS when <paramref name="NeedsBios"/>).</param>
-/// <param name="NeedsBios">Whether the ROM's render depends on the BIOS (a commercial game that runs BIOS SWIs during boot);
-/// such a floor skips when only the zeroed BIOS stub is present, since it would otherwise render a blank screen and
-/// mismatch. Simple direct-boot demos (the ppu screens) are BIOS-independent and set this <see langword="false"/>.</param>
-internal sealed record RenderFloor(RenderFloorSource Source, string RelativePath, string Name, long Steps, ulong ExpectedHash, bool NeedsBios);
+/// <param name="ExpectedHash">The known-good FNV-1a framebuffer hash.</param>
+internal sealed record RenderFloor(string RelativePath, string Name, long Steps, ulong ExpectedHash);
 /// <summary>
-/// Tier-B stage: deterministic render-hash floors. Each floor boots a ROM, runs it for a fixed number of CPU steps,
-/// and hashes the framebuffer; because the core is fully deterministic, a known-good render must reproduce its FNV-1a
-/// hash exactly. This guards the whole CPU&#8594;bus&#8594;PPU pipeline against silent regressions while the accuracy
-/// frontier is worked. Floors sourced from the corpus (the ppu screen demos) or the commercial-ROM directory skip
-/// individually when their ROM is absent; the stage skips entirely when none is present. Keep BIOS identity and step
-/// budget fixed when comparing builds: replacement firmware need not reach the same frame after the same instruction
-/// count. Explain a changed result before recapturing a floor with <c>--render-hash</c>.
+/// Tier-B stage: deterministic render-hash floors. Each floor boots a corpus ROM, runs it for a fixed number of CPU
+/// steps, and hashes the framebuffer; because the core is fully deterministic, a known-good render must reproduce its
+/// FNV-1a hash exactly. This guards the whole CPU&#8594;bus&#8594;PPU pipeline against silent regressions while the
+/// accuracy frontier is worked. A floor skips when its ROM is absent; the stage skips entirely when none is present.
+/// Keep BIOS identity and step budget fixed when comparing builds: replacement firmware need not reach the same frame
+/// after the same instruction count. Explain a changed result before recapturing a floor with <c>--render-hash</c>.
 /// </summary>
 internal sealed class RenderHashStage : IPostStage<PostContext> {
     private readonly IReadOnlyList<RenderFloor> m_floors;
@@ -50,36 +38,24 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var stubBios = (context.BiosImage.Span.IndexOfAnyExcept(value: ((byte)0)) < 0);
+        var root = context.TestRomRoot;
         var floors = new List<(RenderFloor Floor, string FullPath)>(capacity: m_floors.Count);
 
-        foreach (var floor in m_floors) {
-            var root = ((floor.Source == RenderFloorSource.Corpus)
-                ? context.TestRomRoot
-                : context.GamesRoot
-            );
+        if (root is not null) {
+            foreach (var floor in m_floors) {
+                var fullPath = Path.Combine(
+                    path1: root,
+                    path2: floor.RelativePath
+                );
 
-            // A BIOS-dependent floor renders a blank screen on the zeroed stub, which would never match — skip it there
-            // rather than false-fail. Nonzero images run, but the floor's fixed step budget is BIOS-specific.
-            if (
-                (root is null) ||
-                (floor.NeedsBios && stubBios)
-            ) {
-                continue;
-            }
-
-            var fullPath = Path.Combine(
-                path1: root,
-                path2: floor.RelativePath
-            );
-
-            if (File.Exists(path: fullPath)) {
-                floors.Add(item: (floor, fullPath));
+                if (File.Exists(path: fullPath)) {
+                    floors.Add(item: (floor, fullPath));
+                }
             }
         }
 
         if (floors.Count == 0) {
-            return PostStageOutcome.Skip(detail: "no render-hash floor ROMs present (fetch the gba-tests corpus or pass --roms / --games)");
+            return PostStageOutcome.Skip(detail: "no render-hash floor ROMs present (fetch the gba-tests corpus or pass --roms)");
         }
 
         var outcome = RomCaseRunner.Run(

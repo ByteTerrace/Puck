@@ -13,10 +13,10 @@ from it and publishes `AudioSnapshot`s here.
 
 `Puck.Audio` parses no document. `WorldVoicePatchFactory.FromDocument`
 converts a normalized `puck.synthesizer-patch.v1` document
-(`Puck.World.Authoring.SynthPatchDocument`) into the runtime
+(`Puck.Assets.Documents.SynthPatchDocument`) into the runtime
 `Puck.Audio.Mixing.VoicePatch` struct—the one place a document crosses
 that boundary, including mapping the document's
-`Puck.World.Authoring.SynthOscillator` onto the mixer's own
+`Puck.Assets.Documents.SynthOscillator` onto the mixer's own
 `Puck.Audio.Mixing.SynthOscillator` (same ordinals, kept as two separate
 enumerations rather than one shared type across the layering boundary).
 
@@ -129,15 +129,32 @@ placed emitter plus one seeded `VoiceSynth` trigger), recorded under the
 reserved `voice.babble` cue token so `speaker.state`'s live transient-cue tail
 reads it the same way every other cue reads. Every syllable's seed folds the
 identity id, the utterance ordinal, and the syllable index—never wall-clock
-—so a babbled utterance reproduces bit-identically across runs. No producer
-yet estimates a syllable count from dialogue/caption text (a presentation/
-content concern), and a babbling identity has no live-body correlation yet, so
+—so a babbled utterance reproduces bit-identically across runs. A babbling
+identity has no live-body correlation yet, so
 every syllable voices listener-placed rather than at a resolved world
-position—`voice.babble` is the debug/test call site until a real one lands.
+position. `voice.babble` remains a count-based debug/test call site; HUD text
+uses the text-aware source below.
 `voice.state` echoes the live status: the delivered identity's voice
 selectors, how many syllable triggers remain scheduled, how many
 `voice.babble` cue transients are currently live, and the cumulative fired
 count (monotone).
+
+## HUD text speech
+
+`WorldHudElement.Voice` reuses the patch/cadence profile with speaker pitch,
+formant and pace scales. `WorldHudSpeechFeed` resolves the visible element's
+literal, binding or template, speaks on arrival/change and stops on hiding.
+`WorldAudioDirector.Speech.cs` binds each utterance's `TextSpeechSource` into
+the existing mixer, listener-placed, with four reserved slots. That source
+drives the existing `VoiceSynth` at exact audio-frame character boundaries,
+with vowel formants, consonant noise onsets and punctuation rests.
+
+`WorldSpeechRenderer` writes the same source to WAV without a device;
+`audio.render <panelId> <elementId> <output.wav>` exposes it on headless and
+presented Worlds. [The audio reference](../../../docs/reference/audio.md#text-speech)
+owns the document shape, units and recipe. The debug guide and map sign are
+the live authored examples in `worlds/debug/guide.puck`. Authored sample sets
+remain the second slice; no sample-source document is admitted yet.
 
 ## Verifying
 

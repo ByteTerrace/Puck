@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-LinkGameReplayStage
+link-replay

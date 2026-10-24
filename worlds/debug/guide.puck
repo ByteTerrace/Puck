@@ -9,6 +9,18 @@ import "shapes"
 // label's side, on the level's floor. Regions 2.6 m apart with a 1.29 m radius never overlap.
 let guideExhibits = reduce(galleryRows, [], (all, row) => concat(all, map(row.names, (name, index) => { name: name, x: (galleryX + (gallerySpacing * index)), y: galleryFloor[row.level], z: (row.z - 1.7) })))
 let guideRadius = 1.29
+let guideVoice = { patchId: "gallery-guide", cadenceTicks: 16, pitchThousandths: 1100, formantThousandths: 1150, paceThousandths: 1250 }
+
+// The existing synth patch supplies the oscillator and envelope. The HUD voice supplies the speaker's articulation.
+patches [{ name: "gallery-guide", source: "patches/guide-voice.patch.json", hash: "405ee9583477d64a47e99762ed96d22b97b0542650154d3b60cda55b00f243c0" }]
+audio {
+  masterGain: 0.65
+  defaultSpeakerRadius: 8
+  defaultCurve: "linear"
+  defaultBedFadeSeconds: 0.1
+  listener: "focus"
+  cues []
+}
 
 // `guide` holds the shown exhibit's title and note, both empty while she stands at none; `guideAt` its position in
 // walking order, or -1.
@@ -39,7 +51,23 @@ hud {
       }
       elements [
         { id: "title", kind: Text, rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }, style: Primary, "template": "{state.guide.title}" }
-        { id: "note", kind: Text, rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }, style: Dim, "template": "{state.guide.note}" }
+        { id: "note", kind: Text, rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }, style: Dim, "template": "{state.guide.note}", voice: guideVoice }
+      ]
+    }
+    {
+      id: "gallery-sign"
+      rect { x: 0.02, y: 0.02, width: 0.68, height: 0.05 }
+      layer: Over
+      style: Panel
+      visible {
+        $type: "all"
+        predicates [
+          { $type: "state", binding: "state.addonHud", comparison: Equal, value: 1 }
+          { $type: "near", subject { $type: "placement", placementId: `gallery-map` }, distance: 2.5 }
+        ]
+      }
+      elements [
+        { id: "directions", kind: Text, rect { x: 0.02, y: 0.1, width: 0.96, height: 0.8 }, style: Primary, text: galleryMapDirections, voice { patchId: "gallery-guide", cadenceTicks: 18, pitchThousandths: 800, formantThousandths: 850, paceThousandths: 1100 } }
       ]
     }
   ]

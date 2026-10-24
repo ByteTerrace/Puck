@@ -1,38 +1,18 @@
 [
   {
-    "Id": "prime-selection.kernel-shells-refuse-violations",
+    "Id": "prime-field.selfridge-shell-refusals",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonQuotients512" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonQuotients256" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonQuotients128" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonQuotientsScalar" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonSegmentPositions512" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonSegmentPositions256" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideGourdonSegmentPositionsScalar" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels", "Name": "DivideByFloorReciprocal" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels+GourdonUnitsByHalves", "Name": "IsSupported" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels+GourdonUnitsByHalves", "Name": "InstructionSet" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels+GourdonUnitsByFraction", "Name": "IsSupported" },
-      { "Type": "Puck.Maths.PrimeDivisionKernels+GourdonUnitsByFraction", "Name": "InstructionSet" },
-      { "Type": "Puck.Maths.PrimeLeafKernels", "Name": "FilterGourdonHardLeavesCompress" },
-      { "Type": "Puck.Maths.PrimeLeafKernels", "Name": "FilterGourdonHardLeavesPack256" },
-      { "Type": "Puck.Maths.PrimeLeafKernels", "Name": "FilterGourdonHardLeavesPack128" },
-      { "Type": "Puck.Maths.PrimeLeafKernels", "Name": "FilterGourdonHardLeavesScalar" },
-      { "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve", "Name": "Reset" },
-      { "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve", "Name": "Initialize" },
-      { "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve", "Name": "CrossOff" },
-      { "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialPrefixCursor", "Name": "Count" },
-      { "Type": "Puck.Maths.PrimeKernels", "Name": "CountOddPrimesBelow" },
-      { "Type": "Puck.Maths.PrimeKernels", "Name": "SelfridgeSymbol" },
-      { "Type": "Puck.Maths.PrimeExtensions", "Name": "CountCombinatorial64" },
-      { "Type": "Puck.Maths.PrimeExploration", "Name": "CountSemiprimes" }
+      {
+        "Type": "Puck.Maths.PrimeKernels",
+        "Name": "SelfridgeSymbol"
+      }
     ],
     "Legs": [
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Every public prime kernel shell refuses each violated precondition before it writes, with the documented exception naming the parameter: a destination, reciprocal or negation span shorter than its source; a scalar start outside zero through the divisor count; a leaf-quotient divisor that is zero or whose quotient reaches 2^48 (the divisor 4096 of 2^60 refuses and 4097 is accepted), and a segment-position divisor that is zero or above 2^31-1, a reciprocal one unit in the last place from the correctly rounded inverse, or a quotient below the window origin or at or above origin+2^28-1, each naming the offending index and ignored before the scalar rungs' start; a floor reciprocal or floor-reciprocal pair with a zero divisor or a reciprocal that is not floor((2^64-1)/divisor); a hard-leaf coordinate past the table, a last below -1 or past the coordinate, a prime of 32768, divisors shorter than one vector of the rung's lanes; a leaf-sieve width past 2^20 or empty, a prime count outside the list, a null list, a window that is not the next one (zero after Reset, then just after the preceding bitmap word, once every listed prime has been crossed), a crossing index below the ninth prime or past the list or before any Reset or out of order or repeated, and a crossing divisor that is not the list's entry, not a unit modulo thirty above 19 or not above its predecessor (through the dispatching crossing and each of the 512-, 256- and 128-bit widths); a packet residue outside the wheel, a packet phase outside the defined ones and a prime past the uint range; a presieve pattern group outside the table; a prefix query past the last bitmap word, in an earlier word than the previous query, on a cursor over no window, or through an undefined window; an odd-prime rank past 65536 and a Selfridge symbol over an even, too small or too large magnitude or an unreduced residue; an explicit-cutoff count or semiprime correction at a bound or cutoff outside the Gourdon regime (a bound at the quotient-counting root cap or a cutoff at the integer cube root, the integer square root or past the table capacity; a semiprime cutoff below floor(value/2^48), which would admit a leaf quotient outside the quotient kernel's domain). Each rung that executes an instruction set directly (the VBMI fraction lookup, the VBMI2, AVX2 and SSSE3 hard-leaf filters, the AVX-512BW and AVX2 prefix windows) answers valid input where the host supports that set and throws PlatformNotSupportedException where it does not, so the answer is checked on a host with the set and the refusal on a host without it, the latter by running the law with DOTNET_EnableAVX512=0 or DOTNET_EnableAVX2=0 set on the test process. ENVELOPE: a prime list that is not ascending or that changes after Reset, and a cursor made stale by a later Reset, Initialize or crossing, are caller obligations the shells document; the aggregate counting laws exercise them.",
+        "Subject": "SelfridgeSymbol refuses an even, too small or too large discriminant magnitude and an unreduced residue, naming the offending parameter. The independent reciprocity law checks accepted operands.",
         "Against": "",
         "Shared": "",
         "Citation": "",

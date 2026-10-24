@@ -22,7 +22,7 @@ namespace Puck.World;
 /// <see cref="HudBindingVocabulary"/> and the live document's own <c>state</c> section, resolved on demand and never
 /// stored — the console-only twin of what a <see cref="WorldHudElement.Template"/> row does when authored.
 /// </summary>
-internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts) : ICommandModule {
+internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts) : ICommandModule {
     private const string SeatFilterPrefix = "seat:";
 
     private string DescribeElement(string panelId, WorldHudElement element, int slot) {
@@ -63,7 +63,11 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             valueText = $" text='{literal}'";
         }
 
-        return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}]";
+        var voiceText = ((element.Voice is { } voice)
+            ? $" voice=patch:{voice.PatchId}/cadence:{voice.CadenceTicks}/pitch:{voice.PitchThousandths}/formant:{voice.FormantThousandths}/pace:{voice.PaceThousandths}"
+            : string.Empty);
+
+        return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}{voiceText}]";
     }
     // A frame element's candidates in rank order (source JSON plus its condition, when one is authored) and the
     // candidate winning now for the scope asked about — the same first-holding rule the feed publishes by. slot -1
@@ -299,6 +303,14 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "audio.render",
+            audience: CommandAudience.Operator,
+            description: "Renders one HUD Text element's resolved text and authored voice to a 48 kHz stereo PCM WAV, without a device: audio.render <panelId> <elementId> <output.wav>. Ignores visibility so a headless World can export a hidden panel. Text, pitch, formants, cadence and rests use the live playback source; repeated exports of unchanged text and voice are byte-identical.",
+            handler: (_, args) => RenderSpeech(args: args),
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",

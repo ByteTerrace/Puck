@@ -7104,6 +7104,48 @@
       "additionalProperties": false,
       "title": "WorldHudFrameCandidate"
     },
+    "WorldVoiceProfile": {
+      "description": "A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "patchId": {
+          "description": "The referenced Name (must resolve when declared).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cadenceTicks": {
+          "description": "The base spacing in 240 Hz audio ticks: 1..240 for HUD text, any positive value for count-based identity babble.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "pitchThousandths": {
+          "description": "Pitch relative to the patch, 250..4000; 1000 leaves it unchanged.",
+          "type": "integer",
+          "default": 1000
+        },
+        "formantThousandths": {
+          "description": "Vowel formant frequency scale, 250..4000.",
+          "type": "integer",
+          "default": 1000
+        },
+        "paceThousandths": {
+          "description": "Speech speed, 250..4000; 2000 halves each character\u0027s interval.",
+          "type": "integer",
+          "default": 1000
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldVoiceProfile"
+    },
     "WorldHudElement": {
       "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its local rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound text element\u0027s live value replaces the authored literal; a bound gauge element\u0027s live value drives its fill; an unbound gauge draws empty).",
       "type": [
@@ -7196,6 +7238,11 @@
           "description": "How long a Frame element cross-fades when its winning candidate changes; 0 cuts. Finite and non-negative.",
           "type": "number",
           "default": 0
+        },
+        "voice": {
+          "$ref": "#/$defs/WorldVoiceProfile",
+          "description": "Optional Text voice. Speaks the resolved literal, binding or template once on visible arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.",
+          "default": null
         }
       },
       "required": [

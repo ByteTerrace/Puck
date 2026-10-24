@@ -79,6 +79,7 @@ public sealed class AudioMixer {
     private const int ClipLimit = 49151;
     // Below this local-plane raw magnitude (~0.01 units) azimuth is meaningless; pan snaps to center.
     private const long PanEpsilonRaw = 655L;
+
     // Pan constants: π/4 in Q16 raw (the equal-power quarter arc, half of HalfPi), and cos(π/4) for the bed's center pan.
     private static readonly long QuarterPiRawQ16 = (FixedQ4816.HalfPi.Value >> 1);
 
@@ -690,7 +691,7 @@ public sealed class AudioMixer {
 
             if (
                 audible &&
-                (emitter.Source.Kind is AudioSourceKind.Machine or AudioSourceKind.Tune)
+                (emitter.Source.Kind is AudioSourceKind.Machine or AudioSourceKind.Tune or AudioSourceKind.Speech)
             ) {
                 PullSource(
                     key: emitter.Source,

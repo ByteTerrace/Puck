@@ -41,7 +41,7 @@ decision here.
    `LawDeclarationTests.EveryDeclarationHasExactlyOneCase` by name.
 2. Choose the cheapest honest tier by measured cost, not by whether the word
    "exhaustive" fits. `Exhaustive` holds full-carrier sweeps and expensive
-   finite combinatorial-prime checks, which take their own basis rather than a
+   finite checks, which take their own basis rather than a
    `Domain` and never imply a full-carrier proof.
 3. State the claim, subject, operand domain and evidence legs explicitly.
 4. Instantiate the existing `Laws.cs` combinators and shared domains instead of

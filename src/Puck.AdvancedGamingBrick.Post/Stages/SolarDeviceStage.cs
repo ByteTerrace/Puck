@@ -6,8 +6,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// <see cref="AgbCartridge.SetLightLevel"/> are the exact seam a game's ROM code drives: RESET (pin 1) high zeroes the
 /// counter and samples the CURRENT recorded light level; each CLK (pin 0) rising edge while not held in reset advances
 /// the counter by one; the output bit (pin 3) trips once the counter reaches the level's threshold. Self-contained (a
-/// hand-stamped solar-sensor game code, no ROM asset, no BIOS), so it always runs — the golden-replay counterpart
-/// (<see cref="SolarReplayStage"/>) needs a real cartridge and skips without one.
+/// hand-stamped solar-sensor game code, no ROM asset, no BIOS), so it always runs.
 /// </summary>
 internal sealed class SolarDeviceStage : IPostStage<PostContext> {
     // A solar-sensor cart's game code — keys HasSolar (and HasRtc, which real solar-sensor carts also carry; the RTC

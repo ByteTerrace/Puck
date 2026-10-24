@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Puck.Maths;
 
@@ -16,7 +14,6 @@ namespace Puck.Maths;
 /// <see cref="PrimeExtensions.Factorize(uint, Span{uint})"/> and
 /// <see cref="UnsignedNumberFunctions.EnumeratePrimeFactors{T}(T)"/> both reach <see cref="Factorize(ulong, Span{ulong})"/>,
 /// <see cref="PrimeExtensions.NthPrime(uint)"/> strides <see cref="MarkWindow(ReadOnlySpan{uint}, Span{ulong}, ulong, ulong)"/>.
-/// <see cref="PrimeExploration"/> owns thirty-wheel marking and streams upper base primes through that optimized sieve.
 /// </para>
 /// <para>
 /// The arbitrary-width counterparts live in <see cref="BigIntegerFunctions"/>. That split is real rather than
@@ -60,38 +57,7 @@ public static partial class PrimeKernels {
     /// contracted to accept can reach it, and the ceiling exists only so that every loop in the splitter terminates.
     /// </remarks>
     private const int SplitAdvanceBudget = (1 << 24);
-
-    /// <summary>The number of base-two strong rounds <see cref="PassesBaseTwoBatch(ReadOnlySpan{ulong})"/> interleaves.</summary>
-    /// <remarks>
-    /// Four independent squaring chains: a chain's step, one REDC and one conditional doubling, issues three
-    /// multiplies, and on a core with one 64-bit multiplier four chains issue twelve in about the cycles a lazy step's
-    /// dependency chain takes, so four chains fill it for exactly as long as a step lasts. A fifth would wait on the
-    /// multiplier there, and the expected number of batches a selection decides falls more slowly than the batch
-    /// grows: at the top of the carrier about one survivor in five is prime, so a width of three decides 2.0 batches
-    /// per selected prime, four decides 1.6 and five 1.4.
-    /// </remarks>
-    public const int BaseTwoBatchWidth = 4;
-
-    /// <summary>The largest prime whose multiples <see cref="PassesSelectionPrimeFilter(ulong)"/> rejects.</summary>
-    internal const uint SelectionFilterCeiling = 163U;
-
-    /// <summary>The trial-division table index of seven, the first prime <see cref="PassesSelectionPrimeFilter(ulong)"/> tests: wheel candidates are coprime to thirty already.</summary>
-    private const int SelectionFilterFirst = 2;
-    /// <summary>The trial-division table index just past <see cref="SelectionFilterCeiling"/>, the thirty-seventh odd prime.</summary>
-    private const int SelectionFilterEnd = 37;
-    /// <summary>The offset of the moduli in a <see cref="WalkBaseTwoBatch(Span{ulong}, ref BaseTwoBatchPowers)"/> block, one per chain.</summary>
-    private const int BatchModuli = 0;
-    /// <summary>The offset of the inverses modulo <c>2^64</c> in a batch block, one per chain.</summary>
-    private const int BatchInverses = (BatchModuli + BaseTwoBatchWidth);
-    /// <summary>The offset of the exponents in a batch block, one per chain, each walked over its low bits.</summary>
-    private const int BatchExponents = (BatchInverses + BaseTwoBatchWidth);
-    /// <summary>The offset of the step count, the exponent bits every chain walks, in a batch block.</summary>
-    private const int BatchSteps = (BatchExponents + BaseTwoBatchWidth);
-    /// <summary>The offset of the radix residues in a batch block, one per chain, after every entry the walk reads.</summary>
-    private const int BatchOnes = (BatchSteps + 1);
-    /// <summary>The length of a batch block: the span <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong}, Span{ulong})"/> fills and <see cref="PassesBatchStrongLucas(ReadOnlySpan{ulong}, int)"/> reads.</summary>
-    internal const int BatchBlockLength = (BatchOnes + BaseTwoBatchWidth);
-    /// <summary>The leading exponent bits a base-two seed absorbs, in a batch and in the single round below <see cref="ScaledResidueRing64.SignedModulusCeiling"/>, so that every chain walks that many fewer steps.</summary>
+    /// <summary>The leading exponent bits the single base-two round absorbs below <see cref="ScaledResidueRing64.SignedModulusCeiling"/>, so that every chain walks that many fewer steps.</summary>
     /// <remarks>
     /// <para>
     /// Seven: every seed is then <c>2^-a</c> with a prefix <c>a</c> of at most <c>2^7</c>, and
@@ -99,18 +65,13 @@ public static partial class PrimeKernels {
     /// chain, a fraction of the step each absorbed bit saves. An eighth bit would take prefixes past <c>2^7</c>,
     /// whose seeds need a second, dependent product to save that one step.
     /// </para>
-    /// <para>
-    /// Above <c>2^63</c> six bits would need no product at all, since <c>2^(64 - a)</c> is then itself reduced for every
-    /// prefix through <c>2^6</c>; the seventh bit's step and the product cost the same there, so one seed serves every
-    /// batch.
-    /// </para>
     /// </remarks>
     private const int BaseTwoSeedWindow = 7;
     /// <summary>The first discriminant magnitude Selfridge's Method A tries, <c>D = 5</c>, the one whose <c>Q</c> is <c>-1</c>.</summary>
     private const ulong FirstSelfridgeMagnitude = 5UL;
     /// <summary>The product <c>3 * 5 * 7 * 11 * 13 = 15015</c>: one remainder of a value by it, a multiply by the JIT's reciprocal, yields the value's residues modulo three and every candidate magnitude of <see cref="SelfridgeMagnitudeCore(ulong)"/> below 17 as constant-divisor remainders of a 14-bit value.</summary>
     private const ulong SelfridgeSearchModulus = 15015UL;
-    /// <summary>The bit width of an odd-prime rank word.</summary>
+    /// <summary>The bit width of an odd-prime bitmap word.</summary>
     private const int RankWordShift = 6;
     /// <summary>The exclusive bound on the discriminant magnitudes whose Jacobi symbols <see cref="SelfridgeSymbols"/> tabulates: one residue per bit of a word.</summary>
     private const ulong SelfridgeTableLimit = 64UL;
@@ -119,28 +80,24 @@ public static partial class PrimeKernels {
     /// <summary>The exclusive bound on the magnitude of a parameter <see cref="PassesStrongLucasRound(ulong, long)"/> accepts, which keeps <c>4|Q| + 1</c> below <c>2^63</c>.</summary>
     private const long ParameterMagnitudeLimit = (1L << 61);
 
-    /// <summary>Defers the shared base-prime table until a sieve or selection request needs it.</summary>
+    /// <summary>Defers the shared base-prime table until a prime kernel needs it.</summary>
     private static class WindowSieve {
         internal static readonly uint[] BasePrimes;
 
         static WindowSieve() => BasePrimes = CreateBasePrimes();
     }
-    /// <summary>Defers the odd-prime rank bitmap until a small-interval selection needs it.</summary>
+    /// <summary>Defers the odd-prime bitmap until a narrow primality decision needs it.</summary>
     /// <remarks>
     /// Bit <c>v / 2</c> of <see cref="Bits"/> is set exactly for the odd primes <c>v</c> of <see cref="BasePrimes"/>,
-    /// and <see cref="Counts"/> holds, per word, the number of set bits in every earlier word. One trailing zero word
-    /// lets a rank at the table's exclusive end read in bounds.
+    /// with one bit for each odd candidate below 65,536.
     /// </remarks>
-    private static class OddPrimeRanks {
+    private static class OddPrimeBitmap {
         internal static readonly ulong[] Bits;
 
-        public static readonly ushort[] Counts;
-
-        static OddPrimeRanks() {
+        static OddPrimeBitmap() {
             var primes = WindowSieve.BasePrimes;
-            var words = ((((primes[^1] >>> 1) >>> RankWordShift) + 1) + 1);
+            var words = (((primes[^1] >>> 1) >>> RankWordShift) + 1);
             var bits = new ulong[words];
-            var counts = new ushort[words];
 
             foreach (var prime in primes) {
                 var position = (prime >>> 1);
@@ -148,12 +105,7 @@ public static partial class PrimeKernels {
                 bits[(position >>> RankWordShift)] |= (1UL << ((int)position));
             }
 
-            for (var word = 1; (word < words); ++word) {
-                counts[word] = ((ushort)(counts[(word - 1)] + BitOperations.PopCount(value: bits[(word - 1)])));
-            }
-
             Bits = bits;
-            Counts = counts;
         }
     }
     /// <summary>Holds the Jacobi symbols over every small odd discriminant magnitude as residue masks.</summary>
@@ -372,13 +324,6 @@ public static partial class PrimeKernels {
 
         return IsBaillieOddWord(value: value);
     }
-    /// <summary>Decides a word already known to be coprime to thirty, including the nonprime value one.</summary>
-    /// <param name="value">The wheel candidate.</param>
-    /// <returns>Its exact primality.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool IsPrimeCandidateWord(ulong value) => ((value <= uint.MaxValue)
-        ? ((uint)value).IsPrime()
-        : IsBaillieOddWord(value: value));
     /// <summary>Decides Baillie–PSW for an odd value, spending one Montgomery setup on both of its rounds.</summary>
     /// <param name="value">The odd value, at least three.</param>
     /// <returns>Whether <paramref name="value"/> passes the base-two strong round and the strong Lucas test with Selfridge Method A parameters.</returns>
@@ -391,46 +336,13 @@ public static partial class PrimeKernels {
 
         return (baseTwo && PassesStrongLucas(inverse: inverse, one: one, value: value));
     }
-    /// <summary>Returns whether a value has no prime factor from seven through <see cref="SelectionFilterCeiling"/>.</summary>
-    /// <param name="value">The value, coprime to thirty and above <see cref="SelectionFilterCeiling"/>, so that a filter prime can only divide it properly.</param>
-    /// <returns>Whether no filter prime divides <paramref name="value"/>.</returns>
-    /// <remarks>Each test is one truncated multiply and one comparison against an entry of the trial-division table, <see cref="TrialDivisor(int)"/>, from seven on; no division runs.</remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static unsafe bool PassesSelectionPrimeFilter(ulong value) {
-        var inverses = (TrialDivision.Start + SelectionFilterFirst);
 
-        for (nuint index = 0; (index < (SelectionFilterEnd - SelectionFilterFirst)); ++index) {
-            if (unchecked((value * inverses[index])) <= inverses[(TrialDivision.Ceilings + index)]) { return false; }
-        }
-
-        return true;
-    }
-
-    /// <summary>Returns the number of odd primes strictly below a value no greater than 65,536.</summary>
-    /// <param name="value">The exclusive bound, at most 65,536.</param>
-    /// <returns>The count of odd entries of <see cref="BasePrimes"/> below <paramref name="value"/>, which is also the index of the first entry at or above it.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> exceeds 65,536.</exception>
-    /// <remarks>One masked population count over the odd-prime bitmap plus the cumulative count of the words before it.
-    /// The law <c>prime-selection.table-ranks-vs-sieve</c> compares every rank with a sieve.</remarks>
-    public static int CountOddPrimesBelow(uint value) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: value, other: 65_536U, paramName: nameof(value));
-        return CountOddPrimesBelowCore(value: value);
-    }
-
-    /// <summary>Returns whether an odd value below 65,536 is prime, from the odd-prime rank bitmap.</summary>
+    /// <summary>Returns whether an odd value below 65,536 is prime, from the odd-prime bitmap.</summary>
     /// <param name="value">The odd value, below 65,536.</param>
     /// <returns>Whether <paramref name="value"/> is an entry of <see cref="BasePrimes"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsOddTablePrime(uint value) =>
-        (0UL != ((OddPrimeRanks.Bits[((int)(value >>> (RankWordShift + 1)))] >>> ((int)(value >>> 1))) & 1UL));
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int CountOddPrimesBelowCore(uint value) {
-        var position = (value >>> 1);
-        var word = ((int)(position >>> RankWordShift));
-        var below = OddPrimeRanks.Bits[word] & ((1UL << ((int)position)) - 1UL);
-
-        return (OddPrimeRanks.Counts[word] + BitOperations.PopCount(value: below));
-    }
+        (0UL != ((OddPrimeBitmap.Bits[((int)(value >>> (RankWordShift + 1)))] >>> ((int)(value >>> 1))) & 1UL));
 
     /// <summary>Runs the base-two strong-probable-prime round on one odd value, the round the word decision runs before its Lucas test.</summary>
     /// <param name="value">The odd value, at least three.</param>
@@ -475,7 +387,7 @@ public static partial class PrimeKernels {
     /// <returns>Whether the round passes.</returns>
     /// <remarks>
     /// <para>
-    /// The walk of <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong}, Span{ulong})"/> on one value: two raised to the negated
+    /// Two raised to the negated
     /// odd part <c>-d</c>, which accepts at the same round as <c>2^d</c>, from the seed <c>2^-a</c> of the prefix
     /// <c>a = ceil(d / 2^k)</c>, over the low <c>k</c> bits of <c>0 - d</c>, where <c>k</c> is this odd part's bit
     /// length less <see cref="BaseTwoSeedWindow"/>. The walk is most significant bit first, so a step is one square
@@ -484,9 +396,9 @@ public static partial class PrimeKernels {
     /// that walk branches and mispredicts about half the time; here it is a shift count.
     /// </para>
     /// <para>
-    /// The step is <see cref="SignedArithmetic"/>'s <see cref="IBaseTwoArithmetic.SquareDouble(ulong, ulong, ulong, ulong)"/>,
+    /// The step is <see cref="SignedArithmetic"/>'s <see cref="SignedArithmetic.SquareDouble(ulong, ulong, ulong, ulong)"/>,
     /// the signed batch's, which keeps the accumulator within the value of zero from the reduced seed on;
-    /// <see cref="IBaseTwoArithmetic.Canonical(ulong, ulong)"/> folds the power once, before the strong round's exact
+    /// <see cref="IResidueArithmetic.Canonical(ulong, ulong)"/> folds the power once, before the strong round's exact
     /// squarings.
     /// </para>
     /// </remarks>
@@ -585,124 +497,6 @@ public static partial class PrimeKernels {
         );
     }
 
-    /// <summary>Runs the base-two strong-probable-prime round on <see cref="BaseTwoBatchWidth"/> odd values at once.</summary>
-    /// <param name="values">The odd values, each at least three; exactly <see cref="BaseTwoBatchWidth"/> of them.</param>
-    /// <returns>A mask whose bit <c>i</c> is set when the <c>i</c>-th value is a strong probable prime to base two.</returns>
-    /// <exception cref="ArgumentException"><paramref name="values"/> does not hold exactly <see cref="BaseTwoBatchWidth"/> values.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A value in <paramref name="values"/> is even or below three.</exception>
-    /// <remarks>The checked shell over the kernel random prime selection decides its filter survivors with; the law <c>prime-field.base-two-batch-vs-modular-power</c> compares it with plain modular exponentiation.</remarks>
-    public static int PassesBaseTwoBatch(ReadOnlySpan<ulong> values) {
-        if (BaseTwoBatchWidth != values.Length) { throw new ArgumentException(message: $"A batch holds exactly {BaseTwoBatchWidth} values.", paramName: nameof(values)); }
-
-        foreach (var value in values) {
-            if ((3UL > value) || (0UL == (value & 1UL))) {
-                throw new ArgumentOutOfRangeException(paramName: nameof(values), actualValue: value, message: "Every value must be odd and at least three.");
-            }
-        }
-
-        return PassesBaseTwoBatchCore(block: stackalloc ulong[BatchBlockLength], values: values);
-    }
-
-    /// <summary>Runs the base-two strong-probable-prime round on <see cref="BaseTwoBatchWidth"/> odd values at once.</summary>
-    /// <param name="values">The odd values, each at least three; exactly <see cref="BaseTwoBatchWidth"/> of them.</param>
-    /// <param name="block">The batch block, <see cref="BatchBlockLength"/> words; it receives each value's Montgomery constants, which <see cref="PassesBatchStrongLucas(ReadOnlySpan{ulong}, int)"/> reads afterwards.</param>
-    /// <returns>A mask whose bit <c>i</c> is set when the <c>i</c>-th value passes; each bit equals <see cref="PassesBaseTwoCore(ulong, ulong, ulong)"/> on its value.</returns>
-    /// <remarks>
-    /// <para>
-    /// The squaring chains are independent, so interleaving them overlaps each chain's multiply latency with the
-    /// others. Each chain raises two to the negated odd part <c>-d</c> rather than to <c>d</c>: the two powers are
-    /// inverses, and so are their squares, so one is one, minus one, or squares to minus one exactly where the other
-    /// does, and the strong round decides the same at the same squaring. The power runs most significant bit first,
-    /// which needs no second multiply per bit: a set bit doubles the accumulator, never by a branch. Below
-    /// <see cref="ScaledResidueRing64.SignedModulusCeiling"/> the doubling is fused into the reduction, as
-    /// <see cref="IBaseTwoArithmetic.SquareDouble(ulong, ulong, ulong, ulong)"/> states for each arithmetic; above it a
-    /// modular addition under a mask.
-    /// </para>
-    /// <para>
-    /// The negated exponent is what lets a seed absorb its leading bits. With <c>k</c> the walk's step count and
-    /// <c>a = ceil(d / 2^k)</c>, <c>-d = -a 2^k + e</c> where <c>e = a 2^k - d</c> is below <c>2^k</c> and is the low
-    /// <c>k</c> bits of the word <c>0 - d</c>; so the accumulator starts at <c>2^-a</c> and walks those bits, every
-    /// chain the same count, the bit length of the longest odd part less a window. A shorter odd part only has a
-    /// smaller prefix <c>a</c>, never below one; when every odd part fits the window, <c>k</c> is zero and the seed is
-    /// the whole power. Every prefix is at most two to the window, and every seed is reduced, so each chain starts
-    /// inside every arithmetic's operand bound.
-    /// </para>
-    /// <para>
-    /// The squarings of the strong round's tail are per value and sequential, as in the single round. A batch walks
-    /// in the widest arithmetic its largest value admits: <see cref="LazyArithmetic"/> below
-    /// <see cref="ScaledResidueRing64.LazyModulusCeiling"/>, <see cref="SignedArithmetic"/> below
-    /// <see cref="ScaledResidueRing64.SignedModulusCeiling"/>, <see cref="ExactArithmetic"/> above; the batch is
-    /// one loop, so its four chains share the one choice, and its seeds absorb <see cref="BaseTwoSeedWindow"/> bits in
-    /// every arithmetic. Below <see cref="ScaledResidueRing64.LazyModulusCeiling"/> a signed batch measures slower
-    /// than the lazy one, which keeps that region: four chains keep the multiplier busy, and the lazy step issues the
-    /// fewest instructions.
-    /// </para>
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static int PassesBaseTwoBatchCore(ReadOnlySpan<ulong> values, Span<ulong> block) {
-        // The highest indices are read first, which proves every lower one in range.
-        _ = block[(BatchBlockLength - 1)];
-        var fourth = values[3];
-        var first = values[0];
-        var second = values[1];
-        var third = values[2];
-        var firstExponent = BitOperations.TrailingZeroCount(value: (first - 1UL));
-        var secondExponent = BitOperations.TrailingZeroCount(value: (second - 1UL));
-        var thirdExponent = BitOperations.TrailingZeroCount(value: (third - 1UL));
-        var fourthExponent = BitOperations.TrailingZeroCount(value: (fourth - 1UL));
-        var firstOddPart = ((first - 1UL) >>> firstExponent);
-        var secondOddPart = ((second - 1UL) >>> secondExponent);
-        var thirdOddPart = ((third - 1UL) >>> thirdExponent);
-        var fourthOddPart = ((fourth - 1UL) >>> fourthExponent);
-        var length = (64 - BitOperations.LeadingZeroCount(value: (firstOddPart | secondOddPart) | (thirdOddPart | fourthOddPart)));
-        var firstOne = ScaledResidueRing64.RadixResidue(modulus: first);
-        var secondOne = ScaledResidueRing64.RadixResidue(modulus: second);
-        var thirdOne = ScaledResidueRing64.RadixResidue(modulus: third);
-        var fourthOne = ScaledResidueRing64.RadixResidue(modulus: fourth);
-
-        block[BatchModuli] = first;
-        block[(BatchModuli + 1)] = second;
-        block[(BatchModuli + 2)] = third;
-        block[(BatchModuli + 3)] = fourth;
-        block[BatchInverses] = first.ModularInverse();
-        block[(BatchInverses + 1)] = second.ModularInverse();
-        block[(BatchInverses + 2)] = third.ModularInverse();
-        block[(BatchInverses + 3)] = fourth.ModularInverse();
-        block[BatchExponents] = unchecked((0UL - firstOddPart));
-        block[(BatchExponents + 1)] = unchecked((0UL - secondOddPart));
-        block[(BatchExponents + 2)] = unchecked((0UL - thirdOddPart));
-        block[(BatchExponents + 3)] = unchecked((0UL - fourthOddPart));
-        block[BatchOnes] = firstOne;
-        block[(BatchOnes + 1)] = secondOne;
-        block[(BatchOnes + 2)] = thirdOne;
-        block[(BatchOnes + 3)] = fourthOne;
-
-        var steps = Math.Max(val1: (length - BaseTwoSeedWindow), val2: 0);
-        var largest = (first | second) | (third | fourth);
-
-        block[BatchSteps] = ((ulong)steps);
-
-        var powers = new BaseTwoBatchPowers(
-            first: InverseTwoPower(inverse: block[BatchInverses], modulus: first, one: firstOne, prefix: SignedPrefix(oddPart: firstOddPart, steps: steps)),
-            fourth: InverseTwoPower(inverse: block[(BatchInverses + 3)], modulus: fourth, one: fourthOne, prefix: SignedPrefix(oddPart: fourthOddPart, steps: steps)),
-            second: InverseTwoPower(inverse: block[(BatchInverses + 1)], modulus: second, one: secondOne, prefix: SignedPrefix(oddPart: secondOddPart, steps: steps)),
-            third: InverseTwoPower(inverse: block[(BatchInverses + 2)], modulus: third, one: thirdOne, prefix: SignedPrefix(oddPart: thirdOddPart, steps: steps))
-        );
-
-        if (largest < ScaledResidueRing64.LazyModulusCeiling) {
-            WalkBaseTwoBatch<LazyArithmetic>(block: block, powers: ref powers);
-        } else if (largest < ScaledResidueRing64.SignedModulusCeiling) {
-            WalkBaseTwoBatch<SignedArithmetic>(block: block, powers: ref powers);
-        } else {
-            WalkBaseTwoBatch<ExactArithmetic>(block: block, powers: ref powers);
-        }
-
-        return FinishStrongRound(inverse: block[BatchInverses], one: firstOne, power: powers.First, twoExponent: firstExponent, value: first).As<int>() |
-            (FinishStrongRound(inverse: block[(BatchInverses + 1)], one: secondOne, power: powers.Second, twoExponent: secondExponent, value: second).As<int>() << 1) |
-            (FinishStrongRound(inverse: block[(BatchInverses + 2)], one: thirdOne, power: powers.Third, twoExponent: thirdExponent, value: third).As<int>() << 2) |
-            (FinishStrongRound(inverse: block[(BatchInverses + 3)], one: fourthOne, power: powers.Fourth, twoExponent: fourthExponent, value: fourth).As<int>() << 3);
-    }
-
     /// <summary>Returns the prefix a batch seed absorbs: the odd part over two to the step count, rounded up.</summary>
     /// <param name="oddPart">The odd part <c>d</c>, at least one.</param>
     /// <param name="steps">The walk's step count <c>k</c>, from zero through 63.</param>
@@ -743,80 +537,6 @@ public static partial class PrimeKernels {
         high += (low < residue).As<ulong>();
 
         return (high << (64 - shift)) | (low >>> shift);
-    }
-    /// <summary>Squares <see cref="BaseTwoBatchWidth"/> Montgomery accumulators once per step, most significant exponent bit first, doubling each where its own exponent's bit is set, and returns the residues they stand for.</summary>
-    /// <typeparam name="TArithmetic">The chains' arithmetic, admissible for the batch's largest modulus.</typeparam>
-    /// <param name="block">The batch block: moduli, inverses, exponents, and the step count, at the <c>Batch</c> offsets; only the exponents' bits below the step count are read.</param>
-    /// <param name="powers">The accumulators, reduced, raised in place and returned reduced.</param>
-    /// <remarks>
-    /// A loop of its own, each chain's step <see cref="IBaseTwoArithmetic.SquareDouble(ulong, ulong, ulong, ulong)"/>
-    /// written whole; the out-of-order core overlaps the chains, and a chain's temporaries die before the next chain's
-    /// begin. The constants and exponents are read from the block on every step rather than held in locals, which
-    /// leaves registers for the accumulators; read from memory they cost loads that issue ahead of the chain. The
-    /// accumulators arrive through the second argument, whose reference occupies the operand register <c>MULX</c>
-    /// reads implicitly while they load, so none of them is homed there: a term homed in that register is given a
-    /// stack slot inside the chain whenever another product needs the register. Each accumulator is read back
-    /// through <see cref="IBaseTwoArithmetic.Canonical(ulong, ulong)"/> once, after the walk.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void WalkBaseTwoBatch<TArithmetic>(Span<ulong> block, ref BaseTwoBatchPowers powers) where TArithmetic : struct, IBaseTwoArithmetic {
-        // The highest index is checked once, which proves every lower constant index in range.
-        var bit = ((int)block[BatchSteps]);
-        var first = powers.First;
-        var second = powers.Second;
-        var third = powers.Third;
-        var fourth = powers.Fourth;
-
-        while (0 <= --bit) {
-            first = TArithmetic.SquareDouble(
-                doubling: (block[BatchExponents] >>> bit) & 1UL,
-                inverse: block[BatchInverses],
-                modulus: block[BatchModuli],
-                value: first
-            );
-            second = TArithmetic.SquareDouble(
-                doubling: (block[(BatchExponents + 1)] >>> bit) & 1UL,
-                inverse: block[(BatchInverses + 1)],
-                modulus: block[(BatchModuli + 1)],
-                value: second
-            );
-            third = TArithmetic.SquareDouble(
-                doubling: (block[(BatchExponents + 2)] >>> bit) & 1UL,
-                inverse: block[(BatchInverses + 2)],
-                modulus: block[(BatchModuli + 2)],
-                value: third
-            );
-            fourth = TArithmetic.SquareDouble(
-                doubling: (block[(BatchExponents + 3)] >>> bit) & 1UL,
-                inverse: block[(BatchInverses + 3)],
-                modulus: block[(BatchModuli + 3)],
-                value: fourth
-            );
-        }
-
-        powers = new BaseTwoBatchPowers(
-            first: TArithmetic.Canonical(modulus: block[BatchModuli], value: first),
-            fourth: TArithmetic.Canonical(modulus: block[(BatchModuli + 3)], value: fourth),
-            second: TArithmetic.Canonical(modulus: block[(BatchModuli + 1)], value: second),
-            third: TArithmetic.Canonical(modulus: block[(BatchModuli + 2)], value: third)
-        );
-    }
-
-    /// <summary>Runs the strong Lucas probable-prime test with Selfridge's Method A parameters on one value of a decided batch, inside the Montgomery constants its base-two round prepared.</summary>
-    /// <param name="block">The batch block <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong}, Span{ulong})"/> filled.</param>
-    /// <param name="lane">The value's index in the batch, below <see cref="BaseTwoBatchWidth"/>.</param>
-    /// <returns><see cref="PassesStrongLucas(ulong, ulong, ulong)"/> on that value: the inverse and radix residue are functions of the value alone, so reading them back decides exactly as recomputing them.</returns>
-    /// <remarks>The reads are unchecked: a checked read inside the selector's decision loop makes the JIT clone that loop.</remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool PassesBatchStrongLucas(ReadOnlySpan<ulong> block, int lane) {
-        Debug.Assert(((BatchBlockLength <= block.Length) && (((uint)lane) < BaseTwoBatchWidth)));
-        ref var column = ref Unsafe.Add(elementOffset: lane, source: ref MemoryMarshal.GetReference(span: block));
-
-        return PassesStrongLucas(
-            inverse: Unsafe.Add(elementOffset: BatchInverses, source: ref column),
-            one: Unsafe.Add(elementOffset: BatchOnes, source: ref column),
-            value: Unsafe.Add(elementOffset: BatchModuli, source: ref column)
-        );
     }
     /// <summary>Runs the strong Lucas probable-prime test with Selfridge's Method A parameters on an odd value, inside Montgomery constants the caller already holds.</summary>
     /// <param name="value">The odd value, at least three.</param>
@@ -1343,7 +1063,7 @@ public static partial class PrimeKernels {
     /// <see cref="IResidueArithmetic.ReduceSubtract(ulong, ulong, ulong, ulong, ulong)"/> or
     /// <see cref="IResidueArithmetic.SquareSubtract(ulong, ulong, ulong, ulong)"/> returned, or a reduced constant, so
     /// it stays within the modulus of zero by induction. Each acceptance test reads the terms it compares through
-    /// <see cref="IBaseTwoArithmetic.Canonical(ulong, ulong)"/>, so the decision is the exact ladder's.
+    /// <see cref="IResidueArithmetic.Canonical(ulong, ulong)"/>, so the decision is the exact ladder's.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -1487,43 +1207,15 @@ public static partial class PrimeKernels {
         squared = squaredTerm;
     }
 
-    /// <summary>The <see cref="BaseTwoBatchWidth"/> Montgomery accumulators of <see cref="WalkBaseTwoBatch(Span{ulong}, ref BaseTwoBatchPowers)"/>.</summary>
-    /// <param name="first">The first accumulator.</param>
-    /// <param name="second">The second accumulator.</param>
-    /// <param name="third">The third accumulator.</param>
-    /// <param name="fourth">The fourth accumulator.</param>
-    private readonly struct BaseTwoBatchPowers(ulong first, ulong second, ulong third, ulong fourth) {
-        public ulong First { get; } = first;
-        public ulong Second { get; } = second;
-        public ulong Third { get; } = third;
-        public ulong Fourth { get; } = fourth;
-    }
-
-    /// <summary>The modular arithmetic a base-two walk runs in: folded after every operation, carried lazily below a bound, or carried signed below a wider one.</summary>
-    /// <remarks>
-    /// A walk is written once over this contract and specialized per arithmetic by the JIT, and every operand bound is
-    /// one a walk's own steps keep by induction from reduced starting values. <see cref="LazyArithmetic"/> keeps every
-    /// operand below four times the modulus, below <see cref="ScaledResidueRing64.LazyModulusCeiling"/>;
-    /// <see cref="SignedArithmetic"/> keeps every operand within the modulus of zero, below
-    /// <see cref="ScaledResidueRing64.SignedModulusCeiling"/>; <see cref="ExactArithmetic"/> is admissible everywhere.
-    /// </remarks>
-    internal interface IBaseTwoArithmetic {
-        /// <summary>Squares a carried residue and doubles the square for a set bit: one step of a base-two walk.</summary>
-        /// <param name="value">The accumulator, under the arithmetic's base-two operand bound.</param>
-        /// <param name="doubling">One to double the square, zero to keep it.</param>
-        /// <param name="modulus">The odd modulus, below the arithmetic's ceiling.</param>
-        /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>.</param>
-        /// <returns>The square over the radix, doubled for a set bit, under the same operand bound.</returns>
-        static abstract ulong SquareDouble(ulong value, ulong doubling, ulong modulus, ulong inverse);
+    /// <summary>The modular arithmetic the trace ladder runs in: folded after every operation, or carried signed below <see cref="ScaledResidueRing64.SignedModulusCeiling"/>.</summary>
+    /// <remarks><see cref="SignedArithmetic"/> keeps every trace within the modulus of zero; <see cref="ExactArithmetic"/> is admissible everywhere.</remarks>
+    internal interface IResidueArithmetic {
         /// <summary>Returns the unique residue a carried value stands for.</summary>
         /// <param name="value">The carried value, under the arithmetic's operand bound.</param>
         /// <param name="modulus">The odd modulus.</param>
         /// <returns>The residue in <c>[0, modulus)</c>.</returns>
         static abstract ulong Canonical(ulong value, ulong modulus);
-    }
-    /// <summary>The modular arithmetic the trace ladder runs in as well as a base-two walk: folded after every operation, or carried signed below <see cref="ScaledResidueRing64.SignedModulusCeiling"/>.</summary>
-    /// <remarks><see cref="SignedArithmetic"/> keeps every trace within the modulus of zero; <see cref="ExactArithmetic"/> is admissible everywhere.</remarks>
-    internal interface IResidueArithmetic : IBaseTwoArithmetic {
+
         /// <summary>Multiplies two carried residues, reduces the product and subtracts a constant inside the reduction.</summary>
         /// <param name="left">The first factor.</param>
         /// <param name="right">The second factor.</param>
@@ -1551,24 +1243,6 @@ public static partial class PrimeKernels {
     }
     /// <summary>The arithmetic that folds after every operation, so every value is the residue itself.</summary>
     internal readonly struct ExactArithmetic : IResidueArithmetic {
-        /// <remarks><see cref="ScaledResidueRing64.Reduce(ulong, ulong, ulong, ulong)"/>, then a modular addition of the square under the mask the bit negates to.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong SquareDouble(ulong value, ulong doubling, ulong modulus, ulong inverse) {
-            // The mask is formed before the square, off the chain: formed after it, its negation lands on the critical path.
-            var mask = unchecked((0UL - doubling));
-            var square = ScaledResidueRing64.Reduce(
-                inverse: inverse,
-                left: value,
-                modulus: modulus,
-                right: value
-            );
-
-            return ScaledResidueRing64.Add(
-                left: square,
-                modulus: modulus,
-                right: square & mask
-            );
-        }
         /// <remarks>
         /// <see cref="ScaledResidueRing64.Reduce(ulong, ulong, ulong, ulong)"/>'s subtractive form with the constant taken
         /// off the high half first: two reduced operands keep both high halves below the modulus, so the high half less
@@ -1600,30 +1274,6 @@ public static partial class PrimeKernels {
         public static ulong Subtrahend(ulong constant, ulong modulus) => constant;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong Canonical(ulong value, ulong modulus) => value;
-    }
-    /// <summary>The base-two arithmetic below <see cref="ScaledResidueRing64.LazyModulusCeiling"/> that never folds between squares: each REDC is lifted rather than folded, and a value stays below four times the modulus.</summary>
-    internal readonly struct LazyArithmetic : IBaseTwoArithmetic {
-        /// <remarks>
-        /// The subtractive REDC lifted by the modulus, with the doubling fused in as a shift of both high halves,
-        /// <c>(hi(p^2) + n) 2^b - hi(m n) 2^b</c>; the lifted half is shifted off the critical path, which ends in one
-        /// shift and one subtraction. Below <see cref="ScaledResidueRing64.LazyModulusCeiling"/> <c>16n</c> is at most
-        /// <c>2^64</c>, so the square of an operand below <c>4n</c> is below <c>2^64 n</c>, both high halves are below
-        /// <c>n</c>, the lifted difference lies in <c>(0, 2n)</c> and its doubling in <c>(0, 4n)</c>: the operand bound
-        /// holds by induction from a reduced start. The lifted half is below <c>2n</c>, so neither shift leaves the
-        /// carrier, and the shifted difference is the difference shifted. One widening multiply gives both halves of
-        /// the square; the high half is lifted while the factor's truncated multiply and the correction's high
-        /// multiply run.
-        /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong SquareDouble(ulong value, ulong doubling, ulong modulus, ulong inverse) {
-            var lifted = (Math.BigMul(a: value, b: value, low: out var low) + modulus);
-            var factor = unchecked((low * inverse));
-
-            return ((lifted << ((int)doubling)) - (ScaledResidueRing64.MultiplyHigh(left: factor, right: modulus) << ((int)doubling)));
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong Canonical(ulong value, ulong modulus) =>
-            ScaledResidueRing64.Canonical(modulus: modulus, value: value);
     }
     /// <summary>The arithmetic below <see cref="ScaledResidueRing64.SignedModulusCeiling"/> that carries signed representatives within the modulus of zero and reads each correction factor unsigned, so that no product is folded after its reduction.</summary>
     /// <remarks>

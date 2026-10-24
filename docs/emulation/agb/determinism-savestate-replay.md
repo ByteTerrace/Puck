@@ -84,8 +84,7 @@ model.
 
 `AgbLinkCable` connects serial controllers. `AgbLinkSession` advances the
 furthest-behind endpoint so a linked set has one deterministic cable timeline.
-Tier C verifies replay-identical synthetic multiplayer exchange and a
-commercial link-game flow. `AgbSerialController` exposes cable presence,
+Tier C verifies replay-identical synthetic multiplayer exchange. `AgbSerialController` exposes cable presence,
 multiplayer identity and error state, and transferred words through the hardware
 register model. The Multiplayer SD/SI ready lines are not modeled, so a game
 that polls them to detect a partner never sees one.

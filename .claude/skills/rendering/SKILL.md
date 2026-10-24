@@ -442,14 +442,13 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - Run it and look: `dotnet run --project src/Puck.World -c Release -- --world worlds/debug
   --devices none --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
-  looked at. A boot bakes the groups the mesh store does not hold (the whole
-  debug world, about 1,275 groups, 845 of them dynamic, and 44 M triangles,
-  takes several minutes on an RTX 4070, longer on a slower card; a reboot of an unchanged world loads them
-  in seconds instead, and a boot with an empty `--cache-dir` bakes all of
-  them) and then traces the
-  irradiance volume (about 2 s): a script that captures the finished image
-  waits on `world.wait 2400` or longer and checks for `[sdf.mesh-gi] done` in
-  the log before the capture line.
+  looked at. A boot bakes the groups the mesh store does not hold; a reboot of
+  an unchanged world loads its completed meshes, and an empty `--cache-dir`
+  bakes all of them. A cold debug-world bake can span thousands of rendered
+  frames, while simulation advances many ticks per frame. Before capturing the
+  finished scene, use `world.wait bakes <seconds>` and require its settled
+  result, then check for `[sdf.mesh-gi] done` in the log. A tick wait or
+  `world.wait ready` alone does not establish that all meshes are present.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`
   (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. Cross-backend
   parity (`puck parity --world <file>`) needs a parity world with its contract

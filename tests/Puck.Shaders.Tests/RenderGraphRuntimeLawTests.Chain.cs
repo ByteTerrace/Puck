@@ -107,6 +107,18 @@ public sealed partial class RenderGraphRuntimeLawTests {
             gpu.Recording = true;
             main.Outcome = RenderGraphPackageOutcome.DrewNothing;
 
+            // A cold chain can forward its input before any stage image has been written. None of those unused
+            // allocations may be transitioned for reading, and a later drawing frame must still start in its real layout.
+            main.PredictsEmpty = true;
+            runtime.Node(instance: 1).Reset();
+            frames.Next(count: 3);
+            Assert.DoesNotContain(collection: gpu.Barriers, filter: static entry => (
+                (entry.Barrier.Kind == ShaderPipelineBarrierKind.Image) &&
+                (entry.Barrier.OldLayout == GpuImageLayout.Undefined) &&
+                (entry.Barrier.NewLayout == GpuImageLayout.ShaderReadOnly)
+            ));
+            main.PredictsEmpty = false;
+
             var shown = frames.Next();
             var world = main.PassRecords[ViewVersion(view: 1)].Input;
 

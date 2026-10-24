@@ -56,23 +56,48 @@ west of it.
 | West wall, z 30.5 | The big painting to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
 | West wall, z 32.5 | The level's light switch |
 
+The hall is the gallery's inspection room, a debug tool for a person looking
+and an agent capturing, so its light is chosen for reading surfaces: every
+exhibit's albedo, roughness, normals and material should read, none lost in
+shadow or clipped, under light neutral enough to judge colour, while staying
+physical so a leak or a lighting bug still shows. Everything the light meets
+before an exhibit is neutral grey: light grey walls (`#D4D4D4`), a white
+ceiling (`#E8E8E8`, the underside of every slab and the roof, `hallSlab`), a
+mid grey floor (`#9A9A9A`, light enough to fill an exhibit's underside) and
+near-black trim. The light is a neutral 6500 K, the display's own white, from
+overhead: the strips' luminous bands lit through the irradiance volume as the
+soft area light, the downlights over them as a soft key with a highlight that
+shows roughness. The level aims at inspection lighting (EN 12464-1 asks 750 lux
+for inspection work), which also keeps a lit level above the darkest exposure
+the world adapts to (`EV100` 7 under the Moth basis's 2.5 stops of
+compensation, a room averaging under about 90 nits), so a lit room never
+renders darker than its light. The blinds start down, as a gallery keeps
+daylight off its exhibits: with them up, daylight through three window walls
+is several times the electric light and moves the exposure by up to three stops
+between neighbouring exhibits (`world.exposure` read `EV100` 9 to 12 along
+level 0's rows with the blinds up).
+
 Lighting is in real units: the sun gives 100,000 lux, an emissive strip
-(2,500 nits) runs along the ceiling over each viewing aisle and two over each
-landing (`hallStrips`, part of the slab or roof above them), a 3,000-lumen
-neutral downlight hangs every 12 m along each strip (`hallDownlights`), an
-800-lumen pendant lights the stairwell and a 400-lumen lamp the lift car (it
-rides the car's body). The camera's exposure adapts to what each view sees
+(3,000 nits, white) runs along the ceiling over each viewing aisle and two over
+each landing (`hallStrips`, part of the slab or roof above them), a 5,000-lumen
+6500 K downlight hangs every 12 m along each strip and, on level 3, in three more rows across the skylights' frames (`hallDownlights`), an
+800-lumen pendant lights the stairwell, and the lift car has a luminous
+ceiling (120 nits, nearly the whole ceiling) over a 6,000-lumen wide spot that
+rides the car's body. The volume cannot see the moving car's light, so the car
+takes the darkest exposure, `EV100` 7, and its light is sized to read there
+without the panel clipping. The camera's exposure adapts to what each view sees
 (`render.exposure` in the Moth basis), so a dim room and the sunlit lawn both
 read. A fixture that stands still is traced into the irradiance volume, which
 bounces its light about its room and occludes it at every surface whose probes
 cannot see it, so a level's downlights stop at its slab; the lift car's lamp
 rides a body, so it is neither traced nor occluded. The rooms' light is
-otherwise the strips' and the windows', carried indoors by the traced indirect
-light, the shadow cascades under the roof and ambient occlusion.
+otherwise the strips' (and the windows', with the blinds up), carried by the
+traced indirect light, the shadow cascades under the roof and ambient
+occlusion.
 
 Each level's room lights switch on and off. `hallLights` holds each level's
 state (`Off` or `On`): level 0, the lobby where the gaming devices stand,
-starts `Off`, so its light is the windows' and the device screens', and levels
+starts `Off`, so its light is the device screens', and levels
 1 to 3 start `On`. A level that is off shows the dark variant of the slab or
 roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
 pale, unlit diffuser in the strips' palette slot) through the placement's
@@ -87,10 +112,12 @@ the stairs, 1.1 to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator
 when on, a green locator glow when off, so it shows in the dark. The two are one
 geometry, so a flip bakes nothing.
 
-Each level's blinds follow its lights: off lowers them over every window of that
-level (the south face's ten, and its window over the entrance above the lobby;
-the north face's ten; the east face's five; level 3's three skylights too), on
-raises them. The entrance stays an open doorway. A lowered blind is a pale
+Each level's blinds stand apart from its lights: `hallBlinds` holds each level's
+(`Up` or `Down`), every level starts `Down`, and `gallery.blinds <level>
+up|down` raises or lowers them over every window of that level (the south
+face's ten, and its window over the entrance above the lobby; the north face's
+ten; the east face's five; level 3's three skylights too). The entrance stays
+an open doorway. A lowered blind is a pale
 board standing in the wall's thickness 5 cm back from the room face, one per
 face and level (`hall-blind-<k>-south`, `-north`, `-east`, and
 `hall-blind-3-skylight-<x>` in the roof), running inside the piers between the
@@ -103,10 +130,10 @@ and always drawn. The boards are solid, so a line of sight through a window
 reads them (`hall-tests.puck`), and swap through `respond` to `hall-blinds-up`,
 a creation with nothing to draw. Raising a level's blinds bakes nothing;
 lowering them bakes that level's boards the first time they show under a bake
-identity, and the mesh store keeps them after (level 0's bake with the boot,
-since the lobby starts dark). The CPU bake (`puck mesh audit --cpu --group
+identity, and the mesh store keeps them after (every level's bake with the
+boot, since they start down). The CPU bake (`puck mesh audit --cpu --group
 hall-blind`) meshes a south or north board in about 190,000 triangles, an east
-one in 49,000 and a skylight's in 95,000, so the lowered lobby adds about
+one in 49,000 and a skylight's in 95,000, so a lowered level adds about
 420,000, near one floor slab's 530,000. With the lobby's lights off its light is
 the device screens' and the entrance's; the lit levels above still light the
 stairwell, which is open between floors.
@@ -117,10 +144,11 @@ stairwell, which is open between floors.
 |---|---|
 | Enter | `debug.go gallery`, then walk +Z through the door |
 | Change level on foot | The stairs at the lobby's north-west corner: walk +Z up the first flight, step east on the half landing, walk -Z up the second |
-| Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button, or `gallery.lift <level>` |
-| Ride the lift | Stand in the car; approach a numbered button on its back wall and press the context button, or `gallery.lift <level>` |
+| Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
+| Ride the lift | Stand in the car facing its back wall, where the brushed panel has a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |
-| Switch a level's lights, and with them its blinds | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
+| Raise or lower a level's blinds | `gallery.blinds <level> up\|down`; down, the default, keeps daylight off the exhibits |
+| Switch a level's lights | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
@@ -131,7 +159,7 @@ stairwell, which is open between floors.
 The lift car is a population body (`lift-car`, body 41, below the companion) carrying the attached
 solid platform, cab shell and car doors. The shell encloses the car with side
 and back walls and a lit ceiling. Rules move
-it: `liftCall` names the level a button or command called, `liftTarget` and
+it: `liftTarget` and
 `liftAt` count sixteenths of a metre, and `lift-ride` glides the car to cell
 `liftAt` of the `liftShaft` topology every tick (`poseCell(…, glide: true)`, a
 continuous move a client interpolates rather than a teleport), so it climbs
@@ -141,13 +169,29 @@ down through the analytic provider's attached-box support path
 ride and grounding on arrival. `liftDoors` closes the car and all landing
 doors before travel starts, then opens the car and only the landing at its
 destination. Each door has two leaves that retract behind the jambs; both
-variants collide as drawn. `liftLevel` records the last level reached and
-drives the display inside the car and beside each landing's call button.
+variants collide as drawn. `liftLevel` records the last level reached.
 `galleryPopulation` sets the debug world's capacity; the car's attachment
 index is two below it, keeping the car between the companion and chess cursor.
-The buttons are unlit wall plates; there are no emissive floor pads. Ceiling
-strips stop outside the enclosed shaft, and the cab's ceiling hides the slabs
-above it.
+Ceiling strips stop outside the enclosed shaft, and the cab's ceiling hides the
+slabs above it.
+
+The input panel is state and rules (the block comment above the rules in
+`hall.puck` has the order). A landing's CALL button writes `liftHall[levelK]`
+and a car floor button `liftCarCall[levelK]`; each button's placement shows its
+lit prototype while its cell is 1, and the cell clears when the car stops
+there. A stopped car waits out its dwell (four seconds after its doors open,
+`liftClock[dwell]`), then serves pending levels in its direction of travel
+(`liftDir`), nearest first, and turns round only when none is left that way; a
+pending level that lies ahead of a moving car and nearer than its target is
+taken on the way. Door open (`liftOpenReq`) opens or holds the doors and
+restarts the dwell, door close (`liftCloseReq`) shuts them and ends it, and
+each lights its lamp (`liftLamp`) for 0.4 s. `liftFloor` and `liftArrow` drive
+the level displays. A level written to `liftCall`, as `gallery.lift` and the
+traversal addon do, becomes a landing call. The buttons read the Moth's body
+against a reach box before each plate, since a rule reads no facing: six cells
+of the body's x across the car's back wall, and one box on each landing.
+`hall-tests.puck` checks the calls, the ride, the queue order and the door
+buttons.
 
 Section boards hang on two rods from the ceiling above each row's first
 exhibit, with their text facing the landing along -X. Their lower edge is

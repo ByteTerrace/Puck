@@ -92,7 +92,7 @@ harness: `puck_worlds` lists the running Worlds, and the `world` argument of `pu
 runs on the adapter's current World and the result's `world` member names it, so name your own World when several
 run. `puck_world_start` boots a World of the agent's own from a checkout of this repository (`OperatorWorlds`:
 the build of the checkout's current sources from the [World build store](../../../../docs/reference/cli.md#where-the-world-artifact-is-built),
-built first when the store lacks that source state, so never older than its inputs; `--devices none`, its own state
+built first when the store lacks that source state, so never older than its inputs, one build at a time machine-wide under the `build` lease, and with SPIR-V when `backend` is `vulkan`; `--devices none`, its own state
 directory, `--control`, the GPU lease held for a windowed one, taken after the build) and `puck_world_stop`
 ends only a World the adapter started; the console verb `host.log` reads any World's `HostLog` ring of its stdout and
 stderr lines (`Puck.Hosting`, teed from `Console` in `Program.cs`, refusals appended by `BufferedConsoleOutput`,

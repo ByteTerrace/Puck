@@ -1627,13 +1627,19 @@ public static class WorldBootComposition {
         // (the unified overlay's construction resolves it below), so both consumers share the one key table.
         services.AddSingleton<WorldOverlayFrameSources>(implementationFactory: static sp => new WorldOverlayFrameSources(binder: sp.GetRequiredService<WorldScreenBinder>()));
         services.AddSingleton<IOverlayFrameSources>(implementationFactory: static sp => sp.GetRequiredService<WorldOverlayFrameSources>());
+        services.AddSingleton(implementationFactory: static sp => new WorldHudSpeechFeed(
+            bindings: sp.GetRequiredService<IHudBindingResolver>(),
+            speak: sp.GetRequiredService<WorldAudioDirector>().SpeakText,
+            stop: sp.GetRequiredService<WorldAudioDirector>().StopText
+        ));
         services.AddSingleton(implementationFactory: static sp => new WorldHudFeed(
             client: sp.GetRequiredService<WorldClient>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             store: sp.GetRequiredService<HudStore>(),
             facts: sp.GetRequiredService<WorldOverlayFacts>(),
             frameSources: sp.GetRequiredService<WorldOverlayFrameSources>(),
-            viewports: sp.GetRequiredService<WorldSeatViewports>()
+            viewports: sp.GetRequiredService<WorldSeatViewports>(),
+            speech: sp.GetRequiredService<WorldHudSpeechFeed>()
         ));
 
         // The boot document's resolved icon table: the ONE place an icon name, a font id, or a codepoint is known

@@ -300,6 +300,7 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
         public nint OutputImage;
         public GpuImageLayout OutputLayout;
         public RenderGraphPackageOutcome Outcome;
+        public bool PredictsEmpty;
 
         // A pass's own outcome, in place of Outcome, and each pass's last record: its first input's and its output's
         // images and whether it was told it may stand in.
@@ -317,6 +318,7 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
     }
     private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
+        public bool DrawsNothing(ReadOnlySpan<byte> passBlock) => (counter.PredictsEmpty && (counter.Outcome == RenderGraphPackageOutcome.DrewNothing));
         public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => counter.CadenceSignature;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             if (counter.RefuseRecording) { throw new InvalidOperationException(message: "Injected history writer recording refusal."); }

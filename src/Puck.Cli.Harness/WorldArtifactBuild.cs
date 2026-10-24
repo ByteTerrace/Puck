@@ -41,14 +41,19 @@ public static class WorldArtifactBuild {
     /// <see langword="null"/> on failure.</param>
     /// <param name="error">Why the artifact is unavailable, or empty on success. A failed build's reason quotes its
     /// first error lines on further lines and names its log.</param>
+    /// <param name="spirv">Whether the build carries Vulkan SPIR-V beside the Direct3D 12 bytecode. A Windows build of
+    /// one project ships Direct3D 12 bytecode alone, so a World that boots on Vulkan asks for it; it is a different
+    /// source state, so the store keeps it apart from the Direct3D 12 build.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error) =>
+    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, bool spirv = false) =>
         TryResolve(
             artifact: out artifact,
             builder: null,
             error: out error,
+            leaseRoot: () => CliLease.RootAsync(checkout: repositoryRoot).GetAwaiter().GetResult(),
             logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
+            spirv: spirv,
             store: new WorldArtifactStore(root: WorldArtifactStore.DefaultRoot),
             timeout: timeout,
             verb: verb
@@ -113,15 +118,22 @@ public static class WorldArtifactBuild {
     /// <returns><see langword="true"/> when an artifact is available.</returns>
     /// <param name="waiting">Called synchronously on this resolver's thread once its first build-lock attempt finds
     /// another holder, before it waits.</param>
-    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null) {
+    /// <param name="leaseRoot">Gives the shared lease directory whose <c>build</c> lease a build holds, or
+    /// <see langword="null"/> for none. Builds of different source states queue on it machine-wide, one at a time, so
+    /// N lanes with N source states do not run N World builds at once; a run that reuses a stored build never takes
+    /// it, and the lease is held only for the build and its publication.</param>
+    /// <param name="spirv">Whether the build carries Vulkan SPIR-V (<c>-p:PuckShaderSpirvEnabled=true</c>), which
+    /// keys it apart from a Direct3D 12 build of the same sources.</param>
+    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null, Func<string>? leaseRoot = null, bool spirv = false) {
         var clock = Stopwatch.StartNew();
+        IReadOnlyList<string> properties = (spirv ? ["-p:PuckShaderSpirvEnabled=true"] : []);
 
         artifact = null;
 
         var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot);
 
         if (!WorldArtifactKey.TryCompute(
-            buildArguments: CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject),
+            buildArguments: [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject), .. properties],
             key: out var key,
             reason: out var unkeyed,
             repositoryRoot: repositoryRoot,
@@ -179,6 +191,16 @@ public static class WorldArtifactBuild {
                 return true;
             }
 
+            // Builds of other source states queue here; the key's own lock above already serializes this state.
+            using var slot = (leaseRoot is null)
+                ? null
+                : CliLease.AcquireAsync(
+                    clock: TimeProvider.System,
+                    holder: $"{verb} {key}",
+                    name: "build",
+                    root: leaseRoot(),
+                    wait: CliProcess.RemainingBudget(budget: timeout, clock: clock)
+                ).GetAwaiter().GetResult();
             var staging = store.CreateStaging(key: key);
 
             Console.Error.WriteLine(value: $"{verb}: building Puck.World once (Release) for source state {key}.");
@@ -192,6 +214,7 @@ public static class WorldArtifactBuild {
                 runner: builder,
                 error: out error,
                 outputDirectory: staging,
+                properties: properties,
                 timeout: CliProcess.RemainingBudget(
                     budget: timeout,
                     clock: clock
@@ -221,6 +244,14 @@ public static class WorldArtifactBuild {
             error = string.Empty;
 
             return true;
+        } catch (TimeoutException exception) {
+            error = $"the Puck.World build of source state {key} waited the whole {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget for other runs' builds: {exception.Message}";
+
+            return false;
+        } catch (InvalidOperationException exception) {
+            error = $"the shared lease directory for the Puck.World build could not be found: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             error = $"the Puck.World build store {store.Root} failed: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 

@@ -12,15 +12,11 @@ internal sealed class PostContext {
     /// <param name="sstRoot">The resolved SingleStepTests/sm83 corpus root, or <see langword="null"/> when absent.</param>
     /// <param name="requireAssets">Whether an absent corpus asset is an infrastructure failure rather than a skip.</param>
     /// <param name="parallelism">How many cases a corpus stage runs at once; zero for one per logical processor.</param>
-    /// <param name="linkRomPath">A link-capable commercial cartridge for the link-game replay stage, or <see langword="null"/> to skip it.</param>
-    /// <param name="tradeRomPath">The cross-generation trade cartridge for the scripted trade stages, or <see langword="null"/> to skip them.</param>
     /// <exception cref="ArgumentException"><paramref name="artifactsDirectory"/> is null or empty.</exception>
-    public PostContext(string artifactsDirectory, string? testRomRoot, string? sstRoot = null, bool requireAssets = false, int parallelism = 0, string? linkRomPath = null, string? tradeRomPath = null) {
+    public PostContext(string artifactsDirectory, string? testRomRoot, string? sstRoot = null, bool requireAssets = false, int parallelism = 0) {
         ArgumentException.ThrowIfNullOrEmpty(argument: artifactsDirectory);
 
         ArtifactsDirectory = artifactsDirectory;
-        LinkRomPath = linkRomPath;
-        TradeRomPath = tradeRomPath;
         Parallelism = ((parallelism > 0)
             ? parallelism
             : Environment.ProcessorCount
@@ -32,8 +28,6 @@ internal sealed class PostContext {
 
     /// <summary>Gets the directory stages write artifacts to.</summary>
     public string ArtifactsDirectory { get; }
-    /// <summary>Gets the link-capable commercial cartridge the link-game replay stage boots, or <see langword="null"/> to skip it.</summary>
-    public string? LinkRomPath { get; }
     /// <summary>Gets how many cases a corpus stage runs at once.</summary>
     public int Parallelism { get; }
     /// <summary>Gets a value indicating whether an absent corpus asset is an infrastructure failure (exit 2) rather
@@ -43,6 +37,4 @@ internal sealed class PostContext {
     public string? SstRoot { get; }
     /// <summary>Gets the resolved reference-ROM corpus root, or <see langword="null"/> when absent.</summary>
     public string? TestRomRoot { get; }
-    /// <summary>Gets the cross-generation trade cartridge the scripted trade stages boot, or <see langword="null"/> to skip them.</summary>
-    public string? TradeRomPath { get; }
 }
