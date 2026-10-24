@@ -518,7 +518,8 @@ function ConvertFrom-PolicyPwshElement {
     switch ($Element.GetType().Name) {
         'StringConstantExpressionAst' { return [pscustomobject]@{ Value = $Element.Value; Dynamic = $false } }
         'ExpandableStringExpressionAst' { return [pscustomobject]@{ Value = $Element.Value; Dynamic = $Element.NestedExpressions.Count -gt 0 } }
-        'CommandParameterAst' { return [pscustomobject]@{ Value = $Element.Extent.Text; Dynamic = $false } }
+        # -Name:value carries its value inside the parameter; a value that is not a constant is known only at run time.
+        'CommandParameterAst' { return [pscustomobject]@{ Value = $Element.Extent.Text; Dynamic = ($null -ne $Element.Argument -and $Element.Argument -isnot [Management.Automation.Language.ConstantExpressionAst]) } }
         'ScriptBlockExpressionAst' { return [pscustomobject]@{ Value = $Element.Extent.Text; Dynamic = $false } }
         'ArrayLiteralAst' { return $Element.Elements | ForEach-Object { ConvertFrom-PolicyPwshElement $_ } }
         default { return [pscustomobject]@{ Value = $Element.Extent.Text; Dynamic = $true } }
