@@ -14,8 +14,9 @@ namespace Puck.World.Server;
 /// <remarks>
 /// <para>A body contributes up to <see cref="WorldCollider.MaxVolumes"/> sphere, capsule, or oriented-box volumes.
 /// Resolution depenetrates each from every collider, killing the velocity component driving into each resolved
-/// surface. A push whose normal's <c>+Y</c> alignment clears the compiled
-/// <see cref="FixedWorldCollision.GroundedThreshold"/> grounds the body — the same test the ground plane uses.</para>
+/// surface. A support push whose normal's <c>+Y</c> alignment clears the compiled
+/// <see cref="FixedWorldCollision.GroundedThreshold"/> grounds the body. Lateral edge approach instead reports an
+/// obstruction and the full clearance a step-up needs; vertical landing retains the rounded surface normal.</para>
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; a chamfered Box

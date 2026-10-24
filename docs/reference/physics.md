@@ -169,7 +169,7 @@ Sphere/box pairs instead use the closest point on the oriented box, including
 its faces, edges, and corners. A sphere center inside the box exits through the
 nearest face, with ties resolved X, Y, then Z. Static and dynamic sphere/box
 queries share this geometry; reversing the moving side reverses the push.
-Capsule/box pairs still use conservative world bounds. Compound correction
+Dynamic capsule/box pairs still use conservative world bounds. Compound correction
 selection compares full-width squared magnitudes so a shallow overlap is not
 lost by rounding its square to the scalar precision.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,

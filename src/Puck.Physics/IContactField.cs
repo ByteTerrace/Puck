@@ -111,9 +111,9 @@ public enum ContactRefusal {
 /// consults, plus measured walkable and non-walkable contact normals. The obstruction normal is read-back only;
 /// an integrator may adopt the ground normal according to its own body-frame policy.</summary>
 /// <param name="Grounded"><see langword="true"/> when the body is standing on a walkable surface after resolution.</param>
-/// <param name="ObstructionNormal">The last resolved non-walkable contact's unit surface normal this call, or
-/// <see cref="FixedVector3.Zero"/> when nothing obstructed the body. A walkable push (the ground, a ramp) never
-/// writes this — only a contact whose alignment fails the grounded test does.</param>
+/// <param name="ObstructionNormal">The last resolved obstruction's unit surface normal this call, or
+/// <see cref="FixedVector3.Zero"/> when nothing obstructed the body. Ground and ramp support never write this.
+/// An approached analytic edge is an obstruction even when its normal lies in the walkable cone.</param>
 /// <param name="GroundNormal">The unit surface normal of the last WALKABLE push, or <see cref="FixedVector3.Zero"/>
 /// when the body did not ground. This is a measured contact fact, not an instruction to rotate the body; the
 /// consuming integrator's frame policy decides whether to adopt it.</param>

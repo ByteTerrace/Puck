@@ -16,9 +16,8 @@ public interface IFixedContactStep {
     ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity);
 }
 /// <summary>The accepted outcome of <see cref="FixedStepUp.TryStep{TStep}"/>.</summary>
-/// <param name="Position">The foot point on top of the riser.</param>
-/// <param name="Velocity">The velocity after the step-up's moves: the riser never clipped it, so the body keeps its
-/// pace.</param>
+/// <param name="Position">The foot point on the riser's landing surface, including its rounded edge.</param>
+/// <param name="Velocity">The velocity after the step-up's moves, projected onto the landing support.</param>
 /// <param name="Resolution">The landing move's resolution, grounded on a walkable surface.</param>
 public readonly record struct FixedStepUpResult(FixedVector3 Position, FixedVector3 Velocity, ContactResolution Resolution);
 /// <summary>Lifts a grounded body over a riser its ordinary step met as a wall: raise by the step height, move the

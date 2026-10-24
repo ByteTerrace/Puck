@@ -19,7 +19,8 @@ public sealed class RiserEdgeLawTests {
                     Position: new Vector3(x: 0f, y: -0.5f, z: 0f), Rotation: Quaternion.Identity, Scale: new Vector3(x: 20f, y: 0.5f, z: 20f),
                     Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0),
                 new ShapeDocument(Id: 1, Name: "riser", Type: type,
-                    Position: new Vector3(x: 0f, y: 0.05f, z: 3.5f), Rotation: Quaternion.Identity, Scale: new Vector3(x: 2f, y: 0.05f, z: 2f),
+                    Position: new Vector3(x: 0f, y: 0.05f, z: 3.5f), Rotation: ((type == SdfSolidPrimitive.Prism)
+                        ? Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 0.35f) : Quaternion.Identity), Scale: new Vector3(x: 2f, y: 0.05f, z: 2f),
                     Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0, Chamfer: chamfer),
             ]), source: "riser");
         var kits = document.Kits.ToArray();
