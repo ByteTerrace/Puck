@@ -12,8 +12,11 @@
 // Modes rates and rate-flash are the final image with each rated item tinted by its update tier (SdfUpdateRateCode).
 
 // Whether a mode composes the final image: the final image itself and the tier views, which tint it.
+bool sdfDebugPreservesScene(uint mode) {
+    return ((mode == 0u) || (mode == SDF_DEBUG_VIEW_COLLIDERS) || (mode == SDF_DEBUG_VIEW_CONTACTS));
+}
 bool sdfDebugComposesFinal(uint mode) {
-    return ((mode == 0u) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH));
+    return (sdfDebugPreservesScene(mode) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH));
 }
 
 #endif

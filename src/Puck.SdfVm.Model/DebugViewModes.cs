@@ -21,6 +21,8 @@ public static class DebugViewModes {
         "indirect",
         "rates",
         "rate-flash",
+        "colliders",
+        "contacts",
     ];
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");
@@ -32,6 +34,11 @@ public static class DebugViewModes {
     /// <summary>The tier view that tints a rated item only on the frames it updates, so its cadence shows as a
     /// flicker.</summary>
     public static readonly int RateFlash = Array.IndexOf(array: Names, value: "rate-flash");
+
+    /// <summary>Whether diagnostics annotate a normally resolved scene without replacing its shading.</summary>
+    /// <param name="mode">The debug mode.</param>
+    /// <returns>True for the untouched scene and evidence-preserving diagnostics.</returns>
+    public static bool PreservesScene(int mode) => (mode == 0) || (Name(mode) is "colliders" or "contacts");
 
     /// <summary>Gets the number of debug view modes.</summary>
     public static int Count => Names.Length;

@@ -1063,6 +1063,7 @@ public sealed partial class SdfMeshPathBake {
     // Contours a group's final lattice, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).
     private void Contour(Group group, SdfSampledLattice lattice) {
+        group.DiagnosticCell = lattice.ContourCell;
         SdfContour? contour = null;
 
         try {
@@ -1296,6 +1297,7 @@ public sealed partial class SdfMeshPathBake {
     // the group's drawn mesh.
     private void Land(Group group, SdfMesh? mesh) {
         if (mesh is not null) {
+            mesh = mesh with { BakeCell = group.DiagnosticCell };
             Library.Store(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
 
@@ -1500,6 +1502,7 @@ public sealed partial class SdfMeshPathBake {
         public ContourProjection? Projection { get; set; }
 
         public Vector3 CreaseSpacing { get; set; } = Vector3.One;
+        public Vector3 DiagnosticCell { get; set; }
         public float CreaseSlope { get; set; } = 1f;
 
         public Vector4[]? Points { get; set; }

@@ -514,60 +514,6 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
-            name: "world.debug-view",
-            description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
-                separator: '|',
-                value: DebugViewModes.Names
-            )}|next|toggle <mode>]. next steps to the following view, after the last back to off, so one key cycles them; toggle <mode> selects the mode, or off when it is already selected. Depth is the primary-march-only performance probe; off restores final shading. rates is the final image with every item a world.rates lever holds tinted by its tier (30 Hz amber, 15 Hz magenta, every frame untinted), and rate-flash tints each only on the frames it updates. Bindable, so a binding row or an authored command (the debug world's gallery.view) may call it.",
-            handler: (_, args) => {
-                if (renderProbe.Residency is not { } node) {
-                    return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
-                }
-
-                CommandResult Select(int mode) {
-                    node.DebugMode = mode;
-                    settings.RateTints = DebugViewModes.ShowsRates(mode: mode);
-
-                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: mode)}]");
-                }
-
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
-                }
-
-                if (
-                    (args.Count == 1) &&
-                    string.Equals(a: args[0].ToString(), b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)
-                ) {
-                    return Select(mode: ((node.DebugMode + 1) % DebugViewModes.Count));
-                }
-
-                if (
-                    (args.Count == 2) &&
-                    args.Is(index: 0, value: "toggle") &&
-                    DebugViewModes.TryParse(name: args[1].ToString(), mode: out var toggled)
-                ) {
-                    return Select(mode: ((node.DebugMode == toggled) ? 0 : toggled));
-                }
-
-                if (
-                    (args.Count != 1) ||
-                    !DebugViewModes.TryParse(
-                    name: args[0].ToString(),
-                    mode: out var mode
-                )
-                ) {
-                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(
-                        separator: '|',
-                        value: DebugViewModes.Names
-                    )}]");
-                }
-
-                return Select(mode: mode);
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Bindable,
             name: "world.render-scale",
             description: "Controls view resolution: world.render-scale [view] [<tier|fraction|percent>|floor <tier>|pin <scale>|auto [on|off]]. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",
             handler: (context, args) => {

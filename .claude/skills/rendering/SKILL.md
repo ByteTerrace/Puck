@@ -15,6 +15,55 @@ Rendering is presentation: floats are legal, and nothing here may feed back
 into simulation state. The deterministic contract lives with the fixed-point
 query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
+## Evidence-preserving diagnostics
+
+`world.debug-view colliders|contacts` uses the beauty path through temporal
+resolve, sky, glass, fog, exposure and the root tonemap/sharpen. Keep
+`DebugViewModes.PreservesScene`, `sdfDebugPreservesScene` and the temporal epoch
+key together. Diagnostic marks belong only to `AnnotationWriter.EmitDiagnostics`'s separately
+reserved overlay channel; its masks protect every causal footprint, including
+overflow beyond the sixteen visible pins. Focus removes chroma outside those
+footprints without changing luminance. Keep masks exact rather than coalescing
+them into spatial bins: those bins show as rectangular chroma islands in focus.
+Beyond the mask reservation, conservatively protect overflow and leave focus
+off. Place badges beside witnesses with short leaders; collisions overflow to
+the report rather than forming a screen-wide leader band. Never paint a diagnostic into history,
+the visibility buffer or lighting.
+
+`WorldDiagnostics` separates collision-versus-authored-field from
+field-versus-baked-mesh. The latter reuses the irradiance scene's retained
+triangle hierarchy only when its exact draw records and delivered document
+version match and the bake has settled. The client document is not necessarily
+the server's object: compare `WorldDocumentVersion` by value, never their
+definition references. `SdfMesh.BakeCell` comes from the actual
+contour lattice, survives cache storage and material renumbering, and supplies
+the hit triangle's half-cell-diagonal budget. No saved baseline or allowlist is
+involved. A second `SdfWorldPicker` per instance asynchronously reads cluster
+depth without stealing pointer requests; discard results across camera, mesh,
+program or view changes.
+
+Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
+`TryNearestSurface`, not normal-ray hits. The nearest query reuses both levels
+of the trace hierarchy and tests world-space triangle distances (object-space
+nearest points are wrong under nonuniform scaling). It includes edges and
+zero-distance witnesses. The search radius is four times the sum of
+collision/arithmetic precision and the scene's largest bake half diagonal; only the returned
+triangle's own precision enters its budget. A miss is unknown. Grounded checks
+require the nearest retained support surface to be walkable; a missing or
+unqualified hit is unknown too. `coverage.comparisons` counts red, clean and
+unknown witnesses separately from causal findings. Never add a fillet, bound
+or snap-reach allowance, or suppress authored-field findings to quiet the mesh
+audit. The owning decision is [diagnostic evidence](../../../docs/decisions/rendering.md#a-diagnostic-view-never-covers-its-evidence).
+
+Captures on the synthesized overlaid root retain the beauty image, annotated
+image and JSON together. Attach the companion to `WorldRootGraph.OverlayInstance`,
+which serves the screenshot, not `ComparisonLiveRoot`, which is the beauty
+source. The capture companion waits for both display encoders;
+its closure owns pixels and JSON before background encoding starts. Custom
+authored roots need an equivalent beauty/overlay split before they can supply
+a triplet. See [scene diagnostics](../../../docs/reference/commands.md#scene-diagnostics)
+for commands, coverage and the GPU handoff checks.
+
 ## Where things live
 
 | Area | Code | Explanation |

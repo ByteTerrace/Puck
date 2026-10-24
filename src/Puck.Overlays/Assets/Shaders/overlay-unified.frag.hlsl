@@ -182,6 +182,25 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     int atlasCellW = (int)passGroup.counts.z;
     int atlasCellH = (int)passGroup.counts.w;
 
+    // Diagnostic masks are a conservative union of evidence footprints plus an untouched moat. They affect only
+    // the dedicated diagnostic channel; no diagnostic stroke, badge or focus treatment can paint these pixels.
+    bool diagnosticProtected = false;
+    bool diagnosticFocus = false;
+    for (int maskIndex = 0; maskIndex < elementCount; maskIndex++) {
+        uint maskOffset = elementBase + (uint)maskIndex * ELEMENT_WORDS;
+        uint maskKind = OverlayWord(overlayData, maskOffset + 4u) & 0xFu;
+        if ((maskKind != 6u) && (maskKind != 7u)) { continue; }
+        float2 low = float2(OverlayFloat(overlayData, maskOffset), OverlayFloat(overlayData, maskOffset + 1u));
+        float2 size = float2(OverlayFloat(overlayData, maskOffset + 2u), OverlayFloat(overlayData, maskOffset + 3u));
+        bool inside = all(uv >= low) && all(uv <= low + size);
+        diagnosticProtected = diagnosticProtected || ((maskKind == 6u) && inside);
+        diagnosticFocus = diagnosticFocus || ((maskKind == 7u) && inside);
+    }
+    if (diagnosticFocus && !diagnosticProtected) {
+        float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+        color = lerp(luma.xxx, color, 0.2); // mute chroma, preserve luminance; never crush context to black
+    }
+
     float edgeAa = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_EDGE_AA);
     float haloBlur = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_BLOOM_HALO_BLUR);
     float bloomRingA = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_BLOOM_RING_A);
@@ -287,12 +306,20 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
         uint packed = OverlayWord(overlayData, (o + 4u));
         uint kind = (packed & 0xFu);
+        if ((kind == 6u) || (kind == 7u) || (diagnosticProtected && ((packed & 0x80000000u) != 0u))) { continue; }
         uint role = ((packed >> 4u) & 0xFFu);
         float2 origin = (float2(OverlayFloat(overlayData, o), OverlayFloat(overlayData, (o + 1u))) * dims);
         float2 ab = float2(OverlayFloat(overlayData, (o + 2u)), OverlayFloat(overlayData, (o + 3u)));
         float2 local = (fragCoord.xy - origin);
 
-        if (kind == 1u) {
+        if (kind == 8u) {
+            float2 delta = ab * dims - origin;
+            float along = saturate(dot(local, delta) / max(dot(delta, delta), 1.0e-8));
+            float distance = length(local - delta * along);
+            float mask = 1.0 - smoothstep(0.5, 1.5, distance);
+            float4 stroke = OverlayTokenColor(overlayData, role);
+            color = lerp(color, stroke.rgb, mask * stroke.a);
+        } else if (kind == 1u) {
             // A rounded-rect cell (chip fill, selection fill, accent tick, state rail).
             float2 size = (ab * dims);
 

@@ -148,7 +148,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
             renumbered[triangle] = (((place >= 0) && (place < to.Length)) ? (uint)to[place] : source[triangle]);
         }
 
-        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: renumbered, vertexMembers: mesh.VertexMembers);
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: renumbered, vertexMembers: mesh.VertexMembers) { BakeCell = mesh.BakeCell };
     }
 
     private sealed record Variant(int[] Materials, SdfMesh Mesh);

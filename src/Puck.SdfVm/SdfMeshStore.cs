@@ -33,11 +33,11 @@ public sealed class SdfMeshStore {
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";
 
-    // "PUCKMSH2": the entry format. Another layout is another magic, so an older entry is refused rather than misread.
-    private const ulong Magic = 0x3248534D4B435550ul;
+    // "PUCKMSH3": counts followed by the contour cell. Retired cache entries are derived again.
+    private const ulong Magic = 0x3348534D4B435550ul;
     // The magic, the key, and seven counts: vertices, normals, indices, triangle materials, the group's materials, members
     // and vertex members.
-    private const int HeaderBytes = (sizeof(ulong) + 16 + (7 * sizeof(int)));
+    private const int HeaderBytes = (sizeof(ulong) + 16 + (7 * sizeof(int)) + (3 * sizeof(float)));
     // A member's bytes: its slot offset, its position and its orientation.
     private const int MemberBytes = (sizeof(int) + (7 * sizeof(float)));
     private const int ChecksumBytes = 16;
@@ -392,6 +392,9 @@ public sealed class SdfMeshStore {
         BinaryPrimitives.WriteInt32LittleEndian(destination: at[40..], value: materials.Length);
         BinaryPrimitives.WriteInt32LittleEndian(destination: at[44..], value: members.Length);
         BinaryPrimitives.WriteInt32LittleEndian(destination: at[48..], value: vertexMembers.Length);
+        BinaryPrimitives.WriteSingleLittleEndian(destination: at[52..], value: mesh.BakeCell.X);
+        BinaryPrimitives.WriteSingleLittleEndian(destination: at[56..], value: mesh.BakeCell.Y);
+        BinaryPrimitives.WriteSingleLittleEndian(destination: at[60..], value: mesh.BakeCell.Z);
         var offset = HeaderBytes;
 
         groupMaterials.CopyTo(destination: at[offset..]);
@@ -475,7 +478,13 @@ public sealed class SdfMeshStore {
         var vertexMemberData = body.Slice(length: vertexMemberCount, start: offset).ToArray();
 
         try {
-            mesh = new SdfMesh(indices: indexData, members: members, normals: normalData, positions: positionData, triangleMaterials: materialData, vertexMembers: vertexMemberData);
+            mesh = new SdfMesh(indices: indexData, members: members, normals: normalData, positions: positionData, triangleMaterials: materialData, vertexMembers: vertexMemberData) {
+                BakeCell = new Vector3(BinaryPrimitives.ReadSingleLittleEndian(body[52..]),
+                    BinaryPrimitives.ReadSingleLittleEndian(body[56..]), BinaryPrimitives.ReadSingleLittleEndian(body[60..])),
+            };
+            if (!float.IsFinite(mesh.BakeCell.LengthSquared()) || Vector3.Min(mesh.BakeCell, Vector3.Zero) != Vector3.Zero) {
+                throw new ArgumentException("Invalid contour cell.");
+            }
         } catch (ArgumentException exception) {
             refusal = $"is no mesh: {exception.Message}";
 
