@@ -26,11 +26,26 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   camera with the same rays, materials, shadow tests and bounce cache as a
   lattice probe. A small enclosure may contain no lattice centre; searching
   farther or holding the previous room's exposure cannot measure its light.
+  Cache the six directional values by camera cell and scene/lighting generation,
+  with at most one slot per view. Looking around reweights that measurement;
+  moving within its cell reuses it only when the scene sees the camera from
+  the sample's actual origin. A blocked segment requires a fresh measurement,
+  even within one cell. Refresh once when the volume's bounce sweeps finish.
+  `world.counters sdf.mesh-gi` counts `camera-traces`; steady reads add none.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
   the previous exposure, local-adaptation meter and sky visibility. The authored
   EV is only the initial value before a reading. `world.exposure` distinguishes `probes`,
   `camera-trace`, `held` and `initial`; the last two report `meter=none`.
+- A lighting change or scene rebuild advances a generation, never clears the
+  cache. The tracer counts only that generation's sweeps; bounce reads use its
+  intermediate samples while metering and filtering keep the previous completed
+  sample until the cell's replacement finishes. An invalid replacement rejects
+  immediately. Clear the CPU cache and staging volume only when the layout
+  changes. On a resize or window move, retain the uploaded GPU table **and its
+  old coordinates** until every new slot has a measured sample. Never publish
+  unwritten cells as darkness or initialize them to unoccluded sky. Before the
+  first scene has supplied any volume, there is no measured indirect light.
 - The depth fade stays thinner than the thinnest floor. A wall sample at a
   floor junction is level with the floor, so a broad fade admits the probe
   underneath and draws a bright line along the junction.
@@ -40,6 +55,9 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   surfaces on every axis; the diagonal hit closes that hole. Plane distance,
   rather than ray distance, keeps a flat blocker in the same place as the
   receiver's direction changes. CPU and shader use the same selection.
+  Components halfway between directions select the diagonal, away from zero:
+  `NearestPlane` on the CPU and an explicit half threshold in HLSL. HLSL's
+  documented `round()` is ties-to-even, so it does not express that rule.
   The record is 73 words (292 bytes), including 52 words of half-precision
   planes. The existing neighbour rays now trace to the lighting reach and
   their first hit also determines the neighbour mask; no second scene is built.
