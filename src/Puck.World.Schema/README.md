@@ -614,11 +614,9 @@ every kit rides is documented on its kit's `WorldMotion`
 row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
 `upTurn` (field/contact) and the obstruction-witness latch `obstruction`
 (displacement/idleThreshold/graceSeconds)—both default to the engine's own
-rates; `Turn.MaxPitch` is the drive frame's own pitch clamp; `groundStick` is
-the inward speed a grounded body on a curving surface is held against,
-independent of `Speed`—a kit's own resolved move speed measurably
-over-corrects a shallow slope climb, so it is its own field, defaulting to the
-engine's old constant; `stepHeight` is the tallest riser a grounded walker
+rates; `Turn.MaxPitch` is the drive frame's own pitch clamp; `groundSnap` is
+the downward reach within which a grounded walker follows a surface (0.3 m
+by default, scaled with the body, zero disables it); `stepHeight` is the tallest riser a grounded walker
 walks up onto, scaled with the body, zero by default and never negative), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and

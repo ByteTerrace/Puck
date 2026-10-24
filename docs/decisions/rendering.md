@@ -102,17 +102,38 @@ Work that changes every frame updates less often where it is far or small on
 screen (the owner's request), by the same rule: a reduced rate is a visible
 trade-off, so each switches only where a held update jumps by at most two
 pixels on screen for the speed it is sized for (`SdfUpdateRateTiers`). A body's
-pose evaluation runs at 30 Hz at or below 30 pixels per metre and 15 Hz at or
-below 15, its root followed every frame; a nested portal or session view
-renders at 30 Hz at or below 120 display pixels high and 15 Hz at or below 60;
-a screen's source uploads at 30 Hz once shown at or below its own height and
-15 Hz at or below half of it; the far shadow cascade refreshes at 30 Hz, its
-fit held between refreshes so a static shadow stays exact. Rates are absolute,
-so a display at or below 30 Hz holds nothing at the 30 Hz tier. Everything is
-presentation: the simulation ticks every body and every machine runs at its own
-rate, so game timing, audio and replay hashes do not move. The levers extend
-the per-pass cadence and the render graph's refresh, never a second scheduler,
-and `world.rates` switches each for comparison. Measured on the debug world
+pose evaluation updates at least 30 times a second at or below 30 pixels per
+metre and at least 15 at or below 15, its root followed every frame; a nested
+portal or session view renders at least 30 times a second at or below 120
+display pixels high and at least 15 at or below 60; a screen's source uploads
+at least 30 times a second once shown at or below its own height and at least
+15 at or below half of it; the far shadow cascade refreshes at least 30 times a
+second, its fit held between refreshes so a static shadow stays exact.
+
+A tier is a floor held by presentation time, since the two-pixel bound holds
+only if the content really updates that often: a rated item updates on the
+first frame where waiting one more frame, estimated from the latest frame's
+span, would pass its period (`PresentationRate.Holds`). Counting frames of the
+pacing target instead lets the real rate fall with the frame rate: paced at
+141 Hz on a variable-refresh display but rendering 70 frames a second, a
+five-frame hold is 14 Hz and four-pixel steps. On a fixed signal the period is a
+whole number of refreshes rounded down, so the cadence stays even and never
+falls below the tier, and a steady 60 Hz holds the same frames as a two- or
+four-frame divisor. Off a grid the comparison allows a millisecond for the
+jitter of a sampled frame time, without which a steady 60 Hz on a
+variable-refresh display refreshed the far cascade on three frames of every
+five instead of every second one.
+A tier above the display's rate holds nothing. Under
+lockstep the period is whole ticks, so a capture's frames do not depend on the
+display. A cap is the other meaning of a rate ("at most N Hz": an authored
+refresh, or a machine's own 59.7 Hz) and stays counted in presented frames,
+rounded up (`PresentationRate.FramesAtMost`); the two never share a rounding
+rule. Everything is presentation: the simulation ticks every body and every
+machine runs at its own rate, so game timing, audio and replay hashes do not
+move. The levers extend the per-pass cadence and the render graph's refresh
+(`RenderGraphRefresh.AtLeast`), never a second scheduler; `world.rates`
+switches each for comparison and prints each lever's longest interval between
+updates at each tier against the tier's period. Measured on the debug world
 ([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
 
 ## Lights, screens and the camera are photometric

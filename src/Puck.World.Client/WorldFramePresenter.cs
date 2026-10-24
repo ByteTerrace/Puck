@@ -87,6 +87,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private uint m_displayWidth;
     private bool m_displayExtentSupplied;
     private FrameContext? m_graphContext;
+    // The latest prepared frame's presentation rate, which the bodies lever's held poses are judged against.
+    private PresentationRate m_presentationRate;
 
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
@@ -1346,13 +1348,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ReconcileDelivery();
         m_binder.Publish(context: in context);
         AdvanceDynamicResolution(context: in context);
+        m_presentationRate = PresentationRate.Of(context: in context);
+        m_settings.RateIntervals.Advance(frameSeconds: context.FrameDeltaSeconds, rate: m_presentationRate);
 
         if (m_graphs is not { } graphs) {
             return;
         }
 
         graphs.BeginFrame(
-            displayHertz: context.DisplayHertz,
+            rate: m_presentationRate,
             sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
@@ -1967,6 +1971,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_animator.RateBy(
             counts: m_settings.RateCounts,
             height: height,
+            intervals: m_settings.RateIntervals,
+            rate: m_presentationRate,
             rates: m_settings.UpdateRates,
             views: m_frameViews
         );
@@ -2023,6 +2029,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
             TickLocked = TickLocked,
             RateCounts = m_settings.RateCounts,
+            RateIntervals = m_settings.RateIntervals,
             IndirectTier = m_settings.IndirectTier,
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,

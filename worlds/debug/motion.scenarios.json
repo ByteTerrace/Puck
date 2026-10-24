@@ -347,7 +347,7 @@
     },
     {
       "name": "run-ramp-15",
-      "note": "Suited, on the contact course. Runs up and over the 15 degree ramp: the launch off the crest.",
+      "note": "Suited, on the contact course. Runs up and over the 15 degree ramp: grounded across the crest and descent.",
       "form": "suited",
       "layout": "motion-course",
       "pose": [60, 0, -43.5, 0],

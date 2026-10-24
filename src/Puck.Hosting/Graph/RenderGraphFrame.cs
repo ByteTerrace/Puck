@@ -42,7 +42,8 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// <param name="Index">The presented frame's index, non-negative and increasing from frame to frame.</param>
 /// <param name="DisplayWidth">The display's width, in pixels.</param>
 /// <param name="DisplayHeight">The display's height, in pixels.</param>
-/// <param name="DisplayHertz">The display's presented frames a second, or zero when unknown.</param>
+/// <param name="DisplayHertz">The display's presented frames a second, or zero when unknown, where a floor refresh holds
+/// nothing.</param>
 /// <param name="Roots">The instances the display shows directly.</param>
 /// <param name="Footprints">The reads visible inside rendering instances.</param>
 /// <param name="PassPixelBudget">The scheduling policy's price ceiling: the pass-pixels (passes times pixels) the
@@ -85,4 +86,23 @@ public readonly record struct RenderGraphFrame(
 ) {
     /// <summary>Optional current-grid pass pricing, independent of the output extent used by consumers.</summary>
     public IRenderGraphPassCosts? Costs { get; init; }
+    /// <summary>Gets the frame's presentation time, in engine ticks: the presented intervals
+    /// (<see cref="FrameContext.FrameDeltaTicks"/>) summed since the host's first frame, never decreasing from frame to
+    /// frame. A floor refresh (<see cref="RenderGraphRefresh.AtLeast"/>) measures the time since an instance's latest
+    /// render on it.</summary>
+    public ulong PresentedTicks { get; init; }
+    /// <summary>Gets the latest frame's span, in engine ticks, the estimate a floor refresh takes for the next.</summary>
+    public ulong FrameTicks { get; init; }
+    /// <summary>Gets the rate presented frames land on a whole number of steps of (<see cref="FrameContext.GridHertz"/>),
+    /// or zero when they land at any time.</summary>
+    public double GridHertz { get; init; }
+    /// <summary>Gets the instances whose latest render did not show the frame it was asked for (waiting or refused), or
+    /// <see langword="null"/> for none: a floor refresh never holds one, since it has no current update to hold, so a
+    /// bake or build it waits on keeps advancing on frames that present no new time, as lockstep's held ticks do.</summary>
+    public IReadOnlyList<string>? Stale { get; init; }
+    /// <summary>Gets the frame's presentation rate: its display rate and grid.</summary>
+    public PresentationRate Rate => new(
+        DisplayHertz: DisplayHertz,
+        GridHertz: GridHertz
+    );
 }

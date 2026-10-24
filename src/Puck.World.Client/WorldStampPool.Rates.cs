@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Counting;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 
@@ -16,19 +17,26 @@ public sealed partial class WorldStampPool {
     private readonly List<(CameraSnapshot Camera, float Pixels)> m_rateViews = [];
     private SdfUpdateRates m_rates;
     private WorkCounterSet? m_rateCounts;
+    private SdfUpdateRateIntervals? m_rateIntervals;
+    private PresentationRate m_presentationRate;
 
     /// <summary>Records the views the frame source rendered the pool's world through and the levers it rendered under,
     /// which the next <see cref="PackTransforms"/> rates its bodies by.</summary>
     /// <param name="rates">The frame's levers (<see cref="SdfFrame.UpdateRates"/>).</param>
+    /// <param name="rate">The presentation rate a held pose's floor is judged against; an unpaced rate holds none.</param>
     /// <param name="counts">The counters the pool's rated bodies count into, or <see langword="null"/> for none.</param>
+    /// <param name="intervals">The window the pool's rated bodies record their intervals between poses into, or
+    /// <see langword="null"/> for none.</param>
     /// <param name="views">The frame's views.</param>
     /// <param name="height">The pixels down the image the views' regions divide.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void RateBy(SdfUpdateRates rates, WorkCounterSet? counts, IReadOnlyList<SdfViewSnapshot> views, uint height) {
+    public void RateBy(SdfUpdateRates rates, PresentationRate rate, WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         m_rates = rates;
+        m_presentationRate = rate;
         m_rateCounts = counts;
+        m_rateIntervals = intervals;
         m_rateViews.Clear();
 
         for (var index = 0; (index < views.Count); index++) {
@@ -39,7 +47,7 @@ public sealed partial class WorldStampPool {
     // frame while the lever is off or no view is known yet.
     private int BodyHertz(Vector3 center, float radius) {
         if (((m_rates & SdfUpdateRates.Bodies) == 0) || (m_rateViews.Count == 0)) {
-            return 60;
+            return SdfUpdateRateTiers.EveryFrameHertz;
         }
 
         var largest = 0f;
@@ -53,7 +61,7 @@ public sealed partial class WorldStampPool {
             var depth = (Vector3.Dot(vector1: (center - camera.Position), vector2: camera.Forward) - radius);
 
             if (depth <= camera.Near) {
-                return 60;
+                return SdfUpdateRateTiers.EveryFrameHertz;
             }
 
             largest = MathF.Max(x: largest, y: (pixels / ((2f * depth) * camera.TanHalfFieldOfView)));
@@ -61,13 +69,29 @@ public sealed partial class WorldStampPool {
 
         return SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: largest);
     }
-    // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: its rate is
-    // below every frame and the seconds since its last full pack, with this frame's, fall more than half a frame short
-    // of the rate's period.
+    // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
+    // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds). The
+    // slowest tier since that pack is the one its next interval is recorded under.
     private bool HoldsPose(Registration live, float deltaSeconds, Vector3 center, float radius) {
         var hertz = BodyHertz(center: center, radius: radius);
 
-        return ((hertz < 60) && (((live.RateSeconds + deltaSeconds) + (0.5f * deltaSeconds)) < (1f / hertz)));
+        live.RateSlowest = Math.Min(val1: live.RateSlowest, val2: hertz);
+
+        return SdfUpdateRateTiers.Holds(
+            elapsedSeconds: (live.RateSeconds + deltaSeconds),
+            frameSeconds: deltaSeconds,
+            hertz: hertz,
+            rate: m_presentationRate
+        );
+    }
+    // Records a full pack's interval since the previous one under the slowest tier it was rated at between them, and
+    // starts the next interval.
+    private void RecordPose(Registration live, float deltaSeconds) {
+        if (live.RateSlowest < SdfUpdateRateTiers.EveryFrameHertz) {
+            m_rateIntervals?.Record(hertz: live.RateSlowest, lever: SdfUpdateRates.Bodies, seconds: (live.RateSeconds + deltaSeconds));
+        }
+
+        live.RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
     }
     // Carries a held registration's slots with its root: the root follows the body as a full pack would, and every
     // other slot it packed rides the root's motion since the last frame rigidly.

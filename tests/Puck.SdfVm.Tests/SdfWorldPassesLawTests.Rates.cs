@@ -11,11 +11,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
     // Produces `frames` frames, applying `change` to the frame source before each, and returns the far cascade's
     // rendered and held counts. The cadence gate is off, so every pass is forced and only the hold can stand the far pass.
-    private static (long Rendered, long Held) FarCascadeCounts(SdfUpdateRates rates, int frames, Func<SdfFrame, int, SdfFrame> change) {
+    private static (long Rendered, long Held) FarCascadeCounts(SdfUpdateRates rates, int frames, Func<SdfFrame, int, SdfFrame> change, SdfUpdateRateIntervals? intervals = null) {
         var counts = SdfUpdateRateCounts.Counters();
         using var rig = new TemporalRig(displayHertz: 60, views: 1);
 
-        rig.SourceFrame = (DrawnFrame() with { RateCounts = counts, UpdateRates = rates });
+        rig.SourceFrame = (DrawnFrame() with { RateCounts = counts, RateIntervals = intervals, UpdateRates = rates });
         // The first frames fit and render the far cascade whatever the lever holds.
         for (var frame = 0; (frame < 2); frame++) { rig.Produce(); }
 
@@ -37,10 +37,13 @@ public sealed partial class SdfWorldPassesLawTests {
     // every second frame and counts the others held.
     [Fact]
     public void AStillViewRendersItsFarCascadeEverySecondFrameWhileTheLeverIsOn() {
-        var (rendered, held) = FarCascadeCounts(rates: SdfUpdateRates.ShadowFar, frames: RateFrames, change: static (frame, _) => frame);
+        var intervals = new SdfUpdateRateIntervals();
+        var (rendered, held) = FarCascadeCounts(intervals: intervals, rates: SdfUpdateRates.ShadowFar, frames: RateFrames, change: static (frame, _) => frame);
 
         Assert.Equal(expected: (RateFrames / 2), actual: rendered);
         Assert.Equal(expected: (RateFrames / 2), actual: held);
+        // Each refresh closes an interval of two 60 Hz frames: the 30 Hz tier's whole period.
+        Assert.Equal(expected: (2d / 60d), actual: (intervals.Longest(hertz: 30, lever: SdfUpdateRates.ShadowFar) ?? 0d), tolerance: 1e-9d);
     }
     // With the lever off, or a lever other than the far cascade's on, every frame renders it and none is held.
     [InlineData(SdfUpdateRates.None)]

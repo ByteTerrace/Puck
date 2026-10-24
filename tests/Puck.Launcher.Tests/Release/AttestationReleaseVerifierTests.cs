@@ -388,4 +388,34 @@ public sealed class AttestationReleaseVerifierTests {
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
     }
+
+    [Fact]
+    public void Verify_Refuses_ClaimSubjectMismatchingManifestApp() {
+        var fixture = new ReleaseChainFixture(subject: "puck.other");
+        var verifier = new AttestationReleaseVerifier(
+            codec: fixture.Codec,
+            sequenceStore: new InMemoryReleaseSequenceStore(),
+            trustList: fixture.BuildTrustList(replayHorizon: TimeSpan.FromDays(days: 30))
+        );
+        var manifest = fixture.Sign(
+            document: UnsignedDocument(),
+            notAfter: (ReleaseChainFixture.Epoch + 3600),
+            notBefore: ReleaseChainFixture.Epoch,
+            sequence: 1
+        );
+
+        var outcome = verifier.Verify(
+            advanceSequence: true,
+            installedVersion: "1.0.0",
+            manifest: manifest,
+            now: DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch)
+        );
+
+        Assert.False(condition: outcome.Accepted);
+        Assert.Contains(
+            expectedSubstring: "subject",
+            actualString: outcome.RefusalReason!,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
+    }
 }

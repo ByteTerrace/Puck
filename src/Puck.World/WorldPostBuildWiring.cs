@@ -74,6 +74,11 @@ public static class WorldPostBuildWiring {
             return false;
         }
 
+        // host.log stamps each line with the boot world's completed tick, the tick world.at and world.wait count in.
+        var bootServer = services.GetRequiredService<WorldServer>();
+
+        services.GetRequiredService<Puck.Hosting.HostLog>().Anchor(completedTick: () => (bootServer.NextInputTick - 1UL));
+
         // The affordance vocabulary goes live here — the first post-container point on the boot path where the built
         // registry exists (whichever verbs THIS boot shape actually composed). From now on every binding door
         // (player.bind, recomposes, the document validators) refuses a command name the registry does not carry; the

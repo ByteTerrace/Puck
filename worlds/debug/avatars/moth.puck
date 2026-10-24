@@ -1858,7 +1858,7 @@ kits {
       mass: 0
       motion {
         facingSnap: false
-        groundStick: 2
+        groundSnap: 0.3
         // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
         // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
         // falls with no hover and no thrust, and jumps instead.

@@ -21,8 +21,9 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
     // Shows a test pattern source `sourceHeight` pixels high on two screens, one facing each of two placed views, and
     // frames the host twice under the lever, so its footprints rate by the shares the first frame measured. Returns the
-    // divisor each consumer's footprint of the source asks for, by consumer, and how many footprints the lever counted
-    // rated. A root camera view films the world beside the placed views when `rootCamera` is set.
+    // frames of a 60 Hz display each consumer's footprint of the source holds the source for (a floor of 15 Hz holds
+    // four, every frame one), by consumer, and how many footprints the lever counted rated. A root camera view films the
+    // world beside the placed views when `rootCamera` is set.
     private (Dictionary<string, int> Divisors, long Rated) ScreenDivisors(SdfUpdateRates rates, int sourceHeight, IWorldViewScenes? scenes, bool placeSecond = true, bool rootCamera = false, bool farSecond = false, SdfWorldPasses? pickers = null, SdfSkyEnvironmentPasses? environment = null) {
         var pattern = WorldImageProducerSettings.SourceOf(
             id: WorldImageProducerSettings.TestPatternId,
@@ -64,14 +65,14 @@ public sealed partial class WorldViewPaneMappingLawTests {
             m_views.Add(item: new SdfViewSnapshot(Camera: (farSecond ? CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new System.Numerics.Vector3(x: 3f, y: 1f, z: 20f), target: new System.Numerics.Vector3(x: 3f, y: 1f, z: 0f), viewportHeight: Display, viewportWidth: Display) : Camera(x: 3f)), Region: Right));
         }
 
-        m_displayHertz = 60;
+        m_rate = Paced60;
         Frame(pane: null);
         Frame(pane: null);
 
         var source = screens.InstanceOf(screen: 0);
 
         return (
-            m_host.Footprints.Where(predicate: footprint => (footprint.Producer == source)).ToDictionary(keySelector: static footprint => footprint.Consumer, elementSelector: static footprint => footprint.Refresh.Divisor),
+            m_host.Footprints.Where(predicate: footprint => (footprint.Producer == source)).ToDictionary(keySelector: static footprint => footprint.Consumer, elementSelector: static footprint => ((footprint.Refresh.Floor > 0) ? (60 / footprint.Refresh.Floor) : footprint.Refresh.Divisor)),
             settings.RateCounts.Read(kind: SdfUpdateRateCounts.ScreensRated)
         );
     }

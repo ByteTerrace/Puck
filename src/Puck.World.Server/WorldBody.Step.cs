@@ -214,10 +214,12 @@ public sealed partial class WorldBody {
         switch (instruction.Operation) {
             case BodyMotionOp.SetVerticalVelocity:
                 m_verticalVelocity = (instruction.Value * m_scale);
+                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.ScaleVerticalVelocity:
                 m_verticalVelocity *= instruction.Value;
+                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
@@ -576,10 +578,12 @@ public sealed partial class WorldBody {
                 break;
             case BodyMotionOp.SetVerticalVelocity:
                 m_verticalVelocity = (instruction.Value * m_scale);
+                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.ScaleVerticalVelocity:
                 m_verticalVelocity *= instruction.Value;
+                if (m_verticalVelocity > FixedQ4816.Zero) { m_grounded = false; }
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
@@ -772,6 +776,16 @@ public sealed partial class WorldBody {
     }
     private void IntegratePlanarAndVerticalVelocity(ref BodyMotionScratch scratch) {
         scratch.Velocity = (m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity)));
+        if (m_grounded && !HoldOwnsVerticalChannel && (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) &&
+            (m_contactField is { } field) && (m_collider is not null)) {
+            var contactStep = new BodyContactStep(field: field, entityIndex: scratch.EntityIndex,
+                orientation: scratch.Orientation, up: scratch.Up, volumes: ScaledColliderVolumes());
+
+            if (FixedStepUp.TrySnap(step: ref contactStep, start: in m_position, velocity: in m_planarVelocity,
+                up: in scratch.Up, distance: GroundSnap, result: out var support)) {
+                scratch.Velocity = support.Velocity;
+            }
+        }
         var step = m_positionAccumulator.Integrate(
             elapsedTicks: scratch.StepTicks,
             ratePerSecond: scratch.Velocity

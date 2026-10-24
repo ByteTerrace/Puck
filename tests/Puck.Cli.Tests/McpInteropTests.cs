@@ -46,7 +46,7 @@ public sealed class McpInteropTests {
         var tools = await client.ListToolsAsync(cancellationToken: Token);
 
         Assert.Equal(
-            ["puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_worlds"],
+            ["puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_world_start", "puck_world_stop", "puck_worlds"],
             tools.Select(selector: tool => tool.Name).Order()
         );
         Assert.All(
@@ -54,7 +54,7 @@ public sealed class McpInteropTests {
             tool => Assert.NotNull(value: tool.ProtocolTool.OutputSchema)
         );
         Assert.All(
-            tools.Where(predicate: tool => (tool.Name != "puck_worlds")),
+            tools.Where(predicate: tool => (tool.Name is not ("puck_worlds" or "puck_world_start" or "puck_world_stop"))),
             tool => Assert.True(condition: tool.ProtocolTool.InputSchema.GetProperty(propertyName: "properties").TryGetProperty(propertyName: "world", value: out _))
         );
         var worlds = (await client.CallToolAsync(
@@ -421,6 +421,106 @@ public sealed class McpInteropTests {
         } finally {
             foreach (var process in new[] { a, b }) {
                 if (!process.HasExited) { process.Kill(entireProcessTree: true); }
+            }
+        }
+    }
+
+    // Law: puck_world_start boots the checkout's debug world headless from its Release build and answers once the World
+    // accepts an attachment; host.log reads that World's stderr, its boot line saying no device is open and the line a
+    // world.at pin wrote, anchored to the tick it ran at; puck_world_stop quits it and reports its exit. A World the
+    // adapter did not start is listed as not started, its stop is refused and it keeps answering; a document outside
+    // the checkout's worlds/ and a checkout outside the repository are refused before anything boots.
+    [Fact]
+    public async Task AStartedWorldAttachesLogsAndStopsWhileAForeignWorldIsNeverStopped() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        using var directory = new TemporaryDirectory();
+        using var foreign = LaunchWorld(announced: out var announced, directory: directory, source: StageWorld(directory: directory, name: "worlds"), stateName: "state");
+        var startedProcess = 0;
+
+        try {
+            await announced.WaitAsync(timeout: TimeSpan.FromMinutes(minutes: 5), cancellationToken: Token);
+            await using var adapter = await ConnectAsync(
+                attach: "latest",
+                directory: directory,
+                revision: "2026-07-28"
+            );
+
+            async Task<System.Text.Json.JsonElement> CallAsync(string tool, Dictionary<string, object?> arguments) =>
+                (await adapter.Client.CallToolAsync(tool, arguments, cancellationToken: Token)).StructuredContent!.Value.Clone();
+            async Task<string> ExecAsync(int world, string command, int timeoutMs = 30000) {
+                var result = await CallAsync(tool: "puck_exec", arguments: new() { ["command"] = command, ["timeoutMs"] = timeoutMs, ["world"] = world.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) });
+
+                Assert.True(condition: (result.GetProperty(propertyName: "status").GetString() == "completed"), userMessage: $"{command}: {result}");
+
+                return result.GetProperty(propertyName: "output").GetString()!;
+            }
+
+            foreach (var refused in new Dictionary<string, object?>[] { new() { ["document"] = "src" }, new() { ["checkout"] = directory.RootPath } }) {
+                var refusal = await CallAsync(tool: "puck_world_start", arguments: refused);
+
+                Assert.Equal(expected: "refused", actual: refusal.GetProperty(propertyName: "status").GetString());
+                Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refusal.GetProperty(propertyName: "processId").ValueKind);
+            }
+
+            var start = await CallAsync(tool: "puck_world_start", arguments: new() { ["timeoutSeconds"] = 300 });
+
+            Assert.True(condition: (start.GetProperty(propertyName: "status").GetString() == "started"), userMessage: start.ToString());
+            startedProcess = start.GetProperty(propertyName: "processId").GetInt32();
+            Assert.Equal(expected: startedProcess, actual: start.GetProperty(propertyName: "world").GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(
+                expected: Path.GetFullPath(path: Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "worlds/debug/debug.puck")),
+                actual: start.GetProperty(propertyName: "world").GetProperty(propertyName: "document").GetString(),
+                ignoreCase: true
+            );
+
+            var listed = (await CallAsync(tool: "puck_worlds", arguments: [])).GetProperty(propertyName: "worlds").EnumerateArray().ToDictionary(
+                elementSelector: static world => world.GetProperty(propertyName: "started").GetBoolean(),
+                keySelector: static world => world.GetProperty(propertyName: "processId").GetInt32()
+            );
+
+            Assert.True(condition: listed[startedProcess]);
+            Assert.False(condition: listed[foreign.Id]);
+
+            // A pinned line writes "[world.at] tick <T> ran: …" on stderr right after tick T completes.
+            var armed = System.Text.RegularExpressions.Regex.Match(input: await ExecAsync(command: "world.at +30 world.status", world: startedProcess), pattern: @"armed at tick (\d+)");
+
+            Assert.True(condition: armed.Success);
+            var tick = armed.Groups[1].Value;
+
+            _ = await ExecAsync(command: $"world.wait until {tick}", timeoutMs: 60000, world: startedProcess);
+
+            var pinned = await ExecAsync(command: "host.log category world.at", world: startedProcess);
+
+            Assert.Matches(expectedRegexPattern: $@"(?m)^#\d+ t{tick} err \[world\.at\] tick {tick} ran: world\.status", actualString: pinned);
+            Assert.Contains(expectedSubstring: "err [world.host] physical input devices are off (--devices none)", actualString: await ExecAsync(command: "host.log text \"physical input devices\" stream err", world: startedProcess));
+
+            var foreignStop = await CallAsync(tool: "puck_world_stop", arguments: new() { ["world"] = foreign.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) });
+
+            Assert.Equal(expected: "refused", actual: foreignStop.GetProperty(propertyName: "status").GetString());
+            Assert.False(condition: foreign.HasExited);
+            _ = await ExecAsync(command: "world.status", world: foreign.Id);
+
+            var stop = await CallAsync(tool: "puck_world_stop", arguments: new() { ["world"] = start.GetProperty(propertyName: "world").GetProperty(propertyName: "attachmentId").GetString() });
+
+            Assert.True(condition: (stop.GetProperty(propertyName: "status").GetString() == "stopped"), userMessage: stop.ToString());
+            Assert.Equal(expected: 0, actual: stop.GetProperty(propertyName: "exitCode").GetInt32());
+            Assert.False(condition: stop.GetProperty(propertyName: "killed").GetBoolean());
+            Assert.False(condition: stop.GetProperty(propertyName: "leaseReleased").GetBoolean());
+            Assert.Contains(expectedSubstring: "[world.host] physical input devices are off", actualString: File.ReadAllText(path: stop.GetProperty(propertyName: "stderrLog").GetString()!));
+            Assert.DoesNotContain(
+                collection: (await CallAsync(tool: "puck_worlds", arguments: [])).GetProperty(propertyName: "worlds").EnumerateArray(),
+                filter: world => (world.GetProperty(propertyName: "processId").GetInt32() == startedProcess)
+            );
+            Assert.Equal(expected: "refused", actual: (await CallAsync(tool: "puck_world_stop", arguments: new() { ["world"] = startedProcess.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) })).GetProperty(propertyName: "status").GetString());
+            startedProcess = 0;
+        } finally {
+            if (!foreign.HasExited) { foreign.Kill(entireProcessTree: true); }
+            if (startedProcess != 0) {
+                try {
+                    using var started = Process.GetProcessById(processId: startedProcess);
+
+                    started.Kill(entireProcessTree: true);
+                } catch (ArgumentException) { }
             }
         }
     }

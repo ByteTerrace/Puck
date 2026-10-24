@@ -90,7 +90,11 @@ boot, announced on stderr, wired through `WorldBootInputs.Control`); `stop` and 
 harness: `puck_worlds` lists the running Worlds, and the `world` argument of `puck_exec`, `puck_capture_frame` and
 `puck_state_vector_write` (an attachment id or process id) reaches exactly that World or is refused; an unnamed call
 runs on the adapter's current World and the result's `world` member names it, so name your own World when several
-run. The file protects a mutual-authenticated
+run. `puck_world_start` boots a World of the agent's own from a checkout of this repository (`OperatorWorlds`:
+`--devices none`, its own state directory, `--control`, the GPU lease held for a windowed one) and `puck_world_stop`
+ends only a World the adapter started; the console verb `host.log` reads any World's `HostLog` ring of its stdout and
+stderr lines (`Puck.Hosting`, teed from `Console` in `Program.cs`, refusals appended by `BufferedConsoleOutput`,
+ticks anchored in `WorldPostBuildWiring`). The file protects a mutual-authenticated
 loopback capability for the current OS user, including its other processes/elevation levels. Each connection has
 one bounded, dedicated Console session. Exec preserves ordinary result uncertainty; capture uses the same
 session's `InvokeAsync` barrier and the exact render request's completion, with off-pump waiting and temporary

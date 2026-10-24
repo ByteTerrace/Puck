@@ -18,7 +18,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
         };
 
         m_host.RenderSettings = settings;
-        m_displayHertz = 60;
+        m_rate = Paced60;
 
         var renders = 0;
 
@@ -31,9 +31,12 @@ public sealed partial class WorldViewPaneMappingLawTests {
         if (rated) {
             Assert.InRange(actual: renders, high: 6, low: 4);
             Assert.True(condition: (settings.RateCounts.Read(kind: SdfUpdateRateCounts.ViewsRated) > 0L));
+            // The schedule shows the session rendering every fourth frame between holds: a 15 Hz tier's whole period.
+            Assert.Equal(expected: (4d / 60d), actual: (settings.RateIntervals.Longest(hertz: 15, lever: SdfUpdateRates.Views) ?? 0d), tolerance: 1e-9d);
         } else {
             Assert.InRange(actual: renders, high: 16, low: 14);
             Assert.Equal(expected: 0L, actual: settings.RateCounts.Read(kind: SdfUpdateRateCounts.ViewsRated));
+            Assert.Null(@object: settings.RateIntervals.Longest(hertz: 15, lever: SdfUpdateRates.Views));
         }
     }
 }

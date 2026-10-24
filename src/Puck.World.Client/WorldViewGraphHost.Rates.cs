@@ -1,20 +1,42 @@
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SdfVm;
 
 namespace Puck.World.Client;
 
 // The world.rates levers the host's footprints carry (SdfUpdateRates.Views and Screens): a footprint showing a nested
 // view or a screen's source asks for it less often as the pixels it covers on the display shrink, so the scheduler
-// renders the view or uploads the source at 30 or 15 Hz (RenderGraphFootprint.Refresh). The pixels are the footprint's
-// share of its consumer times the consumer's share of the display, which the previous frame's footprints measure.
+// renders the view or uploads the source at least 30 or 15 times a second of presentation time
+// (RenderGraphRefresh.AtLeast on RenderGraphFootprint.Refresh). The pixels are the footprint's share of its consumer
+// times the consumer's share of the display, which the previous frame's footprints measure. Each rated producer's
+// achieved intervals are read back from the schedule its footprints were scheduled in (MeasureRatedRenders).
 public sealed partial class WorldViewGraphHost {
     // Each instance's height as a share of the display's, measured from the previous frame's footprints.
     private readonly Dictionary<string, double> m_displayShares = new(comparer: StringComparer.Ordinal);
-    // The display's presented frames a second this frame, or zero when unknown.
-    private int m_displayHertz;
+    // The frame's presentation rate; an unpaced rate rates nothing.
+    private PresentationRate m_presentationRate;
     // The most frequent refresh this frame's views asked for each source they show on screens.
     private readonly Dictionary<string, RenderGraphRefresh> m_sourceRefresh = new(comparer: StringComparer.Ordinal);
+    // Each producer a rated footprint showed: what its footprints asked this frame and its interval since it last
+    // rendered.
+    private readonly Dictionary<string, RatedProducer> m_ratedProducers = new(comparer: StringComparer.Ordinal);
+    // The frame of the latest schedule the rated producers were measured against, so a frame the runtime did not
+    // schedule is not read twice.
+    private long m_ratedMeasured = -1;
+
+    private sealed class RatedProducer {
+        // The lever its footprints rate it under.
+        public SdfUpdateRates Lever;
+        // The most frequent tier its footprints asked for this frame, or 0 when none asked.
+        public int Asked;
+        // The slowest tier asked since its latest render.
+        public int Slowest = SdfUpdateRateTiers.EveryFrameHertz;
+        // The presentation time of its latest render, valid while Chained.
+        public ulong Rendered;
+        // Whether every frame since its latest render rendered it or held it by its rated demand.
+        public bool Chained;
+    }
 
     /// <summary>Gets or sets the live render settings whose <c>world.rates</c> levers rate the nested views and screens
     /// the host's footprints demand (<see cref="WorldRenderSettings.UpdateRates"/>), or <see langword="null"/> to demand
@@ -60,7 +82,7 @@ public sealed partial class WorldViewGraphHost {
     }
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
-    private RenderGraphRefresh ViewRefresh(string consumer, double coverage) {
+    private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage) {
         if (
             (RenderSettings is not { } settings) ||
             ((settings.UpdateRates & SdfUpdateRates.Views) == 0) ||
@@ -69,20 +91,69 @@ public sealed partial class WorldViewGraphHost {
             return RenderGraphRefresh.EveryFrame;
         }
 
-        return Rated(counts: settings.RateCounts, hertz: SdfUpdateRateTiers.ViewHertz(pixels: ((share * coverage) * m_displayHeight)), kind: SdfUpdateRateCounts.ViewsRated);
+        return Rated(counts: settings.RateCounts, hertz: SdfUpdateRateTiers.ViewHertz(pixels: ((share * coverage) * m_displayHeight)), kind: SdfUpdateRateCounts.ViewsRated, lever: SdfUpdateRates.Views, producer: producer);
     }
-    // The refresh a rate asks for at the display's rate, counting a footprint it holds: every frame when the display's
-    // rate is unknown or the rate rounds to it (SdfUpdateRateTiers.Divisor).
-    private RenderGraphRefresh Rated(int hertz, WorkCounterSet counts, WorkKind kind) {
-        var divisor = SdfUpdateRateTiers.Divisor(displayHertz: m_displayHertz, hertz: hertz);
+    // The refresh a tier asks for, counting a footprint it rates and noting the tier its producer was asked at: a floor
+    // at the tier (RenderGraphRefresh.AtLeast), or every frame at the full tier or on a host not paced to a display.
+    private RenderGraphRefresh Rated(int hertz, WorkCounterSet counts, WorkKind kind, SdfUpdateRates lever, string producer) {
+        if (!m_presentationRate.IsPaced) {
+            return RenderGraphRefresh.EveryFrame;
+        }
+        if (!m_ratedProducers.TryGetValue(key: producer, value: out var rated)) {
+            rated = new RatedProducer();
+            m_ratedProducers[producer] = rated;
+        }
 
-        if (divisor <= 1) {
+        rated.Lever = lever;
+        rated.Asked = Math.Max(val1: rated.Asked, val2: hertz);
+
+        if (hertz >= SdfUpdateRateTiers.EveryFrameHertz) {
             return RenderGraphRefresh.EveryFrame;
         }
 
         counts.Count(kind: kind);
 
-        return RenderGraphRefresh.Every(divisor: divisor);
+        return RenderGraphRefresh.AtLeast(hertz: hertz);
+    }
+    // Reads the latest schedule, the one this host's previous footprints were scheduled in, into each rated producer's
+    // interval: a render closes the interval since the one before (recorded under the slowest tier asked over it when
+    // every frame between rendered or held it by its rated demand) and opens the next; a frame that neither rendered nor
+    // held it, or did not ask for it through a rated footprint, breaks the interval. Then clears what was asked.
+    private void MeasureRatedRenders() {
+        if (
+            (m_runtime is { Latest: { } latest } runtime) &&
+            (latest.Frame != m_ratedMeasured)
+        ) {
+            m_ratedMeasured = latest.Frame;
+
+            var intervals = RenderSettings?.RateIntervals;
+
+            foreach (var (name, rated) in m_ratedProducers) {
+                var index = runtime.Instances.IndexOf(name: name);
+                var row = (((index >= 0) && (index < latest.Instances.Count)) ? latest.Instances[index] : default);
+
+                if ((rated.Asked == 0) || !string.Equals(a: row.Instance, b: name, comparisonType: StringComparison.Ordinal)) {
+                    rated.Chained = false;
+                } else if (row.Status == RenderGraphInstanceStatus.Rendered) {
+                    rated.Slowest = Math.Min(val1: rated.Slowest, val2: rated.Asked);
+                    if (rated.Chained && (rated.Slowest < SdfUpdateRateTiers.EveryFrameHertz) && (latest.PresentedTicks > rated.Rendered)) {
+                        intervals?.Record(hertz: rated.Slowest, lever: rated.Lever, seconds: FixedTickConversion.ToSeconds(ticks: (latest.PresentedTicks - rated.Rendered)));
+                    }
+
+                    rated.Chained = true;
+                    rated.Rendered = latest.PresentedTicks;
+                    rated.Slowest = SdfUpdateRateTiers.EveryFrameHertz;
+                } else if (row.Held) {
+                    rated.Slowest = Math.Min(val1: rated.Slowest, val2: rated.Asked);
+                } else {
+                    rated.Chained = false;
+                }
+            }
+        }
+
+        foreach (var rated in m_ratedProducers.Values) {
+            rated.Asked = 0;
+        }
     }
     // The refresh a footprint showing a source on the boot world's screens asks for: every frame unless the screens lever
     // is on and every screen showing it stands at or below its image's own size on the display, out of the consumer's
@@ -102,12 +173,14 @@ public sealed partial class WorldViewGraphHost {
             return refresh;
         }
 
-        m_sourceRefresh[footprint.Producer] = ((m_sourceRefresh.TryGetValue(key: footprint.Producer, value: out var other) && (other.Divisor < refresh.Divisor))
+        m_sourceRefresh[footprint.Producer] = ((m_sourceRefresh.TryGetValue(key: footprint.Producer, value: out var other) && (Frequency(refresh: other) > Frequency(refresh: refresh)))
             ? other
             : refresh);
 
         return refresh;
     }
+    // How often a refresh this host's footprints carry asks for its producer: a floor's rate, and every frame above any.
+    private static int Frequency(RenderGraphRefresh refresh) => ((refresh.Floor > 0) ? refresh.Floor : int.MaxValue);
     // A sky environment reads every screen its view shows, for the light they cast: each of its reads asks for its source
     // as often as the most frequent view footprint of that source this frame.
     private void RateEnvironmentReads() {
@@ -168,6 +241,6 @@ public sealed partial class WorldViewGraphHost {
             largest = Math.Max(val1: largest, val2: (((coverage * consumerShare) * m_displayHeight) / Math.Max(val1: 1, val2: mapping.Crop.Height)));
         }
 
-        return Rated(counts: settings.RateCounts, hertz: (shown ? SdfUpdateRateTiers.ScreenHertz(share: largest) : 60), kind: SdfUpdateRateCounts.ScreensRated);
+        return Rated(counts: settings.RateCounts, hertz: (shown ? SdfUpdateRateTiers.ScreenHertz(share: largest) : SdfUpdateRateTiers.EveryFrameHertz), kind: SdfUpdateRateCounts.ScreensRated, lever: SdfUpdateRates.Screens, producer: footprint.Producer);
     }
 }

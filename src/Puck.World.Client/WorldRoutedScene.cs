@@ -170,6 +170,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             MeshCull = host.MeshCull,
             UpdateRates = host.UpdateRates,
             RateCounts = host.RateCounts,
+            RateIntervals = host.RateIntervals,
             Time = host.Time,
             Views = m_frameViews,
         };

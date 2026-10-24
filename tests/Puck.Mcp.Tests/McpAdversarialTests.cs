@@ -212,9 +212,30 @@ public sealed class McpAdversarialTests {
             );
 
             Assert.Equal(
-                4,
+                6,
                 tools.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "tools").GetArrayLength()
             );
+
+            // An adapter given no checkout starts nothing, and a stop names only a World this adapter started.
+            var call = 5;
+
+            foreach (var (tool, arguments, refusal) in new[] {
+                ("puck_world_start", """{"bogus":1}""", "Invalid argument: bogus."),
+                ("puck_world_start", """{"document":"worlds/debug","checkout":"x","windowed":true,"ownerPlay":false,"holder":"lane","timeoutSeconds":5}""", "serves no Puck checkout"),
+                ("puck_world_stop", """{"timeoutMs":5}""", "Invalid argument: world."),
+                ("puck_world_stop", """{"world":"1","bogus":1}""", "Invalid argument: bogus."),
+                ("puck_world_stop", """{"world":"1"}""", "names no World this adapter started"),
+            }) {
+                using var answer = await adapter.RequestAsync(
+                    id: call++,
+                    method: "tools/call",
+                    parameters: $$"""{"name":"{{tool}}","arguments":{{arguments}}}"""
+                );
+                var structured = answer.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent");
+
+                Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
+                Assert.Contains(expectedSubstring: refusal, actualString: structured.GetProperty(propertyName: "output").GetString());
+            }
         } else {
             Assert.Equal(
                 "completed",
