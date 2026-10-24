@@ -109,14 +109,15 @@ public static partial class CliProjectBuild {
     /// <param name="error">Why the build failed, its first errors and log path, or empty on success.</param>
     /// <param name="artifactName">The required artifact inside the output directory, or null to check only the build.</param>
     /// <param name="runner">A captured process runner, or null to launch dotnet.</param>
+    /// <param name="properties">Extra MSBuild switches (<c>-p:Name=value</c>) added to the shared arguments, or null.</param>
     /// <returns><see langword="true"/> when the build exited 0 inside its budget.</returns>
-    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null) {
+    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null) {
         build = null;
 
         var name = Path.GetFileNameWithoutExtension(path: project);
         // A directory a build writes with --output can outlive the build (the World store keeps it), so its content items
         // are copies: a link would let an editor saving a source in place rewrite the kept build.
-        List<string> arguments = [.. Arguments(project: project), "-p:CreateHardLinksForAdditionalFilesIfPossible=false", "--output", outputDirectory];
+        List<string> arguments = [.. Arguments(project: project), .. (properties ?? []), "-p:CreateHardLinksForAdditionalFilesIfPossible=false", "--output", outputDirectory];
 
         try {
             build = CliReferenceAssemblyRecovery.Run(
