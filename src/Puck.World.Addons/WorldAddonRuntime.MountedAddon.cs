@@ -109,7 +109,7 @@ public sealed partial class WorldAddonRuntime {
         /// <c>StageBatch</c>.</summary>
         public Dictionary<GrantSubject, int> EventCounts { get; }
         public Dictionary<GrantSubject, int> StateReadCounts { get; } = [];
-        public bool LoggedThisTick { get; set; }
+        public int LogLinesThisTick { get; set; }
         /// <summary>Gets this tick's lifetime event-gap counter (the overflow doctrine's per-mount summary — see
         /// <c>Scripting.AddonAbi.ObservationVerbs.EventGap</c>'s own doc) — saturating, never reset. Every edge
         /// dropped because its per-row event budget or the ring ran out of room (world events or a memory-watch change
@@ -142,6 +142,7 @@ public sealed partial class WorldAddonRuntime {
         // by the world.addons verb, never by simulation state and never on a hashed path. Saturates at
         // ulong.MaxValue rather than wrapping.
         public ulong LastTickFuelConsumed { get; set; }
+        public ulong PeakTickFuelConsumed { get; set; }
         /// <summary>Gets the per-watch last-observed state, parallel to <see cref="MemoryWatches"/> by index; null when the
         /// row declares no watches.</summary>
         public WatchState[]? MemoryWatchState { get; }
@@ -202,6 +203,10 @@ public sealed partial class WorldAddonRuntime {
         public ulong TotalFuelConsumed { get; set; }
         public bool UndeliverableReported { get; set; }
         public bool UnrequestedActReported { get; set; }
+        public Dictionary<(WorldCapability, GrantSubject), int> QueryCounts { get; } = [];
+        public byte[] ReadBuffer { get; } = new byte[262144];
+        public byte[]? MachineSnapshot { get; set; }
+        public Puck.Abstractions.Machines.IMachineRuntime? SnapshotRuntime { get; set; }
 
         // The Drive twin of Observe, beside it for the same reason (a shared latch across capabilities would let one
         // capability's line starve the other's).

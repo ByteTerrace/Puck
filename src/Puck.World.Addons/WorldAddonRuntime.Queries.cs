@@ -108,6 +108,9 @@ public sealed partial class WorldAddonRuntime {
                     ? GrantSubject.Body(index: ((int)ask.SubjectIndex))
                     : GrantSubject.All
                 );
+            } else if (ask.SubjectKind == AddonSubjectKind.Screen) {
+                inRange = ask.SubjectIndex is >= 0 and <= int.MaxValue;
+                subject = inRange ? GrantSubject.Screen((int)ask.SubjectIndex) : GrantSubject.All;
             } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
                 string sectionName;
                 if (ask.SubjectKind == AddonSubjectKind.State) {
@@ -269,7 +272,7 @@ public sealed partial class WorldAddonRuntime {
     // Response channel, each repeating the SAME allowing verdict and carrying the part index in the Verb byte, with both
     // handle lanes zero — a pose grants no handle. Host-written explicit framing, never an implied pairing the guest has
     // to reconstruct.
-    private void ResolveQueries(MountedAddon addon) {
+    private void ResolveQueries(MountedAddon addon, ulong tick) {
         var queries = addon.Pump.Queries;
         var grants = m_server.Grants;
         var handles = grants.HandleTable(
@@ -300,6 +303,10 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
+                if (query.Verb >= AddonAbi.RequestVerbs.ReadStateText) {
+                    ResolveDebuggerQuery(addon, in query, tick);
+                    continue;
+                }
                 if (query.Verb == AddonAbi.RequestVerbs.Log) {
                     ResolveLog(addon, in query);
                     continue;

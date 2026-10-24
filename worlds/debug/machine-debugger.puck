@@ -1,0 +1,153 @@
+// The generic machine test driver. All activity is off until an agent sets machineDebugger[run].
+// Configuration is runtime state, not game knowledge. Bus ranges here name hardware RAM only.
+// No panel: results remain readable with world.state regardless of addonHud.
+state {
+  world {
+    table machineDebugger {
+      run = 0
+      screen = 0
+      body = 4
+      window = 60
+      mask = 17
+      seed = 1
+      probe = -1
+      address = 49152
+      length = 8192
+      p0 = 7680
+      p1 = 7697
+      p2 = 0
+      p3 = 0
+      p4 = 0
+      p5 = 0
+      p6 = 0
+      p7 = 0
+      withhold = 0
+      probe1 = -1
+      probe2 = -1
+      probe3 = -1
+    }
+    // Provider payloads are data the agent can replace. The guest interprets none of their content.
+    table machineDebuggerOperations {
+      swap0 = """{"operation":"content.insert","contentName":"hgb-mirror.cgb.puck","payload":{"schema":"puck.gaming-brick.content-insert.v1"}}"""
+      eject0 = """{"operation":"content.eject","payload":{"schema":"puck.gaming-brick.content-eject.v1"}}"""
+      swap1 = """{"operation":"content.insert","contentName":"pip.agb.puck","payload":{"schema":"puck.advanced-gaming-brick.content-insert.v1"}}"""
+      eject1 = """{"operation":"content.eject","payload":{"schema":"puck.advanced-gaming-brick.content-eject.v1"}}"""
+      swap2 = """{"operation":"content.insert","contentName":"moving-sprite.nes","payload":{"schema":"puck.humble-gaming-deck.content-insert.v1"}}"""
+      eject2 = """{"operation":"content.eject","payload":{"schema":"puck.humble-gaming-deck.content-eject.v1"}}"""
+    }
+    table machineDebugger0 {
+      alive = 0
+      responsive = 0
+      rewind = 0
+      deterministic = 0
+      swap = 0
+      eject = 0
+      tick = -1
+      frames = 0
+      samples = 0
+      hash = 0
+      trace1 = 0
+      trace2 = 0
+      changed = 0
+      mismatches = 0
+      phase = 0
+      driven = 0
+      randomState = 0
+      aliveTick = -1
+      responsiveTick = -1
+      rewindTick = -1
+      deterministicTick = -1
+      swapTick = -1
+      ejectTick = -1
+    }
+    table machineDebugger1 {
+      alive = 0
+      responsive = 0
+      rewind = 0
+      deterministic = 0
+      swap = 0
+      eject = 0
+      tick = -1
+      frames = 0
+      samples = 0
+      hash = 0
+      trace1 = 0
+      trace2 = 0
+      changed = 0
+      mismatches = 0
+      phase = 0
+      driven = 0
+      randomState = 0
+      aliveTick = -1
+      responsiveTick = -1
+      rewindTick = -1
+      deterministicTick = -1
+      swapTick = -1
+      ejectTick = -1
+    }
+    table machineDebugger2 {
+      alive = 0
+      responsive = 0
+      rewind = 0
+      deterministic = 0
+      swap = 0
+      eject = 0
+      tick = -1
+      frames = 0
+      samples = 0
+      hash = 0
+      trace1 = 0
+      trace2 = 0
+      changed = 0
+      mismatches = 0
+      phase = 0
+      driven = 0
+      randomState = 0
+      aliveTick = -1
+      responsiveTick = -1
+      rewindTick = -1
+      deterministicTick = -1
+      swapTick = -1
+      ejectTick = -1
+    }
+    table machineDebuggerViolations {
+      count = 0
+      tick = -1
+      first = -1
+    }
+  }
+}
+
+addon "machine-debugger" {
+  modulePath: "addons/machine-debugger.wat"
+  hash: "auto"
+  fuel: 1000000
+  enabled: true
+  requests: concat(
+    [
+      { capability: Observe, subject: "state:machineDebugger" }
+      { capability: Observe, subject: "state:machineDebuggerOperations" }
+      { capability: Mutate, subject: "section:State" }
+      { capability: Edit, subject: "state:machineDebuggerViolations" }
+    ],
+    map(range(0, 3), i => { capability: Edit, subject: $"state:machineDebugger{i}" }),
+    map(range(0, 3), i => { capability: Observe, subject: $"screen:{i}" }),
+    map(range(0, 3), i => { capability: Control, subject: $"screen:{i}" }),
+    map(range(4, 3), i => { capability: Drive, subject: $"body:{i}" }),
+    map(["humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck"], name => { capability: Control, subject: $"machine:{name}" })
+  )
+}
+
+grants: concat(
+  [
+    { grantee: "addon:machine-debugger", capability: Observe, subject: "state:machineDebugger", budget: 32 }
+    { grantee: "addon:machine-debugger", capability: Observe, subject: "state:machineDebuggerOperations", budget: 16 }
+    { grantee: "addon:machine-debugger", capability: Mutate, subject: "section:State", kindMask: "UpsertStateRow", budget: 2 }
+    { grantee: "addon:machine-debugger", capability: Edit, subject: "state:machineDebuggerViolations" }
+  ],
+  map(range(0, 3), i => { grantee: "addon:machine-debugger", capability: Edit, subject: $"state:machineDebugger{i}" }),
+  map(range(0, 3), i => { grantee: "addon:machine-debugger", capability: Observe, subject: $"screen:{i}", budget: 8, eventBudget: 1 }),
+  map(range(0, 3), i => { grantee: "addon:machine-debugger", capability: Control, subject: $"screen:{i}" }),
+  map(range(4, 3), i => { grantee: "addon:machine-debugger", capability: Drive, subject: $"body:{i}", budget: 8 }),
+  map(["humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck"], name => { grantee: "addon:machine-debugger", capability: Control, subject: $"machine:{name}" })
+)

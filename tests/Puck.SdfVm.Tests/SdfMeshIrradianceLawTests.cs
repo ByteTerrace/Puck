@@ -17,15 +17,14 @@ public sealed class SdfMeshIrradianceLawTests {
     // A box between two corners, its faces wound outward, as the bake winds them.
     private static SdfMesh Box(Vector3 low, Vector3 high) {
         Vector3[] positions = [
-            new(low.X, low.Y, low.Z), new(high.X, low.Y, low.Z), new(high.X, high.Y, low.Z), new(low.X, high.Y, low.Z),
-            new(low.X, low.Y, high.Z), new(high.X, low.Y, high.Z), new(high.X, high.Y, high.Z), new(low.X, high.Y, high.Z),
+            new(x: low.X, y: low.Y, z: low.Z), new(x: high.X, y: low.Y, z: low.Z), new(x: high.X, y: high.Y, z: low.Z), new(x: low.X, y: high.Y, z: low.Z),
+            new(x: low.X, y: low.Y, z: high.Z), new(x: high.X, y: low.Y, z: high.Z), new(x: high.X, y: high.Y, z: high.Z), new(x: low.X, y: high.Y, z: high.Z),
         ];
         uint[] indices = [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5];
 
         return new SdfMesh(indices: indices, positions: positions);
     }
     private static SdfMeshDraw Draw(SdfMesh mesh) => new(Identity: new object(), Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity);
-
     // Two rooms 20 m square: a floor under the lower one, a slab between them from y = 4 to 4.3, and a ceiling over the
     // upper one; a static 20,000-candela point light in the upper room, 1 m over the slab, and no other light.
     private static SdfFrame Frame() {
@@ -80,11 +79,11 @@ public sealed class SdfMeshIrradianceLawTests {
         var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: x, y: y, z: z);
         var probe = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
 
-        Assert.Equal(expected: (SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag), actual: probe[0]);
+        Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag, actual: probe[0]);
 
         return probe;
     }
-    private static float Half(uint word, bool high) => ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(high ? (word >> 16) : (word & 0xffffu)))));
+    private static float Half(uint word, bool high) => ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(high ? (word >> 16) : word & 0xffffu))));
     private static float Luminance(ReadOnlySpan<uint> probe, int face) {
         var sum = 0f;
 
@@ -106,27 +105,29 @@ public sealed class SdfMeshIrradianceLawTests {
         var frame = (Frame() with { TickLocked = true });
         var writes = 0;
         var words = Array.Empty<uint>();
+
         _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => {
             writes++;
             words = memory.ToArray();
         });
 
-        Assert.Equal(expected: 1, actual: writes);
-        Assert.Equal(expected: landed, actual: words);
+        Assert.Equal(actual: writes, expected: 1);
+        Assert.Equal(actual: words, expected: landed);
 
         _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => writes++);
-        Assert.Equal(expected: 1, actual: writes);
+        Assert.Equal(actual: writes, expected: 1);
 
         var changed = frame with { MeshDraws = [frame.MeshDraws[0], frame.MeshDraws[2]] };
+
         var (_, replacement) = Trace(frame: changed with { TickLocked = false }, volume: new SdfMeshIrradiance());
 
         _ = locked.Stage(bakePending: false, frame: changed, tier: SdfIndirectTier.High, write: memory => {
             writes++;
             words = memory.ToArray();
         });
-        Assert.Equal(expected: 2, actual: writes);
-        Assert.Equal(expected: replacement, actual: words);
-        Assert.NotEqual(expected: landed, actual: words);
+        Assert.Equal(actual: writes, expected: 2);
+        Assert.Equal(actual: words, expected: replacement);
+        Assert.NotEqual(actual: words, expected: landed);
     }
     /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
     /// backward and nothing for the first; any other frame over the host frame's interval.</summary>
@@ -143,7 +144,8 @@ public sealed class SdfMeshIrradianceLawTests {
     public void AStaticPointLightIsSeenAndBouncedInItsOwnRoomAlone_AndADepthCubeStopsAtTheSlab() {
         var volume = new SdfMeshIrradiance();
         var frame = Frame();
-        var (parameters, words) = Trace(volume: volume, frame: frame);
+
+        var (parameters, words) = Trace(frame: frame, volume: volume);
 
         Assert.True(condition: parameters.Enabled);
         Assert.Equal(expected: 1f, actual: parameters.Spacing);
@@ -152,8 +154,8 @@ public sealed class SdfMeshIrradianceLawTests {
         var upper = Probe(parameters: in parameters, words: words, x: 0, y: 5, z: 0);
         var lower = Probe(parameters: in parameters, words: words, x: 0, y: 1, z: 0);
 
-        Assert.Equal(expected: 1u, actual: (upper[SdfMeshIrradianceProbe.LightsWord] & 1u));
-        Assert.Equal(expected: 0u, actual: (lower[SdfMeshIrradianceProbe.LightsWord] & 1u));
+        Assert.Equal(expected: 1u, actual: upper[SdfMeshIrradianceProbe.LightsWord] & 1u);
+        Assert.Equal(expected: 0u, actual: lower[SdfMeshIrradianceProbe.LightsWord] & 1u);
         // The slab's lit top sends light up to the upper probe's -Y face; the floor under the slab sends the lower
         // probe's only what spills round the slab's open edges and bounces back in, under a hundredth of it.
         var upperLuminance = Luminance(face: 3, probe: upper);
@@ -167,26 +169,73 @@ public sealed class SdfMeshIrradianceLawTests {
         var lowerDown = Half(high: true, word: lower[(SdfMeshIrradianceProbe.DepthWord + 1)]);
         var upperUp = Half(high: false, word: upper[(SdfMeshIrradianceProbe.DepthWord + 1)]);
 
-        Assert.InRange(actual: lowerUp, low: 2.49f, high: 2.51f);
-        Assert.InRange(actual: lowerDown, low: 1.49f, high: 1.51f);
-        Assert.InRange(actual: upperUp, low: 2.79f, high: 2.81f);
+        Assert.InRange(actual: lowerUp, high: 2.51f, low: 2.49f);
+        Assert.InRange(actual: lowerDown, high: 1.51f, low: 1.49f);
+        Assert.InRange(actual: upperUp, high: 2.81f, low: 2.79f);
         // The meter reads the lit room lit and the dark room dark.
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _));
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (lit > 0f));
         Assert.True(condition: (dark < (0.01f * lit)));
 
         // The camera can approach the slab without reading the lit probes beyond it.
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (nearSlab < (0.01f * lit)));
     }
+    [Fact]
+    public void ASpaceBetweenLatticeCentresMetersItsOwnLightingWithoutOpeningTheWalls() {
+        var frame = Frame();
+        var lights = new SdfLights();
 
+        lights.Set(index: 0, light: frame.Lights.Records[0] with { Direction = new Vector3(x: 0f, y: 2.8f, z: 0f) });
+        lights.Count = 1;
+        frame = frame with {
+            Lights = lights,
+            IndirectBounces = 0,
+            TickLocked = true,
+            Exposure = new SdfExposure(Adaptation: 0f, Compensation: 0f, Ev100: 15f, Local: 0.5f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
+            // A 40-cm gap contains the camera and light but no lattice centres (x = +/- 0.5).
+            MeshDraws = [.. frame.MeshDraws,
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: 0f, z: -10f), high: new Vector3(x: -0.2f, y: 4f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: -10f), high: new Vector3(x: 10f, y: 4f, z: 10f))),
+            ],
+        };
+        var volume = new SdfMeshIrradiance();
+
+        _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
+        Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+            luminance: out var lit, skyVisibility: out var sky, source: out var source));
+        Assert.Equal(actual: source, expected: SdfExposureMeterSource.CameraTrace);
+        Assert.True(condition: (lit > 0f));
+        Assert.InRange(actual: sky, high: 0.1f, low: 0f);
+        var exposures = new SdfViewExposures();
+
+        exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 1d);
+        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Ev100), actual: exposures.MultiplierOf(view: 0));
+        Assert.Contains(expectedSubstring: "meter=none source=initial", actualString: exposures.Describe()[0]);
+        exposures.Stage(frame: frame, irradiance: volume, seconds: 1d);
+        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Target(luminance: lit)), actual: exposures.MultiplierOf(view: 0), precision: 6);
+        Assert.Contains(expectedSubstring: "source=camera-trace", actualString: exposures.Describe()[0]);
+        var held = exposures.MultiplierOf(view: 0);
+        var heldAir = exposures.AirLightOf(view: 0);
+
+        exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 1d);
+        Assert.Equal(expected: held, actual: exposures.MultiplierOf(view: 0));
+        Assert.Equal(expected: heldAir, actual: exposures.AirLightOf(view: 0));
+        Assert.Equal(expected: lit, actual: exposures.MeteredOf(view: 0));
+        Assert.Contains(expectedSubstring: "meter=none source=held", actualString: exposures.Describe()[0]);
+        // Inside the opaque wall is unknown, not a reading of an unlit room.
+        Assert.False(condition: volume.TryMeter(position: new Vector3(x: 0.3f, y: 2f, z: 0f), forward: Vector3.UnitX,
+            luminance: out _, skyVisibility: out _, source: out source));
+        Assert.Equal(actual: source, expected: SdfExposureMeterSource.None);
+    }
     [Fact]
     public void AnOpeningBesideAnAxisDoesNotEraseItsFirstBlocker() {
         var frame = Frame() with {
             IndirectBounces = 0,
             MeshDraws = [Draw(mesh: Box(low: new Vector3(x: 1f, y: 0.4f, z: 0.4f), high: new Vector3(x: 1.1f, y: 0.6f, z: 0.6f)))],
         };
+
         var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
         var probe = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
 

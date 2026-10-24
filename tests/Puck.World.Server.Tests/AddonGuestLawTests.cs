@@ -160,6 +160,20 @@ public sealed class AddonGuestLawTests {
         Assert.Equal(expected: 0, actual: tick.CellCount);
         Assert.Equal(expected: AddonState.Enabled, actual: guest.State);
     }
+    [Fact]
+    public void HostQueriesShareTheWasmsTickFuelAndExhaustionIsSticky() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        using var guest = Mount(engine, Quiet, fuelPerTick: 50000);
+        var tick = guest.Tick([]);
+        Assert.Equal(AddonTickStatus.Ok, tick.Status);
+        Assert.True(guest.TryChargeHostFuel(100, out var first));
+        Assert.Equal(100UL, first);
+        Assert.False(guest.TryChargeHostFuel(50000, out var rest));
+        Assert.Equal(50000UL, first + rest + tick.FuelConsumed);
+        Assert.Equal(AddonState.Faulted, guest.State);
+        Assert.Equal(AddonFaultKind.OutOfFuel, guest.Fault.Kind);
+        Assert.Equal(AddonTickStatus.Faulted, guest.Tick([]).Status);
+    }
     // Every committed guest binary: each guest crate's dist builds.
     public static TheoryData<string> CommittedGuests() => new(values: Directory.EnumerateDirectories(path: RepositoryPaths.Resolve(relativePath: "wasm"))
             .Select(selector: static crate => Path.Combine(path1: crate, path2: "dist"))

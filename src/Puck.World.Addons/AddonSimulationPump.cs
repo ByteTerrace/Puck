@@ -117,6 +117,7 @@ public sealed class AddonSimulationPump {
         if (
             (cell.Verb != ((ushort)AddonSubjectKind.Body)) &&
             (cell.Verb != ((ushort)AddonSubjectKind.Section)) &&
+            (cell.Verb != ((ushort)AddonSubjectKind.Screen)) &&
             (cell.Verb != ((ushort)AddonSubjectKind.State))
         ) {
             error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
@@ -141,6 +142,7 @@ public sealed class AddonSimulationPump {
         var mask = ((ulong)cell.B);
         var admissible = subjectKind switch {
             AddonSubjectKind.Section => AddonCapabilityMask.Mutate,
+            AddonSubjectKind.Screen => AddonCapabilityMask.Observe | AddonCapabilityMask.Control,
             AddonSubjectKind.State => AddonCapabilityMask.Observe,
             _ => AddonCapabilityMask.Drive | AddonCapabilityMask.Observe,
         };
@@ -154,7 +156,7 @@ public sealed class AddonSimulationPump {
             return false;
         }
 
-        if (subjectKind == AddonSubjectKind.Body) {
+        if (subjectKind is AddonSubjectKind.Body or AddonSubjectKind.Screen) {
             if (cell.C != 0L) {
                 error = $"a Body ask requires C = 0 (C={cell.C})";
                 return false;
@@ -171,7 +173,7 @@ public sealed class AddonSimulationPump {
             SubjectKind: subjectKind,
             SubjectIndex: cell.A,
             CapabilityMask: mask,
-            NameLength: ((subjectKind != AddonSubjectKind.Body)
+            NameLength: ((subjectKind is AddonSubjectKind.Section or AddonSubjectKind.State)
             ? cell.C
             : 0L)
         );
@@ -260,6 +262,15 @@ public sealed class AddonSimulationPump {
         if (cell.Verb >= verbCount) {
             error = $"request verb {cell.Verb} outside the declared range [0, {verbCount})";
             return false;
+        }
+
+        if (cell.Verb >= AddonAbi.RequestVerbs.ReadStateText) {
+            // Magnitudes and pointers are per-request refusals, like SubmitMutation; the entire validated
+            // batch remains atomic with respect to structural faults.
+            m_queries[m_queryCount++] = new AddonQuerySubmission(ordinal, cell.Verb, cell.HandleIndex,
+                cell.HandleGeneration, cell.A, cell.B, cell.C);
+            error = "";
+            return true;
         }
 
         if (cell.Verb == AddonAbi.RequestVerbs.SubmitMutation) {

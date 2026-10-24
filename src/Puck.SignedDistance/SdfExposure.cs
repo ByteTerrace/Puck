@@ -18,8 +18,8 @@ public enum SdfExposureMode {
 /// reads presentation time and the irradiance volume, and nothing in simulation state depends on it.
 /// </summary>
 /// <param name="Mode">Manual or automatic.</param>
-/// <param name="Ev100">The manual exposure value at ISO 100; an automatic exposure's value before its meter reads, and
-/// whenever it cannot.</param>
+/// <param name="Ev100">The manual exposure value at ISO 100; an automatic exposure's initial value before its meter
+/// first reads. A later missing measurement holds the previous exposure.</param>
 /// <param name="Minimum">The darkest scene an automatic exposure adapts to, as the lowest <c>EV100</c> it takes.</param>
 /// <param name="Maximum">The brightest scene an automatic exposure adapts to, as the highest <c>EV100</c> it takes.</param>
 /// <param name="Compensation">The stops an automatic exposure brightens the metered image by.</param>
@@ -63,12 +63,12 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
         Minimum: DefaultEv100,
         Mode: SdfExposureMode.Manual
     );
-
     /// <summary>Gets the largest exposure multiplier any view of the world takes: its darkest <c>EV100</c> less any
     /// compensation, which sizes each point light's range (<see cref="SdfPhotometry.RangeOf"/>).</summary>
     public float BrightestGain => SdfPhotometry.ExposureOf(ev100: ((Mode == SdfExposureMode.Auto)
         ? MathF.Min(x: Minimum, y: Ev100)
         : Ev100));
+
     /// <summary>Returns the <c>EV100</c> an automatic exposure aims for at a metered average luminance: the meter's reading
     /// less the compensation, within the bounds.</summary>
     /// <param name="luminance">The metered average luminance, in nits.</param>

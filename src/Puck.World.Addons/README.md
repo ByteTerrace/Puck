@@ -7,7 +7,7 @@ World-side ABI vocabulary mappings—capability bits, grant-rule-to-verdict),
 `AddonMutateRefusal` (the `addon.mutate` door's cataloged refusal reasons),
 and `AddonSimulationPump` (the crossing from a guest's decoded output cells
 to typed, vocabulary-validated submissions). It is dedicated strictly to WASM
-scripting guests and remains completely free of emulator or screen-machine
+scripting guests and remains free of emulator implementation
 dependencies (which live in [`Puck.World.Machines`](../Puck.World.Machines/README.md)).
 It references [`Puck.World.Server`](../Puck.World.Server/README.md) directly—the
 seam interface (`IWorldAddonHost`) and the wire-format records it persists
@@ -19,7 +19,9 @@ ABI `AddonSimulationPump` validates against), `Puck.Maths`, and `Puck.Assets`
 (the module bytes a mount reads).
 
 Development guests can query a body's settled kinematics and numeric authored
-state cells, write individual state cells through the ordinary mutation door,
+state cells or bounded text chunks, read/hash machine memory, capture/restore one bounded
+checkpoint, engage a driven body and submit generic provider operations. They write
+individual state cells through the ordinary mutation door,
 and emit bounded lines into `host.log`. The [ABI reference](../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
 owns their wire layouts, authority, limits and host fuel charges.
 

@@ -48,7 +48,7 @@ public sealed class CliLeaseTests : IDisposable {
         using var next = await released;
     }
     [Fact]
-    public async Task OnlyOldHoldersWhoseProcessIsGoneAreReclaimed() {
+    public async Task DeadAndReusedHoldersAreReclaimedImmediatelyButLiveHoldersNeverExpire() {
         var clock = new VirtualClock();
         var directory = Path.Combine(path1: m_root, path2: "gpu");
 
@@ -62,7 +62,8 @@ public sealed class CliLeaseTests : IDisposable {
         File.WriteAllLines(path: path, contents: Metadata(time: old, pid: process.Id, start: process.StartTime.ToUniversalTime().Ticks));
         await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(clock: clock));
         File.WriteAllLines(path: path, contents: Metadata(time: clock.GetUtcNow(), pid: int.MaxValue, start: 1));
-        await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(clock: clock));
+        using (var recovered = await Take(clock: clock)) { Assert.Equal(expected: "agents-slim", actual: File.ReadAllLines(path: path)[0]); }
+        Directory.CreateDirectory(path: directory);
         File.WriteAllLines(contents: ["unrecognized"], path: path);
         await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(clock: clock));
         File.Delete(path: path);
@@ -70,7 +71,7 @@ public sealed class CliLeaseTests : IDisposable {
         File.WriteAllLines(path: path, contents: Metadata(pid: int.MaxValue, start: 1, time: old));
         using (var recovered = await Take(clock: clock)) { Assert.Equal(expected: "agents-slim", actual: File.ReadAllLines(path: path)[0]); }
         Directory.CreateDirectory(path: directory);
-        File.WriteAllLines(path: path, contents: Metadata(time: old, pid: process.Id, start: 1));
+        File.WriteAllLines(path: path, contents: Metadata(time: clock.GetUtcNow(), pid: process.Id, start: 1));
         using var reusedPid = await Take(clock: clock);
     }
     [Fact]

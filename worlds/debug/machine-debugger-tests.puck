@@ -1,0 +1,206 @@
+// End-to-end checks through the mounted WAT guest and the same engaged-body input fold players use.
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "machine-debugger-tests"
+
+// Schedules act as seat1. Positioning another body requires the same explicit Drive grant as live play.
+grants: map(range(4, 3), i => { grantee: "seat1", capability: Drive, subject: $"body:{i}" })
+
+machines [
+  {
+    name: "humble-gaming-brick"
+    engine: "gaming-brick"
+    configuration {
+      schema: "puck.gaming-brick.configuration.v1"
+      model: "cgb"
+      boot: "fast"
+      content { path: "cartridges/cgb/machine-test.cgb.puck" }
+    }
+    contentFolders ["cartridges/cgb"]
+  }
+  {
+    name: "advanced-gaming-brick"
+    engine: "advanced-gaming-brick"
+    configuration {
+      schema: "puck.advanced-gaming-brick.config.v1"
+      boot: "fast"
+      content { path: "cartridges/agb/machine-test.agb.puck" }
+    }
+    contentFolders ["cartridges/agb"]
+  }
+  {
+    name: "humble-gaming-deck"
+    engine: "humble-gaming-deck"
+    configuration {
+      schema: "puck.humble-gaming-deck.configuration.v1"
+      content { path: "cartridges/deck/colour-bars.nes" }
+    }
+    contentFolders ["cartridges/deck"]
+    preferFolderDefault: false
+  }
+]
+
+test "every machine passes the six checks on bundled diagnostic cartridges" {
+  when {
+    seat1: world.state.cell.set machineDebugger window 12
+    seat1: world.state.cell.set machineDebugger p0 1536
+    seat1: world.state.cell.set machineDebugger p1 1553
+    ticks 30
+    seat1: body.pose 7 0.05 29.4 0 0 0 4
+    seat1: world.state.cell.set machineDebugger run 1
+    ticks 100
+    seat1: world.state.cell.set machineDebugger run 0
+    seat1: world.state.cell.set machineDebugger screen 1
+    seat1: world.state.cell.set machineDebugger body 5
+    seat1: world.state.cell.set machineDebugger address 33554432
+    seat1: world.state.cell.set machineDebugger length 262144
+    ticks 3
+    seat1: body.pose 5.5 0.05 31.6 0 0 0 5
+    seat1: world.state.cell.set machineDebugger run 1
+    ticks 100
+    seat1: world.state.cell.set machineDebugger run 0
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger address 0
+    seat1: world.state.cell.set machineDebugger length 2048
+    ticks 3
+    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 1
+    ticks 100
+  }
+  expect {
+    machineDebugger0[alive] == 1
+    machineDebugger0[responsive] == 1
+    machineDebugger0[rewind] == 1
+    machineDebugger0[deterministic] == 1
+    machineDebugger0[swap] == 1
+    machineDebugger0[eject] == 1
+    machineDebugger1[alive] == 1
+    machineDebugger1[responsive] == 1
+    machineDebugger1[rewind] == 1
+    machineDebugger1[deterministic] == 1
+    machineDebugger1[swap] == 1
+    machineDebugger1[eject] == 1
+    machineDebugger2[alive] == 1
+    machineDebugger2[responsive] == 1
+    machineDebugger2[rewind] == 1
+    machineDebugger2[deterministic] == 1
+    machineDebugger2[swap] == 1
+    machineDebugger2[eject] == 1
+    machineDebuggerViolations[count] == 0
+  }
+}
+
+test "withholding input fails responsive while the other checks pass" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger address 0
+    seat1: world.state.cell.set machineDebugger length 2048
+    seat1: world.state.cell.set machineDebugger window 12
+    seat1: world.state.cell.set machineDebugger withhold 1
+    ticks 30
+    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 1
+    ticks 100
+  }
+  expect {
+    machineDebugger2[alive] == 1
+    machineDebugger2[responsive] == -1
+    machineDebugger2[rewind] == 1
+    machineDebugger2[deterministic] == 1
+    machineDebugger2[swap] == 1
+    machineDebugger2[eject] == 1
+    machineDebugger2[changed] == 0
+    machineDebuggerViolations[count] == 1
+    machineDebuggerViolations[first] > 30
+  }
+}
+
+test "the runtime input program plays every segment then releases the body" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger p0 512
+    seat1: world.state.cell.set machineDebugger p1 769
+    seat1: world.state.cell.set machineDebugger window 2
+    ticks 30
+    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 2
+    ticks 25
+  }
+  expect {
+    machineDebugger2[driven] == 5
+    machineDebugger2[phase] == 99
+    machineDebuggerViolations[count] == 0
+  }
+}
+
+test "the seeded fuzzer consumes the reproducible PCG stream for its window" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger window 12
+    seat1: world.state.cell.set machineDebugger seed 7
+    seat1: world.state.cell.set machineDebugger probe 16
+    seat1: world.state.cell.set machineDebugger probe1 17
+    seat1: world.state.cell.set machineDebugger probe2 18
+    ticks 30
+    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 3
+    ticks 35
+  }
+  expect {
+    machineDebugger2[driven] == 12
+    machineDebugger2[randomState] != 0
+    machineDebugger2[phase] == 99
+    machineDebuggerViolations[count] == 0
+  }
+}
+
+
+test "an out-of-reach driver reports unknown checks with ticks" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger address 0
+    seat1: world.state.cell.set machineDebugger length 2048
+    ticks 30
+    seat1: body.pose 0 0.05 0 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 1
+    ticks 20
+  }
+  expect {
+    machineDebugger2[alive] == 0
+    machineDebugger2[responsive] == 0
+    machineDebugger2[rewind] == 0
+    machineDebugger2[deterministic] == 0
+    machineDebugger2[swap] == 0
+    machineDebugger2[eject] == 0
+    machineDebugger2[aliveTick] > 30
+    machineDebugger2[ejectTick] > 30
+    machineDebugger2[phase] == 99
+    machineDebuggerViolations[count] == 0
+  }
+}
+
+
+test "switching off cancels and publishes the input program" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger p0 153617
+    ticks 30
+    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 2
+    ticks 20
+    seat1: world.state.cell.set machineDebugger run 0
+    ticks 5
+  }
+  expect {
+    machineDebugger2[driven] > 0 and machineDebugger2[driven] < 25
+    machineDebugger2[phase] == 99
+    machineDebugger2[tick] > 30
+    machineDebuggerViolations[count] == 0
+  }
+}

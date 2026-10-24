@@ -1,16 +1,16 @@
 namespace Puck.Scripting;
 
 /// <summary>The addon ABI's <c>Ask</c> subject kind wire values, defined independently of any consumer enum. The
-/// decode-valid set is <c>{1, 3, 5}</c> — <see cref="Body"/> (paired with the Drive/Observe capability bits),
+/// decode-valid set is <c>{1, 2, 3, 5}</c> — <see cref="Body"/> (paired with the Drive/Observe capability bits),
 /// <see cref="State"/> (Observe only) and
 /// <see cref="Section"/> (paired with the Mutate capability bit alone, the addon mutation seam's own handle shape);
-/// <see cref="Screen"/> and <see cref="Profile"/> are declared but not admitted. No wildcard ordinal exists on
+/// <see cref="Screen"/> admits Observe/Control; <see cref="Profile"/> is not admitted. No wildcard ordinal exists on
 /// purpose: the wire has no spelling for asking for one.</summary>
 public enum AddonSubjectKind : byte {
     /// <summary>A simulated body. Paired with the Drive/Observe capability bits.</summary>
     Body = 1,
 
-    /// <summary>A screen. Reserved; not admitted.</summary>
+    /// <summary>A screen index. Paired with Observe or Control; C is zero.</summary>
     Screen = 2,
 
     /// <summary>A world-document section. Paired with the Mutate capability bit alone — the addon mutation seam's

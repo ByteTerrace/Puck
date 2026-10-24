@@ -14,6 +14,10 @@ test "the watchdog stays quiet through an ordinary boot" {
   }
   expect {
     watchdog[count] == 0
+    machineDebuggerViolations[count] == 0
+    machineDebugger0[tick] == -1
+    machineDebugger1[tick] == -1
+    machineDebugger2[tick] == -1
   }
 }
 
