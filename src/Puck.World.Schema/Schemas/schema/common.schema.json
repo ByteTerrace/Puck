@@ -2794,6 +2794,21 @@
           "type": "number",
           "default": 6
         },
+        "closeTargetOffset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
+          "default": null
+        },
+        "closeTargetStartFraction": {
+          "description": "The boom fraction below which target migration begins.",
+          "type": "number",
+          "default": 0.6
+        },
+        "closeTargetFullFraction": {
+          "description": "The boom fraction at which migration reaches the close target.",
+          "type": "number",
+          "default": 0.2
+        },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
           "type": [
@@ -3264,6 +3279,21 @@
           "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
           "type": "number",
           "default": 6
+        },
+        "closeTargetOffset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
+          "default": null
+        },
+        "closeTargetStartFraction": {
+          "description": "The boom fraction below which target migration begins.",
+          "type": "number",
+          "default": 0.6
+        },
+        "closeTargetFullFraction": {
+          "description": "The boom fraction at which migration reaches the close target.",
+          "type": "number",
+          "default": 0.2
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -4190,6 +4220,15 @@
       ],
       "additionalProperties": false,
       "title": "WorldSequence"
+    },
+    "WorldCameraClearanceChoice": {
+      "description": "How a seat\u0027s chase view handles a room that cannot fit its boom and body.",
+      "enum": [
+        "Auto",
+        "Cutaway",
+        "Fade"
+      ],
+      "title": "WorldCameraClearanceChoice"
     },
     "ShapeNonNullable9": {
       "enum": [

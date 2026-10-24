@@ -12,6 +12,16 @@ namespace Puck.World.Schema.Tests;
 /// validates, so a law can never pass because the whole document was malformed for some other reason.
 /// </summary>
 public sealed class WorldCameraProgramValidationLawTests {
+    [Fact]
+    public void CloseTargetsRequireFiniteCoordinatesAndAnOrderedCompressionBand() {
+        var aim = new WorldCameraProgramOp.LookAt(new WorldCameraSubject.Reference(), CloseTargetOffset: new Vector3(x: 0f, y: 1.74f, z: 0f));
+        var control = Program("close", aim, Fov());
+
+        Refuses(Program("close", aim with { CloseTargetFullFraction = 0.7f }, Fov()), control, "closeTargetFullFraction");
+        Refuses(Program("close", aim with { CloseTargetOffset = new Vector3(x: 0f, y: float.NaN, z: 0f) }, Fov()), control, "closeTargetOffset");
+        Refuses(Program("close", aim with { Subject = null }, Fov()), control, "requires a subject");
+    }
+
     // A document carrying ONE authored camera whose rig is the program under test. A camera row imposes no
     // interactivity rule of its own, so it is the honest place to state an op-level refusal.
     private static WorldDefinition DocumentWithCamera(WorldCameraProgram rig) => (Fixtures.BuildDocument() with {

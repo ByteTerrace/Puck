@@ -71,6 +71,16 @@ Player sentiment across Reddit (`r/Games`, `r/eldenring`, `r/ffxiv`, `r/wow`), S
 
 ## The two winners for Puck
 
+Implementation: target migration and the `fade`/`cutaway` choices are now wired
+through the existing seat rig. The debug default is `fade`;
+`player.camera.clearance fade|cutaway|auto` changes the issuing seat's temporary
+choice, with no argument toggling the two. `world.view.camera` reports `mode`
+and the fade amount. Both currently share the rig's authored 1.74 m close target;
+the table below remains design guidance for further per-form tuning. First
+person, automatic pull-in with hysteresis and a simultaneous comparison layout
+remain separate follow-up work. The current implementation contract is in
+[Chase eye clearance](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance).
+
 Puck's debug world serves both as a playable third-person action showcase and as a visual inspection tool for the Moth's sculpted SDF rig, gait, and thrusters ([`AGENTS.md`](../../AGENTS.md)). Evaluating all nine behaviors from the table narrows the general tight-space choice to two winners:
 
 - **Eliminated — Orbit away from the wall**: Violates heading preservation (`yawReference: "World"`), fighting the player's look stick and bending camera-relative movement paths near walls.

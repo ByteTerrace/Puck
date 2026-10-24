@@ -12,6 +12,23 @@ namespace Puck.SdfVm.Tests;
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
     [Fact]
+    public void StampFadeBelongsToOneViewAndOtherViewsStaySolid() {
+        var frame = Frame();
+        var seat = frame.Views[0] with { StampFade = new SdfStampFade(FirstSlot: 41, Opacity: 0.375f, SlotCount: 368) };
+        var mirror = new SdfViewSnapshot(Camera: seat.Camera, Region: seat.Region);
+
+        frame = frame with { Views = [seat, mirror] };
+        var block = new byte[SdfFrameBlock.SizeBytes];
+        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.StampFade));
+
+        SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 0, width: 1);
+        Assert.Equal(41f, BitConverter.ToSingle(startIndex: offset, value: block));
+        Assert.Equal(368f, BitConverter.ToSingle(startIndex: (offset + 4), value: block));
+        Assert.Equal(0.375f, BitConverter.ToSingle(startIndex: (offset + 8), value: block));
+        SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 1, width: 1);
+        Assert.Equal(0f, BitConverter.ToSingle(startIndex: (offset + 4), value: block));
+    }
+    [Fact]
     public void IndirectSourceBitsReachThePassBlock() {
         var block = new byte[SdfFrameBlock.SizeBytes];
         var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectSources));
@@ -90,6 +107,7 @@ public sealed class SdfFrameBlockLawTests {
                     Grid = Grid,
                     Quality = Restricted,
                     ScreenFidelity = 0.75f,
+                    StampFade = new SdfStampFade(FirstSlot: 41, Opacity: 0.5f, SlotCount: 368),
                 },
             ],
             Time: 7f
@@ -220,7 +238,7 @@ public sealed class SdfFrameBlockLawTests {
         );
         Assert.Equal(
             actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
-            expected: ((uint)SdfLights.MaxLights, 1)
+            expected: (((uint)SdfLights.MaxLights), 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from

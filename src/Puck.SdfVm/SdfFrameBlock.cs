@@ -194,16 +194,17 @@ public static partial class SdfFrameBlock {
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
         var toon = frame.Toon;
-        WriteSingle(block: block, offset: ToonBands, value: toon.Enabled ? 1f : 0f);
-        WriteSingle(block: block, offset: ToonBands + 4, value: toon.Threshold);
-        WriteSingle(block: block, offset: ToonBands + 8, value: toon.Softness);
-        WriteSingle(block: block, offset: ToonBands + 12, value: toon.SpecularSize);
+
+        WriteSingle(block: block, offset: ToonBands, value: (toon.Enabled ? 1f : 0f));
+        WriteSingle(block: block, offset: (ToonBands + 4), value: toon.Threshold);
+        WriteSingle(block: block, offset: (ToonBands + 8), value: toon.Softness);
+        WriteSingle(block: block, offset: (ToonBands + 12), value: toon.SpecularSize);
         WriteVector3(block: block, offset: ToonShadow, value: toon.ShadowTint);
-        WriteSingle(block: block, offset: ToonShadow + 12, value: MathF.Pow(2f, toon.Exposure));
-        WriteSingle(block: block, offset: ToonOutline, value: toon.OutlineWidth * (float)snapshot.RenderGrid);
-        WriteSingle(block: block, offset: ToonOutline + 4, value: toon.OutlineDistance);
-        WriteSingle(block: block, offset: ToonOutline + 8, value: toon.OutlineNormal);
-        WriteSingle(block: block, offset: ToonOutline + 12, value: toon.Shoulder);
+        WriteSingle(block: block, offset: (ToonShadow + 12), value: MathF.Pow(x: 2f, y: toon.Exposure));
+        WriteSingle(block: block, offset: ToonOutline, value: (toon.OutlineWidth * ((float)snapshot.RenderGrid)));
+        WriteSingle(block: block, offset: (ToonOutline + 4), value: toon.OutlineDistance);
+        WriteSingle(block: block, offset: (ToonOutline + 8), value: toon.OutlineNormal);
+        WriteSingle(block: block, offset: (ToonOutline + 12), value: toon.Shoulder);
         WriteVector3(block: block, offset: ToonInk, value: toon.OutlineTint);
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
@@ -244,9 +245,16 @@ public static partial class SdfFrameBlock {
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
         WriteSingle(block: block, offset: ScreenFidelity, value: Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity));
+        WriteVector3(block: block, offset: ViewOffsets.StampFade, value: new System.Numerics.Vector3(x: snapshot.StampFade.FirstSlot, y: snapshot.StampFade.SlotCount, z: snapshot.StampFade.Opacity));
     }
 
     // The offset a pass-block member lies at.
+    // View-only additions belong here rather than in the outer type's initializer: WriteMeshBake reaches that
+    // initializer, so changing it would invalidate the mesh cache for a value the bake never reads.
+    private static class ViewOffsets {
+        public static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
+    }
+
     private static int Offset(string member) =>
         ((int)Layout.BlockOffsetOf(member: member));
     private static void WriteFlag(Span<byte> block, int offset, bool value) =>

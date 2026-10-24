@@ -11713,6 +11713,36 @@
                           "type": "number",
                           "default": 6
                         },
+                        "closeTargetOffset": {
+                          "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
+                          "default": null,
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "closeTargetStartFraction": {
+                          "description": "The boom fraction below which target migration begins.",
+                          "type": "number",
+                          "default": 0.6
+                        },
+                        "closeTargetFullFraction": {
+                          "description": "The boom fraction at which migration reaches the close target.",
+                          "type": "number",
+                          "default": 0.2
+                        },
                         "opcode": {
                           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
                           "type": [
@@ -12544,6 +12574,36 @@
                     "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
                     "type": "number",
                     "default": 6
+                  },
+                  "closeTargetOffset": {
+                    "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
+                    "default": null,
+                    "title": "DocumentVector3",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  },
+                  "closeTargetStartFraction": {
+                    "description": "The boom fraction below which target migration begins.",
+                    "type": "number",
+                    "default": 0.6
+                  },
+                  "closeTargetFullFraction": {
+                    "description": "The boom fraction at which migration reaches the close target.",
+                    "type": "number",
+                    "default": 0.2
                   },
                   "opcode": {
                     "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -14840,6 +14900,16 @@
               "additionalProperties": false,
               "default": null,
               "title": "WorldSeatGyro"
+            },
+            "clearanceMode": {
+              "description": "The player\u0027s clearance preference; Auto inherits the framing world\u0027s default.",
+              "enum": [
+                "Auto",
+                "Cutaway",
+                "Fade"
+              ],
+              "default": "Auto",
+              "title": "WorldCameraClearanceChoice"
             }
           },
           "required": [
@@ -27086,6 +27156,48 @@
               "additionalProperties": false,
               "default": null,
               "title": "WorldSeatFollow"
+            },
+            "clearanceMode": {
+              "description": "The author\u0027s tight-space behavior; players may override it.",
+              "enum": [
+                "Auto",
+                "Cutaway",
+                "Fade"
+              ],
+              "default": "Cutaway",
+              "title": "WorldCameraClearanceChoice"
+            },
+            "characterFade": {
+              "description": "The full-size fade distances; absent uses the standard distances.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "startDistance": {
+                  "description": "The boom distance at which the body starts dissolving.",
+                  "type": "number",
+                  "default": 1.25
+                },
+                "endDistance": {
+                  "description": "The distance at which the body is completely hidden.",
+                  "type": "number",
+                  "default": 0.45
+                },
+                "minimumBoom": {
+                  "description": "The preferred shortest boom; a nearer wall takes precedence.",
+                  "type": "number",
+                  "default": 0.35
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldCameraCharacterFade"
+            },
+            "clearanceMaxElevation": {
+              "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians.",
+              "type": "number",
+              "default": 1.1
             }
           },
           "required": [

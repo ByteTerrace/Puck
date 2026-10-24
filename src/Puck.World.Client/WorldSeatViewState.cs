@@ -54,6 +54,25 @@ public sealed class WorldSeatViewState {
     public float Pitch { get { lock (m_gate) { return m_pitch; } } }
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
 
+    private WorldCameraClearanceChoice m_clearanceOverride;
+
+    /// <summary>Gets the last clearance frame's opacity for the body's stamp in this seat's own view.</summary>
+    public float BodyOpacity { get { lock (m_gate) { return m_clearance.BodyOpacity; } } }
+
+    /// <summary>Resolves the session override, portable preference, then the author's default.</summary>
+    public WorldCameraClearanceChoice ClearanceChoice(WorldSeatViewControl control, WorldSeatCameraFeel feel) {
+        lock (m_gate) {
+            return ((m_clearanceOverride != WorldCameraClearanceChoice.Auto) ? m_clearanceOverride
+                : ((feel.ClearanceMode != WorldCameraClearanceChoice.Auto) ? feel.ClearanceMode : control.ClearanceMode));
+        }
+    }
+    /// <summary>Sets this seat's temporary clearance choice. Auto restores its document/profile preference.</summary>
+    public void SetClearanceChoice(WorldCameraClearanceChoice choice) {
+        lock (m_gate) {
+            m_clearanceOverride = choice;
+        }
+    }
+
     // The rig's authored pitch, for the live-pitch clamp: a BOUND pitch has no single authored value, so the clamp
     // is taken about the rest angle.
     private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Value.Literal ?? 0f);
@@ -174,20 +193,22 @@ public sealed class WorldSeatViewState {
     /// <returns>The presented live yaw and pitch, in radians.</returns>
     public (float Yaw, float Pitch) PresentedLook(float interpolationAlpha) {
         var lag = (1f - Math.Clamp(
-            value: interpolationAlpha,
+            max: 1f,
             min: 0f,
-            max: 1f
+            value: interpolationAlpha
         ));
 
         lock (m_gate) {
             return (VectorFunctions.WrapAngle(radians: (m_yaw - (m_tickYawStep * lag))), (m_pitch - (m_tickPitchStep * lag)));
         }
     }
+
     // A cut has no tick step to interpolate across: the look lands where it was put.
     private void CutTickStep() {
         m_tickYawStep = 0f;
         m_tickPitchStep = 0f;
     }
+
     /// <summary>The chase boom's second-order ease: eases <paramref name="eye"/> toward <paramref name="target"/> by
     /// <paramref name="dynamics"/> while this seat frames through its own chase rig.</summary>
     /// <param name="dynamics">The chase rig's reported response.</param>
@@ -224,7 +245,12 @@ public sealed class WorldSeatViewState {
     /// <param name="deltaSeconds">The frame step, in seconds.</param>
     /// <returns>The near-plane distance, in world units, the eye's image begins at
     /// (<see cref="WorldCameraClearance.Near"/>); zero when <paramref name="enabled"/> is <see langword="false"/>.</returns>
-    public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds) {
+    /// <param name="targetShift">The compiled program's close-target migration, in world axes and live scale.</param>
+    /// <param name="choice">The resolved clearance preference.</param>
+    /// <param name="control">The world's camera clearance parameters.</param>
+    /// <param name="scale">The perceived body's live scale.</param>
+    public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, ref Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
+        SdfCameraTargetShift targetShift = default, WorldCameraClearanceChoice choice = WorldCameraClearanceChoice.Cutaway, WorldSeatViewControl? control = null, float scale = 1f) {
         lock (m_gate) {
             if (!enabled) {
                 m_clearance.Reset();
@@ -239,8 +265,14 @@ public sealed class WorldSeatViewState {
                 field: field,
                 subject: in subject,
                 target: target,
-                up: up
+                up: up,
+                targetShift: targetShift,
+                choice: choice,
+                characterFade: control?.CharacterFade,
+                scale: scale,
+                maxElevation: (control?.ClearanceMaxElevation ?? WorldCameraClearance.LiftCeiling)
             );
+            target = m_clearance.Target;
 
             return m_clearance.Near;
         }

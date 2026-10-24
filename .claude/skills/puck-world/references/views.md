@@ -1,7 +1,7 @@
 # Views — authored cameras and seat control
 
 The `views` section owns camera structure. `seatDefaults.seatCameraFeel`
-(`WorldSeatCameraFeel`) owns only portable human input preference. The split is
+(`WorldSeatCameraFeel`) owns portable human input preference and the player's clearance choice. The split is
 strict: pitch limits and axis framing belong to `views.seatControl` and the rig,
 and the feel carries neither (strict parse refuses any unmapped member).
 
@@ -53,6 +53,9 @@ views {
   // … more inspection layouts …
 
   seatControl {
+    clearanceMode: Fade
+    characterFade { startDistance: 1.25, endDistance: 0.45, minimumBoom: 0.35 }
+    clearanceMaxElevation: 1.1
     maxPitch: 1.2
     minPitch: -0.5
     yawReference: "World"
@@ -62,7 +65,7 @@ views {
     version: "puck.camera.program.v1"
     operations [
       orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
-      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true)
+      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true, closeTargetOffset: [0, 1.74, 0], closeTargetStartFraction: 0.6, closeTargetFullFraction: 0.2)
       fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
       dynamics(row: `camera-boom`)
     ]
@@ -134,7 +137,12 @@ physical axis independently; the dot products against the full 3D `yaw` and
 `pitch` weight vectors then produce semantic look-right/look-up rates. Thus all
 three axes can participate, be combined, or be remapped without code changes.
 A joined identity's preference travels; otherwise the routed world's default
-applies. Neither can override the routed world's `seatControl`.
+applies. Pitch limits and yaw reference remain the routed world's; the feel's
+`clearanceMode: Auto|Fade|Cutaway` may override its clearance choice. `Auto`
+inherits `views.seatControl.clearanceMode` (which admits `Fade` or `Cutaway`).
+`player.camera.clearance fade|cutaway|auto` sets a temporary choice for the issuing
+seat; no argument, or `toggle`, flips fade/cutaway. `auto` restores the document
+or identity preference. It changes no logical yaw, pitch or movement state.
 
 Motion input is a separate, generic toggled mode: `player.motion.controls`
 toggles it (it stays active after the buttons release) and
@@ -190,6 +198,35 @@ For each fixed tick:
 
 ## Chase eye clearance
 
+The debug world's default is **fade**, with **cutaway** one toggle away. Both
+share target migration: the camera program's `lookAt.closeTargetOffset` names
+the close target, in the same axes as `targetOffset`. As static geometry reduces
+the authored boom from `closeTargetStartFraction` (0.6) to
+`closeTargetFullFraction` (0.2), a smoothstep blend approaches that target and
+eases on the program's `dynamics`. The Moth authors waist `[0, 1, 0]` and close
+target `[0, 1.74, 0]`. The displacement, boom, collision radii and fade distances
+scale with her live scale. Blend/select programs carry the winning look-at's
+migration. Compression is measured at the rest pivot, independently of the
+migrated target, to avoid a feedback oscillation under lintels.
+
+**Fade keeps the room.** The boom shortens along the requested heading and pitch,
+never rises automatically and never advances the near plane through a wall.
+`seatControl.characterFade` authors `startDistance`, `endDistance` and
+`minimumBoom` (1.25, 0.45 and 0.35 m full-size by default). The preferred minimum
+boom yields to closer geometry. The own body becomes a 4×4 screen-door pattern
+from solid at the start to hidden at the end. `SdfViewSnapshot.StampFade` carries
+only that body's transform-slot range and opacity; the mesh and glass fragment
+passes discard before writing depth or glass sums. Shared stamp transforms and
+shadows stay intact. Mirrors, portals, named cameras and other seats construct
+independent view snapshots, so they still see the whole Moth. Attached screens
+own separate stamp slots and stay visible.
+
+**Cutaway keeps the body.** The following keep-out/rise/near-plane procedure is
+the cutaway branch. The Moth stays solid even when no room remains behind her.
+`seatControl.clearanceMaxElevation` authors its elevation ceiling (1.1 rad by
+default). The live read-back includes `mode=fade|cutaway` and `fade=0..1` (zero
+means solid) alongside the eye, migrated target, boom, rise, near and clearance.
+
 After the boom ease, a seat framing its own body through `views.seatRig` places
 the eye on its own spring arm (`WorldCameraClearance`, owned by the seat's
 `WorldSeatViewState`, `Clear`), in the world the seat is presented in only; a
@@ -238,7 +275,7 @@ within its radius of the body; the body wins where the two conflict.
 The heading never changes: the frame the seat steers in stays the frame it sees.
 A target inside geometry (a portal frame around the pivot) skips a 1.1 m shell
 before sweeping and keeps the authored boom where that shell reaches past it.
-The eye radius, the ceiling, the skin and the scan are engine constants; the
+The eye radius, skin and scan are engine constants; the ceiling is authored; the
 body volume is the kit's authored collider and the creation's own shapes; the
 ease is the rig's authored dynamics. `world.view.camera` echoes the arm's latest
 frame (`eye=`, `target=`, `boom=<placed>/<authored>`, `rise=` in degrees,
@@ -461,6 +498,8 @@ Free Cam do not alter the logical movement basis.
   preference, held free-look state, motion-control gate/sample, the exact
   live yaw/pitch state used by movement/rendering, and where the chase eye's
   arm last placed the eye (see "Chase eye clearance").
+- `player.camera.clearance [fade|cutaway|auto|toggle]` — changes the issuing
+  seat's temporary clearance preference; no argument toggles the two modes.
 - `world.view.state` — reads active layout, selection reason, transition, and
   slot occupants; an instance slot prints as `instance:<name>`, or
   `instance:<name>:missing` when the runtime has no such instance.

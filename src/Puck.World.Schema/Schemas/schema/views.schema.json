@@ -55,6 +55,43 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldSeatFollow"
+        },
+        "clearanceMode": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraClearanceChoice",
+          "description": "The author\u0027s tight-space behavior; players may override it.",
+          "default": "Cutaway"
+        },
+        "characterFade": {
+          "description": "The full-size fade distances; absent uses the standard distances.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "startDistance": {
+              "description": "The boom distance at which the body starts dissolving.",
+              "type": "number",
+              "default": 1.25
+            },
+            "endDistance": {
+              "description": "The distance at which the body is completely hidden.",
+              "type": "number",
+              "default": 0.45
+            },
+            "minimumBoom": {
+              "description": "The preferred shortest boom; a nearer wall takes precedence.",
+              "type": "number",
+              "default": 0.35
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldCameraCharacterFade"
+        },
+        "clearanceMaxElevation": {
+          "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians.",
+          "type": "number",
+          "default": 1.1
         }
       },
       "required": [

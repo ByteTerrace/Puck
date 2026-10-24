@@ -88,7 +88,11 @@ public abstract record SdfCameraOp {
     /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, read only for
     /// <see cref="SdfCameraProgram.FacingSubject"/>.</param>
-    public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance) : SdfCameraOp;
+    /// <param name="CloseTargetOffset">The optional offset approached when the caller shortens the chase boom.</param>
+    /// <param name="CloseTargetStartFraction">The fraction below which target migration begins.</param>
+    /// <param name="CloseTargetFullFraction">The fraction at which target migration is complete.</param>
+    public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance,
+        Vector3? CloseTargetOffset = null, float CloseTargetStartFraction = 0.6f, float CloseTargetFullFraction = 0.2f) : SdfCameraOp;
     /// <summary>Places the eye by orbiting the current subject's pose.</summary>
     /// <param name="Distance">The orbit distance.</param>
     /// <param name="Yaw">The orbit heading in radians.</param>
@@ -194,7 +198,15 @@ public readonly record struct SdfCameraLook(float Yaw, float Pitch);
 /// <param name="FovRadians">The vertical field of view, radians.</param>
 /// <param name="Dynamics">The response the program's <see cref="SdfCameraOp.Dynamics"/> reported, or
 /// <see cref="SdfCameraDynamics.None"/>.</param>
-public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float FovRadians, SdfCameraDynamics Dynamics);
+public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float FovRadians, SdfCameraDynamics Dynamics) {
+    /// <summary>The close-target displacement and boom fractions reported by the winning look-at operation.</summary>
+    public SdfCameraTargetShift TargetShift { get; init; }
+}
+/// <summary>A collision-driven displacement from the rest target, in world axes before the caller's live scale.</summary>
+/// <param name="Offset">The displacement from the rest target to the close target.</param>
+/// <param name="StartFraction">The boom fraction below which migration begins.</param>
+/// <param name="FullFraction">The boom fraction at which migration is complete.</param>
+public readonly record struct SdfCameraTargetShift(Vector3 Offset, float StartFraction, float FullFraction);
 /// <summary>The per-frame inputs a program evaluates against — everything that varies while the compiled ops do
 /// not.</summary>
 public readonly ref struct SdfCameraProgramFrame {
@@ -278,6 +290,7 @@ public static class SdfCameraProgramEvaluator {
         var haveTarget = false;
         var fov = OrbitRig.DefaultFieldOfViewRadians;
         var dynamics = SdfCameraDynamics.None;
+        var targetShift = default(SdfCameraTargetShift);
         var pitchMin = (-MathF.PI / 2f);
         var pitchMax = (MathF.PI / 2f);
         var operations = program.Operations;
@@ -339,6 +352,7 @@ public static class SdfCameraProgramEvaluator {
 
                     break;
                 case SdfCameraOp.LookAt lookAt:
+                    targetShift = default;
                     if (lookAt.SubjectSlot == SdfCameraProgram.FacingSubject) {
                         target = (eye + (Forward(orientation: subject.Orientation) * MathF.Max(
                             x: lookAt.FocusDistance.Resolve(scalars: scalars),
@@ -357,6 +371,12 @@ public static class SdfCameraProgramEvaluator {
                             value: lookAt.TargetOffset,
                             worldAxes: lookAt.WorldAxes
                         );
+                        if (lookAt.CloseTargetOffset is { } closeOffset) {
+                            targetShift = new SdfCameraTargetShift(
+                                Offset: (Place(subject: in aim, value: closeOffset, worldAxes: lookAt.WorldAxes, scale: 1f) - target),
+                                StartFraction: lookAt.CloseTargetStartFraction,
+                                FullFraction: lookAt.CloseTargetFullFraction);
+                        }
                     }
 
                     haveTarget = true;
@@ -415,6 +435,10 @@ public static class SdfCameraProgramEvaluator {
                         b: resolvedB.Dynamics,
                         weight: weight
                     );
+                    targetShift = new SdfCameraTargetShift(
+                        Offset: Vector3.Lerp(resolvedA.TargetShift.Offset, resolvedB.TargetShift.Offset, weight),
+                        StartFraction: float.Lerp(resolvedA.TargetShift.StartFraction, resolvedB.TargetShift.StartFraction, weight),
+                        FullFraction: float.Lerp(resolvedA.TargetShift.FullFraction, resolvedB.TargetShift.FullFraction, weight));
                     target = Vector3.Lerp(
                         amount: weight,
                         value1: resolvedA.Target,
@@ -452,6 +476,7 @@ public static class SdfCameraProgramEvaluator {
                     target = resolvedSelect.Target;
                     fov = resolvedSelect.FovRadians;
                     dynamics = resolvedSelect.Dynamics;
+                    targetShift = resolvedSelect.TargetShift;
                     haveTarget = true;
 
                     break;
@@ -465,7 +490,7 @@ public static class SdfCameraProgramEvaluator {
             Target: (haveTarget
             ? target
             : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
-        );
+        ) { TargetShift = targetShift };
     }
     private static Vector3 Forward(Quaternion orientation) => Vector3.Transform(
         rotation: orientation,
@@ -553,6 +578,8 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
 
     /// <summary>Gets the response the last <see cref="Resolve"/> reported (see <see cref="SdfCameraOp.Dynamics"/>).</summary>
     public SdfCameraDynamics Dynamics { get; private set; }
+    /// <summary>Gets the winning look-at operation's close-target migration.</summary>
+    public SdfCameraTargetShift TargetShift { get; private set; }
     /// <summary>Gets the live look sample added to every <see cref="SdfCameraOp.Orbit"/> that applies it.</summary>
     public SdfCameraLook Look { get; set; }
     /// <summary>Gets the compiled set this rig resolves.</summary>
@@ -589,6 +616,7 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
         );
 
         Dynamics = pose.Dynamics;
+        TargetShift = pose.TargetShift;
 
         return pose;
     }

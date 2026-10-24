@@ -171,6 +171,8 @@ public static partial class SdfWorldPackage {
     /// seat framing the screen it engaged carries its ease's weight here, so at 1 a framed picture is its source scaled;
     /// every other view carries 0.</summary>
     public const string ScreenFidelity = "screenFidelity";
+    /// <summary>The view-local stamp fade: first transform slot, slot count and opacity.</summary>
+    public const string StampFade = "stampFade";
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -222,7 +224,6 @@ public static partial class SdfWorldPackage {
     public const string MeshPyramid = "sdfMeshPyramid";
     /// <summary>The pyramid pass's writable binding of <see cref="MeshPyramid"/>.</summary>
     public const string MeshPyramidWritten = "sdfMeshPyramidRW";
-
     /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
     public const string ScreenSources = "screenSources";
     /// <summary>The length of <see cref="ScreenSources"/>: the most screen surfaces one program declares.</summary>
@@ -324,6 +325,7 @@ public static partial class SdfWorldPackage {
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
+        Value(name: StampFade, type: ShaderValueType.Float3),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
@@ -439,10 +441,10 @@ public static partial class SdfWorldPackage {
         Passes: [
             Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]) with { Members = BakeMembers },
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]) with { Members = BakeMembers },
-            ShadowRaster(name: Parts.ShadowNear, depth: Parts.ShadowNearDepth),
-            ShadowRaster(name: Parts.ShadowFar, depth: Parts.ShadowFarDepth),
-            ShadowRaster(name: Parts.ShadowSecond, depth: Parts.ShadowSecondDepth),
-            Raster(name: Parts.Mesh, target: Parts.MeshTarget, depth: Parts.MeshDepth),
+            ShadowRaster(depth: Parts.ShadowNearDepth, name: Parts.ShadowNear),
+            ShadowRaster(depth: Parts.ShadowFarDepth, name: Parts.ShadowFar),
+            ShadowRaster(depth: Parts.ShadowSecondDepth, name: Parts.ShadowSecond),
+            Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             // The surface pass reads the bake samples it never touches so the bake pass, whose samples only the host reads
             // back, stays live in the planned graph.
@@ -468,7 +470,7 @@ public static partial class SdfWorldPackage {
             Buffer(
                 count: null,
                 name: Parts.BakeSamples,
-                sizeBytes: (((ulong)MeshBakeMaxSamples) * MeshBakeSampleWords * sizeof(uint)),
+                sizeBytes: ((((ulong)MeshBakeMaxSamples) * MeshBakeSampleWords) * sizeof(uint)),
                 strideBytes: sizeof(uint)
             ),
             ShadowDepth(name: Parts.ShadowNearDepth, texels: MeshShadowResolution),

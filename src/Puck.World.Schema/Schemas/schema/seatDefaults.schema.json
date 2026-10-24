@@ -169,6 +169,11 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldSeatGyro"
+        },
+        "clearanceMode": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraClearanceChoice",
+          "description": "The player\u0027s clearance preference; Auto inherits the framing world\u0027s default.",
+          "default": "Auto"
         }
       },
       "required": [

@@ -7840,6 +7840,13 @@ views {
   // A dual-stick third-person action camera: the left stick moves and strafes relative to the camera, the right stick
   // turns the camera and the body with it, and the right-stick press recenters it behind the body.
   seatControl {
+    clearanceMode: Fade
+    characterFade {
+      startDistance: 1.25
+      endDistance: 0.45
+      minimumBoom: 0.35
+    }
+    clearanceMaxElevation: 1.1
     maxPitch: 1.2
     minPitch: -0.5
     yawReference: "World"
@@ -7849,7 +7856,7 @@ views {
     version: "puck.camera.program.v1"
     operations [
       orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
-      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true)
+      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true, closeTargetOffset: [0, 1.74, 0], closeTargetStartFraction: 0.6, closeTargetFullFraction: 0.2)
       fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
       dynamics(row: `camera-boom`)
     ]

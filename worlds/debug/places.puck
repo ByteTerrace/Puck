@@ -9,6 +9,9 @@
 // own authority, as though the caller had typed it.
 
 spawnPoints [
+  // Tight-space camera comparisons. Call gallery.lift 0 before visiting the car.
+  { id: "lift", position [16, 0.1, 38], yawDegrees: 0 }
+  { id: "stairs", position [12.2, 2.3, 38.7], yawDegrees: 0 }
   // In Wonderland (wonderland.puck), 2.3 m in front of the deck's television on the west wall (devices.puck), facing
   // it, with the Advanced Brick on her right and the Humble Brick on her left: posed here, she keeps whatever size she
   // was.
