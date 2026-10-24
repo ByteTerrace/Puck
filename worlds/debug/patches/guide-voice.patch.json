@@ -1,0 +1,13 @@
+{
+  "schema": "puck.synthesizer-patch.v1",
+  "name": "gallery-guide",
+  "oscillator": "Saw",
+  "attackFrames": 96,
+  "decayFrames": 240,
+  "sustainThousandths": 650,
+  "releaseFrames": 240,
+  "pitchMillihertz": 240000,
+  "vibratoDepthMillihertz": 12000,
+  "vibratoRateMillihertz": 7000,
+  "durationFrames": 2400
+}

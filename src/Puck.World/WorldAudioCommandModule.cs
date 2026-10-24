@@ -32,9 +32,8 @@ namespace Puck.World;
 /// <c>mutate section:audio</c> grant has been revoked has its volume change refused, not applied; on accept,
 /// <c>world.save</c> folds the live gain into the document's <c>audio.masterGain</c>.</remarks>
 internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink link, WorldAudioDirector director, Audio.WorldAudioRenderService device, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
-    // The voice.babble debug/test trigger: no game-facing producer estimates a syllable count from dialogue/caption
-    // text yet (see WorldAudioDirector.TriggerBabble's own remarks), so this verb is the mechanism's one call site
-    // until a real one lands. <identityId> <syllableCount> <utteranceOrdinal>. Echoes its OWN confirmation (never
+    // The count-based identity-babble debug/test trigger. HUD text instead uses WorldHudSpeechFeed and the
+    // sample-frame TextSpeechSource. <identityId> <syllableCount> <utteranceOrdinal>. Echoes its OWN confirmation (never
     // voice.state's bracket text) so the two verbs' occurrences are never conflated by a piped proof.
     private CommandResult BabbleHandler(CommandContext context, WireArgs args) {
         if (
@@ -244,7 +243,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "voice.babble",
-            description: "DEBUG/TEST TRIGGER (no game-facing producer estimates syllables from text yet — see WorldAudioDirector.TriggerBabble): voice.babble <identityId> <syllableCount> <utteranceOrdinal> schedules one babbled utterance's syllable triggers off the delivered definition's authored voice profile, echoing what it scheduled — read voice.state separately for live status. A lever — always echoes.",
+            description: "Count-based identity-babble debug/test trigger: voice.babble <identityId> <syllableCount> <utteranceOrdinal> schedules one babbled utterance off the delivered identity's voice profile. HUD Text elements use their authored voice and the text-aware source instead. Echoes what it scheduled; read voice.state separately for live status. A lever — always echoes.",
             handler: BabbleHandler
         );
         yield return CommandDefinition.Verb(

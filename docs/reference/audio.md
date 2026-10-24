@@ -57,12 +57,9 @@ selectors, drives `ComputeTriggerTicks` for the utterance's tick schedule, and
 fires one seeded `VoiceSynth` trigger per syllable as its delay elapses
 (`AdvanceBabbleSchedule`) through the reserved `voice.babble` cue token
 (`WorldAudioCue.EventTokens`)—never one sustained tone for the whole
-utterance (proved by `WorldVoiceSynthTests.BabbleUtteranceFiresOneDistinctSeededTriggerPerSyllableBitIdenticalAcrossTwoFreshPairings`
-and `BabbleUtteranceNeverCollapsesToASingleSustainedToneForMultipleSyllables`). `voice.state`/
-`voice.babble` are its read-back/debug-trigger verbs. Two things stay open,
-both later work outside this wiring: no producer yet estimates an utterance's
-syllable count from dialogue/caption text (a presentation/content concern),
-and a babbling identity has no live-body correlation yet, so every syllable
+utterance. `voice.state`/`voice.babble` are its read-back/debug-trigger verbs.
+HUD text uses the text-aware source below rather than estimating a syllable
+count. A babbling identity has no live-body correlation yet, so every syllable
 voices listener-placed rather than at a resolved world position—the same
 simplification `WorldAudioDirector.SubmitEmbellishment` already takes for a
 fire-time-chosen patch with no world site.
@@ -73,6 +70,64 @@ else. In particular, `Puck.Audio` parses no document—a `puck.synthesizer-patch
 patch crosses into the mixer's `VoicePatch` struct through the host's patch
 factory, which stays in `Puck.World` alongside the rest of the presentation glue (the tune host, the
 render device) documented in [`Puck.World`'s Audio/ folder](../../src/Puck.World/Audio/README.md).
+
+## Text speech
+
+A HUD `Text` element may author a `voice`, reusing `WorldVoiceProfile` and a
+declared `patches` row referencing a `puck.synthesizer-patch.v1` document:
+
+```puck
+{ id: "note", kind: Text, rect { x: 0, y: 0, width: 1, height: 1 }, style: Primary,
+  "template": "{state.guide.note}",
+  voice { patchId: "gallery-guide", cadenceTicks: 16, pitchThousandths: 1100, formantThousandths: 1150, paceThousandths: 1250 } }
+```
+
+The patch owns oscillator, pitch, envelope, sweep and vibrato. The voice's
+`pitchThousandths` scales that pitch; `formantThousandths` shifts vowel
+resonances; `paceThousandths` scales speed. Each scale is 250..4000, with
+1000 neutral. `cadenceTicks` is 1..240 ticks at the audio clock's 240 Hz,
+independent of the world's simulation rate. One character's interval is
+`cadenceTicks * 200 * 1000 / paceThousandths` audio frames, using integer
+division at 48 kHz.
+
+`WorldHudSpeechFeed` observes the visible panels. A visible arrival, resolved
+text change or voice change speaks once; a hidden, removed or empty element
+stops. Literal `text`, `binding` and `template` resolve through the same HUD
+binding resolver and template grammar the screen uses. The debug guide's note
+and the nearby map sign use this hook in `worlds/debug/guide.puck`, behind
+the existing `addonHud` toggle. The sign reads the same directions the map
+board embosses, in a lower voice.
+
+`TextSpeechSource` pulls the existing `VoiceSynth` at exact character
+boundaries. Each Unicode scalar has an interval: vowels select two band-pass
+formants (Y uses I); consonants add a short seeded noise onset to a neutral
+vowel. Digits use that neutral syllable. Spaces and other non-alphanumeric
+characters rest; comma/semicolon/colon rest for two intervals, sentence
+punctuation and newline for three. A syllable releases within three quarters
+of its interval, leaving a quiet tail even between adjacent letters. Noise
+seeds derive from the text and character ordinal. No wall clock, frame delta
+or utterance history enters the schedule or samples. The director binds the
+source into its existing mixer as listener-placed speech, with four concurrent
+utterances; a fifth replaces the oldest slot. `voice.state` adds `textStarted`
+and `textSources` to its read-back.
+
+The operator verb `audio.render <panelId> <elementId> <output.wav>` exports a fresh utterance
+through the same source as 48 kHz stereo s16 PCM, without a device. It resolves
+the live text but ignores panel visibility, so a headless World can render a
+hidden guide or sign. It exports the voice before the mixer's master gain and
+spatialization. For example, in a debug World:
+
+```text
+body.pose spawn:shape-sphere 0
+world.wait 4
+audio.render guide note speech-guide.wav
+audio.render gallery-sign directions speech-sign.wav
+```
+
+Two exports of unchanged text and voice are byte-identical. The Windows
+`WorldAudioRenderService` remains the device governor; offline export drives
+the source directly through `WorldSpeechRenderer`. Authored syllable sample
+sets remain the second source, tracked in [open items](../plans/open-items.md).
 
 ## Layering
 

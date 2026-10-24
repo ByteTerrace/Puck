@@ -132,6 +132,8 @@ public sealed record WorldHudFrameCandidate(WorldFrameSource Source, [property: 
 /// <see cref="WorldHudCapacity.MaxFrameSources"/>.</param>
 /// <param name="FadeSeconds">How long a <see cref="WorldHudElementKind.Frame"/> element cross-fades when its winning
 /// candidate changes; 0 cuts. Finite and non-negative.</param>
+/// <param name="Voice">Optional Text voice. Speaks the resolved literal, binding or template once on visible
+/// arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
     string Id,
@@ -147,7 +149,8 @@ public sealed record WorldHudElement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Radius = 0f,
     float Opacity = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHudFrameCandidate>? Sources = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float FadeSeconds = 0f
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float FadeSeconds = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldVoiceProfile? Voice = null
 ) {
     /// <summary>Gets the frame candidates in rank order — <see cref="Sources"/>, else the bare <see cref="Source"/>
     /// as one unconditional entry, else none. The one shape every reader of a frame element's sources takes.</summary>

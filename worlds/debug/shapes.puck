@@ -20,6 +20,7 @@
 let galleryStorey = 4.5
 let galleryPopulation = 43
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
+let galleryMapDirections = "stairs and lift north-west: press CALL, or gallery.lift <level>"
 
 // The axis of the painting wing's endless fall (paintings.puck): a painting in level 0's floor under its twin in the
 // ceiling at (fallX, fallZ). A body that falls out of the ceiling twin needs 2.2 m of air over it, so level 1's slab is
@@ -172,7 +173,7 @@ template signPrototypes() {
       }
       textRuns: map(concat(
         [{ text: "SHAPE GALLERY", position [0, 2.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
-        [{ text: "stairs and lift north-west: press CALL, or gallery.lift <level>", position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
+        [{ text: galleryMapDirections, position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
         map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
         map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
         [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],

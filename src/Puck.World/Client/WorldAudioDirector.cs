@@ -53,7 +53,7 @@ namespace Puck.World.Client;
 /// plan serializes on one reentrant gate. The gate is uncontended in steady state (reconciles are rare, a mix block
 /// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
 /// </remarks>
-internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
+public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
     /// <summary>The <c>speaker:</c>/<c>placement:</c> derived-plan key prefixes' sibling for a music-layer bed —
     /// the tune id follows.</summary>
     private const string MusicLayerKeyPrefix = "musicLayer:";
@@ -1378,6 +1378,9 @@ internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudio
             m_mixer = mixer;
             m_machineBindingsDirty = true;
             ApplyMixerBindings();
+            foreach (var playback in m_textSpeech.Values) {
+                mixer.SetSource(key: playback.Key, source: playback.Source);
+            }
         }
     }
     /// <summary>The deterministic <c>audio.emitters</c> listing: one segment per derived emitter — id, key, kind,
@@ -1524,7 +1527,7 @@ internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudio
 
             return string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"[voice.state: identity={identityId} voice={voiceToken} scheduled={m_scheduledBabble.Count} live={liveCount} fired={m_babbleFiredTotal}]"
+                handler: $"[voice.state: identity={identityId} voice={voiceToken} scheduled={m_scheduledBabble.Count} live={liveCount} fired={m_babbleFiredTotal} textStarted={m_textSpeechStarted} textSources={m_textSpeech.Count}]"
             );
         }
     }
@@ -1543,6 +1546,9 @@ internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudio
             }
 
             m_machineBindings.Clear();
+            foreach (var playback in m_textSpeech.Values) {
+                m_mixer?.RemoveSource(key: playback.Key);
+            }
             m_mixer = null;
         }
     }
@@ -1582,6 +1588,7 @@ internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudio
                 seats: seats,
                 transforms: transforms
             ));
+            PublishTextSpeech(slab: slab);
             // Babble firings BEFORE transients — a syllable due this publish must already be in the pool by the
             // time transients emit.
             AdvanceBabbleSchedule(deltaSeconds: deltaSeconds);
@@ -1719,9 +1726,9 @@ internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudio
             );
             RetireDepartedKeys();
 
-            // The reserved transient pool is charged against the snapshot cap: the plan may only fill what cues never need.
-            if (m_plan.Count > (AudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)) {
-                Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(AudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({AudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
+            // Speech and cues publish before the plan, each with a bounded reserved pool.
+            if (m_plan.Count > ((AudioSnapshot.DefaultMaxEmitters - TransientCueCapacity) - SpeechCapacity)) {
+                Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {((AudioSnapshot.DefaultMaxEmitters - TransientCueCapacity) - SpeechCapacity)}-row plan budget ({AudioSnapshot.DefaultMaxEmitters}-row snapshot table minus {TransientCueCapacity} cue and {SpeechCapacity} speech slots) — the overflow renders silent]");
             }
 
             // Validate the WHOLE derived plan against the mixer's bounded registries at the compose
@@ -1906,9 +1913,9 @@ internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudio
     /// <see cref="WorldIdentityDefinition.Voice"/> selectors off the delivered definition, drives
     /// <see cref="VoiceBabbler.ComputeTriggerTicks"/> for the utterance's cadence-jittered per-syllable tick
     /// schedule, and stages one <see cref="FireBabbleSyllable"/> firing per syllable at its own deterministic delay
-    /// — never one sustained tone for the whole utterance (see the type remarks). Producing the syllable count from
-    /// dialogue/caption text, and correlating the babbling identity to a live body for spatial placement, are both
-    /// later work: every syllable voices listener-placed, the same simplification <see cref="SubmitEmbellishment"/>
+    /// — never one sustained tone for the whole utterance (see the type remarks). HUD text instead drives
+    /// <see cref="SpeakText"/>'s audio-frame source. Correlating the babbling identity to a live body for spatial placement
+    /// remains later work: every syllable voices listener-placed, the same simplification <see cref="SubmitEmbellishment"/>
     /// already takes for a fire-time-chosen patch with no world site.</summary>
     /// <param name="identityId">The babbling identity — must match the delivered definition's own
     /// <see cref="WorldIdentityDefinition.Id"/> (a world carries at most one). Any other value, an undeclared
