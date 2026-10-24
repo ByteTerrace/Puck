@@ -470,7 +470,7 @@ public sealed class McpInteropTests {
             }
         }
     }
-    // Law: puck_world_start boots the checkout's debug world headless from its Release build and answers once the World
+    // Law: puck_world_start boots the checkout's debug world headless from the build of its current sources and answers once the World
     // accepts an attachment; host.log reads that World's stderr, its boot line saying no device is open and the line a
     // world.at pin wrote, anchored to the tick it ran at; puck_world_stop quits it and reports its exit. A World the
     // adapter did not start is listed as not started, its stop is refused and it keeps answering; a document outside
