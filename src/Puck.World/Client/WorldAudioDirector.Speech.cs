@@ -14,25 +14,17 @@ public sealed partial class WorldAudioDirector {
     public void SpeakText(string key, WorldVoiceProfile voice, string text) {
         lock (m_gate) {
             StopText(key: key);
-            if (voice is not { PatchId: { } patchId, CadenceTicks: { } cadence }) {
+            if ((m_definition is null) || !Puck.World.Audio.WorldTextSpeechFactory.TryCreate(definition: m_definition, error: out _, source: out var source, text: text, voice: voice)) {
                 return;
             }
-            foreach (var (id, patch) in m_patchSet) {
-                if (!string.Equals(a: id, b: patchId, comparisonType: StringComparison.Ordinal)) {
-                    continue;
-                }
-                if (m_textSpeech.Count == SpeechCapacity) {
-                    StopText(key: m_textSpeech.MinBy(keySelector: pair => pair.Value.Id).Key);
-                }
-                var source = new TextSpeechSource(text, patch, cadence, voice.PitchThousandths,
-                    voice.FormantThousandths, voice.PaceThousandths);
-                var playback = new SpeechPlayback(Id: m_nextEmitterId++, Key: AudioSourceKey.Speech(id: key), Source: source);
+            if (m_textSpeech.Count == SpeechCapacity) {
+                StopText(key: m_textSpeech.MinBy(keySelector: pair => pair.Value.Id).Key);
+            }
+            var playback = new SpeechPlayback(Id: m_nextEmitterId++, Key: AudioSourceKey.Speech(id: key), Source: source!);
 
-                m_textSpeech.Add(key: key, value: playback);
-                m_mixer?.SetSource(key: playback.Key, source: source);
-                m_textSpeechStarted++;
-                return;
-            }
+            m_textSpeech.Add(key: key, value: playback);
+            m_mixer?.SetSource(key: playback.Key, source: source!);
+            m_textSpeechStarted++;
         }
     }
     /// <summary>Stops a hidden, removed or changed HUD element's current utterance.</summary>

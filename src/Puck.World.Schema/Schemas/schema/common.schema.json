@@ -7144,7 +7144,7 @@
       "title": "WorldHudFrameCandidate"
     },
     "WorldVoiceProfile": {
-      "description": "A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.",
+      "description": "A character voice over an existing synth patch or an authored syllable sample set. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.",
       "type": [
         "object",
         "null"
@@ -7180,6 +7180,14 @@
           "description": "Speech speed, 250..4000; 2000 halves each character\u0027s interval.",
           "type": "integer",
           "default": 1000
+        },
+        "sampleSet": {
+          "description": "Optional syllable-bank document path, replacing synthesis for HUD text.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,

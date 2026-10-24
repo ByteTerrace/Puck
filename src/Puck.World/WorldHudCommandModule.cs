@@ -64,7 +64,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         }
 
         var voiceText = ((element.Voice is { } voice)
-            ? $" voice=patch:{voice.PatchId}/cadence:{voice.CadenceTicks}/pitch:{voice.PitchThousandths}/formant:{voice.FormantThousandths}/pace:{voice.PaceThousandths}"
+            ? $" voice={((voice.SampleSet is { } set) ? $"samples:{set}" : $"patch:{voice.PatchId}")}/cadence:{voice.CadenceTicks}/pitch:{voice.PitchThousandths}/formant:{voice.FormantThousandths}/pace:{voice.PaceThousandths}"
             : string.Empty);
 
         return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}{voiceText}]";

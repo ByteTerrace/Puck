@@ -30154,6 +30154,14 @@
                           "description": "Speech speed, 250..4000; 2000 halves each character\u0027s interval.",
                           "type": "integer",
                           "default": 1000
+                        },
+                        "sampleSet": {
+                          "description": "Optional syllable-bank document path, replacing synthesis for HUD text.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "additionalProperties": false,

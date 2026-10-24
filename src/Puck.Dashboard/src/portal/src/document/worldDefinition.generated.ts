@@ -13094,7 +13094,7 @@ export type WorldViewSlot = {
 };
 
 /**
- * A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.
+ * A character voice over an existing synth patch or an authored syllable sample set. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.
  */
 export type WorldVoiceProfile = {
   /**
@@ -13117,6 +13117,10 @@ export type WorldVoiceProfile = {
    * Speech speed, 250..4000; 2000 halves each character's interval.
    */
   paceThousandths?: number;
+  /**
+   * Optional syllable-bank document path, replacing synthesis for HUD text.
+   */
+  sampleSet?: string | null;
 };
 
 /**

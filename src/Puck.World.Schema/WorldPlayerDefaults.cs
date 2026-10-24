@@ -91,7 +91,7 @@ public sealed record WorldIdentityDefinition(
 /// <param name="DeviceState">The row containing the device id.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldControllerStateSlots(CellName MachineState, CellName DeviceState);
-/// <summary>A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible
+/// <summary>A character voice over an existing synth patch or an authored syllable sample set. HUD Text elements speak their resolved text on visible
 /// arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame
 /// schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.</summary>
 /// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve when declared).</param>
@@ -100,5 +100,6 @@ public sealed record WorldControllerStateSlots(CellName MachineState, CellName D
 /// <param name="PitchThousandths">Pitch relative to the patch, 250..4000; 1000 leaves it unchanged.</param>
 /// <param name="FormantThousandths">Vowel formant frequency scale, 250..4000.</param>
 /// <param name="PaceThousandths">Speech speed, 250..4000; 2000 halves each character's interval.</param>
+/// <param name="SampleSet">Optional syllable-bank document path, replacing synthesis for HUD text.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldVoiceProfile(string? PatchId = null, int? CadenceTicks = null, int PitchThousandths = 1000, int FormantThousandths = 1000, int PaceThousandths = 1000);
+public sealed record WorldVoiceProfile(string? PatchId = null, int? CadenceTicks = null, int PitchThousandths = 1000, int FormantThousandths = 1000, int PaceThousandths = 1000, string? SampleSet = null);

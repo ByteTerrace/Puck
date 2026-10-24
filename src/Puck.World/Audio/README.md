@@ -153,8 +153,12 @@ with vowel formants, consonant noise onsets and punctuation rests.
 `audio.render <panelId> <elementId> <output.wav>` exposes it on headless and
 presented Worlds. [The audio reference](../../../docs/reference/audio.md#text-speech)
 owns the document shape, units and recipe. The debug guide and map sign are
-the live authored examples in `worlds/debug/guide.puck`. Authored sample sets
-remain the second slice; no sample-source document is admitted yet.
+the live authored examples in `worlds/debug/guide.puck`. The guide uses synthesis;
+the sign names an authored sample set. `WorldTextSpeechFactory` resolves either
+source for live playback and exports. `WorldVoiceSampleLoader` reads the set
+and its six document-relative WAV assets, decoded by `Puck.Assets.PcmWave`.
+`TextSpeechSource` selects the same vowel/consonant classes and resamples with
+integer pitch/rate interpolation inside the existing character intervals.
 
 ## Verifying
 

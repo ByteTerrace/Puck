@@ -85,4 +85,43 @@ public sealed class TextSpeechTests {
     [Theory]
     public void InvalidVoiceParametersRefuse(int cadence, int pitch, int formant, int pace) =>
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new TextSpeechSource(cadenceTicks: cadence, formantThousandths: formant, paceThousandths: pace, patch: Patch, pitchThousandths: pitch, text: "a"));
+    [Fact]
+    public void SampledSpeechSharesTheSynthScheduleAndMapsClassesWithExactRests() {
+        var bank = Enumerable.Range(count: 6, start: 1).Select(selector: value => Enumerable.Repeat(count: 4800, element: ((short)(value * 1000))).ToArray()).ToArray();
+        const string Text = "AEiyouB7, !";
+        var first = new TextSpeechSource(Text, default, 16, pitchThousandths: 1200, paceThousandths: 1250, samples: bank);
+        var second = new TextSpeechSource(Text, default, 16, pitchThousandths: 1200, paceThousandths: 1250, samples: bank);
+        var synth = new TextSpeechSource(Text, Patch, 16, pitchThousandths: 1200, paceThousandths: 1250);
+
+        Assert.Equal(synth.Schedule, first.Schedule);
+        var pcm = Render(blockSize: 256, source: first);
+
+        Assert.Equal(pcm, Render(blockSize: 97, source: second));
+        int[] classes = [1, 2, 3, 3, 4, 5, 6, 6];
+
+        for (var index = 0; (index < classes.Length); index++) {
+            Assert.Equal(((short)(classes[index] * 1000)), pcm[(((int)first.Schedule[index].StartFrame) * 2)]);
+        }
+        foreach (var syllable in first.Schedule) {
+            var tail = pcm.AsSpan((((int)(syllable.StartFrame + (syllable.Rest ? 0 : ((syllable.Frames * 3) / 4)))) * 2),
+                ((syllable.Rest ? syllable.Frames : (syllable.Frames - ((syllable.Frames * 3) / 4))) * 2));
+
+            Assert.True(condition: (tail.IndexOfAnyExcept(value: ((short)0)) < 0));
+        }
+    }
+    [Fact]
+    public void SamplePitchAndBankRateChangePlaybackWithoutChangingCadence() {
+        var bank = Enumerable.Range(count: 6, start: 0).Select(selector: _ => Enumerable.Range(count: 300, start: 0).Select(selector: value => ((short)(value * 50))).ToArray()).ToArray();
+        var normal = new TextSpeechSource("a", default, 16, samples: bank, sampleRateThousandths: 1000);
+        var high = new TextSpeechSource("a", default, 16, samples: bank, pitchThousandths: 2000, sampleRateThousandths: 1000);
+        var fast = new TextSpeechSource("a", default, 16, samples: bank, sampleRateThousandths: 2000);
+
+        Assert.Equal(normal.Schedule, high.Schedule);
+        var original = Render(blockSize: 99, source: normal);
+        var pitched = Render(blockSize: 99, source: high);
+
+        Assert.NotEqual(actual: pitched, expected: original);
+        Assert.Equal(pitched, Render(blockSize: 73, source: fast));
+        Assert.Throws<ArgumentException>(testCode: () => new TextSpeechSource("a", default, 16, samples: []));
+    }
 }

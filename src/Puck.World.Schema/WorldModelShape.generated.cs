@@ -6190,6 +6190,7 @@ public static partial class WorldModelShape {
                 M("pitchThousandths", typeof(global::System.Int32), typeof(global::Puck.World.WorldVoiceProfile), "PitchThousandths", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).PitchThousandths),
                 M("formantThousandths", typeof(global::System.Int32), typeof(global::Puck.World.WorldVoiceProfile), "FormantThousandths", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).FormantThousandths),
                 M("paceThousandths", typeof(global::System.Int32), typeof(global::Puck.World.WorldVoiceProfile), "PaceThousandths", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).PaceThousandths),
+                M("sampleSet", typeof(global::System.String), typeof(global::Puck.World.WorldVoiceProfile), "SampleSet", Read | Write, static value => ((global::Puck.World.WorldVoiceProfile)value).SampleSet),
             ],
             []),
         T(typeof(global::System.Collections.Generic.IDictionary<global::System.String, global::System.Text.Json.JsonElement>), true, JsonTypeInfoKind.Dictionary, typeof(global::System.Text.Json.JsonElement),

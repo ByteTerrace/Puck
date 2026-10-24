@@ -222,25 +222,21 @@ public static class WorldDocumentPaths {
     /// <param name="targetDocumentPath">The receiving document's resolved name or path.</param>
     public static void RelocateDocumentFields(JsonObject module, string sourceDocumentPath, string targetDocumentPath, WorldDocumentOrigins? origins = null) {
         ArgumentNullException.ThrowIfNull(argument: module);
-
         foreach (var field in FileFields) {
-            JsonNode? holder = module;
+            RelocateSection(depth: 0, field: field, node: module, origins: origins, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
+        }
+    }
 
-            foreach (var segment in field.Section) {
-                holder = (holder as JsonObject)?[segment];
-            }
-
-            switch (holder) {
-                case JsonArray rows:
-                    foreach (var row in rows) {
-                        if (row is JsonObject item) {
-                            RelocateMember(member: field.JsonName, row: item, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, origins: origins);
-                        }
-                    }
-                    break;
-                case JsonObject row:
-                    RelocateMember(member: field.JsonName, row: row, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, origins: origins);
-                    break;
+    // Sections may contain arrays (HUD panels and their elements). Only registered paths are walked;
+    // similarly named keys inside arbitrary machine configuration or other payloads stay untouched.
+    private static void RelocateSection(JsonNode? node, FileField field, int depth, string sourceDocumentPath, string targetDocumentPath, WorldDocumentOrigins? origins) {
+        if (node is JsonArray rows) {
+            foreach (var row in rows) { RelocateSection(depth: depth, field: field, node: row, origins: origins, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath); }
+        } else if (node is JsonObject row) {
+            if (depth == field.Section.Length) {
+                RelocateMember(row, field.JsonName, sourceDocumentPath, targetDocumentPath, origins);
+            } else {
+                RelocateSection(row[field.Section[depth]], field, (depth + 1), sourceDocumentPath, targetDocumentPath, origins);
             }
         }
     }
@@ -250,6 +246,8 @@ public static class WorldDocumentPaths {
     private sealed record FileField(Type Owner, string Member, string JsonName, string[] Section);
 
     private static readonly FileField[] FileFields = [
+        new(typeof(WorldVoiceProfile), nameof(WorldVoiceProfile.SampleSet), "sampleSet", ["identity", "voice"]),
+        new(typeof(WorldVoiceProfile), nameof(WorldVoiceProfile.SampleSet), "sampleSet", ["hud", "panels", "elements", "voice"]),
         new(typeof(WorldMusicRow), nameof(WorldMusicRow.Source), "source", ["music"]),
         new(typeof(Puck.State.TableRow), nameof(Puck.State.TableRow.Source), "source", ["tables"]),
         new(typeof(WorldTune), nameof(WorldTune.Source), "source", ["tunes"]),
@@ -266,7 +264,7 @@ public static class WorldDocumentPaths {
     private static void RelocateMember(JsonObject row, string member, string sourceDocumentPath, string targetDocumentPath, WorldDocumentOrigins? origins) {
         switch (row[member]) {
             case JsonValue value:
-                if (Relocated(value: value, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, origins: origins) is { } relocated) {
+                if (Relocated(origins: origins, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, value: value) is { } relocated) {
                     row[member] = relocated;
                 }
                 break;
@@ -274,7 +272,7 @@ public static class WorldDocumentPaths {
                 for (var index = 0; (index < paths.Count); index++) {
                     if (
                         (paths[index] is JsonValue item) &&
-                        (Relocated(value: item, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, origins: origins) is { } relocatedItem)
+                        (Relocated(origins: origins, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath, value: item) is { } relocatedItem)
                     ) {
                         paths[index] = relocatedItem;
                     }

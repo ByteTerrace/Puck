@@ -67,7 +67,7 @@ hud {
         ]
       }
       elements [
-        { id: "directions", kind: Text, rect { x: 0.02, y: 0.1, width: 0.96, height: 0.8 }, style: Primary, text: galleryMapDirections, voice { patchId: "gallery-guide", cadenceTicks: 18, pitchThousandths: 800, formantThousandths: 850, paceThousandths: 1100 } }
+        { id: "directions", kind: Text, rect { x: 0.02, y: 0.1, width: 0.96, height: 0.8 }, style: Primary, text: galleryMapDirections, voice { sampleSet: "voices/gallery.sample-set.json", cadenceTicks: 18, pitchThousandths: 800, paceThousandths: 1100 } }
       ]
     }
   ]
