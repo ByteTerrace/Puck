@@ -215,6 +215,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             );
 
             return new ContactResolution(
+                RequiredStepHeight: FixedQ4816.Max(x: resolution.RequiredStepHeight, y: neighbourResolution.RequiredStepHeight),
                 Unproved: (resolution.Unproved || neighbourResolution.Unproved),
                 Grounded: (resolution.Grounded || neighbourResolution.Grounded),
                 ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero)

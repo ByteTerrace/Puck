@@ -997,9 +997,9 @@ public sealed partial class WorldBody {
             return facts;
         }
     }
-    /// <summary>Gets the latched resolved non-walkable contact normal — <see cref="FixedVector3.Zero"/> when nothing
+    /// <summary>Gets the latched resolved obstruction normal — <see cref="FixedVector3.Zero"/> when nothing
     /// obstructs the body, a unit surface normal otherwise. A walkable push (the ground, a ramp) never sets this —
-    /// only a contact whose alignment fails the grounded test does, which is exactly the witness
+    /// a steep contact or an approached edge does, even if the edge's normal lies in the walkable cone. This is the witness
     /// <see cref="ContactCount"/> cannot show: a body pushed by a vertical wall reads <see cref="ContactCount"/>
     /// <c>0</c> but a non-zero normal here, even while simultaneously standing (grounded) on the floor. Latched
     /// (see <see cref="UpdateObstructionWitness"/>) rather than a raw per-tick read: it survives a solver tick that

@@ -419,9 +419,15 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   apply-time capacity gate.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
-  empty): spheres and circular cylinders have closest-point contact, while
-  other finite primitives use oriented boxes. The Moth's capsule has a 0.35 m
-  radius and is 2.06 m tall; capsule/box edges remain conservative. Every
+  empty): spheres, circular cylinders and Boxes have surface contact. Box
+  fillets derive from `SdfSolidGeometry.BoxCornerRadius`; chamfered Boxes use
+  conservative inside rounded boxes with the outer face planes retained;
+  deep chamfers use three inside rounded axis rods retaining surviving face
+  centres, with a smaller support footprint. Other finite primitives use
+  oriented bounds. The Moth's capsule has a 0.35 m radius and is 2.06 m tall;
+  sharp and rounded boxes use closest segment/box features. Lateral edge/rim
+  approach requires enough step height to clear the top support plane;
+  resting and falling still meet the rounded surface. Every
   boolean carve collides as the uncarved shape. Build a doorway,
   window or stairwell as a union of boxes around the opening, never a
   subtraction, and keep 2.4 m of headroom over every tread and landing (her

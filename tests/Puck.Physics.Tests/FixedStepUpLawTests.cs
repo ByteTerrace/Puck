@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.Physics.Tests;
 
 /// <summary>The step-up law over the analytic solver, whose box contact reads a riser's face as a wall: a blocked step
-/// lands on a riser no taller than the step height at its full planar reach and pace, and every other blocked step
+/// lands on a riser no taller than the step height at its full planar reach, and every other blocked step
 /// stands.</summary>
 public sealed class FixedStepUpLawTests {
     // cos(60 degrees), the shipped walkable slope.
@@ -30,18 +30,19 @@ public sealed class FixedStepUpLawTests {
                 ContactSkin: FixedQ4816.Zero,
                 GroundedThreshold: GroundedThreshold,
                 MaxIterations: 4
-            ).Resolve(
+            ).ResolveSweep(
                 colliders: m_colliders,
                 dynamicColliders: [],
                 orientation: FixedQuaternion.Identity,
                 position: ref position,
+                previousPosition: in previousPosition,
                 up: FixedVector3.UnitY,
                 velocity: ref velocity,
                 volumes: Capsule
             );
     }
 
-    // A box riser spanning x 1..2 and the given height; a body at x 0.65 stands against its face.
+    // A box riser spanning x 1..2 and the given height; a capsule at x 0.75 is just clear of its lower edge.
     private static FixedStaticCollider Riser(double height) => FixedStaticCollider.AxisAlignedBox(
         center: Vector(x: 1.5d, y: (height / 2d), z: 0d),
         halfExtents: Vector(x: 0.5d, y: (height / 2d), z: 2d)
@@ -51,11 +52,11 @@ public sealed class FixedStepUpLawTests {
         Y: FixedQ4816.FromDouble(value: y),
         Z: FixedQ4816.FromDouble(value: z)
     );
-    // Runs the ordinary step from the face 5 cm into the riser, then the step-up. A level step is asserted blocked
+    // Runs the ordinary step 5 cm toward the riser, then the step-up. A level step is asserted blocked
     // first; a rising one may clear the riser's top, and the step-up must still decline it.
     private static bool Step(FixedStaticCollider[] colliders, double rise, FixedQ4816 stepHeight, out FixedStepUpResult result) {
-        var start = Vector(x: 0.65d, y: 0d, z: 0d);
-        var intended = Vector(x: 0.7d, y: rise, z: 0d);
+        var start = Vector(x: 0.75d, y: 0d, z: 0d);
+        var intended = Vector(x: 0.8d, y: rise, z: 0d);
         var velocity = Vector(x: 1.5d, y: 0d, z: 0d);
         var step = new StaticStep(colliders: colliders);
         var blocked = intended;
@@ -70,6 +71,7 @@ public sealed class FixedStepUpLawTests {
         }
 
         return FixedStepUp.TryStep(
+            requiredStepHeight: resolution.RequiredStepHeight,
             blocked: in blocked,
             intended: in intended,
             result: out result,
@@ -82,16 +84,17 @@ public sealed class FixedStepUpLawTests {
     }
 
     [Fact]
-    public void ABlockedStepLandsOnALowRiserAtItsFullReachAndPace() {
+    public void ABlockedStepLandsOnALowRisersSurfaceAtItsFullReach() {
         Assert.True(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0d, stepHeight: StepHeight, result: out var result));
         Assert.True(condition: result.Resolution.Grounded);
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.7d), actual: result.Position.X);
-        Assert.InRange(
-            actual: result.Position.Y,
-            high: FixedQ4816.FromDouble(value: 0.102d),
-            low: FixedQ4816.FromDouble(value: 0.099d)
-        );
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.5d), actual: result.Velocity.X);
+        // A shallow edge landing depenetrates along its normal by at most one bisection interval.
+        Assert.InRange(actual: ((double)result.Position.X), low: 0.799d, high: 0.8001d);
+        // The foot is still outside the riser: its capsule lands on the edge, not on an inflated box top.
+        var delta = ((result.Position + Vector(x: 0d, y: 0.35d, z: 0d)) - Vector(x: 1d, y: 0.1d, z: 0d));
+
+        Assert.InRange(actual: ((double)delta.Length), low: 0.3498d, high: 0.3502d);
+        Assert.InRange(actual: ((double)result.Position.Y), low: 0.02d, high: 0.04d);
+        Assert.True(condition: (result.Velocity.X > FixedQ4816.Zero));
     }
     [Fact]
     public void ABlockedStepStandsAgainstATallRiserARisingStepASteepFaceAndAZeroStepHeight() {
@@ -99,6 +102,7 @@ public sealed class FixedStepUpLawTests {
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.5d)], rise: 0d, stepHeight: StepHeight, result: out _));
         // No step height: never steps.
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0d, stepHeight: FixedQ4816.Zero, result: out _));
+        Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0d, stepHeight: FixedQ4816.FromDouble(value: 0.05d), result: out _));
         // A rising step (a jump) lowers only to where it would have ended, above the riser's top.
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0.25d, stepHeight: StepHeight, result: out _));
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0.4d, stepHeight: StepHeight, result: out _));
