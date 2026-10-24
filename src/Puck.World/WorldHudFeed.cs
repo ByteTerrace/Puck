@@ -22,7 +22,7 @@ namespace Puck.World;
 /// cross-fades on the presentation clock for the element's <c>fadeSeconds</c>, both keys staying active until the
 /// fade completes. Fade state lives per (panel, element, seat) inside the build, so a steady frame allocates nothing.
 /// </summary>
-internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts, WorldOverlayFrameSources frameSources, WorldSeatViewports viewports) {
+internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts, WorldOverlayFrameSources frameSources, WorldSeatViewports viewports, WorldHudSpeechFeed speech) {
     private readonly WorldClient m_client = client;
     private readonly WorldOverlayFacts m_facts = facts;
     private readonly WorldOverlayFrameSources m_frameSources = frameSources;
@@ -169,6 +169,8 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
             }
 
             var build = m_seatBuilds[slot]!;
+
+            speech.Observe(panel: panel, seat: slot);
 
             RankFrames(
                 build: build,
@@ -348,6 +350,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
     /// produced frame (the render thread's <c>FeedTick</c>).</summary>
     public void Tick() {
         m_frameSources.BeginGeneration();
+        speech.BeginFrame();
 
         try {
             var revision = m_client.DefinitionRevision;
@@ -403,6 +406,8 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
 
                     var build = m_worldPanels[index];
 
+                    speech.Observe(panel: m_worldSources[index], seat: -1);
+
                     RankFrames(
                         build: build,
                         nowSeconds: nowSeconds
@@ -425,6 +430,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 )
             ));
         } finally {
+            speech.EndFrame();
             m_frameSources.EndGeneration();
         }
     }

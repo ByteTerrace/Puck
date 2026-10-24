@@ -114,7 +114,8 @@ public static class WorldSemanticValidator {
             loweredJson: composed,
             machines: machines,
             source: loweredJson,
-            sourceMap: sourceMap
+            sourceMap: sourceMap,
+            sourcePath: sourcePath
         ));
     /// <summary>Composes <paramref name="loweredJson"/>'s <c>basis</c>/<c>imports</c> graph, rooted beside
     /// <paramref name="sourcePath"/>, through <see cref="PuckDocumentComposer"/>, and reports a refused composition
@@ -187,8 +188,9 @@ public static class WorldSemanticValidator {
     /// the document <paramref name="sourceMap"/> indexes; a refusal's path is traced back into it
     /// (<see cref="WorldDocumentBasis.TraceToLayer"/>), so a basis's or an import's rows cannot shift the line a
     /// refusal lands on. <see langword="null"/> when <paramref name="loweredJson"/> is the source's own document.</param>
+    /// <param name="sourcePath">The root document's path, when known, so referenced assets resolve beside it.</param>
     /// <returns>True if the world passed semantic validation without errors.</returns>
-    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", JsonObject? source = null) {
+    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", JsonObject? source = null, string? sourcePath = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -215,6 +217,10 @@ public static class WorldSemanticValidator {
                 span: SourceSpan.None
             );
             return false;
+        }
+
+        if (sourcePath is not null) {
+            definition = definition with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: sourcePath) };
         }
 
         var errors = new List<string>();

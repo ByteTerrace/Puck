@@ -91,14 +91,14 @@ public sealed record WorldIdentityDefinition(
 /// <param name="DeviceState">The row containing the device id.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldControllerStateSlots(CellName MachineState, CellName DeviceState);
-/// <summary>The document-authored selectors driving an identity's synthesized voice babble (text renders as babble
-/// plus caption; there is no spoken-audio asset). Both fields select into already-declared audio vocabulary rather
-/// than carry raw pitch/timbre floats — <paramref name="PatchId"/> names the <see cref="WorldPatch"/> row voicing
-/// each syllable (pitch/timbre/envelope already live on that patch), and <paramref name="CadenceTicks"/> is the
-/// tick-integer base spacing <c>Puck.Audio.Simulation.VoiceBabbler</c> jitters around. Either field left
-/// <see langword="null"/>, or the whole profile absent from <see cref="WorldIdentityDefinition.Voice"/>, means the
-/// identity has no authored voice yet; nothing babbles for it.</summary>
+/// <summary>A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible
+/// arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame
+/// schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.</summary>
 /// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve when declared).</param>
-/// <param name="CadenceTicks">The base inter-syllable tick spacing (must be positive when declared).</param>
+/// <param name="CadenceTicks">The base spacing in 240 Hz audio ticks: 1..240 for HUD text, any positive value
+/// for count-based identity babble.</param>
+/// <param name="PitchThousandths">Pitch relative to the patch, 250..4000; 1000 leaves it unchanged.</param>
+/// <param name="FormantThousandths">Vowel formant frequency scale, 250..4000.</param>
+/// <param name="PaceThousandths">Speech speed, 250..4000; 2000 halves each character's interval.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldVoiceProfile(string? PatchId = null, int? CadenceTicks = null);
+public sealed record WorldVoiceProfile(string? PatchId = null, int? CadenceTicks = null, int PitchThousandths = 1000, int FormantThousandths = 1000, int PaceThousandths = 1000);

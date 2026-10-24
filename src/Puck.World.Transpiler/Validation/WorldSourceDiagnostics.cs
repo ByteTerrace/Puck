@@ -180,7 +180,7 @@ public static class WorldSourceDiagnostics {
 
                 if (sourcePath is not null) {
                     if (WorldSemanticValidator.TryComposeWorld(output.Json, output.SourceMap, diagnostics, sourcePath, out var composedWorld, machines: machines, catalogFingerprint: catalogFingerprint, sourceCompilation: sourceCompilation)) {
-                        WorldSemanticValidator.ValidateWorld(composedWorld, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint, source: output.Json);
+                        WorldSemanticValidator.ValidateWorld(composedWorld, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint, source: output.Json, sourcePath: sourcePath);
                         PuckLinter.LintReferences(catalogFingerprint: catalogFingerprint, composed: composedWorld, diagnostics: diagnostics, document: output.Json, machines: machines, sourceMap: output.SourceMap, sourcePath: sourcePath);
                     }
                 } else if ((output.Json["basis"] is null) && (output.Json["imports"] is null)) {
@@ -232,7 +232,8 @@ public static class WorldSourceDiagnostics {
                 loweredJson: composed,
                 machines: machines,
                 source: json,
-                sourceMap: sourceMap
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
             );
         }
 

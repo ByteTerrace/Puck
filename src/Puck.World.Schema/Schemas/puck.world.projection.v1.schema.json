@@ -30004,6 +30004,49 @@
                       "description": "How long a Frame element cross-fades when its winning candidate changes; 0 cuts. Finite and non-negative.",
                       "type": "number",
                       "default": 0
+                    },
+                    "voice": {
+                      "description": "Optional Text voice. Speaks the resolved literal, binding or template once on visible arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "patchId": {
+                          "description": "The referenced Name (must resolve when declared).",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "cadenceTicks": {
+                          "description": "The base spacing in 240 Hz audio ticks: 1..240 for HUD text, any positive value for count-based identity babble.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "pitchThousandths": {
+                          "description": "Pitch relative to the patch, 250..4000; 1000 leaves it unchanged.",
+                          "type": "integer",
+                          "default": 1000
+                        },
+                        "formantThousandths": {
+                          "description": "Vowel formant frequency scale, 250..4000.",
+                          "type": "integer",
+                          "default": 1000
+                        },
+                        "paceThousandths": {
+                          "description": "Speech speed, 250..4000; 2000 halves each character\u0027s interval.",
+                          "type": "integer",
+                          "default": 1000
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldVoiceProfile"
                     }
                   },
                   "required": [

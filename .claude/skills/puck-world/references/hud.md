@@ -58,6 +58,15 @@ an unbound gauge draws empty).
 `Panel`/`Strip`/`Chip`; `WorldHudStyleToken`: `Primary`/`Dim`/`Accent`/
 `Positive`/`Warning`/`Danger`.
 
+A Text element's optional `voice` is a `WorldVoiceProfile`: `patchId` and
+`cadenceTicks` plus integer `pitchThousandths`, `formantThousandths` and
+`paceThousandths` scales (1000 neutral). It speaks its resolved text once on
+visible arrival/change and stops on hiding, through `WorldHudSpeechFeed` and
+the existing audio director/mixer. `audio.render <panelId> <elementId>
+<output.wav>` exports that same source headlessly, ignoring visibility.
+[The audio reference](../../../../docs/reference/audio.md#text-speech) owns the
+units and articulation; `worlds/debug/guide.puck` authors the guide and map sign.
+
 `WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 4`,
 `MaxElementsPerPanel = 24`, `MaxSeatPanels = 1`, `MaxElementsPerSeatPanel =
 12`, and `MaxFrameSources = 8` structurally unique `Frame` sources per HUD
