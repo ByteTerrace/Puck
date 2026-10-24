@@ -659,8 +659,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             ScreensRaw = null,
         }));
 
-    /// <summary>Measures a proposed destination definition against this view's frozen render envelope.</summary>
-    public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
+    /// <summary>Counts the instances a proposed destination definition emits in this view's probed program shape.</summary>
+    public int MeasureCandidate(WorldDefinition candidate) =>
         WorldSessionRenderEnvelope.MeasureCandidate(
             candidate: Scoped(definition: candidate),
             bodyColor: m_bodyColor,

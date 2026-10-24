@@ -442,7 +442,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // world emitter's FIXED (candidate-independent) DynamicSlotCount reserves — the document side declares no dynamic
     // slots of its own (see WorldSdfDocumentEmitter's type remarks), so the base only has to line up for parity with
     // the live composition, not correctness. A null documentProgram (no document loaded) composes the world side alone.
-    private (int Words, int Instances) MeasureComposed(WorldDefinition worldDefinition, SdfDocumentProgram? documentProgram) => SdfProgramMeasure.Measure(emit: builder => {
+    private int MeasureComposed(WorldDefinition worldDefinition, SdfDocumentProgram? documentProgram) => SdfProgramMeasure.Instances(emit: builder => {
         m_emitter.ComposeCandidate(
             builder: builder,
             candidate: worldDefinition
@@ -2328,11 +2328,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // loaded (see MeasureComposed: measuring the world emitter alone would let a mutation spend capacity
         // the loaded document already holds, since the packed tables the two share are computed over the COMPOSED
         // program and are not additive).
-        _ = envelope.Configure(
-            allowGrowth: true,
-            programWordCapacity: ProgramWordCapacity,
-            instanceCapacity: InstanceCapacity,
-            measure: candidate => MeasureComposed(
+        _ = envelope.ConfigureGrowing(
+            measureInstances: candidate => MeasureComposed(
                 worldDefinition: candidate,
                 documentProgram: m_sdfDocuments.CurrentProgram
             )
@@ -2347,11 +2344,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // behind, never a stale snapshot). Without this, a scene mutation could spend capacity a document isn't
         // currently using, and a subsequently loaded — individually valid — document would commit unchecked and
         // overflow the composed program at the next rebuild.
-        m_sdfDocuments.Configure(
-            allowGrowth: true,
-            programWordCapacity: ProgramWordCapacity,
-            instanceCapacity: InstanceCapacity,
-            measureComposed: candidateProgram => MeasureComposed(
+        m_sdfDocuments.ConfigureGrowing(
+            measureComposedInstances: candidateProgram => MeasureComposed(
                 worldDefinition: m_client.Definition,
                 documentProgram: candidateProgram
             )

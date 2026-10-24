@@ -106,12 +106,13 @@ internal static class WorldSessionRenderEnvelope {
     // from this type's program-capacity measurement, kept in the same file because both answer "what does this
     // session render cost.")
 
-    /// <summary>Measures a candidate definition against the same program shape the offscreen renderer probed.</summary>
-    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, bool includeAdjacencies = false) {
+    /// <summary>Emits a candidate definition in the program shape the offscreen renderer probed and counts its
+    /// instances, without packing a program: the measure of a renderer that grows to what is delivered.</summary>
+    public static int MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, bool includeAdjacencies = false) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
-        return SdfProgramMeasure.Measure(emit: builder => {
+        return SdfProgramMeasure.Instances(emit: builder => {
             EmitProbe(
                 bodyColor: bodyColor,
                 builder: builder,
