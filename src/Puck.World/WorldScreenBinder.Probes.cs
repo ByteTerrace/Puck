@@ -23,9 +23,23 @@ public sealed partial class WorldScreenBinder {
     // on the adapter the render device reported; woken once per publish.
     private IRenderedProbeKernelHost? m_renderedKernels;
 
-    /// <summary>Declares that a probe writes a texture, so a screen may show it. Idempotent.</summary>
+    /// <summary>Declares that a probe writes a texture, so a screen may show it, and whether that output is external content
+    /// (<see cref="WorldCaptureFills.IsExternalProbe"/>), which a capture shows the placeholder in place of. Idempotent.</summary>
     /// <param name="id">The <c>probes[].id</c>.</param>
-    public void DeclareProbeOutput(string id) => GetOrAddProbeFeed(id: id).Declared = true;
+    /// <param name="external">Whether the output derives from a device; a probe fed only by in-world views and recorded
+    /// tracks is not external.</param>
+    public void DeclareProbeOutput(string id, bool external) {
+        var feed = GetOrAddProbeFeed(id: id);
+
+        feed.Declared = true;
+        feed.External = external;
+    }
+    // Whether a screen source or a HUD frame's source shows external content. A probe is external until its row is declared
+    // otherwise, so an undeclared one is withheld rather than shown.
+    private bool ShowsExternal(WorldScreenSource? source) => WorldCaptureFills.IsExternal(
+        probeIsExternal: id => (!m_probeFeeds.TryGetValue(key: id, value: out var feed) || feed.External),
+        source: source
+    );
     /// <summary>Records the kernel run that writes a probe's output ring, whose order <c>world.screens</c> reports for a
     /// screen showing the probe.</summary>
     /// <param name="id">The <c>probes[].id</c> the output ring is keyed by.</param>
@@ -377,6 +391,8 @@ public sealed partial class WorldScreenBinder {
     // writes it, plus the pending extent request and live/fault state.
     private sealed partial class ProbeFeed(string id) {
         public bool Declared { get; set; }
+        // Whether the output derives from a device (a camera or a capture), which a capture withholds.
+        public bool External { get; set; } = true;
         public string? Fault { get; set; }
         // Why the probe's ring could not be provisioned, until a later provision succeeds.
         public string? Refusal { get; set; }

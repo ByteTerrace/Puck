@@ -7,8 +7,8 @@ namespace Puck.World;
 
 /// <summary>
 /// The capture fills external content resolves to while a <see cref="WorldCaptureGate"/> fills, or while its feed has no
-/// image of its own (<see cref="WorldCaptureGate.FillsFeed"/>): one static 1x1 image per
-/// packed RGBA8 fill color, its one pixel converted through the <c>source-rgba</c> conversion on a converter of its own
+/// image of its own (<see cref="WorldCaptureGate.FillsFeed"/>): one static striped placeholder (<see cref="Placeholder"/>)
+/// per packed RGBA8 fill color, its pixels converted through the <c>source-rgba</c> conversion on a converter of its own
 /// (<see cref="RenderGraphRuntime.CreateConverter"/>), and again only after a device loss drops it. A converter builds its
 /// graph off the frame thread and its first conversions wait for it, so a fill first converted on the frame a capture is
 /// armed for has no image on that frame, and the capture would show nothing where the external content was. The fills
@@ -47,19 +47,71 @@ public sealed class WorldCaptureFills : IDisposable {
         }
     }
 
+    /// <summary>The width and height, in pixels, of the placeholder a capture shows in place of external content: a square of
+    /// diagonal stripes in the source's fill color and a contrasting one, so a capture reader tells withheld content from
+    /// content that failed to draw.</summary>
+    public const uint PlaceholderExtent = 16U;
+
     /// <summary>Returns whether a screen source shows external content: a producer whose registered shape's content class is
-    /// <see cref="ImageContentClass.External"/> (a camera, a desktop capture), or a probe, which processes a camera's
-    /// frames.</summary>
+    /// <see cref="ImageContentClass.External"/> (a camera, a desktop capture), or a probe that
+    /// <paramref name="probeIsExternal"/> names external.</summary>
     /// <param name="source">The source a screen shows or a HUD frame names, or <see langword="null"/> for none.</param>
+    /// <param name="probeIsExternal">Answers whether a probe, by its id, reads a real device (see
+    /// <see cref="IsExternalProbe"/>).</param>
     /// <returns><see langword="true"/> when the gate fills the source's image while it fills.</returns>
-    public static bool IsExternal(WorldScreenSource? source) => source switch {
-        WorldScreenSource.Producer producer => (WorldImageProducerVocabulary.TryGet(
-            id: producer.Id,
-            shape: out var shape
-        ) && (shape.Content == ImageContentClass.External)),
-        WorldScreenSource.Probe => true,
-        _ => false,
-    };
+    /// <exception cref="ArgumentNullException"><paramref name="probeIsExternal"/> is <see langword="null"/>.</exception>
+    public static bool IsExternal(WorldScreenSource? source, Func<string, bool> probeIsExternal) {
+        ArgumentNullException.ThrowIfNull(argument: probeIsExternal);
+
+        return source switch {
+            WorldScreenSource.Producer producer => (WorldImageProducerVocabulary.TryGet(
+                id: producer.Id,
+                shape: out var shape
+            ) && (shape.Content == ImageContentClass.External)),
+            WorldScreenSource.Probe probe => probeIsExternal(arg: probe.Id),
+            _ => false,
+        };
+    }
+    /// <summary>Returns whether a probe's output is external content, classified by what its inputs read: a probe that plays
+    /// a recorded track, or whose every input is an in-world view or the output of a probe that is itself not external, is
+    /// derived content; one reading a camera, a desktop capture or any other external producer, or an unknown probe, is
+    /// external.</summary>
+    /// <param name="probe">The probe row.</param>
+    /// <param name="rowOf">Returns a probe row by its id, or <see langword="null"/> for none.</param>
+    /// <returns><see langword="true"/> when a capture shows the placeholder in place of the probe's output.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="probe"/> or <paramref name="rowOf"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool IsExternalProbe(WorldProbe probe, Func<string, WorldProbe?> rowOf) {
+        ArgumentNullException.ThrowIfNull(argument: probe);
+        ArgumentNullException.ThrowIfNull(argument: rowOf);
+
+        return ReadsDevice(probe: probe, rowOf: rowOf, visiting: []);
+    }
+    private static bool ReadsDevice(WorldProbe probe, Func<string, WorldProbe?> rowOf, HashSet<string> visiting) {
+        if (probe.Track is not null) {
+            return false;
+        }
+
+        if (!visiting.Add(item: probe.Id)) {
+            return true;
+        }
+
+        foreach (var input in (probe.Inputs?.Values ?? [])) {
+            var external = (input switch {
+                WorldScreenSource.View => false,
+                WorldScreenSource.Probe other => ((rowOf(arg: other.Id) is not { } row) || ReadsDevice(probe: row, rowOf: rowOf, visiting: visiting)),
+                _ => true,
+            });
+
+            if (external) {
+                return true;
+            }
+        }
+
+        _ = visiting.Remove(item: probe.Id);
+
+        return false;
+    }
     /// <summary>Acquires the image of a fill color for one submitted frame, held until that frame's submission has
     /// retired.</summary>
     /// <param name="rgba">The packed RGBA8 fill color.</param>
@@ -145,17 +197,43 @@ public sealed class WorldCaptureFills : IDisposable {
             return;
         }
 
-        ReadOnlySpan<byte> pixel = [((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24))];
-
         _ = fill.TryConvert(
             color: ImageColorEncoding.Srgb,
             context: in context,
             format: ImagePixelFormat.R8G8B8A8Unorm,
-            height: 1U,
-            planes: pixel,
+            height: PlaceholderExtent,
+            planes: Placeholder(rgba: rgba),
             runtime: runtime,
-            width: 1U
+            width: PlaceholderExtent
         );
+    }
+    /// <summary>Returns the placeholder's pixels for a fill color: <see cref="PlaceholderExtent"/> squared RGBA8 pixels of
+    /// diagonal stripes four pixels wide, alternating the fill color with a contrasting one (amber over a dark fill, near
+    /// black over a light one).</summary>
+    /// <param name="rgba">The packed RGBA8 fill color, red in the low byte.</param>
+    /// <returns>The pixels, row by row from the top.</returns>
+    public static byte[] Placeholder(uint rgba) {
+        var luma = ((((rgba & 0xFFU) * 54U) + (((rgba >> 8) & 0xFFU) * 183U) + (((rgba >> 16) & 0xFFU) * 19U)) >> 8);
+        var contrast = ((luma < 128U)
+            ? 0xFF40C0FFU
+            : 0xFF202020U);
+        var pixels = new byte[((int)(PlaceholderExtent * PlaceholderExtent * 4U))];
+
+        for (var y = 0; (y < PlaceholderExtent); y++) {
+            for (var x = 0; (x < PlaceholderExtent); x++) {
+                var color = ((((x + y) / 4) % 2 == 0)
+                    ? rgba
+                    : contrast);
+                var at = (((y * ((int)PlaceholderExtent)) + x) * 4);
+
+                pixels[at] = ((byte)color);
+                pixels[(at + 1)] = ((byte)(color >> 8));
+                pixels[(at + 2)] = ((byte)(color >> 16));
+                pixels[(at + 3)] = ((byte)(color >> 24));
+            }
+        }
+
+        return pixels;
     }
     /// <summary>Drops every fill's device objects after a device loss; each converts again on the recreated device.</summary>
     public void OnDeviceLost() {

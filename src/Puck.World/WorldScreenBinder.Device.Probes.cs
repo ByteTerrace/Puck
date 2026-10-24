@@ -69,7 +69,8 @@ public sealed partial class WorldScreenBinder {
     }
     // A probe output as a source instance's feed: an imported source whose image the probe's kernel writes on its host's
     // device, published with the value it signals on the ring's shared fence, which the adapter hands out through the
-    // capture gate as external content. The binder provisions and services the ring each publish, and retires it on
+    // capture gate as external content when the probe reads a device (a camera or a capture, directly or through another
+    // probe) and as presentation content when only in-world views and recorded tracks feed it. The binder provisions and services the ring each publish, and retires it on
     // device loss, so the feed publishes, recovers and releases nothing of its own. A probe lights nothing.
     private sealed class ProbeSourceFeed(ProbeFeed feed) : IWorldImportFeed {
         private ImageSourceDescriptor m_descriptor = new(
@@ -91,11 +92,17 @@ public sealed partial class WorldScreenBinder {
                     ? (((uint)output.Width), ((uint)output.Height))
                     : (0U, 0U));
 
+                var content = (feed.External
+                    ? ImageContentClass.External
+                    : ImageContentClass.Presentation);
+
                 if (
                     (width != m_descriptor.Width) ||
-                    (height != m_descriptor.Height)
+                    (height != m_descriptor.Height) ||
+                    (content != m_descriptor.Content)
                 ) {
                     m_descriptor = (m_descriptor with {
+                        Content = content,
                         Height = height,
                         Width = width,
                     });

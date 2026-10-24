@@ -5,7 +5,7 @@ public sealed partial class WorldScreenBinder {
     // Whether any screen shows external content: a camera, a capture or a probe output.
     private bool BindsExternal() {
         foreach (var slot in m_slots.Values) {
-            if (WorldCaptureFills.IsExternal(source: ShownOf(screen: slot.Index))) {
+            if (ShowsExternal(source: ShownOf(screen: slot.Index))) {
                 return true;
             }
         }
@@ -20,7 +20,7 @@ public sealed partial class WorldScreenBinder {
         }
 
         foreach (var (source, _) in m_frameSourceReferences.Keys) {
-            if (WorldCaptureFills.IsExternal(source: source)) {
+            if (ShowsExternal(source: source)) {
                 return true;
             }
         }

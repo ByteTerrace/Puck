@@ -137,6 +137,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         ReconcileInstances();
     }
 
+    // A declared probe row by its id, or null for none.
+    private WorldProbe? RowOf(string id) => (m_rowIndexById.TryGetValue(key: id, value: out var index)
+        ? m_rows[index].Row
+        : null);
     /// <inheritdoc/>
     public void CaptureFrame(ulong frameKey) {
         if (

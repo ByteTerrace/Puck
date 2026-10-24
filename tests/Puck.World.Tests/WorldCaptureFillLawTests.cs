@@ -301,11 +301,62 @@ public sealed class WorldCaptureFillLawTests {
         )
     );
 
+    /// <summary>A probe is classified by what its inputs read: a recorded track, an in-world view, or the output of such a
+    /// probe is derived content a capture shows; a camera, a capture, any external producer, a cycle or an unknown probe is
+    /// external, and so is a probe with any one such input.</summary>
+    [Fact]
+    public void AProbeIsExternalOnlyWhenItsInputsReadADevice() {
+        var camera = WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings());
+        var view = new WorldScreenSource.View(CameraName: "eye");
+        var rows = new Dictionary<string, WorldProbe> {
+            ["track"] = new WorldProbe(Id: "track", Kind: "average", RateHz: 30U, Track: "probes/beacon.probe-track.json"),
+            ["viewed"] = new WorldProbe(Id: "viewed", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = view }),
+            ["filmed"] = new WorldProbe(Id: "filmed", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = camera }),
+            ["chained"] = new WorldProbe(Id: "chained", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = new WorldScreenSource.Probe(Id: "viewed") }),
+            ["relayed"] = new WorldProbe(Id: "relayed", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = new WorldScreenSource.Probe(Id: "filmed") }),
+            ["mixed"] = new WorldProbe(Id: "mixed", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["a"] = view, ["b"] = camera }),
+            ["orphaned"] = new WorldProbe(Id: "orphaned", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = new WorldScreenSource.Probe(Id: "absent") }),
+            ["loop-a"] = new WorldProbe(Id: "loop-a", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = new WorldScreenSource.Probe(Id: "loop-b") }),
+            ["loop-b"] = new WorldProbe(Id: "loop-b", Kind: "average", RateHz: 30U, Inputs: new Dictionary<string, WorldFrameSource> { ["frame"] = new WorldScreenSource.Probe(Id: "loop-a") }),
+        };
+
+        WorldProbe? RowOf(string id) => rows.GetValueOrDefault(key: id);
+
+        (string Id, bool External)[] expected = [("track", false), ("viewed", false), ("filmed", true), ("chained", false), ("relayed", true), ("mixed", true), ("orphaned", true), ("loop-a", true)];
+
+        foreach (var (id, external) in expected) {
+            Assert.Equal(expected: external, actual: WorldCaptureFills.IsExternalProbe(probe: rows[id], rowOf: RowOf));
+        }
+
+        Assert.False(condition: WorldCaptureFills.IsExternal(probeIsExternal: static _ => false, source: new WorldScreenSource.Probe(Id: "viewed")));
+        Assert.True(condition: WorldCaptureFills.IsExternal(probeIsExternal: static _ => true, source: new WorldScreenSource.Probe(Id: "filmed")));
+    }
+    /// <summary>The placeholder is a square of diagonal stripes alternating the fill color with a contrasting one, so a capture
+    /// shows withheld content as a pattern a reader tells from a plain color or a failed draw.</summary>
+    [Fact]
+    public void ThePlaceholderIsStripesOfTheFillColorAndItsContrast() {
+        var extent = ((int)WorldCaptureFills.PlaceholderExtent);
+
+        foreach (var (fill, contrast) in new (uint, uint)[] { (ImageSourceDescriptor.DefaultCaptureFill, 0xFF40C0FFU), (0xFFF0F0F0U, 0xFF202020U) }) {
+            var pixels = WorldCaptureFills.Placeholder(rgba: fill);
+
+            Assert.Equal(expected: (extent * extent * 4), actual: pixels.Length);
+
+            for (var y = 0; (y < extent); y++) {
+                for (var x = 0; (x < extent); x++) {
+                    var at = (((y * extent) + x) * 4);
+                    var pixel = (((uint)pixels[at]) | (((uint)pixels[(at + 1)]) << 8) | (((uint)pixels[(at + 2)]) << 16) | (((uint)pixels[(at + 3)]) << 24));
+
+                    Assert.Equal(expected: ((((x + y) / 4) % 2 == 0) ? fill : contrast), actual: pixel);
+                }
+            }
+        }
+    }
     [Fact]
     public void AScreenShowingAnExternalSourceHasItsFillConvertedBeforeTheCaptureIsArmed() {
         var source = Desktop();
 
-        Assert.True(condition: WorldCaptureFills.IsExternal(source: source));
+        Assert.True(condition: WorldCaptureFills.IsExternal(probeIsExternal: static _ => true, source: source));
 
         using var scene = new Scene(shown: source);
         var producer = Assert.IsType<WorldImageFeedProducer>(@object: scene.Runtime.Producer(instance: 0));
@@ -332,7 +383,7 @@ public sealed class WorldCaptureFillLawTests {
 
         Assert.True(condition: fill.Image.IsSameDeviceImage);
         Assert.Equal(fill.ImageViewHandle, fill.Image.ImageViewHandle);
-        Assert.Equal((1U, 1U), (fill.Image.Width, fill.Image.Height));
+        Assert.Equal((WorldCaptureFills.PlaceholderExtent, WorldCaptureFills.PlaceholderExtent), (fill.Image.Width, fill.Image.Height));
         Assert.Equal(GpuPixelFormat.R8G8B8A8Unorm, fill.Image.Format);
         fill.Retire();
 
@@ -355,7 +406,7 @@ public sealed class WorldCaptureFillLawTests {
     public void ACaptureWhileNothingShowsExternalContentConvertsNoFillAndBuildsNoPipeline(bool alwaysFills) {
         var source = Pattern();
 
-        Assert.False(condition: WorldCaptureFills.IsExternal(source: source));
+        Assert.False(condition: WorldCaptureFills.IsExternal(probeIsExternal: static _ => true, source: source));
 
         using var scene = new Scene(
             alwaysFills: alwaysFills,
@@ -478,7 +529,7 @@ public sealed class WorldCaptureFillLawTests {
 
         public Scene(WorldScreenSource shown, bool alwaysFills = false, uint feedExtent = 1U, string? openingFault = null, bool trackObjects = false) {
             m_gpu = new FakeGpuDevice(trackObjects: trackObjects);
-            ConsumesExternal = WorldCaptureFills.IsExternal(source: shown);
+            ConsumesExternal = WorldCaptureFills.IsExternal(probeIsExternal: static _ => true, source: shown);
             Gate = new WorldCaptureGate(
                 alwaysFills: alwaysFills,
                 captureArmed: () => Armed
