@@ -44,7 +44,7 @@ public sealed class OverlayFrameBuilder {
     public const int MaxClips = 32;
     /// <summary>The element-record ceiling (all rect, text, icon, ring, wedge, and sampled-frame records together) —
     /// a cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
-    public const int MaxElements = 2048;
+    public const int MaxElements = 4096;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
     /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the three fixed
     /// record backstops and the derived text capacity size the GPU region the shader addresses. The budget is
@@ -87,6 +87,7 @@ public sealed class OverlayFrameBuilder {
     private readonly Counters[] m_refused = new Counters[OverlayChannelLeases.Count];
     // The open channel's index, or -1 when no channel scope is open (any write then throws).
     private int m_channel = -1;
+    private int m_channelStart;
 
     // One channel's per-frame counts. A mutable struct held in an array and reached by ref — the per-record
     // accounting must not allocate or copy.
@@ -238,6 +239,7 @@ public sealed class OverlayFrameBuilder {
         }
 
         m_channel = index;
+        m_channelStart = m_elementCount;
     }
     /// <summary>Opens a clip scope: records written before <see cref="EndClip"/> are discarded by the shader outside
     /// this rect — the per-seat viewport invariant every split-screen writer rides. Scopes do not nest: a
@@ -362,7 +364,45 @@ public sealed class OverlayFrameBuilder {
             EndClip();
         }
 
+        if (m_channel == (int)OverlayChannel.Diagnostic) {
+            for (var index = m_channelStart; index < m_elementCount; index++) {
+                m_scratch[ElementBaseWords + index * ElementWords + 4] |= 0x80000000u;
+            }
+        }
+
         m_channel = -1;
+    }
+
+    /// <summary>Packs an evidence protection rectangle or a focus viewport. These are masks, never painted surfaces.</summary>
+    /// <param name="rect">Normalized x, y, width and height.</param>
+    /// <param name="focus">True for the focus viewport; false for protected evidence including its moat.</param>
+    public void WriteDiagnosticMask(System.Numerics.Vector4 rect, bool focus) {
+        if (!TryTakeElement()) { return; }
+        var offset = ElementBaseWords + m_elementCount * ElementWords;
+        m_scratch[offset] = Pack(rect.X);
+        m_scratch[offset + 1] = Pack(rect.Y);
+        m_scratch[offset + 2] = Pack(rect.Z);
+        m_scratch[offset + 3] = Pack(rect.W);
+        m_scratch[offset + 4] = focus ? 7u : 6u;
+        m_scratch[offset + 9] = 0;
+        m_elementCount++;
+    }
+
+    /// <summary>Packs a diagnostic line segment in normalized frame coordinates.</summary>
+    /// <param name="from">First endpoint.</param>
+    /// <param name="to">Second endpoint.</param>
+    /// <param name="role">Severity color.</param>
+    public void WriteDiagnosticLine(System.Numerics.Vector2 from, System.Numerics.Vector2 to, OverlayColorRole role) {
+        if (!TryTakeElement()) { return; }
+        var offset = ElementBaseWords + m_elementCount * ElementWords;
+        m_scratch[offset] = Pack(from.X);
+        m_scratch[offset + 1] = Pack(from.Y);
+        m_scratch[offset + 2] = Pack(to.X);
+        m_scratch[offset + 3] = Pack(to.Y);
+        m_scratch[offset + 4] = 8u | ((uint)role << 4);
+        m_scratch[offset + 7] = Pack(1f);
+        m_scratch[offset + 9] = 0;
+        m_elementCount++;
     }
     /// <summary>Closes the clip scope (records return to unclipped). A scope that wrote nothing hands its table slot
     /// back — the count decrements — so a writer with an empty seat never burns its clip reservation, and an

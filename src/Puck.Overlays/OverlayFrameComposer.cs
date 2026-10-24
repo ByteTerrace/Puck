@@ -46,6 +46,7 @@ public sealed class OverlayFrameComposer {
     private readonly InspectorWriter? m_inspectorWriter;
     private readonly HistoryRowWriter? m_historyRowWriter;
     private readonly AnnotationWriter? m_annotationWriter;
+    private readonly IDiagnosticOverlaySource? m_diagnostics;
 
     // Per-channel reservation-overflow episode latches: set when a channel starts losing records at its own
     // reservation, cleared the frame it renders clean again, so each episode narrates exactly once.
@@ -134,6 +135,7 @@ public sealed class OverlayFrameComposer {
         m_inspectorWriter = ((sources.Inspector is { } inspector) ? new InspectorWriter(source: inspector, theme: m_theme) : null);
         m_historyRowWriter = ((sources.HistoryRow is { } historyRow) ? new HistoryRowWriter(source: historyRow, theme: m_theme) : null);
         m_annotationWriter = ((sources.Annotations is { } annotations) ? new AnnotationWriter(source: annotations, theme: m_theme) : null);
+        m_diagnostics = sources.Diagnostics;
         m_toastWriter = ((sources.Toast is { } toast)
             ? new ToastWriter(
                 source: toast,
@@ -354,6 +356,12 @@ public sealed class OverlayFrameComposer {
         if (m_annotationWriter is { } annotationWriter) {
             m_builder.BeginChannel(channel: OverlayChannel.Annotation);
             annotationWriter.Emit(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        if (m_diagnostics is { } diagnostics) {
+            m_builder.BeginChannel(channel: OverlayChannel.Diagnostic);
+            AnnotationWriter.EmitDiagnostics(m_builder, diagnostics);
             m_builder.EndChannel();
         }
 

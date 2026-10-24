@@ -72,6 +72,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         target.Submit = true;
         switch (index) {
             case 0:
+                target.Record = false;
                 readback = new RenderGraphBufferReadback(Version: target.Visibility!,
                     SourceOffsetBytes: (((((ulong)request.Y) * request.Width) + request.X) * SdfWorldPackage.VisibilityRecordByteLength),
                     SizeBytes: ((ulong)target.RecordBytes), Destination: target.Buffer!);

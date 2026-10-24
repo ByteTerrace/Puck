@@ -138,6 +138,9 @@ public sealed partial class WorldPopulation {
     /// without a second boot build. A live rebuild instead receives the server's field back through
     /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
     public WorldSolidField? SolidField => (m_baseContactField as WorldSolidField);
+    /// <summary>The static collider inputs actually held by the analytic solver, with authored provenance.</summary>
+    public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders =>
+        (m_baseContactField as WorldColliderSet)?.DiagnosticColliders ?? [];
     /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
     /// narrates nothing.</summary>
     public WorldOutputHub? NarrationHub { get; set; }

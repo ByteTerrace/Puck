@@ -1,7 +1,7 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The overlay's nine declared writer channels. The value is the priority for the four first-party writers (0 draws
+/// The overlay's ten declared writer channels. The value is the priority for the four first-party writers (0 draws
 /// first/bottom, 3 draws last/top), pinned to the order <see cref="OverlayFrameComposer"/> emits them in when they run
 /// — draw order stops being an implicit contract nobody states and becomes the lease table's first column.
 /// <see cref="Hud"/> is the odd one out: it is not part of that fixed loop at all — <see cref="OverlayFrameComposer"/>'s
@@ -39,6 +39,8 @@ public enum OverlayChannel {
     /// <summary>The annotation outlines a person circles on screen (<see cref="AnnotationWriter"/>), unclipped, above
     /// the editor and below the wheel and cursor.</summary>
     Annotation = 8,
+    /// <summary>Evidence-preserving diagnostic pins, exterior contours and support calipers.</summary>
+    Diagnostic = 9,
 }
 /// <summary>One channel's hard reservation across the four frame resources. A channel may write up to these counts
 /// and not one record more: it clips at its own boundary, attributed to itself, and can never consume another
@@ -173,7 +175,7 @@ public sealed class OverlayChannelLeases {
     // (the CursorWriter discipline), so a clamp change moves the reservation with it.
 
     /// <summary>The number of declared channels.</summary>
-    public const int Count = 9;
+    public const int Count = 10;
 
     // Indexed by (int)OverlayChannel — the enum's declared values are the array index.
     private readonly OverlayChannelReservation[] m_reservations;
@@ -263,6 +265,7 @@ public sealed class OverlayChannelLeases {
             ((seats * 2), (((InspectorWriter.MaxLines + 1) + HistoryRowWriter.ElementsPerSeat) * seats), 0, (((InspectorWriter.MaxLines * InspectorWriter.MaxLineChars) + HistoryRowWriter.MaxLabelChars) * seats)),
             // The annotation channel: one window-wide set of outlines, their labels and the mode banner, unclipped.
             (0, AnnotationWriter.MaxElements, 0, AnnotationWriter.MaxTextWords),
+            (0, AnnotationWriter.MaxDiagnosticElements, 0, AnnotationWriter.MaxDiagnosticTextWords),
         ];
 
         UInt128 totalClips = 0;
@@ -379,6 +382,7 @@ public sealed class OverlayChannelLeases {
         OverlayChannel.Wheel => "wheel",
         OverlayChannel.Editor => "editor",
         OverlayChannel.Annotation => "annotation",
+        OverlayChannel.Diagnostic => "diagnostic",
         _ => throw new ArgumentOutOfRangeException(
         paramName: nameof(channel),
         actualValue: channel,
