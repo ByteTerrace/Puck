@@ -541,13 +541,8 @@ public sealed partial class SessionObservationLawTests {
             }),
         };
 
-        using (envelope.Configure(
-            allowGrowth: true,
-            instanceCapacity: 0,
-            measure: candidate => ((observation.Disclose(candidate: candidate) is not null)
-                ? (Words: 0, Instances: 0)
-                : (Words: 0, Instances: 0)),
-            programWordCapacity: 0
+        using (envelope.ConfigureGrowing(
+            measureInstances: candidate => ((observation.Disclose(candidate: candidate) is not null) ? 0 : 0)
         )) {
             Laws.RefusalWithControl(
                 lawId: "session.unplaceable-candidate-is-refused-not-thrown",

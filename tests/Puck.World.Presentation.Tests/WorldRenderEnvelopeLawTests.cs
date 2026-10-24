@@ -16,11 +16,8 @@ public sealed partial class WorldRenderEnvelopeLawTests(WorldRenderEnvelopeLawTe
     [Fact]
     public void GrowingConsumerStillRefusesTheEngineInstanceCeiling() {
         var envelope = new WorldRenderEnvelope();
-        using var registration = envelope.Configure(
-            allowGrowth: true,
-            instanceCapacity: 1,
-            measure: _ => (100, (SdfProgramBuilder.MaxInstances + 1)),
-            programWordCapacity: 1
+        using var registration = envelope.ConfigureGrowing(
+            measureInstances: _ => (SdfProgramBuilder.MaxInstances + 1)
         );
 
         Assert.False(condition: envelope.TryFit(candidate: Fixtures.BuildDocument(), reason: out var reason));
@@ -33,18 +30,18 @@ public sealed partial class WorldRenderEnvelopeLawTests(WorldRenderEnvelopeLawTe
             {"schema":"puck.sdf.v1","materials":[{"albedo":[1,0,0]}],"ops":[{"op":"sphere","radius":1,"material":0}]}
             """u8.ToArray();
 
-        emitter.Configure(1, 0, _ => (1024, 1), allowGrowth: true);
+        emitter.ConfigureGrowing(measureComposedInstances: _ => 1);
         emitter.Load(utf8Json: document);
         var accepted = emitter.CurrentProgram;
         Span<int> before = stackalloc int[1];
 
         emitter.WriteRevision(destination: before);
 
-        emitter.Configure(1, 0, _ => (1024, (SdfProgramBuilder.MaxInstances + 1)), allowGrowth: true);
+        emitter.ConfigureGrowing(measureComposedInstances: _ => (SdfProgramBuilder.MaxInstances + 1));
         Assert.Throws<SdfDocumentException>(testCode: () => emitter.Load(utf8Json: document));
         Assert.Same(accepted, emitter.CurrentProgram);
 
-        emitter.Configure(1, 0, _ => throw new InvalidOperationException(message: "composed structural limit"), allowGrowth: true);
+        emitter.ConfigureGrowing(measureComposedInstances: _ => throw new InvalidOperationException(message: "composed structural limit"));
         var refusal = Assert.Throws<SdfDocumentException>(testCode: () => emitter.Load(utf8Json: document));
 
         Assert.Contains("composed structural limit", refusal.Message, StringComparison.Ordinal);
@@ -117,11 +114,8 @@ public sealed partial class WorldRenderEnvelopeLawTests(WorldRenderEnvelopeLawTe
         var measured = scene.Measure(candidate: candidate);
 
         var envelope = new WorldRenderEnvelope();
-        using var growing = envelope.Configure(
-            programWordCapacity: scene.BootWords,
-            instanceCapacity: scene.BootInstances,
-            measure: _ => measured,
-            allowGrowth: true
+        using var growing = envelope.ConfigureGrowing(
+            measureInstances: _ => measured.Instances
         );
 
         Assert.True(condition: envelope.TryFit(candidate: candidate, reason: out var reason), userMessage: reason);

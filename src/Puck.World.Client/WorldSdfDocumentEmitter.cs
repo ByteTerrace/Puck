@@ -33,8 +33,8 @@ namespace Puck.World.Client;
 /// </remarks>
 public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     private int m_instanceCapacity;
-    private bool m_allowGrowth;
     private Func<SdfDocumentProgram, (int Words, int Instances)>? m_measureComposed;
+    private Func<SdfDocumentProgram, int>? m_measureComposedInstances;
     private SdfDocumentProgram? m_program;
     private int m_programWordCapacity;
     private int m_revision;
@@ -87,20 +87,30 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     /// (roles swapped) — see the type remarks. Unconfigured (a load somehow racing startup, or a probe-only test
     /// double), <see cref="Load"/> skips the composed check — the same "unconfigured reads as fits" posture
     /// <see cref="Puck.World.WorldRenderEnvelope"/> documents.</summary>
-    /// <param name="programWordCapacity">The initial program-word reserve; a ceiling only when growth is disabled.</param>
-    /// <param name="instanceCapacity">The initial instance reserve; a ceiling only when growth is disabled.</param>
+    /// <param name="programWordCapacity">The program-word ceiling.</param>
+    /// <param name="instanceCapacity">The instance ceiling.</param>
     /// <param name="measureComposed">Composes a candidate document against the current world definition and measures
     /// the result.</param>
-    /// <param name="allowGrowth">Whether the renderer grows its program and instance buffers beyond the boot reserve.
-    /// Composed measurement and engine limits still apply.</param>
     /// <exception cref="ArgumentNullException"><paramref name="measureComposed"/> is <see langword="null"/>.</exception>
-    public void Configure(int programWordCapacity, int instanceCapacity, Func<SdfDocumentProgram, (int Words, int Instances)> measureComposed, bool allowGrowth = false) {
+    public void Configure(int programWordCapacity, int instanceCapacity, Func<SdfDocumentProgram, (int Words, int Instances)> measureComposed) {
         ArgumentNullException.ThrowIfNull(argument: measureComposed);
 
         m_programWordCapacity = programWordCapacity;
-        m_allowGrowth = allowGrowth;
         m_instanceCapacity = instanceCapacity;
         m_measureComposed = measureComposed;
+        m_measureComposedInstances = null;
+    }
+    /// <summary>Configures the composed-admission check for a renderer that grows its program and instance buffers to
+    /// what is delivered, so only the engine's limits bound a document: the instance ceiling, and every refusal the
+    /// composed emission makes.</summary>
+    /// <param name="measureComposedInstances">Composes a candidate document against the current world definition and
+    /// returns the composed instance count, emitting without packing a program.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="measureComposedInstances"/> is <see langword="null"/>.</exception>
+    public void ConfigureGrowing(Func<SdfDocumentProgram, int> measureComposedInstances) {
+        ArgumentNullException.ThrowIfNull(argument: measureComposedInstances);
+
+        m_measureComposed = null;
+        m_measureComposedInstances = measureComposedInstances;
     }
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
@@ -160,12 +170,17 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
         // sides split — the packed tables a program carries are computed over the WHOLE composed build, not
         // additively per contributor. Measured and refused HERE, before commit, exactly mirroring how a scene
         // mutation is refused against this same envelope rather than discovered later as an UploadProgram throw.
-        if (m_measureComposed is { } measure) {
-            int words;
+        if ((m_measureComposed is not null) || (m_measureComposedInstances is not null)) {
+            var growing = (m_measureComposedInstances is not null);
+            var words = 0;
             int instances;
 
             try {
-                (words, instances) = measure(program);
+                if (m_measureComposedInstances is { } measureInstances) {
+                    instances = measureInstances(program);
+                } else {
+                    (words, instances) = m_measureComposed!(program);
+                }
             } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
                 throw new SdfDocumentException(
                     message: exception.Message,
@@ -173,14 +188,14 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
                 );
             }
 
-            if (!m_allowGrowth && (words > m_programWordCapacity)) {
+            if (!growing && (words > m_programWordCapacity)) {
                 throw new SdfDocumentException(
                     message: $"document: composed with the live world scene, program words {words} exceed the probed render envelope {m_programWordCapacity} — the previously loaded document (if any) keeps rendering unchanged.",
                     reason: SdfRefusal.ComposedProgramWordsExceeded
                 );
             }
 
-            var instanceLimit = (m_allowGrowth ? SdfProgramBuilder.MaxInstances : m_instanceCapacity);
+            var instanceLimit = (growing ? SdfProgramBuilder.MaxInstances : m_instanceCapacity);
 
             if (instances > instanceLimit) {
                 throw new SdfDocumentException(
