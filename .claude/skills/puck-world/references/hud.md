@@ -14,11 +14,13 @@ on-screen UI the debug world wants: add no other panel, chip or hint row (a
 mouse chord stays off the bar; the bar's `modifiers` row stays off). Every
 control the bar shows has a sensible keyboard equivalent bound beside it, for
 example WASD beside the d-pad (`worlds/debug/avatars/moth.puck`, `moth.md`).
-The debug world's addons author the two panels it has, each hidden until it
-has something to say: the watchdog's while a violation is recorded and the
-gallery guide's in front of an exhibit (`worlds/debug/addons.md`). A lead's
-brief asked for them, not the owner, so whether they stay beside the ruling
-above is the owner's decision.
+Addon panels sit behind a separate toggle, off by default, and agents show
+them when they need them (the owner's ruling). The `addonHud` state row
+(`worlds/debug/addon-hud.puck`) gates every addon panel: each panel's `visible`
+is an `all` of `state.addonHud` equal to 1 and its own condition. Today those
+are the watchdog's panel, while a violation is recorded, and the gallery
+guide's, in front of an exhibit. `world.state.cell.set addonHud $value 1` shows
+them and `0` hides them. A new addon panel takes the same gate.
 
 ## Contents
 
