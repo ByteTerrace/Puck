@@ -54,21 +54,22 @@ let hallPaletteDark = [
 // Off (the placement's `respond` facet), and its lit one otherwise.
 let hallLooks = [{ suffix: "", palette: hallPalette }, { suffix: "-dark", palette: hallPaletteDark }]
 
-// The lift's panels and displays: a brushed steel plate (a scratch pattern over a darker steel, the nearest the palette
-// has to a grain), charcoal legends, chrome bezels, black display glass and an amber glow that is always lit. A button's
-// face is the one slot after them, unlit or lit; the two variants of a button share their geometry, so lighting one
-// bakes nothing.
+// The lift's panels and displays: a satin steel plate, charcoal legends, chrome bezels and black display glass, with the
+// lit and unlit lamps and button faces in the slots after them. The variants of a button or display share their
+// geometry and differ only in those slots, so lighting one bakes nothing.
 let liftSteel = 0
 let liftInk = 1
 let liftChrome = 2
 let liftGlass = 3
-let liftGlow = 4
-let liftFace = 5
+let liftFace = 4
 let liftBase = [
-  { color: "#B9BDC2", roughness: 0.42, metal: 0.9, weathering { lines: 0.7, floor: 1, scale: 40, under [{ threshold: 0.3, surface { color: "#8C9197", roughness: 0.55, metal: 0.9 } }] } }
+  { color: "#B4B8BD", roughness: 0.5, metal: 0.85 }
   { color: "#23262B", roughness: 0.6, specular: 0.15 }
   { color: "#DADDE0", roughness: 0.2, metal: 1 }
-  { color: "#0A0C0F", roughness: 0.15, specular: 0.4 }
+  { color: "#0A0C0F", roughness: 0.3, specular: 0.08 }
+]
+let liftLamps = [
+  { color: "#4A3B24", roughness: 0.5, specular: 0.05 }
   { color: "#FFB24A", roughness: 0.5, emissive: 900nit }
 ]
 let liftFaces = [
@@ -504,42 +505,49 @@ prototypes {
       }
     }
   }
-  // A level display: black glass in a chrome bezel showing the level in a lit amber digit, and beside it, in a placement
-  // of its own, an arrow while the car has a direction. Every landing and the car share both.
-  for level in range(0, 4) {
-    prototype $"lift-display-{level}" {
+  // A level display: black glass in a chrome bezel with the four levels in a row, the one the car is at lit amber and the
+  // rest dim, and a pair of arrows beside them, up and down, one lit while the car has that direction. The variants of
+  // each differ only in which slot is lit, so they share one geometry and a variant's first showing bakes nothing:
+  // a new text run bakes alone, slowly, so a display that changed its glyphs would show the old ones until it was done.
+  // Every landing and the car share them.
+  for lit in range(0, 4) {
+    prototype $"lift-display-{lit}" {
       document {
-        name: $"lift-display-{level}"
+        name: $"lift-display-{lit}"
         schema: "puck.creation.v1"
-        palette: liftBase
+        palette: concat(liftBase, map(range(0, 4), d => liftLamps[(d == lit) ? 1 : 0]))
         shape Box "bezel" {
           material: liftChrome
           position [0, 0, 0.015]
-          scale [0.29, 0.17, 0.015]
+          scale [0.32, 0.13, 0.015]
         }
         shape Box "glass" {
           material: liftGlass
           position [0, 0, 0.03]
-          scale [0.26, 0.14, 0.01]
+          scale [0.295, 0.105, 0.01]
         }
-        textRuns [
-          { text: $"{level}", position [-0.06, -0.075, 0.04], rotation [0, 0, 0, 1], emHeight: 0.21, depth: 0.004, mode: "emboss", material: liftGlow, align: "center" }
-        ]
+        textRuns: map(range(0, 4), d => { text: $"{d}", position [(-0.09 + (0.1 * d)), -0.045, 0.04], rotation [0, 0, 0, 1], emHeight: 0.13, depth: 0.004, mode: "emboss", material: (4 + d), align: "center" })
       }
     }
   }
-  for arrow in [1, 2] {
-    prototype $"lift-arrow-{arrow}" {
+  for arrow in range(0, 3) {
+    prototype $"lift-arrows-{arrow}" {
       document {
-        name: $"lift-arrow-{arrow}"
+        name: $"lift-arrows-{arrow}"
         schema: "puck.creation.v1"
-        palette: liftBase
-        shape Prism "arrow" {
-          material: liftGlow
+        palette: concat(liftBase, [liftLamps[(arrow == 1) ? 1 : 0], liftLamps[(arrow == 2) ? 1 : 0]])
+        shape Prism "up" {
+          material: 4
           taper: 0
-          position [0, 0, 0.04]
-          rotation: ((arrow == 1) ? [0, 0, 0, 1] : [0, 0, 1, 0])
-          scale [0.065, 0.065, 0.005]
+          position [-0.22, 0.05, 0.04]
+          scale [0.035, 0.03, 0.005]
+        }
+        shape Prism "down" {
+          material: 5
+          taper: 0
+          position [-0.22, -0.05, 0.04]
+          rotation [0, 0, 1, 0]
+          scale [0.035, 0.03, 0.005]
         }
       }
     }
@@ -592,12 +600,12 @@ prototypes {
         palette: concat(liftBase, [liftFaces[lit]])
         shape Box "plate" {
           material: liftSteel
-          position [0, 0, 0.02]
+          position [0, 0, -0.02]
           scale [0.14, 0.22, 0.02]
         }
         liftButtonFace()
         textRuns [
-          { text: "CALL", position [0, -0.17, 0.042], rotation [0, 0, 0, 1], emHeight: 0.055, depth: 0.003, mode: "emboss", material: liftInk, align: "center" }
+          { text: "CALL", position [0, -0.17, 0.003], rotation [0, 0, 0, 1], emHeight: 0.055, depth: 0.003, mode: "emboss", material: liftInk, align: "center" }
         ]
       }
     }
@@ -756,13 +764,13 @@ placements {
     respond: map(range(1, 3), v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" })
   }
   placement "lift-car-arrow" {
-    prototype: "lift-hidden"
-    position [(liftX - 0.13), 1.85, carPanelZ]
+    prototype: "lift-arrows-0"
+    position [liftX, 1.85, carPanelZ]
     attach {
       bodyIndex: liftBody
-      localOffset [-0.13, (1.85 - liftRoot), (carPanelZ - liftZ)]
+      localOffset [0, (1.85 - liftRoot), (carPanelZ - liftZ)]
     }
-    respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrow-{v}" })
+    respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" })
   }
   // The panel's buttons, left to right: floors 0 to 3, door open, door close. A floor button lights while its car call
   // is pending, a door button for a moment after its press.
@@ -815,9 +823,9 @@ placements {
       respond: map(range(1, 3), v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" })
     }
     placement $"lift-arrow-{level.level}" {
-      prototype: "lift-hidden"
-      position [(liftX + 1.02), (galleryFloor[level.level] + 1.8), 36.1]
-      respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrow-{v}" })
+      prototype: "lift-arrows-0"
+      position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), 36.1]
+      respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" })
     }
     placement $"lift-landing-{level.level}" {
       prototype: $"lift-landing-{level.level}"
