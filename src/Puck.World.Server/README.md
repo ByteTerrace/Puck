@@ -847,12 +847,15 @@ itself takes effect at the next solid rebuild). `world.collision.status` echoes 
 cell size, corner extent, baked corner count, band, and hash. The field provider proves each
 moving body's step clear before its contact solve, by a certified sweep over the exact program's
 bounds together with those of any field lattice's solid columns (`FixedFieldContactSolver.ResolveSweep`,
-counted as the `physics.sweep` work source). The analytic provider emits exact isotropically
-scaled spheres and, for other finite placement primitives, each primitive's own
-bounding box turned with it (an oriented box, or an axis-aligned one when its
-axes land on world axes), so a sharp box collides exactly at any yaw; rounded,
-non-box, smoothed, and boolean-carved geometry is conservative there, and a
-solid screen keeps its world-axis bounds. A solid row participates in simulation, which is why
+counted as the `physics.sweep` work source). The analytic provider emits isotropically
+scaled spheres, circular cylinders and rounded Boxes with their surfaces. Box
+fillets derive from `SdfSolidGeometry.BoxCornerRadius`, the renderer's own
+source, retaining the authored flat-face extents at every yaw. A chamfered Box
+uses a rounded box inset by the chamfer, conservatively inside the drawn solid;
+its flat faces shrink too. Other finite primitives retain their oriented
+bounds, and a solid screen keeps its world-axis bounds. Smoothing and boolean
+carving remain approximations there. See [contact geometry](../../docs/reference/physics.md#contact-and-rigid-body-kernels)
+for the queries and remaining approximations. A solid row participates in simulation, which is why
 mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 

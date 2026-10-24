@@ -139,13 +139,15 @@ public readonly record struct FixedOrientedBox(FixedVector3 Center, FixedVector3
     /// centers along it: an even value pushes along the axis, an odd one against it.</param>
     /// <param name="correction">The winning unit axis scaled by its overlap depth, directed from
     /// <paramref name="right"/> toward <paramref name="left"/>.</param>
-    /// <returns><see langword="true"/> when every candidate axis reads a positive overlap, so the boxes truly
-    /// overlap; <see langword="false"/> the moment any axis proves separation, when a pair merely touches, or when
+    /// <param name="padding">Additional separation along each unit axis. For a spherical offset, use only after
+    /// the unpadded cores have been shown to overlap; separated cores require their Euclidean closest distance.</param>
+    /// <returns><see langword="true"/> when every candidate axis reads a positive padded overlap;
+    /// <see langword="false"/> the moment any axis proves separation, when an unpadded pair merely touches, or when
     /// the center difference does not fit the carrier.</returns>
     /// <remarks>A face axis is unit already; each edge cross product is normalized once so its overlap is a distance,
     /// and a near-parallel edge pair (a cross product of at most one raw squared) is skipped. Among equal depths the
     /// first axis in order wins: left's face axes, right's, then the cross products left-major.</remarks>
-    public static bool TrySeparation(in FixedOrientedBox left, in FixedOrientedBox right, int tieBreaker, out FixedVector3 correction) {
+    public static bool TrySeparation(in FixedOrientedBox left, in FixedOrientedBox right, int tieBreaker, out FixedVector3 correction, FixedQ4816 padding = default) {
         correction = default;
 
         if (!FixedVector3.TrySubtract(
@@ -183,7 +185,7 @@ public readonly record struct FixedOrientedBox(FixedVector3 Center, FixedVector3
                 left: delta,
                 right: axis
             );
-            var overlap = ((left.ProjectionRadius(axis: axis) + right.ProjectionRadius(axis: axis)) - FixedQ4816.Abs(value: centerDistance));
+            var overlap = (((left.ProjectionRadius(axis: axis) + right.ProjectionRadius(axis: axis)) + padding) - FixedQ4816.Abs(value: centerDistance));
 
             if (overlap <= FixedQ4816.Zero) {
                 return false;

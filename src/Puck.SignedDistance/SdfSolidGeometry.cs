@@ -17,7 +17,18 @@ namespace Puck.SignedDistance;
 /// half-height and extrusion half-depth 1, top half-width given by taper (default 0.5). Changing a value here changes the
 /// meaning of every persisted document that names the vocabulary.</remarks>
 public static class SdfSolidGeometry {
+    /// <summary>The inset corner radius of a Box, as a fraction of its smallest effective scale. Contact compilers
+    /// use this same value; the fillet retains the authored outer face extents.</summary>
     private const float BoxRound = 0.04f;
+
+    /// <summary>Returns a Box's built-in inset fillet radius in the authored scale's units. Shared by shape emission
+    /// and analytic collision compilation.</summary>
+    public static float BoxCornerRadius(Vector3 scale) {
+        var effective = EffectiveScale(scale: scale);
+
+        return (BoxRound * MathF.Min(x: effective.X, y: MathF.Min(x: effective.Y, y: effective.Z)));
+    }
+
     private const float CapsuleRadius = 1f;
     private const float ConeHalfHeight = 1f;
     private const float ConeRadius = 1f;
@@ -312,7 +323,7 @@ public static class SdfSolidGeometry {
         ) {
             // The plain Box arm's zero set is BoxHalfExtents with a BoxRound fillet; the chamfered Box keeps that outer
             // extent and that fillet (the family's rounding lane, applied on top of the chamfer) so a chamfer going to
-            // zero lands on the plain Box and the two share one collider.
+            // zero lands on the plain Box. Analytic contact uses a conservative inside shape for the chamfer.
             return chain.ChamferedRectangle(
                 blend: blend,
                 chamfer: chamfer,
@@ -576,14 +587,7 @@ public static class SdfSolidGeometry {
             );
         }
 
-        var minimumScale = MathF.Min(
-            x: effectiveScale.X,
-            y: MathF.Min(
-                x: effectiveScale.Y,
-                y: effectiveScale.Z
-            )
-        );
-        var boxRound = (BoxRound * minimumScale);
+        var boxRound = BoxCornerRadius(scale: effectiveScale);
 
         if (type == SdfSolidPrimitive.Prism) {
             RequireTaper(taper: taper);
@@ -605,7 +609,7 @@ public static class SdfSolidGeometry {
         // The plain Box arm's faces sit at the scaled half-extents, as the transformed unit box's do, under one
         // world-space corner radius inset from them (sdfBox erodes by it and offsets back out), so the field stays a true
         // rounded-box distance at any aspect; the chamfered arm keeps the same zero set and the same fillet (riding the
-        // family's rounding lane on top of the chamfer), so the two share one collider and a chamfer going to zero lands
+        // family's rounding lane on top of the chamfer), so the two share outer bounds and a chamfer going to zero lands
         // on the plain Box.
         var boxExtents = (BoxHalfExtents * effectiveScale);
 

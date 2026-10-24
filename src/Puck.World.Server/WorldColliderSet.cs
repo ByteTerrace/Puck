@@ -18,10 +18,10 @@ namespace Puck.World.Server;
 /// <see cref="FixedWorldCollision.GroundedThreshold"/> grounds the body — the same test the ground plane uses.</para>
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
-/// additive. A slab's <c>Round</c> and a creation's boolean carving, smoothing, rounded box corners, and non-box primitive
-/// surfaces beyond spheres and circular cylinders are deliberately not modelled. Those two use their closest-point geometry; each other finite placement
-/// primitive uses its own bounding box, turned with it (<see cref="FixedStaticCollider.Box"/>): exact for a sharp box
-/// at any yaw, conservative for rounded or non-box geometry, and axis-aligned whenever its axes land on world axes. A
+/// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; a chamfered Box
+/// uses a rounded box inset by its chamfer, conservatively inside the drawn solid. Spheres and circular cylinders
+/// use their closest-point geometry. A slab's <c>Round</c>, boolean carving, smoothing, and other finite primitive
+/// surfaces are not modelled: those primitives use their oriented bounding box (<see cref="FixedStaticCollider.Box"/>). A
 /// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. No broadphase:
 /// O(bodies × colliders); a Y-sorted array with an AABB reject on the swept bounds is the cheap first cull if profiling
 /// ever demands one, behind this seam with no signature change.</para>
@@ -30,7 +30,7 @@ namespace Puck.World.Server;
 /// those colliders once per tick, before any body advances, so every body's <see cref="Resolve"/> call this tick
 /// depenetrates against the same snapshot rather than repeating the recompute per body.</para>
 /// </remarks>
-internal sealed class WorldColliderSet : IContactField {
+public sealed class WorldColliderSet : IContactField {
     private List<FixedStaticCollider> m_attachedColliders = [];
     // The attached row each collider in m_attachedColliders came from, parallel to it.
     private List<int> m_attachedColliderRows = [];
@@ -229,17 +229,35 @@ internal sealed class WorldColliderSet : IContactField {
         hash.Add(value: collider.Extent.X.Value);
         hash.Add(value: collider.Extent.Y.Value);
         hash.Add(value: collider.Extent.Z.Value);
+        hash.Add(value: collider.Radius.Value);
         hash.Add(value: collider.Rotation.X.Value);
         hash.Add(value: collider.Rotation.Y.Value);
         hash.Add(value: collider.Rotation.Z.Value);
         hash.Add(value: collider.Rotation.W.Value);
     }
-    // A circular cylinder retains its surface; other finite primitives retain an oriented bound.
-    private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) =>
-        (((copy.Shape.Type == SdfSolidPrimitive.Cylinder) && (copy.LocalHalfExtents.X == copy.LocalHalfExtents.Z))
-        ? FixedStaticCollider.Cylinder(center: copy.Center, radius: (copy.LocalHalfExtents.X + margin),
-            halfHeight: (copy.LocalHalfExtents.Y + margin), rotation: copy.Rotation)
-        : FixedStaticCollider.Box(
+    // Boxes retain their fillet and circular cylinders their surface; other finite primitives retain a bound.
+    private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
+        if (copy.Shape.Type == SdfSolidPrimitive.Box) {
+            var shapeScaleX = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.X)),
+                y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
+            var stampScale = (copy.LocalHalfExtents.X / shapeScaleX);
+            var radius = (FixedQ4816.FromDouble(value: SdfSolidGeometry.BoxCornerRadius(scale: copy.Shape.Scale)) * stampScale);
+            var chamfer = (FixedQ4816.FromDouble(value: (copy.Shape.Chamfer ?? 0f)) * stampScale);
+            // The box inset by the entire chamfer lies within every profile/cap bevel half-space, including after
+            // the common fillet erosion. Offsetting this smaller core by that fillet preserves containment. It
+            // sacrifices a chamfer-width strip on flat faces rather than ever creating empty-space support.
+            var inset = (radius + chamfer);
+            var inner = FixedVector3.Max(left: FixedVector3.Zero,
+                right: (copy.LocalHalfExtents - new FixedVector3(X: inset, Y: inset, Z: inset)));
+
+            return FixedStaticCollider.RoundedBox(center: copy.Center, rotation: copy.Rotation,
+                innerHalfExtents: inner, radius: (radius + margin));
+        }
+        if ((copy.Shape.Type == SdfSolidPrimitive.Cylinder) && (copy.LocalHalfExtents.X == copy.LocalHalfExtents.Z)) {
+            return FixedStaticCollider.Cylinder(center: copy.Center, radius: (copy.LocalHalfExtents.X + margin),
+                halfHeight: (copy.LocalHalfExtents.Y + margin), rotation: copy.Rotation);
+        }
+        return FixedStaticCollider.Box(
             center: copy.Center,
             halfExtents: (copy.LocalHalfExtents + new FixedVector3(
                 X: margin,
@@ -247,7 +265,8 @@ internal sealed class WorldColliderSet : IContactField {
                 Z: margin
             )),
             rotation: copy.Rotation
-        ));
+        );
+    }
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.

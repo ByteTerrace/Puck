@@ -173,7 +173,7 @@ Capsule/box pairs still use conservative world bounds. Compound correction
 selection compares full-width squared magnitudes so a shallow overlap is not
 lost by rounding its square to the scalar precision.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
-axis-aligned boxes, oriented boxes, and half-spaces, returning only a
+axis-aligned boxes, oriented boxes, rounded boxes, cylinders, and half-spaces, returning only a
 `FixedContactPush`. An oriented box carries its own half-extents and a unit
 rotation; the push carries the body into the box's frame, runs the
 axis-aligned query there, and turns the push back, so a capsule, sphere, or
@@ -183,6 +183,26 @@ half-extents, and keeps the axis-aligned collider whenever the rotation
 carries every box axis exactly onto a world axis. Against either box a capsule
 or box body is measured by its bounds in the box's frame, which is exact for
 an upright capsule on a box's faces and conservative at its edges.
+
+Box placements use `FixedStaticCollider.RoundedBox`: an oriented inner box
+offset by a sphere. `Extent` carries the inner half-extents and `Radius` the
+offset. `SdfSolidGeometry.BoxCornerRadius` supplies the same built-in fillet
+the renderer emits (0.04 of the smallest effective scale); the outer flat
+faces stay at the authored extents. Sphere contact uses the inner box with
+the combined radii. Capsule and box contact measure their closest convex
+features, including edge pairs, rather than a body bound. Intersecting cores
+use separating axes with the offset added to their depth. The solver's
+substeps, support, hold and tether queries all use this shape in fixed point.
+The chase camera already queries the rendered SDF directly.
+
+A chamfered Box uses a conservative **inside** rounded box: its inner extents
+are reduced by both the fillet radius and the authored chamfer, clamped at
+zero, then offset by the fillet. This gives up a chamfer-width strip even on
+flat faces but cannot create support outside the drawn bevel. It shares the
+rounded contact path without introducing a second polyhedral solver. A solid
+margin offsets the resulting collider by that explicit authored allowance.
+Box does not admit a separate authored `rounding` on this vocabulary; that
+facet belongs to Prism, Cylinder and Cone.
 
 Circular cylinders and thin discs compile to `FixedStaticCollider.Cylinder`,
 including their rotation, radius and half-height. `FixedCylinderContact`
