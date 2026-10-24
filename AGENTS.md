@@ -29,6 +29,13 @@ agent works in that mode by default, without asking:
   line coverage, plus a short keep-list of invariant tests the owner approves
   (determinism replay hashes, exact fixed-point results), which coverage alone
   cannot see. Code no test and no live world reaches is deleted, not tested.
+  The owner's correction to that rule: "unreached" is not the same as
+  "unwanted". A product capability (capture, input devices, audio or speech,
+  probes, a world or exhibit) that nothing calls yet is wired or covered, not
+  deleted; ask the owner before deleting one. Exact-output hashes and recorded
+  artifacts that prove real behaviour (render floors over committed test
+  ROMs, determinism replay hashes) are worth keeping. Eradication is for
+  ledgers, dead internals and duplicates, not for its own sake.
   CI checks the 100% on every push to `main` (`puck artifacts coverage`, the
   `coverage` job in `azure.yml`, outside what deploy waits for); code only
   real hardware reaches (a GPU, or a session's real mouse and foreground
