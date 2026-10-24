@@ -162,6 +162,19 @@ public sealed class WorldTickScriptLawTests {
     }
 
     [Fact]
+    public void TestStepsSubmitAtTheAuthorityHookBeforeTheOperatorDrain() {
+        using var host = new Host();
+
+        Assert.Null(@object: host.Script.ArmSeat(tick: 5UL, text: "probe.read", slot: 0, router: () => host.Router, line: out var step));
+        Assert.Null(@object: host.Script.Arm(line: "probe.read", tick: 5UL));
+        // Publish without draining the host, as a boot step does before advancing its sibling instances.
+        host.Script.PublishTick(tick: 5UL);
+        Assert.Single(collection: host.Log);
+        Assert.Equal(expected: "ran", actual: step.Outcome);
+        host.Source.Collect();
+        Assert.Equal(expected: 2, actual: host.Log.Count);
+    }
+    [Fact]
     public void TestStepsAndOperatorLinesShareTicksButKeepTheirOwnAnswers() {
         using var host = new Host();
 

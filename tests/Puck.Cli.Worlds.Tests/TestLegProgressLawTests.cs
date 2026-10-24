@@ -33,8 +33,10 @@ public sealed class TestLegProgressLawTests {
 
     // The stand-in host's program: the console answers and the schedule outputs a leg reads, at a fixed wall cost per
     // tick.
-    private static string Program() => $$"""
+    private static string Program(string manifestSchema, bool includeWorlds, int tickMilliseconds) => $$"""
+        using System.Collections.Generic;
         using System.Diagnostics;
+        using System.Text.Json;
 
         var schedule = string.Empty;
         var exitAfter = 0;
@@ -52,7 +54,11 @@ public sealed class TestLegProgressLawTests {
             if (exported) { return; }
             exported = true;
             Directory.CreateDirectory(schedule);
-            File.WriteAllText(Path.Combine(schedule, "{{WorldScheduleSection.ManifestFileName}}"), "{\"schema\":\"{{WorldScheduleSection.ManifestSchemaId}}\",\"exportTick\":" + tick + ",\"worlds\":[{\"world\":\"boot\",\"started\":true,\"export\":\"{{WorldScheduleSection.ExportFileName}}\"}]}");
+            var manifest = new Dictionary<string, object> { ["schema"] = "{{manifestSchema}}", ["exportTick"] = tick };
+            if ({{includeWorlds.ToString().ToLowerInvariant()}}) {
+                manifest["worlds"] = new[] { new { world = "boot", started = true, export = "{{WorldScheduleSection.ExportFileName}}" } };
+            }
+            File.WriteAllText(Path.Combine(schedule, "{{WorldScheduleSection.ManifestFileName}}"), JsonSerializer.Serialize(manifest));
             File.WriteAllText(Path.Combine(schedule, "{{WorldScheduleSection.ExportFileName}}"), "{\"tick\":" + tick + "}");
         }
 
@@ -65,7 +71,7 @@ public sealed class TestLegProgressLawTests {
                 Console.WriteLine("[world.wait: " + ticks + " ticks from " + tick + " — releasing at tick " + (tick + ticks) + "]");
                 for (var step = 0UL; (step < ticks); step++) {
                     if ((exitAfter > 0) && (clock.Elapsed.TotalSeconds >= exitAfter)) { Export(); return 0; }
-                    Thread.Sleep({{TickMilliseconds.ToString(provider: CultureInfo.InvariantCulture)}});
+                    Thread.Sleep({{tickMilliseconds.ToString(provider: CultureInfo.InvariantCulture)}});
                     tick++;
                     if (tick == {{ExportTick.ToString(provider: CultureInfo.InvariantCulture)}}UL) { Export(); }
                 }
@@ -81,13 +87,13 @@ public sealed class TestLegProgressLawTests {
         Export();
         return 0;
         """;
-    private static string StandInWorld(TemporaryDirectory scratch) {
+    private static string StandInWorld(TemporaryDirectory scratch, string manifestSchema = WorldScheduleSection.ManifestSchemaId, bool includeWorlds = true, int tickMilliseconds = TickMilliseconds) {
         var compilation = CSharpCompilation.Create(
             assemblyName: "StandInWorld",
             options: new CSharpCompilationOptions(outputKind: OutputKind.ConsoleApplication, nullableContextOptions: NullableContextOptions.Enable),
             references: References,
             syntaxTrees: [
-                CSharpSyntaxTree.ParseText(text: Program()),
+                CSharpSyntaxTree.ParseText(text: Program(includeWorlds: includeWorlds, manifestSchema: manifestSchema, tickMilliseconds: tickMilliseconds)),
                 CSharpSyntaxTree.ParseText(text: "global using System; global using System.IO; global using System.Threading;"),
             ]
         );
@@ -105,6 +111,28 @@ public sealed class TestLegProgressLawTests {
         return assembly;
     }
 
+    [Fact]
+    public void ARetiredOrIncompleteManifestCannotMeasureATestRun() {
+        foreach (var (schema, worlds, refusal) in new[] {
+            ("puck.world.schedule-manifest.v1", true, "did not write a"),
+            (WorldScheduleSection.ManifestSchemaId, false, "wrote no world exports"),
+        }) {
+            using var scratch = new TemporaryDirectory(prefix: "puck-test-manifest-");
+            using var error = new StringWriter();
+
+            Assert.False(condition: TestCommand.TryRunLeg(
+                artifact: StandInWorld(includeWorlds: worlds, manifestSchema: schema, scratch: scratch, tickMilliseconds: 0),
+                error: error,
+                exportTick: ExportTick,
+                legDirectory: scratch.PathOf(name: "leg"),
+                rateHz: RateHz,
+                reading: out var reading,
+                world: scratch.WriteText(name: "world.json", text: "{}")
+            ));
+            Assert.Null(@object: reading);
+            Assert.Contains(expectedSubstring: refusal, actualString: error.ToString());
+        }
+    }
     [Fact]
     public void AHostThatKeepsAdvancingIsNeverCutShortByWallTime() {
         using var scratch = new TemporaryDirectory(prefix: "puck-test-leg-");

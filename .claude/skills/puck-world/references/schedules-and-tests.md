@@ -212,6 +212,10 @@ recording, persistence, MATCH verification and driving back to a tick, including
 addon guests. A test's `schedule` section is retained as the lowering target for
 `when` blocks: `WorldTestRun` arms its seat-bound lines through that same script
 and exports their exact session answers, edit echoes and sibling-world states.
+Test lines submit at the authority tick-complete hook, before this host step
+advances sibling worlds and takes the export; operator lines run in the next
+console drain. Sharing the queue must preserve that boundary, or a sibling's
+input lands one host step later.
 It is test-run bookkeeping, not a second scheduler or replay. The native video
 recording boot path and capture verbs have been removed; probes and probe tracks
 remain independent.

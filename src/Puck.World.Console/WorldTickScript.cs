@@ -15,9 +15,11 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// <para>Operator lines run under the console principal through one session of their own; test steps use their own
-/// seat-bound sessions. Lines are submitted straight to the registry,
-/// so the session's read-after-write barrier never holds a line behind another line of the same tick: every line of a
-/// tick runs in the drain after it, in the order it was armed. A tick a rewound authority timeline publishes again runs
+/// seat-bound sessions. Test steps submit in the authority tick-complete hook, before sibling instances advance
+/// and test results export; operator lines submit in the following console drain. Both use the same tick queue
+/// and command dispatch. Lines are submitted straight to the registry,
+/// so the session's read-after-write barrier never holds a line behind another line of the same tick. Lines of each
+/// ingress run in arming order. A tick a rewound authority timeline publishes again runs
 /// nothing a second time, since a line is removed from the pending set as it runs.</para>
 /// <para>A settled capture a line arms (<c>world.screenshot</c>) is held for like any other: the rendered host steps no
 /// tick past the line's tick until a frame of that tick serves it.</para>
@@ -70,7 +72,8 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// <summary>Gets the number of lines armed and not yet run.</summary>
     public int PendingCount => m_pending.PendingCount;
 
-    /// <summary>Arms a test step through a seat's ordinary ingress, on the same scheduler as world.at.</summary>
+    /// <summary>Arms a test step through a seat's ordinary ingress, on the same scheduler as world.at. It submits
+    /// at the authority tick-complete hook, before sibling instances advance.</summary>
     /// <param name="tick">The completed tick after which to submit.</param>
     /// <param name="text">The command line.</param>
     /// <param name="slot">The seat slot.</param>
@@ -141,19 +144,35 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
 
         return builder.ToString();
     }
-    /// <summary>The authority tick-complete hook: queues the lines armed for <paramref name="tick"/> to run in the
-    /// console drain before the next tick steps.</summary>
+    /// <summary>The authority tick-complete hook: submits test steps and queues operator lines for the console
+    /// drain before the next tick steps.</summary>
     /// <param name="tick">The boot world's just-completed tick.</param>
     public void PublishTick(ulong tick) {
         if (!m_pending.TryTake(rows: out var due, tick: tick)) {
             return;
         }
 
-        // One host operation for the tick's lines: it runs in the next drain, and submits every line straight to the
+        // Test worlds pin their submission before this host step advances siblings and exports results. Preserve
+        // that boundary while sharing world.at's queue and dispatcher; an extra drain would delay sibling input.
+        var deferred = false;
+
+        foreach (var line in due) {
+            if (line.Router is not null) {
+                Run(line: line);
+            } else {
+                deferred = true;
+            }
+        }
+        if (!deferred) {
+            return;
+        }
+        // One host operation for the tick's operator lines: it runs in the next drain, and submits each to the
         // registry so no line of the tick waits behind another's simulation submission.
         _ = Session().InvokeAsync(operation: () => {
             foreach (var line in due) {
-                Run(line: line);
+                if (line.Router is null) {
+                    Run(line: line);
+                }
             }
 
             return true;
