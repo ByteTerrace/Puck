@@ -1608,8 +1608,8 @@ future transport arm, not a reshape of `authorities`' current members.
 
 ### Where the World artifact is built
 
-`puck canary`, `puck parity`, `puck counters`, `puck test`, and
-`puck docs citations` boot the Release build of `src/Puck.World`. They share one store of these builds, one
+`puck canary`, `puck parity`, `puck counters`, `puck test`,
+`puck docs citations` and the MCP adapter's `puck_world_start` boot the Release build of `src/Puck.World`. They share one store of these builds, one
 per source state, and build only when the store has no build for the
 checkout's current sources. A second run over an unchanged checkout builds
 nothing. `puck test --world-artifact <dll>` and `puck canary --world-artifact
