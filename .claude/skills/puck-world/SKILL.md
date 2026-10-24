@@ -293,6 +293,14 @@ check the flag: the owner may be holding the pad.
   last edit and the same script, rerun through this recipe with its own
   `--state-dir`, shows the behavior. Report what ran (build, command, script,
   what it showed); the commit body carries it.
+- **Keep a windowed World's life short.** A windowed debug World's working set
+  grows while it runs (14.4, 16.0, then 17.3 GB over some 50 minutes of
+  gallery captures; 19 GB within about 20 minutes in another run), enough to
+  starve the machine and get lanes killed. Boot, pose, capture and stop in one
+  batch of under 10 minutes; tune light values on a headless World or with
+  `world.reload` inside a batch, never by holding a World open between steps.
+  Arm a whole batch with `world.rate pause`, `world.at` scripts at absolute
+  ticks and `world.rate resume`, since the World steps on between calls.
 - `--exit-after-seconds 0` or absent runs until the window closes. `--world`
   is required: a package folder (its `manifest.json` names the entry), a
   `.puck` source or a JSON document; without it the boot refuses. `Program.cs` parses the full flag surface;
