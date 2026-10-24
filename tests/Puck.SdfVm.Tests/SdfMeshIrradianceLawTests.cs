@@ -171,14 +171,58 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.InRange(actual: lowerDown, low: 1.49f, high: 1.51f);
         Assert.InRange(actual: upperUp, low: 2.79f, high: 2.81f);
         // The meter reads the lit room lit and the dark room dark.
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _));
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (lit > 0f));
         Assert.True(condition: (dark < (0.01f * lit)));
 
         // The camera can approach the slab without reading the lit probes beyond it.
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (nearSlab < (0.01f * lit)));
+    }
+
+    [Fact]
+    public void ASpaceBetweenLatticeCentresMetersItsOwnLightingWithoutOpeningTheWalls() {
+        var frame = Frame();
+        var lights = new SdfLights();
+
+        lights.Set(index: 0, light: frame.Lights.Records[0] with { Direction = new Vector3(x: 0f, y: 2.8f, z: 0f) });
+        lights.Count = 1;
+        frame = frame with {
+            Lights = lights,
+            IndirectBounces = 0,
+            TickLocked = true,
+            Exposure = new SdfExposure(Mode: SdfExposureMode.Auto, Ev100: 15f, Minimum: 0f, Maximum: 20f, Compensation: 0f, Adaptation: 0f, Local: 0.5f),
+            // A 40-cm gap contains the camera and light but no lattice centres (x = +/- 0.5).
+            MeshDraws = [.. frame.MeshDraws,
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: 0f, z: -10f), high: new Vector3(x: -0.2f, y: 4f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: -10f), high: new Vector3(x: 10f, y: 4f, z: 10f))),
+            ],
+        };
+        var volume = new SdfMeshIrradiance();
+
+        _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
+        Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+            luminance: out var lit, skyVisibility: out var sky, source: out var source));
+        Assert.Equal(expected: SdfExposureMeterSource.CameraTrace, actual: source);
+        Assert.True(condition: (lit > 0f));
+        Assert.InRange(actual: sky, low: 0f, high: 0.1f);
+        var exposures = new SdfViewExposures();
+
+        exposures.Stage(frame: frame, irradiance: volume, seconds: 1d);
+        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Target(luminance: lit)), actual: exposures.MultiplierOf(view: 0), precision: 6);
+        Assert.Contains(expectedSubstring: "source=camera-trace", actualString: exposures.Describe()[0]);
+        var held = exposures.MultiplierOf(view: 0);
+        var heldAir = exposures.AirLightOf(view: 0);
+
+        exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 1d);
+        Assert.Equal(expected: held, actual: exposures.MultiplierOf(view: 0));
+        Assert.Equal(expected: heldAir, actual: exposures.AirLightOf(view: 0));
+        Assert.Contains(expectedSubstring: "meter=none source=held", actualString: exposures.Describe()[0]);
+        // Inside the opaque wall is unknown, not a reading of an unlit room.
+        Assert.False(condition: volume.TryMeter(position: new Vector3(x: 0.3f, y: 2f, z: 0f), forward: Vector3.UnitX,
+            luminance: out _, skyVisibility: out _, source: out source));
+        Assert.Equal(expected: SdfExposureMeterSource.None, actual: source);
     }
 
     [Fact]

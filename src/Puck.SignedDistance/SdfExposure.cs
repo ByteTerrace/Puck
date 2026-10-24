@@ -18,8 +18,8 @@ public enum SdfExposureMode {
 /// reads presentation time and the irradiance volume, and nothing in simulation state depends on it.
 /// </summary>
 /// <param name="Mode">Manual or automatic.</param>
-/// <param name="Ev100">The manual exposure value at ISO 100; an automatic exposure's value before its meter reads, and
-/// whenever it cannot.</param>
+/// <param name="Ev100">The manual exposure value at ISO 100; an automatic exposure's initial value before its meter
+/// first reads. A later missing measurement holds the previous exposure.</param>
 /// <param name="Minimum">The darkest scene an automatic exposure adapts to, as the lowest <c>EV100</c> it takes.</param>
 /// <param name="Maximum">The brightest scene an automatic exposure adapts to, as the highest <c>EV100</c> it takes.</param>
 /// <param name="Compensation">The stops an automatic exposure brightens the metered image by.</param>

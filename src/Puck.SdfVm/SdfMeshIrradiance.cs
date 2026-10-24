@@ -273,7 +273,8 @@ public sealed class SdfMeshIrradiance {
     /// about the camera see along each of their six axes, the light the surfaces about it reflect and emit under every
     /// traced light and the sky through the openings it sees, averaged with each axis weighted by the squared cosine of
     /// its angle to where the camera looks plus <see cref="MeterSurround"/>, so the axis ahead counts about four fifths of
-    /// the reading. An anchored light and the screens are no part of the reading.</summary>
+    /// the reading. When no visible lattice probe answers, traces the same radiance at the camera itself.
+    /// An anchored light and the screens are no part of the reading.</summary>
     /// <param name="position">The camera's position, in world units.</param>
     /// <param name="forward">The camera's unit forward axis.</param>
     /// <param name="luminance">The metered average luminance, in nits, when the method returns
@@ -281,10 +282,12 @@ public sealed class SdfMeshIrradiance {
     /// <param name="skyVisibility">The share of the sky the probes about the camera see open, alike in every direction,
     /// in [0, 1], when the method returns <see langword="true"/>: one on open ground, whose probes see the sky over the
     /// upper half of their directions, near zero in a closed room.</param>
-    /// <returns><see langword="false"/> while no traced probe of the current lighting lies about the camera.</returns>
-    public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility) {
+    /// <param name="source">Whether the reading came from lattice probes, a camera trace, or neither.</param>
+    /// <returns><see langword="false"/> while no scene is available or the camera lies inside opaque geometry.</returns>
+    public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility, out SdfExposureMeterSource source) {
         luminance = 0f;
         skyVisibility = 1f;
+        source = SdfExposureMeterSource.None;
 
         lock (m_gate) {
             if ((m_lighting is not { } lighting) || !m_windowValid) {
@@ -329,7 +332,25 @@ public sealed class SdfMeshIrradiance {
             }
 
             if (total <= 0f) {
-                return false;
+                if (m_scene is not { } scene) { return false; }
+
+                // Small spaces need not contain a lattice centre. Measure where the camera actually is instead of
+                // borrowing another room's probes or holding the exposure of the room the camera just left.
+                Span<float> sky = stackalloc float[6];
+                Span<Vector3> radiance = stackalloc Vector3[6];
+
+                if (!TraceRadiance(origin: position, rotation: Quaternion.Identity, layout: m_layout, lighting: lighting,
+                    low: m_low, scene: scene, sweep: (m_layout.Sweeps - 1), sky: sky, radiance: radiance)) { return false; }
+                for (var axis = 0; (axis < 6); axis++) {
+                    var skyLight = (lighting.Sky ? (lighting.SkyIrradiance(normal: Axes[axis]) * (sky[axis] * lighting.Gains.Sky)) : Vector3.Zero);
+
+                    axes[axis] = SdfPhotometry.LuminanceOf(color: (radiance[axis] + skyLight));
+                    open += (sky[axis] / 6f);
+                }
+                total = 1f;
+                source = SdfExposureMeterSource.CameraTrace;
+            } else {
+                source = SdfExposureMeterSource.Probes;
             }
 
             var sum = 0f;
@@ -657,43 +678,19 @@ public sealed class SdfMeshIrradiance {
     private Probe TraceProbe((int X, int Y, int Z) cell, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep) {
         var origin = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
         var rotation = RotationOf(cell: cell);
-        Span<float> total = stackalloc float[6];
-        Span<float> sky = stackalloc float[6];
-        Span<Vector3> radiance = stackalloc Vector3[6];
-        var backFaces = 0;
-
-        for (var ray = 0; (ray < layout.Rays); ray++) {
-            var direction = Vector3.Transform(value: Fibonacci(index: ray, count: layout.Rays), rotation: rotation);
-            var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out var material, normal: out var normal);
-            var light = Vector3.Zero;
-            var open = !hit;
-
-            if (hit) {
-                if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) {
-                    backFaces++;
-                } else {
-                    light = Shade(layout: layout, lighting: lighting, low: low, material: material, normal: normal, point: (origin + (direction * distance)), scene: scene, sweep: sweep);
-                }
-            }
-
-            for (var axis = 0; (axis < 6); axis++) {
-                var weight = MathF.Max(0f, Vector3.Dot(vector1: direction, vector2: Axes[axis]));
-
-                if (weight <= 0f) { continue; }
-                total[axis] += weight;
-                if (open) { sky[axis] += weight; }
-                radiance[axis] += (light * weight);
-            }
-        }
+        var sky = new float[6];
+        var radiance = new Vector3[6];
+        var valid = TraceRadiance(origin: origin, rotation: rotation, layout: layout, lighting: lighting, low: low,
+            scene: scene, sweep: sweep, sky: sky, radiance: radiance);
 
         var probe = new Probe(
             Depth: new float[6],
             Planes: new Vector4[26],
-            Invalid: (backFaces > (InsideShare * layout.Rays)),
+            Invalid: !valid,
             Lights: new uint[SdfMeshIrradianceProbe.LightWords],
             Neighbours: 0u,
-            Radiance: new Vector3[6],
-            Sky: new float[6],
+            Radiance: radiance,
+            Sky: sky,
             Sweeps: (sweep + 1)
         );
 
@@ -702,9 +699,6 @@ public sealed class SdfMeshIrradiance {
             var along = (scene.Intersect(origin: origin, direction: Axes[axis], maximum: lighting.Reach, distance: out var axisDistance, material: out _, normal: out _) ? axisDistance : lighting.Reach);
 
             probe.Depth[axis] = along;
-            if (total[axis] <= 0f) { continue; }
-            probe.Sky[axis] = (sky[axis] / total[axis]);
-            probe.Radiance[axis] = (radiance[axis] / total[axis]);
         }
         if (probe.Invalid) { return probe; }
 
@@ -734,6 +728,42 @@ public sealed class SdfMeshIrradiance {
         }
 
         return probe;
+    }
+    // The same hemispherical radiance measurement serves lattice probes and a camera in a gap between them. This
+    // reads the existing scene and bounce cache; a camera sample is never written back into the irradiance volume.
+    private bool TraceRadiance(Vector3 origin, Quaternion rotation, Layout layout, Lighting lighting, (int X, int Y, int Z) low,
+        SdfMeshIrradianceScene scene, int sweep, Span<float> sky, Span<Vector3> radiance) {
+        Span<float> total = stackalloc float[6];
+        var backFaces = 0;
+
+        for (var ray = 0; (ray < layout.Rays); ray++) {
+            var direction = Vector3.Transform(value: Fibonacci(index: ray, count: layout.Rays), rotation: rotation);
+            var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out var material, normal: out var normal);
+            var light = Vector3.Zero;
+
+            if (hit) {
+                if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) {
+                    backFaces++;
+                } else {
+                    light = Shade(layout: layout, lighting: lighting, low: low, material: material, normal: normal, point: (origin + (direction * distance)), scene: scene, sweep: sweep);
+                }
+            }
+            for (var axis = 0; (axis < 6); axis++) {
+                var weight = MathF.Max(0f, Vector3.Dot(vector1: direction, vector2: Axes[axis]));
+
+                if (weight <= 0f) { continue; }
+                total[axis] += weight;
+                if (!hit) { sky[axis] += weight; }
+                radiance[axis] += (light * weight);
+            }
+        }
+        for (var axis = 0; (axis < 6); axis++) {
+            if (total[axis] <= 0f) { continue; }
+            sky[axis] /= total[axis];
+            radiance[axis] /= total[axis];
+        }
+
+        return (backFaces <= (InsideShare * layout.Rays));
     }
     // The radiance a hit sends back along its ray, in the views pass's units (albedo times the light a surface receives):
     // the directional lights' bounce under a traced shadow, the traced point and spot lights' under their windowed
