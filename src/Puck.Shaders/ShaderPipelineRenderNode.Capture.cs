@@ -5,6 +5,17 @@ namespace Puck.Shaders;
 
 // The capture of the published output: a surface format read back as it is, any other image through the display encode.
 public sealed partial class ShaderPipelineRenderNode {
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<byte[], Action<string>> m_captureCompanions = new();
+    /// <summary>Captures immutable companion data on the render thread and returns its file writer. Invoked while
+    /// the exact source frame is retained; presented encodes run later and receive only the captured closure.</summary>
+    public Func<Action<string>?>? CaptureCompanionFactory { get; set; }
+    /// <summary>Whether all companion encoders are ready; a false result retains the pending capture.</summary>
+    public Func<bool>? CaptureCompanionReady { get; set; }
+    /// <summary>Starts any display encoder an image needs and checks that it can be read without losing a capture.</summary>
+    /// <param name="image">The retained source image.</param>
+    /// <returns>Whether a same-device image and its encoder are ready.</returns>
+    public bool CanReadPresented(in Surface image) => !image.IsEmpty && image.IsSameDeviceImage &&
+        (Surface.IsSurfaceFormat(image.Format) || EncoderReady());
     /// <summary>Polls a pending capture against the last published image without rendering another sample.</summary>
     public void PollCapture() => CaptureIfPending();
     /// <summary>Reads back an image the display presents this frame for a presented capture
@@ -19,6 +30,7 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <exception cref="DeviceLostException">The read lost the graphics device.</exception>
     public bool TryReadPresented(in Surface image, GpuImageLayout layout, out byte[] rgba) {
         rgba = [];
+        if (CaptureCompanionReady?.Invoke() == false) { return false; }
 
         if (
             image.IsSameDeviceImage &&
@@ -29,6 +41,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         rgba = ReadPixels(image: in image, layout: layout).ToArray();
+        if (CaptureCompanionFactory?.Invoke() is { } companion) { m_captureCompanions.Add(rgba, companion); }
 
         return true;
     }
@@ -44,6 +57,10 @@ public sealed partial class ShaderPipelineRenderNode {
         _ = (m_capturePng.TryWrite(height: height, path: path, rgba: rgba, width: width)
             ? true
             : throw new NotSupportedException(message: "PNG capture is unavailable."));
+        if (m_captureCompanions.TryGetValue(rgba, out var companion)) {
+            companion(path);
+            _ = m_captureCompanions.Remove(rgba);
+        }
     }
 
     // A capture armed after a selection reads that selection: while its preview builds, the published image is still the
@@ -52,6 +69,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // carries (a float working image) is captured through the display encode's SDR, which waits while its pipeline
     // builds and moves the image out of the layout it was published in to sample it, and back.
     private void CaptureIfPending() {
+        if (m_capture.PendingPath is not null && CaptureCompanionReady?.Invoke() == false) { return; }
         if (
             (m_previewRequest is not null) ||
             !m_publishedAtRequestedExtent
@@ -75,6 +93,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 m_capturePng.ThrowIfUnavailable(path: path);
 
                 var pixels = ReadPixels(image: in m_lastSurface, layout: m_publishedLayout);
+                var companion = CaptureCompanionFactory?.Invoke();
 
                 if (!m_capturePng.TryWrite(
                     height: ((int)m_lastSurface.Height),
@@ -86,6 +105,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 }
 
                 Console.Error.WriteLine(value: $"[capture] {m_name} -> {path}");
+                companion?.Invoke(path);
             })
         );
     }

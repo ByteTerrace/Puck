@@ -32,8 +32,30 @@ verdict fixtures are quarantined under `experimental/`; do not boot, repair or
 retarget them, and read the references' mentions of them as prior art
 ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
 
+## Diagnostic reports and pins
+
+`world.debug-view report colliders --json` and `world.debug-view report contacts
+--json` are core commands: they run with the view off and in a headless host.
+Unknown coverage is a result, never a clean bill of health. Headless checks
+compare the effective analytic colliders and retained support solves with the
+authored solid field; rendered checks additionally require matching retained
+opaque meshes. Dynamic supports and interpolated body poses without an exact
+solver witness remain unknown. Rigid contacts retain a loaded manifold point;
+snap reach is informational and never a hover tolerance.
+
+Enable `world.debug-view colliders|contacts [focus|pins-only]` for the primary
+view. `world.view.pick <instance> finding <id>` reads its causal record without
+changing the existing `<instance> <x> <y>` normalized pick form.
+`world.debug-view goto <id>` requests an operator camera pose only. Reports
+share stable cause IDs, current measurements, precision budgets, source
+stamp/creation/node/operation and tick lifetimes. Changed reports enter
+`host.log category world.debug-view.colliders` or `.contacts`, debounced.
+See [scene diagnostics](../../../docs/reference/commands.md#scene-diagnostics)
+for capture names and current coverage boundaries.
+
 ## The live World is shared
- The World the owner pairs in runs the main
+
+The World the owner pairs in runs the main
 checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
 tools (in Claude, ToolSearch `select:mcp__puck__puck_worlds,mcp__puck__puck_world_start,mcp__puck__puck_world_stop,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
 `puck_worlds` lists the running Worlds, and `puck_exec`, `puck_capture_frame`

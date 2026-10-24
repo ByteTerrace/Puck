@@ -15,6 +15,34 @@ Rendering is presentation: floats are legal, and nothing here may feed back
 into simulation state. The deterministic contract lives with the fixed-point
 query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
+## Evidence-preserving diagnostics
+
+`world.debug-view colliders|contacts` uses the beauty path through temporal
+resolve, sky, glass, fog, exposure and the root tonemap/sharpen. Keep
+`DebugViewModes.PreservesScene`, `sdfDebugPreservesScene` and the temporal epoch
+key together. Diagnostic marks belong only to `AnnotationWriter.EmitDiagnostics`'s separately
+reserved overlay channel; its masks protect every causal footprint, including
+overflow beyond the sixteen visible pins. Focus removes chroma outside those
+footprints without changing luminance. Never paint a diagnostic into history,
+the visibility buffer or lighting.
+
+`WorldDiagnostics` separates collision-versus-authored-field from
+field-versus-baked-mesh. The latter reuses the irradiance scene's retained
+triangle hierarchy only when its exact draw records and immutable authored
+source match and the bake has settled. `SdfMesh.BakeCell` comes from the actual
+contour lattice, survives cache storage and material renumbering, and supplies
+the hit triangle's half-cell-diagonal budget. No saved baseline or allowlist is
+involved. A second `SdfWorldPicker` per instance asynchronously reads cluster
+depth without stealing pointer requests; discard results across camera, mesh,
+program or view changes.
+
+Captures on the synthesized overlaid root retain the beauty image, annotated
+image and JSON together. The capture companion waits for both display encoders;
+its closure owns pixels and JSON before background encoding starts. Custom
+authored roots need an equivalent beauty/overlay split before they can supply
+a triplet. See [scene diagnostics](../../../docs/reference/commands.md#scene-diagnostics)
+for commands, coverage and the GPU handoff checks.
+
 ## Where things live
 
 | Area | Code | Explanation |

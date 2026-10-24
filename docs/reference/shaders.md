@@ -980,8 +980,9 @@ the tonemap included, and whenever the world has more than one view; otherwise
 When nothing is drawn, as in an offscreen World with no panes, no `views.post`
 rows and no tonemap, `world` is the root and the display shows the world's first
 view directly. The host composes the root again whenever the document's panes, views,
-`views.post` rows or `render.tonemap` move, and runs no tonemap while a debug
-view (`world.debug-view`) is on, so a debug view shows its own colors. A world that sets `views.root` authors its whole render graph,
+`views.post` rows or `render.tonemap` move. Raw-term debug views skip the tonemap;
+the evidence-preserving `colliders` and `contacts` views retain it and sharpening,
+and compose their marks in the overlay. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
 a world authors no `views.post`.
 `RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the

@@ -138,6 +138,8 @@ public sealed record SdfFrame(
     /// <summary>Gets the immutable host identity table for the composed frame. Composition fills it before publishing
     /// the frame; it is CPU-only presentation data and is never uploaded to the frame block.</summary>
     public ISdfPickMap? PickMap { get; internal set; }
+    /// <summary>The host's immutable authored source identity, retained through bake dressing for matching-state diagnostics.</summary>
+    public object? DiagnosticSource { get; init; }
     /// <summary>Gets the words <see cref="Program"/> differs in from the program built before it, which tables holding
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
     public SdfProgramDelta? ProgramDelta { get; internal set; }

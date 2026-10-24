@@ -170,6 +170,7 @@ These items belong to no single programme.
   - [ ] Walking backward, the Moth's legs cross behind each other.
   - [ ] Diagnostic views that flag suspect values without covering them ([decision](../decisions/rendering.md#a-diagnostic-view-never-covers-its-evidence)).
     - [ ] Phase 1: the shared machinery (preserve-scene path, finding records, `report`, pins and exterior marks, capture triplets, pick and goto by finding) with the `colliders` and `contacts` views.
+      - Coding implementation is in the diagnostic command, report tracker and `AnnotationWriter`'s separately budgeted diagnostic channel. Headless checks distinguish authored-field evidence from unavailable mesh evidence. Windowed integration still must verify the [held-frame comparisons and capture triplets](../reference/commands.md#scene-diagnostics); no GPU leg ran in the coding lane. Retained dynamic supports, field-provider support witnesses and interpolated body/render pose pairing remain explicit unknown coverage.
     - [ ] Phase 2: the `probes` view (a final contributing probe whose segment to the receiver is blocked) and the `exposure` view (checks against the probe-based meter, `SdfMeshIrradiance.TryMeter`).
   - [ ] Repurpose `view.annotate` as the human half of the diagnostics, after diagnostics phase 1:
     - the diagnostic pins, contours and calipers extend its `AnnotationWriter`, with no second overlay writer;

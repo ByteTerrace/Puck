@@ -11,6 +11,17 @@ namespace Puck.SdfVm.Tests;
 /// taken back from the scene that retained it.
 /// </summary>
 public sealed class SdfMeshIrradianceSceneLawTests {
+    [Fact]
+    public void ADiagnosticHitCarriesOnlyItsOwnTransformedBakeCell() {
+        var mesh = Cube() with { BakeCell = new Vector3(0.02f, 0.04f, 0.06f) };
+        var scene = SdfMeshIrradianceScene.Build([
+            Draw(mesh, Matrix4x4.CreateScale(2), 0),
+            Draw(mesh with { BakeCell = Vector3.One }, Matrix4x4.CreateTranslation(10, 0, 0), 0),
+        ]);
+        Assert.NotNull(scene);
+        Assert.True(scene.Intersect(new Vector3(0, 3, 0), -Vector3.UnitY, 10, out _, out _, out _, out var error));
+        Assert.Equal(mesh.BakeCell.Length(), error, 0.000001f);
+    }
     // A rippled sheet of quads, wide enough that its hierarchy and preparation run in parallel.
     private static SdfMesh Sheet(int quads, uint materials) {
         var positions = new Vector3[(quads + 1) * (quads + 1)];

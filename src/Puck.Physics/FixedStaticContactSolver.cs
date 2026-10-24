@@ -47,6 +47,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     }
     private bool Sweep(
         ReadOnlySpan<FixedStaticCollider> colliders,
+        FixedSurfaceColliderSource source,
+        ref ContactSupportWitness? support,
         ref FixedVector3 position,
         ref FixedVector3 velocity,
         in FixedQuaternion orientation,
@@ -58,7 +60,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     ) {
         var pushed = false;
 
-        foreach (var collider in colliders) {
+        for (var index = 0; index < colliders.Length; index++) {
+            var collider = colliders[index];
             if (collider.TryGetPush(
                 orientation: in orientation,
                 position: position,
@@ -75,6 +78,13 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     up: in up,
                     velocity: ref velocity
                 );
+                if (FixedVector3.Dot(left: push.Normal, right: up) >= GroundedThreshold) {
+                    support = new ContactSupportWitness(Collider: collider, Volume: volume, Position: position,
+                        Orientation: orientation, Push: push, Source: source, ColliderIndex: index) {
+                        BodyPoint = position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal),
+                        Up = up, WalkableThreshold = GroundedThreshold,
+                    };
+                }
                 pushed = true;
             }
         }
@@ -101,6 +111,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         in FixedVector3 up
     ) {
         var grounded = false;
+        ContactSupportWitness? support = null;
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
         var iterations = Math.Max(
@@ -114,6 +125,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             foreach (ref readonly var volume in volumes) {
                 pushed |= Sweep(
                     colliders: colliders,
+                    source: FixedSurfaceColliderSource.Static,
+                    support: ref support,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
@@ -125,6 +138,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 );
                 pushed |= Sweep(
                     colliders: dynamicColliders,
+                    source: FixedSurfaceColliderSource.Dynamic,
+                    support: ref support,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
@@ -145,6 +160,6 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal
-        );
+        ) { Support = support };
     }
 }

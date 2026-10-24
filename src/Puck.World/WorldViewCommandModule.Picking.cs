@@ -35,6 +35,13 @@ internal sealed partial class WorldViewCommandModule {
         }
         var instance = args[0].ToString();
 
+        if (args.Count == 3 && args.Is(1, "finding")) {
+            if (diagnostics?.Find(args[2].ToString()) is not { } finding || finding.Identity.Instance != instance) {
+                return CommandResult.Error(output: $"[world.view.pick: no finding '{args[2]}' in instance '{instance}']");
+            }
+            return new CommandResult(Output: finding.ToJson());
+        }
+
         if (graphs?.FindPicker(instance: instance) is not { } picker) {
             return CommandResult.Error(output: $"[world.view.pick: no rendered SDF view '{instance}']");
         }

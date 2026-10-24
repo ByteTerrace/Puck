@@ -54,6 +54,7 @@ internal sealed class WorldColliderSet : IContactField {
     // holdable or tetherable today.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
+    public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private init; } = [];
     // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
     // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
     // surface along the probe, if it is holdable", and the latter lets an ordinary floor shadow every holdable wall
@@ -284,6 +285,7 @@ internal sealed class WorldColliderSet : IContactField {
 
         var tuning = FixedWorldCollision.Compile(collision: collision);
         var colliders = new List<FixedStaticCollider>();
+        var diagnosticColliders = new List<WorldDiagnosticCollider>();
         var holdableColliders = new List<FixedStaticCollider>();
         var holdableGrantedByOverride = new List<bool>();
         var worldDefaultGrip = definition.Collision.DefaultHold;
@@ -314,6 +316,7 @@ internal sealed class WorldColliderSet : IContactField {
             );
 
             colliders.Add(item: screenCollider);
+            diagnosticColliders.Add(new WorldDiagnosticCollider(screenCollider, $"screen:{screen.Index}", "screen", "slab", "box", solid.Margin));
             // A screen carries no grip facet — its collider always follows the world default, never an override.
             if (worldDefaultGrip) {
                 holdableColliders.Add(item: screenCollider);
@@ -419,6 +422,9 @@ internal sealed class WorldColliderSet : IContactField {
                         }
 
                         colliders.Add(item: placementCollider);
+                        diagnosticColliders.Add(new WorldDiagnosticCollider(placementCollider, placement.Id.ToString(),
+                            creation.Id.ToString(), copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            $"{copy.Shape.Type}/{copy.Shape.Blend}", solid.Margin, !creation.EngineDocument.IsGlassShape(copy.Shape)));
 
                         if (placementHoldable) {
                             holdableColliders.Add(item: placementCollider);
@@ -436,6 +442,7 @@ internal sealed class WorldColliderSet : IContactField {
             tuning: tuning,
             attachedRows: attachedRows
         ) {
+            DiagnosticColliders = diagnosticColliders.ToArray(),
             BoxCount = boxes,
             CylinderCount = placementCylinders,
             PlacementBoxCount = placementBoxes,

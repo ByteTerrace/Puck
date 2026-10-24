@@ -246,8 +246,8 @@ public static class WorldRenderRoot {
         // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, or a
         // temporally resolved view starts or stops sharpening, from the post passes and tonemap the document names then,
         // so a live views.post, render.tonemap or lever edit reaches the running root.
-        // A debug view shows its own colors, so the root runs no tonemap and no sharpen while one is on.
-        host.ShowsDebugView = () => (residency.DebugMode != 0);
+        // Raw-term views show their own colors; diagnostic overlays retain the beauty tonemap and sharpening.
+        host.ShowsDebugView = () => !DebugViewModes.PreservesScene(mode: residency.DebugMode);
         host.Attach(
             compose: (panes, views, post, tonemap, sharpens) => WorldRootGraph.Compose(
                 overlay: overlaid,
@@ -299,6 +299,10 @@ public static class WorldRenderRoot {
                 );
                 compareCapture.Poll();
                 frameSource.PrepareGraph(context: in context);
+                if (overlaid && host.Synthesized is { } synthesizedRoot && runtime.NodeOf(host.ComparisonLiveRoot!) is { } captureNode) {
+                    captureNode.CaptureCompanionFactory = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureCompanion(runtime, synthesizedRoot.Scene);
+                    captureNode.CaptureCompanionReady = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureReady(runtime, synthesizedRoot.Scene);
+                }
                 timing.Tick();
             },
             Roots = host.Roots,

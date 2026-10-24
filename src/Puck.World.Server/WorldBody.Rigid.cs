@@ -640,6 +640,8 @@ public sealed partial class WorldBody {
         var subTicks = (stepTicks / unchecked((ulong)derivedSubsteps));
         var leftoverTicks = (stepTicks - (subTicks * unchecked((ulong)derivedSubsteps)));
         var grounded = false;
+        DiagnosticSupport = null;
+        m_diagnosticManifoldPoint = null;
         var scaledColliderVolumes = ScaledColliderVolumes();
 
         for (var sub = 0; (sub < derivedSubsteps); sub++) {
@@ -721,6 +723,7 @@ public sealed partial class WorldBody {
                 m_rigidObstructionContacting = false;
             }
 
+            m_diagnosticManifoldPoint = null;
             if (resolution.Grounded) {
                 // GroundNormal reads Zero on a genuinely grounded substep only through WorldAdjacencyContactField's
                 // own cross-authority merge (its `return new ContactResolution(Grounded: ..., ObstructionNormal: ...)`
@@ -777,6 +780,9 @@ public sealed partial class WorldBody {
             }
 
             grounded = (grounded || resolution.Grounded);
+            if (resolution.Support is { } support) {
+                DiagnosticSupport = m_diagnosticManifoldPoint is { } point ? support with { BodyPoint = point } : support;
+            }
         }
 
         // Rigid bodies bypass the locomotion contact operation. Publish the measured contact here as well;
@@ -1075,6 +1081,15 @@ public sealed partial class WorldBody {
                 );
             }
         }
+
+        // Retain a point that actually carried the solved load, never an invented point below the body centre.
+        var loaded = -1;
+        for (var point = 0; point < pointCount; point++) {
+            if (accumulatedNormalImpulseRaw[point] > 0 && (loaded < 0 || accumulatedNormalImpulseRaw[point] > accumulatedNormalImpulseRaw[loaded])) {
+                loaded = point;
+            }
+        }
+        if (loaded >= 0) { m_diagnosticManifoldPoint = m_position + m_orientation.Rotate(rigid.CenterOffset) + anchors[loaded]; }
 
         for (var point = 0; (point < pointCount); point++) {
             if (accumulatedNormalImpulseRaw[point] <= 0L) {

@@ -122,4 +122,25 @@ public enum ContactRefusal {
 /// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
 /// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
 /// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false);
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false) {
+    /// <summary>The actual walkable analytic solve, retained for diagnostics only; absent for providers that do not publish it.</summary>
+    public ContactSupportWitness? Support { get; init; }
+}
+
+/// <summary>The input and outcome of the last walkable analytic push. Read-back only; never part of simulation decisions.</summary>
+/// <param name="Collider">The effective collider used by the solve.</param>
+/// <param name="Volume">The body's volume used by the solve.</param>
+/// <param name="Position">The body position immediately after this push.</param>
+/// <param name="Orientation">The body orientation used by the solve.</param>
+/// <param name="Push">The actual normal and penetration.</param>
+/// <param name="Source">Static or attached collider span.</param>
+/// <param name="ColliderIndex">The index in that span.</param>
+public readonly record struct ContactSupportWitness(FixedStaticCollider Collider, FixedBodyColliderVolume Volume,
+    FixedVector3 Position, FixedQuaternion Orientation, FixedContactPush Push, FixedSurfaceColliderSource Source, int ColliderIndex) {
+    /// <summary>The body's support point for this push, or the loaded rigid-manifold anchor when that solve refines it.</summary>
+    public FixedVector3 BodyPoint { get; init; }
+    /// <summary>The solve's up axis, before any subsequent body-frame adjustment.</summary>
+    public FixedVector3 Up { get; init; }
+    /// <summary>The solve's exact walkability cosine.</summary>
+    public FixedQ4816 WalkableThreshold { get; init; }
+}
