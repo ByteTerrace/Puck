@@ -86,9 +86,9 @@ reports drift. Restore a fresh worktree once
 
 A World you boot to verify a change passes `--devices none`: the stdin recipe,
 a scratch `.puck` world, and a World you drive over MCP, which you start with
-the `puck` server's `puck_world_start` from your worktree's Release build
-(`checkout`: the worktree's absolute path) instead of a hand-written boot
-line. That tool passes `--devices none`, its own state directory and
+the `puck` server's `puck_world_start` (`checkout`: the worktree's absolute
+path; it boots the build of your current sources, building it first when no run
+has) instead of a hand-written boot line. That tool passes `--devices none`, its own state directory and
 `--control`, holds the GPU lease for a windowed World until it exits, and
 returns the `processId` to name on every call; `host.log` reads the World's
 stderr lines, and `puck_world_stop` ends it and releases the lease. Without

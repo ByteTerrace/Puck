@@ -43,16 +43,22 @@ runs. Reads and captures are free. A mutation (`world.row.set`, `world.reload`,
 `body.*`, `player.*`, `view.override`) changes what the owner sees: make one
 only when the task allows it, and restore what you changed.
 
-To run your own edits, build `src/Puck.World` in Release in your worktree and
-start a World with `puck_world_start` (`checkout`: your worktree's absolute
-path; `windowed: true` only for a granted GPU leg). Never hand-write that boot
+To run your own edits, start a World with `puck_world_start` (`checkout`: your
+worktree's absolute path; `windowed: true` only for a granted GPU leg). The
+tool resolves the World build of the checkout's current sources from the same
+content-keyed store `puck test` and `puck canary` use, building it first when
+no run has built that source state (an unchanged tree reuses its build), so it
+never boots a binary older than the sources and documents you edited; a
+failed build refuses the start with its first errors. Its build is not the
+worktree's `bin/Release`, so no manual build is needed first. Never hand-write that boot
 line: the tool passes `--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)),
 a state directory of its own and `--control`, takes and holds the GPU lease
 for a windowed World, and returns the World's `processId`. Name that World on
 every call, read its stdout and stderr with `host.log` (`host.log category
 sdf.mesh-bake`, `host.log since <seq>`, `host.log ticks <from>..<to>`), and end
 it with `puck_world_stop`, which refuses any World the adapter did not start.
-The World runs from your build output, so stop it before rebuilding
+The World runs from the store's build, which holds it while the World runs and
+leaves your `bin/Release` free to rebuild
 ([references/hosting-and-release.md](references/hosting-and-release.md)).
 
 ## The model

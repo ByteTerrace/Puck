@@ -319,6 +319,40 @@ public sealed class McpAdversarialTests {
         Assert.Equal(expected: ControlCapture.Settled, actual: seen[2]!.Mode);
         await adapter.StopAsync();
     }
+    // Law: a start boots only the build the launch resolves for the checkout; when no build of the current sources can be
+    // made, the start refuses with the build's reason and takes no GPU lease and launches nothing.
+    [Fact]
+    public async Task AStartWhoseSourcesCannotBeBuiltIsRefusedWithTheBuildsReason() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        using var scratch = new TemporaryDirectory(prefix: "puck-start-");
+        var asked = new List<(string Checkout, TimeSpan Budget)>();
+
+        _ = Directory.CreateDirectory(path: Path.Combine(path1: scratch.RootPath, path2: "worlds", path3: "debug"));
+        await using var adapter = new InProcessAdapter(
+            createSession: () => new ScriptedSession(entered: null),
+            directory: scratch.RootPath,
+            launch: new OperatorWorldLaunch(
+                AcquireGpuLease: static (_, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
+                Checkout: scratch.RootPath,
+                ResolveBuild: (checkout, budget, _) => {
+                    asked.Add(item: (checkout, budget));
+
+                    return Task.FromResult(result: new OperatorWorldBuild(Error: "the Puck.World build exited 1.", Lease: null, Path: null));
+                }
+            )
+        );
+        using var answer = await adapter.RequestAsync(
+            id: 2,
+            method: "tools/call",
+            parameters: """{"name":"puck_world_start","arguments":{"windowed":true,"timeoutSeconds":7}}"""
+        );
+        var structured = answer.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent");
+
+        Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
+        Assert.Contains(expectedSubstring: "the Puck.World build exited 1.", actualString: structured.GetProperty(propertyName: "output").GetString());
+        Assert.Equal(expected: JsonValueKind.Null, actual: structured.GetProperty(propertyName: "processId").ValueKind);
+        Assert.Equal(expected: [(Path.TrimEndingDirectorySeparator(path: scratch.RootPath), TimeSpan.FromSeconds(seconds: 7))], actual: asked);
+    }
     // Law: an adapter following a directory attaches to the newest World there that answers, skipping a capability
     // file whose World is gone, and after its attachment closes follows to whichever World now answers, with no
     // adapter restart.
@@ -418,7 +452,7 @@ public sealed class McpAdversarialTests {
 
         private int m_attachments;
 
-        internal InProcessAdapter(Func<IControlSession> createSession, string? directory = null) {
+        internal InProcessAdapter(Func<IControlSession> createSession, string? directory = null, OperatorWorldLaunch? launch = null) {
             Host = new LocalControlServer(
                 clock: HostClock,
                 createSession: () => { Interlocked.Increment(location: ref m_attachments); return createSession(); },
@@ -429,7 +463,8 @@ public sealed class McpAdversarialTests {
                 Input,
                 m_output,
                 m_stop.Token,
-                AdapterClock
+                AdapterClock,
+                launch
             );
         }
 

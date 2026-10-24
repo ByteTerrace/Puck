@@ -161,8 +161,14 @@ own:
 An agent that needs a World of its own starts it through the adapter rather
 than writing a boot line:
 
-- `puck_world_start` boots a world `document` (default `worlds/debug`) from a
-  `checkout`'s Release build of `src/Puck.World`, headless unless `windowed`.
+- `puck_world_start` boots a world `document` (default `worlds/debug`) from the
+  Release build of a `checkout`'s current `src/Puck.World` sources, headless
+  unless `windowed`. The build comes from the CLI's World build store, one
+  build per source state: an unchanged checkout builds nothing, a changed one
+  is built first (inside `timeoutSeconds`, before any GPU lease is taken), so a
+  start never boots a binary older than its sources and the checkout's
+  `bin/Release` is neither read nor written. A build that fails refuses the
+  start with its first errors and the log's path.
   The checkout is the adapter's own (the default) or a worktree of its
   repository, named by absolute path, so a lane boots its own build; the
   document must lie under that checkout's `worlds/`. Anything else is refused

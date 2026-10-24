@@ -104,12 +104,11 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
 - **Coding lanes** build only the projects they touch, with `-m:2`, and run only
   their focused tests. They run no whole-solution build, no full suite and no
   GPU leg, and they hand back a branch that builds and passes those tests.
-  Several can run at once only while their combined builds, test hosts and
-  Worlds fit in memory. On a 32 GB machine, two Codex lanes building and
-  booting Worlds beside the integration lane drove memory low enough that
-  Claude Code reaped both while the session sat idle, twice. There, run one
-  building lane at a time, and save a reaped lane's tree as a WIP commit
-  before restarting it.
+  Several run at once (the owner's direction: don't over-serialize for
+  memory). Claude Code can reap background jobs under memory pressure while
+  the session idles. When that happens, save the reaped lane's tree as a WIP
+  commit and restart it with a continuation note. Keep one heavy integration
+  job at a time.
 - **The integration lane** is one long-running lane. It takes finished branches
   in the order the lead names, merges each onto its own staging branch, and
   resolves generated-file conflicts by running their generators. Then it runs
@@ -328,8 +327,8 @@ World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
 the lead merges and reloads, or in a World of its own, named by `world` on
 every call. A brief tells such a lane to start that World with
-`puck_world_start` from its worktree's Release build (`checkout`: the worktree's
-absolute path) and to end it with `puck_world_stop`, never with a hand-written
+`puck_world_start` (`checkout`: the worktree's absolute path; it boots the build
+of the worktree's current sources, building it first when no run has) and to end it with `puck_world_stop`, never with a hand-written
 boot line or a PID kill; the tool passes `--devices none`, a state directory
 of its own and `--control`, and a `windowed: true` start, the GPU grant's leg,
 holds the GPU lease until the World exits. Reads and captures of the live World are always
