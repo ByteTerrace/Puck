@@ -177,7 +177,8 @@ template signPrototypes() {
         map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
         [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
         [{ text: "PAINTING WING east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
-      ), run => { text: run.text, position [run.position[0], (run.position[1] + 0.7), run.position[2]], rotation: run.rotation, emHeight: run.emHeight, depth: run.depth, mode: run.mode, material: run.material, align: run.align, maxWidth: 1.36 })
+      ), run => { text: run.text, position [run.position[0], (run.position[1] + 0.7), run.position[2]], rotation: run.rotation, emHeight: run.emHeight, depth: run.depth, mode: run.mode, material: run.material, align: run.align, maxWidth: 1.36 }
+      )
     }
   }
 }
