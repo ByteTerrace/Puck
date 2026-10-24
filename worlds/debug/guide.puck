@@ -29,7 +29,14 @@ hud {
       rect { x: 0.02, y: 0.02, width: 0.56, height: 0.075 }
       layer: Over
       style: Panel
-      visible { $type: "state", binding: "state.guide.title", comparison: NotEqual, text: "" }
+      // Shown only with the addon HUD toggle on (addon-hud.puck) and an exhibit in front of her.
+      visible {
+        $type: "all"
+        predicates [
+          { $type: "state", binding: "state.addonHud", comparison: Equal, value: 1 }
+          { $type: "state", binding: "state.guide.title", comparison: NotEqual, text: "" }
+        ]
+      }
       elements [
         { id: "title", kind: Text, rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }, style: Primary, "template": "{state.guide.title}" }
         { id: "note", kind: Text, rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }, style: Dim, "template": "{state.guide.note}" }
