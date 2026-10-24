@@ -19,12 +19,20 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   refresh. `world.wait bakes` still waits for all geometry; an initial
   `world.exposure` reading with `meter=none` is not a backend-parity result.
 - A cold bake with `world.wait bakes` still pending, `sdf.mesh-gi.scenes=0`,
-  and skipped `sdf.world$mask`/`sdf.world$bake` work can be stalled before GI.
-  The bake scheduler used to count saved pose rows against its sample-output
-  limit, permanently rejecting a large lattice; the input table now grows
-  independently. This fixes a tested scheduler boundary, not a confirmed cause
-  of the gallery stall: the final cold Direct3D run still had not settled after
-  six minutes. See [mesh baking](mesh-bake.md#groups-poses-and-materials).
+  and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
+  Read the wait's bake description twice: its meshes, pending groups,
+  dispatches and samples distinguish progress from a stopped scheduler.
+  Plain `lead/catch-up` at `3870e5e0e`, without the two `codex-gi2` fixes,
+  also failed to finish a cold Direct3D bake within nearly nine minutes. Its mesh
+  draw count kept rising. `host.frames` showed eight simulation catch-up steps
+  taking roughly 400 ms a frame; `world.rate pause` on the boot instance
+  reduced frame time to about 19 ms and accelerated baking. Pause only a
+  diagnostic run, never the owner's play session, and disclose that change
+  when comparing times. A nested world's `[sdf.mesh-gi] done` does not certify
+  the gallery: check the main residency's counter and meter too.
+  The scheduler's separate saved-pose/input-capacity defect has a focused
+  boundary test; it is not the established cause of this slow gallery boot.
+  See [mesh baking](mesh-bake.md#groups-poses-and-materials).
 - A depth axis stores its first hit. Averaging it with rays that escape beside
   a blocker, or choosing the farther distance, erases that blocker.
 - At the volume boundary, clamp the lookup to the boundary probes, then test
@@ -143,7 +151,11 @@ reflects a substantial neutral environment over its red diffuse albedo.
 `coat` currently adds a direct-light lobe in `sdfMaterialSpecular`; it is not
 read by the environment-reflection branch in `sdf-light-stage.hlsli`. Compare
 the material with coat disabled separately from changing its base F0 before
-attributing a pale colour to the coat layer.
+attributing a pale colour to the coat layer. The continuation's settled
+Direct3D captures confirm this isolation: coat zero leaves the salmon colour;
+keeping coat at 0.5 and reducing base F0 from 0.35 to 0.04 restores a saturated
+red. These were live diagnostic edits, restored before the run ended, not a
+change to the authored exhibit or exposure.
 
 See the [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 for the lighting model and [verification](../../verification/SKILL.md) for GPU
