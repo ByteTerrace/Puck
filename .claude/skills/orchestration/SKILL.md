@@ -117,7 +117,14 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
   resolves generated-file conflicts by running their generators. Then it runs
   the landing bar above once on the merged result: the whole-solution build, the
   suites, the debug-world scenarios and any granted GPU check. It reports green
-  or red per branch.
+  or red per branch. It also lists each branch's deleted files (`git diff
+  --diff-filter=D` against the integration tip) and compares them with what the
+  brief allowed. A deletion the brief didn't name is reported to the lead before
+  landing, never merged silently. A lane once deleted native capture while
+  asked only to consolidate.
+- **Briefs** that allow deletion say what may be deleted. A finding capture names
+  its settle state: bakes settled and irradiance settled, or marked partial. A
+  capture taken before settling can't support a lighting finding.
 - **The lead** fast-forwards the integration branch to each green staging head,
   routes a red result back to the lane that owns it, and decides any merge
   conflict that needs judgement.
