@@ -117,7 +117,10 @@ public sealed class AddonSimulationPump {
         if (
             (cell.Verb != ((ushort)AddonSubjectKind.Body)) &&
             (cell.Verb != ((ushort)AddonSubjectKind.Section)) &&
+<<<<<<< HEAD
             (cell.Verb != ((ushort)AddonSubjectKind.Screen)) &&
+=======
+>>>>>>> lead/catch-up
             (cell.Verb != ((ushort)AddonSubjectKind.State))
         ) {
             error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
@@ -143,7 +146,10 @@ public sealed class AddonSimulationPump {
         var admissible = subjectKind switch {
             AddonSubjectKind.Section => AddonCapabilityMask.Mutate,
             AddonSubjectKind.State => AddonCapabilityMask.Observe,
+<<<<<<< HEAD
             AddonSubjectKind.Screen => AddonCapabilityMask.Observe | AddonCapabilityMask.Control,
+=======
+>>>>>>> lead/catch-up
             _ => AddonCapabilityMask.Drive | AddonCapabilityMask.Observe,
         };
 
@@ -173,7 +179,11 @@ public sealed class AddonSimulationPump {
             SubjectKind: subjectKind,
             SubjectIndex: cell.A,
             CapabilityMask: mask,
+<<<<<<< HEAD
             NameLength: ((subjectKind is AddonSubjectKind.Section or AddonSubjectKind.State)
+=======
+            NameLength: ((subjectKind != AddonSubjectKind.Body)
+>>>>>>> lead/catch-up
             ? cell.C
             : 0L)
         );
@@ -315,6 +325,16 @@ public sealed class AddonSimulationPump {
                 A: cell.A,
                 B: cell.B
             );
+            error = "";
+            return true;
+        }
+
+        if (cell.Verb is AddonAbi.RequestVerbs.ReadStateCell or AddonAbi.RequestVerbs.Log) {
+            if (cell.C != 0L || (cell.Verb == AddonAbi.RequestVerbs.Log && (cell.HandleIndex != 0 || cell.HandleGeneration != 0))) {
+                error = "state reads and logs require C = 0; log handle fields must be zero";
+                return false;
+            }
+            m_queries[m_queryCount++] = new AddonQuerySubmission(ordinal, cell.Verb, cell.HandleIndex, cell.HandleGeneration, cell.A, cell.B);
             error = "";
             return true;
         }

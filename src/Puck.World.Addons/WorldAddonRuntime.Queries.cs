@@ -108,15 +108,26 @@ public sealed partial class WorldAddonRuntime {
                     ? GrantSubject.Body(index: ((int)ask.SubjectIndex))
                     : GrantSubject.All
                 );
+<<<<<<< HEAD
             } else if (ask.SubjectKind == AddonSubjectKind.Screen) {
                 inRange = ask.SubjectIndex is >= 0 and <= int.MaxValue;
                 subject = inRange ? GrantSubject.Screen((int)ask.SubjectIndex) : GrantSubject.All;
             } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
                 if (!TryResolveSectionAskName(
+=======
+            } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
+                string sectionName;
+                if (ask.SubjectKind == AddonSubjectKind.State) {
+                    if (!TryReadUtf8(addon, ask.SubjectIndex, ask.NameLength, AddonAbi.MaxSectionNameBytes, out sectionName, out var refusal)) {
+                        QueueAnswer(addon, ask.Ordinal, refusal);
+                        continue;
+                    }
+                } else if (!TryResolveSectionAskName(
+>>>>>>> lead/catch-up
                     addon: addon,
                     ask: in ask,
                     error: out var copyError,
-                    name: out var sectionName,
+                    name: out sectionName,
                     refusal: out var copyRefusal
                 )) {
                     Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} ask ordinal {ask.Ordinal} refused {copyRefusal} — {copyError}]");
@@ -134,10 +145,16 @@ public sealed partial class WorldAddonRuntime {
                 // so answering "no such section" for an unresolvable name leaks nothing a body-liveness answer
                 // would — there is no enumeration oracle to protect against for a static enum.
                 if (ask.SubjectKind == AddonSubjectKind.State) {
+<<<<<<< HEAD
                     inRange = !string.IsNullOrWhiteSpace(sectionName);
                     subject = GrantSubject.State(sectionName);
                 } else {
                 if (!GrantSubject.TryParseSectionName(
+=======
+                    inRange = true;
+                    subject = GrantSubject.State(name: sectionName);
+                } else if (!GrantSubject.TryParseSectionName(
+>>>>>>> lead/catch-up
                     name: sectionName,
                     section: out var resolvedSection
                 )) {
@@ -149,11 +166,17 @@ public sealed partial class WorldAddonRuntime {
                     );
 
                     continue;
+                } else {
+                    inRange = true;
+                    subject = GrantSubject.Section(section: resolvedSection);
                 }
+<<<<<<< HEAD
 
                 inRange = true;
                 subject = GrantSubject.Section(section: resolvedSection);
                 }
+=======
+>>>>>>> lead/catch-up
             } else {
                 inRange = false;
                 subject = GrantSubject.All;
@@ -299,8 +322,17 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
+<<<<<<< HEAD
                 if (query.Verb >= AddonAbi.RequestVerbs.StateCell) {
                     ResolveDebuggerQuery(addon, in query, tick);
+=======
+                if (query.Verb == AddonAbi.RequestVerbs.Log) {
+                    ResolveLog(addon, in query);
+                    continue;
+                }
+                if (query.Verb == AddonAbi.RequestVerbs.ReadStateCell) {
+                    ResolveStateRead(addon, in query);
+>>>>>>> lead/catch-up
                     continue;
                 }
 
@@ -496,6 +528,18 @@ public sealed partial class WorldAddonRuntime {
                         verdict: AddonVerdict.NoSuchSubject
                     );
 
+                    continue;
+                }
+
+                if (query.Verb == AddonAbi.RequestVerbs.BodyKinematics) {
+                    if (!ChargeHostFuel(addon, 64)) {
+                        QueueAnswer(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
+                        continue;
+                    }
+                    var kinematicsVerdict = WorldAddonWire.FromRule(rule: verdict.Rule);
+                    QueuePart(addon, query.Ordinal, kinematicsVerdict, 0, body.FixedPosition.Y.Value, body.ApproximateWorldVelocity().Y.Value);
+                    QueuePart(addon, query.Ordinal, kinematicsVerdict, 1, (long)body.Facts,
+                        (long)(uint)body.ContactCount | (body.LastObstructionNormal != Puck.Maths.FixedVector3.Zero ? 2L : 0L));
                     continue;
                 }
 

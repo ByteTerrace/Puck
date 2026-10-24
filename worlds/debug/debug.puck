@@ -23,6 +23,9 @@ import "controls"
 import "pad"
 import "devices"
 import "desktop"
+import "fuzzer"
+import "traversal"
+import "kinematics-scope"
 import "companion"
 import "hall"
 import "chess"
@@ -123,19 +126,19 @@ spawnPoints: concat([
 
 commands: galleryCommands
 
-// The Moth basis seats eight bodies, the companion takes the highest slot (companion.puck), the gallery hall's lift
-// car the next (hall.puck), the chess board cursor the next and the pieces the 32 below it (chess.puck); the imports
-// name populations of their own, so this body settles it; the rate range's six walkers, imported last, take the free
-// slots below the pieces (range.puck). Each body's size is its `size` register (size.puck).
+// The development fuzzer and traversal bot take bodies 44 and 43; the companion keeps 42. The gallery hall and
+// chess imports keep their existing indices. Each import names its population; this body settles the total.
+// The rate range's six walkers, imported last, take the free slots below the pieces (range.puck).
+// Each body's size is its `size` register (size.puck).
 bodies {
-  capacity: 43
+  capacity: (galleryPopulation + 2)
 }
 
 placements {
   // Eleven derived face screens: the painting wing's six canvases (paintings.puck), the Wonderland doors' two
   // (wonderland.puck) and the rate range's three windows (range.puck).
   policy {
-    authoringHeadroomPlacements: 0
+    authoringHeadroomPlacements: 24
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1

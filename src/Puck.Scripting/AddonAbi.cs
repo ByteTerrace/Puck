@@ -181,6 +181,7 @@ public static class AddonAbi {
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
         /// fewer verbs.</summary>
+<<<<<<< HEAD
         public const int Count = 11;
         /// <summary>Observe/screen runtime status (A) and completed steps (B); all payload lanes zero.</summary>
         public const int MachineStatus = 10;
@@ -205,6 +206,19 @@ public static class AddonAbi {
         /// <summary>Guest log line through an Observe handle: A/B UTF-8 pointer/length (up to 2048), C zero.
         /// The host prefixes the mount identity and settled tick.</summary>
         public const int Log = 9;
+=======
+        public const int Count = 6;
+        /// <summary>Reads height/vertical world velocity, then body facts/contact flags (two answer parts).</summary>
+        public const int BodyKinematics = 3;
+        /// <summary>The number of answer cells for height/velocity and facts/contact flags.</summary>
+        public const int BodyKinematicsAnswerParts = 2;
+        /// <summary>Reads one numeric cell through an Observe/State handle. A/B name UTF-8 key bytes; C is zero.
+        /// The answer carries its raw value and CellKind ordinal. Text and vector cells are refused.</summary>
+        public const int ReadStateCell = 4;
+        /// <summary>Writes one attributed diagnostic line. A/B name UTF-8 bytes; handles and C are zero.
+        /// At most one 256-byte line per guest per tick, charged against remaining tick fuel.</summary>
+        public const int Log = 5;
+>>>>>>> lead/catch-up
         /// <summary>The target-designation verb (<c>2</c>): a guest acts through a Drive handle over the source
         /// body; <c>A</c> is the target body index, <c>B</c> is the target-register index, and <c>C</c> is zero.</summary>
         public const int Designate = 2;

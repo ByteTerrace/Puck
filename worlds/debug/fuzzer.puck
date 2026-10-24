@@ -1,0 +1,67 @@
+// Seeded development tool. Toggle fuzzer[enabled] over MCP; it returns to zero after limit driven ticks.
+// Imported before traversal and companion, its stand-in is body 44; no human seat is driven.
+state {
+  world {
+    table fuzzer {
+      enabled = 0
+      seed = 12345
+      limit = 300
+      steps = 0
+      tick = -1
+      rng = 0
+      draw = 0
+    }
+    // Fixed bounds are authored cells too; the guest reads these, rather than baking the room into WAT.
+    table fuzzerBounds {
+      minX = 52.0
+      maxX = 65.0
+      minZ = -45.0
+      maxZ = -30.0
+    }
+  }
+}
+
+placements {
+  placement "fuzzer-stand-in" {
+    prototype: "companion"
+    position [56, 0.05, -32]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "companion"
+      source: "Idle"
+    }
+  }
+}
+
+addon "fuzzer" {
+  modulePath: "addons/fuzzer.wat"
+  hash: "auto"
+  fuel: 0
+  enabled: true
+  requests [
+    { capability: Observe, subject: "state:fuzzer" }
+    { capability: Observe, subject: "state:fuzzerBounds" }
+    { capability: Observe, subject: "body:44" }
+    { capability: Drive, subject: "body:44" }
+    { capability: Mutate, subject: "section:State" }
+    { capability: Edit, subject: "state:fuzzer" }
+  ]
+}
+
+grants [
+  { grantee: "addon:fuzzer", capability: Observe, subject: "state:fuzzer", budget: 3 }
+  { grantee: "addon:fuzzer", capability: Observe, subject: "state:fuzzerBounds", budget: 4 }
+  { grantee: "addon:fuzzer", capability: Observe, subject: "body:44", budget: 2 }
+  { grantee: "addon:fuzzer", capability: Drive, subject: "body:44", budget: 7 }
+  { grantee: "addon:fuzzer", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 6 }
+  { grantee: "addon:fuzzer", capability: Edit, subject: "state:fuzzer", kindMask: "UpsertStateCell" }
+]

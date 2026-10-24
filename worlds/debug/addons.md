@@ -1,6 +1,6 @@
 # Debug world addons
 
-The debug world mounts three WebAssembly addons, each authored as WebAssembly
+The debug world mounts six WebAssembly addons, each authored as WebAssembly
 text under [addons/](addons) and mounted by its own module beside the others,
 with its grants authored there too. A text module is source: nothing is compiled
 into the package, the module's `hash: "auto"` pins its text, and the World
@@ -12,16 +12,95 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 | Watchdog | [watchdog.puck](watchdog.puck) | [addons/watchdog.wat](addons/watchdog.wat) | Checks invariants every tick and records each violation with its tick |
 | Gallery guide | [guide.puck](guide.puck) | [addons/guide.wat](addons/guide.wat) | Names the exhibit the Moth stands at on a HUD panel |
 | Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 42, that follows the Moth |
+| Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 44; off by default |
+| Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 43 through authored waypoints and marks misses/falls; off by default |
+| Kinematics scope | [kinematics-scope.puck](kinematics-scope.puck) | [addons/kinematics-scope.wat](addons/kinematics-scope.wat) | Samples a selected body into a 128-tick history; off by default |
 
-`world.addons` lists all three with their fuel. Measured on a headless run, each
+`world.addons` lists all six with their fuel. Measured on a headless run, each
 spends a small part of the default budget of 1,000,000 a tick: the watchdog
 about 8,000, the companion 1,200 to 2,500, and the guide about 60, rising to
 about 30,000 on the tick it writes an exhibit near the end of its table.
 
+## Development tools
+
+All three tool guests stay mounted but start idle. Set cells with
+`world.state.cell.set <row> <key> <value>` over MCP, naming your own World on
+every call. An agent's headless World uses `--devices none`. The scope panel
+also requires `world.state.cell.set addonHud $value 1`; sampling can run with
+the addon HUD hidden, and normal play shows only the controller bar.
+
+**Fuzzer.** Set `fuzzer[seed]` (default 12345), `fuzzer[limit]` (default 300),
+then `fuzzer[enabled]` to 1. It drives movement, strafe, turn, jump, flight,
+rise and interact through the walker's channels, using the integer PCG32
+mapping with stream 1. `fuzzerBounds` authors its world-space X/Z bounds;
+an inward guard band is converted to the body's current yaw before driving.
+It records `steps`, `tick`, full signed RNG bits in `rng`, and the unsigned
+last `draw`, and switches itself off at the exact limit. No pose is written.
+An enabled read is one tick behind a guest's own mutation, so the local step
+limit also gates driving. The scenario checks four draws from seed 12345
+against `3444695176` and reproduces the complete run byte for byte.
+
+Run with the watchdog mounted. A violation names its observation tick;
+record from boot as described below and use `replay.drive <name> to <tick + 2>`
+to inspect it. A seed alone identifies the input stream; replay pins the
+world, guest receipts and the ticks at which the switch and other inputs changed.
+
+**Traversal.** Set `traversal[run]` to 1 for a pass. `traversalRoute` contains
+world-space fixed-point coordinates with keys `0x`, `0y`, `0z`, and so on;
+the route includes both studio steps, both ramps, the stairs, the round dais,
+the gallery's two flights, and calling/riding the lift. `start` (default 0)
+selects the first entry and `count` the exclusive end. `timeout`
+(ticks per waypoint, default 600) and `tolerance` (raw Q16 horizontal tolerance,
+default 32768) are authored controls. Vertical tolerance is 0.6 m. The bot
+walks and strafes without teleporting or using flight. A timeout records the
+tick in `traversalFailures[waypoint]` and a small red marker at the body's
+position; a fall faster than 4 m/s and more than 1 m below the goal records
+`traversalFalls[event]` and another marker. `reached`, `missed` and `falls`
+are cumulative counters; `waypoint`, `tick`, `done` and `run` describe the
+current pass. A new pass clears `done`; it switches `run` off when done. A miss is a route probe finding,
+not proof of a physics bug: inspect its approach and authored tolerance.
+Before entering the lift it waits for `liftAt` to reach level one's 72
+sixteenth-metre cells. The studio is sealed: the default pass reaches the
+fifteen studio goals, then reports the closed wall and the unreachable gallery
+goals. For an independent stairwell probe, pose body 43 at (11.2, 0.05, 32.5)
+from the host, set `start` to 17, and run a fresh pass. The guest itself never poses a body.
+
+**Scope.** Set `scope[body]` to a body index (0–44), then `scope[enabled]` to
+1. It queries settled kinematics each tick and records `scopeHeight`,
+`scopeVelocity`, `scopeFacts`, `scopeContacts`, `scopeTicks` and `scopeEvents`
+at `samples & 127`. Heights and velocities are fixed-point raw bits; the
+latest summary is in `scope`. Contact flags are bit 0 grounded, bit 1 obstructed.
+Event bits are ground-begin/end (1/2) and obstruction-begin/end (4/8), derived
+from consecutive solver witnesses, not the proximity collision-event feed.
+`scopeTrace` keeps 128 characters: `_` grounded, `^` rising, `v` falling,
+`+` a contact edge. Changing the body discards the in-flight old body's
+sample and restarts the contact edge witness. Turn sampling off when done;
+it submits thirteen state mutations per tick through full document validation.
+
+The tools exercise four addon additions: numeric authored reads, settled
+kinematics, strict per-cell mutation decoding and bounded guest logs. The
+[ABI](../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
+owns their layouts and fuel charges. Text/vector authored reads and a cheaper
+transactional cell-write path are recorded in [open items](../../docs/plans/open-items.md#addon-system).
+
+Measured headlessly over MCP: fuzzer 10,062 fuel/tick while driving, traversal
+7,074 on a route tick, and scope 22,588 while sampling. The one-million budget was ample; no answers
+or events dropped and no mutation budget exhausted. The scope used thirteen
+of its sixteen cell mutations per tick; full document validation and narration
+were the limiting host work. A 300-step seeded fuzz pass was clean under the
+watchdog on the merged head, ending at (53.75, 0.03, -34.04), inside its bounds;
+its 373-tick delivery recording verified `MATCH`. A longer scope run filled the 4,096-line
+host log ring and evicted 1,547 old lines, while state history remained bounded
+at 128 samples. The gallery stairwell leg (`traversal start 17`, body 43 posed at
+(11.2, 0.05, 32.5)) reaches all eight goals with no falls, riding the lift car.
+Its first run missed the car entry and fell because the lift attached to the
+chess cursor instead of the car.
+
 ## The watchdog
 
 The watchdog reads the pose of every body but the chess pieces every tick, and
-of four pieces a tick in turn, and listens for collision begins. It records:
+of up to four pieces a tick in turn (two with every range/tool body present),
+and listens for collision begins. It records:
 
 | Violation | When |
 |---|---|
@@ -57,7 +136,11 @@ No checkpoint holds a guest's memory, so a recording in this world starts at
 boot: `replay.record <name>` must arrive before the world steps, as the first
 line of the stdin the World starts with. An MCP attachment arrives after the
 first step, too late to arm one, so start the World with that line on stdin and
-`--control`, and drive it over MCP from there. Then:
+`--control`, and drive it over MCP from there.
+
+Close the startup stdin pipe after writing the arm: headless startup drains
+that script before stepping. An open pipe can leave mutations waiting at tick
+zero while MCP read commands already answer. Then:
 
 1. Play or script until the watchdog fires, and read `world.state watchdog`
    for the tick.

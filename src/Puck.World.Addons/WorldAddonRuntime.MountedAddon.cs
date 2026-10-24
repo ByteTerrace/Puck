@@ -108,6 +108,8 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets this tick's event-cell charge count by Observe subject. Cleared once per tick in
         /// <c>StageBatch</c>.</summary>
         public Dictionary<GrantSubject, int> EventCounts { get; }
+        public Dictionary<GrantSubject, int> StateReadCounts { get; } = [];
+        public bool LoggedThisTick { get; set; }
         /// <summary>Gets this tick's lifetime event-gap counter (the overflow doctrine's per-mount summary — see
         /// <c>Scripting.AddonAbi.ObservationVerbs.EventGap</c>'s own doc) — saturating, never reset. Every edge
         /// dropped because its per-row event budget or the ring ran out of room (world events or a memory-watch change
