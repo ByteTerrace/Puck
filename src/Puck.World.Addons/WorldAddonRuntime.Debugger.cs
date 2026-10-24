@@ -150,14 +150,15 @@ public sealed partial class WorldAddonRuntime {
                         var operationId = op.GetString()!;
                         if (root.TryGetProperty("contentName", out var contentName)) {
                             var declaration = m_server.Definition.Machines.FirstOrDefault(item => item.Name == machine.Instance);
-                            if (operationId != "content.insert" || contentName.ValueKind != JsonValueKind.String || declaration is null ||
+                            if (operationId != "content.insert" || contentName.ValueKind != JsonValueKind.String ||
+                                payload.ValueKind != JsonValueKind.Object || declaration is null ||
                                 !WorldMachineContentFolder.TryList(declaration, m_server.Definition.DocumentDirectory,
                                     m_server.Machines.ValidationCatalog, out _, out var entries, out var reason)) { break; }
                             if (!WorldMachineContentFolder.TryFind(entries, contentName.GetString()!, out var entry, out reason)) {
                                 Console.Error.WriteLine($"[world.addon: {addon.Instance.Name} t={tick} content refused: {reason}]");
                                 break;
                             }
-                            var tree = System.Text.Json.Nodes.JsonNode.Parse(payload.GetRawText())!.AsObject();
+                            var tree = System.Text.Json.Nodes.JsonObject.Create(payload)!;
                             tree["content"] = new System.Text.Json.Nodes.JsonObject { ["path"] = entry.ContentPath };
                             payload = MachineOperationValidation.CloneJson(tree);
                         }
