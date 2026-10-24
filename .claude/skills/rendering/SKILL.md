@@ -23,13 +23,19 @@ resolve, sky, glass, fog, exposure and the root tonemap/sharpen. Keep
 key together. Diagnostic marks belong only to `AnnotationWriter.EmitDiagnostics`'s separately
 reserved overlay channel; its masks protect every causal footprint, including
 overflow beyond the sixteen visible pins. Focus removes chroma outside those
-footprints without changing luminance. Never paint a diagnostic into history,
+footprints without changing luminance. Keep masks exact rather than coalescing
+them into spatial bins: those bins show as rectangular chroma islands in focus.
+Beyond the mask reservation, conservatively protect overflow and leave focus
+off. Place badges beside witnesses with short leaders; collisions overflow to
+the report rather than forming a screen-wide leader band. Never paint a diagnostic into history,
 the visibility buffer or lighting.
 
 `WorldDiagnostics` separates collision-versus-authored-field from
 field-versus-baked-mesh. The latter reuses the irradiance scene's retained
-triangle hierarchy only when its exact draw records and immutable authored
-source match and the bake has settled. `SdfMesh.BakeCell` comes from the actual
+triangle hierarchy only when its exact draw records and delivered document
+version match and the bake has settled. The client document is not necessarily
+the server's object: compare `WorldDocumentVersion` by value, never their
+definition references. `SdfMesh.BakeCell` comes from the actual
 contour lattice, survives cache storage and material renumbering, and supplies
 the hit triangle's half-cell-diagonal budget. No saved baseline or allowlist is
 involved. A second `SdfWorldPicker` per instance asynchronously reads cluster
@@ -37,7 +43,9 @@ depth without stealing pointer requests; discard results across camera, mesh,
 program or view changes.
 
 Captures on the synthesized overlaid root retain the beauty image, annotated
-image and JSON together. The capture companion waits for both display encoders;
+image and JSON together. Attach the companion to `WorldRootGraph.OverlayInstance`,
+which serves the screenshot, not `ComparisonLiveRoot`, which is the beauty
+source. The capture companion waits for both display encoders;
 its closure owns pixels and JSON before background encoding starts. Custom
 authored roots need an equivalent beauty/overlay split before they can supply
 a triplet. See [scene diagnostics](../../../docs/reference/commands.md#scene-diagnostics)

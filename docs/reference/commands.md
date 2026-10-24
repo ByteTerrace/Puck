@@ -810,16 +810,24 @@ explicit skipped reasons. Missing evaluation is **unknown**, never a zero.
 
 `world.debug-view colliders` or `world.debug-view contacts` keeps the beauty
 image and adds at most sixteen causal pins, exterior marks and support calipers.
-The banner counts severities and reports pin overflow. Leaders and marks are
+The banner counts severities and reports pin overflow, including badges that
+cannot fit beside their witnesses without covering evidence or another badge.
+In-view badges have short direct leaders. Leaders and marks are
 clipped out of conservative evidence footprints with an untouched moat.
 Occluded witnesses become hollow after asynchronous depth readback; off-screen
 witnesses dock at the viewport edge. `focus` desaturates other context while
-preserving its luminance; `pins-only` omits contours and calipers. `off` clears
+preserving its luminance. Protection uses exact witness rectangles; if more
+than 512 intersect the viewport, marks conservatively protect the overflow
+and focus leaves the context unchanged. `pins-only` omits contours and calipers. `off` clears
 the diagnostic presentation. The primary view is the default scope; a nested
 view must first become the explicitly isolated primary presentation.
 
-Use `world.view.pick <instance> finding <id>` for a pin's causal record.
-The existing coordinate form remains `world.view.pick <instance> <x> <y>`,
+Use `world.view.pick <view-or-instance> finding <id>` for a pin's retained
+causal record, including while that diagnostic view is off or another is active.
+Run `world.debug-view report` first if no findings have been collected.
+`primary` resolves to the first seat's current rendered instance (`world`
+before presentation); an explicit render instance name is also accepted.
+The coordinate form is `world.view.pick <view-or-instance> <x> <y>`,
 with normalized coordinates. `world.debug-view goto <id>` moves the operator
 camera toward the witness; it never moves the body. Changed structured reports
 are debounced under `world.debug-view.colliders` and
@@ -829,7 +837,7 @@ The collider audit samples compiled primitive boundaries in both signed
 directions against the authored solid union. This is a finite witness audit,
 not a proof over every point of the surface. Collision-versus-field findings
 stay separate from field-versus-baked-mesh findings. Rendered comparisons
-require the same authored source, a settled bake and matching retained draw
+require the same delivered document version, a settled bake and matching retained draw
 records; their budget includes the actual hit mesh's contour cell half diagonal.
 Opaque solids participate in that contract; transmissive geometry does not
 become a missing opaque surface. Attached poses and providers without a

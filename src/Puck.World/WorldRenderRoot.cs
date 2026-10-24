@@ -299,7 +299,7 @@ public static class WorldRenderRoot {
                 );
                 compareCapture.Poll();
                 frameSource.PrepareGraph(context: in context);
-                if (overlaid && host.Synthesized is { } synthesizedRoot && runtime.NodeOf(host.ComparisonLiveRoot!) is { } captureNode) {
+                if (overlaid && host.Synthesized is { } synthesizedRoot && runtime.NodeOf(WorldRootGraph.OverlayInstance) is { } captureNode) {
                     captureNode.CaptureCompanionFactory = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureCompanion(runtime, synthesizedRoot.Scene);
                     captureNode.CaptureCompanionReady = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureReady(runtime, synthesizedRoot.Scene);
                 }

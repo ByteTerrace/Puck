@@ -19,14 +19,14 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
     private readonly Dictionary<string, ulong> m_logTicks = new(StringComparer.Ordinal);
     public string Mode { get; set; } = "off";
     public string Presentation { get; set; } = "default";
-    public string Instance { get; set; } = "primary";
+    public string Instance { get; set; } = "world";
     public bool Amber { get; set; }
     public IReadOnlyList<WorldDiagnosticCollider> Colliders => server.Population.DiagnosticColliders;
     public WorldDiagnosticReport? Latest => m_reports.GetValueOrDefault(Mode);
     public ulong Tick => server.NextInputTick - 1;
     public long Revision => server.SolidRevision;
     public bool DrawnReady => render?.Residency is { Frame: { } frame } residency && !residency.MeshPathBake.Pending &&
-        ReferenceEquals(frame.DiagnosticSource, server.Definition) && residency.MeshIrradiance.DiagnosticScene(frame) is not null;
+        Equals(frame.DiagnosticSource, server.DocumentVersion) && residency.MeshIrradiance.DiagnosticScene(frame) is not null;
     public WorldDiagnosticFinding? Find(string id) => m_reports.Values.SelectMany(r => r.Findings).FirstOrDefault(f => f.Id == id);
     public void Retain(WorldDiagnosticReport report) => m_reports[report.View] = report;
 
@@ -42,7 +42,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var failed = new HashSet<string>(StringComparer.Ordinal);
         var meshFailed = new HashSet<string>(StringComparer.Ordinal);
         var frame = render?.Residency?.Frame;
-        var scene = frame is not null && ReferenceEquals(frame.DiagnosticSource, server.Definition) &&
+        var scene = frame is not null && Equals(frame.DiagnosticSource, server.DocumentVersion) &&
             render?.Residency?.MeshPathBake.Pending == false ? render?.Residency.MeshIrradiance.DiagnosticScene(frame) : null;
         // A conservative scene-wide bound is still derived from the cells actually drawn, never a recorded allowance.
         var bakeError = scene is null ? 0 : frame!.MeshDraws.Where(d => SdfMeshIrradianceScene.IsStatic(d))

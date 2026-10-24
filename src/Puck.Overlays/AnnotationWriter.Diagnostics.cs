@@ -35,8 +35,8 @@ public interface IDiagnosticOverlaySource {
 public sealed partial class AnnotationWriter {
     /// <summary>The visible pin limit; overflow remains in the report.</summary>
     public const int MaxDiagnosticPins = 16;
-    /// <summary>Maximum separately protected rectangles; overflow coalesces within spatial bins.</summary>
-    public const int MaxDiagnosticRegions = 64;
+    /// <summary>Maximum exact evidence rectangles. Excess evidence conservatively protects its enclosing rectangle.</summary>
+    public const int MaxDiagnosticRegions = 512;
     /// <summary>Independent element reservation including masks, contours, leaders and calipers.</summary>
     public const int MaxDiagnosticElements = MaxDiagnosticRegions + 1 + MaxDiagnosticPins * 18 + 2;
     /// <summary>Independent glyph reservation.</summary>
@@ -53,35 +53,48 @@ public sealed partial class AnnotationWriter {
         var moat = new Vector2(2) / dims;
         var regions = frame.Protected;
         if (regions.Count > MaxDiagnosticRegions) {
-            // Eight-by-eight bins preserve the union without replacing a scattered set by one screen-sized box.
-            var bins = new Dictionary<int, Vector4>();
-            foreach (var r in regions) {
-                var key = Math.Clamp((int)((r.X + r.Z * 0.5f) * 8), 0, 7) + 8 * Math.Clamp((int)((r.Y + r.W * 0.5f) * 8), 0, 7);
-                if (bins.TryGetValue(key, out var previous)) {
-                    var low = Vector2.Min(new(previous.X, previous.Y), new(r.X, r.Y));
-                    var high = Vector2.Max(new(previous.X + previous.Z, previous.Y + previous.W), new(r.X + r.Z, r.Y + r.W));
-                    bins[key] = new(low.X, low.Y, high.X - low.X, high.Y - low.Y);
-                } else { bins[key] = r; }
+            var low = new Vector2(float.PositiveInfinity);
+            var high = new Vector2(float.NegativeInfinity);
+            foreach (var r in regions.Skip(MaxDiagnosticRegions - 1)) {
+                low = Vector2.Min(low, new(r.X, r.Y));
+                high = Vector2.Max(high, new(r.X + r.Z, r.Y + r.W));
             }
-            regions = bins.Values.ToArray();
+            regions = regions.Take(MaxDiagnosticRegions - 1).Append(new Vector4(low.X, low.Y, high.X - low.X, high.Y - low.Y)).ToArray();
         }
         foreach (var r in regions) {
             builder.WriteDiagnosticMask(new(r.X - moat.X, r.Y - moat.Y, r.Z + 2 * moat.X, r.W + 2 * moat.Y), false);
         }
-        if (frame.Focus) { builder.WriteDiagnosticMask(frame.Viewport, true); }
-        var count = Math.Min(MaxDiagnosticPins, frame.Pins.Count);
+        // A coalesced overflow region is safe for marks, but would paint a false rectangular chroma island in focus.
+        if (frame.Focus && frame.Protected.Count <= MaxDiagnosticRegions) { builder.WriteDiagnosticMask(frame.Viewport, true); }
+        var count = 0;
+        var labels = new List<Vector4>();
         var viewport = frame.Viewport;
-        for (var index = 0; index < count; index++) {
-            var pin = frame.Pins[index];
+        foreach (var pin in frame.Pins) {
+            if (count == MaxDiagnosticPins) { break; }
             var role = pin.Amber ? OverlayColorRole.Warning : OverlayColorRole.Danger;
             var minimum = new Vector2(viewport.X, viewport.Y) + new Vector2(18) / dims;
             var maximum = Vector2.Max(minimum, new Vector2(viewport.X + viewport.Z, viewport.Y + viewport.W) - new Vector2(18) / dims);
-            var badge = pin.Offscreen ? Vector2.Clamp(pin.Anchor, minimum, maximum)
-                : new Vector2(minimum.X, Math.Clamp(minimum.Y + (38 + index * 25) / dims.Y, minimum.Y, maximum.Y));
+            var label = pin.Occluded ? $"{pin.Id} +{pin.DepthDelta:0.00}m behind" : pin.Id;
+            var anchor = Vector2.Clamp(pin.Anchor, minimum, maximum);
+            Vector2? placed = null;
+            for (var attempt = 0; attempt < 24; attempt++) {
+                var angle = attempt % 8 * MathF.PI / 4;
+                var offset = new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * (24 + attempt / 8 * 24) / dims;
+                var candidate = Vector2.Clamp(anchor + offset, minimum, maximum);
+                var rect = new Vector4(candidate.X - 9 / dims.X, candidate.Y - 10 / dims.Y,
+                    (22 + label.Length * 8) / dims.X, 20 / dims.Y);
+                static bool Intersects(Vector4 a, Vector4 b) => a.X < b.X + b.Z && a.X + a.Z > b.X && a.Y < b.Y + b.W && a.Y + a.W > b.Y;
+                if (rect.X + rect.Z > viewport.X + viewport.Z || labels.Any(r => Intersects(r, rect)) ||
+                    regions.Any(r => Intersects(new(r.X - moat.X, r.Y - moat.Y, r.Z + 2 * moat.X, r.W + 2 * moat.Y), rect))) { continue; }
+                placed = candidate;
+                labels.Add(rect);
+                break;
+            }
+            if (placed is not { } badge) { continue; }
+            count++;
             var radius = 7f;
             builder.WriteRing(badge.X * dims.X, badge.Y * dims.Y, radius, role, 1);
             if (!pin.Occluded) { builder.WriteRing(badge.X * dims.X, badge.Y * dims.Y, 2, role, 1); }
-            var label = pin.Occluded ? $"{pin.Id} +{pin.DepthDelta:0.00}m behind" : pin.Id;
             builder.WriteText(badge.X * dims.X + 10, badge.Y * dims.Y - 6, label, 12, role, 1, maxChars: 40);
             if (pin.Offscreen) {
                 var direction = Vector2.Normalize(pin.Anchor - new Vector2(viewport.X + viewport.Z / 2, viewport.Y + viewport.W / 2));
@@ -94,8 +107,7 @@ public sealed partial class AnnotationWriter {
                 var delta = (pin.Anchor - badge) * dims;
                 if (delta.LengthSquared() > 16) {
                     var end = pin.Anchor - Vector2.Normalize(delta) * new Vector2(4) / dims;
-                    builder.WriteDiagnosticLine(badge, new Vector2(end.X, badge.Y), role);
-                    builder.WriteDiagnosticLine(new Vector2(end.X, badge.Y), end, role);
+                    builder.WriteDiagnosticLine(badge, end, role);
                 }
             }
             if (!frame.PinsOnly && !pin.Offscreen) {

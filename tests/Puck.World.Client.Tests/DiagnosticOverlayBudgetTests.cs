@@ -10,7 +10,7 @@ public sealed class DiagnosticOverlayBudgetTests {
         public DiagnosticOverlayFrame Snapshot() => new(
             Enumerable.Range(0, 20).Select(i => new DiagnosticOverlayPin(new string('1', 40), new(0.5f, 0.5f),
                 new(0.4f, 0.4f, 0.1f, 0.1f), false, false, false, 0, new Vector2(0.5f, 0.6f), Vector2.UnitY)).ToArray(),
-            Enumerable.Range(0, 100).Select(i => new Vector4((i % 10) * 0.1f, (i / 10) * 0.1f, 0.02f, 0.02f)).ToArray(),
+            Enumerable.Range(0, AnnotationWriter.MaxDiagnosticRegions + 36).Select(i => new Vector4((i % 10) * 0.1f, (i / 10 % 10) * 0.1f, 0.02f, 0.02f)).ToArray(),
             new(0, 0, 1, 1), new string('1', 160), true, false);
     }
 

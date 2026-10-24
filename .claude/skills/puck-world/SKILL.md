@@ -44,8 +44,11 @@ solver witness remain unknown. Rigid contacts retain a loaded manifold point;
 snap reach is informational and never a hover tolerance.
 
 Enable `world.debug-view colliders|contacts [focus|pins-only]` for the primary
-view. `world.view.pick <instance> finding <id>` reads its causal record without
-changing the existing `<instance> <x> <y>` normalized pick form.
+view. `world.view.pick primary finding <id>` reads a retained causal record
+even while its diagnostic view is off or another is active; run `report` first
+to populate findings. `primary` resolves to the first seat's rendered instance
+(`world` before presentation); explicit instance names and the normalized
+`<view-or-instance> <x> <y>` pick form work too.
 `world.debug-view goto <id>` requests an operator camera pose only. Reports
 share stable cause IDs, current measurements, precision budgets, source
 stamp/creation/node/operation and tick lifetimes. Changed reports enter

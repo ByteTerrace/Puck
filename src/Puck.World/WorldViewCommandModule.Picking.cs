@@ -31,9 +31,10 @@ internal sealed partial class WorldViewCommandModule {
     }
     private CommandResult Pick(WireArgs args) {
         if (args.Count is not (1 or 3)) {
-            return CommandResult.Usage(form: "<instance> [<x> <y>]", verb: "world.view.pick");
+            return CommandResult.Usage(form: "<view-or-instance> [<x> <y>|finding <id>]", verb: "world.view.pick");
         }
         var instance = args[0].ToString();
+        if (instance == "primary") { instance = viewports?.Seat(0).RenderInstance ?? WorldViewGraphs.WorldInstance; }
 
         if (args.Count == 3 && args.Is(1, "finding")) {
             if (diagnostics?.Find(args[2].ToString()) is not { } finding || finding.Identity.Instance != instance) {
