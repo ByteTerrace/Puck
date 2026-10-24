@@ -22,6 +22,15 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
+- When none of the eight probes answers, the meter traces radiance at the
+  camera with the same rays, materials, shadow tests and bounce cache as a
+  lattice probe. A small enclosure may contain no lattice centre; searching
+  farther or holding the previous room's exposure cannot measure its light.
+  This camera sample never writes the volume or relaxes surface visibility.
+  If the scene is unavailable or the camera is inside opaque geometry, retain
+  the previous exposure, local-adaptation meter and sky visibility. The authored EV is only the
+  initial value before a reading. `world.exposure` distinguishes `probes`,
+  `camera-trace`, `held` and `initial`; the last two report `meter=none`.
 - The depth fade stays thinner than the thinnest floor. A wall sample at a
   floor junction is level with the floor, so a broad fade admits the probe
   underneath and draws a bright line along the junction.

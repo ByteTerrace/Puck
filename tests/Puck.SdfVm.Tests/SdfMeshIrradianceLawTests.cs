@@ -209,6 +209,9 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.InRange(actual: sky, low: 0f, high: 0.1f);
         var exposures = new SdfViewExposures();
 
+        exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 1d);
+        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Ev100), actual: exposures.MultiplierOf(view: 0));
+        Assert.Contains(expectedSubstring: "meter=none source=initial", actualString: exposures.Describe()[0]);
         exposures.Stage(frame: frame, irradiance: volume, seconds: 1d);
         Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Target(luminance: lit)), actual: exposures.MultiplierOf(view: 0), precision: 6);
         Assert.Contains(expectedSubstring: "source=camera-trace", actualString: exposures.Describe()[0]);
@@ -218,6 +221,7 @@ public sealed class SdfMeshIrradianceLawTests {
         exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 1d);
         Assert.Equal(expected: held, actual: exposures.MultiplierOf(view: 0));
         Assert.Equal(expected: heldAir, actual: exposures.AirLightOf(view: 0));
+        Assert.Equal(expected: lit, actual: exposures.MeteredOf(view: 0));
         Assert.Contains(expectedSubstring: "meter=none source=held", actualString: exposures.Describe()[0]);
         // Inside the opaque wall is unknown, not a reading of an unlit room.
         Assert.False(condition: volume.TryMeter(position: new Vector3(x: 0.3f, y: 2f, z: 0f), forward: Vector3.UnitX,

@@ -192,7 +192,13 @@ sun does.
 `render.exposure` is manual (an `EV100`) or automatic: a reflected-light meter
 reads the irradiance volume's luminance about each view's camera, weighted
 toward where it looks, and eases toward that reading less a compensation,
-within authored bounds, over presentation time. The eye adapts across a scene
+within authored bounds, over presentation time. When no visible lattice probe
+answers, the same tracer measures radiance at the camera itself. This measures
+an enclosure smaller than a lattice cell without importing light from another
+room or changing the irradiance volume. If even that measurement is unavailable,
+the view holds its previous exposure; the authored EV initializes a view before
+its first reading. `world.exposure` names the measurement source, and reports
+no meter reading while holding. The eye adapts across a scene
 where a camera cannot, so an automatic exposure also adapts locally by an
 authored share (`render.exposure.local`): the views stage moves each surface's
 exposure from the view's toward the one its own illumination (the lights'
