@@ -16,6 +16,10 @@ public enum FixedStaticColliderKind : byte {
     Cylinder,
     /// <summary>An oriented inner box offset by a spherical radius.</summary>
     RoundedBox,
+    /// <summary>The drawn chamfered XY rectangle extruded along Z, including its edge fillet.</summary>
+    ChamferedBox,
+    /// <summary>An oriented Lp ball with independently scaled radii.</summary>
+    Superellipsoid,
 }
 /// <summary>A deterministic depenetration response without any body-state or gameplay policy.</summary>
 /// <param name="Normal">The unit push direction.</param>
@@ -27,13 +31,17 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// half-extents, an oriented box carries its own half-extents and the unit <see cref="Rotation"/> that turns its axes
 /// into world space. A cylinder carries radius in X/Z and half-height in Y, with the same local-to-world rotation.
 /// A rounded box carries inner half-extents in Extent and the spherical offset in Radius.
+/// A chamfered box carries the drawing builder's inset half-extents, inset Chamfer and final Radius offset.
+/// A superellipsoid carries its per-axis radii in Extent and its Lp Exponent.
 /// A half-space carries its unit normal in <see cref="Extent"/> and one boundary point in <see cref="Center"/>.</remarks>
 /// <param name="Kind">The analytic shape kind.</param>
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
 /// <param name="Extent">The radius carrier, box half-extents, or half-space normal.</param>
 /// <param name="Rotation">The oriented box or cylinder's local-to-world rotation.</param>
 /// <param name="Radius">The rounded box's offset radius; Extent carries its inner half-extents.</param>
-public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default) {
+/// <param name="Chamfer">The inset chamfer of a lifted chamfered box.</param>
+/// <param name="Exponent">The superellipsoid's Lp exponent.</param>
+public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default, FixedQ4816 Chamfer = default, FixedQ4816 Exponent = default) {
     // The point of a segment nearest to a point: the point less the one segment witness every segment query shares.
     private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) =>
         (point - FixedDynamicBodyContacts.ClosestDelta(
@@ -243,6 +251,15 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     public static FixedStaticCollider RoundedBox(FixedVector3 center, FixedQuaternion rotation, FixedVector3 innerHalfExtents, FixedQ4816 radius) =>
         new(Kind: FixedStaticColliderKind.RoundedBox, Center: center, Extent: innerHalfExtents,
             Rotation: rotation.Normalize(), Radius: radius);
+    /// <summary>Creates the exact lifted chamfered rectangle. Extents and chamfer are the inset dimensions emitted
+    /// by the drawing vocabulary; radius is its final scalar-field offset.</summary>
+    public static FixedStaticCollider ChamferedBox(FixedVector3 center, FixedQuaternion rotation, FixedVector3 innerHalfExtents, FixedQ4816 chamfer, FixedQ4816 radius) =>
+        new(Kind: FixedStaticColliderKind.ChamferedBox, Center: center, Extent: innerHalfExtents,
+            Rotation: rotation.Normalize(), Radius: radius, Chamfer: chamfer);
+    /// <summary>Creates an oriented superellipsoid with positive radii and exponent at least two.</summary>
+    public static FixedStaticCollider Superellipsoid(FixedVector3 center, FixedQuaternion rotation, FixedVector3 radii, FixedQ4816 exponent) =>
+        new(Kind: FixedStaticColliderKind.Superellipsoid, Center: center, Extent: radii,
+            Rotation: rotation.Normalize(), Exponent: exponent);
     /// <summary>Creates a static box turned by a rotation: an axis-aligned box when the rotation carries every box axis
     /// exactly onto a world axis, so an unturned or quarter-turned box keeps the world-axis fast path, and an oriented
     /// box otherwise.</summary>
@@ -314,6 +331,31 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
                 Z: FixedQ4816.Zero
             )
         );
+    /// <summary>Returns a finite solid's supporting surface point in a world-space direction. A zero direction
+    /// chooses world X. A half-space has no finite support and is refused.</summary>
+    public FixedVector3 SupportPoint(FixedVector3 direction) {
+        if (Kind == FixedStaticColliderKind.HalfSpace) { throw new InvalidOperationException(message: "A half-space has no finite support point."); }
+        var unit = ((direction == FixedVector3.Zero) ? FixedVector3.UnitX : direction.Normalize());
+
+        if (Kind == FixedStaticColliderKind.Sphere) { return (Center + (unit * Extent.X)); }
+        var local = ((Kind == FixedStaticColliderKind.AxisAlignedBox) ? unit : Rotation.RotateInverse(vector: unit));
+        FixedVector3 point;
+
+        if (Kind is FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid) {
+            point = FixedConvexGeometry.Support(collider: in this, direction: local);
+        } else if (Kind == FixedStaticColliderKind.Cylinder) {
+            var radial = (new FixedVector3(X: local.X, Y: FixedQ4816.Zero, Z: local.Z).Normalize() * Extent.X);
+
+            point = (radial + (FixedVector3.UnitY * ((local.Y == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.CopySign(Extent.Y, local.Y))));
+        } else {
+            point = new FixedVector3(
+                X: ((local.X == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.CopySign(Extent.X, local.X)),
+                Y: ((local.Y == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.CopySign(Extent.Y, local.Y)),
+                Z: ((local.Z == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.CopySign(Extent.Z, local.Z)));
+            if (Kind == FixedStaticColliderKind.RoundedBox) { point += (local.Normalize() * Radius); }
+        }
+        return (Center + ((Kind == FixedStaticColliderKind.AxisAlignedBox) ? point : Rotation.Rotate(vector: point)));
+    }
     /// <summary>Queries the depenetration required for one body volume.</summary>
     /// <param name="position">The body's world position.</param>
     /// <param name="orientation">The body's world orientation.</param>
@@ -328,6 +370,8 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) => Kind switch {
+        FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.TryPush(
+            collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),
         FixedStaticColliderKind.RoundedBox => FixedRoundedBoxContact.TryPush(box: in this, orientation: in orientation,
             position: position, push: out push, skin: skin, volume: in volume),
         FixedStaticColliderKind.Cylinder => FixedCylinderContact.TryPush(cylinder: in this, orientation: in orientation,

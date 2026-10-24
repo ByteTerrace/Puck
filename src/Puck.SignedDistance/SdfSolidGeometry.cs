@@ -323,7 +323,7 @@ public static class SdfSolidGeometry {
         ) {
             // The plain Box arm's zero set is BoxHalfExtents with a BoxRound fillet; the chamfered Box keeps that outer
             // extent and that fillet (the family's rounding lane, applied on top of the chamfer) so a chamfer going to
-            // zero lands on the plain Box. Analytic contact uses a conservative inside shape for the chamfer.
+            // zero lands on the plain Box. Analytic contact uses the same lifted-profile zero set, including its fillet.
             return chain.ChamferedRectangle(
                 blend: blend,
                 chamfer: chamfer,

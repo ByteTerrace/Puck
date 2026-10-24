@@ -11,4 +11,7 @@ namespace Puck.World.Server;
 /// <param name="Margin">Authored collision margin, in metres.</param>
 /// <param name="Opaque">Whether this authored shape participates in the opaque drawn-surface contract.</param>
 public sealed record WorldDiagnosticCollider(FixedStaticCollider Collider, string Stamp, string Creation, string Node,
-    string Operation, double Margin, bool Opaque = true);
+    string Operation, double Margin, bool Opaque = true) {
+    /// <summary>Computed maximum inward approximation error in metres, zero for an exact contact.</summary>
+    public double ConservativeInset { get; init; }
+}

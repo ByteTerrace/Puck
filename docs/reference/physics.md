@@ -173,7 +173,7 @@ Dynamic capsule/box pairs still use conservative world bounds. Compound correcti
 selection compares full-width squared magnitudes so a shallow overlap is not
 lost by rounding its square to the scalar precision.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
-axis-aligned boxes, oriented boxes, rounded boxes, cylinders, and half-spaces, returning only a
+axis-aligned boxes, oriented boxes, rounded boxes, chamfered boxes, superellipsoids, cylinders, and half-spaces, returning only a
 `FixedContactPush`. An oriented box carries its own half-extents and a unit
 rotation; the push carries the body into the box's frame, runs the
 axis-aligned query there, and turns the push back, so a capsule, sphere, or
@@ -195,18 +195,24 @@ use separating axes with the offset added to their depth. The solver's
 substeps, support, hold and tether queries all use this shape in fixed point.
 The chase camera already queries the rendered SDF directly.
 
-A chamfered Box uses a conservative **inside** rounded box with outer extents
-unchanged and radius R = r + b/(2 − √2), where r is the drawn fillet and b the
-chamfer leg. In a two-face section the arc removes (2 − √2)R along the bevel;
-the cap/profile corner needs the same bound, since (1 + √2)/√2 = 1/(2 − √2).
-This preserves the flat face planes while leaving the rounded edges inside
-the drawn chamfer. If R exceeds the smallest half-extent, one rounded box
-cannot retain all face planes. Three axis rods in the SDF's eroded bevel
-polyhedron, offset by r, retain every surviving face centre instead. This
-fallback gives up more of the edge and face footprint, but never adds support
-outside the drawn solid. Each rod contributes to the collider census and the
-attached-collider revision. A solid margin offsets each collider by that
-explicit authored allowance.
+A chamfered Box compiles to one `FixedStaticCollider.ChamferedBox`, including
+deep bevels. Its inner dimensions and chamfer match the drawing builder's
+erosion: subtract the fillet r from every half-extent and replace b with
+max(0, b − r(2 − √2)). Its support map follows the actual lifted XY profile,
+including the cap/profile corner and the final scalar offset. At a fixed Z,
+the cross-section is a rounded rectangle clipped by the profile bevel;
+the extrusion and cap bevel determine its permitted profile distance.
+The supporting slice is found on the fixed parameter grid. GJK measures
+separation and EPA finds a separating push over that support map for spheres,
+capsules and boxes. The same witnesses answer support, hold and tether
+queries. `SupportPoint` exposes the finite collider's supporting boundary
+for diagnostics. No rounded-box inset or axis-rod approximation remains.
+
+Superellipsoid placements use their Lp support map, including anisotropic
+radii and rotation. The chair seat and back are exponent-4 superellipsoids;
+they therefore never go through the oriented-bound fallback. Both convex
+kinds use Q32 intermediates for small simplex predicates and Q16 witnesses,
+with deterministic iteration limits and tie order.
 Box does not admit a separate authored `rounding` on this vocabulary; that
 facet belongs to Prism, Cylinder and Cone.
 
@@ -219,6 +225,12 @@ capsule uses a bounded fixed-point segment search. Box bodies retain their
 bounds in the cylinder frame, tested against the circular cross-section;
 tilted box edges are still conservative. Elliptical and carved primitives
 remain bounded approximations in the analytic provider.
+Rounded or chamfered circular rims currently use a contained cylinder core.
+The diagnostic reports the length of its radial/height contraction as the
+maximum inward approximation error. Such an error is a known approximation
+within that shape-derived bound and red beyond it; outward error receives
+only the arithmetic and authored-margin budget. The remaining fix is an
+exact rim contact.
 
 A walking body's `motion.groundSnap` is a downward reach, scaled with the
 body (0.3 m by default; zero disables it). The controller projects its walking

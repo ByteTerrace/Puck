@@ -114,4 +114,25 @@ public sealed class FixedStepUpLawTests {
 
         Assert.False(condition: Step(colliders: [Ground, steep], result: out _, rise: 0d, stepHeight: StepHeight));
     }
+    [InlineData(0, false)]
+    [InlineData(0.05, false)]
+    [InlineData(0.3, true)]
+    [Theory]
+    public void TheExactChamferStillNeedsEnoughStepHeight(double height, bool expected) {
+        var fillet = FixedQ4816.FromDouble(value: 0.002);
+        var chamfer = (FixedQ4816.FromDouble(value: 0.02) - (fillet *
+            (FixedQ4816.FromInteger(value: 2) - FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2)))));
+        var riser = FixedStaticCollider.ChamferedBox(center: Vector(x: 1.5, y: 0.05, z: 0),
+            rotation: FixedQuaternion.Identity, innerHalfExtents: Vector(x: 0.498, y: 0.048, z: 1.998),
+            chamfer: chamfer, radius: fillet);
+
+        var actual = Step(colliders: [Ground, riser], rise: 0, stepHeight: FixedQ4816.FromDouble(value: height), result: out var result);
+
+        Assert.Equal(actual: actual, expected: expected);
+        if (actual) {
+            Assert.True(condition: result.Resolution.Grounded);
+            Assert.InRange(((double)result.Position.X), 0.798, 0.801);
+            Assert.InRange(((double)result.Position.Y), 0.01, 0.1);
+        }
+    }
 }
