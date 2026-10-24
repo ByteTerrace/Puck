@@ -134,6 +134,14 @@ Shipped games use two distinct patterns for combining third-person and first-per
    - *Metal Gear Solid 2* and *3* switch automatically into "intrusion view" (first person) only when the player enters a discrete state—crawling into an air duct or holding a wall-press in a narrow alcove—never from ordinary wall grazing.
    - *Skyrim*, *Fallout 4*, and *Grand Theft Auto V* never let third-person wall collision push the camera into first person; instead, the player toggles first person deliberately (with a button press or a scroll detent past minimum third-person distance), and third-person wall collision stops at a close over-the-shoulder distance.
 
+3. **State-driven transition: Metroid Prime's morph ball** (the owner's reference for how this transition should feel). Retro Studios' camera system, which Mark Haigh-Hutchinson engineered, switches between Samus's first-person visor and a third-person camera behind the morph ball:
+   - **A deliberate state change triggers it, never collision.** The player morphs or unmorphs, so the switch is always expected.
+   - **The camera travels a short eased path.** On morphing it pulls back out of the helmet along the view direction to its chase position behind the ball, and returns into the visor on unmorphing. It is a continuous move over roughly half a second, not a cut.
+   - **Heading is preserved through the move,** so the player's sense of direction and movement input carry across.
+   - **The presentation follows the camera.** The visor HUD gives way, or returns, as the camera leaves or re-enters the helmet. The body is never seen from inside.
+   - **Controls change with the state,** so look and steer mean what the current view implies.
+   - **In tight morph-ball tunnels, authored camera hints (spline and fixed-position cameras) take over** rather than a reactive boom fighting the walls.
+
 ### Comfort and motion-sickness considerations
 
 Both academic cybersickness research and GDC camera post-mortems (Haigh-Hutchinson, *Real-Time Cameras*; Nesky, "50 Game Camera Mistakes") flag involuntary third-to-first-person collision transitions as a high-risk comfort hazard for four reasons:
@@ -157,6 +165,15 @@ Supporting a smooth pull-into-first-person on the Moth interacts directly with f
    When the camera pulls within `0.45 m` of the head pivot on its way to `d = 0`, presentation must hide or dither-out the perceived body's own stamp in *that seat's view only* (leaving mirrors, portal windows, and other seats' views showing the whole Moth, and keeping any carried screen placement such as the engaged brick visible).
 
 ### Recommendation on the third option
+
+The owner's direction: model the first- and third-person change on Metroid Prime's morph ball transition. The third option is a state-driven view change, not a collision response:
+- **Triggers:** a deliberate state the player or world enters, such as a first-person toggle, an inspect or focus mode, flight, piloting, or a size change like Wonderland's quarter scale.
+- **The move:** an eased pull out of the head, or into it, along the view direction, with heading preserved.
+- **The body:** the Moth's own stamp is hidden while the eye is inside her head shell.
+- **HUD and controls** follow the view.
+- **Tight spaces:** authored camera volumes, as in the lift, take over where a reactive boom would fight the walls.
+
+The collision-driven pull-in below remains an option to evaluate, but it is not the default.
 
 - **Do not make automatic collision-driven first-person pull-in a default chase mode.** In stairwells and around columns, uncommanded transitions between `d = 4.2 m` and `d = 0 m` cause optical looming and hide the avatar's feet when stepping onto ledges or the lift platform.
 - **Offer `firstPerson` as an opt-in third mode (`clearanceMode: "firstPerson"`) with mandatory hysteresis, alongside a manual zoom/toggle binding.**
