@@ -16,7 +16,7 @@ internal static class Diagnostics {
     /// <summary>The frame budget a snapshot dump runs when <c>--frames</c> is absent.</summary>
     private const int DefaultDumpSnapshotFrames = 300;
     /// <summary>The frame budget a render runs when none is given — ten seconds of emulated time, enough for a
-    /// commercial ROM to clear its logo screens and start drawing.</summary>
+    /// ROM to clear its logo screens and start drawing.</summary>
     private const int DefaultRenderFrames = 600;
 
     // Resolves --boot: the literal "puck" selects the forge's authored image for the model, anything else (including
@@ -328,32 +328,6 @@ internal static class Diagnostics {
             exitCode: out var hashDivergenceExitCode
         )) {
             exitCode = hashDivergenceExitCode;
-
-            return true;
-        }
-
-        // --link-explore <romA> <scriptA> [<romB> <scriptB>] [--frames N] [--dump-every M] [--out DIR] [--modelA/B]:
-        // the interactive link explorer — drive one or two commercial ROMs under text input scripts and dump frames, to
-        // author the scripts the cross-generation link-game gate later replays. Its own file to bound this method.
-        if (LinkExplore.TryRun(
-            args: args,
-            exitCode: out var linkExploreExitCode
-        )) {
-            exitCode = linkExploreExitCode;
-
-            return true;
-        }
-
-        // --trade-explore <rom> [--linked] [--scriptA path] [--scriptB path] [--frames N] [--dump-every M] [--out DIR]
-        // [--bootrom path] [--spawn g:m:y:x] [--model cgb]: the cross-gen-cart trade explorer — boot one or two Cgb
-        // trade-cart machines with crafted saves and dump framebuffers + a peek panel while authoring the scripted-trade
-        // harness. --trade-export [--out DIR] writes the two crafted trade saves + README for the demo's per-cabinet
-        // saves. Its own file to bound this method.
-        if (ScriptedTradeExplore.TryRun(
-            args: args,
-            exitCode: out var tradeExploreExitCode
-        )) {
-            exitCode = tradeExploreExitCode;
 
             return true;
         }

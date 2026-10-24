@@ -2,7 +2,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 // Generates tiny hand-assembled ARM .gba ROMs: the timer/IRQ probes that isolate IRQ-recognition timing for
 // differential lockstep against the cosim oracle (`--lockstep <rom> N direct`), plus the link-parent/link-child
-// SIO multiplayer exchange pair the Tier-C link-replay stage boots on a shared cable. Unlike a commercial game,
+// SIO multiplayer exchange pair the Tier-C link-replay stage boots on a shared cable. Unlike a retail game,
 // a tight loop has near-zero cumulative bus-cost drift, so any Puck-vs-oracle functional divergence is purely
 // the IRQ pipeline depth / timer latch. Code begins at ROM offset 0 (= 0x08000000), which both cores jump to
 // under direct boot; the timer/IRQ probes rely on the real BIOS to dispatch the IRQ vector to the user handler

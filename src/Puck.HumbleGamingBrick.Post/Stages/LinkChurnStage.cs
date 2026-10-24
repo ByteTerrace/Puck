@@ -9,8 +9,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// replay-through-churn proof a plain replay alone does not cover. A DMG master and a Color slave boot the gapped
 /// <see cref="SerialLinkRom.CreateChurn"/> protocol (sixteen transfers each way with a deliberate idle gap between them)
 /// and are advanced together through a <see cref="SerialLinkSession"/> on a fixed schedule of small T-cycle budgets.
-/// Every completed transfer on both ports is folded into a per-side FNV-1a traffic fingerprint (the same idiom
-/// <see cref="LinkReplay"/> uses); the trace is anchored by the connect phase — both machines' raw DIV counter and SC
+/// Every completed transfer on both ports is folded into a per-side FNV-1a traffic fingerprint; the trace is anchored by the connect phase — both machines' raw DIV counter and SC
 /// register at the instant the cable was joined. There is no resync at connect (a cable does not touch DIV): the
 /// canonical phase is each profile's deterministic post-boot phase, so recording it pins the no-resync decision into the
 /// gate.
@@ -328,7 +327,7 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
         return PostStageOutcome.Pass(detail: $"{TransferCount} transfers each way (dmg master ↔ cgb slave), connect phase pinned, replay-identical and churn-identical (severed transfer-idle at budget step {churnStep}, {reference.MasterState.Size}+{reference.SlaveState.Size} state bytes)");
     }
 
-    // A host-side, never-serialized tally of one port's serial traffic, folding the LinkReplay fingerprint idiom: it
+    // A host-side, never-serialized tally of one port's serial traffic: it
     // counts the internal-clock sends and every completion and folds each completed byte into an FNV-1a stream hash.
     // Kept as a mutable class so the same accumulators survive being re-attached to a fresh port after a churn.
     private sealed class TrafficTally {

@@ -35,8 +35,6 @@ internal static class PostStages {
             new AllocationStage(),
             // Tier A — the solar sensor's GPIO protocol, proven directly against AgbCartridge (no ROM asset).
             new SolarDeviceStage(),
-            // Tier B — functional firmware comparisons require a locally supplied, verified retail BIOS.
-            new FirmwareOracleStage(),
             // Tier B — reference conformance suites (r12 verdict register; skip when the corpus is absent).
             new ConformanceRomStage(
                 cases: [("arm/arm.gba", "arm"), ("thumb/thumb.gba", "thumb"), ("memory/memory.gba", "memory")],
@@ -52,55 +50,31 @@ internal static class PostStages {
             ),
             // Tier B — ARM/Thumb fuzz-corpus coverage (EWRAM failure marker; skip when absent).
             new ArmFuzzStage(),
-            // Tier B — deterministic render-hash floors. The ppu screen demos are BIOS-independent direct-boot ROMs from
-            // the corpus; the game and aging cartridge are user-supplied and BIOS-dependent (they run BIOS SWIs during
-            // boot), and skip on the zeroed stub. A fixed instruction budget is not portable across BIOS implementations:
-            // hold image identity fixed and explain a shifted floor before recapturing it with --render-hash.
+            // Tier B — deterministic render-hash floors over the corpus's BIOS-independent direct-boot ppu screen demos. A
+            // fixed instruction budget is not portable across BIOS implementations: hold image identity fixed and explain
+            // a shifted floor before recapturing it with --render-hash.
             new RenderHashStage(floors: [
                 new RenderFloor(
                     ExpectedHash: 0x19E7C5AF1FB0BF25ul,
                     Name: "ppu/shades",
-                    NeedsBios: false,
                     RelativePath: "ppu/shades.gba",
-                    Source: RenderFloorSource.Corpus,
                     Steps: 6_000_000
                 ),
                 new RenderFloor(
                     ExpectedHash: 0x62B76C0E0223A81Cul,
                     Name: "ppu/hello",
-                    NeedsBios: false,
                     RelativePath: "ppu/hello.gba",
-                    Source: RenderFloorSource.Corpus,
                     Steps: 6_000_000
                 ),
                 new RenderFloor(
                     ExpectedHash: 0x2F1E64B48356B525ul,
                     Name: "ppu/stripes",
-                    NeedsBios: false,
                     RelativePath: "ppu/stripes.gba",
-                    Source: RenderFloorSource.Corpus,
-                    Steps: 6_000_000
-                ),
-                new RenderFloor(
-                    ExpectedHash: 0x634D863B8CE386E8ul,
-                    Name: "A (commercial RPG)",
-                    NeedsBios: true,
-                    RelativePath: "A.gba",
-                    Source: RenderFloorSource.Games,
-                    Steps: 120_000_000
-                ),
-                new RenderFloor(
-                    ExpectedHash: 0x64044FC6D20B9C93ul,
-                    Name: "AGS menu",
-                    NeedsBios: true,
-                    RelativePath: "AGS Aging Cartridge (World) (v7.1).gba",
-                    Source: RenderFloorSource.Games,
                     Steps: 6_000_000
                 ),
             ]),
-            // Tier B — reference suites with known partial conformance (measurement, not a gate; skip when the ROM is absent).
+            // Tier B — the menu-driven accuracy suite: a measurement, not a gate (skip when the ROM is absent).
             new AccuracySuiteStage(),
-            new AgsStage(),
             // Tier C — cross-machine link determinism (two consoles on one cable, stepped through AgbLinkSession;
             // self-contained hand-assembled micro-ROMs, so it runs anywhere).
             new FirmwareMultiBootStage(),
@@ -109,12 +83,5 @@ internal static class PostStages {
             // Tier C — the same link cable proven transparent to a mid-exchange suspend/snapshot/restore/reconnect
             // churn (AgbLinkSession's credit-preserving resume token), doubled within one run; self-contained.
             new LinkChurnStage(),
-            // Tier C — the same link stack under a REAL commercial multiplayer game (two full-booted consoles on one
-            // cable); proves the game's SIO link probe engages over the cable and the linked scenario is
-            // replay-identical. Skips when --link-game or a real boot BIOS is absent.
-            new LinkGameReplayStage(),
-            // Tier C — a recorded varying-light script replays byte-identically on a real solar-sensor cart. Skips
-            // when --solar-rom or a real boot BIOS is absent (no solar-sensor dump ships with the repo).
-            new SolarReplayStage(),
         ];
 }

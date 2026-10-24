@@ -638,9 +638,10 @@ writes to CI's `artifacts/hgb-post` directory, where a run leaves its report tab
 its JSON summary and its JUnit results (all three written by `PostReport` in
 `src/Puck.Machines.Post`). Iterate with `--filter`.
 The Advanced battery works the same way: its corpora are pinned in its own
-`corpora.json`, the BIOS and commercial cartridges are command-line flags, and
+`corpora.json`, the BIOS is a command-line flag, and
 it exposes lockstep, trace, I/O-dump, render-hash, and divergence diagnostics;
-see its project README.
+see its project README. No battery stage or CI step reads a commercial ROM or
+BIOS: a retail image is a local, by-hand input and is never committed.
 
 ### Performance changes
 

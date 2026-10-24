@@ -30,7 +30,8 @@ Use `--tier A|B|C` or `--filter <text>` to narrow a run. The
 corpus cache, so its self-contained stages run in every CPU test pass and its
 corpus stages skip. CI's runtime verification workflow (`verify.yml`) runs the
 whole battery over the pinned corpora. The project README documents optional
-commercial-cartridge inputs, artifact paths, and exit codes.
+corpus inputs, artifact paths, and exit codes. No stage reads a commercial
+cartridge.
 
 ## Test ROM corpora
 
