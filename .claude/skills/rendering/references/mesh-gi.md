@@ -97,6 +97,11 @@ and move the hall camera and target 8 m along +X, to check that moving the
 toroidal volume creates no rectangular wall patch or bright distance band.
 The teal corner must also stay closed high up where its walls meet the roof;
 checking only the lower stepped strip misses the diagonal-probe case.
+Aim the same eye at `4.60 4.2 29.76` to inspect that junction. The `codex-expo2`
+before/after comparison found a remaining triangular bright patch there in both
+indirect and final shading; its cause is unconfirmed and tracked in
+[open items](../../../../docs/plans/open-items.md). Do not infer a clean roof
+from the lower reference view.
 
 See the [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 for the lighting model and [verification](../../verification/SKILL.md) for GPU
