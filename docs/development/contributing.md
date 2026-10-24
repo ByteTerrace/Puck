@@ -10,7 +10,9 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
 - A run uses a versioned `puck.world.definition.v1` JSON document. CLI conveniences
   synthesize the same model; they do not create a second execution path.
 - Vulkan and Direct3D 12 implement the same neutral GPU contracts. Direct3D 12 is the
-  development backend; verify there, and qualify Vulkan when the owner calls for it.
+  development backend; a rendering or GPU change also gets a windowed Vulkan boot
+  of the debug world on the lead machine. Fix Vulkan regressions as ordinary work;
+  full parity qualification waits for the owner's call.
 - `Puck.World` composes the running application. Run it to verify rendering and
   complete game interaction. The World test suite covers document, protocol,
   authoritative simulation, and shipped game state programs; other checks below
