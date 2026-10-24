@@ -349,9 +349,9 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.obstruction"
         );
 
-        RequirePositiveFixed(
-            value: tuning.GroundStick,
-            name: $"{path}.groundStick",
+        RequireNonNegativeFixed(
+            value: tuning.GroundSnap,
+            name: $"{path}.groundSnap",
             errors: errors
         );
         RequireNonNegativeFixed(

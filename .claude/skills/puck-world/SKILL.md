@@ -413,9 +413,10 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   apply-time capacity gate.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
-  empty): a body collides as its volumes' world box (the Moth is 0.7 m square
-  and 2.06 m tall) and a placement's primitive as its own box, so a box is
-  exact and every boolean carve collides as the uncarved shape. Build a doorway,
+  empty): spheres and circular cylinders have closest-point contact, while
+  other finite primitives use oriented boxes. The Moth's capsule has a 0.35 m
+  radius and is 2.06 m tall; capsule/box edges remain conservative. Every
+  boolean carve collides as the uncarved shape. Build a doorway,
   window or stairwell as a union of boxes around the opening, never a
   subtraction, and keep 2.4 m of headroom over every tread and landing (her
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
@@ -443,7 +444,10 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   noclip (`worlds/debug/noclip.puck`) is a collider-less free-flight kit
   selected through the `form` register (suit + 2 × noclip).
 - A moving floor is an attached solid placement riding a body (`attach` plus
-  `solid`, analytic provider only); a body grounded on it rides it. The gallery
+  `solid`, analytic provider only); a body grounded on it rides its translation
+  and yaw through the same narrowphase and slope test as ordinary contact.
+  `motion.groundSnap` follows downward surfaces within an authored reach;
+  jump and launch operations release grounding. The gallery
   lift moves its car body with a rule that `poseCell`s it along a box topology
   of 1/16 m layers each tick, so its speed and floor stops are exact.
 
