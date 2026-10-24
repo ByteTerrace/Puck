@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Puck.World.Client;
 
 /// <summary>
@@ -41,12 +43,59 @@ public sealed class WorldBodyStampCensus {
             scaleRow: m_scaleRow
         );
     }
-    // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
-    // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
-    // look). The uniform scale folds the placement scale, the look scale, and the body's own live scale (see
-    // LiveBodyScale) — the same bodies.scale register WorldPopulation.SyncBodyScale reads server-side.
-    private WorldStampPool.BodyStamp? ResolveStampCreation(IWorldStampSource source, WorldDefinition definition, int index) {
+    /// <summary>Returns the creation a body renders as a stamp: an inhabitant wears its look's creation (a creation
+    /// look) or its placement's own creation, and a crowd body wears its look's creation (a creation look).</summary>
+    /// <param name="source">The world whose body is read.</param>
+    /// <param name="definition">The source's live document.</param>
+    /// <param name="index">The body's index.</param>
+    /// <param name="creation">The creation the body renders as, or <see langword="null"/> when it renders as a catalog
+    /// avatar.</param>
+    /// <param name="scale">The creation's uniform stamp scale on the body, the placement scale times the look scale,
+    /// before the body's own live scale; 1 when there is no creation.</param>
+    /// <returns><see langword="true"/> when the body renders as a creation stamp.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="definition"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool TryResolveCreation(IWorldStampSource source, WorldDefinition definition, int index, [NotNullWhen(returnValue: true)] out WorldPrototype? creation, out float scale) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
         var look = source.Look(index: index);
+        var placementScale = 1f;
+        string? prototypeId = null;
+
+        if (source.PlacementId(index: index) is { } placementId) {
+            if (WorldDefinitionRows.FindPlacement(
+                placements: definition.Placements,
+                id: placementId
+            ) is { } placement) {
+                placementScale = placement.Scale;
+                prototypeId = ((look.Source is WorldLookSource.Creation inhabitLook)
+                    ? inhabitLook.PrototypeId.Value
+                    : placement.PrototypeId
+                );
+            }
+        } else if (look.Source is WorldLookSource.Creation crowdLook) {
+            prototypeId = crowdLook.PrototypeId.Value;
+        }
+
+        creation = ((prototypeId is null)
+            ? null
+            : WorldDefinitionRows.FindCreation(
+                creations: definition.Creations,
+                id: prototypeId
+            )
+        );
+        scale = ((creation is null)
+            ? 1f
+            : (placementScale * look.Scale)
+        );
+
+        return (creation is not null);
+    }
+    // The creation a body renders as a stamp, or null (it renders as a catalog avatar). The uniform scale folds the
+    // placement scale, the look scale, and the body's own live scale (see LiveBodyScale) — the same bodies.scale register
+    // WorldPopulation.SyncBodyScale reads server-side.
+    private WorldStampPool.BodyStamp? ResolveStampCreation(IWorldStampSource source, WorldDefinition definition, int index) {
         var liveScale = LiveBodyScale(
             definition: definition,
             index: index,
@@ -55,49 +104,21 @@ public sealed class WorldBodyStampCensus {
 
         m_bakedScale[index] = liveScale;
 
-        if (source.PlacementId(index: index) is { } placementId) {
-            if (WorldDefinitionRows.FindPlacement(
-                placements: definition.Placements,
-                id: placementId
-            ) is not { } placement) {
-                return null;
-            }
-
-            var prototypeId = ((look.Source is WorldLookSource.Creation inhabitLook)
-                ? inhabitLook.PrototypeId.Value
-                : placement.PrototypeId
-            );
-
-            return ((WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: prototypeId
-            ) is { } creation)
-                ? new WorldStampPool.BodyStamp(
-                    BodyIndex: index,
-                    Creation: creation,
-                    Scale: ((placement.Scale * look.Scale) * liveScale),
-                    Look: look
-                )
-                : null
-            );
-        }
-
-        if (look.Source is WorldLookSource.Creation crowdLook) {
-            return ((WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: crowdLook.PrototypeId
-            ) is { } creation)
-                ? new WorldStampPool.BodyStamp(
-                    BodyIndex: index,
-                    Creation: creation,
-                    Scale: (look.Scale * liveScale),
-                    Look: look
-                )
-                : null
-            );
-        }
-
-        return null;
+        return (TryResolveCreation(
+            creation: out var creation,
+            definition: definition,
+            index: index,
+            scale: out var scale,
+            source: source
+        )
+            ? new WorldStampPool.BodyStamp(
+                BodyIndex: index,
+                Creation: creation,
+                Scale: (scale * liveScale),
+                Look: source.Look(index: index)
+            )
+            : null
+        );
     }
 
     /// <summary>Refreshes the census from a source's active entities. Called at each rebuild.</summary>
