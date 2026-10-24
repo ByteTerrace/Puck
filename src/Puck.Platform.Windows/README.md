@@ -9,8 +9,6 @@ The Windows concrete backends behind `Puck.Platform`'s contracts.
 - **Camera/capture**—`Win32MediaFoundationCameraService` (the webcam,
   Media Foundation plus the camera frame server), `Win32NativeImageCaptureService`
   (Windows Graphics Capture desktop/window feeds).
-- **Recording**—the Media Foundation hardware video-encoder ladder
-  (AV1→H.264) and WASAPI loopback/microphone audio capture sources.
 - **Audio render**—the WASAPI render-device factory.
 - **Input**—HID device enumeration (`Win32HidDeviceSource`) and Xbox
   acquisition over XInput/GameInput (`Win32XboxAcquisitionSource`);
@@ -110,7 +108,7 @@ vocabulary onto either a WinRT `VideoDeviceController` or the legacy
 
 One static class, one method per seam:
 `AddWindowsPlatformWindowing`/`AddWindowsCameraCapture`/
-`AddWindowsRecordingPlatform`/`AddWindowsAudioRender`/`AddWindowsPrecisionWaiter`.
+`AddWindowsAudioRender`/`AddWindowsPrecisionWaiter`.
 Every method that constructs a `[SupportedOSPlatform("windows")]`-annotated
 type carries the same attribute, so CA1416 requires the CALLER to guard with
 `OperatingSystem.IsWindows()`—that guard is the composition-time platform

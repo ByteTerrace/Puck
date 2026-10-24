@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Platform.Audio;
-using Puck.Platform.Windows.Recording;
 
 namespace Puck.Platform.Windows.Audio;
 
@@ -163,10 +162,7 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
         Wasapi.CoUninitialize();
     }
     private (IAudioClient AudioClient, IAudioRenderClient RenderClient) Initialize() {
-        var audioClient = Wasapi.ActivateAudioClient(
-            dataFlow: Wasapi.DataFlowRender,
-            deviceId: null
-        );
+        var audioClient = Wasapi.ActivateAudioClient();
 
         // The endpoint's own mix format is only released, not consumed: the stream requests OUR format below and the
         // AUTOCONVERT flags absorb any difference. Calling it first also fails fast on a half-present endpoint.

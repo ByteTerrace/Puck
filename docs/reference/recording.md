@@ -10,14 +10,11 @@ one game: a host can drive the same shape from a window or a headless render.
 `Puck.World` does not compose this native video library; its session recording
 and playback use `replay.*`.
 
-Everything that talks to real hardware—Media Foundation's encoder ladder,
-WASAPI loopback and microphone capture—lives outside this project, behind
-`Puck.Abstractions.Recording`'s `IVideoEncoderFactory` and
-`IAudioCaptureSourceFactory`. The Windows backend that implements them is
-`Puck.Platform.Windows`, registered through its `AddWindowsRecordingPlatform`
-extension; `Puck.Platform.Linux`'s `AddLinuxRecordingPlatform` registers
-factories that decline with a reason. This project references neither and
-knows nothing about Media Foundation or COM.
+The library consumes `Puck.Abstractions.Recording`'s `IVideoEncoderFactory`
+and `IAudioCaptureSourceFactory`. Its tests supply deterministic factories;
+the unused native encoder/audio-capture backends and their registration
+helpers were removed with the World's native recording integration. Camera
+capture, probes and audio rendering remain separate platform services.
 
 ## Key features
 
@@ -50,8 +47,8 @@ knows nothing about Media Foundation or COM.
 ```mermaid
 flowchart LR
     Doc["📄 RecordingDocument"] --> Options["🧩 RecordingSessionOptions"]
-    VideoFactory["🎥 IVideoEncoderFactory<br/>(Puck.Platform.Windows)"] --> Options
-    AudioFactory["🎙️ IAudioCaptureSourceFactory<br/>(Puck.Platform.Windows)"] --> Options
+    VideoFactory["🎥 caller's IVideoEncoderFactory"] --> Options
+    AudioFactory["🎙️ caller's IAudioCaptureSourceFactory"] --> Options
     Options --> Session["🎬 RecordingSession.TryCreate"]
     Session --> Render["🖼️ Render thread: Consume(frame)"]
     Render --> Queue["🔁 FrameSlotQueue"]
@@ -77,7 +74,7 @@ muxer; one audio thread drains, mixes, encodes to Opus, and writes to the
 muxer; both serialize through one lock around the muxer.
 
 `RecordingSessionOptions.Document.Clock` chooses what a playback position
-means: `Wall` (the shipped default) stamps frames and audio from the wall
+means: `Wall` (the document default) stamps frames and audio from the wall
 clock at consume time, while `Sim` stamps frames from the engine tick clock
 for a deterministic offline re-render and forbids audio rows. Either way the
 container timeline is rebased so the first written block sits at zero—an
@@ -87,9 +84,8 @@ the whole take.
 
 ## Quick start
 
-A minimal session needs a document, the platform factories, and the source
-frame extent; `AddWindowsRecordingPlatform` (in `Puck.Platform.Windows`) is
-what supplies real factories in a Windows host:
+A minimal session needs a document, caller-supplied factories and the source
+frame extent:
 
 ```csharp
 using Puck.Recording.Document;
@@ -101,12 +97,12 @@ var document = RecordingDocument.CreateDefault() with {
 
 if (!RecordingSession.TryCreate(
     options: new RecordingSessionOptions {
-        AudioSourceFactory = audioSourceFactory,   // from AddWindowsRecordingPlatform
-        Clock = clock,                             // the RecordingSessionClock the same registration shares
+        AudioSourceFactory = audioSourceFactory,
+        Clock = clock,                             // shared with the supplied audio sources
         Document = document,
         SourceHeight = 1080,
         SourceWidth = 1920,
-        VideoEncoderFactory = videoEncoderFactory,  // from AddWindowsRecordingPlatform
+        VideoEncoderFactory = videoEncoderFactory,
     },
     session: out var session,
     reason: out var reason
@@ -198,9 +194,8 @@ real `SeekHead` at the identical offset.
 recording interfaces this project implements against) and `Puck.Assets` (the PNG
 codec `CaptureSink` writes still frames through), plus the third-party `Concentus`
 (the managed Opus encoder) package. It carries no platform, GPU, or windowing
-dependency—a consumer supplies `IVideoEncoderFactory` and
-`IAudioCaptureSourceFactory` from wherever real hardware access lives, which
-inside this repository is `Puck.Platform.Windows`'s `AddWindowsRecordingPlatform`.
+dependency. A consumer supplies `IVideoEncoderFactory` and
+`IAudioCaptureSourceFactory`; the current tests provide deterministic factories.
 
 ## Documentation
 

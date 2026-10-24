@@ -68,7 +68,9 @@ results. Its manifest is `puck.world.test-run.v1`, written as `test-run.json`.
 
 The removed World recording integration encoded native video and audio; it was
 not a replay system and had no debug-world caller. Its boot flag, default asset
-and capture verbs are deleted. The reusable `Puck.Recording` library remains in
+and capture verbs are deleted, together with their orphaned native A/V backends
+and registration helpers. Audio output keeps its shared WASAPI interop under
+`src/Puck.Platform.Windows/Audio/`. The reusable `Puck.Recording` library remains in
 the build. `WorldProbes`, `probe.*` and probe tracks remain for the stretch goal.
 
 ## ROMs

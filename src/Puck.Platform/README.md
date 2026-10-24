@@ -32,13 +32,8 @@ plus the pieces that need no OS-specific code at all.
 - **`Puck.Memory`**—the unmanaged allocator (mimalloc-backed, with a
   tracking wrapper and a plain native fallback), registered via
   `AddPuckAllocator`.
-- **Null fallbacks**—`NullClipboardService`, `NullCameraCaptureService`,
-  `NullNativeImageCaptureService`, and the declining recording factories
-  (`Puck.Platform.Recording.DecliningVideoEncoderFactory`/
-  `DecliningAudioCaptureSourceFactory`, which resolve a platform-supplied
-  decline reason instead of a missing service), used by
-  `Puck.Platform.Linux`'s registration (and by anything that never calls a
-  platform-specific registration method at all).
+- **Null fallbacks**—`NullClipboardService`, `NullCameraCaptureService` and
+  `NullNativeImageCaptureService`, used by `Puck.Platform.Linux`'s registration.
 - **Probes contracts** (`Puck.Platform.Probes`)—`ProbeReading`, the
   neutral fixed-point currency between an probe and every binding that
   consumes it; `ProbeReadingRing`, its triple-buffered seqlock latest-wins
@@ -67,10 +62,10 @@ A composition root pairs it with exactly one of:
 - `Puck.Platform.Windows.WindowsPlatformServiceRegistration.AddWindowsPlatformWindowing`
 - `Puck.Platform.Linux.LinuxPlatformServiceRegistration.AddLinuxPlatformWindowing`
 
-Camera capture, recording, and audio-render registration follow the same
+Camera capture and audio-render registration follow the same
 shape: each platform package carries its own method
 (`AddWindowsCameraCapture`/`AddLinuxCameraCapture`,
-`AddWindowsRecordingPlatform`/`AddLinuxRecordingPlatform`, and so on), and
+`AddWindowsAudioRender`, and so on), and
 this project registers none of them.
 
 `Puck.World`'s `WorldBootComposition`/`Program.cs` show the composition-root
