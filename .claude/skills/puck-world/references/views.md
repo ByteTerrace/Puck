@@ -198,6 +198,51 @@ For each fixed tick:
 
 ## Chase eye clearance
 
+### First person
+
+First person is a seat-owned view state, independent of the fade/cutaway clearance
+choice. `player.camera.view first|third|toggle|auto` requests an eased move into
+the authored eye or back out; no argument toggles. `auto` restores the program's
+request and the optional automatic policy. The composed controller-bar pages
+have no free plate (Debug South is the Suit toggle), and every play-wheel ring
+already fills its eight sectors, so this bindable verb has no default binding.
+An author may assign it through the ordinary control vocabulary.
+
+The camera program reports its destination through
+`firstPerson(eyePoint: [0, 1.75, 0.22], active: 0, transitionSeconds: 0.5,
+hideRadius: 0.45)`. The Moth basis owns this eye point. `active` may be a
+`state.<row>[.<key>]` binding: zero requests third person, one first person.
+An explicit player view choice overrides it. Selected programs carry the winning
+destination; a blended program carries the dominant side's destination. The
+point rides the presented body's orientation and live scale. The transition
+migrates the chase pivot to that eye while retracting the boom, preserves yaw,
+and keeps a nonzero forward sightline at the eye. Reversing the toggle continues
+from the current fraction. The FOV stays the rig's authored FOV.
+
+`WorldCameraViewTransition`, held by `WorldSeatViewState`, owns the request,
+smoothstep transition and automatic dwell. The existing `SdfStampFade` hides
+only the issuing seat's own body stamp within the authored head shell, fading
+over the preceding shell radius. No shared stamp transform changes; other seats,
+mirrors, portals and carried screens retain their own visibility. First-person
+look rotates at the eye, keeps the body upright when pointer steering, and
+suppresses follow; it uses the same authored look/orbit/steer inputs.
+
+Automatic pull-in is **off by default**. Author
+`views.seatControl.autoFirstPerson { enabled: false, entryDistance: 0.85,
+entrySeconds: 0.2, exitDistance: 1.35, exitSeconds: 0.15 }`; distances scale with
+the body. The nullable portable `seatCameraFeel.autoFirstPerson` overrides the
+author's enabled choice. `player.camera.automatic on|off|auto|toggle` overrides
+that choice for the session; `auto` removes the override. Explicit `view first`
+and `view third` win over automatic pull-in. Use `view auto` to let it act.
+
+The room probe starts at the authored eye and runs backward along the requested
+view direction, independently of the current transition and chase target shift.
+Entry needs continuously less than 0.85 m for 0.2 s; exit needs continuously more
+than 1.35 m for 0.15 s. Intermediate clearance retains the current state and
+interrupting either dwell resets its timer. `world.view.camera` echoes `view`,
+`viewSource`, `transition`, `autoFirstPerson`, `room` and `dwell`, alongside the
+actual presented eye/target, fade and third-person clearance result.
+
 The debug world's default is **fade**, with **cutaway** one toggle away. Both
 share target migration: the camera program's `lookAt.closeTargetOffset` names
 the close target, in the same axes as `targetOffset`. As static geometry reduces

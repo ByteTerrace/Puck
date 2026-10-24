@@ -12295,6 +12295,108 @@
                       ],
                       "additionalProperties": false,
                       "title": "WorldCameraProgramOpSelectProgram"
+                    },
+                    {
+                      "description": "Authors the seat\u0027s first-person destination and eased transition. The eye point is in the reference body\u0027s local axes at full size. Active may bind state: zero requests third person, one first person; an explicit player choice overrides it. The caller applies live body scale and view-local hiding.",
+                      "properties": {
+                        "$type": {
+                          "const": "firstPerson"
+                        },
+                        "eyePoint": {
+                          "description": "The eye in the avatar\u0027s local frame.",
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "active": {
+                          "description": "The authored view request, a literal or state binding in [0, 1].",
+                          "title": "BindableScalar",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "transitionSeconds": {
+                          "description": "The duration of a complete eased move.",
+                          "type": "number",
+                          "default": 0.5
+                        },
+                        "hideRadius": {
+                          "description": "The head shell radius within which the own stamp is hidden.",
+                          "type": "number",
+                          "default": 0.45
+                        },
+                        "opcode": {
+                          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "eyePoint",
+                        "active"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldCameraProgramOpFirstPerson"
                     }
                   ],
                   "title": "WorldCameraProgramOp"
@@ -14910,6 +15012,14 @@
               ],
               "default": "Auto",
               "title": "WorldCameraClearanceChoice"
+            },
+            "autoFirstPerson": {
+              "description": "The player\u0027s automatic pull-in choice; null inherits the author\u0027s default.",
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "default": null
             }
           },
           "required": [
@@ -27198,6 +27308,43 @@
               "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians.",
               "type": "number",
               "default": 1.1
+            },
+            "autoFirstPerson": {
+              "description": "The optional automatic pull-in policy; absent is off with standard hysteresis.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "enabled": {
+                  "description": "Whether automatic pull-in is the author\u0027s default.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "entryDistance": {
+                  "description": "Maximum constrained room for entry.",
+                  "type": "number",
+                  "default": 0.85
+                },
+                "entrySeconds": {
+                  "description": "Continuous constrained time before entry.",
+                  "type": "number",
+                  "default": 0.2
+                },
+                "exitDistance": {
+                  "description": "Minimum open room for exit, greater than entry.",
+                  "type": "number",
+                  "default": 1.35
+                },
+                "exitSeconds": {
+                  "description": "Continuous clear time before exit.",
+                  "type": "number",
+                  "default": 0.15
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldCameraAutoFirstPerson"
             }
           },
           "required": [

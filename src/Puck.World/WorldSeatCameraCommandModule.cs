@@ -49,6 +49,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
         if (state is not null) {
             _ = builder.Append(value: $" mode={choice.ToString().ToLowerInvariant()}");
+            _ = builder.Append(value: $" autoFirstPerson={state.AutomaticFirstPerson(control, seatLook).ToString().ToLowerInvariant()}");
             _ = builder.Append(value: ' ').Append(value: state.DescribeClearance());
         }
 
@@ -60,6 +61,56 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.view",
+            description: "Eases this seat into its authored eye or back out: player.camera.view [first|third|toggle|auto]. No argument toggles. Auto restores the camera program's state-driven view and optional automatic pull-in.",
+            handler: (context, args) => {
+                if (args.Count > 1) {
+                    return CommandResult.Error(output: "[player.camera.view: expected first|third|toggle|auto]");
+                }
+                var seat = roster.Seat(slot: context.Slot);
+                if (seat is null) {
+                    return CommandResult.Error(output: "[player.camera.view: no occupied seat]");
+                }
+                var token = ((args.Count == 0) ? "toggle" : args[0].ToString().ToLowerInvariant());
+                switch (token) {
+                    case "first": seat.View.SetView(true); break;
+                    case "third": seat.View.SetView(false); break;
+                    case "toggle": seat.View.SetView(!seat.View.FirstPerson); break;
+                    case "auto": seat.View.SetView(null); break;
+                    default: return CommandResult.Error(output: "[player.camera.view: expected first|third|toggle|auto]");
+                }
+                return new CommandResult(Output: Describe(slot: context.Slot));
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.automatic",
+            description: "Chooses automatic first-person pull-in: player.camera.automatic [on|off|auto|toggle]. Auto restores the portable preference or author's default. Explicit first/third view choices take priority; player.camera.view auto restores state-driven behavior.",
+            handler: (context, args) => {
+                if (args.Count > 1) {
+                    return CommandResult.Error(output: "[player.camera.automatic: expected on|off|auto|toggle]");
+                }
+                var seat = roster.Seat(slot: context.Slot);
+                if (seat is null) {
+                    return CommandResult.Error(output: "[player.camera.automatic: no occupied seat]");
+                }
+                var definition = instances.ResolveRoutedDefinition(slot: context.Slot);
+                var feel = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
+                var token = ((args.Count == 0) ? "toggle" : args[0].ToString().ToLowerInvariant());
+                switch (token) {
+                    case "on": seat.View.SetAutomaticFirstPerson(true); break;
+                    case "off": seat.View.SetAutomaticFirstPerson(false); break;
+                    case "auto": seat.View.SetAutomaticFirstPerson(null); break;
+                    case "toggle": seat.View.SetAutomaticFirstPerson(!seat.View.AutomaticFirstPerson(definition.Views.SeatControl, feel)); break;
+                    default: return CommandResult.Error(output: "[player.camera.automatic: expected on|off|auto|toggle]");
+                }
+                return new CommandResult(Output: Describe(slot: context.Slot));
+            },
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.camera.clearance",

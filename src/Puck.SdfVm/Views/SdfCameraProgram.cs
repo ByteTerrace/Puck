@@ -62,6 +62,8 @@ public readonly record struct SdfCameraDynamics(float Frequency, float Damping, 
 /// what a document, a binding, or an entity is.
 /// </summary>
 public abstract record SdfCameraOp {
+    /// <summary>Reports an avatar-local first-person destination; the seat applies the transition.</summary>
+    public sealed record FirstPerson(Vector3 EyePoint, SdfCameraScalar Active, float TransitionSeconds, float HideRadius) : SdfCameraOp;
     private SdfCameraOp() {
     }
 
@@ -201,7 +203,12 @@ public readonly record struct SdfCameraLook(float Yaw, float Pitch);
 public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float FovRadians, SdfCameraDynamics Dynamics) {
     /// <summary>The close-target displacement and boom fractions reported by the winning look-at operation.</summary>
     public SdfCameraTargetShift TargetShift { get; init; }
+    /// <summary>The winning program's first-person destination and transition, if authored.</summary>
+    public SdfCameraFirstPerson? FirstPerson { get; init; }
 }
+/// <summary>A first-person eye point in the reference body's local axes at full size, with its authored request
+/// and transition parameters. The host applies the body's presented pose and live scale.</summary>
+public readonly record struct SdfCameraFirstPerson(Vector3 EyePoint, bool Active, float TransitionSeconds, float HideRadius);
 /// <summary>A collision-driven displacement from the rest target, in world axes before the caller's live scale.</summary>
 /// <param name="Offset">The displacement from the rest target to the close target.</param>
 /// <param name="StartFraction">The boom fraction below which migration begins.</param>
@@ -291,12 +298,18 @@ public static class SdfCameraProgramEvaluator {
         var fov = OrbitRig.DefaultFieldOfViewRadians;
         var dynamics = SdfCameraDynamics.None;
         var targetShift = default(SdfCameraTargetShift);
+        SdfCameraFirstPerson? firstPerson = null;
         var pitchMin = (-MathF.PI / 2f);
         var pitchMax = (MathF.PI / 2f);
         var operations = program.Operations;
 
         for (var index = 0; (index < operations.Count); index++) {
             switch (operations[index]) {
+                case SdfCameraOp.FirstPerson firstPersonOp:
+                    firstPerson = new SdfCameraFirstPerson(firstPersonOp.EyePoint,
+                        firstPersonOp.Active.Resolve(scalars: scalars) >= 0.5f,
+                        firstPersonOp.TransitionSeconds, firstPersonOp.HideRadius);
+                    break;
                 case SdfCameraOp.Anchor anchor:
                     subject = ResolveSubject(
                         frame: in frame,
@@ -439,6 +452,7 @@ public static class SdfCameraProgramEvaluator {
                         Offset: Vector3.Lerp(resolvedA.TargetShift.Offset, resolvedB.TargetShift.Offset, weight),
                         StartFraction: float.Lerp(resolvedA.TargetShift.StartFraction, resolvedB.TargetShift.StartFraction, weight),
                         FullFraction: float.Lerp(resolvedA.TargetShift.FullFraction, resolvedB.TargetShift.FullFraction, weight));
+                    firstPerson = ((weight < 0.5f) ? resolvedA.FirstPerson : resolvedB.FirstPerson);
                     target = Vector3.Lerp(
                         amount: weight,
                         value1: resolvedA.Target,
@@ -477,6 +491,7 @@ public static class SdfCameraProgramEvaluator {
                     fov = resolvedSelect.FovRadians;
                     dynamics = resolvedSelect.Dynamics;
                     targetShift = resolvedSelect.TargetShift;
+                    firstPerson = resolvedSelect.FirstPerson;
                     haveTarget = true;
 
                     break;
@@ -490,7 +505,7 @@ public static class SdfCameraProgramEvaluator {
             Target: (haveTarget
             ? target
             : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
-        ) { TargetShift = targetShift };
+        ) { TargetShift = targetShift, FirstPerson = firstPerson };
     }
     private static Vector3 Forward(Quaternion orientation) => Vector3.Transform(
         rotation: orientation,
@@ -580,6 +595,8 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
     public SdfCameraDynamics Dynamics { get; private set; }
     /// <summary>Gets the winning look-at operation's close-target migration.</summary>
     public SdfCameraTargetShift TargetShift { get; private set; }
+    /// <summary>The last resolved program's first-person destination.</summary>
+    public SdfCameraFirstPerson? FirstPerson { get; private set; }
     /// <summary>Gets the live look sample added to every <see cref="SdfCameraOp.Orbit"/> that applies it.</summary>
     public SdfCameraLook Look { get; set; }
     /// <summary>Gets the compiled set this rig resolves.</summary>
@@ -617,6 +634,7 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
 
         Dynamics = pose.Dynamics;
         TargetShift = pose.TargetShift;
+        FirstPerson = pose.FirstPerson;
 
         return pose;
     }

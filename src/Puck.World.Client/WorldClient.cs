@@ -505,7 +505,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private PlayerIntent ComposeSteer(int slot, int bodyIndex, WorldAuthorityEndpoint endpoint, WorldDefinition definition, PlayerIntent intent) {
         if (
             (m_roster.Seat(slot: slot) is not { } seat) ||
-            (!seat.PointerSteering && !seat.LookFacesBody) ||
+            (!seat.PointerSteering && !seat.LookFacesBody && !seat.View.FirstPersonLook) ||
+            (definition.Views.SeatControl.YawReference != WorldSeatYawReference.World) ||
             !endpoint.TryEntityPose(
             index: bodyIndex,
             orientation: out var bodyOrientation,
@@ -527,7 +528,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         if (
             (roles.FaceX < 0) ||
             (roles.FaceZ < 0) ||
-            (seat.PointerSteering && (roles.FaceY < 0))
+            (seat.PointerSteering && !seat.View.FirstPersonLook && (roles.FaceY < 0))
         ) {
             return intent;
         }
@@ -538,7 +539,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         );
         // The orbit's pitch is the eye's elevation above the target, so the camera looks DOWN by that angle.
         var pitch = seat.View.LogicalPitch(views: definition.Views);
-        var planar = (seat.PointerSteering
+        var planar = ((seat.PointerSteering && !seat.View.FirstPersonLook)
             ? MathF.Cos(x: pitch)
             : 1f
         );
@@ -552,7 +553,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             intent = roles.Write(
                 intent: intent,
                 role: ChannelRole.FaceY,
-                value: (seat.PointerSteering
+                value: ((seat.PointerSteering && !seat.View.FirstPersonLook)
                 ? FixedQ4816.FromDouble(value: -MathF.Sin(x: pitch))
                 : FixedQ4816.Zero)
             );
@@ -756,7 +757,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
 
         if (
-            looking ||
+            looking || seat.View.FirstPersonLook ||
             (definition.Views.SeatControl.Follow is not { } follow) ||
             (!follow.WhileIdle && !seat.MovementHeld) ||
             !route.Endpoint.TryEntityHeading(

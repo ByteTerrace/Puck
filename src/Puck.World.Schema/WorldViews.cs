@@ -170,10 +170,21 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// <param name="ClearanceMode">The author's tight-space behavior; players may override it.</param>
 /// <param name="CharacterFade">The full-size fade distances; absent uses the standard distances.</param>
 /// <param name="ClearanceMaxElevation">The cutaway boom's highest elevation above the seat's level plane, in radians.</param>
+/// <param name="AutoFirstPerson">The optional automatic pull-in policy; absent is off with standard hysteresis.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
     WorldCameraClearanceChoice ClearanceMode = WorldCameraClearanceChoice.Cutaway,
-    WorldCameraCharacterFade? CharacterFade = null, float ClearanceMaxElevation = 1.1f);
+    WorldCameraCharacterFade? CharacterFade = null, float ClearanceMaxElevation = 1.1f,
+    WorldCameraAutoFirstPerson? AutoFirstPerson = null);
+/// <summary>Opt-in automatic first person. Distances are full-size metres; dwell requires consecutive time
+/// below entry or above exit clearance. The gap retains the current view.</summary>
+/// <param name="Enabled">Whether automatic pull-in is the author's default.</param>
+/// <param name="EntryDistance">Maximum constrained room for entry.</param>
+/// <param name="EntrySeconds">Continuous constrained time before entry.</param>
+/// <param name="ExitDistance">Minimum open room for exit, greater than entry.</param>
+/// <param name="ExitSeconds">Continuous clear time before exit.</param>
+public sealed record WorldCameraAutoFirstPerson(bool Enabled = false, float EntryDistance = 0.85f,
+    float EntrySeconds = 0.2f, float ExitDistance = 1.35f, float ExitSeconds = 0.15f);
 /// <summary>The follow camera's shape.</summary>
 /// <param name="Rate">The exponential rate (per second) the camera yaw closes on the heading — about 63% of the
 /// remaining angle per <c>1/rate</c> seconds; larger is a stiffer follow.</param>
