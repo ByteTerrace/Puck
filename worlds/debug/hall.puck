@@ -74,7 +74,8 @@ let inspectAmbient = 2.5
 // The basis's ambient gain (avatars/moth.puck). A multiple of 1/64, so the state cell holds it exactly and Off restores
 // it bit for bit.
 let authoredAmbient = 0.40625
-let inspectHold = 8
+let inspectHold = 7
+let inspectFill = 60
 let hallLooks = [{ suffix: "", palette: hallPalette }, { suffix: "-dark", palette: hallPaletteDark }]
 
 // The lift's panels and displays: a satin steel plate, charcoal legends, chrome bezels and black display glass, with the
@@ -884,6 +885,14 @@ render {
     lights: concat(
       [
         directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
+        // The inspection fill (`gallery.inspect`): five unshadowed neutral lights, one from overhead and four low
+        // from the sides, each at the `galleryFill.fill` illuminance, zero while the lever is Off. They reach every
+        // surface that faces them, shadowed or not, so no exhibit sits in the dark.
+        directional(name: "inspect-fill-top", direction: [0, 1, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
+        directional(name: "inspect-fill-east", direction: [1, 0.3, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
+        directional(name: "inspect-fill-west", direction: [-1, 0.3, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
+        directional(name: "inspect-fill-south", direction: [0, 0.3, 1], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
+        directional(name: "inspect-fill-north", direction: [0, 0.3, -1], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
         point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
         // The car's light, just under its luminous ceiling: a spot opening almost to a hemisphere, so it lights the
         // walls up to the ceiling but not the panel above it, riding the car's body, so neither traced nor bounced. It
@@ -898,11 +907,12 @@ render {
       map(range(0, length(wingWashes)), i => spot(name: $"wing-wash-{i}", position: [wingWashes[i].x, (hallCeilings[0] - 0.1), wingWashes[i].z], direction: wingWashes[i].aim, angle: 35deg, innerAngle: 20deg, temperature: 3500K, power: 4000lm))
     )
   }
-  // The inspection lever (`gallery.inspect`). Each of the three values below reads a `galleryFill` cell that the lever's
+  // The inspection lever (`gallery.inspect`). Each of the values below reads a `galleryFill` cell that the lever's
   // rules write, and the cells hold exactly the values the basis authors while the lever is Off, so the authored
-  // lighting renders unchanged: the sky's ambient gain (the basis's 0.40625, restated with its reflection gain, since a
-  // section member replaces the basis's whole), the camera exposure (the basis's automatic bounds restated, plus the
-  // hold that pins it while the lever is On) and the screens' share of the traced light.
+  // lighting renders unchanged: the fill lights in the list above (illuminance zero), the sky's ambient gain (the
+  // basis's 0.40625, restated with its reflection gain, since a section member replaces the basis's whole), the camera
+  // exposure (the basis's automatic bounds restated, plus the hold that pins it while the lever is On) and the
+  // screens' share of the traced light.
   environment {
     ambient: "state.galleryFill.ambient"
     reflection: 1
@@ -1013,6 +1023,7 @@ state {
       ambient = authoredAmbient
       hold = 0
       screens = 1
+      fill = 0
     }
     // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
     table hallLamps {
@@ -1329,6 +1340,7 @@ rule "gallery-inspect-on" {
   galleryFill[$"ambient"] = inspectAmbient
   galleryFill[$"hold"] = inspectHold
   galleryFill[$"screens"] = 0
+  galleryFill[$"fill"] = inspectFill
 }
 rule "gallery-inspect-off" {
   when galleryInspect[$"mode"] == 0
@@ -1336,6 +1348,7 @@ rule "gallery-inspect-off" {
   galleryFill[$"ambient"] = authoredAmbient
   galleryFill[$"hold"] = 0
   galleryFill[$"screens"] = 1
+  galleryFill[$"fill"] = 0
 }
 
 commands [

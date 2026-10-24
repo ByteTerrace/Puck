@@ -454,31 +454,3 @@ test "lowering them again stops it" {
     los(body, 0, body, 8) == 0
   }
 }
-
-// The inspection lever (`gallery.inspect`): On writes the flat ambient, the exposure hold and the screens' gain a render
-// binding reads, and Off writes the authored values back exactly (the ambient is the basis's 0.40625).
-test "the inspection lever fills, pins and holds the screens out, and Off restores them" {
-  when {
-    seat1: world.state.cell.set galleryInspect mode 1
-    ticks 10
-  }
-  expect {
-    galleryFill[ambient] == 2.5
-    galleryFill[hold] == 8
-    galleryFill[screens] == 0
-  }
-}
-
-test "turning it Off again restores the authored values" {
-  when {
-    seat1: world.state.cell.set galleryInspect mode 1
-    ticks 10
-    seat1: world.state.cell.set galleryInspect mode 0
-    ticks 10
-  }
-  expect {
-    galleryFill[ambient] == 0.40625
-    galleryFill[hold] == 0
-    galleryFill[screens] == 1
-  }
-}

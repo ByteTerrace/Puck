@@ -1,0 +1,48 @@
+// The gallery's inspection lever (hall.puck's `gallery.inspect`), each scenario booted in the whole debug world:
+// `puck test worlds/debug/gallery-inspect-tests.puck`. On writes the fill lights' illuminance, the flat sky ambient, the
+// exposure hold and the screens' gain that the render bindings read, and Off writes the authored values back exactly (the
+// ambient is the basis's 0.40625). Enum members are written as their numbers, as hall-tests.puck does.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "gallery-inspect-tests"
+
+test "the inspection lever fills, pins the exposure and holds the screens out" {
+  when {
+    seat1: world.state.cell.set galleryInspect mode 1
+    ticks 10
+  }
+  expect {
+    galleryFill[fill] == 60
+    galleryFill[ambient] == 2.5
+    galleryFill[hold] == 7
+    galleryFill[screens] == 0
+  }
+}
+
+test "turning it Off again restores the authored values" {
+  when {
+    seat1: world.state.cell.set galleryInspect mode 1
+    ticks 10
+    seat1: world.state.cell.set galleryInspect mode 0
+    ticks 10
+  }
+  expect {
+    galleryFill[fill] == 0
+    galleryFill[ambient] == 0.40625
+    galleryFill[hold] == 0
+    galleryFill[screens] == 1
+  }
+}
+
+test "a world that never switches it on keeps the authored values" {
+  when {
+    ticks 10
+  }
+  expect {
+    galleryFill[fill] == 0
+    galleryFill[ambient] == 0.40625
+    galleryFill[hold] == 0
+    galleryFill[screens] == 1
+  }
+}

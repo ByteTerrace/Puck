@@ -193,6 +193,10 @@ from `Puck.Maths`. The simulation rate is a document field
 entity advances on the server from a `PlayerIntent`; poses never come from
 outside. A deliberate correction to logic is expected to change replay hashes.
 Client code is presentation: floats are fine there and nothing feeds back.
+A `probes` row plays on the wall clock, so an `axis` binding (a probe channel
+into the input router) makes every test world that imports it refuse
+`puck test --reproduce`; the debug world's `beacon` probe (`probe-beacon.puck`)
+uses `parameter` bindings, which write presentation only.
 
 **The acting principal.** Every mutating ingress consults the acting principal
 before any mutation. The ingress stamps identity (`SubmissionEnvelope.Principal`

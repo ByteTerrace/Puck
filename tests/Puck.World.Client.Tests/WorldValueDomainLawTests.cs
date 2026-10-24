@@ -73,6 +73,12 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.DirectionalAngularRadius] = Lit(author: s => new WorldRenderLight.Directional(AngularRadius: s), present: static e => MathF.Atan(x: e.Lights[0].Param), member: "angularRadius"),
         [WorldValueFields.EnvironmentAmbient] = Env(s => new WorldRenderEnvironment(Ambient: s), e => e.Sky.Block.Ambient, "ambient"),
         [WorldValueFields.EnvironmentReflection] = Env(s => new WorldRenderEnvironment(Reflection: s), e => e.Sky.Block.Reflection, "reflection"),
+        // A hold of zero releases the exposure to its authored one, so the presentation reads no hold back as itself; the
+        // exposure law below covers what a hold presents.
+        [WorldValueFields.ExposureHold] = new Case(
+            Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Hold: s) } },
+            Path: "render.exposure.hold"
+        ),
         [WorldValueFields.PanelIntensity] = Sky(s => new WorldRenderSkyLayer.Panel(Intensity: s), e => e.Sky.First<SdfSkyPanel>().Intensity, "intensity"),
         [WorldValueFields.PanelBlur] = Sky(s => new WorldRenderSkyLayer.Panel(Blur: s), e => e.Sky.First<SdfSkyPanel>().Blur, "blur"),
         [WorldValueFields.RimLuminance] = Lit(author: s => new WorldRenderLight.Rim(Luminance: s), present: static e => e.Lights[0].Weight, member: "luminance"),
@@ -634,6 +640,30 @@ public sealed class WorldValueDomainLawTests {
         value: value
     );
 
+    [Fact]
+    public void An_exposure_hold_pins_every_view_manual_and_a_zero_hold_leaves_the_authored_exposure() {
+        var authored = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Minimum: 7f, Maximum: 16f, Compensation: 2.5f, Local: 0.5f);
+        var bound = Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = authored with { Hold = new BindableScalar(binding: $"state.{Row}") } } };
+        var world = new LiveWorld(definition: WithRow(definition: bound, value: 0d));
+        var domains = new WorldValueDomainGuard();
+        var resolve = new WorldEnvironmentResolve(domains: domains);
+
+        Assert.Equal(expected: WorldRenderExposure.Resolve(exposure: authored), actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Exposure);
+
+        world.Set(definition: WithRow(definition: bound, value: 8d));
+
+        var held = resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Exposure;
+
+        Assert.Equal(expected: SdfExposureMode.Manual, actual: held.Mode);
+        Assert.Equal(expected: 8f, actual: held.Ev100);
+        Assert.Equal(expected: 0f, actual: held.Local);
+        // The authored bounds still size the lights' ranges: a hold changes what views render at, never the lights.
+        Assert.Equal(expected: 7f, actual: WorldRenderExposure.Resolve(exposure: authored).Minimum);
+
+        world.Set(definition: WithRow(definition: bound, value: 0d));
+
+        Assert.Equal(expected: WorldRenderExposure.Resolve(exposure: authored), actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Exposure);
+    }
     [Fact]
     public void A_value_that_cannot_be_clamped_holds_the_last_valid_value_and_reports_each_transition() {
         var domains = new WorldValueDomainGuard();
