@@ -92,6 +92,39 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Equal(expected: (stale ? 0 : 10), actual: schedules.Count(predicate: schedule => Row(name: "window", schedule: schedule, set: set).Held));
         Assert.Equal(expected: (19UL * Span), actual: schedules[^1].PresentedTicks);
     }
+    // Stale describes each instance's last render, not the dependency graph: the runtime marks consumers that
+    // actually read stale output too. A producer alone cannot release a floor that holds its consumer.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AFloorFootprintReleasesAConsumerOnlyWhenItsOwnOutputIsStale(bool consumerStale) {
+        var set = Set(
+            Screens("main", "pane"),
+            Screens("pane", "window"),
+            Instance(name: "window")
+        );
+        const ulong Span = (Puck.Maths.FixedTickConversion.TicksPerSecond / 70UL);
+        var schedules = Run(
+            count: 4,
+            frame: index => (Frame(
+                footprints: [
+                    (Shows(consumer: "main", producer: "pane") with { Refresh = RenderGraphRefresh.AtLeast(hertz: 30) }),
+                    (Shows(consumer: "pane", producer: "window") with { Refresh = RenderGraphRefresh.AtLeast(hertz: 30) }),
+                ],
+                hertz: 141,
+                index: index,
+                roots: MainRoot
+            ) with {
+                FrameTicks = Span,
+                PresentedTicks = (((ulong)index) * Span),
+                Stale = (consumerStale ? ["pane", "window"] : ["window"]),
+            }),
+            set: set
+        );
+
+        Assert.Equal(expected: (consumerStale ? 4 : 2), actual: RenderCount(name: "pane", schedules: schedules, set: set));
+        Assert.Equal(expected: (consumerStale ? 4 : 2), actual: RenderCount(name: "window", schedules: schedules, set: set));
+    }
     [Fact]
     public void AStaleNameNamingNoInstanceIsRefused() {
         var set = Set(

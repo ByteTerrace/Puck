@@ -134,7 +134,9 @@ function Invoke-AgentPolicy {
 
 # --- git ---------------------------------------------------------------------------------------------------------
 
-$script:GitSeparateValues = @('-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env')
+# Git 2.47's git(1) options and git.c handle_options: --exec-path accepts only an attached value;
+# --shallow-file is an internal separate-value option omitted from git(1).
+$script:GitSeparateValues = @('-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--attr-source', '--shallow-file')
 $script:GitRedirects = @('-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env')
 $script:GitRedirectVariables = @('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_NAMESPACE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM')
 # git never lets an alias shadow one of these, so only another verb is looked up as an alias.
@@ -178,14 +180,21 @@ function Invoke-PolicyGit {
 # Splits a git invocation at its verb: @{ Verb; Rest; RestDynamic (per Rest word, known only at run time); Cwd
 # (after -C); Globals (to replay on a policy's own read); Config (-c pairs, keys lowercased); Redirected (it names
 # another tree or overrides configuration); Unresolved (what before the verb, the verb included, is known only at
-# run time, or $null) }.
+# run time, or $null); UnresolvedValue (a global option whose value alone is known only at run time, or an
+# unresolved working directory or git environment override) }.
 function Split-GitInvocation {
     param($Invocation)
     $argv = $Invocation.Argv
     $flags = $Invocation.Dynamic
     $dynamic = { param([int] $k) $null -ne $flags -and $k -lt $flags.Count -and $flags[$k] }
     $git = @{ Verb = $null; Rest = @(); RestDynamic = @(); Cwd = $Invocation.Cwd; Globals = [Collections.Generic.List[string]]::new(); Config = @{}; Redirected = $false; Unresolved = $null; UnresolvedValue = $null }
-    foreach ($key in $Invocation.Env.Keys) { if ($key -in $script:GitRedirectVariables) { $git.Redirected = $true } }
+    if (-not $Invocation.Cwd) { $git.UnresolvedValue = 'the working directory' }
+    foreach ($key in $Invocation.Env.Keys) {
+        if ($key -in $script:GitRedirectVariables) {
+            $git.Redirected = $true
+            if ($Invocation.EnvDynamic[$key]) { $git.UnresolvedValue = "the value of $key" }
+        }
+    }
     for ($i = 1; $i -lt $argv.Count; $i++) {
         $t = $argv[$i]
         if (-not $t.StartsWith('-') -or $t -eq '-') {

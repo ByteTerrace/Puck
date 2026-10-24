@@ -4,7 +4,7 @@
 # Turns one tool command into the program invocations it would start: PowerShell through PowerShell's own parser,
 # POSIX shell text through the tokenizer below. Each invocation carries its argument vector with wrappers (env, sudo,
 # timeout, xargs, a lease's `--`, bash -c, pwsh -Command, Start-Process, ...) unwrapped, its NAME=value prefixes, the
-# effective working directory after any earlier cd or Set-Location, and its source text. Quoted text, heredoc bodies
+# effective working directory after any earlier cd or Set-Location (null when known only at run time), and its source text. Quoted text, heredoc bodies
 # and here-strings are data. A form the classifier recognizes but cannot see into (a computed command name,
 # -EncodedCommand, eval of a variable, a shell reading its script from stdin) is marked Opaque, never passed over.
 Set-StrictMode -Version Latest
@@ -49,12 +49,13 @@ function Resolve-PolicyPath {
 }
 
 function New-PolicyInvocation {
-    param([string[]] $Argv, [bool[]] $Dynamic, [hashtable] $Env, [string] $Cwd, [string] $Text, [string] $Dialect, [string] $Opaque)
+    param([string[]] $Argv, [bool[]] $Dynamic, [hashtable] $Env, [string] $Cwd, [string] $Text, [string] $Dialect, [string] $Opaque, [hashtable] $EnvDynamic = @{})
     [pscustomobject]@{
         Argv    = $Argv
         Dynamic = $Dynamic
         Name    = Get-PolicyExecutable $Argv[0]
         Env     = $Env
+        EnvDynamic = $EnvDynamic
         Cwd     = $Cwd
         Text    = $Text.Trim()
         Dialect = $Dialect
@@ -157,21 +158,21 @@ function Split-PolicyWords {
 # Returns the index where a wrapped command starts, or -1 when $Argv is not a wrapper. env also collects its
 # assignments and -C directory into $State.
 function Get-PolicyWrappedStart {
-    param([string[]] $Argv, [string] $Name, [hashtable] $State)
+    param([string[]] $Argv, [string] $Name, [hashtable] $State, [bool[]] $Dynamic)
     if ($Name -eq 'env') {
         for ($j = 1; $j -lt $Argv.Count; $j++) {
             $t = $Argv[$j]
             if ($t -eq '--') { return $j + 1 }
             if ($t -in @('-u', '--unset')) { $j++; continue }
-            if ($t -in @('-C', '--chdir')) { $State.Cwd = Resolve-PolicyPath $Argv[++$j] $State.Cwd; continue }
-            if ($t -match '^--chdir=(.*)$') { $State.Cwd = Resolve-PolicyPath $Matches[1] $State.Cwd; continue }
+            if ($t -in @('-C', '--chdir')) { $j++; $State.Cwd = $Dynamic[$j] ? $null : (Resolve-PolicyPath $Argv[$j] $State.Cwd); continue }
+            if ($t -match '^--chdir=(.*)$') { $State.Cwd = $Dynamic[$j] ? $null : (Resolve-PolicyPath $Matches[1] $State.Cwd); continue }
             if ($t -in @('-S', '--split-string') -or $t -match '^(-S|--split-string=)(.+)$') {
                 $split = if ($t -in @('-S', '--split-string')) { $Argv[++$j] } else { $Matches[2] }
                 $State.Split = @(Split-PolicyWords $split)
                 return $j + 1
             }
             if ($t.StartsWith('-')) { continue }
-            if ($t -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { $State.Env[$Matches[1]] = $Matches[2]; continue }
+            if ($t -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { $State.Env[$Matches[1]] = $Matches[2]; $State.EnvDynamic[$Matches[1]] = $Dynamic[$j]; continue }
             return $j
         }
         return $Argv.Count
@@ -263,11 +264,12 @@ function Get-PolicyShellScript {
 
 # Unwraps one argument vector into the invocations it starts.
 function Resolve-PolicyInvocation {
-    param([string[]] $Argv, [bool[]] $Dynamic, [hashtable] $Env, [string] $Cwd, [string] $Text, [string] $Dialect, [int] $Depth)
+    param([string[]] $Argv, [bool[]] $Dynamic, [hashtable] $Env, [string] $Cwd, [string] $Text, [string] $Dialect, [int] $Depth, [hashtable] $EnvDynamic = @{})
     while ($Argv.Count -gt 0) {
         # A POSIX NAME=value prefix, wherever the dialect let it through.
         if (-not $Dynamic[0] -and $Argv[0] -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
             $Env[$Matches[1]] = $Matches[2]
+            $EnvDynamic[$Matches[1]] = $Dynamic[0]
             $Argv = @($Argv | Select-Object -Skip 1)
             $Dynamic = @($Dynamic | Select-Object -Skip 1)
             continue
@@ -277,8 +279,8 @@ function Resolve-PolicyInvocation {
             New-PolicyInvocation $Argv $Dynamic $Env $Cwd $Text $Dialect 'a command name computed at run time'
             return
         }
-        $state = @{ Env = $Env; Cwd = $Cwd; Split = $null }
-        $start = Get-PolicyWrappedStart $Argv $name $state
+        $state = @{ Env = $Env; EnvDynamic = $EnvDynamic; Cwd = $Cwd; Split = $null }
+        $start = Get-PolicyWrappedStart $Argv $name $state $Dynamic
         if ($start -ge 0) {
             $Cwd = $state.Cwd
             if ($null -ne $state.Split) {
@@ -303,7 +305,7 @@ function Resolve-PolicyInvocation {
             if ($Depth -lt $script:PolicyMaxDepth) { Get-PolicyInvocations $shell.Script $shell.Dialect $Cwd ($Depth + 1) }
             return
         }
-        New-PolicyInvocation $Argv $Dynamic $Env $Cwd $Text $Dialect $null
+        New-PolicyInvocation $Argv $Dynamic $Env $Cwd $Text $Dialect $null $EnvDynamic
         # find runs its -exec command; a lease runs the command after its own `--`.
         $forward = -1
         $stop = $Argv.Count
@@ -355,17 +357,19 @@ function Get-PolicyPosixInvocations {
         while ($list.Count -and -not $list[0].Dynamic -and $list[0].Value -in $script:PolicyReservedWords) { $list = @($list | Select-Object -Skip 1) }
         if ($list.Count -and $list[0].Value -in $script:PolicySkippedForms) { $list = @() }
         $prefix = @{}
+        $prefixDynamic = @{}
         while ($list.Count -and $list[0].Value -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
             $prefix[$Matches[1]] = $Matches[2]
+            $prefixDynamic[$Matches[1]] = $list[0].Dynamic
             $list = @($list | Select-Object -Skip 1)
         }
         if ($list.Count) {
             $argv = [string[]]@($list | ForEach-Object Value)
             $flags = [bool[]]@($list | ForEach-Object Dynamic)
-            if ((Get-PolicyExecutable $argv[0]) -in @('cd', 'pushd') -and $argv.Count -ge 2 -and -not $flags[1] -and $argv[1] -ne '-') {
-                $Cwd = Resolve-PolicyPath $argv[1] $Cwd
+            if ((Get-PolicyExecutable $argv[0]) -in @('cd', 'pushd') -and $argv.Count -ge 2) {
+                $Cwd = ($flags[1] -or $argv[1] -eq '-') ? $null : (Resolve-PolicyPath $argv[1] $Cwd)
             }
-            Resolve-PolicyInvocation $argv $flags $prefix $Cwd $source 'posix' $Depth
+            Resolve-PolicyInvocation $argv $flags $prefix $Cwd $source 'posix' $Depth $prefixDynamic
         }
     }
     $substitute = {
@@ -575,7 +579,7 @@ function Get-PolicyPwshInvocations {
             $path = Find-PolicyPwshArgument $arguments @('path', 'literalpath', 'lp') 0
             if ($null -ne $path) {
                 $word = @(ConvertFrom-PolicyPwshElement $path)[0]
-                if (-not $word.Dynamic -and $word.Value -notin @('-', '+')) { $Cwd = Resolve-PolicyPath $word.Value $Cwd }
+                $Cwd = ($word.Dynamic -or $word.Value -in @('-', '+')) ? $null : (Resolve-PolicyPath $word.Value $Cwd)
             }
             continue
         }
@@ -605,7 +609,7 @@ function Get-PolicyPwshInvocations {
             $here = $Cwd
             if ($null -ne $directory) {
                 $directoryWord = @(ConvertFrom-PolicyPwshElement $directory)[0]
-                if (-not $directoryWord.Dynamic) { $here = Resolve-PolicyPath $directoryWord.Value $Cwd }
+                $here = $directoryWord.Dynamic ? $null : (Resolve-PolicyPath $directoryWord.Value $Cwd)
             }
             # Start-Process joins its argument list with spaces into one command line, so the words split again.
             $argv = @($fileWord.Value) + @(Split-PolicyWords (($listWords | ForEach-Object Value) -join ' '))

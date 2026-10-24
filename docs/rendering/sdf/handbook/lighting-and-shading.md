@@ -172,11 +172,12 @@ in the frame.
   so a sunlit patch a few rays catch does not show as a band; a neighbour
   behind a wall or inside geometry takes no part, and the light visibility bits
   are each probe's own. A probe also stores a depth cube, how far it sees
-  along each axis before geometry: the farther of a ray cast along the axis and
-  the mean distance along the axis that its rays within 35 degrees of it
-  travel. A slab or wall across the axis answers its exact distance, a wall
-  beside the probe that cuts the cone short leaves the axis ray's, and a small
-  object on the axis leaves the cone's.
+  along each axis before the first geometry. Rays escaping beside a blocker
+  cannot extend its blocking depth. Its 26 neighbour rays retain their first
+  hit planes too (normal and distance as four halves each); the plane along
+  the receiver's nearest lattice direction rejects diagonal wall/roof corners
+  that every axis ray misses. A plane tests the actual receiver, rather than
+  comparing its distance to a ray travelling in a different direction.
 - **A probe lights only what lies within its depth.** A read weights each of
   the eight probes about a point by whether the point, pushed off its surface,
   lies nearer along each axis than the probe's depth that way, fading over
@@ -189,8 +190,8 @@ in the frame.
   is pushed along the wall, level with the floor's surface, and a probe on the
   far side of that floor sees it only the floor's thickness past its depth; a
   softer fade would draw the far side's light along every junction. Where every probe about a point stands across a
-  wall or slab from it, the point takes no indirect light, rather than the open
-  sky a point no probe has traced takes. The test is one axis wide, so a
+  wall or slab from it, or no probe has traced, the point takes no indirect
+  light. An axis ray is one line wide, so a
   window or doorway on a probe's axis lets its depth pass a wall the probe
   stands across from the point; each answering probe's weight therefore also
   fades out as the share of the other answering probes' weight it sees and is
@@ -198,8 +199,9 @@ in the frame.
   neighbour bits the trace records, `SdfMeshIrradianceProbe.NeighboursWord`,
   `MutualLow`, `MutualHigh`, `sdfMeshProbeMutualShares`), so a probe outside a
   room's corner, which sees in through a window above it and may hold the
-  sunlit day, gives way entirely to the probes inside. Architecture off the axes that no neighbour's sight
-  line crosses still resolves at the lattice's coarseness.
+  sunlit day, gives way entirely to the probes inside. The directional hit
+  planes cover diagonal blockers, but architecture none of the sampled rays
+  crosses still resolves at the lattice's coarseness.
 - **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
   probes about the shaded point once (`sdfMeshProbesAt`), pushed 0.35 of a cell
   along its normal, weighted trilinearly, by how far each lies in front of the
@@ -210,8 +212,10 @@ in the frame.
   point or spot light's visibility at the surface is the share of those probes
   whose centre sees it (`sdfMeshLightVisibility`), which scales its direct
   term, so a fixture lights nothing through the slab under it; an anchored
-  light is never traced and goes unoccluded. Across the volume's last cell the
-  light fades to the open sky and every light to visible. `world.debug-view
+  light is never traced and goes unoccluded. Outside the volume, the lookup
+  clamps to its boundary probes while their depth tests still use the actual
+  receiver position. They extend only the light their visibility supports;
+  the volume boundary adds no sky. `world.debug-view
   indirect` shows the volume's light alone. A window's view and a sky layer's
   view of another world read that world's own volume, at the tier its
   `render.indirect` authors, so its meter, fixtures and bounce are its own.
@@ -258,7 +262,9 @@ in the frame.
   walls rather than the sky outside it.
 - **Exposure.** The volume is also the automatic exposure's meter: the
   luminance the probes about a view's camera see along their six axes, weighted
-  toward where the camera looks ([photometric units](#photometric-units-and-exposure)).
+  toward where the camera looks. A scene ray from the camera to each probe
+  excludes probes across a wall or slab
+  ([photometric units](#photometric-units-and-exposure)).
 
 ## Ambient occlusion: screen-space obscurance
 

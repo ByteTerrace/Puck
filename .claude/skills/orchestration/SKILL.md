@@ -155,7 +155,11 @@ names (`git`, `dotnet`, `pwsh`, `node`); any other command, such as `rm` or
 `Remove-Item`, is auto-denied and ends the run with no output, so a brief that
 deletes files says to use `git rm`. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
-its edits uncommitted, so a brief tells it to build and test in the foreground. The home policy is the block contributing
+its edits uncommitted, so a brief tells it to build and test in the foreground.
+A headless run can also stall with its process alive and its log empty, so the
+lead watches the lane's worktree for file writes. After 30 minutes with no
+writes, the lead stops the run, commits its edits as WIP, and hands them to
+another lane. The home policy is the block contributing
 records; login and trust material stay local. The workspace plugin exposes the MCP
 configuration because a bare `.agents/mcp_config.json` is not a discovery root.
 

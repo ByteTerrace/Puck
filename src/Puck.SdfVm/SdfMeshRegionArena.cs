@@ -8,7 +8,8 @@ namespace Puck.SdfVm;
 /// lies: a list that names it again, as when a body that left the world returns, owes nothing for it.
 /// <para>A plan relocates every mesh a list names, packing the arena from the start in the list's order and forgetting
 /// every mesh the list does not name, only when the list holds more draws than the reserve, which then doubles, or when
-/// the arena's words outside the named meshes exceed both the named meshes' words and <see cref="RetainedSlackWords"/>.
+/// the arena's words outside the named meshes exceed both the named meshes' words and <see cref="RetainedSlackWords"/>,
+/// or keeping those words would append past <see cref="SdfWorldTables.MostMeshRegionBytes"/>.
 /// The plan states what it owes: <see cref="Relocated"/>, or the meshes it placed (<see cref="Placed"/>).</para>
 /// </summary>
 public sealed class SdfMeshRegionArena {
@@ -84,7 +85,12 @@ public sealed class SdfMeshRegionArena {
 
         // The arena's words that no named mesh holds: meshes no list names any more.
         var unnamed = ((m_end - (((long)m_drawCapacity) * SdfMeshRecord.DrawWords)) - placedNamedWords);
-        var relocate = ((draws.Count > m_drawCapacity) || ((unnamed > namedWords) && (unnamed > m_retainedSlackWords)));
+        var appendedWords = (m_end + (namedWords - placedNamedWords));
+        var relocate = (
+            (draws.Count > m_drawCapacity) ||
+            ((unnamed > namedWords) && (unnamed > m_retainedSlackWords)) ||
+            ((unnamed > 0) && (((ulong)appendedWords) > (SdfWorldTables.MostMeshRegionBytes / sizeof(uint))))
+        );
 
         if (relocate) {
             m_drawCapacity = Math.Min(val1: SdfMeshRegion.MaxDraws, val2: Math.Max(val1: draws.Count, val2: Math.Max(val1: MinimumDrawCapacity, val2: (2 * m_drawCapacity))));
