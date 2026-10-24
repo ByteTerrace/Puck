@@ -1,4 +1,7 @@
-namespace Puck.Recording.Configuration;
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
+namespace Puck.Recording.Document;
 
 /// <summary>
 /// The recording's timestamp source — the clock a player's timeline is measured in. The block timestamps written to
@@ -11,11 +14,12 @@ namespace Puck.Recording.Configuration;
 /// between arming a capture and the first encoded packet is therefore absent from playback time but present in an
 /// <see cref="OverlayKind.Timecode"/> overlay, which reads the frame's own unrebased clock — a burnt-in timecode and
 /// the player's position differ by that startup latency, constant for the whole take. An overlay row also chooses
-/// its clock independently (<see cref="OverlayClock"/>), so a configuration pairing <see cref="Sim"/> here with
+/// its clock independently (<see cref="OverlayClock"/>), so a document pairing <see cref="Sim"/> here with
 /// <see cref="OverlayClock.Session"/> there burns in a timecode measuring something the timeline does not.
 /// </remarks>
+[JsonConverter(typeof(StrictEnumConverter<RecordingClock>))]
 public enum RecordingClock {
-    /// <summary>Live capture (the default): frames and audio are stamped from the wall clock (QPC) at consume
+    /// <summary>Live capture (the shipped default): frames and audio are stamped from the wall clock (QPC) at consume
     /// time, NOT from the engine tick clock. Playback time is real elapsed capture time.</summary>
     Wall,
     /// <summary>Deterministic offline re-render: frames are stamped from the engine tick clock; audio must be empty.
@@ -23,6 +27,7 @@ public enum RecordingClock {
     Sim,
 }
 /// <summary>The kind of an audio capture row.</summary>
+[JsonConverter(typeof(StrictEnumConverter<RecordingAudioKind>))]
 public enum RecordingAudioKind {
     /// <summary>A capture device (the microphone).</summary>
     Microphone,
@@ -30,6 +35,7 @@ public enum RecordingAudioKind {
     Loopback,
 }
 /// <summary>How an audio row lands in the container.</summary>
+[JsonConverter(typeof(StrictEnumConverter<RecordingAudioTrackMode>))]
 public enum RecordingAudioTrackMode {
     /// <summary>Summed into the single default stereo track (what a service such as YouTube reads).</summary>
     Mix,
@@ -37,6 +43,7 @@ public enum RecordingAudioTrackMode {
     Isolated,
 }
 /// <summary>The kind of a capture-only overlay row.</summary>
+[JsonConverter(typeof(StrictEnumConverter<OverlayKind>))]
 public enum OverlayKind {
     /// <summary>A run of styled text.</summary>
     Text,
@@ -46,6 +53,7 @@ public enum OverlayKind {
     Timecode,
 }
 /// <summary>The anchor a normalized overlay position is measured from.</summary>
+[JsonConverter(typeof(StrictEnumConverter<OverlayAnchor>))]
 public enum OverlayAnchor {
     /// <summary>The top-left corner.</summary>
     TopLeft,
@@ -69,6 +77,7 @@ public enum OverlayAnchor {
 /// <summary>Which clock a <see cref="OverlayKind.Timecode"/> row reads. This is chosen independently of
 /// <see cref="RecordingClock"/>, which is what the container's own timeline measures — see that type's remarks for
 /// why a burnt-in timecode and a player's position are not the same number.</summary>
+[JsonConverter(typeof(StrictEnumConverter<OverlayClock>))]
 public enum OverlayClock {
     /// <summary>The wall-clock session time since capture began, unrebased.</summary>
     Session,

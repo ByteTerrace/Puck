@@ -154,6 +154,14 @@ rendering or input, Client never references Server.
 
 ## Contracts that bite
 
+**Native capture stays (owner ruling).** Gameplay video/audio clips and microphone
+input are product capabilities even without a current world caller. Keep the
+windowed `capture.start/status/stop` surface, `--recording`, recording document
+loader/format, Windows encoder and loopback/microphone capture, and Linux
+factories/registration. Capture and deterministic `replay.*` serve different
+outputs; scheduler consolidation does not remove capture. Headless Worlds do
+not compose these capture verbs. See [recording](../../../docs/reference/recording.md).
+
 **Determinism.** No wall clock, RNG or float in simulation state; fixed point
 from `Puck.Maths`. The simulation rate is a document field
 (`WorldDefinition.Simulation.RateHz`, dividing 50400 exactly, default 30). Every

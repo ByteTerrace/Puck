@@ -1,12 +1,12 @@
 using System.Globalization;
 using Puck.Abstractions.Gpu;
 using Puck.Assets;
-using Puck.Recording.Configuration;
+using Puck.Recording.Document;
 
 namespace Puck.Recording.Overlay;
 
 /// <summary>
-/// The CPU alpha-over compositor for capture-only overlays: it draws the configuration's overlay rows (text, rectangle,
+/// The CPU alpha-over compositor for capture-only overlays: it draws the document's overlay rows (text, rectangle,
 /// timecode) straight onto the copied CPU frame after frame capture, so they exist in the recording and never in
 /// the game window. Text is rendered from the crisp integer-scaled <see cref="BitmapFont"/>. Composition is zero
 /// cost when there are no rows.

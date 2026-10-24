@@ -1,26 +1,27 @@
 using Puck.Recording.Overlay;
 
-namespace Puck.Recording.Configuration;
+namespace Puck.Recording.Document;
 
 /// <summary>
-/// Validates a <see cref="RecordingConfiguration"/>: a non-empty codec ladder of known tokens,
-/// a positive frame rate and bitrate, a positive extent when
+/// The one thick gate for a <see cref="RecordingDocument"/>. It rejects a malformed document structurally — the
+/// schema tag, a non-empty codec ladder of known tokens, a positive frame rate and bitrate, a positive extent when
 /// given, unique non-empty audio ids, finite gains, the sim-clock-implies-no-audio rule, and every overlay row's
-/// per-kind requirements (content, a parseable color, normalized position, positive sizes).
+/// per-kind requirements (content, a parseable color, normalized position, positive sizes). A load that fails is
+/// rejected loudly; the loader never half-accepts.
 /// </summary>
-public static class RecordingConfigurationValidator {
+public static class RecordingDocumentValidator {
     private static readonly string[] KnownCodecs = ["av1", "h264"];
 
     private static bool IsNormalized(float value) =>
         (float.IsFinite(f: value) && (value >= 0.0f) && (value <= 1.0f));
-    private static void ValidateAudio(RecordingConfiguration configuration, List<string> errors) {
-        var audio = configuration.Audio;
+    private static void ValidateAudio(RecordingDocument document, List<string> errors) {
+        var audio = document.Audio;
 
         if (audio is not { Count: > 0 }) {
             return;
         }
 
-        if (configuration.Clock == RecordingClock.Sim) {
+        if (document.Clock == RecordingClock.Sim) {
             errors.Add(item: "audio rows are not allowed with the sim clock (deterministic renders carry no live audio).");
         }
 
@@ -153,13 +154,13 @@ public static class RecordingConfigurationValidator {
         }
     }
 
-    /// <summary>Validates a configuration without throwing.</summary>
-    /// <param name="configuration">The candidate configuration.</param>
+    /// <summary>Validates a document without throwing.</summary>
+    /// <param name="document">The candidate document.</param>
     /// <param name="reason">The collapsed one-line failure reason, or empty on success.</param>
-    /// <returns><see langword="true"/> when the configuration is valid.</returns>
-    public static bool TryValidate(RecordingConfiguration configuration, out string reason) {
+    /// <returns><see langword="true"/> when the document is valid.</returns>
+    public static bool TryValidate(RecordingDocument document, out string reason) {
         try {
-            Validate(configuration: configuration);
+            Validate(document: document);
             reason = string.Empty;
 
             return true;
@@ -169,30 +170,38 @@ public static class RecordingConfigurationValidator {
             return false;
         }
     }
-    /// <summary>Validates a configuration, throwing with the collapsed error list on any failure.</summary>
-    /// <param name="configuration">The candidate configuration.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The configuration is invalid.</exception>
-    public static void Validate(RecordingConfiguration configuration) {
-        ArgumentNullException.ThrowIfNull(argument: configuration);
+    /// <summary>Validates a document, throwing with the collapsed error list on any failure.</summary>
+    /// <param name="document">The candidate document.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The document is invalid.</exception>
+    public static void Validate(RecordingDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
 
         var errors = new List<string>();
 
+        if (!string.Equals(
+            a: document.Schema,
+            b: RecordingDocument.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            errors.Add(item: $"schema '{(document.Schema ?? "(absent)")}' is not '{RecordingDocument.SchemaVersion}'.");
+        }
+
         ValidateVideo(
-            video: configuration.Video,
+            video: document.Video,
             errors: errors
         );
         ValidateAudio(
-            configuration: configuration,
+            document: document,
             errors: errors
         );
         ValidateOverlays(
-            overlays: configuration.Overlays,
+            overlays: document.Overlays,
             errors: errors
         );
 
         if (errors.Count > 0) {
-            throw new InvalidOperationException(message: $"Invalid RecordingConfiguration:{Environment.NewLine} - {string.Join(
+            throw new InvalidOperationException(message: $"Invalid RecordingDocument:{Environment.NewLine} - {string.Join(
                 separator: $"{Environment.NewLine} - ",
                 values: errors
             )}");

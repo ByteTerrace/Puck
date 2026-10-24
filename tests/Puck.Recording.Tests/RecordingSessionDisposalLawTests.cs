@@ -2,7 +2,7 @@ using Puck.Abstractions.Capture;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Recording;
-using Puck.Recording.Configuration;
+using Puck.Recording.Document;
 using Puck.Recording.Session;
 using Puck.Testing;
 using Xunit;
@@ -50,7 +50,7 @@ public sealed class RecordingSessionDisposalLawTests {
                 condition: RecordingSession.TryCreate(
                     options: new RecordingSessionOptions {
                         Clock = new RecordingSessionClock(),
-                        Configuration = (RecordingConfiguration.CreateDefault() with { Audio = null, Output = output }),
+                        Document = (RecordingDocument.CreateDefault() with { Audio = null, Output = output }),
                         SourceHeight = 2,
                         SourceWidth = 2,
                         VideoEncoderFactory = encoder,

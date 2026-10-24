@@ -1,7 +1,7 @@
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Recording;
 using Puck.Recording.Audio;
-using Puck.Recording.Configuration;
+using Puck.Recording.Document;
 using Puck.Recording.Matroska;
 using Puck.Recording.Overlay;
 
@@ -17,7 +17,7 @@ namespace Puck.Recording.Session;
 /// one lock; the render thread never blocks (a full queue drops the newest frame and counts it). Every buffer is
 /// rented at start-up, so steady state does not allocate.
 /// <para>
-/// Build one through <see cref="TryCreate"/>: it resolves the configuration's codec ladder and audio rows against the
+/// Build one through <see cref="TryCreate"/>: it resolves the document's codec ladder and audio rows against the
 /// supplied platform factories, opening only what this machine can encode and capture, and reports a loud reason
 /// when the ladder or a device declines. Arm the host's frame-capture controller with the returned sink; call
 /// <see cref="Stop"/> (or dispose) to finalize the container.
@@ -115,7 +115,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private static OpusAudioLane? ResolveAudioLane(RecordingSessionOptions options, List<string> notes) {
         if (
             (options.AudioSourceFactory is null) ||
-            (options.Configuration.Audio is not { Count: > 0 } rows)
+            (options.Document.Audio is not { Count: > 0 } rows)
         ) {
             return null;
         }
@@ -153,8 +153,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         );
     }
     private static string ResolveOutputPath(RecordingSessionOptions options, bool hasVideo, bool webm) {
-        if (options.Configuration.Output is not null) {
-            return options.Configuration.Output!;
+        if (options.Document.Output is not null) {
+            return options.Document.Output!;
         }
 
         var extension = ((hasVideo && webm)
@@ -170,7 +170,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private static IVideoEncoder? ResolveVideoEncoder(RecordingSessionOptions options, List<string> notes) {
         if (
             (options.VideoEncoderFactory is null) ||
-            (options.Configuration.Video is not { } video)
+            (options.Document.Video is not { } video)
         ) {
             return null;
         }
@@ -246,15 +246,15 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         output = null!;
 
         if (
-            (options.Configuration.Output is not null) &&
-            string.IsNullOrWhiteSpace(value: options.Configuration.Output)
+            (options.Document.Output is not null) &&
+            string.IsNullOrWhiteSpace(value: options.Document.Output)
         ) {
             reason = "output path is empty or whitespace.";
 
             return false;
         }
 
-        var candidate = options.Configuration.Output;
+        var candidate = options.Document.Output;
 
         try {
             candidate ??= ResolveOutputPath(
@@ -412,8 +412,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         m_audioLane?.Dispose();
         m_frameAvailable.Dispose();
     }
-    /// <summary>Attempts to create a recording session for a configuration against the platform's capture factories.</summary>
-    /// <param name="options">The configuration, factories, and source resolution.</param>
+    /// <summary>Attempts to create a recording session for a document against the platform's capture factories.</summary>
+    /// <param name="options">The document, factories, and source resolution.</param>
     /// <param name="session">The created session on success; otherwise <see langword="null"/>.</param>
     /// <param name="reason">A human-readable note on what landed and what declined (empty on a clean full-fat start).</param>
     /// <returns><see langword="true"/> when at least one lane (video or audio) is recording.</returns>
@@ -422,15 +422,15 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         session = null;
 
-        if (!RecordingConfigurationValidator.TryValidate(
-            configuration: options.Configuration,
+        if (!RecordingDocumentValidator.TryValidate(
+            document: options.Document,
             reason: out reason
         )) {
             return false;
         }
 
         var notes = new List<string>();
-        var configuration = options.Configuration;
+        var document = options.Document;
         var videoEncoder = ResolveVideoEncoder(
             notes: notes,
             options: options
@@ -493,7 +493,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         session = new RecordingSession(
             audioLane: audioLane,
             codecLanded: (videoEncoder?.CodecId ?? "(audio only)"),
-            configuration: configuration,
+            document: document,
             muxer: muxer,
             options: options,
             output: output,
@@ -533,7 +533,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private RecordingSession(
         OpusAudioLane? audioLane,
         string codecLanded,
-        RecordingConfiguration configuration,
+        RecordingDocument document,
         MatroskaMuxer muxer,
         RecordingSessionOptions options,
         FileStream output,
@@ -541,8 +541,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         IVideoEncoder? videoEncoder
     ) {
         m_audioLane = audioLane;
-        m_clock = configuration.Clock;
-        m_compositor = new OverlayCompositor(overlays: (configuration.Overlays ?? []));
+        m_clock = document.Clock;
+        m_compositor = new OverlayCompositor(overlays: (document.Overlays ?? []));
         m_muxer = muxer;
         m_sessionClock = options.Clock;
         m_output = output;
@@ -554,8 +554,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
             b: "V_AV1",
             comparisonType: StringComparison.Ordinal
         ));
-        m_videoWidth = (configuration.Video?.Width ?? options.SourceWidth);
-        m_videoHeight = (configuration.Video?.Height ?? options.SourceHeight);
+        m_videoWidth = (document.Video?.Width ?? options.SourceWidth);
+        m_videoHeight = (document.Video?.Height ?? options.SourceHeight);
         CodecLanded = codecLanded;
         OutputPath = outputPath;
 

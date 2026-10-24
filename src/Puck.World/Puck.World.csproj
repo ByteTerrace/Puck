@@ -46,6 +46,7 @@
         <ProjectReference Include="../Puck.Platform.Linux/Puck.Platform.Linux.csproj" />
         <ProjectReference Include="../Puck.Platform.Windows/Puck.Platform.Windows.csproj" />
         <ProjectReference Include="../Puck.Platform/Puck.Platform.csproj" />
+        <ProjectReference Include="../Puck.Recording/Puck.Recording.csproj" />
         <ProjectReference Include="../Puck.Scripting/Puck.Scripting.csproj" />
         <ProjectReference Include="../Puck.SdfVm/Puck.SdfVm.csproj" />
         <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
@@ -77,5 +78,10 @@
     </Target>
     <ItemGroup>
         <Using Include="Puck.State" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The engine's own content: the default recording. Worlds are asset packages the engine is handed at boot,
+             never shipped beside it. -->
+        <Content Include="Assets/recordings/**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

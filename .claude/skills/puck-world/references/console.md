@@ -659,7 +659,7 @@ longer matches its own content.
 ## Grammar conventions for new verbs
 
 - `family.verb` dotted names (`world.*`, `player.*`, `screen.*`,
-  `profile.*`, `storage.*`, `replay.*`,
+  `profile.*`, `storage.*`, `capture.*`, `replay.*`,
   `audio.*`); names case-insensitive on the full parse, ordinal
   on the fast path.
 - Row-valued mutation verbs take ONE inline-JSON argument in the exact wire

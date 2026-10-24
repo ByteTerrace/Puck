@@ -1424,6 +1424,13 @@ public static class WorldBootComposition {
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
         services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
+        // Native video/audio capture is presentation-only; the launcher supplies the final root surface.
+        if (OperatingSystem.IsWindows()) {
+            services.AddWindowsRecordingPlatform();
+        } else {
+            services.AddLinuxRecordingPlatform();
+        }
+        services.AddSingleton<ICommandModule, WorldRecordingCommandModule>();
         // Controllers, first-class beside the keyboard: the hardware manager (HID + the Xbox XInput/GameInput poll
         // thread), the focus-gated snapshot capture binding the sticks to the player's Axis2D channels, and the
         // hosted service that governs device lifetime (hotplug rescans every ~1.5 s). Presentation-only — a headless

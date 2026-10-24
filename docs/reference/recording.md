@@ -1,25 +1,30 @@
 # Capture and recording pipeline
 
 Puck.Recording is the platform-neutral half of Puck's recording graph. A
-typed `RecordingConfiguration` describes one capture—its output path, clock
+versioned `RecordingDocument` describes one capture—its output path, clock
 model, video lane, audio rows, and capture-only overlays—and
-`RecordingSession` drives that configuration against caller-supplied video-encoder
+`RecordingSession` drives that document against caller-supplied video-encoder
 and audio-source factories, muxing what lands into a hand-rolled deterministic
-Matroska/WebM container. The configuration is the primitive that lives above any
+Matroska/WebM container. The document is the primitive that lives above any
 one game: a host can drive the same shape from a window or a headless render.
-`Puck.World` does not compose this native video library; its session recording
-and playback use `replay.*`.
+`Puck.World` composes native capture in its windowed presentation through
+`capture.start/status/stop`, loading `--recording` or the shipped default
+document. Deterministic session recording and playback use `replay.*`.
 
-The library consumes `Puck.Abstractions.Recording`'s `IVideoEncoderFactory`
-and `IAudioCaptureSourceFactory`. Its tests supply deterministic factories;
-the unused native encoder/audio-capture backends and their registration
-helpers were removed with the World's native recording integration. Camera
-capture, probes and audio rendering remain separate platform services.
+Everything that talks to real hardware—Media Foundation's encoder ladder,
+WASAPI loopback and microphone capture—lives outside this project, behind
+`Puck.Abstractions.Recording`'s `IVideoEncoderFactory` and
+`IAudioCaptureSourceFactory`. The Windows backend that implements them is
+`Puck.Platform.Windows`, registered through its `AddWindowsRecordingPlatform`
+extension; `Puck.Platform.Linux`'s `AddLinuxRecordingPlatform` registers
+factories that decline with a reason. This project references neither and
+knows nothing about Media Foundation or COM.
 
 ## Key features
 
-- *Typed configuration:* callers supply `RecordingConfiguration` directly.
-  There is no recording JSON schema, loader, serializer or extension-data bag.
+- *One document, several drivers:* `RecordingDocument` (`puck.recording.configuration.v1`)
+  is schema-versioned, extension-preserving JSON; any host that can supply the
+  two platform factories can drive it.
 - *A factory ladder that declines loudly:* a video or audio factory returns
   `null` with a reason instead of throwing, so a missing microphone or an
   unencodable codec becomes a status line, never a crash.
@@ -45,9 +50,9 @@ capture, probes and audio rendering remain separate platform services.
 
 ```mermaid
 flowchart LR
-    Doc["📄 RecordingConfiguration"] --> Options["🧩 RecordingSessionOptions"]
-    VideoFactory["🎥 caller's IVideoEncoderFactory"] --> Options
-    AudioFactory["🎙️ caller's IAudioCaptureSourceFactory"] --> Options
+    Doc["📄 RecordingDocument"] --> Options["🧩 RecordingSessionOptions"]
+    VideoFactory["🎥 IVideoEncoderFactory<br/>(Puck.Platform.Windows)"] --> Options
+    AudioFactory["🎙️ IAudioCaptureSourceFactory<br/>(Puck.Platform.Windows)"] --> Options
     Options --> Session["🎬 RecordingSession.TryCreate"]
     Session --> Render["🖼️ Render thread: Consume(frame)"]
     Render --> Queue["🔁 FrameSlotQueue"]
@@ -61,7 +66,7 @@ flowchart LR
     Mux --> File["💾 .webm / .mkv"]
 ```
 
-`RecordingSession.TryCreate` resolves the configuration's codec ladder and audio
+`RecordingSession.TryCreate` resolves the document's codec ladder and audio
 rows against the supplied factories, opening only what the machine can
 actually encode and capture, and reports a loud reason for whatever declined.
 It never half-starts silently: if neither a video encoder nor an audio lane
@@ -72,8 +77,8 @@ rendering. One encode thread composites overlays, encodes, and writes to the
 muxer; one audio thread drains, mixes, encodes to Opus, and writes to the
 muxer; both serialize through one lock around the muxer.
 
-`RecordingSessionOptions.Configuration.Clock` chooses what a playback position
-means: `Wall` (the configuration default) stamps frames and audio from the wall
+`RecordingSessionOptions.Document.Clock` chooses what a playback position
+means: `Wall` (the shipped default) stamps frames and audio from the wall
 clock at consume time, while `Sim` stamps frames from the engine tick clock
 for a deterministic offline re-render and forbids audio rows. Either way the
 container timeline is rebased so the first written block sits at zero—an
@@ -83,25 +88,26 @@ the whole take.
 
 ## Quick start
 
-A minimal session needs a configuration, caller-supplied factories and the source
-frame extent:
+A minimal session needs a document, the platform factories, and the source
+frame extent; `AddWindowsRecordingPlatform` (in `Puck.Platform.Windows`) is
+what supplies real factories in a Windows host:
 
 ```csharp
-using Puck.Recording.Configuration;
+using Puck.Recording.Document;
 using Puck.Recording.Session;
 
-var configuration = RecordingConfiguration.CreateDefault() with {
+var document = RecordingDocument.CreateDefault() with {
     Output = "recordings/session.webm",
 };
 
 if (!RecordingSession.TryCreate(
     options: new RecordingSessionOptions {
-        AudioSourceFactory = audioSourceFactory,
-        Clock = clock,                             // shared with the supplied audio sources
-        Configuration = configuration,
+        AudioSourceFactory = audioSourceFactory,   // from AddWindowsRecordingPlatform
+        Clock = clock,                             // the RecordingSessionClock the same registration shares
+        Document = document,
         SourceHeight = 1080,
         SourceWidth = 1920,
-        VideoEncoderFactory = videoEncoderFactory,
+        VideoEncoderFactory = videoEncoderFactory,  // from AddWindowsRecordingPlatform
     },
     session: out var session,
     reason: out var reason
@@ -115,8 +121,10 @@ if (!RecordingSession.TryCreate(
 }
 ```
 
-`RecordingConfigurationValidator` checks the typed settings before the session
-opens its factories. The retired recording document format has no reader.
+Loading and saving a document keeps the file diffable: `RecordingDocumentSerialization.Save`
+writes the canonical form (declaration member order, LF newlines, one trailing
+newline), and `TryLoad` runs the one thick `RecordingDocumentValidator` and
+never half-accepts a malformed document.
 
 ## Muxing and codecs
 
@@ -130,7 +138,7 @@ carry. `EbmlWriter` and `MatroskaIds` are the byte-level half: every element
 the muxer emits crosses one of `EbmlWriter`'s typed helpers, so the container
 layout is defined in exactly one place.
 
-The container document type is chosen by what actually landed: `webm` for an AV1 +
+The document type is chosen by what actually landed: `webm` for an AV1 +
 Opus program, `matroska` for the H.264 fallback—WebM is a Matroska subset,
 so one writer serves both with a data-chosen doc-type string and file
 extension. `Av1TemporalDelimiterFilter` strips the leading
@@ -154,12 +162,12 @@ CPU-pixel frame to any registered `ICaptureFrameObserver`s and then encodes it
 to PNG through `Puck.Assets`'s `PngEncoder`, either to one fixed path or to
 numbered files under a directory.
 
-`OverlayCompositor` alpha-blends the configuration's overlay rows onto the copied
-CPU frame after capture, at zero cost when a configuration has no overlay rows.
+`OverlayCompositor` alpha-blends the document's overlay rows onto the copied
+CPU frame after capture, at zero cost when a document has no overlay rows.
 Text overlays render through `BitmapFont` (in `Puck.Assets`), a compact embedded 8×8 monospace
 ASCII glyph set rendered at integer scale so overlay text stays crisp with no
 filtering blur—a self-contained path with no cross-project font
-dependency. `Rgba32` parses and carries the configuration's `#RRGGBBAA` /
+dependency. `Rgba32` parses and carries the document's `#RRGGBBAA` /
 `#RRGGBB` colors, shared by the validator (to reject malformed colors at the
 boundary) and the compositor (to blend them).
 
@@ -167,9 +175,9 @@ boundary) and the compositor (to blend them).
 
 | Area | Types | Role |
 |---|---|---|
-| Configuration | `RecordingConfiguration`, `RecordingVideo`, `RecordingAudioRow`, `OverlayRow`, `RecordingEnums` (`RecordingClock`, `RecordingAudioKind`, `RecordingAudioTrackMode`, `OverlayKind`, `OverlayAnchor`, `OverlayClock`) | The typed capture settings. |
-| Validation | `RecordingConfigurationValidator` | Validates typed settings before opening a session. |
-| Session | `RecordingSession`, `RecordingSessionOptions`, `RecordingStatus` | Drives a configuration against platform factories and reports honest progress. |
+| Document | `RecordingDocument`, `RecordingVideo`, `RecordingAudioRow`, `OverlayRow`, `RecordingEnums` (`RecordingClock`, `RecordingAudioKind`, `RecordingAudioTrackMode`, `OverlayKind`, `OverlayAnchor`, `OverlayClock`) | The versioned, data-defined capture description. |
+| Document plumbing | `RecordingDocumentValidator`, `RecordingDocumentSerialization`, `RecordingJsonContext` | The one thick validation gate and the canonical (de)serializer. |
+| Session | `RecordingSession`, `RecordingSessionOptions`, `RecordingStatus` | Drives a document against platform factories and reports honest progress. |
 | Muxing | `MatroskaMuxer`, `EbmlWriter`, `MatroskaIds` | The hand-rolled deterministic Matroska/WebM writer. |
 | Audio | `OpusAudioLane`, `AudioLaneSource`, `OpusStreamEncoder`, `OpusHead`, `LinearResampler`, `FloatRing`, `IAudioPacketSink` | Resampling, mixing, and Opus encoding for the audio lane. |
 | Capture | `CaptureSink`, `ICaptureFrameObserver`, `FrameSlotQueue`, `Av1TemporalDelimiterFilter` | The default sink, frame observation, and the render/encode handoff. |
@@ -191,8 +199,9 @@ real `SeekHead` at the identical offset.
 recording interfaces this project implements against) and `Puck.Assets` (the PNG
 codec `CaptureSink` writes still frames through), plus the third-party `Concentus`
 (the managed Opus encoder) package. It carries no platform, GPU, or windowing
-dependency. A consumer supplies `IVideoEncoderFactory` and
-`IAudioCaptureSourceFactory`; the current tests provide deterministic factories.
+dependency—a consumer supplies `IVideoEncoderFactory` and
+`IAudioCaptureSourceFactory` from wherever real hardware access lives, which
+inside this repository is `Puck.Platform.Windows`'s `AddWindowsRecordingPlatform`.
 
 ## Documentation
 

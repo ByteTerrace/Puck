@@ -38,7 +38,7 @@ output's root, and every other file of the package. A source boot has no store
 and compiles a pipeline on first use.
 
 **The engine ships no content.** `Puck.World` and its siblings ship engine data
-only: shaders, fonts, overlays and probe kinds, each
+only: shaders, fonts, overlays, probe kinds and the default recording, each
 owned by the project that uses it. Document schemas live with the document
 model (`src/Puck.World.Schema/Schemas/`) and ship in the CLI package, because
 only CLI tooling reads them. Worlds, cartridges, music, addons and art belong
@@ -66,14 +66,13 @@ retains seat authority, expected refusals, edit echoes, truncated-run detection
 and exports from sibling worlds, because `puck test --reproduce` measures those
 results. Its manifest is `puck.world.test-run.v1`, written as `test-run.json`.
 
-The removed World recording integration encoded native video and audio; it was
-not a replay system and had no debug-world caller. Its boot flag, default asset
-and capture verbs are deleted, together with their orphaned native A/V backends
-and registration helpers. Audio output keeps its shared WASAPI interop under
-`src/Puck.Platform.Windows/Audio/`. The reusable `Puck.Recording` library remains in
-the build with typed `RecordingConfiguration`; its orphaned JSON schema, reader,
-serialization context and extension-data bag are deleted. `WorldProbes`,
-`probe.*` and probe tracks remain for the stretch goal.
+**Native capture is a product capability (owner ruling).** Gameplay video and
+audio clips, including loopback and microphone input, stay even without a live
+world caller. `capture.start/status/stop`, `--recording`, the recording document
+format and loader, the Windows encoder and audio capture, and the Linux
+factories and registration methods remain. Capture is composed in windowed
+Worlds and uses `Puck.Recording`; deterministic session playback uses `replay.*`.
+`WorldProbes`, `probe.*` and probe tracks remain for the stretch goal.
 
 ## ROMs
 
