@@ -744,6 +744,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The chase boom eases only while the seat frames through its own chase rig — a camera control application
         // resolves through views.cameraRig, whose framing is the possessed body's own pose and must not lag it. The
         // response is the one the program's dynamics op just reported; None passes eye/target through bit for bit.
+        var viewForward = Vector3.Normalize(target - eye);
         view.Follow(
             dynamics: chase.Dynamics,
             enabled: ReferenceEquals(
@@ -778,7 +779,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             targetShift: chase.TargetShift with { Offset = (chase.TargetShift.Offset * liveScale) },
             choice: view.ClearanceChoice(control: views.SeatControl, feel: (m_roster.Seat(slot: slot)?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook)),
             control: views.SeatControl,
-            scale: liveScale
+            scale: liveScale,
+            firstPerson: chase.FirstPerson,
+            feel: (m_roster.Seat(slot: slot)?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook),
+            viewForward: viewForward
         );
         var clearedEye = eye;
         var clearedTarget = target;

@@ -7847,6 +7847,13 @@ views {
       minimumBoom: 0.35
     }
     clearanceMaxElevation: 1.1
+    autoFirstPerson {
+      enabled: false
+      entryDistance: 0.85
+      entrySeconds: 0.2
+      exitDistance: 1.35
+      exitSeconds: 0.15
+    }
     maxPitch: 1.2
     minPitch: -0.5
     yawReference: "World"
@@ -7859,6 +7866,7 @@ views {
       lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true, closeTargetOffset: [0, 1.74, 0], closeTargetStartFraction: 0.6, closeTargetFullFraction: 0.2)
       fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
       dynamics(row: `camera-boom`)
+      firstPerson(eyePoint: [0, 1.75, 0.22], active: 0, transitionSeconds: 0.5, hideRadius: 0.45)
     ]
     fovOp {
       fieldOfViewRadians: 0.96

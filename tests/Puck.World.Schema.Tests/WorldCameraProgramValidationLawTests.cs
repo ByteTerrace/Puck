@@ -13,6 +13,16 @@ namespace Puck.World.Schema.Tests;
 /// </summary>
 public sealed class WorldCameraProgramValidationLawTests {
     [Fact]
+    public void FirstPersonRequiresAnEyeAndPositiveTransitionAndHideShell() {
+        var eye = new WorldCameraProgramOp.FirstPerson(new Vector3(0f, 1.75f, 0.22f), new BindableScalar(0f));
+        var control = Program("eye", eye, Fov());
+        Refuses(Program("eye", eye with { EyePoint = new Vector3(float.NaN) }, Fov()), control, "eyePoint");
+        Refuses(Program("eye", eye with { TransitionSeconds = 0f }, Fov()), control, "transitionSeconds");
+        Refuses(Program("eye", eye with { HideRadius = -1f }, Fov()), control, "hideRadius");
+        Refuses(Program("eye", eye with { Active = new BindableScalar(2f) }, Fov()), control, "active");
+        Refuses(Program("eye", eye, eye, Fov()), control, "second 'firstPerson'");
+    }
+    [Fact]
     public void CloseTargetsRequireFiniteCoordinatesAndAnOrderedCompressionBand() {
         var aim = new WorldCameraProgramOp.LookAt(new WorldCameraSubject.Reference(), CloseTargetOffset: new Vector3(x: 0f, y: 1.74f, z: 0f));
         var control = Program("close", aim, Fov());

@@ -21,6 +21,9 @@ public readonly struct WorldChaseBody {
     private readonly Vector3 m_position;
     private readonly float m_scale;
 
+    /// <summary>Places an authored full-size local point at this body's presented pose and live scale.</summary>
+    public Vector3 Point(Vector3 local) => (m_position + Vector3.Transform(local * m_scale, Quaternion.Conjugate(m_inverseOrientation)));
+
     /// <summary>Initializes a new instance of the <see cref="WorldChaseBody"/> struct.</summary>
     /// <param name="collider">The body's compiled kit collider, or <see langword="null"/> for a body with none.</param>
     /// <param name="position">The body root's presented position, in world units.</param>

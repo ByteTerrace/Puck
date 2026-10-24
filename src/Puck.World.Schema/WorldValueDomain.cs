@@ -238,6 +238,8 @@ public static class WorldValueFields {
     public static WorldValueField OrbitYaw { get; } = new(typeof(WorldCameraProgramOp.Orbit), nameof(WorldCameraProgramOp.Orbit.Yaw), WorldValueDomain.Finite);
     /// <summary>An orbit's pitch, in radians.</summary>
     public static WorldValueField OrbitPitch { get; } = new(typeof(WorldCameraProgramOp.Orbit), nameof(WorldCameraProgramOp.Orbit.Pitch), WorldValueDomain.Finite);
+    /// <summary>A first-person op's authored view request.</summary>
+    public static WorldValueField FirstPersonActive { get; } = new(typeof(WorldCameraProgramOp.FirstPerson), nameof(WorldCameraProgramOp.FirstPerson.Active), WorldValueDomain.Unit);
     /// <summary>A path op's fraction along its curve.</summary>
     public static WorldValueField PathFraction { get; } = new(typeof(WorldCameraProgramOp.Path), nameof(WorldCameraProgramOp.Path.Fraction), WorldValueDomain.Finite);
     /// <summary>A field-of-view op's angle, in radians, from the narrowest a camera is built with to just under a half
@@ -340,6 +342,7 @@ public static class WorldValueFields {
         VolumeSoftness,
         OrbitYaw,
         OrbitPitch,
+        FirstPersonActive,
         PathFraction,
         FieldOfView,
         BlendWeight,
