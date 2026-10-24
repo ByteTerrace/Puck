@@ -82,11 +82,15 @@ public sealed partial class WorldAddonRuntime {
                 case AddonAbi.RequestVerbs.Engage:
                     if (subject.Kind != GrantSubjectKind.Body || query.B != 0 || query.C != 0 ||
                         query.A is < -1 or > int.MaxValue) { break; }
+                    // IsRequested only narrows to what the manifest asked for and confers nothing. Authority is the Drive
+                    // grant over the body (QueryAuthority, rechecked by EngageDrivenBody), CheckEngagePolicy (engageable,
+                    // in reach, a machine to control) and the engage check Compose and ResolveDissolve make over each target.
                     var target = GrantSubject.Screen((int)query.A);
                     if (query.A >= 0 && (!IsRequested(addon, WorldCapability.Control, target) ||
                         !m_server.Machines.HasMachine((int)query.A) ||
                         !m_server.CheckEngagePolicy(subject.Value, target, out _))) { break; }
-                    // A dissolve may touch several applications; the manifest must cover each, like the grant check.
+                    // A dissolve may touch several applications; the manifest must request each. Whether the addon may
+                    // dissolve it is the engage check ResolveDissolve makes, not this request check.
                     if (query.A == -1 && !CanDissolve(addon, subject.Value)) { break; }
                     if (m_server.Engagement.EngageDrivenBody(subject.Value, (int)query.A, addon.Principal)) {
                         verdict = AddonVerdict.Applied;
@@ -139,6 +143,9 @@ public sealed partial class WorldAddonRuntime {
                 case AddonAbi.RequestVerbs.MachineOperation:
                     if (subject.Kind != GrantSubjectKind.Screen || query.C != 0 ||
                         !ChargeHostFuel(addon, 300000) || !TryReadUtf8(addon, query.A, query.B, 2048, out var json, out _)) { break; }
+                    // The Control handle over the screen passed QueryAuthority's grant check, and the manifest check below
+                    // narrows to the instance the guest requested. The authority over the machine itself is the Control
+                    // grant ApplyMachineOperation checks for the addon's principal.
                     var screen = m_server.Definition.Screens.FirstOrDefault(s => s.Index == subject.Value);
                     if (screen?.Source is not WorldScreenSource.Machine machine ||
                         !IsRequested(addon, WorldCapability.Control, GrantSubject.Machine(machine.Instance)) ||
@@ -163,7 +170,7 @@ public sealed partial class WorldAddonRuntime {
                             payload = MachineOperationValidation.CloneJson(tree);
                         }
                         var result = m_server.ApplyMachineOperation(new WorldMachineOperation(machine.Instance,
-                            state.Generation, operationId, payload), addon.Principal, 0, 0, recomputed: true);
+                            state.Generation, operationId, payload), addon.Principal, 0, 0, addonDerived: true);
                         if (result.Status != MachineOperationStatus.Applied) {
                             Console.Error.WriteLine($"[world.addon: {addon.Instance.Name} t={tick} operation refused: {result.Reason}]");
                         }
@@ -179,6 +186,8 @@ public sealed partial class WorldAddonRuntime {
         QueuePart(addon, query.Ordinal, verdict, 0, a, b);
     }
 
+    // Whether the manifest requests Control over every application a dissolve would end. This is a request check; the
+    // engage check over each target is made by WorldEngagement.ResolveDissolve when the dissolve applies.
     private bool CanDissolve(MountedAddon addon, int bodyIndex) {
         var principal = bodyIndex < m_server.Population.LocalSeatCount
             ? Puck.Commands.Principal.Seat(bodyIndex) : m_server.Population.PeerPrincipal(bodyIndex);

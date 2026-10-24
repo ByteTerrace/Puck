@@ -11,7 +11,10 @@ public sealed partial class WorldServer {
     /// <param name="principal">The envelope's authenticated actor.</param>
     /// <param name="connectionId">The submitting connection, retained for future operation narration.</param>
     /// <param name="correlationId">The envelope correlation, retained for future operation narration.</param>
-    /// <param name="recomputed">A mounted addon re-derives this operation under receipt-pinned replay.</param>
+    /// <param name="addonDerived">The operation comes from a mounted addon's guest, which re-derives it deterministically
+    /// under receipt-pinned replay, so it needs no tape entry and is allowed while a recording is armed. It is honored
+    /// only for an <see cref="PrincipalKind.Addon"/> principal. A <c>content.insert</c> payload names a file in a
+    /// content folder that is read at apply time, so a re-driven tape diverges if that folder changed.</param>
     /// <returns>A typed provider outcome. Preparation and commit remain host-owned so replacement admission is not
     /// confused with live runtime application.</returns>
     public MachineOperationResult ApplyMachineOperation(
@@ -19,7 +22,7 @@ public sealed partial class WorldServer {
         Principal principal,
         int connectionId,
         long correlationId,
-        bool recomputed = false
+        bool addonDerived = false
     ) {
         _ = connectionId;
         _ = correlationId;
@@ -51,7 +54,7 @@ public sealed partial class WorldServer {
 
         // Generic operation receipts are not part of the current replay format. Refuse before preparation while
         // recording, rather than let an untaped runtime change contaminate an otherwise valid tape.
-        if (ScreenOpTap is not null && !(recomputed && principal.Kind == PrincipalKind.Addon)) {
+        if (ScreenOpTap is not null && !(addonDerived && principal.Kind == PrincipalKind.Addon)) {
             return new MachineOperationResult(
                 MachineOperationStatus.Refused,
                 reason: $"machine operations cannot execute while recording ({nameof(WorldMachineOperationRefusal.WhileRecording)}); the current replay format does not capture provider operations"
