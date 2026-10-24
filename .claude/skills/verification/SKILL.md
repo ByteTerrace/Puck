@@ -55,6 +55,13 @@ a helper there), not a guarded statement.
 
 GPU legs require the lead's grant.
 
+An empty shared lease directory can report an unnamed holder indefinitely:
+`CliLease.IsStale` cannot reclaim missing metadata. Diagnose it under the
+existing exclusive `.guard` file, never by the absence of a World alone.
+If that guard is available and the directory is empty while it is held,
+removing only the empty directory lets the normal `puck lease` acquire again.
+Never unlink the guard file or remove a directory containing holder metadata.
+
 Judge performance by code, disassembly and load-independent counts; only
   counts gate a change. Wall-clock and GPU timing are evidence
   read beside those counts, never alone, and run on a quiet machine: the lead
