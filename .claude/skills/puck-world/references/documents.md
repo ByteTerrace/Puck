@@ -244,9 +244,14 @@ its whole authority surface.
   emitter alone under-counts by the adjacency and field reservations.
   `world.budget` reports the composed render figures where a render probe is
   attached (windowed composition fills them).
-- `WorldRenderEnvelope.cs` — the render-capacity oracle: `Configure` at boot
-  from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
-  "fits".
+- `WorldRenderEnvelope.cs` — the render-capacity oracle: `ConfigureGrowing`
+  (every live renderer) or `Configure` (fixed ceilings) at boot from the probe,
+  `TryFit(candidate)` at every apply; unconfigured reads as "fits". `TryFit`
+  runs once per render-relevant mutation, each responding placement included,
+  and emits the whole worst-case candidate, so a growing measurer emits without
+  building (`SdfProgramMeasure.Instances`, into kept `SdfProgramBuilderStorage`);
+  a measurer that builds the `SdfProgram` makes about 1.8 GB of large-object
+  garbage per debug-world `gallery.lights.all`.
 - `CreationDocument.PaletteSize = 32` bounds `puck.creation.v1`'s `palette`
   array — see [documents-render.md](documents-render.md) for the entry shape
   (weathering/inset lanes), which is decision prose, not a bare catalog.
