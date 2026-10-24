@@ -67,6 +67,17 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
         visibility *= (1.0 - saturate((abs(along) - depth) / SDF_MESH_IRRADIANCE_DEPTH_FADE));
     }
 
+    // The nearest lattice direction's hit plane covers diagonal corners missed by all six axis rays.
+    float major = max(abs(toward.x), max(abs(toward.y), abs(toward.z)));
+    if (major > 0.0) {
+        int3 d = int3(round(toward / major));
+        uint index = (uint)((9 * (d.x + 1)) + (3 * (d.y + 1)) + (d.z + 1));
+        index -= ((index > 13u) ? 1u : 0u);
+        uint first = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_PLANES_WORD + (2u * index)];
+        uint second = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_PLANES_WORD + (2u * index) + 1u];
+        float4 plane = float4(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u), sdfMeshIrradianceHalf(second, 1u));
+        visibility *= (1.0 - saturate((dot(plane.xyz, toward) - plane.w) / SDF_MESH_IRRADIANCE_DEPTH_FADE));
+    }
     return visibility;
 }
 

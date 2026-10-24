@@ -869,8 +869,10 @@ owns its layout, costs and limits.
 **It is presentation and bounds no leak by proof.** The volume holds back light
 through walls with its back-face weight, its inside-geometry test, the read's
 preference for the probes in front of a surface and each probe's depth cube,
-which stops it at the wall or slab its rays meet along each axis; there is no
-per-probe visibility of the surfaces it lights. The depth is the exact
+which stops it at the wall or slab its rays meet along each axis, and the first
+hit planes of its 26 neighbour directions. The receiver's nearest lattice
+direction selects a plane to reject a diagonal corner every axis ray misses.
+These are sampled visibility, not an exact ray to every surface. The depth is the exact
 distance to a wall or slab across the axis, and a point a few centimetres past
 it takes nothing from the probe, because a point where a wall meets a floor
 lies level with the floor's surface, only the floor's thickness from a probe

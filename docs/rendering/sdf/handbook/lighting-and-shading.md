@@ -173,7 +173,11 @@ in the frame.
   behind a wall or inside geometry takes no part, and the light visibility bits
   are each probe's own. A probe also stores a depth cube, how far it sees
   along each axis before the first geometry. Rays escaping beside a blocker
-  cannot extend its blocking depth.
+  cannot extend its blocking depth. Its 26 neighbour rays retain their first
+  hit planes too (normal and distance as four halves each); the plane along
+  the receiver's nearest lattice direction rejects diagonal wall/roof corners
+  that every axis ray misses. A plane tests the actual receiver, rather than
+  comparing its distance to a ray travelling in a different direction.
 - **A probe lights only what lies within its depth.** A read weights each of
   the eight probes about a point by whether the point, pushed off its surface,
   lies nearer along each axis than the probe's depth that way, fading over
@@ -187,7 +191,7 @@ in the frame.
   far side of that floor sees it only the floor's thickness past its depth; a
   softer fade would draw the far side's light along every junction. Where every probe about a point stands across a
   wall or slab from it, or no probe has traced, the point takes no indirect
-  light. The test is one axis wide, so a
+  light. An axis ray is one line wide, so a
   window or doorway on a probe's axis lets its depth pass a wall the probe
   stands across from the point; each answering probe's weight therefore also
   fades out as the share of the other answering probes' weight it sees and is
@@ -195,8 +199,9 @@ in the frame.
   neighbour bits the trace records, `SdfMeshIrradianceProbe.NeighboursWord`,
   `MutualLow`, `MutualHigh`, `sdfMeshProbeMutualShares`), so a probe outside a
   room's corner, which sees in through a window above it and may hold the
-  sunlit day, gives way entirely to the probes inside. Architecture off the axes that no neighbour's sight
-  line crosses still resolves at the lattice's coarseness.
+  sunlit day, gives way entirely to the probes inside. The directional hit
+  planes cover diagonal blockers, but architecture none of the sampled rays
+  crosses still resolves at the lattice's coarseness.
 - **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
   probes about the shaded point once (`sdfMeshProbesAt`), pushed 0.35 of a cell
   along its normal, weighted trilinearly, by how far each lies in front of the

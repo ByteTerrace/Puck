@@ -25,7 +25,16 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - The depth fade stays thinner than the thinnest floor. A wall sample at a
   floor junction is level with the floor, so a broad fade admits the probe
   underneath and draws a bright line along the junction.
-- Six axis depths and neighbour visibility are coarse spatial support, not
+- The 26 neighbour rays also retain their first hit planes. The receiver's
+  nearest lattice direction selects a plane, tested in addition to the six
+  axis depths. A probe diagonally outside a roof/wall corner can miss both
+  surfaces on every axis; the diagonal hit closes that hole. Plane distance,
+  rather than ray distance, keeps a flat blocker in the same place as the
+  receiver's direction changes. CPU and shader use the same selection.
+  The record is 73 words (292 bytes), including 52 words of half-precision
+  planes. The existing neighbour rays now trace to the lighting reach and
+  their first hit also determines the neighbour mask; no second scene is built.
+- Axis depths, directional planes and neighbour visibility are coarse spatial support, not
   exact receiver visibility. Inspect corners and openings with
   `world.debug-view indirect`, separately from `ao` and `shadow`, and compare
   final shading and `world.exposure`. Check an outdoor view and move across

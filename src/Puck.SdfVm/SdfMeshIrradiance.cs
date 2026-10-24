@@ -485,6 +485,12 @@ public sealed class SdfMeshIrradiance {
             words[(SdfMeshIrradianceProbe.DepthWord + pair)] = Pack(low: probe.Depth[(2 * pair)], high: probe.Depth[((2 * pair) + 1)]);
         }
         words[SdfMeshIrradianceProbe.NeighboursWord] = probe.Neighbours;
+        for (var index = 0; (index < probe.Planes.Length); index++) {
+            var plane = probe.Planes[index];
+
+            words[(SdfMeshIrradianceProbe.PlanesWord + (2 * index))] = Pack(low: plane.X, high: plane.Y);
+            words[(SdfMeshIrradianceProbe.PlanesWord + (2 * index) + 1)] = Pack(low: plane.Z, high: plane.W);
+        }
         m_dirty = true;
     }
     // How far a probe lets a point at `toward` from its centre take its light: one while the point lies nearer along
@@ -501,6 +507,18 @@ public sealed class SdfMeshIrradiance {
             visibility *= (1f - Math.Clamp(value: ((MathF.Abs(x: along) - depth) / SdfMeshIrradianceProbe.DepthFade), min: 0f, max: 1f));
         }
 
+        // The nearest lattice direction's hit plane also covers diagonal corners that all six axis rays miss.
+        // A plane, rather than the ray length, keeps a flat wall's boundary independent of receiver direction.
+        var major = MathF.Max(MathF.Abs(toward.X), MathF.Max(MathF.Abs(toward.Y), MathF.Abs(toward.Z)));
+
+        if (major > 0f) {
+            var direction = (toward / major);
+            var index = NeighbourIndex(x: (int)MathF.Round(direction.X), y: (int)MathF.Round(direction.Y), z: (int)MathF.Round(direction.Z));
+            var plane = probe.Planes[index];
+            var past = (Vector3.Dot(new Vector3(plane.X, plane.Y, plane.Z), toward) - plane.W);
+
+            visibility *= (1f - Math.Clamp(value: (past / SdfMeshIrradianceProbe.DepthFade), min: 0f, max: 1f));
+        }
         return visibility;
     }
     // A probe's cubes averaged with those of the cached, valid neighbours it and they see each other across, by the
@@ -670,6 +688,7 @@ public sealed class SdfMeshIrradiance {
 
         var probe = new Probe(
             Depth: new float[6],
+            Planes: new Vector4[26],
             Invalid: (backFaces > (InsideShare * layout.Rays)),
             Lights: new uint[SdfMeshIrradianceProbe.LightWords],
             Neighbours: 0u,
@@ -702,7 +721,14 @@ public sealed class SdfMeshIrradiance {
             var toward = (new Vector3(x: offset.X, y: offset.Y, z: offset.Z) * layout.Spacing);
             var distance = toward.Length();
 
-            if (scene.Unblocked(direction: (toward / distance), maximum: distance, origin: origin)) {
+            var direction = (toward / distance);
+            var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var depth, material: out _, normal: out var normal);
+
+            if (hit) {
+                if (Vector3.Dot(normal, direction) < 0f) { normal = -normal; }
+                probe.Planes[index] = new Vector4(normal, (Vector3.Dot(normal, direction) * depth));
+            }
+            if (!hit || (depth >= distance)) {
                 probe = (probe with { Neighbours = (probe.Neighbours | (1u << index)) });
             }
         }
@@ -950,7 +976,7 @@ public sealed class SdfMeshIrradiance {
     // One probe: its sky visibility, radiance and depth cubes, the traced lights its centre sees (one bit a lights-table
     // index), the neighbouring probes it sees (one bit an entry of NeighbourOffsets), the sweeps it holds and whether it
     // lies inside geometry.
-    private sealed record Probe(float[] Sky, Vector3[] Radiance, float[] Depth, uint[] Lights, uint Neighbours, int Sweeps, bool Invalid);
+    private sealed record Probe(float[] Sky, Vector3[] Radiance, float[] Depth, Vector4[] Planes, uint[] Lights, uint Neighbours, int Sweeps, bool Invalid);
 
     // The eight probes about a point a read gathers, held without an allocation on the trace's hot path.
     [System.Runtime.CompilerServices.InlineArray(8)]

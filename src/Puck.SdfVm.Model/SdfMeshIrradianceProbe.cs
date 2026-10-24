@@ -7,11 +7,16 @@ namespace Puck.SdfVm;
 /// visibility cube as six halves, the radiance cube as eighteen (red, green and blue of +X, -X, +Y, -Y, +Z and -Z), the
 /// visibility of each light of the lights table from the probe, one bit a record from <see cref="LightsWord"/>, the
 /// depth cube as six halves from <see cref="DepthWord"/>: how far the probe's rays travel about each axis before they
-/// meet geometry, and at <see cref="NeighboursWord"/> which of its 26 neighbouring probes its centre sees.
+/// meet geometry, at <see cref="NeighboursWord"/> which of its 26 neighbouring probes its centre sees, and at
+/// <see cref="PlanesWord"/> the first blocking plane along each of those directions.
 /// </summary>
 public static class SdfMeshIrradianceProbe {
     /// <summary>The words one probe takes in the volume table.</summary>
-    public const int ProbeWords = 21;
+    public const int ProbeWords = 73;
+    /// <summary>Two words per neighbour direction holding the first hit's plane relative to the probe: four halves
+    /// (normal XYZ and plane distance). A zero plane means the ray reached open space. The normal faces away from
+    /// the probe, so a receiver beyond the plane is occluded. Directions use the neighbour mask's order.</summary>
+    public const int PlanesWord = 21;
     /// <summary>The word holding which neighbouring probes the probe's centre sees: bit <c>n</c> for the neighbour at
     /// offset <c>(x, y, z)</c>, each in -1, 0 and 1 and not all zero, where <c>n</c> is <c>9(x + 1) + 3(y + 1) + (z + 1)</c>
     /// less one past the origin's 13, so the neighbour at <c>25 - n</c> lies opposite.</summary>

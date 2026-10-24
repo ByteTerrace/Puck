@@ -461,9 +461,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   with the same entry filenames: a renamed wrapper changes document identity,
   so garden/night back-references can instantiate another debug world. Keep
   device-machine screens intact and disclose the desktop substitution in the
-  capture report. After a suit change, allow its rule to run and wait for
-  `world.wait bakes` before capturing; a tick wait alone can show the old mesh
-  stretched over the new rig. Clear an operator camera with
+  capture report. After a suit change, allow its rule to run and check the
+  residency's `[sdf.mesh-bake] done` log before capturing; `world.wait` accepts
+  tick counts, and a tick wait alone can show the old mesh stretched over the
+  new rig. Clear an operator camera with
   `view.override camera auto` before switching to a following motion layout.
 - GPU captures, device faults and the validation layers:
   [kernels](references/kernels.md#captures-faults-and-validation).
