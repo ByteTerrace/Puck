@@ -72,7 +72,7 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
         }
         if (m_sampler?.Result is { } answer && answer.Request == m_request && m_requestedFinding is { } id &&
             answer.MeshRevision == frame.MeshDrawsRevision && diagnostics.Find(id) is { } sampled && answer.Sample is { } sample && sample.Camera == view.Camera) {
-            var witnessDistance = Vector3.Distance(sample.Camera.Position, sampled.Witness);
+            var witnessDistance = Vector3.Distance(sample.Camera.Position, sampled.PinAnchor ?? sampled.Witness);
             var difference = witnessDistance - answer.Distance;
             m_depth[id] = (answer.Hit && difference > sampled.Budget.Total, Math.Max(0, difference));
             m_requestedFinding = null;
@@ -97,6 +97,11 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
             var anchor = Project(finding.PinAnchor ?? finding.Witness, out var offscreen);
             var low = anchor;
             var high = anchor;
+            if (view.Camera.TryProject(finding.Witness, out _, out _)) {
+                var witness = Project(finding.Witness, out _);
+                low = Vector2.Min(low, witness);
+                high = Vector2.Max(high, witness);
+            }
             // A finite witness audit flags the measured locus, not every pixel of the containing wall or room.
             // Protect both ends of the discrepancy and their moat. A whole-room envelope would erase every pin.
             var comparison = finding.SurfaceWitness ?? finding.Witness - finding.Normal * (float)(finding.Observed ?? 0);

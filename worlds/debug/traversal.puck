@@ -1,0 +1,132 @@
+// Optional development route runner, body 43. One traversal[run] write runs a pass; all goals are authored here.
+// Route coordinates are WORLD coordinates. The studio course is offset (48, 0, -48).
+let traversalGoals = [
+  { x: 60.0, y: 0.01, z: -30.0 } // approach
+  { x: 60.0, y: 0.16, z: -34.5 } // 15 cm step
+  { x: 60.0, y: 0.01, z: -37.0 }
+  { x: 60.0, y: 0.31, z: -41.5 } // 30 cm step
+  { x: 60.0, y: 0.01, z: -44.0 }
+  { x: 60.0, y: 1.05, z: -50.9 } // 15 degree crest
+  { x: 60.0, y: 0.01, z: -55.0 }
+  { x: 60.0, y: 1.51, z: -59.6 } // 30 degree crest
+  { x: 60.0, y: 0.01, z: -62.7 }
+  { x: 60.0, y: 1.03, z: -66.3 } // six risers and landing
+  { x: 60.0, y: 0.01, z: -69.5 }
+  { x: 54.0, y: 0.01, z: -60.0 }
+  { x: 54.0, y: 0.01, z: -48.0 }
+  { x: 48.0, y: 0.31, z: -48.0 } // round studio dais
+  { x: 48.0, y: 0.01, z: -30.0 }
+  { x: 48.0, y: 0.01, z: -23.0 }
+  { x: 20.0, y: 0.05, z: 10.0 }
+  { x: 11.2, y: 0.05, z: 32.5 } // gallery stairwell approach
+  { x: 11.2, y: 2.3, z: 38.5 } // flight A and half landing
+  { x: 13.2, y: 2.3, z: 38.5 } // cross landing around divider
+  { x: 13.2, y: 4.55, z: 33.8 } // flight B to first floor
+  { x: 15.9, y: 4.55, z: 35.3 } // call lift on level 1
+  { x: 15.9, y: 4.55, z: 38.05 } // enter car, then request ground
+  { x: 15.9, y: 0.05, z: 38.05 } // ride down
+  { x: 15.9, y: 0.05, z: 34.0 } // leave car
+]
+
+state {
+  world {
+    table traversal {
+      run = 0
+      start = 0
+      count = length(traversalGoals)
+      timeout = 600
+      tolerance = 32768 // raw Q16: half a metre
+      waypoint = 0
+      reached = 0
+      missed = 0
+      falls = 0
+      done = 0
+      tick = -1
+    }
+    row {
+      name: "traversalRoute"
+      kind: "Fixed"
+      cells: reduce(range(0, length(traversalGoals)), [], (cells, i) => concat(cells, [
+        { key: $"{i}x", value: $"{traversalGoals[i].x}" }
+        { key: $"{i}y", value: $"{traversalGoals[i].y}" }
+        { key: $"{i}z", value: $"{traversalGoals[i].z}" }
+      ]
+      )
+      )
+    }
+    table traversalFailures {
+      "0" = 0
+    }
+    table traversalFalls
+  }
+}
+
+prototypes {
+  prototype "traversal-marker" {
+    document {
+      schema: "puck.creation.v1"
+      name: "traversal-marker"
+      palette [{ color: "#FF5845" }]
+      shape Sphere "failure" {
+        material: 0
+        position [0, 0.12, 0]
+        scale [0.09, 0.09, 0.09]
+      }
+    }
+  }
+}
+
+placements {
+  placement "traversal-stand-in" {
+    prototype: "companion"
+    position [60, 0.05, -30]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "companion"
+      source: "Idle"
+    }
+  }
+}
+
+addon "traversal" {
+  modulePath: "addons/traversal.wat"
+  hash: "auto"
+  fuel: 0
+  enabled: true
+  requests [
+    { capability: Observe, subject: "state:traversal" }
+    { capability: Observe, subject: "state:traversalRoute" }
+    { capability: Observe, subject: "state:liftAt" }
+    { capability: Observe, subject: "body:43" }
+    { capability: Drive, subject: "body:43" }
+    { capability: Mutate, subject: "section:State" }
+    { capability: Mutate, subject: "section:Placements" }
+    { capability: Edit, subject: "state:traversal" }
+    { capability: Edit, subject: "state:traversalFailures" }
+    { capability: Edit, subject: "state:traversalFalls" }
+    { capability: Edit, subject: "state:liftCall" }
+  ]
+}
+
+grants [
+  { grantee: "addon:traversal", capability: Observe, subject: "state:traversal", budget: 5 }
+  { grantee: "addon:traversal", capability: Observe, subject: "state:traversalRoute", budget: 3 }
+  { grantee: "addon:traversal", capability: Observe, subject: "state:liftAt", budget: 1 }
+  { grantee: "addon:traversal", capability: Observe, subject: "body:43", budget: 2 }
+  { grantee: "addon:traversal", capability: Drive, subject: "body:43", budget: 3 }
+  { grantee: "addon:traversal", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 10 }
+  { grantee: "addon:traversal", capability: Mutate, subject: "section:Placements", kindMask: "UpsertPlacement", budget: 2 }
+  { grantee: "addon:traversal", capability: Edit, subject: "state:traversal", kindMask: "UpsertStateCell" }
+  { grantee: "addon:traversal", capability: Edit, subject: "state:traversalFailures", kindMask: "UpsertStateCell" }
+  { grantee: "addon:traversal", capability: Edit, subject: "state:traversalFalls", kindMask: "UpsertStateCell" }
+  { grantee: "addon:traversal", capability: Edit, subject: "state:liftCall", kindMask: "UpsertStateCell" }
+]

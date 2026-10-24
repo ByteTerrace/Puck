@@ -9,7 +9,7 @@
 ;;   companion-overlap       a collision begin between the Moth (body 0) and the companion (body 42), which keeps 2 m
 ;;                           away from her.
 ;; The host discloses an Observe handle for every body watchdog.puck grants. The guest queries the pose of every body
-;; but the chess pieces every tick, and of four pieces a tick in turn, since the pieces rest on their board. Collision
+;; but the chess pieces every tick, and fills the remaining pose budget with up to four pieces in turn. Collision
 ;; begins arrive as events on the same grants. A pose answer and an event in the batch of tick T describe the tick that
 ;; settled before it, T - 1, and that is the tick a violation records.
 ;;
@@ -341,7 +341,8 @@
         ;; Ask for Mutate over the State section, named by text: the name is 5 bytes at 0x6000.
         (global.set $askedMutate (call $emit (i32.const 2) (i32.const 0) (i32.const 0) (i32.const 3)
           (i64.const 0x6000) (i64.const 8) (i64.const 5)))))
-    ;; Every body but the chess pieces is read every tick; the pieces, which rest on their board, four a tick in turn.
+    ;; Read walkers every tick and fill spare room with pieces. Fifteen poses leave room for two mutation answers
+    ;; and one event in the 63-cell pending budget; the range walkers and tool bodies reduce the chess slice to two.
     (local.set $i (i32.const 0))
     (block $everyTick
       (loop $query
@@ -357,7 +358,7 @@
       (loop $piece
         (br_if $inTurn (i32.ge_u (local.get $asked) (i32.const 4)))
         (br_if $inTurn (i32.ge_u (local.get $i) (global.get $watched)))
-        (br_if $inTurn (i32.ge_u (global.get $out) (i32.const 19)))
+        (br_if $inTurn (i32.ge_u (global.get $out) (i32.const 15)))
         (if (i32.ge_u (global.get $turn) (global.get $watched)) (then (global.set $turn (i32.const 0))))
         (if (call $isPiece (global.get $turn))
           (then

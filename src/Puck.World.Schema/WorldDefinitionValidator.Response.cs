@@ -11,11 +11,10 @@ public static partial class WorldDefinitionValidator {
         var path = $"{placementPath}.respond";
 
         if (
-            (placement.Attach is not null) ||
             (placement.Inhabit is not null) ||
             (placement.FaceSources is not null)
         ) {
-            errors.Add(item: $"{path} is refused alongside attach/inhabit/faceSources — a response swap is a static-prototype concern only.");
+            errors.Add(item: $"{path} is refused alongside inhabit/faceSources — a response swaps a placement's prototype, not a population body's look or per-instance face sources.");
         }
 
         if (responses.Count == 0) {

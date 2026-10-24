@@ -108,12 +108,18 @@ public sealed partial class WorldAddonRuntime {
                     ? GrantSubject.Body(index: ((int)ask.SubjectIndex))
                     : GrantSubject.All
                 );
-            } else if (ask.SubjectKind == AddonSubjectKind.Section) {
-                if (!TryResolveSectionAskName(
+            } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
+                string sectionName;
+                if (ask.SubjectKind == AddonSubjectKind.State) {
+                    if (!TryReadUtf8(addon, ask.SubjectIndex, ask.NameLength, AddonAbi.MaxSectionNameBytes, out sectionName, out var refusal)) {
+                        QueueAnswer(addon, ask.Ordinal, refusal);
+                        continue;
+                    }
+                } else if (!TryResolveSectionAskName(
                     addon: addon,
                     ask: in ask,
                     error: out var copyError,
-                    name: out var sectionName,
+                    name: out sectionName,
                     refusal: out var copyRefusal
                 )) {
                     Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} ask ordinal {ask.Ordinal} refused {copyRefusal} — {copyError}]");
@@ -130,7 +136,10 @@ public sealed partial class WorldAddonRuntime {
                 // a fixed, PUBLIC set (every member name ships in this repository's own docs and console grammar),
                 // so answering "no such section" for an unresolvable name leaks nothing a body-liveness answer
                 // would — there is no enumeration oracle to protect against for a static enum.
-                if (!GrantSubject.TryParseSectionName(
+                if (ask.SubjectKind == AddonSubjectKind.State) {
+                    inRange = true;
+                    subject = GrantSubject.State(name: sectionName);
+                } else if (!GrantSubject.TryParseSectionName(
                     name: sectionName,
                     section: out var resolvedSection
                 )) {
@@ -142,10 +151,10 @@ public sealed partial class WorldAddonRuntime {
                     );
 
                     continue;
+                } else {
+                    inRange = true;
+                    subject = GrantSubject.Section(section: resolvedSection);
                 }
-
-                inRange = true;
-                subject = GrantSubject.Section(section: resolvedSection);
             } else {
                 inRange = false;
                 subject = GrantSubject.All;
@@ -288,6 +297,15 @@ public sealed partial class WorldAddonRuntime {
                 // into the "verb not served" discrepancy branch below) keeps that branch meaning what it says: a
                 // verb this host genuinely does not recognize, not one a DIFFERENT stage already answered.
                 if (query.Verb == AddonAbi.RequestVerbs.SubmitMutation) {
+                    continue;
+                }
+
+                if (query.Verb == AddonAbi.RequestVerbs.Log) {
+                    ResolveLog(addon, in query);
+                    continue;
+                }
+                if (query.Verb == AddonAbi.RequestVerbs.ReadStateCell) {
+                    ResolveStateRead(addon, in query);
                     continue;
                 }
 
@@ -483,6 +501,18 @@ public sealed partial class WorldAddonRuntime {
                         verdict: AddonVerdict.NoSuchSubject
                     );
 
+                    continue;
+                }
+
+                if (query.Verb == AddonAbi.RequestVerbs.BodyKinematics) {
+                    if (!ChargeHostFuel(addon, 64)) {
+                        QueueAnswer(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
+                        continue;
+                    }
+                    var kinematicsVerdict = WorldAddonWire.FromRule(rule: verdict.Rule);
+                    QueuePart(addon, query.Ordinal, kinematicsVerdict, 0, body.FixedPosition.Y.Value, body.ApproximateWorldVelocity().Y.Value);
+                    QueuePart(addon, query.Ordinal, kinematicsVerdict, 1, (long)body.Facts,
+                        (long)(uint)body.ContactCount | (body.LastObstructionNormal != Puck.Maths.FixedVector3.Zero ? 2L : 0L));
                     continue;
                 }
 

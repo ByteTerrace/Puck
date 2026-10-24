@@ -5,7 +5,7 @@ deterministic WebAssembly guest. World-side runtime:
 `src/Puck.World.Addons/WorldAddonRuntime.cs` + `WorldAddonWire.cs`, behind the
 `IWorldAddonHost` seam `src/Puck.World.Server/IWorldAddonHost.cs` declares.
 The ABI itself (cell layouts, exports, mount steps, determinism posture) is
-owned by `src/Puck.Scripting/README.md` — read it before touching the guest
+owned by `docs/reference/scripting.md` (`src/Puck.Scripting/README.md` links it) — read it before touching the guest
 boundary; this file carries the World-relevant surface.
 
 The addon system is improved as it is used (the owner's ruling). A lane that
@@ -207,7 +207,7 @@ cell). `RequestVerbs.Count` bounds a guest's declared `VerbCount`, which may
 be any non-empty prefix of the vocabulary — growing the vocabulary must never
 refuse a guest built against fewer verbs.
 **A guest CAN edit the document at the ABI/authority level** — this is not
-withheld/inert. `Addons.WorldAddonMutationDecoder` wires 10 of
+withheld/inert. `Addons.WorldAddonMutationDecoder` wires 12 of
 the declared kinds today: the 5 HUD kinds
 (`UpsertHudPanel`/`RemoveHudPanel`/`UpsertHudElement`/`RemoveHudElement`/
 `SetHudDefaults`, ordinals 39-43), the 2 placement kinds
@@ -218,7 +218,8 @@ faceSources — each face read through the document's own `WorldPlacementFace`
 contract (every source arm, `portal` and `filter`), repeated keys refused —
 region, and attach), the 2 state kinds
 (`UpsertStateRow`/`RemoveStateRow`, ordinals 44-45, every non-generator
-`WorldStateRow` variant: int/fixed/bool/text), and `SetInputHold`
+`WorldStateRow` variant: int/fixed/bool/text), the 2 state-cell kinds
+(`UpsertStateCell`/`RemoveStateCell`, ordinals 47-48), and `SetInputHold`
 (ordinal 46). Every OTHER declared `WorldMutation` kind still
 decodes to `AddonMutateRefusal.DecodeFailed` → `Verdict::MalformedPayload`
 regardless of grants or verb masks — a decoder gap, not an authority one;
@@ -231,6 +232,22 @@ that need the whole document (does `creationId` resolve, does a `state` row's
 `Min`/`Max` pair validate, does a placement's `scale` sit inside the
 authoring envelope) stay with `WorldDefinitionValidator`, exactly like the
 HUD arms already left capacity/authoring checks to it.
+
+Development tools extend this surface without changing ABI 1. `BodyKinematics`
+(request 3, Observe/Body) reads height, world vertical speed, body facts and
+grounded/obstruction witnesses in two cells. `ReadStateCell` (4) reads a numeric
+cell through an Observe/State handle, acquired by a named `State` Ask (wire
+kind 5). `Log` (5) emits one attributed 256-byte UTF-8 line per guest per tick
+into the World's `host.log` ring. State names and keys use strict UTF-8;
+numeric values remain raw fixed-point or integer values. Text/vector reads
+remain an open gap. The [ABI reference](../../../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
+owns the exact layouts and remaining-fuel charges.
+
+The decoder also serves `UpsertStateCell`/`RemoveStateCell` (47/48), through
+the same typed mutation, Edit/state grant, kind mask, dispatch/byte budgets,
+receipt and replay paths as whole rows. Payloads are `{row,key,kind,value,text?}`
+for an upsert (`kind` is `set` or `add`; numeric `value` is required), and
+`{row,key}` for a removal. Repeated and unknown JSON members refuse.
 `ObservationVerbs` (`AddonAbi.cs`, again the one authoritative list) is
 `GrantedBody` — the disclosure of a minted handle over a granted body, not an
 event — plus the world-events verbs the "World events" section below
@@ -300,6 +317,11 @@ that step), or it refuses as
 `StartNotCheckpointable`. `replay.drive` then works in the same session: its
 boot-image reset prepares every guest fresh, so the guests re-run from their
 modules' initial state and reproduce the recording tick for tick.
+
+When piping the startup script, close stdin after the replay arm. Headless
+startup drains that script before stepping; leaving the pipe open waiting for
+more lines holds mutations at tick zero even though control reads already
+answer. Continue through the named World's MCP attachment, then quit it there.
 
 ## Verbs
 
@@ -393,12 +415,15 @@ shared grant leaf.
 
 ## The shipped examples
 
-The debug world mounts three WebAssembly-text guests, each in its own module
+The debug world mounts six WebAssembly-text guests, each in its own module
 ([worlds/debug/addons.md](../../../../worlds/debug/addons.md)): the watchdog
 (`watchdog.puck`), which checks invariants every tick and records violations
 in state rows; the gallery guide (`guide.puck`), which names the exhibit the
 Moth stands at through region events; and the companion (`companion.puck`),
-which follows her through Drive and pose queries. They are the worked
+which follows her through Drive and pose queries. The optional fuzzer,
+traversal bot and kinematics scope demonstrate seeded driving, authored
+numeric reads, kinematics, bounded logging and per-cell mutations. All three
+start off; addon HUD panels additionally require `addonHud` to be 1. They are the worked
 examples of a hand-written guest: the cell layouts, a Section ask, pose
 queries, region and collision events, and `SubmitMutation` of whole state
 rows, with no toolchain beyond the engine.
@@ -417,7 +442,7 @@ withheld-request example.
 
 ## Puck.Scripting in one paragraph
 
-`src/Puck.Scripting/README.md` is the single home of the ABI contract:
+`docs/reference/scripting.md` is the single home of the ABI contract:
 cell/descriptor byte tables, the guest exports, the ten-step mount order,
 the per-tick batch order, fault-vs-verdict postures. Determinism: Wasmtime
 pinned EXACTLY (the package version is the native engine version; fuel

@@ -7,6 +7,11 @@
 let companionBody = 42
 let mothBody = 0
 
+// The two development stand-ins use the same model and look.
+exports {
+  reads [companion]
+}
+
 prototypes {
   // A plain grey-teal stand-in, inside the walker kit's capsule (0.35 m radius, 2.06 m tall).
   prototype "companion" {
