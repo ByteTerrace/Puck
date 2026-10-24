@@ -173,7 +173,7 @@ The owner's direction: model the first- and third-person change on Metroid Prime
 - **HUD and controls** follow the view.
 - **Tight spaces:** authored camera volumes, as in the lift, take over where a reactive boom would fight the walls.
 
-The collision-driven pull-in below remains an option to evaluate, but it is not the default.
+The automatic, collision-driven transition stays a supported option, not a discarded one (the owner's direction: authorship, player choice and debug needs rule). An author sets which triggers a world allows and its default, and the player may override them, for example turning automatic pull-in on or off. A debug toggle forces any mode for inspection. When automatic is chosen, it uses the hysteresis below.
 
 - **Do not make automatic collision-driven first-person pull-in a default chase mode.** In stairwells and around columns, uncommanded transitions between `d = 4.2 m` and `d = 0 m` cause optical looming and hide the avatar's feet when stepping onto ledges or the lift platform.
 - **Offer `firstPerson` as an opt-in third mode (`clearanceMode: "firstPerson"`) with mandatory hysteresis, alongside a manual zoom/toggle binding.**
