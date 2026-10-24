@@ -106,6 +106,23 @@ Until initial development is done, no adaptation lowers quality. Every machine
 runs the highest quality settings, and the adaptations above are how it reaches
 its frame-rate bar there (the owner's ruling).
 
+What "lowering quality" means (the owner confirmed a consensus of Claude, Codex
+and Antigravity):
+- **Identical on every machine:** the simulation and document content, and every
+  light, shadow, global illumination, ambient occlusion and glass pass. No
+  machine drops a pass or an effect, and nothing pops in or out.
+- **A machine may adapt** anything that changes no visible geometry by more
+  than one display pixel and adds no visible shimmer, lag, or change to
+  lighting or readability: culling, memory paths, lossless merges, level of
+  detail under the one-pixel rule, and update rates within their floors.
+- **Anything visible beyond that is a lower tier.** If a machine can't hold its
+  bar at the highest tier under this rule, the shortfall is a finding to fix,
+  not a reason to redefine the tier.
+
+What each tier below the highest means waits until the highest is settled, and
+is worked out on the Steam Deck and the RTX 2060 machine themselves (the
+owner's ruling).
+
 Every adaptation stays visible and switchable, so its effect can be measured
 and compared on each machine. The rendering decisions say what each lever does
 ([rendering](rendering.md)).
@@ -261,6 +278,15 @@ sink a hair into a surface it can't resolve exactly, but it never stands on air.
 How a walker climbs an edge is decided by its step height, not by the contact
 normal a corner happens to produce. The colliders diagnostic therefore has no
 allowance for a bound: a collider outside its drawn solid is a finding.
+
+The rule is the same on every face: exact where the vocabulary can express the
+solid, inside it otherwise, never outside. Walls and ceilings get no exception.
+The chase camera clears against the drawn field, not the colliders, so an inset
+wall collider can't make the camera clip. A conservative approximation reports
+its computed bound. Within that bound it is a known approximation, not a red
+finding; beyond it, it is red. The fix for an approximation is an exact contact,
+such as an exact chamfered-box collider. The owner confirmed this as a
+consensus of Claude, Codex and Antigravity.
 
 Why: the owner's ruling. Bodies floating at the round dais and at box corners
 were visible flaws. Removing the drawn fillet instead would make plain boxes look

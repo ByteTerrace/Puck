@@ -164,6 +164,16 @@ Supporting a smooth pull-into-first-person on the Moth interacts directly with f
 4. **Required stamp visibility rule**:
    When the camera pulls within `0.45 m` of the head pivot on its way to `d = 0`, presentation must hide or dither-out the perceived body's own stamp in *that seat's view only* (leaving mirrors, portal windows, and other seats' views showing the whole Moth, and keeping any carried screen placement such as the engaged brick visible).
 
+### The debug world's default
+
+The owner confirmed a consensus of Claude, Codex and Antigravity:
+- **The default is target shift with a character fade** (winner 1).
+- **Target shift with the near-plane cut-away** (winner 2) is one toggle away, for inspecting the Moth.
+- **First person** is the state-driven third option, with automatic pull-in opt-in and with hysteresis.
+- **Why the fade:** it avoids the camera failures with the strongest evidence: forced yaw swings, exposing the void behind walls, and losing the room ahead.
+- **Confidence is moderate to low** that it is also the most delightful. No source compares player preference between fade and cut-away, so the owner's side-by-side playtest in the lift and the stairwell settles it.
+- **Verified sources:** a web-checked review confirmed Nesky's talk, the Uncharted 3 talk, Haigh-Hutchinson's Metroid Prime camera work, Elden Ring's wall-recovery setting, WoW's indirect-visibility settings, Guild Wars 2's collision sensitivity and FFXIV's wall zoom. Several mistake numbers above are off, and the player-praise claims for specific games stay unverified.
+
 ### Recommendation on the third option
 
 The owner's direction: model the first- and third-person change on Metroid Prime's morph ball transition. The third option is a state-driven view change, not a collision response:
