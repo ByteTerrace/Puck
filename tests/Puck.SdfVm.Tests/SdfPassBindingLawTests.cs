@@ -15,7 +15,7 @@ public sealed class SdfPassBindingLawTests {
     // exposure and air light, the shadow slots, the curvature shading, temporal history, indirect controls, the
     // light-camera flag, twelve cascade rows, shadow parameters and the irradiance volume, 16-aligned. The bake's lattice
     // rows are its own block's (BakeBlockBytes).
-    private const uint PassBlockBytes = 912;
+    private const uint PassBlockBytes = 944;
     // The bake's pass block's bytes: the extent, the instance-mask width, the lattice count, 64 lattice rows and the two
     // work-counter rows, 16-aligned.
     private const uint BakeBlockBytes = 1056;
