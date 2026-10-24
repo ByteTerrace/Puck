@@ -1186,49 +1186,6 @@
     ]
   },
   {
-    "Id": "prime-field.base-two-batch-vs-modular-power",
-    "Tier": "Default",
-    "Members": [
-      {
-        "Type": "Puck.Maths.PrimeKernels",
-        "Name": "PassesBaseTwoBatch"
-      },
-      {
-        "Type": "Puck.Maths.PrimeKernels",
-        "Name": "BaseTwoBatchWidth"
-      }
-    ],
-    "Legs": [
-      {
-        "Kind": "Classical",
-        "Flavor": "None",
-        "Subject": "PrimeKernels.PassesBaseTwoBatch, the four-chain base-two round random prime selection decides its filter survivors with, which raises two to the negated odd part -d from a seed 2^-a of the prefix a = ceil(d / 2^k) and walks the low k bits of the word 0 - d, at: every odd value below 2^17 four consecutive values to a batch, and every odd value below 2^12 in every lane beside three values above 2^63; 1,200 drawn batches inside each arithmetic region (below 2^32, below 2^58, below the lazy ceiling 2^60, below 2^61, below 2^62, below the signed ceiling 2^63, and above it, where every value seeds by a shift), with at least one hundred accepted values in each, and 2,400 batches whose lanes come from any region; 24,000 batches in [2^60, 2^61), above the lazy ceiling, where a lazy accumulator leaves 4n only now and then, and 6,000 in [2^63, 3*2^62), just above the signed ceiling; constructed odd parts d 2^s + 1 whose common bit length L is 1, 2, 5, 6, 7, 8, 9, 32, 57, 62 or 63, so the walk takes zero or one step at 6, 7 and 8, with leads and companions whose prefixes are 1, 2, 64, 65, 66 and 128 (64 and 128 the reduction by 2^64, 65 and above the seed of 2^-(a - 64)), each placed at bit lengths 33, 58, 60, 61, 62, 63 and 64 and mixed across them, in every lane rotation; the thirty-six strong base-two pseudoprimes (6k + 1)(12k + 1)(18k + 1) between 2^63 and 2^64, led by 9275096661522257161 = 1156261 * 2312521 * 3468781, each beside three of its kind, beside values in [2^62, 2^64) and beside values below 2^61, in every rotation; the strong base-two pseudoprimes of that form in [2^60, 2^62), where the batch is signed, each beside three of its kind, beside values below the lazy ceiling and beside values above 2^61, 2^62 and 2^63, in every rotation; prime powers in [2^60, 2^62), the Wieferich primes' powers and products of primes either side of 2^30 and 2^31, each beside drawn values; the odd neighbours within 256 of 2^32, the lazy ceiling, 2^62 and the signed ceiling on both sides, alone and beside values above 2^63; and the top 256 odd values of the carrier",
-        "Against": "Oracles.StrongBaseTwoAcceptanceRound: two raised to d by square-and-multiply least significant bit first, every product a UInt128 remainder, then the strong round's squarings, with no Montgomery form, no seed, no negated exponent and no lazy carry. It also raises (n + 1) / 2, the inverse of two, and the law requires both to accept at the same round, the identity the subject's negated exponent rests on, at every lane it checks. The pseudoprimes are composite by construction and the oracle alone decides which pass. Both sides EXACT, so condition (B) drops out",
-        "Shared": "",
-        "Citation": "",
-        "Absolute": ""
-      },
-      {
-        "Kind": "Structural",
-        "Flavor": "None",
-        "Subject": "The shell refuses a span of three or five values with ArgumentException and an even value, one or zero with ArgumentOutOfRangeException, each naming values. The mask carries no bit past the batch",
-        "Against": "",
-        "Shared": "",
-        "Citation": "",
-        "Absolute": ""
-      },
-      {
-        "Kind": "Structural",
-        "Flavor": "None",
-        "Subject": "ENVELOPE: the seeds' reduction, the lazy batch's operand bound below ScaledResidueRing64.LazyModulusCeiling and the signed batch's below ScaledResidueRing64.SignedModulusCeiling are proofs in PrimeKernels' and ScaledResidueRing64's documentation, not observations; this law observes the decisions they protect at drawn values in each region, at the seed's shift boundaries and on both sides of every ceiling. The acceptance round the subject reaches is not observable through its mask; the oracle checks at every lane that the inverse power accepts at the same round",
-        "Against": "",
-        "Shared": "",
-        "Citation": "",
-        "Absolute": ""
-      }
-    ]
-  },
-  {
     "Id": "prime-field.base-two-round-vs-modular-power",
     "Tier": "Default",
     "Members": [

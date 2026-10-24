@@ -6,12 +6,11 @@ using System.Runtime.InteropServices;
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides deterministic primality testing, prime counting and prime selection for unsigned integers.
+/// Provides deterministic primality testing for unsigned integers, with 32-bit factorization, prime counting and rank selection.
 /// </summary>
 /// <remarks>
 /// The primality test is exact across the entire 32-bit range — it never returns a probabilistic answer — and the
 /// narrow decision kernels use Montgomery form and the quotient counter's summation uses precomputed reciprocals.
-/// The unsigned sixty-four-bit combinatorial counter also uses integer division for its leaf quotients.
 /// </remarks>
 public static partial class PrimeExtensions {
     /// <summary>Gets the sorted base-2 strong pseudoprimes below 2³² coprime to 105, a superset of those that survive the trial division in <see cref="IsPrime(uint)"/>.</summary>
@@ -650,8 +649,8 @@ public static partial class PrimeExtensions {
         return CountQuotients<uint, QuotientCountWord32>(cancellationToken: default, squareRoot: ((uint)Math.Sqrt(d: value)), value: value);
     }
 
-    // The quotient-counting recurrence, shared by the uint count and the widened ulong count below the
-    // 4194303^2 root cap. TLarge carries pi(value/k) and every quotient of value; smalls hold pi(k) for k<=sqrt.
+    // The narrow quotient-counting recurrence. TLarge carries pi(value/k) and every quotient of value;
+    // smalls hold pi(k) for k<=sqrt.
     // Requires value>=9 and squareRoot=floor(sqrt(value)).
     private static TLarge CountQuotients<TLarge, TWidth>(TLarge value, uint squareRoot, CancellationToken cancellationToken)
         where TLarge : unmanaged, IBinaryInteger<TLarge>, IUnsignedNumber<TLarge>
@@ -752,11 +751,5 @@ public static partial class PrimeExtensions {
         public static ulong Reciprocal(uint divisor) => ((ulong.MaxValue / divisor) + 1UL);
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static uint Divide(uint value, uint[] divisors, ulong[] reciprocals, uint index) => ((uint)((((UInt128)reciprocals[index]) * value) >> 64));
-    }
-    private readonly struct QuotientCountWord64 : IQuotientCountWidth<ulong> {
-        public static ulong Reciprocal(uint divisor) => PrimeDivisionKernels.FloorReciprocalCore(divisor: divisor);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong Divide(ulong value, uint[] divisors, ulong[] reciprocals, uint index) =>
-            PrimeDivisionKernels.DivideByFloorReciprocalCore(dividend: value, divisor: divisors[index], reciprocal: reciprocals[index]);
     }
 }

@@ -38,9 +38,8 @@ public readonly struct ScaledResidueRing64 {
     /// <c>2^60</c>. The subtractive quotient <c>hi(a b) - hi(m n)</c> of <see cref="Reduce(ulong, ulong, ulong, ulong)"/>
     /// lies in <c>(-n, a b / 2^64)</c>, so lifted by the modulus it lies in <c>(0, a b / 2^64 + n)</c>. Two operands
     /// below <c>4n</c> keep that below <c>16 n^2 / 2^64 + n</c>, which is at most <c>2n</c> exactly when <c>16n</c> is
-    /// at most <c>2^64</c>, so the sum of two such results is below <c>4n</c> again. The prime kernels' lazy chains
-    /// carry their residues that way below this bound, and <see cref="Canonical(ulong, ulong)"/> recovers the residue
-    /// wherever one is compared.
+    /// at most <c>2^64</c>, so the sum of two such results is below <c>4n</c> again.
+    /// <see cref="Canonical(ulong, ulong)"/> recovers the residue wherever one is compared.
     /// </remarks>
     public const ulong LazyModulusCeiling = (1UL << 60);
     /// <summary>The exclusive bound on a modulus whose chains may carry signed representatives within the modulus of zero between products reduced by <see cref="ReduceSigned(long, long, long, ulong, ulong)"/>, <see cref="ReduceSignedSquareSubtract(long, long, ulong, ulong)"/> and <see cref="ReduceSignedSquare(long, int, ulong, ulong)"/>, with no fold after any reduction.</summary>

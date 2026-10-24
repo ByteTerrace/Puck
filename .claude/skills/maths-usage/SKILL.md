@@ -124,6 +124,7 @@ Work on `PrimeExtensions.IsPrime`, `NthPrime(uint)`, `PrimeKernels` and
 single-value decision and its SIMD fallbacks. The owner's prime-research
 cleanup removes wide counting, selection and interval exploration, while
 `Research/`, `Algebra/` and `Oracle/` remain outside that cleanup.
+
 ## Verify
 
 Build the test project (`dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj

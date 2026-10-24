@@ -10,7 +10,7 @@ and `Oracle/` wings remain outside that cleanup.
 
 `PrimeExtensions.NthPrime(uint)` takes a zero-based index: zero returns two,
 and `999U.NthPrime()` returns 7919. Indices through 203280220 return a `uint`
-prime; larger indices return zero. The language builds its first 64 primes
+prime; larger indices return zero. The language builds its first 256 primes
 with this entry point.
 
 The first seventeen primes use small-factor constants. Remaining primes below

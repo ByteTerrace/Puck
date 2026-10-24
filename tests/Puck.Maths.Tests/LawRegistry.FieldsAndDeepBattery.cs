@@ -254,10 +254,6 @@ internal static partial class LawRegistry {
             id: "prime-field.lucas-trace-ladder-vs-recurrence"
         ),
         ClaimCase(
-            claim: Subjects.BaseTwoBatchMatchesModularPower,
-            id: "prime-field.base-two-batch-vs-modular-power"
-        ),
-        ClaimCase(
             claim: Subjects.BaseTwoRoundMatchesModularPower,
             id: "prime-field.base-two-round-vs-modular-power"
         ),
