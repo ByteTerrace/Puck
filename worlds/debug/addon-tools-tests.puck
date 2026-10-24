@@ -56,7 +56,7 @@ test "a traversal pass starts at the selected route entry" {
     traversal[done] == 1
     traversal[missed] == 1
     traversalFailures[0] == 0
-    traversalFailures[1] > 0
+    traversal[reached] == 0
   }
 }
 

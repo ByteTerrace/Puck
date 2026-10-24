@@ -192,7 +192,7 @@
     (local $cos i64) (local $sin i64) (local $right i64)
     (call $drain (local.get $count))
     (global.set $out (i32.const 0))
-    
+
     (if (i32.and (i32.eq (global.get $reads) (i32.const 7)) (i64.ne (i64.load (i32.const 17408)) (i64.const 0))) (then
       (if (i32.eqz (global.get $active)) (then
         (global.set $active (i32.const 1)) (global.set $steps (i64.const 0)) (global.set $state (i64.const 0))

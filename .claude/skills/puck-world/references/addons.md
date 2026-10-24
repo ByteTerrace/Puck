@@ -318,6 +318,11 @@ that step), or it refuses as
 boot-image reset prepares every guest fresh, so the guests re-run from their
 modules' initial state and reproduce the recording tick for tick.
 
+When piping the startup script, close stdin after the replay arm. Headless
+startup drains that script before stepping; leaving the pipe open waiting for
+more lines holds mutations at tick zero even though control reads already
+answer. Continue through the named World's MCP attachment, then quit it there.
+
 ## Verbs
 
 - `world.row.set addons <row-json>` / `world.row.remove addons <name>` — the

@@ -5,8 +5,8 @@
 // shows the count and the last violation while there is one. addons.md beside this file says how to find a transient
 // and replay to its tick.
 
-// Every body the population holds: the eight seats, the 32 chess pieces, the board cursor, the lift car and the
-// companion (debug.puck's `bodies`).
+// Every population slot, including the seats, range walkers, chess pieces/cursor, lift, companion and the two
+// development stand-ins (debug.puck's `bodies`).
 let watchedBodies = range(0, 45)
 
 // `watchdog` counts the violations and holds the ticks of the last and the first (-1 before any); `watchdogLog` holds

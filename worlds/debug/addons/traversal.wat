@@ -199,7 +199,7 @@
     (local $i i32) (local $dx i64) (local $dy i64) (local $dz i64) (local $r i32) (local $p i32)
     (call $drain (local.get $count))
     (global.set $out (i32.const 0))
-    
+
     (if (i64.eqz (i64.load (i32.const 17408))) (then (global.set $active (i32.const 0))))
     (if (i32.and (i32.eq (global.get $reads) (i32.const 9)) (i64.ne (i64.load (i32.const 17408)) (i64.const 0))) (then
       (if (i32.eqz (global.get $active)) (then

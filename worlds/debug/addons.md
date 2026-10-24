@@ -83,13 +83,15 @@ kinematics, strict per-cell mutation decoding and bounded guest logs. The
 owns their layouts and fuel charges. Text/vector authored reads and a cheaper
 transactional cell-write path are recorded in [open items](../../docs/plans/open-items.md#addon-system).
 
-Measured headlessly over MCP: fuzzer 10,159 fuel/tick while driving, traversal
-6,477 on an ordinary route tick (before adding its start/lift readiness reads),
-and scope 22,103 while sampling. The one-million budget was ample; no answers
+Measured headlessly over MCP: fuzzer 10,062 fuel/tick while driving, traversal
+7,074 on a route tick, and scope 22,588 while sampling. The one-million budget was ample; no answers
 or events dropped and no mutation budget exhausted. The scope used thirteen
 of its sixteen cell mutations per tick; full document validation and narration
 were the limiting host work. A 300-step seeded fuzz pass was clean under the
-watchdog, and its 346-tick recording verified `MATCH`. The separate gallery
+watchdog on the merged head, ending at (53.75, 0.03, -34.04), inside its bounds;
+its 373-tick delivery recording verified `MATCH`. A longer scope run filled the 4,096-line
+host log ring and evicted 1,547 old lines, while state history remained bounded
+at 128 samples. The separate gallery
 leg reached seven of eight goals, with one missed car-entry waypoint and one
 fall even after waiting for the car. This is a probe finding requiring diagnosis,
 not a confirmed lift-physics defect.
@@ -134,7 +136,11 @@ No checkpoint holds a guest's memory, so a recording in this world starts at
 boot: `replay.record <name>` must arrive before the world steps, as the first
 line of the stdin the World starts with. An MCP attachment arrives after the
 first step, too late to arm one, so start the World with that line on stdin and
-`--control`, and drive it over MCP from there. Then:
+`--control`, and drive it over MCP from there.
+
+Close the startup stdin pipe after writing the arm: headless startup drains
+that script before stepping. An open pipe can leave mutations waiting at tick
+zero while MCP read commands already answer. Then:
 
 1. Play or script until the watchdog fires, and read `world.state watchdog`
    for the tick.
