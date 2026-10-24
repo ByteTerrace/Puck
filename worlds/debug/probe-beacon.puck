@@ -13,8 +13,6 @@
 // probe's config, as here; to steer a body or a rule, route its axis through an input channel in a world that is
 // operated rather than reproduced.
 
-schema: "puck.world.definition.v1"
-
 probes [
   {
     id: "beacon"
