@@ -651,13 +651,13 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (!WorldCaptureFills.IsExternal(source: ShownOf(screen: index))) {
+        if (!ShowsExternal(source: ShownOf(screen: index))) {
             return (Ok: false, Message: $"screen {index} has no source to eject");
         }
 
         if (
             (slot.DeclaredSource is WorldScreenSource.Producer declared) &&
-            !WorldCaptureFills.IsExternal(source: declared)
+            !ShowsExternal(source: declared)
         ) {
             ShowRow(index: index);
         } else {

@@ -81,7 +81,7 @@ public sealed partial class WorldScreenBinder {
 
         if (
             FillsExternal &&
-            WorldCaptureFills.IsExternal(source: source)
+            ShowsExternal(source: source)
         ) {
             frame = m_fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill);
 

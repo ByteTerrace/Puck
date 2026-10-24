@@ -424,7 +424,10 @@ internal sealed partial class WorldProbes {
         };
 
         if (rowInfo.Manifest.Output is not null) {
-            m_screens.DeclareProbeOutput(id: instance.OutputRingKey);
+            m_screens.DeclareProbeOutput(
+                external: WorldCaptureFills.IsExternalProbe(probe: rowInfo.Row, rowOf: RowOf),
+                id: instance.OutputRingKey
+            );
         }
         if (rowInfo.Row.Inputs is { } inputs) {
             var retainedViews = new HashSet<string>(comparer: StringComparer.Ordinal);

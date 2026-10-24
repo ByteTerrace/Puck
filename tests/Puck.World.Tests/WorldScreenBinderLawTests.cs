@@ -192,7 +192,7 @@ public sealed class WorldScreenBinderLawTests {
         // A probe's output binds only once the probe declares one.
         Assert.False(condition: binder.TryProbe(id: "other", index: BinderScene.None).Ok);
         Assert.False(condition: binder.TryProbe(id: "probe", index: 99).Ok);
-        binder.DeclareProbeOutput(id: "probe");
+        binder.DeclareProbeOutput(external: true, id: "probe");
         Assert.True(condition: binder.TryProbe(id: "probe", index: BinderScene.None).Ok);
 
         // Every other source a magazine entry names applies live; a machine boots through the machine host instead.

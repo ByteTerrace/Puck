@@ -1704,12 +1704,12 @@ is not external. A deterministic feed states the exact image it shows
 compares a read-back against.
 
 **External content never reaches a capture.** Every external image, whether a
-camera, a desktop capture or a probe's output, resolves through
+camera, a desktop capture or the output of a probe that reads one, resolves through
 `WorldCaptureGate`. While the gate fills, or while the feed has no image of its
 own (`WorldCaptureGate.FillsFeed`), the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
-default), and the producer's frame is never acquired. A fill is a 1×1 image
-converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
+default), and the producer's frame is never acquired. A fill is a 16×16 placeholder of diagonal stripes in the fill color and a contrasting one, so a reader tells withheld from broken,
+converted through `source-rgba` (`WorldCaptureFills`). A probe is classified by its inputs (`WorldCaptureFills.IsExternalProbe`): one fed only by in-world views and recorded tracks, or by such probes, is derived content a capture shows. Its converter builds
 off the frame thread, so a fill first converted on the frame a capture is
 armed for would have no image on that frame; each fill therefore converts as
 soon as a screen shows or a HUD frame names an external source, before any
