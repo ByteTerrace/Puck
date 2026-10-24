@@ -71,6 +71,13 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         Assert.True(condition: DirectXHeapArena.Release(calls: calls, resource: large));
         Assert.Equal(expected: ["release heap 4"], actual: calls.Log);
 
+        // A resource's own heap, larger than a shared one, goes when it empties although the pool keeps no other empty
+        // heap, so no later resource is placed in it and holds it.
+        calls.Log.Clear();
+        var own = Create(arena: arena, description: Buffer(bytes: (2UL * Heap)), heapType: upload, role: GpuMemoryRole.HostVisible);
+        Assert.True(condition: DirectXHeapArena.Release(calls: calls, resource: own));
+        Assert.Equal(expected: [$"heap 5 {2UL * Heap} {D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS}", $"place {own} heap 5 at 0", "release heap 5"], actual: calls.Log);
+
         // A failed placement, and a failed tag, give their range back to the heap, which the next resource takes.
         calls.Log.Clear();
         calls.FailPlacement = true;

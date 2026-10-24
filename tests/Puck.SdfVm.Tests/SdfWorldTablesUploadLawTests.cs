@@ -852,6 +852,56 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: (((words + SdfMeshRecord.VertexWords) + 1) * sizeof(uint)), value: landedWords));
     }
+    // A relocation that leaves the mesh region holding more than half again what its draws need shrinks it to the need
+    // plus an eighth, and the shrunk region holds the words of a region that never grew.
+    [Fact]
+    public void ARelocationShrinksAnOversizedMeshRegionToItsNeed() {
+        const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
+        var big = new SdfMesh(
+            indices: new uint[] { 0, 1, 2 },
+            positions: Enumerable.Range(count: BigVertices, start: 0).Select(selector: static index => new Vector3(x: index, y: (index & 1), z: 0f)).ToArray()
+        );
+        var quad = new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        );
+        // More draws than the region reserves records for, so planning them relocates every mesh.
+        var many = Enumerable.Range(count: (SdfMeshRegionArena.MinimumDrawCapacity + 44), start: 0).Select(selector: index => new SdfMeshDraw(
+            Identity: index,
+            Material: 1,
+            Mesh: quad,
+            ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
+        )).ToArray();
+        using var rig = new Rig(slots: 1);
+        using var fresh = new Rig(slots: 1);
+
+        rig.Warm();
+        rig.Render(meshDraws: [new(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
+
+        var grown = rig.Engine.MeshRegionBytes;
+
+        rig.Render(meshDraws: many, time: 0f);
+        // A region that never grew past the granule, planned through the same draw lists but a small first mesh, lays the
+        // second list out alike.
+        fresh.Warm();
+        fresh.Render(meshDraws: [new(Identity: "big", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
+        fresh.Render(meshDraws: many, time: 0f);
+
+        var used = ((int)rig.Engine.MeshRegionUsedBytes);
+
+        Assert.True(condition: (grown > (2UL * SdfWorldTables.MeshRegionGranuleBytes)));
+        Assert.Equal(expected: SdfWorldTables.MeshRegionGrownBytes(needBytes: ((ulong)used)), actual: rig.Engine.MeshRegionBytes);
+        Assert.Equal(expected: fresh.Engine.MeshRegionBytes, actual: rig.Engine.MeshRegionBytes);
+        // The draws read their records and the meshes past the reserved records; the reserve's unused records hold
+        // whatever the region held there before, and no draw reads them.
+        var records = ((many.Length * SdfMeshRecord.DrawWords) * sizeof(uint));
+        var arena = (((2 * SdfMeshRegionArena.MinimumDrawCapacity) * SdfMeshRecord.DrawWords) * sizeof(uint));
+        var expected = fresh.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: fresh.Engine.MeshRegionBytes);
+        var actual = rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes);
+
+        Assert.Equal(expected: expected[..records], actual: actual[..records]);
+        Assert.Equal(expected: expected[arena..used], actual: actual[arena..used]);
+    }
 
     // The mesh region grows to the need plus an eighth, to a 16 MiB granule, and to no more than a region holds. The
     // debug world's region has not reached 2 GiB, so the sizes past it are held by the arithmetic alone.
