@@ -263,7 +263,8 @@ in the frame.
 - **Exposure.** The volume is also the automatic exposure's meter: the
   luminance the probes about a view's camera see along their six axes, weighted
   toward where the camera looks. A scene ray from the camera to each probe
-  excludes probes across a wall or slab
+  excludes probes across a wall or slab. If no probe answers, the same tracer
+  samples at the camera without writing that sample into the volume
   ([photometric units](#photometric-units-and-exposure)).
 
 ## Ambient occlusion: screen-space obscurance
@@ -331,7 +332,12 @@ output by its exposure, the multiplier `1 / (1.2 · 2^EV100)` per nit
 camera, which carries every traced light's bounce, aims for
 `log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
 over the adaptation time of presentation time, snapping at a camera cut
-(`SdfViewExposures`). An automatic exposure's `local` share then adapts each
+(`SdfViewExposures`). A camera with no visible lattice probe measures its own
+surroundings through the same radiance tracer. An unavailable scene or a camera
+inside opaque geometry supplies no reading: exposure, local adaptation's meter
+and sky visibility hold
+their previous values, using the authored EV only before the first reading.
+An automatic exposure's `local` share then adapts each
 surface on its own in the views stage (`sdfLightStage`): the illumination
 arriving at the surface, the lights' diffuse terms and the volume's indirect
 light, is read against the view's meter reading taken as a scene of
@@ -346,7 +352,9 @@ leaves its sky to the viewer. The pass block carries the view's meter reading
 (`meterLuminance`), the share (`localAdaptation`) and the sky's peak
 (`skyPeakLuminance`).
 `world.exposure` echoes the authored exposure and each view's `EV100`, multiplier
-and meter reading. A view onto another world through a window, or a sky layer's
+and meter reading, with `source=probes` or `source=camera-trace`. No measurement
+reports `meter=none` and `source=held` (previous exposure) or `source=initial`
+(no previous exposure). A view onto another world through a window, or a sky layer's
 view, publishes its luminance raised by its own exposure to the window share
 (`SdfViewSnapshot.Unexposed`, the pass block's `exposeShare`,
 `SdfPhotometry.WindowAdaptation`), and the view looking through it applies the

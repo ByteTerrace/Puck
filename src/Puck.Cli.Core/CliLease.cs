@@ -115,12 +115,15 @@ public sealed class CliLease : IDisposable {
         if (!File.Exists(path: holder)) { return false; }
         var lines = File.ReadAllLines(path: holder);
 
-        if ((lines.Length != 4) || !DateTimeOffset.TryParse(input: lines[1], formatProvider: CultureInfo.InvariantCulture, styles: DateTimeStyles.RoundtripKind, result: out var acquired) || ((now - acquired) <= TimeSpan.FromHours(hours: 1)) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return false; }
+        if ((lines.Length != 4) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return false; }
         try {
             using var process = Process.GetProcessById(processId: pid);
 
             return (process.HasExited || (process.StartTime.ToUniversalTime().Ticks != ticks));
-        } catch (ArgumentException) { return true; } catch (InvalidOperationException) { return true; } catch (System.ComponentModel.Win32Exception) { return false; }
+        } catch (ArgumentException) { return true; } catch (InvalidOperationException) { return true; } catch (System.ComponentModel.Win32Exception) {
+            // The guard is exclusively ours, but the OS could not answer who owns the metadata. Only then use age.
+            return (DateTimeOffset.TryParse(input: lines[1], formatProvider: CultureInfo.InvariantCulture, styles: DateTimeStyles.RoundtripKind, result: out var acquired) && ((now - acquired) > TimeSpan.FromHours(hours: 1)));
+        }
     }
 
     /// <summary>Removes this holder's directory and releases the exclusive guard.</summary>
