@@ -127,7 +127,7 @@ commands: galleryCommands
 // name populations of their own, so this body settles it; the rate range's six walkers, imported last, take the free
 // slots below the pieces (range.puck). Each body's size is its `size` register (size.puck).
 bodies {
-  capacity: 43
+  capacity: galleryPopulation
 }
 
 placements {

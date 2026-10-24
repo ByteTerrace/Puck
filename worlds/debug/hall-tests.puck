@@ -8,6 +8,59 @@ schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "hall-tests"
 
+test "the lift carries a standing Moth from level 0 to level 2" {
+  when {
+    seat1: body.pose 15.9 0.05 38.05 0 0 0 0
+    ticks 30
+    seat1: world.state.cell.set liftCall $value 2
+    ticks 180
+  }
+  expect {
+    liftAt == 144
+    liftLevel == 2
+    bodyPosition(body, 0, y) > 9
+    bodyPosition(body, 0, y) < 9.15
+    fact(body, 0, Grounded) == 1
+    liftDoors[car] == 1
+    liftDoors[level0] == 0
+    liftDoors[level1] == 0
+    liftDoors[level2] == 1
+    liftDoors[level3] == 0
+  }
+}
+
+test "a travelling lift closes its car and every landing" {
+  when {
+    seat1: world.state.cell.set liftCall $value 3
+    ticks 45
+  }
+  expect {
+    liftAt > 0
+    liftAt < 216
+    liftDoors[car] == 0
+    liftDoors[level0] == 0
+    liftDoors[level1] == 0
+    liftDoors[level2] == 0
+    liftDoors[level3] == 0
+  }
+}
+
+test "the wall call button brings the car to its landing" {
+  when {
+    seat1: body.pose 17.05 4.55 35.2 180 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 120
+  }
+  expect {
+    liftAt == 72
+    liftLevel == 1
+    liftDoors[car] == 1
+    liftDoors[level0] == 0
+    liftDoors[level1] == 1
+  }
+}
+
 test "the lobby starts dark and the levels above lit" {
   when {
     ticks 30
