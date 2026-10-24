@@ -64,12 +64,14 @@ public static class FixedContactPushMath {
     /// <param name="up">The body's up axis the walkable test measures alignment against.</param>
     /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> <paramref name="normal"/>'s alignment with
     /// <paramref name="up"/> must clear to read as walkable.</param>
-    public static Trial ComputeOrdinary(FixedVector3 normal, FixedQ4816 penetration, in FixedVector3 velocity, FixedVector3 up, FixedQ4816 groundedThreshold) {
+    /// <param name="blockClimb">Treat an approached edge as an obstruction even when its normal is walkable.
+    /// Vertical support probes leave this false; a step-up must clear the edge on its raised across move.</param>
+    public static Trial ComputeOrdinary(FixedVector3 normal, FixedQ4816 penetration, in FixedVector3 velocity, FixedVector3 up, FixedQ4816 groundedThreshold, bool blockClimb = false) {
         var alignment = FixedVector3.Dot(
             left: normal,
             right: up
         );
-        var grounded = (alignment >= groundedThreshold);
+        var grounded = (!blockClimb && (alignment >= groundedThreshold));
 
         // A face steeper than the walkable slope is a wall, and a wall pushes across `up`, never along its own
         // normal: the normal push's up-component is a lift, and against a body driving into the face every tick

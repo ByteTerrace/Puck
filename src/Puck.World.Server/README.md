@@ -847,12 +847,17 @@ itself takes effect at the next solid rebuild). `world.collision.status` echoes 
 cell size, corner extent, baked corner count, band, and hash. The field provider proves each
 moving body's step clear before its contact solve, by a certified sweep over the exact program's
 bounds together with those of any field lattice's solid columns (`FixedFieldContactSolver.ResolveSweep`,
-counted as the `physics.sweep` work source). The analytic provider emits exact isotropically
-scaled spheres and, for other finite placement primitives, each primitive's own
-bounding box turned with it (an oriented box, or an axis-aligned one when its
-axes land on world axes), so a sharp box collides exactly at any yaw; rounded,
-non-box, smoothed, and boolean-carved geometry is conservative there, and a
-solid screen keeps its world-axis bounds. A solid row participates in simulation, which is why
+counted as the `physics.sweep` work source). The analytic provider emits isotropically
+scaled spheres, circular cylinders and rounded Boxes with their surfaces. Box
+fillets derive from `SdfSolidGeometry.BoxCornerRadius`, the renderer's own
+source, retaining the authored flat-face extents at every yaw. A chamfered Box
+uses an inside rounded box with radius r + b/(2 − √2), retaining the outer
+face planes. Deep chamfers that cannot fit this radius use three inside
+rounded axis rods that retain surviving face centres, with a smaller support
+footprint. Other finite primitives retain their oriented
+bounds, and a solid screen keeps its world-axis bounds. Smoothing and boolean
+carving remain approximations there. See [contact geometry](../../docs/reference/physics.md#contact-and-rigid-body-kernels)
+for the queries and remaining approximations. A solid row participates in simulation, which is why
 mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 
@@ -924,7 +929,12 @@ the vertical contact channel and no pull hold owns it, `Puck.Physics`'
 `FixedStepUp` retries the step through that same sweep, so an entity-aware
 field resolves the retry against the other bodies too. The retry replaces the
 blocked step only when it lands grounded on a walkable surface, so a face
-steeper than `maxSlopeDegrees` is never stepped onto. `body.motion` echoes
+steeper than `maxSlopeDegrees` is never stepped onto. A lateral approach to a
+box edge/fillet or cylinder rim is an obstruction even when its closest-feature
+normal tilts into the walkable cone. Its `RequiredStepHeight` measures full
+clearance to the top support plane; a shorter step cannot climb by repeated
+partial landings. Falling or resting at the same edge retains its surface
+normal and rounded support. `body.motion` echoes
 the body's effective `stepHeight=`, and `world.kits` the kit's.
 
 A body grounded on an attached solid rides it (the analytic provider only,

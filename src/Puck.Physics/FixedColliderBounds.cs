@@ -8,6 +8,21 @@ namespace Puck.Physics;
 public static class FixedColliderBounds {
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
+    /// <summary>Returns the body's least projection along a unit direction, including its radius.</summary>
+    /// <param name="position">The body position.</param>
+    /// <param name="orientation">The body orientation.</param>
+    /// <param name="volume">The body-local volume.</param>
+    /// <param name="normal">The unit projection direction.</param>
+    /// <returns>The minimum support projection.</returns>
+    public static FixedQ4816 MinimumProjection(FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, FixedVector3 normal) => volume.Kind switch {
+            FixedBodyColliderKind.Sphere => (FixedVector3.Dot(left: (position + orientation.Rotate(vector: volume.Center)), right: normal) - volume.Radius),
+            FixedBodyColliderKind.Capsule => (FixedQ4816.Min(
+                x: FixedVector3.Dot(left: (position + orientation.Rotate(vector: volume.Center)), right: normal),
+                y: FixedVector3.Dot(left: (position + orientation.Rotate(vector: volume.Endpoint)), right: normal)) - volume.Radius),
+            FixedBodyColliderKind.Box => FixedOrientedBox.FromVolume(orientation: in orientation, position: position, volume: in volume).MinimumProjection(normal: normal),
+            _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
+        };
     /// <summary>Computes the world-space axis-aligned bounds of one body volume at a pose.</summary>
     /// <param name="position">The body's world position.</param>
     /// <param name="orientation">The body's world orientation.</param>

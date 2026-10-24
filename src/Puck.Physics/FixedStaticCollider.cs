@@ -14,21 +14,26 @@ public enum FixedStaticColliderKind : byte {
     HalfSpace,
     /// <summary>A capped circular cylinder along its rotated local Y axis.</summary>
     Cylinder,
+    /// <summary>An oriented inner box offset by a spherical radius.</summary>
+    RoundedBox,
 }
 /// <summary>A deterministic depenetration response without any body-state or gameplay policy.</summary>
 /// <param name="Normal">The unit push direction.</param>
 /// <param name="Penetration">The distance to push along <paramref name="Normal"/>.</param>
-public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 Penetration);
+/// <param name="IsEdge">Whether the closest feature joins faces (including a fillet or cylinder rim).</param>
+public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 Penetration, bool IsEdge = false);
 /// <summary>An analytic fixed-point static collider.</summary>
 /// <remarks>A sphere carries its radius in <see cref="Extent"/>.X, an axis-aligned box carries world-axis
 /// half-extents, an oriented box carries its own half-extents and the unit <see cref="Rotation"/> that turns its axes
 /// into world space. A cylinder carries radius in X/Z and half-height in Y, with the same local-to-world rotation.
+/// A rounded box carries inner half-extents in Extent and the spherical offset in Radius.
 /// A half-space carries its unit normal in <see cref="Extent"/> and one boundary point in <see cref="Center"/>.</remarks>
 /// <param name="Kind">The analytic shape kind.</param>
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
 /// <param name="Extent">The radius carrier, box half-extents, or half-space normal.</param>
 /// <param name="Rotation">The oriented box or cylinder's local-to-world rotation.</param>
-public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default) {
+/// <param name="Radius">The rounded box's offset radius; Extent carries its inner half-extents.</param>
+public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default) {
     // The point of a segment nearest to a point: the point less the one segment witness every segment query shares.
     private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) =>
         (point - FixedDynamicBodyContacts.ClosestDelta(
@@ -44,6 +49,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
+        if (volume.Kind == FixedBodyColliderKind.Capsule) {
+            var box = RoundedBox(center: Center, rotation: FixedQuaternion.Identity, innerHalfExtents: Extent, radius: FixedQ4816.Zero);
+
+            return FixedRoundedBoxContact.TryPush(box: in box, orientation: in orientation, position: position,
+                push: out push, skin: skin, volume: in volume);
+        }
         if (volume.Kind == FixedBodyColliderKind.Sphere) {
             return FixedSphereBoxContact.TryPush(
                 sphereCenter: (position + orientation.Rotate(vector: volume.Center)),
@@ -130,10 +141,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             return false;
         }
 
-        push = new FixedContactPush(
-            Normal: Rotation.Rotate(vector: localPush.Normal),
-            Penetration: localPush.Penetration
-        );
+        push = localPush with { Normal = Rotation.Rotate(vector: localPush.Normal) };
         return true;
     }
     private bool TryHalfSpacePush(
@@ -143,28 +151,8 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
-        var minimumProjection = volume.Kind switch {
-            FixedBodyColliderKind.Sphere => (FixedVector3.Dot(
-            left: (position + orientation.Rotate(vector: volume.Center)),
-            right: Extent
-        ) - volume.Radius),
-            FixedBodyColliderKind.Capsule => (FixedQ4816.Min(
-            x: FixedVector3.Dot(
-                left: (position + orientation.Rotate(vector: volume.Center)),
-                right: Extent
-            ),
-            y: FixedVector3.Dot(
-                left: (position + orientation.Rotate(vector: volume.Endpoint)),
-                right: Extent
-            )
-        ) - volume.Radius),
-            FixedBodyColliderKind.Box => FixedOrientedBox.FromVolume(
-            orientation: in orientation,
-            position: position,
-            volume: in volume
-        ).MinimumProjection(normal: Extent),
-            _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
-        };
+        var minimumProjection = FixedColliderBounds.MinimumProjection(position: position, orientation: in orientation,
+            volume: in volume, normal: Extent);
         var distance = (minimumProjection - FixedVector3.Dot(
             left: Center,
             right: Extent
@@ -251,6 +239,10 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             Extent: halfExtents,
             Kind: FixedStaticColliderKind.AxisAlignedBox
         );
+    /// <summary>Creates an oriented inner box offset by a sphere. Its outer face extents are innerHalfExtents + radius.</summary>
+    public static FixedStaticCollider RoundedBox(FixedVector3 center, FixedQuaternion rotation, FixedVector3 innerHalfExtents, FixedQ4816 radius) =>
+        new(Kind: FixedStaticColliderKind.RoundedBox, Center: center, Extent: innerHalfExtents,
+            Rotation: rotation.Normalize(), Radius: radius);
     /// <summary>Creates a static box turned by a rotation: an axis-aligned box when the rotation carries every box axis
     /// exactly onto a world axis, so an unturned or quarter-turned box keeps the world-axis fast path, and an oriented
     /// box otherwise.</summary>
@@ -336,6 +328,8 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) => Kind switch {
+        FixedStaticColliderKind.RoundedBox => FixedRoundedBoxContact.TryPush(box: in this, orientation: in orientation,
+            position: position, push: out push, skin: skin, volume: in volume),
         FixedStaticColliderKind.Cylinder => FixedCylinderContact.TryPush(cylinder: in this, orientation: in orientation,
             position: position, push: out push, skin: skin, volume: in volume),
         FixedStaticColliderKind.Sphere => TrySpherePush(
