@@ -91,10 +91,10 @@ were the limiting host work. A 300-step seeded fuzz pass was clean under the
 watchdog on the merged head, ending at (53.75, 0.03, -34.04), inside its bounds;
 its 373-tick delivery recording verified `MATCH`. A longer scope run filled the 4,096-line
 host log ring and evicted 1,547 old lines, while state history remained bounded
-at 128 samples. The separate gallery
-leg reached seven of eight goals, with one missed car-entry waypoint and one
-fall even after waiting for the car. This is a probe finding requiring diagnosis,
-not a confirmed lift-physics defect.
+at 128 samples. The gallery stairwell leg (`traversal start 17`, body 43 posed at
+(11.2, 0.05, 32.5)) reaches all eight goals with no falls, riding the lift car.
+Its first run missed the car entry and fell because the lift attached to the
+chess cursor instead of the car.
 
 ## The watchdog
 
