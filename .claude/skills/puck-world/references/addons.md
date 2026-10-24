@@ -253,7 +253,10 @@ localized to `MalformedPayload` or `PayloadTooLarge`, and an authority denial
 answers with its verdict cell. Starvation is not denial (a starved ordinal is
 retryable). Handle pairs validate at APPLICATION, never at decode. The
 `addon.mutate` refusal catalog declares 11 reasons and maps each to this wire
-vocabulary through `AddonMutateRefusals.ToVerdict`.
+vocabulary through `AddonMutateRefusals.ToVerdict`. An addon's applied
+mutation narrates on the console like any other but raises no toast and no
+`mutation.applied` cue (`WorldPostBuildWiring`'s echo tap), since a guest may
+write every few ticks; its refusals still toast.
 
 `AddonCapabilityMask` bits: `Drive = 1<<0`, `Observe = 1<<1`,
 `Control = 1<<2`, `Mutate = 1<<3`, `Edit = 1<<4`; any other bit in an Ask resolves

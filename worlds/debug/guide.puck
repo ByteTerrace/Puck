@@ -26,13 +26,13 @@ hud {
   panels [
     {
       id: "guide"
-      rect { x: 0.02, y: 0.02, width: 0.36, height: 0.09 }
+      rect { x: 0.02, y: 0.02, width: 0.56, height: 0.075 }
       layer: Over
       style: Panel
       visible { $type: "state", binding: "state.guide.title", comparison: NotEqual, text: "" }
       elements [
-        { id: "title", kind: Text, rect { x: 0.04, y: 0.05, width: 0.92, height: 0.45 }, style: Primary, "template": "{state.guide.title}" }
-        { id: "note", kind: Text, rect { x: 0.04, y: 0.5, width: 0.92, height: 0.45 }, style: Dim, "template": "{state.guide.note}" }
+        { id: "title", kind: Text, rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }, style: Primary, "template": "{state.guide.title}" }
+        { id: "note", kind: Text, rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }, style: Dim, "template": "{state.guide.note}" }
       ]
     }
   ]
