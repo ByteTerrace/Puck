@@ -1,6 +1,6 @@
 // The gallery hall's room lights and blinds (hall.puck), each scenario booted in the whole debug world:
-// `puck test worlds/debug/hall-tests.puck`. `hallLights` holds each level's state (Off 0, On 1) and `hallLamps` the
-// fixtures' luminous power, in lumens, that follows it; a level's switch stands on the west wall at z = 32.5, and a
+// `puck test worlds/debug/hall-tests.puck`. `hallLights` holds each level's state (Off 0, On 1), `hallLamps` the
+// fixtures' luminous power, in lumens, that follows it, and `hallBlinds` each level's blinds; a level's switch stands on the west wall at z = 32.5, and a
 // body posed at x = 11.1 on that level stands in its reach box. Enum members are written as their numbers: the rows
 // reach this file only through the debug world's import of hall.puck.
 
@@ -330,7 +330,7 @@ test "the context button at the lobby switch turns its lights on" {
   }
   expect {
     hallLights[level0] == 1
-    hallLamps[level0] == 3000
+    hallLamps[level0] == 5000
     hallLights[level1] == 1
   }
 }
@@ -386,29 +386,30 @@ test "writing a level's cell, as gallery.lights does, switches it" {
   }
   expect {
     hallLights[level0] == 1
-    hallLamps[level0] == 3000
+    hallLamps[level0] == 5000
     hallLights[level1] == 0
     hallLamps[stairs] == 0
   }
 }
 
-// The blinds follow the lights: a level's are down while its lights are off and up while they are on. Each scenario
-// poses body 0 at (27.5, 0.05, 14) in the lobby level's hall and body 8, a chess piece, out on the ground at
-// (27.5, 0.05, 6), so the line of sight between them runs through the south window at x = 26 to 29 and reads whether
-// that window's blind is down.
-test "the lobby's blinds are down and stop the sight line through a window" {
+// The blinds stand apart from the lights: `hallBlinds` holds each level's (Up 0, Down 1), and every level's start
+// down. Each scenario poses body 0 at (27.5, 0.05, 14) in the lobby level's hall and body 8, a chess piece, out on the
+// ground at (27.5, 0.05, 6), so the line of sight between them runs through the south window at x = 26 to 29 and reads
+// whether that window's blind is down.
+test "the lobby's blinds start down and stop the sight line through a window" {
   when {
     seat1: body.pose 27.5 0.05 14 0 0 0 0
     seat1: body.pose 27.5 0.05 6 0 0 0 8
     ticks 30
   }
   expect {
-    hallLights[level0] == 0
+    hallBlinds[level0] == 1
+    hallBlinds[level3] == 1
     los(body, 0, body, 8) == 0
   }
 }
 
-test "the lobby switch raises its blinds" {
+test "the lobby switch leaves its blinds down" {
   when {
     seat1: body.pose 11.1 0.05 32.5 90 0 0 0
     ticks 30
@@ -420,35 +421,36 @@ test "the lobby switch raises its blinds" {
   }
   expect {
     hallLights[level0] == 1
+    hallBlinds[level0] == 1
+    los(body, 0, body, 8) == 0
+  }
+}
+
+test "raising the lobby's blinds, as gallery.blinds does, opens the sight line" {
+  when {
+    seat1: body.pose 27.5 0.05 14 0 0 0 0
+    seat1: body.pose 27.5 0.05 6 0 0 0 8
+    seat1: world.state.cell.set hallBlinds level0 0
+    ticks 30
+  }
+  expect {
+    hallBlinds[level0] == 0
+    hallBlinds[level1] == 1
     los(body, 0, body, 8) == 1
   }
 }
 
-test "another level's lights leave the lobby's blinds as they stand" {
+test "lowering them again stops it" {
   when {
     seat1: body.pose 27.5 0.05 14 0 0 0 0
     seat1: body.pose 27.5 0.05 6 0 0 0 8
-    seat1: world.state.cell.set hallLights level0 1
-    seat1: world.state.cell.set hallLights level1 0
+    seat1: world.state.cell.set hallBlinds level0 0
+    ticks 30
+    seat1: world.state.cell.set hallBlinds level0 1
     ticks 30
   }
   expect {
-    hallLights[level1] == 0
-    los(body, 0, body, 8) == 1
-  }
-}
-
-test "switching the lobby off again lowers its blinds" {
-  when {
-    seat1: body.pose 27.5 0.05 14 0 0 0 0
-    seat1: body.pose 27.5 0.05 6 0 0 0 8
-    seat1: world.state.cell.set hallLights level0 1
-    ticks 30
-    seat1: world.state.cell.set hallLights level0 0
-    ticks 30
-  }
-  expect {
-    hallLights[level0] == 0
+    hallBlinds[level0] == 1
     los(body, 0, body, 8) == 0
   }
 }
