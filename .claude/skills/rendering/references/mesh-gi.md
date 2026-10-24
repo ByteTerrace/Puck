@@ -18,6 +18,13 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   glass or a diagnostic slice must not postpone its first measurement or a
   refresh. `world.wait bakes` still waits for all geometry; an initial
   `world.exposure` reading with `meter=none` is not a backend-parity result.
+- A cold bake with `world.wait bakes` still pending, `sdf.mesh-gi.scenes=0`,
+  and skipped `sdf.world$mask`/`sdf.world$bake` work can be stalled before GI.
+  The bake scheduler used to count saved pose rows against its sample-output
+  limit, permanently rejecting a large lattice; the input table now grows
+  independently. This fixes a tested scheduler boundary, not a confirmed cause
+  of the gallery stall: the final cold Direct3D run still had not settled after
+  six minutes. See [mesh baking](mesh-bake.md#groups-poses-and-materials).
 - A depth axis stores its first hit. Averaging it with rays that escape beside
   a blocker, or choosing the farther distance, erases that blocker.
 - At the volume boundary, clamp the lookup to the boundary probes, then test

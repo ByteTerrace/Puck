@@ -84,6 +84,16 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 
 ## Groups, poses and materials
 
+The dispatch's fixed `MeshBakeMaxSamples` budget counts sampled values, not
+the saved pose rows appended to its input point table. That table grows through
+its existing `GpuRegion`, retires the old buffers and refreshes World bindings.
+Charging poses against the sample limit can strand the first pending lattice
+forever: a nearly cubic lattice plus a sparse pose span no longer fits, so the
+scheduler takes no work and every group behind it waits. Cold bakes expose this;
+warm meshes bypass it. Keep the sampled-output bound while allowing the input
+table to carry all the batch's poses. The posed-cube and growing-input-table
+laws exercise that boundary.
+
 - **Edge weathering reads the baked normal field.** `sdfMeshSurfaceNormal`
   supplies the visibility record's curvature through `sdfMeshMeanCurvature`:
   half the surface divergence of interpolated unit normals in world units.

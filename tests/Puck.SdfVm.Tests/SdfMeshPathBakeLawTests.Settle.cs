@@ -13,6 +13,31 @@ public sealed partial class SdfMeshPathBakeLawTests {
     private static readonly Vector3 OwnHalf = new(value: 0.2f);
     private static readonly Vector3 MemberHalf = new(value: 0.1f);
 
+    [Fact]
+    public void ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget() {
+        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "posed-cube" };
+        var frame = SettleFrame(groups: 1, memberGap: 100000, offset: 0f, program: SettleProgram(groups: 1, memberGap: 100000, scale: 4f), time: 0f);
+        var index = 0L;
+        var full = false;
+
+        TestLiveness.Until(reason: bake.Describe, step: () => {
+            _ = bake.Dress(frame: frame);
+            if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+                if (batch.TableEntries > SdfWorldPackage.MeshBakeMaxSamples) {
+                    Assert.True(condition: (batch.TableEntries > batch.Samples));
+                    var points = new Vector4[batch.TableEntries];
+                    Assert.True(condition: batch.WritePoints(table: points));
+                    full = true;
+                }
+                bake.Record(batch: batch);
+                bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: false, memberGap: 100000, scale: 4f));
+            }
+            return !bake.Pending;
+        });
+        Assert.True(condition: full);
+        Assert.Single(collection: bake.Dress(frame: frame).MeshDraws);
+    }
+
     // A group whose member slides away bakes again only once the slide stops: a member still moving, however far from
     // its baked pose, queues nothing, and once it holds still for the settle window the group bakes at the pose snapped
     // to the settle steps while its skinned mesh keeps drawing. Another bake sharing the library takes that geometry's
@@ -113,31 +138,36 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: 9L, actual: settles.Read(kind: SdfMeshSettle.Queued));
     }
 
-    // Groups of a box on slot 2g+1 and a smaller box on slot 2g+2, smooth-free: each a dynamic instance on its own slot.
-    private static SdfProgram SettleProgram(int groups) {
+    // Groups of a box on slot 2g+1 and a smaller box memberGap slots later, smooth-free: each a dynamic instance on its own slot.
+    private static SdfProgram SettleProgram(int groups, float scale = 1f, int memberGap = 1) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
         for (var group = 0; (group < groups); group++) {
             var slot = ((2 * group) + 1);
 
-            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: 1f)
-                .ResetPoint().TransformDynamic(slot: slot).Box(halfExtents: OwnHalf, material: material, round: 0f)
-                .ResetPoint().TransformDynamic(slot: (slot + 1)).Box(halfExtents: MemberHalf, material: material, round: 0f)
-                .EndInstance();
+            _ = builder.BeginInstanceDynamic(slot: slot, boundOffset: Vector3.Zero, boundRadius: scale)
+                .ResetPoint().TransformDynamic(slot: slot).Box(halfExtents: (OwnHalf * scale), material: material, round: 0f)
+                .ResetPoint().TransformDynamic(slot: (slot + memberGap)).Box(halfExtents: (MemberHalf * scale), material: material, round: 0f);
+            if (memberGap > 1) {
+                // An enclosed detail records a second member pose without changing the union's surface.
+                _ = builder.ResetPoint().TransformDynamic(slot: (slot + 1)).Sphere(radius: 0.01f, material: material);
+            }
+            _ = builder.EndInstance();
         }
 
         return builder.Build();
     }
     // A frame with each group's own slot 3 m along X from the last and its member `offset` along X from it.
-    private static SdfFrame SettleFrame(SdfProgram program, int groups, float offset, float time) {
-        var transforms = new DynamicTransform[((2 * groups) + 1)];
+    private static SdfFrame SettleFrame(SdfProgram program, int groups, float offset, float time, int memberGap = 1) {
+        var transforms = new DynamicTransform[((2 * groups) + memberGap)];
 
         for (var group = 0; (group < groups); group++) {
             var origin = new Vector3(x: (3f * group), y: 0f, z: 0f);
 
             transforms[((2 * group) + 1)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: origin);
-            transforms[((2 * group) + 2)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (origin + new Vector3(x: offset, y: 0f, z: 0f)));
+            if (memberGap > 1) { transforms[((2 * group) + 2)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: origin); }
+            transforms[((2 * group) + 1 + memberGap)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (origin + new Vector3(x: offset, y: 0f, z: 0f)));
         }
 
         return new SdfFrame(Program: program, ProgramChanged: false, Time: time, Views: []) { DynamicTransforms = transforms, FarDistance = 100f };
@@ -159,7 +189,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         index = next;
     }
     // The bake kernel's answer over a group's two boxes, the member's at the pose the batch carries for its slot.
-    private static byte[] AnswerPosed(SdfMeshBakeBatch batch, bool empty) {
+    private static byte[] AnswerPosed(SdfMeshBakeBatch batch, bool empty, float scale = 1f, int memberGap = 1) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
         var sample = 0;
         ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
@@ -168,10 +198,10 @@ public sealed partial class SdfMeshPathBakeLawTests {
             var request = batch.Lattices[lattice];
 
             var (first, rows) = batch.Poses[lattice];
-            var member = ((request.Selector + 1) - first);
+            var member = ((request.Selector + memberGap) - first);
             var shapes = new Shape[] {
-                new(Center: Vector3.Zero, Half: OwnHalf, Rotation: Quaternion.Identity, Material: 0),
-                new(Center: new Vector3(x: rows.Span[(1 + (3 * member))].X, y: rows.Span[(1 + (3 * member))].Y, z: rows.Span[(1 + (3 * member))].Z), Half: MemberHalf, Rotation: Quaternion.Identity, Material: 0),
+                new(Center: Vector3.Zero, Half: (OwnHalf * scale), Rotation: Quaternion.Identity, Material: 0),
+                new(Center: new Vector3(x: rows.Span[(1 + (3 * member))].X, y: rows.Span[(1 + (3 * member))].Y, z: rows.Span[(1 + (3 * member))].Z), Half: (MemberHalf * scale), Rotation: Quaternion.Identity, Material: 0),
             };
             var spacing = (0.015625f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
 
