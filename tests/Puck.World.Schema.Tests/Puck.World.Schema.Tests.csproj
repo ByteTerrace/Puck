@@ -21,12 +21,16 @@
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
         <Compile Include="../Shared/World/PortalFixtures.cs" Link="World/PortalFixtures.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Server.cs" Link="World/VocabularyHooks.Server.cs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="JsonSchema.Net" Version="[9.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />
+        <!-- Shipped addon grants narrow mutation verbs through the protocol's real catalog, installed by the
+             shared server vocabulary fixture without loading the client. -->
+        <ProjectReference Include="../../src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <!-- The shipped worlds are read as the game resolves them: a document with a .puck source is that source,
              compiled and composed through the transpiler's document composer. -->
         <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
