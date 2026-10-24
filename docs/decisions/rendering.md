@@ -139,6 +139,36 @@ switches each for comparison and prints each lever's longest interval between
 updates at each tier against the tier's period. Measured on the debug world
 ([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
 
+## A diagnostic view never covers its evidence
+
+A debug view that flags a suspect value never draws over the pixels it flags
+(the owner's ruling). Flagged pixels stay identical to `world.debug-view off`:
+diagnostic views keep temporal resolve, sky, glass, fog and exposure, and their
+marks are composed after resolve or in the 2D overlay, never into temporal
+history or lighting.
+
+The untouched frame is the default. Marks sit outside the evidence:
+- a pin per cause, beside the item, at most 16 on screen;
+- contours outside a flagged region, with an untouched gap;
+- for physics, the contradicting geometry drawn in the empty space around the
+  drawn surface (a collider's corners, a support caliper).
+
+Muting the unflagged context is an optional mode, because dimming changes the
+perceived brightness that exposure and lighting checks depend on.
+
+A red flag is a named contract violated on matching state, with a witness
+outside an error budget built from the system's own precision. Amber is a
+suspicion and is off by default. Unknown means not evaluated, so an incomplete
+scan never reads as clean. There are no allowlists or recorded baselines: a
+misfiring check is made precise, or the data is fixed.
+
+Every view has a console companion, `world.debug-view report`, which runs with
+the view off and headless. Each finding carries its identity, the predicate and
+its witness, coverage, lifetime and provenance back to the `.puck` source. Pins
+are addressable by `world.view.pick` and `goto`, which moves only the camera.
+A capture with a view on saves the untouched frame, the annotated frame and the
+report from one frame.
+
 ## Lights, screens and the camera are photometric
 
 **Every light, screen and emissive surface is authored in real units, and the
