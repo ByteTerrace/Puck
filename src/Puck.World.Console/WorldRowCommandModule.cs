@@ -740,7 +740,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     );
     private static string DescribeMotion(WorldMotion motion) => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###}{DescribeMaxPitch(turn: motion.Turn)} upTurn=({motion.UpTurn.Field:0.###}/{motion.UpTurn.Contact:0.###}) obstruction=({motion.Obstruction.Displacement:0.###}/{motion.Obstruction.IdleThreshold:0.###}/{motion.Obstruction.GraceSeconds:0.###}) groundStick={motion.GroundStick:0.###} stepHeight={motion.StepHeight:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
+        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###}{DescribeMaxPitch(turn: motion.Turn)} upTurn=({motion.UpTurn.Field:0.###}/{motion.UpTurn.Contact:0.###}) obstruction=({motion.Obstruction.Displacement:0.###}/{motion.Obstruction.IdleThreshold:0.###}/{motion.Obstruction.GraceSeconds:0.###}) groundSnap={motion.GroundSnap:0.###} stepHeight={motion.StepHeight:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
     );
     // The generic "omitted" read-back for an optional authored scalar — none is a document fact worth showing
     // plainly, distinct from DescribeConvergence's own "instant" (an absent RATE, never an absent scalar).

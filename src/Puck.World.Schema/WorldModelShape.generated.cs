@@ -4054,7 +4054,7 @@ public static partial class WorldModelShape {
                 M("holds", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldHold>), typeof(global::Puck.World.WorldMotion), "Holds", Read | Write, static value => ((global::Puck.World.WorldMotion)value).Holds),
                 M("upTurn", typeof(global::Puck.World.WorldUpTurnRates), typeof(global::Puck.World.WorldMotion), "UpTurnRaw", Read | Write, static value => ((global::Puck.World.WorldMotion)value).UpTurnRaw),
                 M("obstruction", typeof(global::Puck.World.WorldObstructionLatch), typeof(global::Puck.World.WorldMotion), "ObstructionRaw", Read | Write, static value => ((global::Puck.World.WorldMotion)value).ObstructionRaw),
-                M("groundStick", typeof(global::System.Single), typeof(global::Puck.World.WorldMotion), "GroundStick", Read | Write, static value => ((global::Puck.World.WorldMotion)value).GroundStick),
+                M("groundSnap", typeof(global::System.Single), typeof(global::Puck.World.WorldMotion), "GroundSnap", Read | Write, static value => ((global::Puck.World.WorldMotion)value).GroundSnap),
                 M("stepHeight", typeof(global::System.Single), typeof(global::Puck.World.WorldMotion), "StepHeight", Read | Write, static value => ((global::Puck.World.WorldMotion)value).StepHeight),
             ],
             []),

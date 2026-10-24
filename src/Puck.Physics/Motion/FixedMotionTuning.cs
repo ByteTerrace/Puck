@@ -146,7 +146,7 @@ public readonly record struct FixedMotionTuning(
     bool FacingSnap,
     FixedUpTurnRates UpTurn,
     FixedObstructionLatch Obstruction,
-    FixedQ4816 GroundStick,
+    FixedQ4816 GroundSnap,
     FixedQ4816 StepHeight
 ) {
     /// <summary>Gets a value indicating whether any shaping row names a second-order follower — whether the body's

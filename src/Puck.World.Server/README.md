@@ -910,14 +910,10 @@ silently pitch the body. A live collision rebuild installs the new policy
 beside the new provider; the adoption rule is authoritative on the next step,
 and a defined new ambient direction reseats the held axis then.
 
-A grounded body's inward catch-up bias against a curving surface
-(`WorldMotion.GroundStick`, `groundStick`) is its own `motion` row field,
-independent of `Speed`, never derived from a kit's resolved move speed:
-deriving it from speed regresses slope climbing under `GradientDerivedUp`,
-because a faster kit's larger inward bias converts to downhill drift under
-depenetration rather than held contact — a shipped world would need to author
-`GradientDerivedUp` to exercise the regression at all, and none does.
-`world.kits` echoes it alongside the other feel fields.
+A grounded walker projects velocity onto its support and follows downward surfaces
+within `motion.groundSnap` (0.3 m by default, scaled with the body). Jump and
+launch operations release support. `FixedStepUp.TrySnap` supplies the same bounded
+landing probe as step-up; there is no inward-speed bias.
 
 A grounded walker steps up a riser no taller than its kit's
 `WorldMotion.StepHeight` (`stepHeight`, scaled with the body, zero by
@@ -937,15 +933,11 @@ previous refresh's attached colliders and each attached row's resolved origin
 at its last two refreshes; right after `RefreshAttached`,
 `WorldPopulation.AdvanceSimulated` asks it, for every active grounded
 locomotion body (seats included, rigid and carried bodies excluded), whether
-the bottom of the body's bounds lay within two contact skins above an
-axis-aligned attached box of the previous refresh, overlapping it
-horizontally, and moves the body by that row's displacement
-(`WorldBody.RideAttachedSupport`) before any body advances. A rising platform
-lifts what stands on it without a push, and a falling one keeps it grounded
-instead of dropping it a tick at a time. Only translation rides: a platform
-that turns does not turn its rider. The debug world's gallery lift
-(`worlds/debug/hall.puck`) is the live case, and `AttachedPlatformRideLawTests`
-holds a rider grounded through a climb and a descent.
+the previous geometry supplies a walkable narrowphase contact. The carrier's
+translation and yaw move the rider's foot point before its own step. This works
+for yawed boxes and cylinders as well as axis-aligned boxes. The rider's attitude
+remains owned by its motion program. `AttachedPlatformRideLawTests` covers rise
+and descent on both axis-aligned and yawed support.
 
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position

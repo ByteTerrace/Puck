@@ -43,6 +43,48 @@ public static class FixedStepUp {
 
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
+    /// <summary>Finds the first walkable support below a position within a caller-supplied snap distance.
+    /// Uses the same sweep and bounded landing search as a step up; an unsuccessful search changes nothing.</summary>
+    /// <typeparam name="TStep">The caller's contact sweep.</typeparam>
+    /// <param name="step">The contact sweep.</param>
+    /// <param name="start">The position to lower from.</param>
+    /// <param name="velocity">The velocity to project onto the support.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <param name="distance">The greatest permitted descent.</param>
+    /// <param name="result">The accepted landing.</param>
+    /// <returns>Whether the search found proven walkable support.</returns>
+    public static bool TrySnap<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 velocity,
+        in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result)
+        where TStep : IFixedContactStep, allows ref struct {
+        result = default;
+        if ((distance <= FixedQ4816.Zero) || !Meets(above: in start, descent: distance, step: ref step,
+            up: in up, velocity: in velocity)) {
+            return false;
+        }
+        var clear = FixedQ4816.Zero;
+        var meet = distance;
+
+        for (var probe = 0; (probe < LandingProbes); probe++) {
+            var middle = ((clear + meet) / Two);
+
+            if (Meets(above: in start, descent: middle, step: ref step, up: in up, velocity: in velocity)) {
+                meet = middle;
+            } else {
+                clear = middle;
+            }
+        }
+        var landed = (start - (up * meet));
+        var moved = velocity;
+        var landing = step.Sweep(position: ref landed, previousPosition: in start, velocity: ref moved);
+
+        if ((landing.Refusal != ContactRefusal.None) || landing.Unproved || !landing.Grounded) {
+            return false;
+        }
+        result = new FixedStepUpResult(Position: landed,
+            Velocity: moved.RejectFrom(unitAxis: landing.GroundNormal), Resolution: landing);
+        return true;
+    }
+
     // Whether lowering the body by descent from above meets anything: the sweep stops, or the endpoint solve pushes.
     private static bool Meets<TStep>(ref TStep step, in FixedVector3 above, in FixedVector3 up, FixedQ4816 descent, in FixedVector3 velocity)
         where TStep : IFixedContactStep, allows ref struct {
@@ -133,32 +175,14 @@ public static class FixedStepUp {
 
         // Lower onto the support: bisect for the shallowest descent that meets it, down to where the original step
         // would have ended along up. Nothing met in that range leaves the body in the air, which is not a step.
-        var clear = FixedQ4816.Zero;
-        var meet = (lift - vertical);
-
-        if (
-            (meet <= FixedQ4816.Zero) ||
-            !Meets(above: in across, descent: meet, step: ref step, up: in up, velocity: in moved)
-        ) {
+        if (!TrySnap(distance: (lift - vertical), result: out var landingResult, start: in across, step: ref step,
+            up: in up, velocity: in moved)) {
             return false;
         }
+        var landed = landingResult.Position;
+        var landing = landingResult.Resolution;
 
-        for (var probe = 0; (probe < LandingProbes); probe++) {
-            var middle = ((clear + meet) / Two);
-
-            if (Meets(above: in across, descent: middle, step: ref step, up: in up, velocity: in moved)) {
-                meet = middle;
-            } else {
-                clear = middle;
-            }
-        }
-
-        var landed = (across - (up * meet));
-        var landing = step.Sweep(
-            position: ref landed,
-            previousPosition: in across,
-            velocity: ref moved
-        );
+        moved = landingResult.Velocity;
         var rise = FixedVector3.Dot(
             left: (landed - start),
             right: up
