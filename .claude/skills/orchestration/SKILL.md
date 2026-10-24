@@ -97,8 +97,28 @@ integration branch. "What the merge touched" includes what consumes it:
 - a change to a world document runs every `worlds/debug/*-tests.puck` with `--reproduce`, plus the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`);
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
 
-Never hold a finished lane for others to make a batch; a
-lane that cannot land alone is a dependency to name in the brief. A wait for a
+### Coding lanes and the integration lane
+
+Heavy verification runs in one place, one job at a time; this is the owner's
+direction, after concurrent whole-solution builds exhausted the machine's memory.
+- **Coding lanes** build only the projects they touch, with `-m:2`, and run only
+  their focused tests. They run no whole-solution build, no full suite and no
+  GPU leg, and they hand back a branch that builds and passes those tests. Many
+  run at once.
+- **The integration lane** is one long-running lane. It takes finished branches
+  in the order the lead names, merges each onto its own staging branch, and
+  resolves generated-file conflicts by running their generators. Then it runs
+  the landing bar above once on the merged result: the whole-solution build, the
+  suites, the debug-world scenarios and any granted GPU check. It reports green
+  or red per branch.
+- **The lead** fast-forwards the integration branch to each green staging head,
+  routes a red result back to the lane that owns it, and decides any merge
+  conflict that needs judgement.
+
+When several branches wait, the integration lane may verify them in one merged
+build, and splits the batch to find the culprit if it goes red. A finished
+branch is never held back for others to arrive. A lane that cannot land alone
+is a dependency to name in the brief. A wait for a
 review or a review slot never holds a lane that meets the landing bar, since a
 review is optional
 ([`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review)). Gates,
