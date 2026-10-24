@@ -3,7 +3,10 @@ schema: "puck.cartridge.v1"
 target: "cgb"
 title: "MACHINE TEST"
 gameCode: "MDBG"
-palettes { background [[32767, 22197, 10570, 0]], object [[0, 22197, 10570, 32767]] }
+palettes {
+  background [[32767, 22197, 10570, 0]]
+  object [[0, 22197, 10570, 32767]]
+}
 tiles [{ name: "blank", pixels ["00000000", "00000000", "00000000", "00000000", "00000000", "00000000", "00000000", "00000000"] }]
 map: map(range(0, 1024), i => 0)
 arrays []
@@ -17,7 +20,13 @@ scrollY: "0"
 variables [{ name: "buttons", initial: 0 }]
 rule "buttons" {
   buttons = 0
-  if key(a, held) { buttons += 1 }
-  if key(right, held) { buttons += 2 }
-  if key(start, held) { buttons += 4 }
+  if key(a, held) {
+    buttons += 1
+  }
+  if key(right, held) {
+    buttons += 2
+  }
+  if key(start, held) {
+    buttons += 4
+  }
 }
