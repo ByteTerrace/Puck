@@ -266,6 +266,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.indirect.apply.intensity` | State | Binding | Binding | `WorldRenderIndirectApply.Intensity` |
 | `render.indirect.apply.tint` | State | Binding | Binding | `WorldRenderIndirectApply.Tint` |
 | `render.indirect.apply.contact` | State | Binding | Binding | `WorldRenderIndirectApply.Contact` |
+| `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
