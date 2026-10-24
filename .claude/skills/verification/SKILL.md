@@ -171,6 +171,10 @@ time. A World run with effective `host.presentation: none` uses no GPU.
   exclude its PID before concluding another job is running, and never skip or
   postpone a granted leg on that match alone.
 - Stop only the processes you started, by the PIDs you recorded.
+- A sandboxed process inventory can omit machine-wide jobs, including a lease
+  holder visible outside that sandbox. An empty `Get-Process` result there
+  does not prove a holder exited; inspect it with machine-wide visibility
+  before diagnosing stale metadata. Let `puck lease` own recovery.
 
 ## Flake or failure
 
