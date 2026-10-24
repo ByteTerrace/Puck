@@ -61,6 +61,252 @@ test "the wall call button brings the car to its landing" {
   }
 }
 
+// The lift's input panel. A landing's CALL button stands at x 17.05; the car's six buttons stand on its back wall, floors
+// 0 to 3 then door open and door close from the viewer's left (+X) to right, one cell of the body's x each: the cell
+// centres are 16.69, 16.37, 16.06, 15.74, 15.42 and 15.11. The car stops at level k at liftAt 72k, waits four seconds
+// (120 ticks) with its doors open and then serves its pending stops, in its direction of travel first.
+test "a landing call lights its button until the car arrives" {
+  when {
+    seat1: body.pose 17.05 9.05 35.2 180 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+  }
+  expect {
+    liftHall[level2] == 1
+    liftDir == 1
+    liftArrow == 1
+    liftAt > 0
+    liftDoors[car] == 0
+  }
+}
+
+test "the car serves a landing call, clears its light and shows the level" {
+  when {
+    seat1: body.pose 17.05 9.05 35.2 180 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 190
+  }
+  expect {
+    liftAt == 144
+    liftHall[level2] == 0
+    liftDoors[level2] == 1
+    liftDoors[car] == 1
+    liftFloor == 2
+    liftArrow == 1
+  }
+}
+
+test "a car with nothing left to serve loses its direction once its dwell is over" {
+  when {
+    seat1: body.pose 17.05 9.05 35.2 180 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 340
+  }
+  expect {
+    liftAt == 144
+    liftDir == 0
+    liftArrow == 0
+    liftDoors[level2] == 1
+  }
+}
+
+test "a floor button in the car lights while its floor is pending and the car carries the Moth there" {
+  when {
+    seat1: body.pose 16.06 0.05 38.8 0 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+  }
+  expect {
+    liftCarCall[level2] == 1
+    liftAt > 0
+  }
+}
+
+test "the Moth rides to the floor she chose" {
+  when {
+    seat1: body.pose 16.06 0.05 38.8 0 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 190
+  }
+  expect {
+    liftAt == 144
+    liftCarCall[level2] == 0
+    liftLevel == 2
+    bodyPosition(body, 0, y) > 9
+    bodyPosition(body, 0, y) < 9.15
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "door close shuts the doors and door open reopens them" {
+  when {
+    seat1: body.pose 15.11 0.05 38.8 0 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+  }
+  expect {
+    liftDoors[car] == 0
+    liftDoors[level0] == 0
+    liftAt == 0
+    liftLamp[close] == 1
+  }
+}
+
+test "door open after door close brings the doors back and the lamp goes out" {
+  when {
+    seat1: body.pose 15.11 0.05 38.8 0 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+    seat1: body.pose 15.42 0.05 38.8 0 0 0 0
+    ticks 10
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+  }
+  expect {
+    liftDoors[car] == 1
+    liftDoors[level0] == 1
+    liftLamp[open] == 0
+    liftLamp[close] == 0
+  }
+}
+
+test "door close sends the car off before its dwell is over" {
+  when {
+    seat1: body.pose 15.11 0.05 38.8 0 0 0 0
+    ticks 30
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 90
+    seat1: world.state.cell.set liftCall $value 3
+    seat1: body.press interact 1 0.2 0
+    ticks 20
+  }
+  expect {
+    liftAt > 72
+    liftDoors[car] == 0
+  }
+}
+
+test "door open holds the car at a floor past its dwell" {
+  when {
+    seat1: body.pose 15.42 0.05 38.8 0 0 0 0
+    ticks 30
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 130
+    seat1: world.state.cell.set liftCall $value 3
+    seat1: body.press interact 1 0.2 0
+    ticks 100
+  }
+  expect {
+    liftAt == 72
+    liftDoors[car] == 1
+    liftHall[level3] == 1
+  }
+}
+
+test "a stop ahead of the car is taken on the way up" {
+  when {
+    seat1: world.state.cell.set liftCall $value 3
+    ticks 20
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 90
+  }
+  expect {
+    liftAt == 72
+    liftDoors[level1] == 1
+    liftHall[level1] == 0
+    liftHall[level3] == 1
+  }
+}
+
+test "the car goes on to the higher call once it has served the lower one" {
+  when {
+    seat1: world.state.cell.set liftCall $value 3
+    ticks 20
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 330
+  }
+  expect {
+    liftAt == 216
+    liftLevel == 3
+    liftHall[level3] == 0
+    liftDoors[level3] == 1
+  }
+}
+
+test "the car serves its direction first and then turns round" {
+  when {
+    seat1: world.state.cell.set liftCall $value 2
+    ticks 10
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 40
+    seat1: world.state.cell.set liftCall $value 0
+    ticks 30
+  }
+  expect {
+    liftAt == 72
+    liftHall[level2] == 1
+    liftHall[level0] == 1
+    liftHall[level1] == 0
+  }
+}
+
+test "after the upper call it comes back down for the one behind it" {
+  when {
+    seat1: world.state.cell.set liftCall $value 2
+    ticks 10
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 40
+    seat1: world.state.cell.set liftCall $value 0
+    ticks 220
+  }
+  expect {
+    liftAt == 144
+    liftDoors[level2] == 1
+    liftHall[level0] == 1
+    liftDir == 1
+  }
+}
+
+test "then it turns round and ends at the lowest level" {
+  when {
+    seat1: world.state.cell.set liftCall $value 2
+    ticks 10
+    seat1: world.state.cell.set liftCall $value 1
+    ticks 40
+    seat1: world.state.cell.set liftCall $value 0
+    ticks 700
+  }
+  expect {
+    liftAt == 0
+    liftLevel == 0
+    liftHall[level0] == 0
+    liftHall[level1] == 0
+    liftHall[level2] == 0
+    liftDoors[level0] == 1
+    liftDir == 0
+  }
+}
+
+test "a call at the level the car is standing at only reopens and holds its doors" {
+  when {
+    seat1: world.state.cell.set liftCall $value 0
+    ticks 60
+  }
+  expect {
+    liftAt == 0
+    liftHall[level0] == 0
+    liftDoors[car] == 1
+    liftDoors[level0] == 1
+  }
+}
+
 test "the lobby starts dark and the levels above lit" {
   when {
     ticks 30

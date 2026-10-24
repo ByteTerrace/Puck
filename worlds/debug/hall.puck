@@ -54,6 +54,44 @@ let hallPaletteDark = [
 // Off (the placement's `respond` facet), and its lit one otherwise.
 let hallLooks = [{ suffix: "", palette: hallPalette }, { suffix: "-dark", palette: hallPaletteDark }]
 
+// The lift's panels and displays: a brushed steel plate (a scratch pattern over a darker steel, the nearest the palette
+// has to a grain), charcoal legends, chrome bezels, black display glass and an amber glow that is always lit. A button's
+// face is the one slot after them, unlit or lit; the two variants of a button share their geometry, so lighting one
+// bakes nothing.
+let liftSteel = 0
+let liftInk = 1
+let liftChrome = 2
+let liftGlass = 3
+let liftGlow = 4
+let liftFace = 5
+let liftBase = [
+  { color: "#B9BDC2", roughness: 0.42, metal: 0.9, weathering { lines: 0.7, floor: 1, scale: 40, under [{ threshold: 0.3, surface { color: "#8C9197", roughness: 0.55, metal: 0.9 } }] } }
+  { color: "#23262B", roughness: 0.6, specular: 0.15 }
+  { color: "#DADDE0", roughness: 0.2, metal: 1 }
+  { color: "#0A0C0F", roughness: 0.15, specular: 0.4 }
+  { color: "#FFB24A", roughness: 0.5, emissive: 900nit }
+]
+let liftFaces = [
+  { color: "#C9C5BA", roughness: 0.45, specular: 0.1 }
+  { color: "#FFC46B", roughness: 0.4, emissive: 700nit }
+]
+
+// A round button standing on its plate: a chrome bezel and a face of the lit or unlit slot, on the +Z side of the origin.
+template liftButtonFace() {
+  shape Cylinder "bezel" {
+    material: liftChrome
+    position [0, 0, 0.012]
+    rotation [0.707107, 0, 0, 0.707107]
+    scale [0.12, 0.012, 0.12]
+  }
+  shape Cylinder "face" {
+    material: liftFace
+    position [0, 0, 0.02]
+    rotation [0.707107, 0, 0, 0.707107]
+    scale [0.095, 0.012, 0.095]
+  }
+}
+
 // The window bands: below level 0's sills, between each level's window heads and the next level's sills, and the
 // parapet above level 3's heads. Windows run from 0.9 m to 3.3 m over each floor.
 let upperBands = [[3.3, 5.4], [7.8, 9.9], [12.3, 14.4], [16.8, parapet]]
@@ -100,17 +138,35 @@ template hallStrips(top, aisles) {
 // placements. The car moves only by the rules below: `liftAt` is its height in
 // sixteenths of a metre, `liftTarget` where it is going, and every tick `lift-ride` poses the car at cell `liftAt` of
 // the `liftShaft` box topology, a column of 1/16 m layers, so the car climbs exactly 1/16 m a tick (1.875 m/s at 30 Hz)
-// and stops exactly at each floor (level k is cell 72k). A call (`liftCall`, written by a button or `gallery.lift`) names
-// a level. The car's body root rides 2.25 m over its floor, clear of the platform and ceiling it carries, so its own
-// collider never meets its own platform.
+// and stops exactly at each floor (level k is cell 72k). The car's body root rides 2.25 m over its floor, clear of the
+// platform and ceiling it carries, so its own collider never meets its own platform.
+//
+// The input panel works as a real lift does, all of it state and rules. A call at a landing (its CALL button) lights in
+// `liftHall[levelK]`, a floor button in the car in `liftCarCall[levelK]`, and a button's placement shows its lit variant
+// while its cell is 1; a call stays pending until the car stops there. A stopped car waits out `liftClock[dwell]`
+// (four seconds after its doors open) and then serves its pending stops in its direction of travel (`liftDir`, 1 up,
+// -1 down, 0 idle), nearest first, and only then turns round; a stop that lies ahead of a moving car, nearer than its
+// target, is taken on the way. The car's door-open button (`liftOpenReq`) opens or holds the doors and starts the dwell
+// afresh, its door-close button (`liftCloseReq`) closes them and ends the dwell. `liftFloor` (the level the car is at or
+// last passed) and `liftArrow` (0 none, 1 up, 2 down) pick the variants of each level display. `liftCall` stays a
+// mailbox for `gallery.lift` and the traversal addon: a level written to it becomes a landing call.
 let liftBody = (galleryPopulation - 2)
 let liftRoot = 2.25
 let liftCells = 72
 let liftX = 15.9
 let liftZ = 38.05
-// Button reach boxes: one on each landing, four along the car's back wall. The context button calls a level.
+// Button reach boxes. One on each landing: the context button there calls the car. Six side by side along the car's
+// back wall: floors 0 to 3, door open and door close from the viewer's left to right (the viewer faces +Z, so left is
+// +X). The Moth's body can stand between x 14.97 and 16.83 in the cab, so the six cells split 14.95 .. 16.85 evenly
+// and the outer two reach to the walls; each cell's button is drawn at its centre.
 let liftPads = map(range(0, 4), k => { level: k, x0: 16.6, x1: 17.4, z0: 34.8, z1: 36, y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
-let carPads = map(range(0, 4), k => { level: k, x0: (14.55 + (0.7 * k)), x1: (15.15 + (0.7 * k)), z0: 38.9, z1: 39.55 })
+let carPadHi = 16.85
+let carPadPitch = (1.9 / 6)
+let carKeys = ["0", "1", "2", "3", "open", "close"]
+let carPads = map(range(0, 6), j => { slot: j, key: carKeys[j], x: (carPadHi - (carPadPitch * (j + 0.5))), x0: ((j == 5) ? 14.6 : (carPadHi - (carPadPitch * (j + 1)))), x1: ((j == 0) ? 17.2 : (carPadHi - (carPadPitch * j))), z0: 38.5, z1: 39.6 })
+// The panel's back wall: its plate stands 1.25 m over the car's floor, 5 cm proud of the back wall's inner face.
+let carPanelY = 1.25
+let carPanelZ = (liftZ + 1.395)
 
 // The room lights. `hallLights` holds each level's state, Off or On: level 0 (the lobby, where the gaming devices'
 // screens light the room) starts Off and the levels above On. Off swaps the slab or roof above that level for its dark
@@ -395,7 +451,7 @@ prototypes {
     document {
       name: "lift-car"
       schema: "puck.creation.v1"
-      palette: hallPalette
+      palette: concat(hallPalette, [liftBase[liftSteel]])
       shape Box "back" {
         material: hallWall
         position [0, 1.3, -1.5]
@@ -421,14 +477,13 @@ prototypes {
         position [0, 2.53, 0]
         scale [0.5, 0.02, 0.5]
       }
-      for pad in carPads {
-        shape Box $"pad-{pad.level}" {
-          material: hallBoard
-          position [(liftX - ((pad.x0 + pad.x1) / 2)), 1.2, -1.42]
-          scale [0.22, 0.22, 0.04]
-        }
+      // The operating panel's brushed plate, on the back wall under the level display; its six buttons are the
+      // placements `lift-car-btn-*`, set in front of it.
+      shape Box "panel" {
+        material: 5
+        position [0, carPanelY, (liftZ - carPanelZ - 0.025)]
+        scale [1, 0.2, 0.025]
       }
-      textRuns: map(carPads, pad => { text: $"{pad.level}", position [(liftX - ((pad.x0 + pad.x1) / 2)), 1.2, -1.375], rotation [0, 0, 0, 1], emHeight: 0.2, depth: 0.006, mode: "emboss", material: hallTrim, align: "center" })
     }
   }
 
@@ -449,37 +504,102 @@ prototypes {
       }
     }
   }
-  for k in range(0, 4) {
-    prototype $"lift-indicator-{k}" {
+  // A level display: black glass in a chrome bezel showing the level in a lit amber digit, and beside it, in a placement
+  // of its own, an arrow while the car has a direction. Every landing and the car share both.
+  for level in range(0, 4) {
+    prototype $"lift-display-{level}" {
       document {
-        name: $"lift-indicator-{k}"
+        name: $"lift-display-{level}"
         schema: "puck.creation.v1"
-        palette: hallPalette
-        shape Box "plate" {
-          material: hallBoard
-          position [0, 0, 0]
-          scale [0.45, 0.2, 0.04]
+        palette: liftBase
+        shape Box "bezel" {
+          material: liftChrome
+          position [0, 0, 0.015]
+          scale [0.29, 0.17, 0.015]
+        }
+        shape Box "glass" {
+          material: liftGlass
+          position [0, 0, 0.03]
+          scale [0.26, 0.14, 0.01]
         }
         textRuns [
-          { text: $"LEVEL {k}", position [0, 0, 0.045], rotation [0, 0, 0, 1], emHeight: 0.12, depth: 0.004, mode: "emboss", material: hallTrim, align: "center" }
+          { text: $"{level}", position [-0.06, -0.075, 0.04], rotation [0, 0, 0, 1], emHeight: 0.21, depth: 0.004, mode: "emboss", material: liftGlow, align: "center" }
         ]
       }
     }
   }
-
-  prototype "lift-call" {
-    document {
-      name: "lift-call"
-      schema: "puck.creation.v1"
-      palette: hallPalette
-      shape Box "plate" {
-        material: hallBoard
-        position [0, 0, 0]
-        scale [0.2, 0.25, 0.06]
+  for arrow in [1, 2] {
+    prototype $"lift-arrow-{arrow}" {
+      document {
+        name: $"lift-arrow-{arrow}"
+        schema: "puck.creation.v1"
+        palette: liftBase
+        shape Prism "arrow" {
+          material: liftGlow
+          taper: 0
+          position [0, 0, 0.04]
+          rotation: ((arrow == 1) ? [0, 0, 0, 1] : [0, 0, 1, 0])
+          scale [0.065, 0.065, 0.005]
+        }
       }
-      textRuns [
-        { text: "CALL", position [0, 0, 0.065], rotation [0, 0, 0, 1], emHeight: 0.11, depth: 0.004, mode: "emboss", material: hallTrim, align: "center" }
-      ]
+    }
+  }
+
+  // The car panel's buttons and the landings' call plate, each unlit (0) or lit (1): a chrome bezel round a face. The
+  // door buttons draw their arrows away from the bar (open) or at it (close).
+  for lit in [0, 1] {
+    for j in range(0, 4) {
+      prototype $"lift-btn-{j}-{lit}" {
+        document {
+          name: $"lift-btn-{j}-{lit}"
+          schema: "puck.creation.v1"
+          palette: concat(liftBase, [liftFaces[lit]])
+          liftButtonFace()
+          textRuns [
+            { text: $"{j}", position [0, -0.045, 0.033], rotation [0, 0, 0, 1], emHeight: 0.13, depth: 0.004, mode: "emboss", material: liftInk, align: "center" }
+          ]
+        }
+      }
+    }
+    for glyph in [{ key: "open", dir: 1 }, { key: "close", dir: -1 }] {
+      prototype $"lift-btn-{glyph.key}-{lit}" {
+        document {
+          name: $"lift-btn-{glyph.key}-{lit}"
+          schema: "puck.creation.v1"
+          palette: concat(liftBase, [liftFaces[lit]])
+          liftButtonFace()
+          shape Box "bar" {
+            material: liftInk
+            position [0, 0, 0.034]
+            scale [0.007, 0.05, 0.004]
+          }
+          for side in [-1, 1] {
+            shape Prism $"arrow-{side}" {
+              material: liftInk
+              taper: 0
+              position [(side * 0.047), 0, 0.034]
+              rotation: (((side * glyph.dir) == 1) ? [0, 0, -0.707107, 0.707107] : [0, 0, 0.707107, 0.707107])
+              scale [0.032, 0.036, 0.004]
+            }
+          }
+        }
+      }
+    }
+    prototype $"lift-call-{lit}" {
+      document {
+        name: $"lift-call-{lit}"
+        schema: "puck.creation.v1"
+        palette: concat(liftBase, [liftFaces[lit]])
+        shape Box "plate" {
+          material: liftSteel
+          position [0, 0, 0.02]
+          scale [0.14, 0.22, 0.02]
+        }
+        liftButtonFace()
+        textRuns [
+          { text: "CALL", position [0, -0.17, 0.042], rotation [0, 0, 0, 1], emHeight: 0.055, depth: 0.003, mode: "emboss", material: liftInk, align: "center" }
+        ]
+      }
     }
   }
 
@@ -627,19 +747,59 @@ placements {
     ]
   }
   placement "lift-car-indicator" {
-    prototype: "lift-indicator-0"
-    position [liftX, 2.1, (liftZ + 1.4)]
+    prototype: "lift-display-0"
+    position [liftX, 1.85, carPanelZ]
     attach {
       bodyIndex: liftBody
-      localOffset [0, (2.1 - liftRoot), 1.4]
+      localOffset [0, (1.85 - liftRoot), (carPanelZ - liftZ)]
     }
-    respond: map(range(1, 3), k => { "when": state(state: liftLevel, comparison: Equal, value: k), prototypeId: $"lift-indicator-{k}" })
+    respond: map(range(1, 3), v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" })
+  }
+  placement "lift-car-arrow" {
+    prototype: "lift-hidden"
+    position [(liftX - 0.13), 1.85, carPanelZ]
+    attach {
+      bodyIndex: liftBody
+      localOffset [-0.13, (1.85 - liftRoot), (carPanelZ - liftZ)]
+    }
+    respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrow-{v}" })
+  }
+  // The panel's buttons, left to right: floors 0 to 3, door open, door close. A floor button lights while its car call
+  // is pending, a door button for a moment after its press.
+  for pad in filter(carPads, p => p.slot < 4) {
+    placement $"lift-car-btn-{pad.slot}" {
+      prototype: $"lift-btn-{pad.key}-0"
+      position [pad.x, carPanelY, carPanelZ]
+      attach {
+        bodyIndex: liftBody
+        localOffset [(pad.x - liftX), (carPanelY - liftRoot), (carPanelZ - liftZ)]
+      }
+      respond [
+        { "when": state(state: liftCarCall, key: $"level{pad.slot}", comparison: Equal, value: 1), prototypeId: $"lift-btn-{pad.key}-1" }
+      ]
+    }
+  }
+  for pad in filter(carPads, p => p.slot >= 4) {
+    placement $"lift-car-btn-{pad.slot}" {
+      prototype: $"lift-btn-{pad.key}-0"
+      position [pad.x, carPanelY, carPanelZ]
+      attach {
+        bodyIndex: liftBody
+        localOffset [(pad.x - liftX), (carPanelY - liftRoot), (carPanelZ - liftZ)]
+      }
+      respond [
+        { "when": state(state: liftLamp, key: pad.key, comparison: Equal, value: 1), prototypeId: $"lift-btn-{pad.key}-1" }
+      ]
+    }
   }
 
   for level in galleryLevels {
     placement $"lift-call-{level.level}" {
-      prototype: "lift-call"
-      position [(liftX + 1.15), (galleryFloor[level.level] + 1.2), 36.01]
+      prototype: "lift-call-0"
+      position [(liftX + 1.15), (galleryFloor[level.level] + 1.2), 36.1]
+      respond [
+        { "when": state(state: liftHall, key: $"level{level.level}", comparison: Equal, value: 1), prototypeId: "lift-call-1" }
+      ]
     }
     placement $"lift-door-{level.level}" {
       prototype: "lift-door-0"
@@ -650,9 +810,14 @@ placements {
       ]
     }
     placement $"lift-indicator-{level.level}" {
-      prototype: "lift-indicator-0"
-      position [(liftX + 1.15), (galleryFloor[level.level] + 1.9), 35.98]
-      respond: map(range(1, 3), k => { "when": state(state: liftLevel, comparison: Equal, value: k), prototypeId: $"lift-indicator-{k}" })
+      prototype: "lift-display-0"
+      position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), 36.1]
+      respond: map(range(1, 3), v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" })
+    }
+    placement $"lift-arrow-{level.level}" {
+      prototype: "lift-hidden"
+      position [(liftX + 1.02), (galleryFloor[level.level] + 1.8), 36.1]
+      respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrow-{v}" })
     }
     placement $"lift-landing-{level.level}" {
       prototype: $"lift-landing-{level.level}"
@@ -766,9 +931,36 @@ state {
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
     slot liftTarget = 0 bounds(0..(3 * liftCells))
-    // The level a button or gallery.lift last called, until lift-call turns it into a target; -1 while none is pending.
+    // The mailbox gallery.lift and the traversal addon write a level to; -1 while empty.
     slot liftCall = -1 bounds(-1..3)
     slot liftLevel = 0 bounds(0..3)
+    slot liftDir = 0 bounds(-1..1)
+    slot liftFloor = 0 bounds(0..3)
+    slot liftArrow = 0 bounds(0..2)
+    slot liftOpenReq = 0 bounds(0..1)
+    slot liftCloseReq = 0 bounds(0..1)
+    // The landing calls and the car's floor calls pending, by level.
+    table liftHall {
+      level0 = 0
+      level1 = 0
+      level2 = 0
+      level3 = 0
+    }
+    table liftCarCall {
+      level0 = 0
+      level1 = 0
+      level2 = 0
+      level3 = 0
+    }
+    // The door buttons' lamps, and the ticks the dwell and the lamps are due to end.
+    table liftLamp {
+      open = 0
+      close = 0
+    }
+    table liftClock {
+      dwell = 0
+      pulse = 0
+    }
     table liftDoors {
       car = 1
       level0 = 1
@@ -801,11 +993,154 @@ state {
   }
 }
 
-rule "lift-call" {
-  when liftCall >= 0
+// The lift's rules run in this order, each seeing the effects of the ones above it in the same tick: calls arrive,
+// a stopped car serves its floor, opens or shuts its doors, then picks its next stop, then moves.
+
+// A level written to the mailbox becomes a landing call.
+for k in range(0, 4) {
+  rule $"lift-mailbox-{k}" {
+    when liftCall == k
+    mode: Level
+    liftHall[$"level{k}"] = 1
+    liftCall = -1
+  }
+}
+
+// The context button on a landing's CALL plate calls the car there; only seat 1's body (the Moth) presses.
+for pad in liftPads {
+  rule $"lift-pad-{pad.level}" {
+    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > pad.y0 and bodyPosition(body, 0, y) < pad.y1
+    mode: Edge
+    liftHall[$"level{pad.level}"] = 1
+  }
+}
+
+// The same press in the car, at the button the body stands before: only a body on the car's floor counts.
+for pad in filter(carPads, p => p.slot < 4) {
+  rule $"lift-car-pad-{pad.slot}" {
+    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+    mode: Edge
+    liftCarCall[$"level{pad.slot}"] = 1
+  }
+}
+for pad in filter(carPads, p => p.slot == 4) {
+  rule "lift-car-pad-open" {
+    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+    mode: Edge
+    liftLamp[open] = 1
+    schedule liftClock[pulse] in 0.4s
+    liftOpenReq = 1
+  }
+}
+for pad in filter(carPads, p => p.slot == 5) {
+  rule "lift-car-pad-close" {
+    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+    mode: Edge
+    liftLamp[close] = 1
+    schedule liftClock[pulse] in 0.4s
+    liftCloseReq = 1
+  }
+}
+
+// A stopped car at a level with a call pending there serves it: the call clears and the doors are asked to open.
+for k in range(0, 4) {
+  rule $"lift-serve-{k}" {
+    when liftAt == (k * liftCells) and liftTarget == liftAt and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0
+    mode: Level
+    liftHall[$"level{k}"] = 0
+    liftCarCall[$"level{k}"] = 0
+    liftOpenReq = 1
+  }
+}
+
+// Opening the doors, or holding them, starts the dwell afresh.
+for k in range(0, 4) {
+  rule $"lift-open-{k}" {
+    when liftAt == (k * liftCells) and liftTarget == liftAt and liftOpenReq == 1
+    mode: Level
+    liftLevel = k
+    liftDoors[car] = 1
+    liftDoors[$"level{k}"] = 1
+    schedule liftClock[dwell] in 4s
+    liftOpenReq = 0
+  }
+}
+rule "lift-open-moving" {
+  when liftOpenReq == 1 and liftTarget != liftAt
   mode: Level
-  liftTarget = liftCall * liftCells
-  liftCall = -1
+  liftOpenReq = 0
+}
+
+// Closing the doors ends the dwell; a moving car's doors are shut already.
+rule "lift-shut" {
+  when liftCloseReq == 1 and liftTarget == liftAt
+  mode: Level
+  liftDoors[car] = 0
+  for k in range(0, 4) {
+    liftDoors[$"level{k}"] = 0
+  }
+  liftClock[dwell] = $tick
+  liftCloseReq = 0
+}
+rule "lift-shut-moving" {
+  when liftCloseReq == 1 and liftTarget != liftAt
+  mode: Level
+  liftCloseReq = 0
+}
+
+// A stopped car whose dwell is over picks its next stop. Going up (or idle) it takes the nearest pending level above
+// and then, if none, the nearest below, turning round; going down it does the reverse.
+template liftPick(f, k, dir, lo, hi) {
+  rule $"lift-pick-{lo}-{dir}-{f}-{k}" {
+    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock[dwell] and liftOpenReq == 0 and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0 and liftDir >= lo and liftDir <= hi
+    mode: Level
+    liftDir = dir
+    liftTarget = k * liftCells
+  }
+}
+// Direction up or idle (liftDir 0 to 1): up first, then down. Direction down: down first, then up.
+for f in range(0, 4) {
+  for k in range(f + 1, 3 - f) {
+    liftPick(f: f, k: k, dir: 1, lo: 0, hi: 1)
+  }
+}
+for f in range(0, 4) {
+  for k in map(range(0, f), i => (f - 1) - i) {
+    liftPick(f: f, k: k, dir: -1, lo: 0, hi: 1)
+  }
+}
+for f in range(0, 4) {
+  for k in map(range(0, f), i => (f - 1) - i) {
+    liftPick(f: f, k: k, dir: -1, lo: -1, hi: -1)
+  }
+}
+for f in range(0, 4) {
+  for k in range(f + 1, 3 - f) {
+    liftPick(f: f, k: k, dir: 1, lo: -1, hi: -1)
+  }
+}
+
+// A stopped car with its dwell over and nothing to serve has no direction.
+rule "lift-idle" {
+  when liftTarget == liftAt and $tick >= liftClock[dwell] and liftOpenReq == 0 and liftDir != 0
+  mode: Level
+  liftDir = 0
+}
+
+// A stop lying ahead of a moving car, nearer than its target, is taken on the way.
+for k in range(0, 4) {
+  rule $"lift-stop-up-{k}" {
+    when liftTarget > liftAt and liftAt < (k * liftCells) and (k * liftCells) < liftTarget and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0
+    mode: Level
+    liftTarget = k * liftCells
+  }
+}
+for k in map(range(0, 4), i => 3 - i) {
+  rule $"lift-stop-down-{k}" {
+    when liftTarget < liftAt and liftAt > (k * liftCells) and (k * liftCells) > liftTarget and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0
+    mode: Level
+    liftTarget = k * liftCells
+  }
 }
 
 rule "lift-rise" {
@@ -826,6 +1161,7 @@ rule "lift-ride" {
   poseCell(key: `placement:lift-car`, topology: liftShaft, expression: liftAt, offset: [0, liftRoot, 0], glide: true)
 }
 
+// Departure closes the car and every landing before the car moves.
 rule "lift-close" {
   when liftTarget != liftAt
   mode: Level
@@ -834,33 +1170,36 @@ rule "lift-close" {
     liftDoors[$"level{k}"] = 0
   }
 }
-for k in range(0, 4) {
-  rule $"lift-open-{k}" {
-    when liftAt == (k * liftCells) and liftTarget == liftAt
-    mode: Level
-    liftLevel = k
-    liftDoors[car] = 1
-    liftDoors[$"level{k}"] = 1
-  }
+
+// The door buttons' lamps go out after a moment.
+rule "lift-lamps-out" {
+  when $tick >= liftClock[pulse] and liftLamp[open] + liftLamp[close] > 0
+  mode: Level
+  liftLamp[open] = 0
+  liftLamp[close] = 0
 }
 
-// The context button acts on a plate in reach; car buttons only read bodies at the car's current height.
-for pad in liftPads {
-  rule $"lift-pad-{pad.level}" {
-    when channel(1, interact) >= 1 and bodyPosition(each, x) > pad.x0 and bodyPosition(each, x) < pad.x1 and bodyPosition(each, z) > pad.z0 and bodyPosition(each, z) < pad.z1 and bodyPosition(each, y) > pad.y0 and bodyPosition(each, y) < pad.y1
-    mode: Edge
-    forEach: $bodies
-    liftCall = pad.level
-  }
+// The displays show the level the car is at or last passed (going down, the level it has not yet reached below), and
+// an arrow for its direction.
+rule "lift-floor-down" {
+  when liftDir < 0
+  mode: Level
+  liftFloor = ((liftAt + liftCells) - 1) / liftCells
 }
-
-for pad in carPads {
-  rule $"lift-car-pad-{pad.level}" {
-    when channel(1, interact) >= 1 and bodyPosition(each, x) > pad.x0 and bodyPosition(each, x) < pad.x1 and bodyPosition(each, z) > pad.z0 and bodyPosition(each, z) < pad.z1 and bodyPosition(each, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(each, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
-    mode: Edge
-    forEach: $bodies
-    liftCall = pad.level
-  }
+rule "lift-floor" {
+  when liftDir >= 0
+  mode: Level
+  liftFloor = liftAt / liftCells
+}
+rule "lift-arrow" {
+  when liftDir >= 0
+  mode: Level
+  liftArrow = liftDir
+}
+rule "lift-arrow-down" {
+  when liftDir < 0
+  mode: Level
+  liftArrow = 2
 }
 
 // A press of the context button inside a switch's reach box flips that level's lights; the reach box stands before the

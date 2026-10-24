@@ -117,8 +117,8 @@ stairwell, which is open between floors.
 |---|---|
 | Enter | `debug.go gallery`, then walk +Z through the door |
 | Change level on foot | The stairs at the lobby's north-west corner: walk +Z up the first flight, step east on the half landing, walk -Z up the second |
-| Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button, or `gallery.lift <level>` |
-| Ride the lift | Stand in the car; approach a numbered button on its back wall and press the context button, or `gallery.lift <level>` |
+| Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
+| Ride the lift | Stand in the car facing its back wall, where the brushed panel has a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |
 | Switch a level's lights, and with them its blinds | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit, facing it | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`); `gallery.go` alone returns to the entrance |
@@ -131,7 +131,7 @@ stairwell, which is open between floors.
 The lift car is a population body (`lift-car`, body 41, below the companion) carrying the attached
 solid platform, cab shell and car doors. The shell encloses the car with side
 and back walls and a lit ceiling. Rules move
-it: `liftCall` names the level a button or command called, `liftTarget` and
+it: `liftTarget` and
 `liftAt` count sixteenths of a metre, and `lift-ride` glides the car to cell
 `liftAt` of the `liftShaft` topology every tick (`poseCell(…, glide: true)`, a
 continuous move a client interpolates rather than a teleport), so it climbs
@@ -141,13 +141,29 @@ down through the analytic provider's attached-box support path
 ride and grounding on arrival. `liftDoors` closes the car and all landing
 doors before travel starts, then opens the car and only the landing at its
 destination. Each door has two leaves that retract behind the jambs; both
-variants collide as drawn. `liftLevel` records the last level reached and
-drives the display inside the car and beside each landing's call button.
+variants collide as drawn. `liftLevel` records the last level reached.
 `galleryPopulation` sets the debug world's capacity; the car's attachment
 index is two below it, keeping the car between the companion and chess cursor.
-The buttons are unlit wall plates; there are no emissive floor pads. Ceiling
-strips stop outside the enclosed shaft, and the cab's ceiling hides the slabs
-above it.
+Ceiling strips stop outside the enclosed shaft, and the cab's ceiling hides the
+slabs above it.
+
+The input panel is state and rules (the block comment above the rules in
+`hall.puck` has the order). A landing's CALL button writes `liftHall[levelK]`
+and a car floor button `liftCarCall[levelK]`; each button's placement shows its
+lit prototype while its cell is 1, and the cell clears when the car stops
+there. A stopped car waits out its dwell (four seconds after its doors open,
+`liftClock[dwell]`), then serves pending levels in its direction of travel
+(`liftDir`), nearest first, and turns round only when none is left that way; a
+pending level that lies ahead of a moving car and nearer than its target is
+taken on the way. Door open (`liftOpenReq`) opens or holds the doors and
+restarts the dwell, door close (`liftCloseReq`) shuts them and ends it, and
+each lights its lamp (`liftLamp`) for 0.4 s. `liftFloor` and `liftArrow` drive
+the level displays. A level written to `liftCall`, as `gallery.lift` and the
+traversal addon do, becomes a landing call. The buttons read the Moth's body
+against a reach box before each plate, since a rule reads no facing: six cells
+of the body's x across the car's back wall, and one box on each landing.
+`hall-tests.puck` checks the calls, the ride, the queue order and the door
+buttons.
 
 Section boards hang on two rods from the ceiling above each row's first
 exhibit, with their text facing the landing along -X. Their lower edge is
