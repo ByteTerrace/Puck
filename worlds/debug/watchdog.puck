@@ -1,0 +1,66 @@
+// The watchdog: a development tool for agents, a WebAssembly addon (addons/watchdog.wat) that checks the debug world's
+// invariants every tick and records each violation, with the tick it happened on, in the `watchdog` and `watchdogLog`
+// state rows. A body more than 1 m under the floor, an orientation off unit length, two chess pieces overlapping and the
+// Moth overlapping the companion each count once as they start. `world.state` reads the rows, and a small HUD panel
+// shows the count and the last violation while there is one. addons.md beside this file says how to find a transient
+// and replay to its tick.
+
+// Every body the population holds: the eight seats, the 32 chess pieces, the board cursor, the lift car and the
+// companion (debug.puck's `bodies`).
+let watchedBodies = range(0, 43)
+
+// `watchdog` counts the violations and holds the ticks of the last and the first (-1 before any); `watchdogLog` holds
+// the first and the last as lines such as "t=812 below-floor body=0 y=-1.25".
+state {
+  world {
+    table watchdog {
+      count = 0
+      tick = -1
+      first = -1
+    }
+    table watchdogLog {
+      first = ""
+      last = ""
+    }
+  }
+}
+
+hud {
+  panels [
+    {
+      id: "watchdog"
+      rect { x: 0.66, y: 0.02, width: 0.32, height: 0.05 }
+      layer: Over
+      style: Chip
+      visible { $type: "state", binding: "state.watchdog.count", comparison: NotEqual, value: 0 }
+      elements [
+        { id: "line", kind: Text, rect { x: 0.03, y: 0, width: 0.94, height: 1 }, style: Danger, "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}" }
+      ]
+    }
+  ]
+}
+
+addon "watchdog" {
+  modulePath: "addons/watchdog.wat"
+  hash: "auto"
+  fuel: 0
+  enabled: true
+  requests: concat(
+    [
+      { capability: Mutate, subject: "section:State" }
+      { capability: Edit, subject: "state:watchdog" }
+      { capability: Edit, subject: "state:watchdogLog" }
+    ],
+    map(watchedBodies, body => { capability: Observe, subject: $"body:{body}" })
+  )
+}
+
+// One pose query a tick over each body, its collision begins, and a whole-row write a tick to each of its own rows.
+grants: concat(
+  [
+    { grantee: "addon:watchdog", capability: Mutate, subject: "section:State", kindMask: "UpsertStateRow", budget: 2 }
+    { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdog" }
+    { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdogLog" }
+  ],
+  map(watchedBodies, body => { grantee: "addon:watchdog", capability: Observe, subject: $"body:{body}", budget: 1, eventBudget: 8 })
+)

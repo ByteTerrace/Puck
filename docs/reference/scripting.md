@@ -47,7 +47,9 @@ native-runtime-bearing NuGet dependency; the verified path is framework-dependen
 
 **This reference is the single home of the addon ABI contract.** The guest-side workspace
 ([`wasm/README.md`](../../wasm/README.md)) covers authoring a module in Rust and links here for the
-wire; it does not restate any of the tables below.
+wire; it does not restate any of the tables below. A guest can also be written by hand as WebAssembly text against
+these tables: the debug world's three addons ([worlds/debug/addons.md](../../worlds/debug/addons.md)) are, and need no
+toolchain beyond the engine.
 
 ## Key features
 
@@ -278,7 +280,7 @@ pairing rules:
 | Kind | `VerbTablePtr` | `VerbCount` | Notes |
 |---|---|---|---|
 | `Input` | the guest's declared **channel-name table** | rows in that table, `≤ MaxChannelNames` (64) | Each row is a `u8` length (`1..=MaxChannelNameBytes`) followed by that many UTF-8 bytes, packed with NO padding—entries are variable-length, unlike every other fixed-stride region in this ABI. |
-| `Request` | must be `0` | `1` today | The vocabulary is a closed numeric set owned by the ABI; decode-valid `Act` verbs are `[0, VerbCount)`. |
+| `Request` | must be `0` | `1` to `RequestVerbs.Count` | The vocabulary is a closed numeric set owned by the ABI; decode-valid `Act` verbs are `[0, VerbCount)`. |
 | `Response` | must be `0` | must be `0` | Host-written only; the guest never emits on it. |
 
 The `Input` channel's verb table is decoded by `AddonChannelNameTableReader` against the injected
@@ -375,6 +377,10 @@ the input channel: `(ordinal 0 << 2) | Started` is zero.
 | 7 | `NoSuchSubject` | Denied—the named subject does not exist. |
 | 8 | `QuotaExhausted` | Denied—a host-enforced budget refused this record. The dimension is deliberately unspecified: one value, one guest reaction—back off. |
 | 9 | `StaleHandle` | Denied—the handle's generation no longer matches. Distinct from `NoHold` on purpose: withdrawn and never-granted are different states. |
+| 10 | `Applied` | A `SubmitMutation` applied: the mutation composed, revalidated and swapped into the live document. |
+| 11 | `MalformedPayload` | A `SubmitMutation` payload that is out of guest memory or does not decode as its kind. |
+| 12 | `PayloadTooLarge` | A `SubmitMutation` payload past `MaxMutationPayloadBytes`, refused before a byte is read. |
+| 13 | `Rejected` | A `SubmitMutation` the document pipeline refused at apply (an unknown reference, a capacity ceiling). |
 
 The allowed predicate is pinned: **`1..=3` allowed, everything else not** (`AddonVerdicts.IsAllowed`,
 generated beside the values in both languages). The set grows as data—a new denial reason is not a
@@ -537,6 +543,16 @@ tick they were written in, so a verdict reflects the grant table as of that poin
 | Verb | Name | Fields |
 |---|---|---|
 | 0 | `GrantedBody` | `HandleIndex`/`HandleGeneration` = a minted handle; `A` = the capability mask (exactly one bit); `B` = the body index |
+| 1, 2 | `EventRegionEnter`, `EventRegionExit` | `A` = the body index; `B` = the region's position among the guest's own `Observe/region:<name>` requests, in manifest order |
+| 3, 4 | `EventSeatJoin`, `EventSeatLeave` | `A` = the seat index |
+| 5, 6 | `EventCollisionBegin`, `EventCollisionEnd` | `A`, `B` = the two body indices, ascending |
+| 7, 8 | `EventRouteEngaged`, `EventRouteDisengaged` | `A` = the source body; `B` = the screen index, or `-(body + 1)` for a body target |
+| 9 | `EventMachineMemoryChanged` | `A` = `(screen << 32) \| address`; `B` = the new value |
+| 10 | `EventGap` | `A` = the mount's lifetime count of dropped events |
+| 11, 12 | `EventLinkEstablished`, `EventLinkDropped` | `A` = the `adjacencies` row's ordinal; `B` = the staleness in ticks on a drop |
+
+Verbs 1 to 12 are world events, delivered only through an `Observe` grant that carries an event budget; they mint no
+handle. `AddonAbi.ObservationVerbs` is the authoritative list.
 
 The host writes one `GrantedBody` cell per `(capability, body)` the addon's principal holds, in
 projection order, in the first batch after mount and in the first batch after any grant change that
@@ -613,7 +629,8 @@ written `sha256/` followed by 64 lowercase hexadecimal digits. Equal short hashe
 or substitute compiled modules. Eviction
 removes the cache's reference, without disposing a module still referenced by a live guest.
 The authoring compiler's `hash: "auto"` requires the module file to exist: it pins those bytes and
-refuses a missing module rather than hashing its pathname.
+refuses a missing module rather than hashing its pathname. A WebAssembly text module is pinned by its text, the bytes
+the loader checks, and its exports and imports are checked when it mounts rather than at compile time.
 
 A leading `\0asm` identifies binary wasm; otherwise `Module.ConvertText` converts WAT to binary.
 The binary also has a 16 MiB ceiling. Before native compilation, `WasmModuleDeclarations` reads

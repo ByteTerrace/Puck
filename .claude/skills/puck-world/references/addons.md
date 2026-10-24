@@ -36,7 +36,7 @@ doors.
 - Receipts and replay
 - Verbs
 - World events
-- The shipped example
+- The shipped examples
 - Puck.Scripting in one paragraph
 
 ## The row, mounting, and the prepare/commit transaction
@@ -58,6 +58,15 @@ of a reload. It is NOT promised monotonic (undo and a whole-document load
 legitimately move it backward — configuration undo, not time travel: the
 pre-undo guest's memory is not part of the document and is never restored);
 an author driving it forward is expected to increment with checked overflow.
+
+**A guest may be WebAssembly text.** A `.wat` module is source: commit it and
+no compiled `.wasm` beside it (the debug world's guests are
+`worlds/debug/addons/*.wat`). `hash: "auto"` pins the module's source bytes at
+compile time, the bytes the loader checks before converting them, so editing
+the text moves the pin; the compile-time contract check reads binaries only,
+and a text guest's exports and imports are checked when it mounts. A guest's
+grants are authored rows like any other: each imported module may author its
+own, since grant rows compose by their `(grantee, capability, subject)` triple.
 
 **The doors are `world.row.set addons <row-json>` / `world.row.remove addons
 <name>`** — the ordinary document-mutation pipeline (`WorldMutation.UpsertAddon`/
@@ -244,7 +253,10 @@ localized to `MalformedPayload` or `PayloadTooLarge`, and an authority denial
 answers with its verdict cell. Starvation is not denial (a starved ordinal is
 retryable). Handle pairs validate at APPLICATION, never at decode. The
 `addon.mutate` refusal catalog declares 11 reasons and maps each to this wire
-vocabulary through `AddonMutateRefusals.ToVerdict`.
+vocabulary through `AddonMutateRefusals.ToVerdict`. An addon's applied
+mutation narrates on the console like any other but raises no toast and no
+`mutation.applied` cue (`WorldPostBuildWiring`'s echo tap), since a guest may
+write every few ticks; its refusals still toast.
 
 `AddonCapabilityMask` bits: `Drive = 1<<0`, `Observe = 1<<1`,
 `Control = 1<<2`, `Mutate = 1<<3`, `Edit = 1<<4`; any other bit in an Ask resolves
@@ -281,6 +293,14 @@ is captured and re-executed on replay through the ordinary tape-covered
 mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
 no separate lifecycle leaf left to reason about arming against.
 
+No checkpoint holds a guest's memory, so a recording in a world with mounted
+addons starts from the boot image: `replay.record` before the world's first
+step (the first line of the World's stdin; an MCP attachment arrives after
+that step), or it refuses as
+`StartNotCheckpointable`. `replay.drive` then works in the same session: its
+boot-image reset prepares every guest fresh, so the guests re-run from their
+modules' initial state and reproduce the recording tick for tick.
+
 ## Verbs
 
 - `world.row.set addons <row-json>` / `world.row.remove addons <name>` — the
@@ -312,7 +332,9 @@ The host delivers world events as host-written `Observation` cells (verbs
 the ABI pin never bumps). Five families are WORLD-scoped, collected once per
 tick by `src/Puck.World.Server/WorldEventFeed.cs` after the population settles: seat
 join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
-a named sphere, addressed by the carrying placement's own `Id`), collision
+a named sphere, addressed by the carrying placement's own `Id`; the cell's `B`
+is the region's position among the guest's own `Observe/region:` requests, in
+manifest order, so a guest's table of regions follows its row), collision
 pairs (a flat proximity test — NOT the physical contact resolver, which has
 no body-vs-body form here), control-application engaged/disengaged, and
 federation link established/dropped.
@@ -341,8 +363,9 @@ family — `Observe/body:<n>` (collision + route), `Observe/region:<name>`
 the authored `adjacencies` row's own name, Region's federation-seam twin) —
 legitimate for UNTRUSTED principals only (no trusted
 principal reads Observation cells). `WorldGrant.EventBudget` is a SIBLING of
-`Budget` on the same row. Its numeric value is a nonzero admission gate, not
-a consumed meter; it is REQUIRED (with `events:<n>` on `world.grant`) for
+`Budget` on the same row: the edges a tick may deliver for that subject, each
+delivered edge charging the first qualifying row; it is REQUIRED (with
+`events:<n>` on `world.grant`) for
 `screen:`/`region:`/`seat:`/`adjacency:` subjects — which still ALSO need the
 pre-existing `budget:<n>` untrusted-Observe requirement, since that door
 does not know a subject carries no query verb — and OPTIONAL on `body:<n>`.
@@ -354,9 +377,8 @@ order; once the ring runs out, the rest of that tick's qualifying edges
 drop and a per-mount saturating `EventGapCount` increments. An `EventGap`
 cell (verb 10) reports the count at most once per batch, only when it moved
 since the last report and room remains; otherwise the current count is
-reported by the next batch with room. No numeric per-subject throttle exists beyond the
-ring — `EventBudget`'s value is an admission gate (nonzero), not a rate
-limiter of its own.
+reported by the next batch with room. An edge whose every qualifying row has
+spent its `EventBudget` this tick drops into the same gap count.
 
 Four of the five families are never taped — they re-derive from sim state
 during replay. The link family is the exception: whether a neighbour
@@ -369,7 +391,17 @@ replay reproduces WHEN a seam went dark and never what the neighbour showed.
 `GrantSubjectKind.Region`/`Seat` and `WorldGrant.EventBudget` through the
 shared grant leaf.
 
-## The shipped example
+## The shipped examples
+
+The debug world mounts three WebAssembly-text guests, each in its own module
+([worlds/debug/addons.md](../../../../worlds/debug/addons.md)): the watchdog
+(`watchdog.puck`), which checks invariants every tick and records violations
+in state rows; the gallery guide (`guide.puck`), which names the exhibit the
+Moth stands at through region events; and the companion (`companion.puck`),
+which follows her through Drive and pose queries. They are the worked
+examples of a hand-written guest: the cell layouts, a Section ask, pose
+queries, region and collision events, and `SubmitMutation` of whole state
+rows, with no toolchain beyond the engine.
 
 `wasm/puck-addon-default/dist/puck-addon-default.wasm` (source under
 `wasm/puck-addon-default/`) — no world mounts it; it is committed beside its

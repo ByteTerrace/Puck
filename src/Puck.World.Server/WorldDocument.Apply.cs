@@ -9,6 +9,11 @@ public sealed partial class WorldDocument {
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
 
+    /// <summary>Gets or sets whether the next rebuild prepares every addon guest fresh rather than reusing the guests
+    /// of unchanged rows, so their memory starts from the module's initial state. The next rebuild consumes it,
+    /// applied or refused; a replay drive sets it before resetting the live world to its tape's boot image.</summary>
+    internal bool ReinstantiateAddonsOnNextRebuild { get; set; }
+
     // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
     // State slices; overwritten by the next snapshot, like the entry array itself.
     private long[] m_snapshotState = [];
@@ -618,12 +623,19 @@ public sealed partial class WorldDocument {
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
         // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
-        // disposes an uncommitted plan.
+        // disposes an uncommitted plan. A replay drive's boot-image reset asks for fresh guests, a request this rebuild
+        // consumes whichever way it ends.
+        var freshAddons = ReinstantiateAddonsOnNextRebuild;
+
+        ReinstantiateAddonsOnNextRebuild = false;
+
         try {
             if (Host.Addons is { } addonsForRebuild) {
                 if (!addonsForRebuild.TryPrepare(
                     candidate: candidate,
-                    current: m_definition,
+                    current: (freshAddons
+                    ? null
+                    : m_definition),
                     plan: out rebuildAddonPlan,
                     reason: out var rebuildAddonReason
                 )) {

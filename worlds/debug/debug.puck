@@ -23,6 +23,7 @@ import "controls"
 import "pad"
 import "devices"
 import "desktop"
+import "companion"
 import "hall"
 import "chess"
 import "paintings"
@@ -30,6 +31,8 @@ import "wonderland"
 import "places"
 import "noclip"
 import "size"
+import "watchdog"
+import "guide"
 import "range"
 
 // The test room's palette slots.
@@ -118,11 +121,12 @@ spawnPoints: concat([
 
 commands: galleryCommands
 
-// The Moth basis seats eight bodies, the gallery hall's lift car takes the highest slot (hall.puck), the chess
-// board cursor the next and the pieces the 32 below it (chess.puck); both imports name a population, so this body
-// settles it. Each body's size is its `size` register (size.puck).
+// The Moth basis seats eight bodies, the companion takes the highest slot (companion.puck), the gallery hall's lift
+// car the next (hall.puck), the chess board cursor the next and the pieces the 32 below it (chess.puck); the imports
+// name populations of their own, so this body settles it; the rate range's six walkers, imported last, take the free
+// slots below the pieces (range.puck). Each body's size is its `size` register (size.puck).
 bodies {
-  capacity: 42
+  capacity: 43
 }
 
 placements {

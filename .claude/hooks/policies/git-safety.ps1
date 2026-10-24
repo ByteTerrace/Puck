@@ -239,8 +239,9 @@ function Test-GitSafetyPolicy {
     if ($Context.Role -ne 'lane') { return }
     $reason = Get-GitSharedStateReason $git
     if ($reason) { return New-PolicyDecision 'deny' $reason }
-    # A verb whose refusal depends on its options cannot be cleared while one of them is known only at run time.
-    if ($git.Verb -in $script:GitConditionalVerbs -and (Test-GitDynamicRest $git -Options)) {
+    # A conditional verb cannot be cleared while an argument is known only at run time. For fetch/pull, operands
+    # after -- still include refspecs that can write shared local refs; other verbs only need their options checked.
+    if ($git.Verb -in $script:GitConditionalVerbs -and (Test-GitDynamicRest $git -Options:($git.Verb -notin @('fetch', 'pull')))) {
         return New-PolicyDecision 'deny' ($unresolved -f "an argument to git $($git.Verb)")
     }
 }

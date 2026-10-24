@@ -80,7 +80,10 @@ stdin are opaque. Each argument also records whether it is known only at run
 time (a variable or a substitution): git-safety asks the lead and refuses a
 lane when such an argument is the git verb, an option before it, a push's
 remote, refspec or option, a `gh` command group or `gh api` option or endpoint,
-or an option of a verb it refuses only for some options. A script file a
+or an option of a verb it refuses only for some options. A working directory or
+git environment override known only at run time also prevents resolving a push
+or alias; a lead's other builtin git verbs proceed. Fetch and pull refspecs
+remain significant after `--`, since they can write shared local refs. A script file a
 command runs is not read. These are guardrails
 at the tool boundary, not a shell security boundary.
 

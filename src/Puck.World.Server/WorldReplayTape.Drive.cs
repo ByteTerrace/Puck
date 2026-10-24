@@ -381,6 +381,8 @@ public sealed partial class WorldReplayTape {
         return m_liveServer.ExecuteAuthorityOperation<string?>(operation: () => {
             if (m_liveServer.Persistence.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
             m_liveServer.Extensions.EnterReplay();
+            // Mounted guests restart from their modules' initial state, as the recording's own guests started.
+            m_liveServer.Document.ReinstantiateAddonsOnNextRebuild = true;
             m_liveServer.EnqueueRebuild(
                 request: new WorldRebuildRequest(
                     Kind: WorldRebuildKind.Load,
@@ -394,6 +396,7 @@ public sealed partial class WorldReplayTape {
                 principal: Principal.Console
             );
             _ = m_liveServer.DrainAdministrative();
+            m_liveServer.Document.ReinstantiateAddonsOnNextRebuild = false;
             if (!ReferenceEquals(
                 objA: m_liveServer.Definition,
                 objB: definition
@@ -535,14 +538,6 @@ public sealed partial class WorldReplayTape {
                 separator: ", ",
                 values: liveSeats.Select(selector: static slot => (slot + 1))
             )}] joined — player.join/player.leave to match first";
-            return false;
-        }
-
-        if (
-            (source.MountedAddons.Count > 0) &&
-            m_liveServer.AnyAddonEverPumped
-        ) {
-            refusal = "the tape pins mounted addons and a live guest has already been pumped — the rebuild door reuses an unchanged addon row's guest with its accumulated state, so the boot image cannot be reached in this session";
             return false;
         }
 

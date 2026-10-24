@@ -458,14 +458,15 @@ public sealed partial class WorldAddonRuntime {
         // nothing here is ever a reuse candidate — see the loop's own remarks.
         var previouslyMounted = new Dictionary<string, MountedAddon>(comparer: StringComparer.Ordinal);
 
-        if (
-            (current is not null) &&
-            !channelsChanged
-        ) {
+        if (!channelsChanged) {
             foreach (var addon in m_mounted) {
                 previouslyMounted[addon.Instance.Name] = addon;
             }
         }
+
+        // With no prior definition there is nothing to reuse from: every enabled row prepares a fresh guest, and every
+        // mounted one is superseded (a replay drive's boot-image reset, or a boot with nothing mounted yet).
+        var reuse = (current is not null);
 
         var mounted = new List<MountedAddon>();
         var receipts = new List<WorldAddonReceipt>();
@@ -523,10 +524,13 @@ public sealed partial class WorldAddonRuntime {
                 )) {
                     previouslyMounted.Remove(key: row.Name);
 
-                    if (RowsStructurallyEqual(
+                    if (
+                        reuse &&
+                        RowsStructurallyEqual(
                         a: existing.SourceRow,
                         b: row
-                    )) {
+                    )
+                    ) {
                         // Unchanged row: reused whole, keeping its memory AND its fault state alike — runtime
                         // fault is not a preparation dependency, so a sticky-faulted guest stays faulted (never
                         // silently recovered by an unrelated mutation, and never restarted by resubmitting the
@@ -655,7 +659,8 @@ public sealed partial class WorldAddonRuntime {
                 hostDescriptors[instance.Name] = descriptor;
                 hostInstances.Add(item: instance);
 
-                var mountedLine = $"[world.addon: mounted {row.Name} ({instance.Hash}) fuel {instance.FuelPerTick} — grant it a body to drive, e.g. world.grant addon:{row.Name} drive body:1 budget:60 (and observe body:1 budget:60 to let it read its pose — both are untrusted-principal dispatch budgets and are required)]";
+                // The disclosure line beside it says what the settled grant table gives this guest.
+                var mountedLine = $"[world.addon: mounted {row.Name} ({instance.Hash}) fuel {instance.FuelPerTick}]";
 
                 narration.Add(item: () => mountedLine);
 

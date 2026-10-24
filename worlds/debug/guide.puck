@@ -1,0 +1,88 @@
+// The gallery guide: a WebAssembly addon (addons/guide.wat) that shows an exhibit's name and a one-line note on a HUD
+// panel while the Moth stands in front of it in the gallery hall, and hides the panel when she walks away. Each exhibit
+// has a region here, a sphere over the floor in front of its plinth where its spawn point stands, and the guide
+// observes every one of them. It writes the `guide` state row the panel reads; addons.md beside this file says more.
+
+import "shapes"
+
+// Every exhibit in walking order, with the centre of the region in front of it: 1.7 m out from the plinth on the
+// label's side, on the level's floor. Regions 2.6 m apart with a 1.29 m radius never overlap.
+let guideExhibits = reduce(galleryRows, [], (all, row) => concat(all, map(row.names, (name, index) => { name: name, x: (galleryX + (gallerySpacing * index)), y: galleryFloor[row.level], z: (row.z - 1.7) })))
+let guideRadius = 1.29
+
+// `guide` holds the shown exhibit's title and note, both empty while she stands at none; `guideAt` its position in
+// walking order, or -1.
+state {
+  world {
+    table guide {
+      title = ""
+      note = ""
+    }
+    slot guideAt = -1
+  }
+}
+
+hud {
+  panels [
+    {
+      id: "guide"
+      rect { x: 0.02, y: 0.02, width: 0.56, height: 0.075 }
+      layer: Over
+      style: Panel
+      visible { $type: "state", binding: "state.guide.title", comparison: NotEqual, text: "" }
+      elements [
+        { id: "title", kind: Text, rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }, style: Primary, "template": "{state.guide.title}" }
+        { id: "note", kind: Text, rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }, style: Dim, "template": "{state.guide.note}" }
+      ]
+    }
+  ]
+}
+
+prototypes {
+  // A region's carrier draws nothing.
+  prototype "guide-region" {
+    document {
+      name: "guide-region"
+      schema: "puck.creation.v1"
+      palette [{ color: "#000000" }]
+    }
+  }
+}
+
+placements {
+  for exhibit in guideExhibits {
+    placement $"guide-{exhibit.name}" {
+      prototype: "guide-region"
+      position [exhibit.x, exhibit.y, exhibit.z]
+      region {
+        radius: guideRadius
+      }
+    }
+  }
+}
+
+// The requests list the regions in walking order, the order the guest's exhibit table follows.
+addon "guide" {
+  modulePath: "addons/guide.wat"
+  hash: "auto"
+  fuel: 0
+  enabled: true
+  requests: concat(
+    [
+      { capability: Mutate, subject: "section:State" }
+      { capability: Edit, subject: "state:guide" }
+      { capability: Edit, subject: "state:guideAt" }
+    ],
+    map(guideExhibits, exhibit => { capability: Observe, subject: $"region:guide-{exhibit.name}" })
+  )
+}
+
+// Each region's enter and exit edges, and a whole-row write a tick to each of its own rows.
+grants: concat(
+  [
+    { grantee: "addon:guide", capability: Mutate, subject: "section:State", kindMask: "UpsertStateRow", budget: 2 }
+    { grantee: "addon:guide", capability: Edit, subject: "state:guide" }
+    { grantee: "addon:guide", capability: Edit, subject: "state:guideAt" }
+  ],
+  map(guideExhibits, exhibit => { grantee: "addon:guide", capability: Observe, subject: $"region:guide-{exhibit.name}", budget: 1, eventBudget: 4 })
+)

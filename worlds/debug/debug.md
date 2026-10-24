@@ -33,6 +33,13 @@ adapter with `--attach <file>`, naming the file the World prints on stderr
 (`[world.control: operator attachment <file>]`); without it, the adapter keeps
 whichever World it attached to first.
 
+## Addons
+
+The world mounts three WebAssembly addons: a watchdog that records invariant
+violations with their ticks, a gallery guide that names the exhibit the Moth
+stands at, and a companion body that follows her.
+[addons.md](addons.md) describes them and how to replay to a violation's tick.
+
 ## Avatar studio
 
 [studio.puck](studio.puck) authors a neutral grey room and a raised circular

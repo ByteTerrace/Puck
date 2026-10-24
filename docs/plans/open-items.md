@@ -168,7 +168,23 @@ These items belong to no single programme.
   - [x] A grounded walker follows crests, descents and small drops within `motion.groundSnap` (default 0.3 m), with velocity projected onto its support. The four-tick debug ramp samples previously peaked airborne at y=2.46 and landed near z=-64.07; now every sample stays grounded, the sampled crest is y=1.62 and the straight slopes give vy=+/-2.17 m/s. The second rise is a staircase with flat treads, so its zero vertical walking velocity is expected; its descending treads now remain grounded too.
   - [x] A circular cylinder/disc placement collides as its surface instead of its bounding box. At the studio dais's false corner (50.8, -50.8), the old implementation held a body at y=0.32; the corrected one stands on the floor at y=0.03. The reported (47.5, -48.7) lies inside the actual radius-3 disc centred at (48, -48), and correctly remains at y=0.32. General carved/elliptical placement geometry and conservative capsule-versus-box contact remain open above.
   - [ ] Walking backward, the Moth's legs cross behind each other.
+  - [ ] Tabled by the owner for later: a maths room in the gallery with a 2D grid (a walkable board) and a 3D grid (a floating lattice) whose cells `Puck.Maths` computes in the simulation, so they are bit-identical on every machine.
+    - The open questions are the owner's: the audience (a showpiece or a tool for us), how animated it is, how interactive, which maths leads, and where it goes.
+    - The technical ones are per-cell variation within the 367-shape budget (a repeat domain that reads a state table, or many placements), computing in rules with new builtins rather than an addon, and what a per-tick update costs.
   - [ ] The gallery's section and wayfinding signs stand on poles in the aisles. They hang from the ceiling above the exhibits instead (the owner's call), and per-exhibit labels stay on the plinths.
+
+## Addon system
+
+The addon system is improved as it is used ([addons](../../.claude/skills/puck-world/references/addons.md)).
+These gaps came up writing the debug world's three guests ([worlds/debug/addons.md](../../worlds/debug/addons.md)).
+
+- [ ] Let a guest read authored data. The gallery guide's exhibit names and notes are copied into `worlds/debug/addons/guide.wat` in the gallery's walking order, so `shapes.puck` and the guest drift apart unless edited together. Either the row carries a text payload the host writes into guest memory at mount (through an optional export pair naming where), or a query verb reads a cell of a state row the guest is granted `Observe` over.
+- [ ] Give federation link events the manifest-order index region events carry: their `A` lane is still the `adjacencies` row's document ordinal, which a guest cannot resolve to a name.
+- [ ] Read more bodies a tick. A pose query answers in four cells, so a 64-cell input ring reads about fifteen bodies a tick, and the watchdog reads the chess pieces four a tick in turn. A batched pose query over every body a guest observes, or an event when a body crosses a height, would let a watchdog check every body every tick.
+- [ ] Wire the per-cell `UpsertStateCell`/`RemoveStateCell` into the addon mutation decoder. A guest rewrites a whole row to change one cell, and an `Edit` row's `verbs:UpsertStateCell,RemoveStateCell` narrowing cannot apply to a guest.
+- [ ] Compare text in a test or rule gate. An `expect` line reads numbers only, so the guide and the watchdog write numeric rows (`guideAt`, `watchdog`) beside their text rows for their tests to read.
+- [ ] Let an agent attached over MCP record a world with addons. A recording with mounted guests must arm before the world's first step, since no checkpoint holds a guest's memory, and an MCP attachment arrives after it, so the World has to start with `replay.record` on stdin. Re-instantiating every guest at the arm, as a drive's boot-image reset now does, would let a recording start from a checkpoint.
+- [ ] Quiet the offline re-drive's narration: `replay.stop` and `replay.verify` print every shadow guest's mount and disclosure lines, so each addon's mount narrates again after a recording.
 
 ## Quarantined gates
 

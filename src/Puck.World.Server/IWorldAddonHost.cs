@@ -69,8 +69,9 @@ public interface IWorldAddonHost : IWorldExtensionRuntime {
     /// <param name="current">The live definition the currently-mounted guests were prepared under — a candidate row
     /// reuses its guest only when it is STRUCTURALLY equal (every field, including <c>Requests</c>/<c>MemoryWatches</c>
     /// content) to the row that guest was last prepared under AND every other preparation dependency (the channel
-    /// table content) is unchanged; <see langword="null"/> when there is no prior state to reuse from (a fresh boot
-    /// install).</param>
+    /// table content) is unchanged; <see langword="null"/> to reuse nothing, so every enabled row prepares a fresh
+    /// guest and every mounted one is superseded (a boot install, or a replay drive resetting to its tape's boot
+    /// image).</param>
     /// <param name="candidate">The candidate definition being considered for install.</param>
     /// <param name="plan">The disposable prepared plan, on success; the caller commits it or disposes it — never
     /// both, and never neither.</param>

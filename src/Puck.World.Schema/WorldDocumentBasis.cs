@@ -24,7 +24,8 @@ namespace Puck.World;
 /// replaces wholesale — the arms of a union share no members, so merging across them could only compose a row the
 /// strict parse refuses.</description></item>
 /// <item><description>A row list whose rows all carry the document's settled identity vocabulary — the first of
-/// <c>id</c> / <c>name</c> / <c>index</c> present on every row of both lists — merges by key: a derived row refines
+/// <c>id</c> / <c>name</c> / <c>key</c> / <c>index</c> present on every row of both lists, or, for grant rows, the
+/// <c>grantee</c> + <c>capability</c> + <c>subject</c> triple taken together — merges by key: a derived row refines
 /// its same-key basis row in place (basis order is preserved — list order is meaning for spawn seats and rules), a
 /// new key appends in authored order, and a tombstone row <c>{"&lt;key&gt;": …, "$drop": true}</c> removes the named
 /// basis row. A tombstone naming no basis row refuses by name.</description></item>
@@ -77,11 +78,44 @@ public static class WorldDocumentBasis {
 
     // The settled row-identity vocabulary, in precedence order (see the type remarks and documents.md's "Identity
     // conventions"): stable string ids, then names, then a state cell's own key, then the screen family's position
-    // index.
-    private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index"];
+    // index, then a grant row's composite identity (grantee, capability and subject together, the triple the grant
+    // table itself keys a hold by). A composite key names its members joined by CompositeKeySeparator.
+    private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index", "grantee+capability+subject"];
+    private const char CompositeKeySeparator = '+';
 
+    // Copies a row's identity members onto another row: the one member of a simple key, every member of a composite.
+    private static void CopyRowIdentity(JsonObject source, JsonObject target, string key) {
+        foreach (var member in key.Split(separator: CompositeKeySeparator)) {
+            target[propertyName: member] = source[propertyName: member]?.DeepClone();
+        }
+    }
     private static string DescribeKey(JsonNode? value) {
         return (value?.ToJsonString() ?? "(absent)");
+    }
+    /// <summary>Returns a row's identity under a key <see cref="TryFindRowKey"/> found: the member's value for a simple
+    /// key, or a fresh array of the members' values, in key order, for a composite one.</summary>
+    /// <param name="row">The row, a JSON object; anything else has no identity.</param>
+    /// <param name="key">The identity key <see cref="TryFindRowKey"/> returned.</param>
+    /// <returns>The identity node to compare with <see cref="JsonNode.DeepEquals"/>, or <see langword="null"/> when the
+    /// row is not an object or carries no such member.</returns>
+    public static JsonNode? RowIdentity(JsonNode? row, string key) {
+        ArgumentNullException.ThrowIfNull(argument: key);
+
+        if (row is not JsonObject rowObject) {
+            return null;
+        }
+
+        if (!key.Contains(value: CompositeKeySeparator)) {
+            return rowObject[propertyName: key];
+        }
+
+        var identity = new JsonArray();
+
+        foreach (var member in key.Split(separator: CompositeKeySeparator)) {
+            identity.Add(value: rowObject[propertyName: member]?.DeepClone());
+        }
+
+        return identity;
     }
     private static JsonNode DiffList(JsonArray basis, JsonArray target) {
         if (!TryFindRowKey(
@@ -99,7 +133,7 @@ public static class WorldDocumentBasis {
         var reconstructed = new List<JsonNode?>();
 
         foreach (var basisRow in basis) {
-            var basisKey = ((JsonObject)basisRow!)[propertyName: key];
+            var basisKey = RowIdentity(key: key, row: basisRow!);
 
             if (IndexOfRowKey(
                 key: key,
@@ -111,7 +145,7 @@ public static class WorldDocumentBasis {
         }
 
         foreach (var targetRow in target) {
-            var targetKey = ((JsonObject)targetRow!)[propertyName: key];
+            var targetKey = RowIdentity(key: key, row: targetRow!);
 
             if (IndexOfRowKey(
                 key: key,
@@ -127,7 +161,7 @@ public static class WorldDocumentBasis {
         for (var index = 0; (orderHolds && (index < target.Count)); index++) {
             orderHolds = JsonNode.DeepEquals(
                 node1: reconstructed[index: index],
-                node2: ((JsonObject)target[index: index]!)[propertyName: key]
+                node2: RowIdentity(key: key, row: target[index: index]!)
             );
         }
 
@@ -145,7 +179,7 @@ public static class WorldDocumentBasis {
 
         foreach (var targetRow in target) {
             var targetObject = ((JsonObject)targetRow!);
-            var targetKey = targetObject[propertyName: key];
+            var targetKey = RowIdentity(key: key, row: targetObject);
             var basisIndex = IndexOfRowKey(
                 key: key,
                 list: basis,
@@ -181,23 +215,32 @@ public static class WorldDocumentBasis {
                 target: targetObject
             );
 
-            rowDelta[propertyName: key] = targetKey?.DeepClone();
+            CopyRowIdentity(
+                key: key,
+                source: targetObject,
+                target: rowDelta
+            );
             delta.Add(value: rowDelta);
         }
 
         foreach (var basisRow in basis) {
             var basisObject = ((JsonObject)basisRow!);
-            var basisKey = basisObject[propertyName: key];
+            var basisKey = RowIdentity(key: key, row: basisObject);
 
             if (IndexOfRowKey(
                 key: key,
                 list: target,
                 value: basisKey
             ) < 0) {
-                delta.Add(value: new JsonObject {
-                    [propertyName: key] = basisKey?.DeepClone(),
-                    [propertyName: DropMemberName] = true,
-                });
+                var tombstone = new JsonObject();
+
+                CopyRowIdentity(
+                    key: key,
+                    source: basisObject,
+                    target: tombstone
+                );
+                tombstone[propertyName: DropMemberName] = true;
+                delta.Add(value: tombstone);
             }
         }
 
@@ -266,12 +309,12 @@ public static class WorldDocumentBasis {
     }
     private static bool HasDuplicateKey(JsonArray list, string key, out string duplicate) {
         for (var outer = 0; (outer < list.Count); outer++) {
-            var outerKey = ((JsonObject)list[index: outer]!)[propertyName: key];
+            var outerKey = RowIdentity(key: key, row: list[index: outer]!);
 
             for (var inner = (outer + 1); (inner < list.Count); inner++) {
                 if (JsonNode.DeepEquals(
                     node1: outerKey,
-                    node2: ((JsonObject)list[index: inner]!)[propertyName: key]
+                    node2: RowIdentity(key: key, row: list[index: inner]!)
                 )) {
                     duplicate = $"{key} {DescribeKey(value: outerKey)}";
 
@@ -289,7 +332,7 @@ public static class WorldDocumentBasis {
             if (
                 (list[index: index] is JsonObject row) &&
                 JsonNode.DeepEquals(
-                node1: row[propertyName: key],
+                node1: RowIdentity(key: key, row: row),
                 node2: value
             )
             ) {
@@ -325,15 +368,17 @@ public static class WorldDocumentBasis {
                 return false;
             }
 
-            if (rowObject[propertyName: key] is not JsonValue keyValue) {
-                return false;
-            }
+            foreach (var member in key.Split(separator: CompositeKeySeparator)) {
+                if (rowObject[propertyName: member] is not JsonValue keyValue) {
+                    return false;
+                }
 
-            if (
-                !keyValue.TryGetValue<string>(value: out _) &&
-                !keyValue.TryGetValue<double>(value: out _)
-            ) {
-                return false;
+                if (
+                    !keyValue.TryGetValue<string>(value: out _) &&
+                    !keyValue.TryGetValue<double>(value: out _)
+                ) {
+                    return false;
+                }
             }
         }
 
@@ -384,7 +429,7 @@ public static class WorldDocumentBasis {
 
         foreach (var basisRow in basis) {
             var basisObject = ((JsonObject)basisRow!);
-            var basisKey = basisObject[propertyName: key];
+            var basisKey = RowIdentity(key: key, row: basisObject);
             var overlayIndex = IndexOfRowKey(
                 key: key,
                 list: overlay,
@@ -443,7 +488,7 @@ public static class WorldDocumentBasis {
             var appended = ((JsonObject)overlay[index: index]!);
 
             if (appended.ContainsKey(propertyName: DropMemberName)) {
-                throw new JsonException(message: $"{path}[{index}] is a tombstone for {key} {DescribeKey(value: appended[propertyName: key])}, which names no basis row — a tombstone that drops nothing is stale authoring; remove it.");
+                throw new JsonException(message: $"{path}[{index}] is a tombstone for {key} {DescribeKey(value: RowIdentity(key: key, row: appended))}, which names no basis row — a tombstone that drops nothing is stale authoring; remove it.");
             }
 
             RefuseRowMarkers(
@@ -520,6 +565,24 @@ public static class WorldDocumentBasis {
         }
     }
     private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path, WorldDocumentOrigins? origins) {
+        // An empty list contributes no row to collide with: siblings each own the rows they author.
+        if (overlay.Count == 0) {
+            return existing;
+        }
+
+        if (existing.Count == 0) {
+            var adopted = ((JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!);
+
+            RecordFreshOwnership(
+                node: adopted,
+                overlayName: overlayName,
+                owners: owners,
+                path: path
+            );
+
+            return adopted;
+        }
+
         if (!TryFindRowKey(
             ambiguity: out var ambiguity,
             basis: existing,
@@ -554,7 +617,7 @@ public static class WorldDocumentBasis {
 
         foreach (var row in overlay) {
             var rowObject = ((JsonObject)row!);
-            var rowKey = rowObject[propertyName: key];
+            var rowKey = RowIdentity(key: key, row: rowObject);
             var existingIndex = IndexOfRowKey(
                 key: key,
                 list: merged,
@@ -705,7 +768,7 @@ public static class WorldDocumentBasis {
         ) {
             foreach (var row in array) {
                 if (row is JsonObject rowObject) {
-                    owners[$"{path}[{DescribeKey(value: rowObject[propertyName: key])}]"] = overlayName;
+                    owners[$"{path}[{DescribeKey(value: RowIdentity(key: key, row: rowObject))}]"] = overlayName;
                 }
             }
         }
@@ -728,13 +791,11 @@ public static class WorldDocumentBasis {
             throw new JsonException(message: $"{path} carries '{DropMemberName}' with a value other than true — a tombstone is exactly {{\"{key}\": …, \"{DropMemberName}\": true}}.");
         }
 
+        var identity = key.Split(separator: CompositeKeySeparator);
+
         foreach (var (name, _) in row) {
             if (
-                !string.Equals(
-                a: name,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            ) &&
+                !identity.Contains(value: name, comparer: StringComparer.Ordinal) &&
                 !string.Equals(
                 a: name,
                 b: DropMemberName,
@@ -945,7 +1006,7 @@ public static class WorldDocumentBasis {
             return IndexOfRowKey(
                 key: key,
                 list: layer,
-                value: ((JsonObject)composed[index: index]!)[propertyName: key]
+                value: RowIdentity(key: key, row: composed[index: index]!)
             );
         }
 
