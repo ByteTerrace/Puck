@@ -153,7 +153,9 @@ Auto mode ignores the ask list; git-safety refuses pushes and shared-state Git
 operations. A headless run executes only commands its user-level allow list
 names (`git`, `dotnet`, `pwsh`, `node`); any other command, such as `rm` or
 `Remove-Item`, is auto-denied and ends the run with no output, so a brief that
-deletes files says to use `git rm`. The home policy is the block contributing
+deletes files says to use `git rm`. A headless run also ends when the agent
+goes idle waiting on a background task of its own (a background build), leaving
+its edits uncommitted, so a brief tells it to build and test in the foreground. The home policy is the block contributing
 records; login and trust material stay local. The workspace plugin exposes the MCP
 configuration because a bare `.agents/mcp_config.json` is not a discovery root.
 
@@ -295,8 +297,13 @@ lead's HEAD (`worktree.baseRef` in `.claude/settings.json`), so their edits
 never touch the checkout the owner is pairing in. Every agent reaches the live
 World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
-the lead merges and reloads, or in a World of its own under a GPU grant (booted
-with `--devices none`), named by `world` on every call. Reads and captures of the live World are always
+the lead merges and reloads, or in a World of its own, named by `world` on
+every call. A brief tells such a lane to start that World with
+`puck_world_start` from its worktree's Release build (`checkout`: the worktree's
+absolute path) and to end it with `puck_world_stop`, never with a hand-written
+boot line or a PID kill; the tool passes `--devices none`, a state directory
+of its own and `--control`, and a `windowed: true` start, the GPU grant's leg,
+holds the GPU lease until the World exits. Reads and captures of the live World are always
 allowed; a brief names the live mutations a lane may make. The machine belongs
 to the agents (the owner's ruling): the lead boots a World for a check and stops
 it when the check ends, and it leaves one running for the owner only when the

@@ -62,7 +62,22 @@ public sealed partial class WorldBody {
                 contactResolution = stepped.Resolution;
             }
 
+            // Keep walking contact across crests and descending slopes. A jump or deliberate launch clears
+            // m_grounded before integration; direct upward input also owns its departure.
+            if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel &&
+                (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) && !contactResolution.Grounded &&
+                !contactResolution.Unproved &&
+                FixedStepUp.TrySnap(step: ref step, start: in scratch.NextPosition, velocity: in resolvedVelocity,
+                    up: in scratch.Up, distance: GroundSnap, result: out var snapped)) {
+                scratch.NextPosition = snapped.Position;
+                resolvedVelocity = snapped.Velocity;
+                contactResolution = snapped.Resolution with { ObstructionNormal = contactResolution.ObstructionNormal };
+            }
+
             m_grounded = contactResolution.Grounded;
+            if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel) {
+                resolvedVelocity = resolvedVelocity.RejectFrom(unitAxis: contactResolution.GroundNormal);
+            }
 
             // Under SurfaceFollowing, a standing body's up is the SURFACE it stands on, not the direction its field
             // pulls. The two differ wherever a floor is not perpendicular to the field — a flat floor under a field
@@ -163,19 +178,7 @@ public sealed partial class WorldBody {
                 return;
             }
 
-            // GROUND STICK. Contact removes the velocity driving into a surface, so a standing body carries no inward
-            // motion at all — fine on a flat floor, fatal on a convex one: the surface curves away, the body keeps
-            // going straight, and it leaves the ground under its own walking speed. A small inward bias while grounded
-            // keeps it pressed against whatever it stands on, and depenetration removes the excess exactly as it does
-            // for gravity. Released the moment the body stops being grounded, so a jump or a ledge still launches
-            // cleanly.
-            // Only a surface that is not world-level needs it: on flat ground contact already holds the body, and an
-            // imposed inward speed there only eats into the margin a marginal handoff (an adjacency seam strip) has to
-            // work with. A level floor keeps its previous behaviour exactly.
-            var settled = ((m_grounded && (m_up != FixedVector3.UnitY) && (resolvedNormal > -StickSpeed))
-                ? -StickSpeed
-                : resolvedNormal
-            );
+            var settled = resolvedNormal;
 
             if (settled != m_verticalVelocity) {
                 m_verticalVelocity = settled;
@@ -196,6 +199,7 @@ public sealed partial class WorldBody {
     // The embedding escape's search: eighth-metre steps out to eight metres, and the push a free pose may still take
     // (a body resting on a floor is pushed by up to its contact skin).
     private const int EmbeddingEscapeSteps = 64;
+
     private static readonly FixedQ4816 EmbeddingEscapeStep = FixedQ4816.FromRawBits(value: (1L << (FixedQ4816.FractionBitCount - 3)));
     private static readonly FixedQ4816 EmbeddingFreePushSquared = FixedQ4816.FromRawBits(value: (1L << (FixedQ4816.FractionBitCount - 8)));
 
@@ -233,9 +237,9 @@ public sealed partial class WorldBody {
         }
     }
     private static bool SameVolumes(FixedWorldCollider? left, FixedWorldCollider? right) =>
-        ((left is { } leftCollider) && (right is { } rightCollider))
+        (((left is { } leftCollider) && (right is { } rightCollider))
             ? leftCollider.Volumes.SequenceEqual(other: rightCollider.Volumes)
-            : (left.HasValue == right.HasValue);
+            : (left.HasValue == right.HasValue));
     // Whether the static solve pushes this body's volumes further than a resting contact would at a pose.
     private bool IsEmbeddedAt(IContactField field, FixedVector3 position) {
         var resolved = position;
@@ -281,7 +285,6 @@ public sealed partial class WorldBody {
             );
         }
     }
-
     // Carries a body that stood on an attached solid last tick along with it: the field reports how far the platform's
     // carrier moved between its last two refreshes, and the body moves by the same before its own step, so a rising
     // platform lifts it without a push and a falling one keeps it standing rather than dropping it a tick at a time.
@@ -294,6 +297,7 @@ public sealed partial class WorldBody {
             (m_carriedByIndex >= 0) ||
             m_sweepRefusedThisTick ||
             !field.TryRideDisplacement(
+                up: in m_up,
                 displacement: out var displacement,
                 orientation: in m_orientation,
                 position: m_position,

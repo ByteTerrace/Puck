@@ -8,11 +8,14 @@ using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>The chase eye sees its body from outside: never inside the body's collider, never inside static geometry,
-/// and never behind geometry that hides the target. Running the World cannot show where the eye stands relative to
-/// the body's own volume, so these laws resolve the eye against walls and a body whose collider is the debug world's
-/// Moth: a capsule of radius 0.35 standing 2.06 m tall, framed from 1 m above its root.</summary>
+/// <summary>The chase eye sees its body from outside and comes back to its boom. Running the World cannot show where the
+/// eye stands relative to the body's own volume, nor that an arm pulled in by geometry is not kept as the new boom, so
+/// these laws resolve the eye frame by frame against walls and a body whose collider is the debug world's Moth: a
+/// capsule of radius 0.35 standing 2.06 m tall, framed from 1 m above its root.</summary>
 public sealed class WorldCameraClearanceLawTests {
+    // The debug world's camera-boom row: 4 Hz, critically damped.
+    private static readonly SdfCameraDynamics Boom = new(Frequency: 4f, Damping: 1f, Response: 0f);
+    private const float Frame = (1f / 60f);
     private static readonly WorldCollider.Capsule MothCollider = new(
         Endpoint: new DocumentVector3(x: 0f, y: 1.36f, z: 0f),
         Radius: 0.35f
@@ -20,11 +23,12 @@ public sealed class WorldCameraClearanceLawTests {
     private static readonly Vector3 Target = new(x: 0f, y: 1f, z: 0f);
 
     private static FixedPosition At(Vector3 value) => FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: value));
-    private static WorldChaseBody Body(WorldCollider? collider = null, float scale = 1f, Quaternion? orientation = null) => new(
+    private static WorldChaseBody Body(WorldCollider? collider = null, float scale = 1f, Quaternion? orientation = null, ReadOnlyMemory<Vector4> drawn = default) => new(
         collider: FixedWorldCollider.Compile(
             collider: (collider ?? MothCollider),
             creations: []
         ),
+        drawn: drawn,
         orientation: (orientation ?? Quaternion.Identity),
         position: Vector3.Zero,
         scale: scale
@@ -69,108 +73,106 @@ public sealed class WorldCameraClearanceLawTests {
 
         return new SdfFieldEvaluator(program: builder.Build());
     }
-    private static Vector3 Resolve(SdfFieldEvaluator? field, Vector3 desired, WorldChaseBody body, Vector3? target = null) => WorldCameraClearance.Resolve(
-        desiredEye: desired,
-        field: field,
-        subject: body,
-        target: (target ?? Target),
-        up: Vector3.UnitY
-    );
+    // Resolves the same pose for a run of frames on the boom dynamics, returning the last eye.
+    private static Vector3 Run(WorldCameraClearance arm, SdfFieldEvaluator? field, Vector3 desired, WorldChaseBody body, int frames, SdfCameraDynamics? dynamics = null) {
+        var eye = desired;
+
+        for (var frame = 0; (frame < frames); frame++) {
+            eye = arm.Resolve(
+                deltaSeconds: Frame,
+                desiredEye: desired,
+                dynamics: (dynamics ?? Boom),
+                field: field,
+                subject: body,
+                target: Target,
+                up: Vector3.UnitY
+            );
+        }
+
+        return eye;
+    }
     // The boom's heading in the level plane: what the clearance may never change.
     private static float Heading(Vector3 eye, Vector3 target) => MathF.Atan2(
         x: (eye.Z - target.Z),
         y: (eye.X - target.X)
     );
 
-    /// <summary>The body pressed into a corner with the boom pointing into it: no length of the authored boom clears both
-    /// walls and the body, so the boom rises over the body on the same heading, outside the body by the eye's radius,
-    /// clear of both walls and with a clear sightline.</summary>
+    /// <summary>A ledge close behind the body, the boom pointing into it, raises the eye over the body on the same
+    /// heading, outside the body by the eye's radius, clear of the ledge with a clear sightline, no steeper than the
+    /// lift ceiling. With the ledge gone the arm eases back down and out to the authored boom and stands there: the
+    /// pull-in is never kept as the boom, and no frame on the way jumps.</summary>
     [Fact]
-    public void ACornerBehindTheBodyRaisesTheEyeOverItRatherThanIntoIt() {
-        var field = Walls(
-            (new Vector3(x: -0.65f, y: 1.5f, z: 0f), new Vector3(x: 0.05f, y: 1.5f, z: 4f)),
-            (new Vector3(x: 0f, y: 1.5f, z: 0.65f), new Vector3(x: 4f, y: 1.5f, z: 0.05f))
-        );
-        var yaw = (-MathF.PI / 4f);
+    public void ALedgeRaisesTheEyeOverTheBodyAndTheArmEasesBackOutWhenItClears() {
+        var ledge = Walls((new Vector3(x: 0f, y: 0.6f, z: 0.7f), new Vector3(x: 4f, y: 0.6f, z: 0.1f)));
+        var open = Walls((new Vector3(x: 0f, y: -10f, z: 0f), new Vector3(x: 1f, y: 1f, z: 1f)));
         var desired = Desired(
             pitch: 0.3f,
-            yaw: yaw
+            yaw: 0f
         );
-        var eye = Resolve(
-            body: Body(),
-            desired: desired,
-            field: field
-        );
-
-        Assert.True(condition: (CapsuleDistance(point: eye) >= (WorldCameraClearance.EyeRadius - 0.01f)), userMessage: $"eye {eye} is within the eye radius of the body");
-        Assert.True(condition: (FieldDistance(field: field, point: eye) >= 0f), userMessage: $"eye {eye} is inside a wall");
-        Assert.True(condition: field.LineOfSight(from: At(value: eye), to: At(value: Target)));
-        Assert.True(condition: (eye.Y > (Target.Y + 1f)), userMessage: $"eye {eye} did not rise over the body");
-        Assert.Equal(expected: yaw, actual: Heading(eye: eye, target: Target), tolerance: 1e-3f);
-    }
-    /// <summary>The body backed flat against a wall with the boom pointing at it: even the steepest rise cannot clear
-    /// the eye's whole radius of the wall, so the eye stands just outside the body on the rise that leaves it farthest
-    /// from the wall, its centre still in front of the wall.</summary>
-    [Fact]
-    public void ABodyBackedIntoAWallKeepsTheEyeOutsideBothOnTheSteepestRise() {
-        var field = Walls((new Vector3(x: 0f, y: 1.5f, z: 0.45f), new Vector3(x: 4f, y: 1.5f, z: 0.05f)));
-        var eye = Resolve(
-            body: Body(),
-            desired: Desired(pitch: 0.3f, yaw: 0f),
-            field: field
-        );
+        var arm = new WorldCameraClearance();
+        var eye = Run(arm: arm, body: Body(), desired: desired, field: ledge, frames: 60);
         var boom = (eye - Target);
 
+        Assert.Equal(expected: WorldCameraClearanceMode.Risen, actual: arm.Mode);
         Assert.True(condition: (CapsuleDistance(point: eye) >= (WorldCameraClearance.EyeRadius - 0.01f)), userMessage: $"eye {eye} is within the eye radius of the body");
-        Assert.True(condition: (FieldDistance(field: field, point: eye) > 0f), userMessage: $"eye {eye} is inside the wall");
-        Assert.Equal(expected: WorldCameraClearance.LiftCeiling, actual: MathF.Asin(x: (boom.Y / boom.Length())), tolerance: 1e-3f);
-    }
-    /// <summary>A wall far enough behind the body only shortens the boom, along its own direction, and an open field
-    /// leaves the eye exactly where the rig put it.</summary>
-    [Fact]
-    public void AnUncrowdedBoomShortensAlongItselfAndAnOpenOneStandsAsAuthored() {
-        var field = Walls((new Vector3(x: 0f, y: 1.5f, z: 2.05f), new Vector3(x: 4f, y: 1.5f, z: 0.05f)));
-        var desired = Desired(pitch: 0.3f, yaw: 0f);
-        var shortened = Resolve(
-            body: Body(),
-            desired: desired,
-            field: field
-        );
-        var open = Walls((new Vector3(x: 0f, y: -10f, z: 0f), new Vector3(x: 1f, y: 1f, z: 1f)));
+        Assert.True(condition: (FieldDistance(field: ledge, point: eye) >= 0f), userMessage: $"eye {eye} is inside the ledge");
+        Assert.True(condition: ledge.LineOfSight(from: At(value: eye), to: At(value: Target)));
+        Assert.True(condition: (MathF.Asin(x: (boom.Y / boom.Length())) > 0.5f), userMessage: $"eye {eye} did not rise over the ledge");
+        Assert.True(condition: (MathF.Asin(x: (boom.Y / boom.Length())) <= (WorldCameraClearance.LiftCeiling + 1e-3f)));
+        Assert.Equal(expected: Heading(eye: desired, target: Target), actual: Heading(eye: eye, target: Target), tolerance: 1e-3f);
 
-        Assert.True(condition: ((shortened - Target).Length() < 2f));
-        Assert.True(condition: ((shortened - Target).Length() > 1.5f));
-        Assert.Equal(expected: 1f, actual: Vector3.Dot(vector1: Vector3.Normalize(value: (shortened - Target)), vector2: Vector3.Normalize(value: (desired - Target))), tolerance: 1e-4f);
-        Assert.Equal(expected: desired, actual: Resolve(body: Body(), desired: desired, field: open));
-        Assert.Equal(expected: Target, actual: Resolve(body: Body(), desired: Target, field: open));
+        var previous = eye;
+
+        for (var frame = 0; (frame < 90); frame++) {
+            eye = Run(arm: arm, body: Body(), desired: desired, field: open, frames: 1);
+            Assert.True(condition: (Vector3.Distance(value1: eye, value2: previous) < 0.6f), userMessage: $"frame {frame} jumped from {previous} to {eye}");
+            previous = eye;
+        }
+
+        Assert.Equal(expected: WorldCameraClearanceMode.Open, actual: arm.Mode);
+        Assert.Equal(expected: 0f, actual: arm.Near);
+        Assert.True(condition: (Vector3.Distance(value1: desired, value2: eye) < 1e-3f), userMessage: $"eye {eye} did not ease back out to {desired}");
+        Assert.Contains(expectedSubstring: "clearance=open", actualString: arm.Describe());
     }
-    /// <summary>With no geometry the eye keeps out of the body alone: a boom shorter than the body is pushed out of it,
-    /// and a body with no collider keeps the eye out of nothing.</summary>
+    /// <summary>The eye never stands inside the body: a boom shorter than the body is pushed out of its collider and
+    /// out of the shapes it is drawn with, a body backed flat against a wall with no rise that clears keeps the eye
+    /// outside her rather than inside the wall's side of her, and a body with neither keeps the eye out of nothing.
+    /// With no dynamics the eye lands on each frame's answer, and a boom with no length passes through.</summary>
     [Fact]
-    public void WithNoFieldTheEyeKeepsOutOfTheBodyAlone() {
+    public void TheEyeNeverStandsInsideTheBodyOrTheShapesItIsDrawnWith() {
         var shortBoom = Desired(distance: 0.2f, pitch: 0f, yaw: 0f);
-        var pushed = Resolve(body: Body(), desired: shortBoom, field: null);
-        var none = new WorldChaseBody(collider: null, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f);
+        var arm = new WorldCameraClearance();
+        var pushed = Run(arm: arm, body: Body(), desired: shortBoom, dynamics: SdfCameraDynamics.None, field: null, frames: 1);
 
         Assert.Equal(expected: (0.35f + WorldCameraClearance.EyeRadius), actual: (pushed - Target).Length(), tolerance: 1e-4f);
-        Assert.Equal(expected: Desired(pitch: 0f, yaw: 0f), actual: Resolve(body: Body(), desired: Desired(pitch: 0f, yaw: 0f), field: null));
-        Assert.Equal(expected: shortBoom, actual: Resolve(body: none, desired: shortBoom, field: null));
-    }
-    /// <summary>A crowded boom with nowhere to rise stands just outside the body: one already straight up under a low
-    /// ceiling has no level heading to rise along, and one already past the lift ceiling has no rise left.</summary>
-    [Fact]
-    public void ACrowdedBoomWithNoRiseLeftStandsJustOutsideTheBody() {
-        var ceiling = Walls((new Vector3(x: 0f, y: 2.5f, z: 0f), new Vector3(x: 4f, y: 0.05f, z: 4f)));
 
-        foreach (var pitch in new[] { (MathF.PI / 2f), 1.45f }) {
-            var eye = Resolve(
-                body: Body(),
-                desired: Desired(pitch: pitch, yaw: 0f),
-                field: ceiling
-            );
+        // A drawn pack behind her reaches past the collider: the eye clears the pack, not just the capsule.
+        ReadOnlyMemory<Vector4> pack = new[] { new Vector4(x: 0f, y: 1.1f, z: 0.4f, w: 0.3f) };
+        var cleared = Run(arm: new WorldCameraClearance(), body: Body(drawn: pack), desired: shortBoom, field: null, frames: 1);
 
-            Assert.True(condition: (CapsuleDistance(point: eye) >= (WorldCameraClearance.EyeRadius - 0.01f)), userMessage: $"pitch {pitch}: eye {eye} is within the eye radius of the body");
-        }
+        Assert.True(condition: (Vector3.Distance(value1: cleared, value2: new Vector3(x: 0f, y: 1.1f, z: 0.4f)) >= (0.3f + WorldCameraClearance.EyeRadius - 1e-3f)), userMessage: $"eye {cleared} is within the eye radius of the pack");
+        Assert.True(condition: (CapsuleDistance(point: cleared) >= (WorldCameraClearance.EyeRadius - 0.01f)), userMessage: $"eye {cleared} is within the eye radius of the body");
+
+        var wall = Walls((new Vector3(x: 0f, y: 1.5f, z: 0.45f), new Vector3(x: 4f, y: 1.5f, z: 0.05f)));
+        var crowded = new WorldCameraClearance();
+        var backed = Run(arm: crowded, body: Body(), desired: Desired(pitch: 0.3f, yaw: 0f), field: wall, frames: 60);
+
+        Assert.Equal(expected: WorldCameraClearanceMode.Crowded, actual: crowded.Mode);
+        Assert.True(condition: (CapsuleDistance(point: backed) >= (WorldCameraClearance.EyeRadius - 0.01f)), userMessage: $"eye {backed} is within the eye radius of the body");
+
+        // The wall between that eye and her is cut away by the near plane, which stops short of her.
+        var sight = Vector3.Normalize(value: (Target - backed));
+
+        Assert.True(condition: (crowded.Near > 0f), userMessage: $"eye {backed} looks at her through the wall");
+        Assert.True(condition: (FieldDistance(field: wall, point: (backed + (sight * crowded.Near))) >= -0.06f), userMessage: $"the image begins inside the wall, {crowded.Near} m from {backed}");
+        Assert.True(condition: (CapsuleDistance(point: (backed + (sight * crowded.Near))) > 0f), userMessage: $"the near plane at {crowded.Near} m cuts into her");
+
+        var none = new WorldChaseBody(collider: null, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f);
+
+        Assert.Equal(expected: shortBoom, actual: Run(arm: new WorldCameraClearance(), body: none, desired: shortBoom, field: null, frames: 1));
+        Assert.Equal(expected: Target, actual: Run(arm: arm, body: Body(), desired: Target, field: null, frames: 1));
+        Assert.Equal(expected: WorldCameraClearanceMode.None, actual: arm.Mode);
+        arm.Reset();
     }
     /// <summary>A target inside geometry sits inside a shell around the pivot, such as a portal frame: the sweep starts
     /// past the shell, a boom no longer than the shell skip stands as authored, as does one whose shell reaches past
@@ -186,16 +188,17 @@ public sealed class WorldCameraClearanceLawTests {
         var none = new WorldChaseBody(collider: null, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f);
         var desired = Desired(pitch: 0f, yaw: 0f);
 
-        Assert.Equal(expected: Desired(distance: 1f, pitch: 0f, yaw: 0f), actual: Resolve(body: none, desired: Desired(distance: 1f, pitch: 0f, yaw: 0f), field: plate));
-        Assert.Equal(expected: desired, actual: Resolve(body: none, desired: desired, field: plate));
-        Assert.Equal(expected: desired, actual: Resolve(body: none, desired: desired, field: thick));
-        Assert.Equal(expected: (3f - 0.05f - WorldCameraClearance.EyeRadius - 0.05f), actual: Resolve(body: none, desired: desired, field: beyond).Z, tolerance: 0.02f);
+        Assert.Equal(expected: Desired(distance: 1f, pitch: 0f, yaw: 0f), actual: Run(arm: new WorldCameraClearance(), body: none, desired: Desired(distance: 1f, pitch: 0f, yaw: 0f), field: plate, frames: 1));
+        Assert.Equal(expected: desired, actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: plate, frames: 1));
+        Assert.Equal(expected: desired, actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: thick, frames: 1));
+        Assert.Equal(expected: (3f - 0.05f - WorldCameraClearance.EyeRadius - 0.05f), actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: beyond, frames: 60).Z, tolerance: 0.02f);
     }
-    /// <summary>The body's keep-out is its collider placed at its pose and scale, inflated by the swept radius: exact
-    /// for a sphere, a capsule and a box along their axes, scaled with the body, turned with it, and zero for a ray
-    /// that meets no volume.</summary>
+    /// <summary>The body's keep-out is its collider and its drawn shapes placed at its pose and scale, inflated by the
+    /// swept radius: exact for a sphere, a capsule and a box along their axes, scaled with the body, turned with it, and
+    /// zero for a ray that meets no volume. A creation's drawn volumes are its material-adding shapes' bounds; a cut
+    /// adds none.</summary>
     [Fact]
-    public void TheBodysKeepOutIsItsPosedColliderInflatedByTheRadius() {
+    public void TheBodysKeepOutIsItsPosedColliderAndDrawnShapesInflatedByTheRadius() {
         var sphere = Body(collider: new WorldCollider.Sphere(Radius: 0.5f));
         var box = Body(collider: new WorldCollider.Box(
             HalfExtents: new DocumentVector3(x: 0.5f, y: 0.5f, z: 0.5f),
@@ -222,5 +225,28 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.Equal(expected: 0.65f, actual: Body(orientation: default(Quaternion)).Exit(direction: Vector3.UnitX, origin: Target, radius: 0.3f), tolerance: 1e-4f);
         Assert.Equal(expected: (2.06f + 0.3f - 1f), actual: Body(orientation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-MathF.PI / 2f))).Exit(direction: Vector3.UnitX, origin: Vector3.UnitX, radius: 0.3f), tolerance: 1e-4f);
         Assert.Equal(expected: 0f, actual: new WorldChaseBody(collider: null, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f).Exit(direction: Vector3.UnitX, origin: Target, radius: 0.3f));
+
+        var drawn = WorldChaseBody.DrawnVolumes(
+            document: CreationFixtures.Document(name: "drawn", shapes: [
+                (CreationFixtures.UnitSphereShape with { Id = 0, Position = new Vector3(x: 2f, y: 0f, z: 0f) }),
+                (CreationFixtures.Shape(type: SdfSolidPrimitive.Box, scale: new Vector3(value: 5f)) with { Id = 1, Blend = SdfBlendOp.Subtraction }),
+                (CreationFixtures.Shape(type: SdfSolidPrimitive.Box, scale: new Vector3(value: 5f)) with { Id = 2, Blend = SdfBlendOp.Intersection }),
+            ]),
+            scale: 0.5f
+        );
+        // A near plane may stand up to the nearest depth at which any volume begins, off the sightline as well as on it.
+        var eye = new Vector3(x: 0f, y: 0.5f, z: 3f);
+
+        Assert.Equal(expected: 2.5f, actual: sphere.NearestDepth(eye: eye, forward: -Vector3.UnitZ), tolerance: 1e-4f);
+        Assert.Equal(expected: (3f - 0.25f), actual: point.NearestDepth(eye: eye, forward: -Vector3.UnitZ), tolerance: 1e-3f);
+        Assert.Equal(expected: (3f - new Vector3(value: 0.5f).Length()), actual: box.NearestDepth(eye: eye, forward: -Vector3.UnitZ), tolerance: 1e-4f);
+        Assert.Equal(expected: (3f - 0.35f), actual: capsule.NearestDepth(eye: eye, forward: -Vector3.UnitZ), tolerance: 1e-4f);
+        Assert.True(condition: float.IsPositiveInfinity(f: new WorldChaseBody(collider: null, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f).NearestDepth(eye: eye, forward: -Vector3.UnitZ)));
+
+        var only = Assert.Single(collection: drawn);
+
+        Assert.Equal(expected: new Vector3(x: 1f, y: 0f, z: 0f), actual: new Vector3(x: only.X, y: only.Y, z: only.Z));
+        Assert.Equal(expected: 1.8f, actual: new WorldChaseBody(collider: null, drawn: drawn, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f).Exit(direction: Vector3.UnitX, origin: Vector3.Zero, radius: 0.3f), tolerance: 0.05f);
+        Assert.Equal(expected: (3f - 0.5f), actual: new WorldChaseBody(collider: null, drawn: drawn, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f).NearestDepth(eye: new Vector3(x: 4f, y: 0f, z: 0f), forward: -Vector3.UnitX), tolerance: 0.01f);
     }
 }

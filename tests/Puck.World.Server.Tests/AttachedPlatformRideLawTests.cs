@@ -74,38 +74,41 @@ public sealed class AttachedPlatformRideLawTests {
         };
     }
     // Stands the carrier so its platform's top lies at height + 0.05, then steps one tick.
-    private static void Carry(WorldFixture fixture, float height) {
+    private static void Carry(WorldFixture fixture, float height, float yaw) {
         fixture.Server.Body(index: Carrier)!.Pose(
+            pitchRadians: 0f,
+            rollRadians: 0f,
             x: 20f,
             y: (height + CarrierAbovePlatform),
-            z: 0f,
-            yawRadians: 0f,
-            pitchRadians: 0f,
-            rollRadians: 0f
+            yawRadians: yaw,
+            z: 0f
         );
         fixture.Step();
     }
 
-    [Fact]
-    public void ARiderStaysGroundedOnARisingAndFallingPlatform() {
+    [InlineData(0f)]
+    [InlineData(0.3f)]
+    [Theory]
+    public void ARiderStaysGroundedOnARisingAndFallingPlatform(float yaw) {
         using var fixture = Fixtures.FreshServer(definition: Document());
         var rider = fixture.JoinSeat(slot: Rider);
 
         _ = fixture.JoinSeat(slot: Carrier);
 
         rider.Pose(
+            pitchRadians: 0f,
+            rollRadians: 0f,
             x: 20f,
             y: 0.1f,
-            z: 0f,
             yawRadians: 0f,
-            pitchRadians: 0f,
-            rollRadians: 0f
+            z: 0f
         );
 
         for (var tick = 0; (tick < 10); tick++) {
             Carry(
                 fixture: fixture,
-                height: 0f
+                height: 0f,
+                yaw: yaw
             );
         }
 
@@ -116,7 +119,8 @@ public sealed class AttachedPlatformRideLawTests {
         for (var tick = 1; (tick <= Ticks); tick++) {
             Carry(
                 fixture: fixture,
-                height: (Climb * tick)
+                height: (Climb * tick),
+                yaw: yaw
             );
             Assert.True(
                 condition: rider.Grounded,
@@ -124,7 +128,7 @@ public sealed class AttachedPlatformRideLawTests {
             );
             Assert.Equal(
                 expected: (rest + (Climb * tick)),
-                actual: (float)rider.FixedPosition.Y,
+                actual: ((float)rider.FixedPosition.Y),
                 tolerance: 0.001f
             );
         }
@@ -132,7 +136,8 @@ public sealed class AttachedPlatformRideLawTests {
         for (var tick = (Ticks - 1); (tick >= 0); tick--) {
             Carry(
                 fixture: fixture,
-                height: (Climb * tick)
+                height: (Climb * tick),
+                yaw: yaw
             );
             Assert.True(
                 condition: rider.Grounded,
@@ -140,7 +145,7 @@ public sealed class AttachedPlatformRideLawTests {
             );
             Assert.Equal(
                 expected: (rest + (Climb * tick)),
-                actual: (float)rider.FixedPosition.Y,
+                actual: ((float)rider.FixedPosition.Y),
                 tolerance: 0.001f
             );
         }

@@ -32,12 +32,12 @@ count as moved on, the driven-input floor below which it counts as idle, and
 how long an unrefreshed latch survives a solver pass reporting no push). The
 positive fixed rates must survive Q48.16 compilation, `displacement` must do
 so after squaring, and `graceSeconds` must be a positive exact whole engine-
-tick duration. A third scalar, `groundStick`, is the inward speed (world
-units/second) a
-grounded body on a curving surface is held against; it is independent of
-`Speed` — a kit's own resolved move speed measurably over-corrects a shallow
-slope climb (the bias converts to downhill drift under depenetration faster
-than to held contact) — and has its own schema default. A fourth,
+tick duration. `groundSnap` is the downward reach (world units, scaled with the
+body, default 0.3) within which a grounded walker follows a crest, descent or
+small edge. Walking velocity is projected onto support; jumps and upward
+launches release it. Zero disables snap. `groundStick` and its inward-speed
+bias are removed. The same bounded landing probe serves snap and step-up.
+Another scalar,
 `stepHeight` (world units, scaled with the body, default 0), is the tallest
 riser a grounded walker walks up onto: when the contact solve finds a step
 blocked by a non-walkable face, `WorldBody.ResolveProgramContacts` retries it

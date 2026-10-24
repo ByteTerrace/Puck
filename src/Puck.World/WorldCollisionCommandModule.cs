@@ -36,7 +36,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             : "analytic contact; census"
         );
 
-        return new CommandResult(Output: $"[world.contacts: {provider} {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
+        return new CommandResult(Output: $"[world.contacts: {provider} {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.CylinderCount} cylinders, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementCylinderCount} cylinders, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
     }
     private static string DescribeCollider(WorldCollider collider) {
         return collider switch {

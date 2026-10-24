@@ -35,17 +35,25 @@ retarget them, and read the references' mentions of them as prior art
 ## The live World is shared
  The World the owner pairs in runs the main
 checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
-tools (in Claude, ToolSearch `select:mcp__puck__puck_worlds,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
+tools (in Claude, ToolSearch `select:mcp__puck__puck_worlds,mcp__puck__puck_world_start,mcp__puck__puck_world_stop,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
 `puck_worlds` lists the running Worlds, and `puck_exec`, `puck_capture_frame`
 and `puck_state_vector_write` take a `world` argument (attachment id or
 process id) that reaches exactly that World; name it whenever more than one
 runs. Reads and captures are free. A mutation (`world.row.set`, `world.reload`,
 `body.*`, `player.*`, `view.override`) changes what the owner sees: make one
-only when the task allows it, and restore what you changed. To run your own
-edits, boot your own World from your worktree with its own `--state-dir`,
-`--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)) and
-`--control` to attach to it, name it on every call, and stop only that
-process ([references/hosting-and-release.md](references/hosting-and-release.md)).
+only when the task allows it, and restore what you changed.
+
+To run your own edits, build `src/Puck.World` in Release in your worktree and
+start a World with `puck_world_start` (`checkout`: your worktree's absolute
+path; `windowed: true` only for a granted GPU leg). Never hand-write that boot
+line: the tool passes `--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)),
+a state directory of its own and `--control`, takes and holds the GPU lease
+for a windowed World, and returns the World's `processId`. Name that World on
+every call, read its stdout and stderr with `host.log` (`host.log category
+sdf.mesh-bake`, `host.log since <seq>`, `host.log ticks <from>..<to>`), and end
+it with `puck_world_stop`, which refuses any World the adapter did not start.
+The World runs from your build output, so stop it before rebuilding
+([references/hosting-and-release.md](references/hosting-and-release.md)).
 
 ## The model
 
@@ -238,6 +246,10 @@ Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
 
 ## Running it
 
+A World you drive call by call is a `puck_world_start` World
+([above](#the-live-world-is-shared)). A whole script piped through stdin, with
+its streams captured, is this recipe:
+
 ```text
 dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
 ```
@@ -298,7 +310,11 @@ check the flag: the owner may be holding the pad.
   ([verification](../verification/SKILL.md#what-uses-the-gpu)).
 - **Capture both streams.** Read-back answers land on stdout; refusals,
   narration, boot lines, capture announcements and `[world.mutation: …]`
-  echoes land on stderr.
+  echoes land on stderr. A World you did not launch keeps its newest 4096
+  lines of both in a ring that `host.log` reads over an attachment, each as
+  `#<seq> t<tick> out|err <line>`; filter with `category <prefix>`, `text
+  <word>` (quote several words), `stream err`, `ticks <from>..<to>`, `since
+  <seq>` and `last <n>`.
 - **Narrow a large read.** An MCP result carries 1 MiB, and `world.counters gpu`
   alone passes that in a world with many render-graph instances. Ask with
   `summary`, `node <name>`, `pass <label>` or `counter <prefix>` (they combine;
@@ -397,9 +413,10 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   apply-time capacity gate.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
-  empty): a body collides as its volumes' world box (the Moth is 0.7 m square
-  and 2.06 m tall) and a placement's primitive as its own box, so a box is
-  exact and every boolean carve collides as the uncarved shape. Build a doorway,
+  empty): spheres and circular cylinders have closest-point contact, while
+  other finite primitives use oriented boxes. The Moth's capsule has a 0.35 m
+  radius and is 2.06 m tall; capsule/box edges remain conservative. Every
+  boolean carve collides as the uncarved shape. Build a doorway,
   window or stairwell as a union of boxes around the opening, never a
   subtraction, and keep 2.4 m of headroom over every tread and landing (her
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
@@ -427,7 +444,10 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   noclip (`worlds/debug/noclip.puck`) is a collider-less free-flight kit
   selected through the `form` register (suit + 2 × noclip).
 - A moving floor is an attached solid placement riding a body (`attach` plus
-  `solid`, analytic provider only); a body grounded on it rides it. The gallery
+  `solid`, analytic provider only); a body grounded on it rides its translation
+  and yaw through the same narrowphase and slope test as ordinary contact.
+  `motion.groundSnap` follows downward surfaces within an authored reach;
+  jump and launch operations release grounding. The gallery
   lift moves its car body with a rule that `poseCell`s it along a box topology
   of 1/16 m layers each tick, so its speed and floor stops are exact.
 

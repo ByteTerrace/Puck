@@ -1,30 +1,37 @@
 using System.Numerics;
 using Puck.Physics;
+using Puck.SignedDistance;
+using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
 /// <summary>
-/// The body a chase camera frames, as the volume its eye keeps out of: the body's kit collider, placed at the pose the
-/// body is drawn at and scaled by its live scale. Presentation-only and allocation-free; the collider's volumes are read
-/// in place and converted to single precision per query.
+/// The body a chase camera frames, as the volume its eye keeps out of: the body's kit collider and the shapes it is drawn
+/// with, placed at the pose the body is drawn at and scaled by its live scale. The drawn shapes reach past the collider
+/// (armour, a helmet, a pack), and an eye inside one starts its view inside her, so both count. Presentation-only and
+/// allocation-free; the collider's volumes are read in place and converted to single precision per query.
 /// </summary>
 public readonly struct WorldChaseBody {
     // Below this a direction component counts as parallel to a slab or an axis.
     private const float ParallelEpsilon = 1e-6f;
 
     private readonly FixedWorldCollider m_collider;
+    private readonly ReadOnlyMemory<Vector4> m_drawn;
     private readonly Quaternion m_inverseOrientation;
     private readonly Vector3 m_position;
     private readonly float m_scale;
 
     /// <summary>Initializes a new instance of the <see cref="WorldChaseBody"/> struct.</summary>
-    /// <param name="collider">The body's compiled kit collider, or <see langword="null"/> for a body with none, which
-    /// keeps the eye out of nothing.</param>
+    /// <param name="collider">The body's compiled kit collider, or <see langword="null"/> for a body with none.</param>
     /// <param name="position">The body root's presented position, in world units.</param>
     /// <param name="orientation">The body's presented orientation.</param>
     /// <param name="scale">The body's live uniform scale; a value that is not positive and finite counts as 1.</param>
-    public WorldChaseBody(FixedWorldCollider? collider, Vector3 position, Quaternion orientation, float scale) {
+    /// <param name="drawn">The bounding spheres of the shapes the body is drawn with (<see cref="DrawnVolumes"/>), in
+    /// the body's own frame at its unscaled size: the centre in X, Y and Z and the radius in W. Empty keeps the eye out
+    /// of the collider alone.</param>
+    public WorldChaseBody(FixedWorldCollider? collider, Vector3 position, Quaternion orientation, float scale, ReadOnlyMemory<Vector4> drawn = default) {
         m_collider = collider.GetValueOrDefault();
+        m_drawn = drawn;
         m_inverseOrientation = Quaternion.Inverse(value: ((orientation.LengthSquared() > 0f)
             ? Quaternion.Normalize(value: orientation)
             : Quaternion.Identity
@@ -34,6 +41,53 @@ public readonly struct WorldChaseBody {
             ? scale
             : 1f
         );
+    }
+
+    /// <summary>Returns the bounding sphere of every shape a creation draws, at its rest pose and stamped at
+    /// <paramref name="scale"/>: the volume a chase eye keeps out of beside the collider.</summary>
+    /// <param name="document">The creation, in the engine frame (<see cref="WorldPrototype.EngineDocument"/>).</param>
+    /// <param name="scale">The creation's stamp scale on the body (the placement and look scales, without the live
+    /// body scale).</param>
+    /// <returns>One sphere per shape that adds material: the centre in X, Y and Z and the radius in W. A shape that only
+    /// cuts or clips the shapes before it (an intersection or a subtraction, <see cref="SdfBoundAlgebra"/>) adds none and
+    /// has no sphere, and a shape folded across a domain is charged its fold's reach, since its copies leave the shape's
+    /// own sphere.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static Vector4[] DrawnVolumes(CreationDocument document, float scale) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        var shapes = (document.Shapes ?? []);
+        var volumes = new List<Vector4>(capacity: shapes.Count);
+        var transform = new CreationStampTransform(
+            Origin: Vector3.Zero,
+            ReflectionNormal: null,
+            Rotation: Quaternion.Identity,
+            Scale: scale
+        );
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var blend = (shapes[index].Blend ?? SdfBlendOp.Union);
+
+            if (
+                SdfBoundAlgebra.IsIntersection(blend: blend) ||
+                SdfBoundAlgebra.IsSubtraction(blend: blend)
+            ) {
+                continue;
+            }
+
+            var (center, radius) = CreationStampEmitter.ShapeStampBound(
+                document: document,
+                shapeIndex: index,
+                transform: transform
+            );
+
+            volumes.Add(item: new Vector4(
+                value: center,
+                w: (radius + (ShapeDomainOps.Reach(domain: shapes[index].Domain) * scale))
+            ));
+        }
+
+        return [.. volumes];
     }
 
     // The interval of t over which origin + t·direction lies within radius of a sphere, or false when it never does.
@@ -234,17 +288,75 @@ public readonly struct WorldChaseBody {
         );
     }
 
+    /// <summary>Returns the nearest depth, along a view direction, at which any volume of the body begins: how far a near
+    /// plane in front of <paramref name="eye"/> may stand before it cuts into the body anywhere in the view, not only
+    /// on the sightline.</summary>
+    /// <param name="eye">The eye, in world units.</param>
+    /// <param name="forward">The unit view direction.</param>
+    /// <returns>The depth, in world units, of the body's nearest volume in front of the eye, measured along
+    /// <paramref name="forward"/> and bounded by each volume's sphere; positive infinity for a body with no volumes.
+    /// A box counts as the sphere about its corners.</returns>
+    public float NearestDepth(Vector3 eye, Vector3 forward) {
+        var nearest = float.PositiveInfinity;
+        var localEye = (Vector3.Transform(
+            rotation: m_inverseOrientation,
+            value: (eye - m_position)
+        ) / m_scale);
+        var localForward = Vector3.Normalize(value: Vector3.Transform(
+            rotation: m_inverseOrientation,
+            value: forward
+        ));
+
+        foreach (ref readonly var volume in m_collider.Volumes) {
+            var radius = ((float)(double)volume.Radius);
+            var center = volume.Center.ToVector3();
+
+            nearest = (volume.Kind switch {
+                FixedBodyColliderKind.Sphere => Depth(center: center, radius: radius),
+                FixedBodyColliderKind.Capsule => MathF.Min(
+                    x: Depth(center: center, radius: radius),
+                    y: Depth(center: volume.Endpoint.ToVector3(), radius: radius)
+                ),
+                _ => Depth(center: center, radius: (radius + volume.HalfExtents.ToVector3().Length())),
+            });
+        }
+
+        foreach (var sphere in m_drawn.Span) {
+            nearest = Depth(
+                center: new Vector3(
+                    x: sphere.X,
+                    y: sphere.Y,
+                    z: sphere.Z
+                ),
+                radius: sphere.W
+            );
+        }
+
+        return (nearest * m_scale);
+
+        float Depth(Vector3 center, float radius) => MathF.Min(
+            x: nearest,
+            y: (Vector3.Dot(
+                vector1: (center - localEye),
+                vector2: localForward
+            ) - radius)
+        );
+    }
     /// <summary>Returns how far along a ray a sphere must travel before it clears every volume of the body the ray
     /// passes through: the latest point at which the swept sphere still touches any of them.</summary>
     /// <param name="origin">The ray's origin, in world units; the chase target, which sits inside the body.</param>
     /// <param name="direction">The ray's unit direction.</param>
     /// <param name="radius">The radius of the sphere the eye keeps clear, in world units; at least zero.</param>
     /// <returns>The distance from <paramref name="origin"/>, in world units; zero when the ray meets no volume ahead of
-    /// its origin, including for a body with no collider.</returns>
+    /// its origin, including for a body with no collider and no drawn shapes.</returns>
     public float Exit(Vector3 origin, Vector3 direction, float radius) {
         var volumes = m_collider.Volumes;
+        var drawn = m_drawn.Span;
 
-        if (volumes.IsEmpty) {
+        if (
+            volumes.IsEmpty &&
+            drawn.IsEmpty
+        ) {
             return 0f;
         }
 
@@ -297,6 +409,26 @@ public readonly struct WorldChaseBody {
                 x: exit,
                 y: volumeExit
             );
+        }
+
+        foreach (var sphere in drawn) {
+            if (SphereInterval(
+                center: new Vector3(
+                    x: sphere.X,
+                    y: sphere.Y,
+                    z: sphere.Z
+                ),
+                direction: localDirection,
+                enter: out _,
+                exit: out var sphereExit,
+                origin: localOrigin,
+                radius: (localRadius + sphere.W)
+            )) {
+                exit = MathF.Max(
+                    x: exit,
+                    y: sphereExit
+                );
+            }
         }
 
         return (exit * m_scale);

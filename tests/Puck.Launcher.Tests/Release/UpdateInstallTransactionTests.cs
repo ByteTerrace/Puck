@@ -287,4 +287,42 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
     }
 
     public void Dispose() => m_root.Dispose();
+
+    [Fact]
+    public async Task Recovery_RefusesWhenRollbackDropsCurrentBelowPendingIntentsMinimumSupported() {
+        Directory.CreateDirectory(path: Install);
+        File.WriteAllText(path: Current, contents: "1.0.1");
+        var manifest = m_fixture.Sign(
+            document: new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: "1.0.0", Notes: null,
+                Payloads: [new ReleasePayload(Rid: UpdateService.CurrentRid(), Files: [new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: Payload).ToString(), Size: Payload.Length)])],
+                Revoked: null, Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema,
+                Signature: null, StateGeneration: 1, Version: "1.0.2"),
+            notBefore: ReleaseChainFixture.Epoch, notAfter: ReleaseChainFixture.Epoch + 3600, sequence: 1);
+        Publish(manifest: manifest);
+        Assert.False(condition: (await Service(installedVersion: "1.0.1", applier: new InterruptedApplier(boundary: "before-pointer"))
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken)).Applied);
+        Assert.True(condition: File.Exists(path: Intent));
+
+        // Simulate stub rollback of 1.0.1 back to last-good 0.8.0 while preserving newer pending intent 1.0.2.
+        using (StubInstall.AcquireUpdateLease(installRoot: Install)) {
+            StubInstall.RevertToLastGood(installRoot: Install, failedVersion: "1.0.1", lastGoodVersion: "0.8.0");
+        }
+
+        var recovered = await Service(installedVersion: "0.8.0", stager: new RefusingStager())
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(condition: recovered.Applied);
+        Assert.Contains(expectedSubstring: "minimumSupported", actualString: recovered.Detail);
+        Assert.Equal(expected: "0.8.0", actual: File.ReadAllText(path: Current));
+    }
+
+    [Fact]
+    public async Task Apply_RefusesCaseInsensitiveVersionCollisionWithActiveInstall() {
+        Directory.CreateDirectory(path: Install);
+        File.WriteAllText(path: Current, contents: "1.0.1-Alpha");
+        Publish(manifest: Manifest(version: "1.0.1-alpha", sequence: 1));
+        var outcome = await Service(installedVersion: "1.0.0", stager: new RefusingStager())
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(condition: outcome.Applied);
+        Assert.Contains(expectedSubstring: "collides", actualString: outcome.Detail, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
 }

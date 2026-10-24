@@ -83,6 +83,14 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: (result.RefusalReason ?? "the claim did not verify as an admitted sequenced release bearer claim"));
         }
 
+        if (!string.Equals(
+            a: requirement.Subject,
+            b: manifest.App,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return ReleaseVerifyOutcome.Refuse(reason: $"the signed claim subject '{requirement.Subject}' does not match the manifest app '{manifest.App}'");
+        }
+
         // Compare-only: refuses a replayed old manifest before anything it carries is trusted. The durable write
         // happens only at the very end, once every other check below has also passed.
         var manifestPin = ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(value: manifest, options: DocumentJsonOptions.Shared));

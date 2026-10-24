@@ -29,9 +29,9 @@ RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,r
     && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp \
     && dotnet publish src/Puck.Mcp.Azure -c Release -o /app/worlds/extensions/Puck.Mcp.Azure
 
-# The official caddy image, through the Docker Official Images mirror on ECR Public rather than Docker Hub, whose
-# anonymous pulls rate-limit and time out on shared CI runners; the index digest pins the exact build.
-FROM public.ecr.aws/docker/library/caddy:2.11.7@sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af AS tls
+# The official Caddy image through Google's Docker Hub mirror: ECR Public's anonymous data limit also rejects
+# shared CI runners with HTTP 429. The index digest pins the exact build, including when the tag is rebuilt.
+FROM mirror.gcr.io/library/caddy:2.11.7@sha256:504a44d7d74bd2bc28a66afc4774912fc21223ca8a67734af1c54ab2f999b489 AS tls
 # TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
 RUN setcap -r /usr/bin/caddy
 
