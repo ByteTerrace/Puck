@@ -1,0 +1,74 @@
+// Development tools are judged in the whole debug world; --reproduce repeats each seeded run byte for byte.
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "addon-tools-tests"
+
+test "development tools start idle and the scope stays empty" {
+  when { ticks 12 }
+  expect {
+    fuzzer[steps] == 0
+    traversal[done] == 0
+    scope[samples] == 0
+  }
+}
+
+test "the fuzzer drives a bounded seeded pass and switches itself off" {
+  when {
+    seat1: world.state.cell.set fuzzer seed 12345
+    seat1: world.state.cell.set fuzzer limit 4
+    seat1: world.state.cell.set fuzzer enabled 1
+    ticks 20
+  }
+  expect {
+    fuzzer[steps] == 4
+    fuzzer[draw] == 3444695176
+    fuzzer[enabled] == 0
+    bodyPosition(body, 44, x) > 52 and bodyPosition(body, 44, x) < 65
+    bodyPosition(body, 44, z) > -45 and bodyPosition(body, 44, z) < -30
+  }
+}
+
+test "the traversal bot reports a deliberately unreachable waypoint" {
+  when {
+    seat1: world.state.cell.set traversal count 1
+    seat1: world.state.cell.set traversal timeout 10
+    seat1: world.state.cell.set traversalRoute 0y 100
+    seat1: world.state.cell.set traversal run 1
+    ticks 30
+  }
+  expect {
+    traversal[done] == 1
+    traversal[missed] == 1
+    traversalFailures[0] > 0
+  }
+}
+
+test "a traversal pass starts at the selected route entry" {
+  when {
+    seat1: world.state.cell.set traversal start 1
+    seat1: world.state.cell.set traversal count 2
+    seat1: world.state.cell.set traversal timeout 10
+    seat1: world.state.cell.set traversalRoute 1y 100
+    seat1: world.state.cell.set traversal run 1
+    ticks 30
+  }
+  expect {
+    traversal[done] == 1
+    traversal[missed] == 1
+    traversalFailures[0] == 0
+    traversal[reached] == 0
+  }
+}
+
+test "the scope samples its selected stand-in into the history rows" {
+  when {
+    seat1: world.state.cell.set scope body 43
+    seat1: world.state.cell.set scope enabled 1
+    ticks 24
+  }
+  expect {
+    scope[samples] > 12
+    scopeTicks[0] > 0
+    scopeFacts[0] > 0
+  }
+}

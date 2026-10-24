@@ -18,6 +18,11 @@ Project references: `Puck.World.Server`, `Puck.Scripting` (the WASM guest
 ABI `AddonSimulationPump` validates against), `Puck.Maths`, and `Puck.Assets`
 (the module bytes a mount reads).
 
+Development guests can query a body's settled kinematics and numeric authored
+state cells, write individual state cells through the ordinary mutation door,
+and emit bounded lines into `host.log`. The [ABI reference](../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
+owns their wire layouts, authority, limits and host fuel charges.
+
 `IWorldAddonHost` implements the shared `IWorldExtensionRuntime` contract with
 recomputed contributions. Capability-manifest matching is shared with recorded
 providers through `WorldCapabilityRequests.Contains`. Service calls belong at

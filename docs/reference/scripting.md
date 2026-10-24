@@ -481,12 +481,15 @@ as any other malformed record—the moment a declared ordinal repeats.
 | 0 | `BodyPose` | none (`A = B = C = 0`) | **4 parts**: `(posX, posY)`, `(posZ, 0)`, `(quatX, quatY)`, `(quatZ, quatW)`—all `FixedQ4816` raw bits |
 | 1 | `SubmitMutation` | through a **Mutate** handle over a document SECTION (never Observe/Body): `A` = the declared `WorldMutation` kind ordinal (`0..127`, `MutationKindAttribute.Ordinal`), `B` = an UNSIGNED guest-memory pointer, `C` = an UNSIGNED byte length (both cross the ABI as signed `i64` lanes reinterpreted) | **1 cell**: `AddonVerdict.Applied` or a refusal (`AttenuatedToEmpty`/`QuotaExhausted`/`StaleHandle`/`NoHold`/`BeatenByReserver`/`MalformedPayload`/`PayloadTooLarge`/`Rejected`) |
 | 2 | `Designate` | through a **Drive** handle over the source BODY: `A` = target body index, `B` = authored target-register index, `C = 0`; the target must also be requested and held through **Observe** | **1 cell**: `AddonVerdict.Applied` or a refusal |
+| 3 | `BodyKinematics` | through an **Observe/Body** handle; `A = B = C = 0` | **2 parts**: `(height, vertical world velocity)` in Q48.16 raw bits; `(body facts, contact flags)` where contact bit 0 is grounded and bit 1 is an obstruction witness |
+| 4 | `ReadStateCell` | through an **Observe/State** handle; `A/B` = unsigned UTF-8 key pointer/length (128 bytes maximum), `C = 0` | **1 cell**: numeric raw value in `A`, `CellKind` ordinal in `B`; missing, text and vector cells answer `NoSuchSubject` |
+| 5 | `Log` | zero handle fields; `A/B` = unsigned UTF-8 pointer/length (256 bytes maximum), `C = 0` | **1 cell**: `Applied` or a refusal; one line per guest per tick, attributed as `[addon.log] <name>: <text>` in `host.log` |
 
 Orientation is the body's canonical `FixedQuaternion`, never a yaw scalar; any derived heading
 projection is the guest's own work. Every `BodyPose` part cell carries the response channel in
 `Channel`, the **same** allowed verdict repeated on all four parts, and `HandleIndex =
 HandleGeneration = 0`—a pose grants no handle. Multi-cell *requests* do not exist beyond
-`BodyPose`'s own four; verbs grow later as data behind the declared range—prefix growth only, so
+the answer parts named above; verbs grow later as data behind the declared range—prefix growth only, so
 a module declaring fewer verbs (built against an older ABI) mounts unchanged.
 
 `SubmitMutation` is decoded and dispatch-gated at DECODE time (the same `TickAddons` call the pump
@@ -504,13 +507,14 @@ verdict is staged into the guest's NEXT batch regardless of when it was decided.
 
 ### `Ask`—rides the `Request` channel
 
-`Verb` = the subject kind (`Body` pairs with the `Drive`/`Observe` mask bits; `Section`—the
-addon mutation seam's own shape—pairs with `Mutate` ALONE), `B` = the capability mask, handle
+`Verb` = the subject kind (`Body` pairs with the `Drive`/`Observe` mask bits;
+`State` with `Observe`; `Section` with `Mutate` alone), `B` = the capability mask, handle
 fields zero. `A`/`C` are shaped PER SUBJECT KIND, never uniformly:
 
 | Subject | `A` | `C` |
 |---|---|---|
 | `Body` | the body's 0-based entity index | `0` (required) |
+| `State` (wire kind 5, Observe only) | unsigned UTF-8 pointer to the exact authored state row name | unsigned name byte length, bounded by `AddonAbi.MaxSectionNameBytes` |
 | `Section` | an UNSIGNED guest-memory pointer to the section's declared NAME's UTF-8 bytes (reinterpreted from the signed `i64` lane, the same convention `SubmitMutation`'s `B` lane uses for a payload) | the name's UNSIGNED UTF-8 byte length (reinterpreted; bounded by `AddonAbi.MaxSectionNameBytes`) |
 
 **`Section` is NAME-KEYED, never ordinal-keyed.** A guest names its section by TEXT (a
@@ -537,6 +541,18 @@ subject; the guest never names a table position. A document section has no liven
 Asks and `BodyPose` queries drain at the pinned drain point, after the authoritative step of the
 tick they were written in, so a verdict reflects the grant table as of that point.
 `SubmitMutation` is the one exception—see above.
+
+`State` asks use the same manifest-before-existence and live grant gates as body reads.
+`ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key.
+These additions are prefix growth: the ABI remains 1, smaller request vocabularies still mount,
+and receipts still pin each guest's content and fuel. They add no imports or external reads.
+
+Host work on the new paths shares the guest's remaining tick fuel. A UTF-8 read costs 32 plus
+its byte length, a state read costs another 64, a kinematics read costs 64, and a log attempt
+costs another 16. UTF-8 is strict and log control characters become spaces. Cell mutation
+payloads (`UpsertStateCell`/`RemoveStateCell`) cost 64 plus bytes before copy/decode, including
+malformed payloads. Insufficient remaining fuel answers `QuotaExhausted`; it never overruns the
+tick budget. `world.addons` includes those charges in its last-tick and lifetime figures.
 
 ### `Observation`—disclosure push
 

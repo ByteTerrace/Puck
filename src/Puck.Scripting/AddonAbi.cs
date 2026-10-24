@@ -180,8 +180,18 @@ public static class AddonAbi {
         public const int BodyPoseAnswerParts = 4;
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
-        /// fewer verbs (<c>3</c>).</summary>
-        public const int Count = 3;
+        /// fewer verbs.</summary>
+        public const int Count = 6;
+        /// <summary>Reads height/vertical world velocity, then body facts/contact flags (two answer parts).</summary>
+        public const int BodyKinematics = 3;
+        /// <summary>The number of answer cells for height/velocity and facts/contact flags.</summary>
+        public const int BodyKinematicsAnswerParts = 2;
+        /// <summary>Reads one numeric cell through an Observe/State handle. A/B name UTF-8 key bytes; C is zero.
+        /// The answer carries its raw value and CellKind ordinal. Text and vector cells are refused.</summary>
+        public const int ReadStateCell = 4;
+        /// <summary>Writes one attributed diagnostic line. A/B name UTF-8 bytes; handles and C are zero.
+        /// At most one 256-byte line per guest per tick, charged against remaining tick fuel.</summary>
+        public const int Log = 5;
         /// <summary>The target-designation verb (<c>2</c>): a guest acts through a Drive handle over the source
         /// body; <c>A</c> is the target body index, <c>B</c> is the target-register index, and <c>C</c> is zero.</summary>
         public const int Designate = 2;

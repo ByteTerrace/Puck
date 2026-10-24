@@ -412,6 +412,8 @@ public sealed partial class WorldAddonRuntime {
         // row its full allowance again.
         Array.Clear(array: addon.DispatchCounts);
         addon.EventCounts.Clear();
+        addon.StateReadCounts.Clear();
+        addon.LoggedThisTick = false;
 
         // A guest that declared no Response channel can be handed nothing: every answer and every grant disclosure is
         // undeliverable by construction, which also means it can never learn a handle and therefore can never reach a

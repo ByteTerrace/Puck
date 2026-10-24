@@ -1,7 +1,8 @@
 namespace Puck.Scripting;
 
 /// <summary>The addon ABI's <c>Ask</c> subject kind wire values, defined independently of any consumer enum. The
-/// decode-valid set is <c>{1, 3}</c> — <see cref="Body"/> (paired with the Drive/Observe capability bits) and
+/// decode-valid set is <c>{1, 3, 5}</c> — <see cref="Body"/> (paired with the Drive/Observe capability bits),
+/// <see cref="State"/> (Observe only) and
 /// <see cref="Section"/> (paired with the Mutate capability bit alone, the addon mutation seam's own handle shape);
 /// <see cref="Screen"/> and <see cref="Profile"/> are declared but not admitted. No wildcard ordinal exists on
 /// purpose: the wire has no spelling for asking for one.</summary>
@@ -25,4 +26,7 @@ public enum AddonSubjectKind : byte {
 
     /// <summary>A profile. Reserved; not admitted.</summary>
     Profile = 4,
+
+    /// <summary>A state row, named by UTF-8 pointer/length in A/C, paired with Observe only.</summary>
+    State = 5,
 }
