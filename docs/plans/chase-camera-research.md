@@ -1,0 +1,215 @@
+# Chase camera behavior in tight spaces
+
+When a third-person chase camera follows an avatar into a lift car, a switchback stairwell, a low doorway, or an inside corner, the authored boom no longer fits inside the room. The camera system must decide how to trade off four constraints: keeping the camera inside the room's geometry, keeping the avatar visible and readable, preserving the look direction that drives player movement, and avoiding sudden visual jumps or looming motion that cause disorientation.
+
+In Puck, [`WorldCameraClearance`](../../src/Puck.World.Client/WorldCameraClearance.cs) and [`WorldChaseBody`](../../src/Puck.World.Client/WorldChaseBody.cs) currently resolve tight spaces by sweeping a `0.3 m` eye sphere along the boom (`4.2 m` at `0.3 rad` pitch in [`moth.puck`](../../worlds/debug/avatars/moth.puck), aimed at `[0, 1, 0]`), shortening the boom when room remains behind the Moth, rising up to `LiftCeiling` (`1.1 rad`, about `63°`) when the wall comes closer than her drawn volumes, and advancing the camera's near clip plane (`Near`) to cut away the wall when her back is pressed against it ([views reference](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance)). That solver keeps her whole silhouette visible and never turns her movement heading, but in a `2.88 m` deep enclosure such as the gallery lift car ([`hall.puck`](../../worlds/debug/hall.puck)) it shortens the boom to `1.4 m` at the resting `17.2°` pitch while still aiming at her waist (`y = 1.0 m`), filling the viewport with her back and thrusters ([open items](open-items.md)).
+
+This page surveys the nine standard tight-space camera behaviors across shipped games and camera-design literature, summarizes practitioner and player evidence, selects the two winning modes for the debug world to ship alongside an evaluation of smooth first-person pull-in, and specifies what the debug world needs to test them side by side.
+
+## Tight-space camera behaviors
+
+Game camera systems draw from nine building blocks when geometry encroaches on a third-person rig. Most shipped games combine two or three of them rather than relying on one alone.
+
+| Behavior | Mechanism | Strengths | Failure modes | Shipped examples |
+|---|---|---|---|---|
+| **Pull-in along the boom** | Raycast, sphere-cast, or frustum-cast from the pivot toward the desired eye shortens the boom distance to stand just in front of the hit surface. | Preserves camera yaw and pitch; keeps the eye inside the room; matches player intuition about physical walls. | Fixed waist-height targets fill the screen with the avatar's lower back at short distances; single-ray probes snag on narrow pillars and stair risers. | *Super Mario 64*, *Uncharted* series, *God of War*, *Dark Souls* series, *World of Warcraft*, Puck (`Shortened` mode). |
+| **Rise over the head** | When horizontal distance behind the avatar is blocked, the boom increases its elevation angle toward world or seat up so the camera looks down over the avatar's head and shoulders. | Keeps the avatar and immediate footing in view in corners and narrow landings without entering the avatar's mesh. | Steep angles (`> 60°`) flatten vertical perspective, hide distant ahead sightlines, fail under low ceilings or soffits, and feel disorienting if aimed at shooters or horizons. | *Journey*, *Super Mario Sunshine*, *Monster Hunter* series, *Shadow of the Colossus*, Puck (`Risen` mode up to `63°`). |
+| **Orbit away from the wall** | Feeler rays or whiskers to the left and right of the boom push camera yaw away from grazing walls or swing the boom around the avatar when the back is blocked. | Avoids sudden distance compression when walking nearly parallel to a curved wall or hillside. | Fights manual look input; under camera-relative movement (`yawReference: "World"`), rotating camera yaw rotates the player's movement vector and steers the avatar into walls or off ledges. | *Dark Souls* and *Elden Ring* ("Camera Auto Wall Recovery"), *Super Mario 64* (Lakitu side-stepping), *Kingdom Hearts*, early *Tomb Raider* titles. |
+| **Near-plane cut-away** | The eye stays at a minimum keep-out distance from the avatar (even inside or behind the obstructing wall) and advances the projection near plane (or a custom clip plane) to slice away geometry between the eye and the avatar's side of the wall. | Requires no per-material transparency shader; keeps the avatar whole; avoids crushing boom distance to zero when backed flat against a wall. | Can reveal void, skyboxes, or adjacent rooms behind thin partitions; exposes open backfaces unless capped or shaded; clips foreground props across the whole viewport width at that depth. | Puck (`Crowded` mode in `WorldCameraClearance.Near`), *Super Mario 3D World*, *XCOM 2*, *Baldur's Gate 3* (tactical cutaway), *The Sims* series. |
+| **Fade or dither the occluder** | Geometry intersecting a capsule or cone between the eye and the avatar reduces its opacity or discards pixels with a screen-space dither pattern (Bayer or blue-noise matrix). | Eliminates jarring camera jumps for narrow pillars, foliage, bannisters, and doorway lintels; preserves framing and FOV. | Looks unnatural on thick structural load-bearing walls if the eye sits deep inside solid rock; requires tagging or thickness heuristics to distinguish thin occluders from room boundaries. | *Super Mario Odyssey*, *Uncharted 3* and *Uncharted 4*, *Monster Hunter: World*, *Diablo IV*, *Hades*. |
+| **Character fade-out when close** | When collision pushes the eye within a threshold distance of the avatar (`~0.4–1.2 m`), the avatar's own mesh fades or screen-door dithers toward full transparency while the look target shifts toward the head or shoulder. | Lets the camera stay inside the room at natural eye-level pitch without the avatar's torso or helmet blocking the center of the screen; works under low ceilings. | Hides the avatar's body posture, foot plants, and cosmetic silhouette while crowded; partial alpha without dithering causes self-sorting artifacts on complex rigs. | *The Legend of Zelda: Breath of the Wild* and *Tears of the Kingdom*, *Super Mario Odyssey*, *Genshin Impact*, *Horizon Zero Dawn*, *Splatoon 3*. |
+| **Pull into first person** | As obstacles push the boom below the minimum third-person clearance, the camera interpolates all the way into the avatar's head pivot (`distance = 0`), hides the avatar body, and operates as a first-person view until space opens again. | Guarantees an unobstructed forward view in arbitrarily tight ducts, crowds, or closets without clipping through walls. | Involuntary perspective shifts trigger looming motion sickness ("yo-yoing" near pillars); reverses pitch parallax; hides feet on stairs; narrow third-person FOV feels cramped in first person. | *World of Warcraft*, *Final Fantasy XIV*, *Guild Wars 2*, *Roblox* (`PopperCam`), *Metal Gear Solid 2* and *3* (tight ducts and wall press). |
+| **Fixed or authored camera volumes** | Entering a trigger volume (such as an elevator cab, crawlspace, or fixed stairwell) blends the active camera program to an authored room camera, spline dolly, or constrained framing parameters. | Gives directors exact composition and guaranteed sightlines for hero spaces such as lift panels or boss arenas. | Labor-intensive to author for every tight corner; creates sudden movement-basis transitions at volume boundaries unless movement latches until stick release. | *Resident Evil* series, *God of War* (scripted squeeze and lift cameras), *Inside*, *Uncharted* series, *Luigi's Mansion 3*. |
+| **Lag and spring easing** | A critically damped or underdamped filter (`SecondOrderFollower3` in Puck) smooths boom length, rise angle, and pivot offset changes over time, often paired with asymmetric snap-in / ease-out rates. | Prevents high-frequency chatter on stairs and corrugated walls; makes recovery after passing an obstacle feel weighty and continuous. | Symmetric slow easing on pull-in lets the camera lag inside a wall for several frames after a fast turn unless bounded by a hard skin clamp (`SurfaceSkin`) or near-plane cutaway. | Virtually all modern third-person cameras: *Journey*, *The Last of Us*, *Ghost of Tsushima*, *Breath of the Wild*, Puck (`camera-boom` dynamics). |
+
+## What the camera-design community and players think
+
+The research lane had no web access, so the sources below are cited from recall and are unverified: talk titles, mistake numbers, player-sentiment claims and the quoted game settings need checking before anything relies on them. Evidence on third-person tight-space behavior comes from four sources: GDC technical post-mortems by camera engineers, foundational textbooks, engine and studio engineering blogs, and player feedback across action RPGs, platformers, and MMOs.
+
+### GDC talks and practitioner post-mortems
+
+**John Nesky, "50 Game Camera Mistakes" (GDC, drawing on *Journey* at thatgamecompany)** — *Strong practitioner evidence (primary source, industry-standard reference for 3D camera design).*
+Nesky catalogs specific failure modes when a third-person camera meets obstacles:
+- **Mistake #4 (Default distance too long for the environment)**: A long boom (`> 4 m`) works in open desert or plazas but stays perpetually in collision recovery indoors unless indoor spaces or tight-space rules adapt the framing.
+- **Mistake #6 (Pushing the camera away from an obstacle while the player swings toward it)** and **Mistake #12 (Swinging the camera sideways when occluders come from behind)**: Nesky strongly warns against auto-orbiting yaw away from walls. When the player commands a look angle or relies on camera-relative movement, lateral avoidance fights the player's thumb and destroys path predictability.
+- **Mistake #7 (Letting the player push the camera inside an obstacle)** and **Mistake #13 (Letting the camera's near-clipping plane intersect the avatar)**: Slicing into the back of the character's head (exposing eyeballs, teeth, or hollow backfaces) or slicing open a wall without clean handling immediately breaks spatial immersion.
+- **Mistake #8 (Letting independent forces compete to push the camera)**: When spring follow, wall repulsion, and auto-centering act on the same axes without a unified hierarchy, the camera oscillates in corners.
+- **Mistake #9 (Excessively moving the camera for unimportant items)** and **Mistake #10 (Intersecting narrow columns)**: Thin props, railings, and small columns should never trigger full boom pull-in; ignoring their camera collision and fading/dithering them avoids rapid zoom pumping.
+- **Mistake #11 (Interpreting a hill as a wall to be avoided)**: Ground slopes and stairs behind the character will push a level raycast inward unless the camera rises with the slope or sweeps a sphere clear of the step rise.
+
+**Travis McIntosh, "The Cameras of *Uncharted 3*: A Dynamic System" (GDC, Naughty Dog)** — *Strong practitioner evidence (shipped AAA production architecture).*
+McIntosh details how *Uncharted* handles narrow urban alleys, stairwells, and indoor rooms:
+- **Priority blending and parameterized rigs**: Rather than one static boom, the camera blends framing parameters (distance, vertical target offset, shoulder offset, FOV) as space constricts.
+- **Target migration on pull-in**: When a wall forces the boom inward, keeping the aim point at the character's pelvis or lower back forces the camera to stare at the character's spine. Shifting the look target upward toward the head/neck and slightly toward the shoulder as distance shortens keeps the horizon and forward room layout occupying the upper two-thirds of the screen.
+- **Dithered occlusion over erratic motion**: For pillars, foliage, and close foreground geometry, Naughty Dog uses distance-based screen-door dithering in the pixel shader rather than jerking the camera forward for brief occlusions.
+
+**Modern over-the-shoulder action cameras (*God of War*, Sony Santa Monica; *Horizon*, Guerrilla Games)** — *Moderate-to-strong practitioner evidence (industry pattern across modern action-adventure titles).*
+- In confined interiors (elevators, boat cabins, narrow ledges), keeping pitch near horizontal (`-10°` to `+25°`) while pulling the camera close to the shoulder or fading the character preserves combat and interaction readability far better than tilting the camera to a steep overhead angle (`> 50°`), because an overhead angle hides wall switches, signage, and enemies standing more than two meters away.
+
+### Textbooks and academic literature
+
+**Mark Haigh-Hutchinson, *Real-Time Cameras: A Guide for Game Designers and Developers* (Morgan Kaufmann, drawing on *Metroid Prime* at Retro Studios)** — *Strong foundational evidence (comprehensive engineering text on real-time camera systems).*
+- **Sphere and volume sweeps over raycasts**: Haigh-Hutchinson demonstrates that single raycasts fail in corners and narrow openings because the camera frustum has finite width (`Near` plane height and width). Sweeping a sphere (`EyeRadius = 0.3 m` in Puck) or a cylinder guarantees frustum clearance.
+- **Asymmetric damping (fast in, smooth out)**: When a wall suddenly blocks the boom during a fast turn, slow inward damping leaves the camera inside the wall. Haigh-Hutchinson recommends cutting or rapidly snapping inward to clear the obstruction (or masking the lag frames), while using critically damped spring interpolation when easing back out to the authored boom so the camera does not pop backward as the player clears a doorway.
+- **Avatar occlusion vs. environment collision**: When the camera is forced closer than the avatar's bounding cylinder, Haigh-Hutchinson identifies three viable resolutions: raising the camera pitch (viable only when ceiling height allows), fading the avatar out (the cleanest general solution for enclosed rooms with ceilings), or transitioning to first person (which requires hysteresis and control-scheme care to prevent motion sickness).
+
+**Christie, Olivier, and Normand, "Camera Control in Computer Graphics" (Eurographics State-of-the-Art Report)** — *Moderate academic evidence.*
+- Formalizes the distinction between *reactive constraint satisfaction* (per-frame sphere casts) and *potential-field / whisker avoidance*, showing that potential fields around concave corners have local minima where the camera chatters unless yaw is locked to user input and only distance and elevation (or opacity) are solved reactively.
+
+### Player forums, reviews, and community consensus
+
+Player sentiment across Reddit (`r/Games`, `r/eldenring`, `r/ffxiv`, `r/wow`), Steam reviews, and accessibility forums is remarkably consistent on which camera behaviors feel good and which cause frustration — *Moderate empirical evidence (large-scale player consensus across genres)*:
+
+1. **Players despise automatic yaw orbiting ("camera fights")**:
+   In *Dark Souls*, *Bloodborne*, and *Elden Ring*, "Camera Auto Wall Recovery" is routinely cited by players as the first setting to turn off. Because those games use camera-relative movement, a wall grazing the camera's side swings the camera yaw, which bends the player's movement direction mid-sprint or mid-dodge. Puck's rule in `WorldCameraClearance`—never changing heading during clearance—aligns completely with player consensus.
+2. **Players praise target-shift + character dither-fade in *Breath of the Wild*, *Tears of the Kingdom*, *Super Mario Odyssey*, and *Genshin Impact***:
+   When Link or Mario backs against a wall in a small shrine room or elevator, the camera slides smoothly forward along the sightline, shifts its aim up to head height so the room stays framed straight ahead, and dissolves the character with a clean stipple dither. Players rarely notice the camera acting at all because their sightline into the room never tilts into the floor and their character never blocks the screen.
+3. **Players complain when waist-aimed cameras trap them in elevators and small rooms**:
+   In third-person games that shorten the boom without raising the look target or fading the character, stepping into an elevator or small shop fills 70% of the screen with the character's backpack or armor plates, making wall buttons and doors hard to see and click. This is the exact symptom observed in Puck's gallery lift car at `boom = 1.4 m`.
+4. **Players dislike involuntary zoom-to-first-person in MMOs and platformers**:
+   In *World of Warcraft*, *Final Fantasy XIV* (especially indoor housing and tight dungeon corridors), and *Guild Wars 2* jumping puzzles, players frequently complain about the camera snapping into the back of their character's head or toggling into first person when backing against a partition. Blizzard exposes `/console cameraIndirectVisibility` and `cameraIndirectOffset` specifically to stop pillars and minor walls from slamming the camera into the player's head, and ArenaNet provides collision-sensitivity and vertical-offset sliders in *Guild Wars 2* for the same reason.
+
+## The two winners for Puck
+
+Puck's debug world serves both as a playable third-person action showcase and as a visual inspection tool for the Moth's sculpted SDF rig, gait, and thrusters ([`AGENTS.md`](../../AGENTS.md)). Evaluating all nine behaviors from the table narrows the general tight-space choice to two winners:
+
+- **Eliminated — Orbit away from the wall**: Violates heading preservation (`yawReference: "World"`), fighting the player's look stick and bending camera-relative movement paths near walls.
+- **Subsumed as shared foundation — Pull-in along the boom, rise over the head, and lag and spring easing**: Every third-person solver needs sphere-cast pull-in (`EyeRadius = 0.3 m`), bounded elevation rise, and critically damped spring easing (`camera-boom` with an inward `SurfaceSkin` clamp). None of the three is sufficient by itself when a room is narrower than the avatar's keep-out radius or when a waist-aimed boom shortens to `1.4 m`.
+- **Supplementary rather than general — Fixed camera volumes and occluder dithering**: Authored camera volumes require per-room trigger boxes and cannot cover arbitrary user-authored geometry; occluder dithering excels at thin pillars and railings sitting *between* the camera and the avatar, but cannot by itself keep a `4.2 m` boom inside a `2.88 m` lift car without leaving the camera buried deep inside solid exterior walls.
+- **The core split — Character fade vs. near-plane cutaway**: When a room forces the eye closer than `1.8 m`:
+  - During **indoor play and navigation** (riding the lift, operating wall buttons, walking through doorways), the player wants to see **the room and controls ahead** along a near-horizontal sightline, even if the Moth fades out when the wall is right behind her.
+  - During **avatar inspection and precision platforming** (watching foot plants on stairs, checking thruster plumes in a corner, judging clearances around the body), the user wants to see **the whole Moth solid and unclipped**, looking down over her head with the intervening wall cut away.
+
+The debug world therefore ships **two winning tight-space modes** that share the same heading-preserving sphere-cast foundation (`EyeRadius = 0.3 m`, zero yaw deflection, target-height migration on pull-in) and differ in how they resolve close proximity (`< 1.8 m`). Authors pick the default for their world or avatar basis in `views.seatControl` (or on the clearance op in `views.seatRig`), and players override it in `seatDefaults.seatCameraFeel` (`playerDefaults.seatLook`).
+
+### Target-shift pull-in with character fade
+
+In the first winner (`fade`), as geometry shortens the boom below a comfort knee (`~2.2 m` on the Moth's `4.2 m` boom), the look target migrates smoothly upward from the authored waist pivot (`[0, 1.0, 0]`) toward her head/eye level (`[0, 1.74, 0]` suited, `[0, 1.54, 0]` pilot, scaled by `liveScale`), and the pitch rise ceiling stays gentle (`0.35 rad` / `20°` max additional rise). Instead of refusing to shorten closer than `WorldChaseBody.Exit` (`KeepOut`), the eye stays strictly inside the room's static geometry (`SurfaceSkin = 0.1 m` in front of the wall) and is allowed to enter the body's keep-out shell down to a short minimum boom (`0.35 m` from the head target). As the eye distance to the target drops from `fadeStartDistance` (`1.25 m`) to `fadeEndDistance` (`0.45 m`), the Moth's body stamp applies a screen-space stipple dither (or opacity fade) from `1.0` (solid) to `0.0` (hidden).
+
+**Why it wins:**
+- **Fixes the 1.4 m lift car immediately**: Inside the gallery lift car (`boom = 1.4 m`, fraction `0.33`), shifting the target height from `1.0 m` up to `~1.55 m` raises the camera sightline to shoulder/head height while keeping her mostly or wholly opaque (at `1.4 m`, she is outside the `1.25 m` fade start, or just beginning a subtle edge dither), so the player looks straight across the cab at the floor buttons, door, and indicator rather than down at her lower back.
+- **Never leaves the room or slices thin walls**: Because the eye stays on the room side of every wall and under every low ceiling, `Near` stays at its normal frustum value; adjacent rooms behind thin partitions are never exposed, and low soffits above doorways never fight a `63°` rise.
+- **Matches modern action-adventure expectations**: Feels immediately familiar to players of *Breath of the Wild*, *Super Mario Odyssey*, and *Genshin Impact*.
+
+### Target-shift rise and near-plane cutaway
+
+The second winner (`cutaway`) refines Puck's existing [`WorldCameraClearance`](../../src/Puck.World.Client/WorldCameraClearance.cs) solver with one addition: **target-height migration on shortened booms**. The Moth remains 100% opaque at all times (`KeepOut` over her collider and `DrawnVolumes` remains an inviolable floor).
+1. When geometry shortens the boom while it still fits outside her body (`Shortened`, as in the lift car at `1.4 m`), the look target interpolates upward from `[0, 1.0, 0]` toward her upper chest/neck (`[0, 1.55, 0]`, scaled by `liveScale`) as the boom fraction drops below `0.6`.
+2. When no length at the resting pitch fits between the wall and her `KeepOut` shell (`Risen`), the boom scans upward up to `LiftCeiling` (`1.1 rad` / `63°`) to look over her head.
+3. When no rise up to `LiftCeiling` fits (`Crowded`, back flat against a wall or corner), the eye stands outside her body at the rise ceiling and `WorldCameraClearance.Near` advances the near clip plane to the wall face on her side, stopping `NearMargin` (`0.05 m`) short of `WorldChaseBody.NearestDepth` so the near plane never cuts into her.
+
+**Why it wins:**
+- **The avatar is never hidden or stippled**: Essential for Puck's studio/inspection workflow, platforming foot-plant visibility, and players who prefer an unbroken character silhouette.
+- **Solves the lift-car framing without losing the cutaway**: Adding target-height interpolation to the existing solver raises the sightline in the lift car from her waist (`1.0 m`) to her upper chest/neck (`1.55 m`) at `1.4 m` boom length, framing her upper torso in the lower half of the screen and opening the top half of the frame to the cab's buttons and doors.
+- **Zero shader or render-pass cost**: Operates entirely in [`WorldCameraClearance.Resolve`](../../src/Puck.World.Client/WorldCameraClearance.cs) and the view snapshot's `Near` plane, already covered by CPU law tests (`WorldCameraClearanceLawTests`).
+
+### Author and player parameters for both winners
+
+In keeping with Puck's data model ([`puck-world` skill](../../.claude/skills/puck-world/SKILL.md#the-model)), durable framing structure lives in the camera program (`views.seatRig`) and `views.seatControl`, while portable player preference lives in `seatDefaults.seatCameraFeel` (`playerDefaults.seatLook`) and echoes in `world.view.camera`.
+
+| Parameter | Where authored / set | Winner 1 (`fade`) default | Winner 2 (`cutaway`) default | Purpose and behavior |
+|---|---|---|---|---|
+| `clearanceMode` | `views.seatControl` (world floor) and `seatCameraFeel` (optional player override: `auto`, `fade`, `cutaway`, `firstPerson`) | `"fade"` | `"cutaway"` | Selects how close obstructions (`< KeepOut`) are resolved. Player `auto` inherits the world's authored mode. |
+| `distance` (boom length) | `views.seatRig` `orbit` op | `4.2` m | `4.2` m | Unobstructed rest distance from the pivot, scaled by `liveScale`. |
+| `pivotOffset` / `targetOffset` | `views.seatRig` `orbit` and `lookAt` ops | `[0, 1.0, 0]` m | `[0, 1.0, 0]` m | Rest look target at full boom length (waist/lower chest). |
+| `closeTargetOffset` | `views.seatRig` clearance / `lookAt` op | `[0, 1.74, 0]` m (`[0, 1.54, 0]` pilot) | `[0, 1.55, 0]` m (`[0, 1.40, 0]` pilot) | Target offset interpolated toward as boom fraction drops from `closeTargetStartFraction` (`0.6`) to `closeTargetFullFraction` (`0.2`). |
+| `maxRise` (`LiftCeiling`) | `views.seatControl` or clearance op | `0.35` rad (`20°`) | `1.1` rad (`63°`) | Maximum elevation added above the rig's rest pitch when `KeepOut` blocks a level pull-in. |
+| `dynamics` (boom and rise easing) | `views.seatRig` `dynamics` op (`camera-boom` row) | `f: 4, zeta: 1, r: 0` (with `SurfaceSkin: 0.1` m inward clamp) | `f: 4, zeta: 1, r: 0` (with `SurfaceSkin: 0.1` m inward clamp) | Critically damped second-order ease on boom fraction, rise angle, and target-height blend; inward wall contact clamps immediately to `SurfaceSkin`. |
+| `occluderTreatment` | `views.seatControl` / clearance op | `wallCollide` (hard sphere-cast against `StaticField`, no wall cutaway) | `nearCutaway` (`Near` advances to wall face, `NearMargin = 0.05` m before `NearestDepth`) | How the room's walls between eye and avatar are treated. |
+| `characterFade` | `views.seatControl` / clearance op | Enabled: `startDistance: 1.25` m, `endDistance: 0.45` m, `minimumBoom: 0.35` m | Disabled (`none`; eye never enters `KeepOut`) | Dither-fades the perceived body stamp as the cleared eye approaches the target closer than `startDistance`. |
+
+## Evaluating a smooth transition into first person as a third option
+
+In a smooth first-person transition (`firstPerson`), as walls close in behind the avatar, the camera pulls along the boom, shifts its target to the avatar's eyes, passes through the head shell to `distance = 0`, and looks outward from the avatar's own eye point until space opens behind the avatar again.
+
+### Prior art
+
+Shipped games use two distinct patterns for combining third-person and first-person views:
+
+1. **Collision-driven automatic pull-in to first person** (*World of Warcraft*, *Final Fantasy XIV*, *Guild Wars 2*, *Roblox* `PopperCam`):
+   - The camera boom is a single continuous distance variable `d` in `[0, d_max]`. Both manual scroll-wheel zoom and wall collision push `d` toward `0`.
+   - In *Roblox*'s `PopperCam`, when a wall pushes `d` below `2.0` studs (~`0.56 m`), the camera controller writes `LocalTransparencyModifier = (2.0 - d) / 1.5` across all character mesh parts, reaching `1.0` (invisible) at `d <= 0.5` studs, and snaps to the head's eye attachment at `d = 0`.
+   - In *World of Warcraft* and *Final Fantasy XIV*, a wall directly behind the character pushes `d` to `0`, hiding the character model on a hard threshold (`d < 0.5 m`) and placing the camera inside the head pivot.
+2. **Contextual or manual toggle to first person** (*Metal Gear Solid 2* and *3*, *The Elder Scrolls V: Skyrim*, *Fallout 4*, *Grand Theft Auto V*, *Cyberpunk 2077*):
+   - *Metal Gear Solid 2* and *3* switch automatically into "intrusion view" (first person) only when the player enters a discrete state—crawling into an air duct or holding a wall-press in a narrow alcove—never from ordinary wall grazing.
+   - *Skyrim*, *Fallout 4*, and *Grand Theft Auto V* never let third-person wall collision push the camera into first person; instead, the player toggles first person deliberately (with a button press or a scroll detent past minimum third-person distance), and third-person wall collision stops at a close over-the-shoulder distance.
+
+3. **State-driven transition: Metroid Prime's morph ball** (the owner's reference for how this transition should feel). Retro Studios' camera system, which Mark Haigh-Hutchinson engineered, switches between Samus's first-person visor and a third-person camera behind the morph ball:
+   - **A deliberate state change triggers it, never collision.** The player morphs or unmorphs, so the switch is always expected.
+   - **The camera travels a short eased path.** On morphing it pulls back out of the helmet along the view direction to its chase position behind the ball, and returns into the visor on unmorphing. It is a continuous move over roughly half a second, not a cut.
+   - **Heading is preserved through the move,** so the player's sense of direction and movement input carry across.
+   - **The presentation follows the camera.** The visor HUD gives way, or returns, as the camera leaves or re-enters the helmet. The body is never seen from inside.
+   - **Controls change with the state,** so look and steer mean what the current view implies.
+   - **In tight morph-ball tunnels, authored camera hints (spline and fixed-position cameras) take over** rather than a reactive boom fighting the walls.
+
+### Comfort and motion-sickness considerations
+
+Both academic cybersickness research and GDC camera post-mortems (Haigh-Hutchinson, *Real-Time Cameras*; Nesky, "50 Game Camera Mistakes") flag involuntary third-to-first-person collision transitions as a high-risk comfort hazard for four reasons:
+
+1. **Optical-flow looming ("yo-yoing")**: When a player walks past a row of columns, climbs a narrow switchback stair with a central divider wall, or turns inside a doorway, the clearance behind the head fluctuates rapidly between `0.3 m` and `3.0 m`. If the camera pulls all the way to `d = 0` and springs back out on every step, the entire peripheral visual field expands and contracts along the optical axis without matching vestibular acceleration—one of the strongest known triggers of vection-induced nausea.
+2. **Pitch parallax reversal at `d = 0`**: On an orbit rig (`d > 0`), pitching the look stick up moves the camera *downward* toward the floor while tilting upward around the pivot; at `d = 0` (first person), pitching up rotates the camera in place with zero vertical translation. Crossing `d = 0` while the player is actively moving the right stick changes the translational-to-rotational ratio of look input mid-turn.
+3. **Field-of-view mismatch**: The Moth's chase rig uses `fieldOfViewRadians: 0.96` (`55°` vertical FOV, about `85°` horizontal on a 16:9 viewport), which is comfortable when the avatar stands two to four meters ahead in the frame. In first person inside a small room (such as the `2.56 m × 2.88 m` lift car), a `55°` vertical FOV feels constricted ("binocular vision"), whereas widening FOV dynamically to `1.20 rad` (`~69°` vertical) during a wall push creates a simultaneous dolly-zoom effect that increases motion sickness.
+4. **Loss of spatial and foot reference**: When climbing the gallery hall's `0.25 m` stair risers or stepping across the threshold of the moving lift car, transitioning to first person hides the Moth's boots and peripheral floor clearance right when the player is judging step edges.
+
+### Interaction with the Moth's drawn body and `WorldCameraClearance`
+
+Supporting a smooth pull-into-first-person on the Moth interacts directly with four parts of Puck's current presentation pipeline:
+
+1. **Bypassing `WorldChaseBody.Exit` (`KeepOut`)**:
+   [`WorldCameraClearance.Resolve`](../../src/Puck.World.Client/WorldCameraClearance.cs) clamps the eased boom length to `placed = MathF.Max(held, keepOut)`, where `keepOut` is the distance required for a `0.3 m` sphere to exit both the kit's capsule collider (`radius: 0.35 m`, height `2.06 m`) and the rest-pose bounding spheres of all 312 union shapes in [`moth.puck`](../../worlds/debug/avatars/moth.puck) (`WorldChaseBody.DrawnVolumes`). Because her hood, shoulder stacks, and back pods inflate `keepOut` to `0.65–1.35 m`, the current clearance arm is mathematically prevented from ever approaching `d = 0`. A first-person pull-in must set `keepOut = 0` (or smoothly relax it to `0`) once the room clearance behind the target drops below the body's exit radius.
+2. **Migrating the pivot from `[0, 1, 0]` to the active look's eye point**:
+   The Moth's `seatRig` orbits `[0, 1, 0]` (her waist). Her sculpted head (`moth-head` in `moth.puck`) sits at `headAt = [0, 1.735, 0.207]` in the suited `2.06 m` form, and lower in the `1.68 m` off-suit `moth-pilot` form ([`suit.puck`](../../worlds/debug/suit.puck)), and both scale by `liveScale` (`0.25` in Wonderland, [`size.puck`](../../worlds/debug/size.puck)). Pulling `d` to `0` without moving the pivot puts the first-person camera inside her abdomen. As `d` shortens from `1.5 m` to `0.0 m`, the pivot and look target must interpolate to the active form's eye position (`[0, 1.75, 0.22] * liveScale` suited, `[0, 1.54, 0.12] * liveScale` pilot) and switch `lookAt` from aiming *at* the pivot to aiming *forward from* the eye (`SdfCameraProgram.FacingSubject` semantics) so `Target - Eye` stays well-conditioned as `d -> 0` (where `MinimumBoom = 1e-4f` in `WorldCameraClearance.Resolve`).
+3. **Hollow interior of the hood, face locks, and blinking eyelids**:
+   Unlike `WorldCameraClearance.Near` in `Crowded` mode—which works because the eye stands *outside* `WorldChaseBody` and stops the near plane `0.05 m` *in front* of `NearestDepth`—an eye placed inside `headAt` has geometry both behind and in front of it: the hood rim, swept fringe locks, nose tip (`z = 0.21–0.23`), and the `blinkPose` eyelids that step forward every `2.5–5 s` (`blink-close` rule in `moth.puck`). Furthermore, `WorldStampPool.PackTransforms` animates her head, chest, and hips with gait bob, forward run lean (`moth-run`), and `body-turn` / `body-lean` followers, whereas `WorldChaseBody.DrawnVolumes` holds static rest-pose spheres. A planar near clip plane cannot hide her animated hood and eyelids at `0.05–0.25 m` without also clipping close walls, lift buttons, or the carried Humble Gaming Brick (`pilotHold` in `suit.puck`) held in her hands.
+4. **Required stamp visibility rule**:
+   When the camera pulls within `0.45 m` of the head pivot on its way to `d = 0`, presentation must hide or dither-out the perceived body's own stamp in *that seat's view only* (leaving mirrors, portal windows, and other seats' views showing the whole Moth, and keeping any carried screen placement such as the engaged brick visible).
+
+### Recommendation on the third option
+
+The owner's direction: model the first- and third-person change on Metroid Prime's morph ball transition. The third option is a state-driven view change, not a collision response:
+- **Triggers:** a deliberate state the player or world enters, such as a first-person toggle, an inspect or focus mode, flight, piloting, or a size change like Wonderland's quarter scale.
+- **The move:** an eased pull out of the head, or into it, along the view direction, with heading preserved.
+- **The body:** the Moth's own stamp is hidden while the eye is inside her head shell.
+- **HUD and controls** follow the view.
+- **Tight spaces:** authored camera volumes, as in the lift, take over where a reactive boom would fight the walls.
+
+The collision-driven pull-in below remains an option to evaluate, but it is not the default.
+
+- **Do not make automatic collision-driven first-person pull-in a default chase mode.** In stairwells and around columns, uncommanded transitions between `d = 4.2 m` and `d = 0 m` cause optical looming and hide the avatar's feet when stepping onto ledges or the lift platform.
+- **Offer `firstPerson` as an opt-in third mode (`clearanceMode: "firstPerson"`) with mandatory hysteresis, alongside a manual zoom/toggle binding.**
+  - When selected as the reactive third option for side-by-side evaluation, prevent yo-yoing with a two-part hysteresis gate:
+    1. **Entry dwell**: Only collapse from minimum third-person shoulder distance (`0.6 m`) into the eye (`0.0 m`) after geometry has restricted the boom below `0.85 m` continuously for `0.20 s` (or immediately when `room < 0.25 m`).
+    2. **Exit hysteresis**: Hold the first-person eye pose until unobstructed room behind the head exceeds `1.35 m` for `0.15 s`, then ease back out on `camera-boom` dynamics.
+  - Pair the `d -> 0` blend with a modest FOV widening (`0.96 rad` -> `1.12 rad` / `55°` -> `64°` vertical) and hide the avatar's own stamp inside `0.45 m` so her hood, fringe locks, and blinking eyelids never flash across the lens.
+
+## What the debug world needs for side-by-side evaluation
+
+The debug world ([`worlds/debug/`](../../worlds/debug/debug.puck)) already contains four of the key architectural stress tests for a third-person camera:
+
+1. **The gallery lift car ([`hall.puck`](../../worlds/debug/hall.puck))**: At `(15.9, y, 38.05)`, a `2.56 m` wide by `2.88 m` deep enclosed cab with a `2.55 m` ceiling, retracting car and landing doors, level indicators, and four back-wall floor pads (`carPads`). Today, standing in the cab gives `boom = 1.4 m` (`Shortened`), staring down at the Moth's middle back.
+2. **The gallery switchback stairwell ([`hall.puck`](../../worlds/debug/hall.puck))**: At `x: 10.3..14.1, z: 34.5..39.7`, two `1.8 m` wide flights of `0.25 m` risers separated by a `0.2 m` solid divider wall, meeting at a `2.0 m` deep half-landing (`z: 37.7..39.7`) with `2.4 m` headroom. Walking around the half-landing exercises simultaneous wall, divider, and overhead flight-slab collision (`boom = 1.369/4.2, clearance = crowded`).
+3. **The yawed Cornell test room (`gi-corner` in [`debug.puck`](../../worlds/debug/debug.puck))**: At `(-2, 0, 13)`, rotated `-45°`, a `4.2 m × 4.2 m` room with a `3.1 m` ceiling, a `1.0 m` low block, and a `2.0 m` tall block inside, testing off-axis wall sliding and internal pillar occlusion.
+4. **Wonderland doorway and quarter-scale room ([`wonderland.puck`](../../worlds/debug/wonderland.puck))**: A `2.0 m × 3.0 m` doorway at `(4.5, 0.05, 23.7)` and the shrinking portal pair where `liveScale` drops to `0.25` and the Moth climbs `6.5 cm` game-case stairs behind the television cabinet.
+
+To let the owner evaluate **Winner 1 (`fade`)**, **Winner 2 (`cutaway`)**, and **Option 3 (`firstPerson`)** side by side in under a minute, the debug world needs three small additions:
+
+### Live mode switching and a three-up comparison layout
+
+- **Live console and binding toggle**: Expose the active clearance mode (`cutaway`, `fade`, `firstPerson`) on `views.seatControl` and `playerDefaults.seatLook` (`world.view.camera` echoing `mode=cutaway|fade|first-person` alongside `eye=`, `target=`, `boom=`, `rise=`, `near=`, `fade=`, and `clearance=`), plus an authored command or binding on the Debug bar page / play wheel so the owner can flip between all three modes in place without leaving the lift car or stairwell.
+- **Simultaneous multi-viewport layout (`layout "camera-compare"`)**: Add an override layout (`view.override layout camera-compare`) with three side-by-side viewports (or a `2×2` quad pairing the three modes with an exterior observer camera) that resolve the seat's live look and body pose through `fade`, `cutaway`, and `firstPerson` simultaneously. Driving the Moth into the lift or up the stairs under `camera-compare` lets the owner judge all three responses on the exact same stick input and frame timing, and lets a single `world.screenshot` or `puck motion` scenario capture a three-panel comparison still.
+
+### A compact tight-space camera gallery course
+
+While `hall.puck` has the lift and the switchback stairs, its main exhibition halls are `50 m × 28 m` open floors, so four classic tight-space edge cases are absent from the debug world. A small solid test structure (placed near the `gi-corner` test room or along the ground-floor lobby edge) should provide:
+
+- **A narrow L-corridor and dead-end alcove (`1.6 m` wide, `2.6 m` ceiling)**: Tests turning `90°` and `180°` in a hallway narrower than half the authored `4.2 m` boom, comparing how `fade`, `cutaway`, and `firstPerson` handle continuous side-wall and back-wall compression.
+- **A low-soffit tunnel (`2.25 m` ceiling dropping from `3.5 m`)**: Just `19 cm` above the suited Moth's `2.06 m` helmet, where an overhead rise (`63°`) is immediately blocked by the ceiling slab above her head. This directly contrasts Winner 1 (which stays level and fades her as the back wall closes) against Winner 2 (which must cut away the ceiling slab as well as the wall) and Option 3 (which pulls into her head under the soffit).
+- **A colonnade of narrow pillars (`0.35 m` columns spaced `1.6 m` apart along a wall)**: Tests Nesky's Mistake #9 and #10—walking parallel to a wall with columns passing between the camera and the Moth—to verify that spring damping and first-person hysteresis prevent zoom pumping or rapid yo-yoing into the head.
+- **A thin partition wall (`0.15 m` thick) between two lit bays**: Tests whether Winner 2's near-plane cutaway (`Near`) reveals the adjacent bay behind the partition when the Moth backs against it, versus Winner 1 and Option 3 keeping the eye on the near side of the partition.
+
+### Named places in `places.puck`
+
+Add three spawn points to [`worlds/debug/places.puck`](../../worlds/debug/places.puck) so `debug.go <place>` reaches every camera test spot in one command:
+- `debug.go lift` — inside the ground-floor lift car at `(15.9, 0.05, 38.05)` facing the south door and back-wall floor pads (`yawDegrees: 0` or `180`).
+- `debug.go stairs` — on the first switchback half-landing at `(12.2, 2.3, 38.7)` facing back down the flights (`yawDegrees: 0`), where `boom = 1.369/4.2`.
+- `debug.go camera-course` — at the entrance of the tight-space corridor/soffit/pillar test structure.
