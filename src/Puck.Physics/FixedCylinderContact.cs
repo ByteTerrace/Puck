@@ -108,7 +108,8 @@ internal static class FixedCylinderContact {
             push = default;
             return false;
         }
-        push = new FixedContactPush(Normal: rotation.Rotate(vector: nearest.Normal), Penetration: (radius - nearest.Distance));
+        push = new FixedContactPush(Normal: rotation.Rotate(vector: nearest.Normal), Penetration: (radius - nearest.Distance),
+            IsEdge: ((nearest.Normal.Y != FixedQ4816.Zero) && ((nearest.Normal.X != FixedQ4816.Zero) || (nearest.Normal.Z != FixedQ4816.Zero))));
         return true;
     }
 }

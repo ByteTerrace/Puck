@@ -18,10 +18,22 @@ namespace Puck.Physics;
 /// ground the body.</param>
 /// <param name="MaxIterations">The relaxation iteration count; values below one resolve one pass.</param>
 public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, FixedQ4816 GroundedThreshold, int MaxIterations) {
+    // Highest support plane of a finite edge-bearing primitive. This is the clearance a step must buy, rather
+    // than the small rise where the capsule first touches the edge's Minkowski arc. Otherwise repeated partial
+    // landings would climb a 10 cm kerb even with a 5 cm step height.
+    private static FixedQ4816 EdgeTop(in FixedStaticCollider collider, in FixedVector3 up) {
+        var axis = ((collider.Kind == FixedStaticColliderKind.AxisAlignedBox) ? up : collider.Rotation.RotateInverse(vector: up));
+        var radius = ((collider.Kind == FixedStaticColliderKind.Cylinder)
+            ? ((collider.Extent.X * new FixedVector2(X: axis.X, Y: axis.Z).Length) + (collider.Extent.Y * FixedQ4816.Abs(value: axis.Y)))
+            : (FixedVector3.Dot(left: collider.Extent, right: FixedVector3.Abs(value: axis)) + collider.Radius));
+
+        return (FixedVector3.Dot(left: collider.Center, right: up) + radius);
+    }
     private void ApplyPush(
         ref FixedVector3 position,
         ref FixedVector3 velocity,
         in FixedContactPush push,
+        bool blockClimb,
         in FixedVector3 up,
         ref bool grounded,
         ref FixedVector3 lastNormal,
@@ -36,6 +48,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             lastNormal: ref lastNormal,
             position: ref position,
             trial: FixedContactPushMath.ComputeOrdinary(
+                // The capsule's Minkowski edge tilts even when the obstacle is a stair. Lateral approach
+                // cannot buy elevation through that normal: only the raised step-up may clear the edge.
+                blockClimb: blockClimb,
                 groundedThreshold: GroundedThreshold,
                 normal: push.Normal,
                 penetration: push.Penetration,
@@ -51,10 +66,13 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         ref FixedVector3 velocity,
         in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume,
+        in FixedVector3 movement,
+        in FixedVector3 previousPosition,
         in FixedVector3 up,
         ref bool grounded,
         ref FixedVector3 lastNormal,
-        ref FixedVector3 groundNormal
+        ref FixedVector3 groundNormal,
+        ref FixedQ4816 requiredStepHeight
     ) {
         var pushed = false;
 
@@ -66,7 +84,17 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 skin: ContactSkin,
                 volume: in volume
             )) {
+                var blockClimb = (push.IsEdge && (FixedVector3.Dot(left: push.Normal, right: up) > FixedQ4816.Zero) &&
+                    (FixedVector3.Dot(left: movement.RejectFrom(unitAxis: up), right: push.Normal) < FixedQ4816.Zero));
+
+                if (blockClimb) {
+                    var bottom = FixedColliderBounds.MinimumProjection(normal: up, orientation: in orientation,
+                        position: previousPosition, volume: in volume);
+
+                    requiredStepHeight = FixedQ4816.Max(x: requiredStepHeight, y: ((EdgeTop(collider: in collider, up: in up) + ContactSkin) - bottom));
+                }
                 ApplyPush(
+                    blockClimb: blockClimb,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
@@ -100,6 +128,25 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         ReadOnlySpan<FixedBodyColliderVolume> volumes,
         in FixedVector3 up
     ) {
+        return ResolveSweep(colliders: colliders, dynamicColliders: dynamicColliders, orientation: in orientation,
+            position: ref position, previousPosition: position, up: in up, velocity: ref velocity, volumes: volumes);
+    }
+    /// <summary>Resolves a move, keeping lateral edge approach separate from vertical support. An edge met while
+    /// moving into it is a wall; a vertical landing still uses its measured surface normal.</summary>
+    /// <param name="colliders">The static colliders.</param>
+    /// <param name="dynamicColliders">The per-tick colliders.</param>
+    /// <param name="previousPosition">The foot point before the move.</param>
+    /// <param name="position">The target and resolved foot point.</param>
+    /// <param name="velocity">The velocity to resolve.</param>
+    /// <param name="orientation">The body orientation.</param>
+    /// <param name="volumes">The body volumes.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <returns>The support and obstruction witnesses.</returns>
+    public ContactResolution ResolveSweep(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedStaticCollider> dynamicColliders,
+        in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+        var movement = (position - previousPosition);
+        var requiredStepHeight = FixedQ4816.Zero;
         var grounded = false;
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
@@ -117,8 +164,11 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
+                    movement: in movement,
                     orientation: in orientation,
                     position: ref position,
+                    previousPosition: in previousPosition,
+                    requiredStepHeight: ref requiredStepHeight,
                     up: in up,
                     velocity: ref velocity,
                     volume: in volume
@@ -128,8 +178,11 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
+                    movement: in movement,
                     orientation: in orientation,
                     position: ref position,
+                    previousPosition: in previousPosition,
+                    requiredStepHeight: ref requiredStepHeight,
                     up: in up,
                     velocity: ref velocity,
                     volume: in volume
@@ -142,6 +195,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         }
 
         return new ContactResolution(
+            RequiredStepHeight: requiredStepHeight,
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal

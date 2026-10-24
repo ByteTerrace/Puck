@@ -31,6 +31,7 @@ internal static class FixedSphereBoxContact {
 
         push = new FixedContactPush(
             Normal: boxRotation.Rotate(vector: (delta / distance)),
+            IsEdge: FixedRoundedBoxContact.IsEdge(delta: delta),
             Penetration: (radius - distance)
         );
         return true;

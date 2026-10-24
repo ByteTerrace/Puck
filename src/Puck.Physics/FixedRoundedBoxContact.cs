@@ -150,12 +150,17 @@ internal static class FixedRoundedBoxContact {
         }
         return OutsidePush(delta: best, distance: distance, push: out push, radius: radius);
     }
+
+    internal static bool IsEdge(FixedVector3 delta) =>
+        (((((delta.X != FixedQ4816.Zero) ? 1 : 0) + ((delta.Y != FixedQ4816.Zero) ? 1 : 0)) +
+        ((delta.Z != FixedQ4816.Zero) ? 1 : 0)) > 1);
+
     private static bool OutsidePush(FixedVector3 delta, FixedQ4816 distance, FixedQ4816 radius, out FixedContactPush push) {
         if ((distance >= radius) || (delta == FixedVector3.Zero)) {
             push = default;
             return false;
         }
-        push = new FixedContactPush(Normal: delta.Normalize(), Penetration: (radius - distance));
+        push = new FixedContactPush(Normal: delta.Normalize(), Penetration: (radius - distance), IsEdge: IsEdge(delta: delta));
         return true;
     }
 

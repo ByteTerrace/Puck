@@ -11,9 +11,9 @@ namespace Puck.World.Server.Tests;
 public sealed class BoxPlacementColliderLawTests {
     private static FixedQ4816 Q(double value) => FixedQ4816.FromDouble(value: value);
     private static FixedVector3 V(double x, double y, double z) => new(X: Q(value: x), Y: Q(value: y), Z: Q(value: z));
-    private static WorldDefinition Document(float scale = 1f, float chamfer = 0f, SdfSolidPrimitive type = SdfSolidPrimitive.Box) {
+    private static WorldDefinition Document(float scale = 1f, float chamfer = 0f, SdfSolidPrimitive type = SdfSolidPrimitive.Box, Vector3? halfExtents = null) {
         var shape = new ShapeDocument(Id: 0, Name: "solid", Type: type, Position: Vector3.Zero,
-            Rotation: Quaternion.Identity, Scale: new Vector3(value: 2f), Material: 0, Blend: SdfBlendOp.Union,
+            Rotation: Quaternion.Identity, Scale: (halfExtents ?? new Vector3(value: 2f)), Material: 0, Blend: SdfBlendOp.Union,
             Smooth: 0f, Group: 0, Chamfer: chamfer);
         var canonical = CreationCanonicalizer.Canonicalize(document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema, Name: "solid", Palette: null, Shapes: [shape], Frames: null), source: "solid");
@@ -63,12 +63,36 @@ public sealed class BoxPlacementColliderLawTests {
                     var probe = V(x: (x * 3), y: (y * 3), z: (z * 3));
 
                     Assert.True(condition: colliders.TryNearestSurfaceAlongDirection(origin: probe, direction: -probe,
-                        maxDistance: Q(value: 6), assistHalfAngle: Q(value: 0.01), candidate: out var surface));
+                        maxDistance: Q(value: 6), assistHalfAngle: FixedQ4816.Pi, candidate: out var surface));
                     Assert.True(condition: field!.Probe(position: surface.Point, distance: out var distance, gradient: out _, material: out _));
                     Assert.True(condition: (distance <= Q(value: 0.0002)), userMessage: $"chamfer {chamfer}, {surface.Point}: outside by {distance}");
                 }
             }
         }
+    }
+    [InlineData(0.1f, 2f)]
+    [InlineData(1f, 2f)]
+    [InlineData(2f, 10f)]
+    [Theory]
+    public void AChamferKeepsItsSurvivingFlatFacePlanes(float chamfer, float width) {
+        var definition = Document(chamfer: chamfer, halfExtents: new Vector3(x: width, y: 2f, z: width));
+        var colliders = WorldColliderSet.Build(definition: definition);
+        var normal = FixedVector3.UnitY;
+        var origin = V(x: 0, y: 3, z: 0);
+
+        Assert.True(condition: colliders.TryNearestSurfaceAlongDirection(origin: origin, direction: -normal,
+            maxDistance: Q(value: 2), assistHalfAngle: Q(value: 0.01), candidate: out var face));
+        Assert.Equal(Q(value: 2), face.Point.Y);
+        var position = V(x: 0, y: 1.99, z: 0);
+        var velocity = -FixedVector3.UnitY;
+        var volume = new Puck.Physics.FixedBodyColliderVolume(Kind: Puck.Physics.FixedBodyColliderKind.Sphere,
+            Center: V(x: 0, y: 0.1, z: 0), Endpoint: FixedVector3.Zero, HalfExtents: FixedVector3.Zero,
+            Radius: Q(value: 0.1), Rotation: FixedQuaternion.Identity);
+        var result = colliders.Resolve(position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity,
+            volumes: [volume], up: normal);
+
+        Assert.True(condition: result.Grounded);
+        Assert.InRange(actual: ((double)position.Y), low: 2, high: 2.021);
     }
     [Fact]
     public void TheCircularCylinderStillHasItsExactSurface() {

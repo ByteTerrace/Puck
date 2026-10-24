@@ -20,7 +20,8 @@ public enum FixedStaticColliderKind : byte {
 /// <summary>A deterministic depenetration response without any body-state or gameplay policy.</summary>
 /// <param name="Normal">The unit push direction.</param>
 /// <param name="Penetration">The distance to push along <paramref name="Normal"/>.</param>
-public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 Penetration);
+/// <param name="IsEdge">Whether the closest feature joins faces (including a fillet or cylinder rim).</param>
+public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 Penetration, bool IsEdge = false);
 /// <summary>An analytic fixed-point static collider.</summary>
 /// <remarks>A sphere carries its radius in <see cref="Extent"/>.X, an axis-aligned box carries world-axis
 /// half-extents, an oriented box carries its own half-extents and the unit <see cref="Rotation"/> that turns its axes
@@ -48,6 +49,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
+        if (volume.Kind == FixedBodyColliderKind.Capsule) {
+            var box = RoundedBox(center: Center, rotation: FixedQuaternion.Identity, innerHalfExtents: Extent, radius: FixedQ4816.Zero);
+
+            return FixedRoundedBoxContact.TryPush(box: in box, orientation: in orientation, position: position,
+                push: out push, skin: skin, volume: in volume);
+        }
         if (volume.Kind == FixedBodyColliderKind.Sphere) {
             return FixedSphereBoxContact.TryPush(
                 sphereCenter: (position + orientation.Rotate(vector: volume.Center)),
@@ -134,10 +141,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             return false;
         }
 
-        push = new FixedContactPush(
-            Normal: Rotation.Rotate(vector: localPush.Normal),
-            Penetration: localPush.Penetration
-        );
+        push = localPush with { Normal = Rotation.Rotate(vector: localPush.Normal) };
         return true;
     }
     private bool TryHalfSpacePush(
@@ -147,28 +151,8 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
-        var minimumProjection = volume.Kind switch {
-            FixedBodyColliderKind.Sphere => (FixedVector3.Dot(
-            left: (position + orientation.Rotate(vector: volume.Center)),
-            right: Extent
-        ) - volume.Radius),
-            FixedBodyColliderKind.Capsule => (FixedQ4816.Min(
-            x: FixedVector3.Dot(
-                left: (position + orientation.Rotate(vector: volume.Center)),
-                right: Extent
-            ),
-            y: FixedVector3.Dot(
-                left: (position + orientation.Rotate(vector: volume.Endpoint)),
-                right: Extent
-            )
-        ) - volume.Radius),
-            FixedBodyColliderKind.Box => FixedOrientedBox.FromVolume(
-            orientation: in orientation,
-            position: position,
-            volume: in volume
-        ).MinimumProjection(normal: Extent),
-            _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
-        };
+        var minimumProjection = FixedColliderBounds.MinimumProjection(position: position, orientation: in orientation,
+            volume: in volume, normal: Extent);
         var distance = (minimumProjection - FixedVector3.Dot(
             left: Center,
             right: Extent

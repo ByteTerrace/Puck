@@ -122,4 +122,6 @@ public enum ContactRefusal {
 /// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
 /// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
 /// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false);
+/// <param name="RequiredStepHeight">The lift needed to clear an approached edge's support plane, measured from the
+/// pre-move body's bottom. A step must buy this whole clearance, even when it first lands partway up the edge.</param>
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false, FixedQ4816 RequiredStepHeight = default);

@@ -111,9 +111,10 @@ public static class FixedStepUp {
     /// <param name="stepHeight">The tallest riser, in world units, the body steps onto; zero or less never steps.</param>
     /// <param name="blocked">The foot point the ordinary, blocked step resolved to.</param>
     /// <param name="result">The accepted step, or <see langword="default"/> when the blocked step stands.</param>
+    /// <param name="requiredStepHeight">The edge clearance reported by the blocked sweep.</param>
     /// <returns><see langword="true"/> when the step-up is accepted.</returns>
     public static bool TryStep<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 intended, in FixedVector3 velocity,
-        in FixedVector3 up, FixedQ4816 stepHeight, in FixedVector3 blocked, out FixedStepUpResult result) where TStep : IFixedContactStep, allows ref struct {
+        in FixedVector3 up, FixedQ4816 stepHeight, in FixedVector3 blocked, out FixedStepUpResult result, FixedQ4816 requiredStepHeight = default) where TStep : IFixedContactStep, allows ref struct {
         result = default;
 
         var delta = (intended - start);
@@ -125,6 +126,7 @@ public static class FixedStepUp {
 
         if (
             (stepHeight <= FixedQ4816.Zero) ||
+            (stepHeight < requiredStepHeight) ||
             (planar == FixedVector3.Zero)
         ) {
             return false;
@@ -158,13 +160,11 @@ public static class FixedStepUp {
 
         // Carry the planar displacement over the riser. A face still in the way at the raised height is a wall.
         var across = (raised + planar);
+        var acrossResolution = step.Sweep(position: ref across, previousPosition: in raised, velocity: ref moved);
 
         if (
-            (step.Sweep(
-                position: ref across,
-                previousPosition: in raised,
-                velocity: ref moved
-            ).Refusal != ContactRefusal.None) ||
+            (acrossResolution.Refusal != ContactRefusal.None) || acrossResolution.Unproved ||
+            (acrossResolution.ObstructionNormal != FixedVector3.Zero) ||
             (FixedVector3.Dot(
                 left: (across - start),
                 right: planar

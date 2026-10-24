@@ -30,11 +30,12 @@ public sealed class FixedStepUpLawTests {
                 ContactSkin: FixedQ4816.Zero,
                 GroundedThreshold: GroundedThreshold,
                 MaxIterations: 4
-            ).Resolve(
+            ).ResolveSweep(
                 colliders: m_colliders,
                 dynamicColliders: [],
                 orientation: FixedQuaternion.Identity,
                 position: ref position,
+                previousPosition: in previousPosition,
                 up: FixedVector3.UnitY,
                 velocity: ref velocity,
                 volumes: Capsule
@@ -70,6 +71,7 @@ public sealed class FixedStepUpLawTests {
         }
 
         return FixedStepUp.TryStep(
+            requiredStepHeight: resolution.RequiredStepHeight,
             blocked: in blocked,
             intended: in intended,
             result: out result,
@@ -82,16 +84,16 @@ public sealed class FixedStepUpLawTests {
     }
 
     [Fact]
-    public void ABlockedStepLandsOnALowRiserAtItsFullReachAndPace() {
+    public void ABlockedStepLandsOnALowRisersSurfaceAtItsFullReach() {
         Assert.True(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0d, stepHeight: StepHeight, result: out var result));
         Assert.True(condition: result.Resolution.Grounded);
         Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.7d), actual: result.Position.X);
-        Assert.InRange(
-            actual: result.Position.Y,
-            high: FixedQ4816.FromDouble(value: 0.102d),
-            low: FixedQ4816.FromDouble(value: 0.099d)
-        );
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.5d), actual: result.Velocity.X);
+        // The foot is still outside the riser: its capsule lands on the edge, not on an inflated box top.
+        var delta = ((result.Position + Vector(x: 0d, y: 0.35d, z: 0d)) - Vector(x: 1d, y: 0.1d, z: 0d));
+
+        Assert.InRange(actual: ((double)delta.Length), low: 0.3498d, high: 0.3502d);
+        Assert.InRange(actual: ((double)result.Position.Y), low: 0.02d, high: 0.04d);
+        Assert.True(condition: (result.Velocity.X > FixedQ4816.Zero));
     }
     [Fact]
     public void ABlockedStepStandsAgainstATallRiserARisingStepASteepFaceAndAZeroStepHeight() {
@@ -99,6 +101,7 @@ public sealed class FixedStepUpLawTests {
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.5d)], rise: 0d, stepHeight: StepHeight, result: out _));
         // No step height: never steps.
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0d, stepHeight: FixedQ4816.Zero, result: out _));
+        Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0d, stepHeight: FixedQ4816.FromDouble(value: 0.05d), result: out _));
         // A rising step (a jump) lowers only to where it would have ended, above the riser's top.
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0.25d, stepHeight: StepHeight, result: out _));
         Assert.False(condition: Step(colliders: [Ground, Riser(height: 0.1d)], rise: 0.4d, stepHeight: StepHeight, result: out _));

@@ -46,8 +46,12 @@ support) and keeps the retry only if it lands grounded on a walkable surface,
 no higher than `stepHeight`, further along than the blocked step. Never while
 airborne, held by a pull, or on a program that cedes the vertical contact
 channel. `body.motion` and `world.kits` echo it. Analytic Box placements follow
-their rounded surface: a low rounded lip can supply a walkable normal, while
-a steep riser face still needs the step-up retry.
+their rounded surface for vertical landing and rest. Lateral approach to an
+edge, fillet or cylinder rim is an obstruction even when its closest-feature
+normal tilts into the walkable cone. The blocked sweep reports full clearance
+to the primitive's top support plane as `RequiredStepHeight`; the step must
+buy that entire lift, so repeated partial landings cannot turn stairs into
+ramps. Sharp box bounds use the same capsule closest-feature and step policy.
 In-medium locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
 is a kit whose shaping table carries an `across` row.
 

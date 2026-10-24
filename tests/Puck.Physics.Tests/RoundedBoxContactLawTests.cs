@@ -80,4 +80,31 @@ public sealed class RoundedBoxContactLawTests {
         Assert.Equal(V(x: 2, y: 0, z: 0), inside.Point);
         Assert.Equal(FixedVector3.UnitX, inside.Normal);
     }
+    [InlineData(FixedBodyColliderKind.Sphere)]
+    [InlineData(FixedBodyColliderKind.Capsule)]
+    [Theory]
+    public void VerticalLandingUsesTheFilletButLateralApproachCannotClimbIt(FixedBodyColliderKind kind) {
+        var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.5), MaxIterations: 8);
+        var volume = Volume(kind: kind);
+        var target = V(x: 1.96, y: 1.98, z: 1.96);
+        var falling = target;
+        var velocity = -FixedVector3.UnitY;
+        var landing = solver.ResolveSweep(colliders: [Cube], dynamicColliders: [], previousPosition: V(x: 1.96, y: 2.01, z: 1.96),
+            position: ref falling, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: [volume], up: FixedVector3.UnitY);
+
+        Assert.True(condition: landing.Grounded);
+        Assert.Equal(FixedVector3.Zero, landing.ObstructionNormal);
+        Assert.InRange(actual: ((double)(falling - V(x: 1.92, y: 1.92, z: 1.92)).Length), low: 0.0899, high: 0.0901);
+        var walking = target;
+
+        velocity = -FixedVector3.UnitX;
+        var blocked = solver.ResolveSweep(colliders: [], dynamicColliders: [Cube], previousPosition: V(x: 1.99, y: 1.98, z: 1.96),
+            position: ref walking, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: [volume], up: FixedVector3.UnitY);
+
+        Assert.False(condition: blocked.Grounded);
+        Assert.NotEqual(FixedVector3.Zero, blocked.ObstructionNormal);
+        Assert.Equal(target.Y, walking.Y);
+        Assert.InRange(actual: ((double)blocked.RequiredStepHeight), low: 0.0299, high: 0.0301);
+        Assert.Equal(FixedQ4816.Zero, velocity.Y);
+    }
 }

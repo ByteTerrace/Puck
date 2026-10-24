@@ -180,9 +180,9 @@ axis-aligned query there, and turns the push back, so a capsule, sphere, or
 box meets the box's true faces and a face push points along that face's
 normal. `FixedStaticCollider.Box` builds one from a center, rotation and
 half-extents, and keeps the axis-aligned collider whenever the rotation
-carries every box axis exactly onto a world axis. Against either box a capsule
-or box body is measured by its bounds in the box's frame, which is exact for
-an upright capsule on a box's faces and conservative at its edges.
+carries every box axis exactly onto a world axis. Sphere and capsule queries
+use closest features on sharp boxes too (the rounded-box kernel with zero
+static radius). Box bodies retain their bounds in the sharp box's frame.
 
 Box placements use `FixedStaticCollider.RoundedBox`: an oriented inner box
 offset by a sphere. `Extent` carries the inner half-extents and `Radius` the
@@ -195,12 +195,18 @@ use separating axes with the offset added to their depth. The solver's
 substeps, support, hold and tether queries all use this shape in fixed point.
 The chase camera already queries the rendered SDF directly.
 
-A chamfered Box uses a conservative **inside** rounded box: its inner extents
-are reduced by both the fillet radius and the authored chamfer, clamped at
-zero, then offset by the fillet. This gives up a chamfer-width strip even on
-flat faces but cannot create support outside the drawn bevel. It shares the
-rounded contact path without introducing a second polyhedral solver. A solid
-margin offsets the resulting collider by that explicit authored allowance.
+A chamfered Box uses a conservative **inside** rounded box with outer extents
+unchanged and radius R = r + b/(2 − √2), where r is the drawn fillet and b the
+chamfer leg. In a two-face section the arc removes (2 − √2)R along the bevel;
+the cap/profile corner needs the same bound, since (1 + √2)/√2 = 1/(2 − √2).
+This preserves the flat face planes while leaving the rounded edges inside
+the drawn chamfer. If R exceeds the smallest half-extent, one rounded box
+cannot retain all face planes. Three axis rods in the SDF's eroded bevel
+polyhedron, offset by r, retain every surviving face centre instead. This
+fallback gives up more of the edge and face footprint, but never adds support
+outside the drawn solid. Each rod contributes to the collider census and the
+attached-collider revision. A solid margin offsets each collider by that
+explicit authored allowance.
 Box does not admit a separate authored `rounding` on this vocabulary; that
 facet belongs to Prism, Cylinder and Cone.
 
@@ -301,13 +307,19 @@ sweep bound to one body's orientation, volumes and up axis, so it works over
 either provider. It raises the start by the step height, moves the step's
 planar displacement, and bisects downward (`LandingProbes`, 8 sweeps) for the
 shallowest descent that meets support, no lower than where the original step
-would have ended along up. The bisection is what lets an endpoint-only provider
-land: `FixedStaticContactSolver` pushes a capsule out of a box along the box's
-own axis of least overlap, so one deep move reads a riser's side as the nearer face,
-while a landing that overlaps the top by less than the probe resolution
-resolves upward. The retry is kept only when the raised move gets further than
-the blocked step and the landing grounds on a walkable surface, no higher than
-the step height above the start and higher than the blocked step. A wall costs
+would have ended along up. The bisection finds a shallow top contact rather
+than resolving a deeply embedded endpoint through the nearer side.
+`FixedContactPush.IsEdge` distinguishes a box edge/fillet or cylinder rim from
+a face. `FixedStaticContactSolver.ResolveSweep` projects an approached edge's
+push across up without lifting or converting forward drive into upward
+velocity. Vertical landings and resting queries retain the measured rounded
+surface normal, and a sloped face remains a ramp. The blocked sweep reports
+`RequiredStepHeight`: the lift from the pre-move body's bottom to the
+primitive's highest support plane, including skin. `FixedStepUp` requires
+that whole clearance; repeated partial landings cannot turn stairs into ramps.
+The raised across move must be free of obstruction and make more progress
+than the blocked step. The landing must ground on a walkable surface, no higher
+than the step height above the start and higher than the blocked step. A wall costs
 two sweeps; an accepted step costs `LandingProbes` plus four. The World calls
 it from the kit's `motion.stepHeight`, zero by default.
 
