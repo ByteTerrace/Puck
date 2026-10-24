@@ -52,8 +52,15 @@ agent works in that mode by default, without asking:
     gate. The owner explicitly includes cartridge JSON twins: commit the
     authored `.puck` sources and compile them when needed
     ([decision](docs/decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
-  - Direct3D 12 is the primary backend during development; Vulkan catches up
-    when the owner calls for qualification.
+  - Direct3D 12 is the primary backend during development. Vulkan never falls
+    far behind on the lead machine: a change to rendering or GPU code also gets a
+    windowed Vulkan boot of the debug world, and a Vulkan regression is fixed as
+    ordinary work. Full parity qualification waits for the owner's call.
+  - Tests never depend on commercial ROMs. A test or check stage runs on
+    committed sources (homebrew and test cartridges); a commercial ROM is used
+    only locally, by hand, and is never committed.
+  - Official published builds in Azure are the target, but nothing is shipped
+    until the owner says so. Every deploy until then is development and testing.
   - Every project stays in the build.
   - Every push to `main` keeps deploying, through a pipeline made as fast as
     possible.
