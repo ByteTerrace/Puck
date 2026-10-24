@@ -104,12 +104,11 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
 - **Coding lanes** build only the projects they touch, with `-m:2`, and run only
   their focused tests. They run no whole-solution build, no full suite and no
   GPU leg, and they hand back a branch that builds and passes those tests.
-  Several can run at once only while their combined builds, test hosts and
-  Worlds fit in memory. On a 32 GB machine, two Codex lanes building and
-  booting Worlds beside the integration lane drove memory low enough that
-  Claude Code reaped both while the session sat idle, twice. There, run one
-  building lane at a time, and save a reaped lane's tree as a WIP commit
-  before restarting it.
+  Several run at once (the owner's direction: don't over-serialize for
+  memory). Claude Code can reap background jobs under memory pressure while
+  the session idles. When that happens, save the reaped lane's tree as a WIP
+  commit and restart it with a continuation note. Keep one heavy integration
+  job at a time.
 - **The integration lane** is one long-running lane. It takes finished branches
   in the order the lead names, merges each onto its own staging branch, and
   resolves generated-file conflicts by running their generators. Then it runs
