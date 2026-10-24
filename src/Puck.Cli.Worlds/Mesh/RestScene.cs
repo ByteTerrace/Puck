@@ -81,7 +81,14 @@ public sealed class RestScene {
         var frames = new SdfCompositionFrameSource(dresser: dresser, emitters: [emitter]);
         var looks = definition.Looks;
         var entries = new List<EntitySnapshot>();
+        // Each body's register file as a server births it, so a stamp scale the world keeps in a register
+        // (bodies.scale) reads its authored initial value rather than the zero an undelivered register reads as.
+        var file = FixedWorldKit.CompileActionStateFile(bodyState: definition.BodyState, identityState: definition.IdentityState);
+        var state = new long[file.Length];
 
+        for (var slot = 0; (slot < file.Length); slot++) {
+            state[slot] = WorldBodyStateReads.Presented(kind: file[slot].Kind, raw: WorldActionStateLane.InitialRaw(definition: in file[slot]));
+        }
         for (var look = 0; ((look < looks.Count) && (look <= byte.MaxValue)); look++) {
             if (looks[look].Source is not WorldLookSource.Creation) { continue; }
             entries.Add(item: new EntitySnapshot(
@@ -94,7 +101,8 @@ public sealed class RestScene {
                 Kit: 0,
                 Look: (byte)look,
                 Orientation: Quaternion.Identity,
-                Position: new Vector3(x: (entries.Count * BodySpacing), y: 0f, z: 0f)
+                Position: new Vector3(x: (entries.Count * BodySpacing), y: 0f, z: 0f),
+                State: state
             ));
         }
 

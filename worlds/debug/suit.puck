@@ -63,7 +63,7 @@ kits {
       mass: 0
       motion {
         facingSnap: false
-        groundStick: 2
+        groundSnap: 0.3
         holds [
           {
             name: "ground"

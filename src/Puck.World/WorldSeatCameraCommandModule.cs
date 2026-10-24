@@ -46,6 +46,10 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             handler: $" yaw={float.RadiansToDegrees(radians: (state?.Yaw ?? 0f)):0.##} pitch={float.RadiansToDegrees(radians: (state?.Pitch ?? 0f)):0.##} freeLook={(seat?.FreeLooking ?? false).ToString().ToLowerInvariant()} orbit={(seat?.Orbiting ?? false).ToString().ToLowerInvariant()} steer={(seat?.PointerSteering ?? false).ToString().ToLowerInvariant()} motionControls={(seat?.MotionControlsActive ?? false).ToString().ToLowerInvariant()} angularVelocity=({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})"
         );
 
+        if (state is not null) {
+            _ = builder.Append(value: ' ').Append(value: state.DescribeClearance());
+        }
+
         if (seatBindings.IsCameraModeActive(slot: slot)) {
             _ = builder.Append(value: " cameraApplication=true");
         }
@@ -57,7 +61,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.camera",
-            description: $"Echoes a seat's live control policy, held free-look state, motion-input state, and camera orbit: world.view.camera [player], player 1..{PlayerRoster.MaxSlots}. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
+            description: $"Echoes a seat's live control policy, held free-look state, motion-input state, camera orbit, and where its chase eye last stood: world.view.camera [player], player 1..{PlayerRoster.MaxSlots}. eye= and target= are world metres, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, clearance= none, open, shortened, risen or crowded. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
             handler: (context, args) => {
                 if (args.Count > 1) {
                     return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");

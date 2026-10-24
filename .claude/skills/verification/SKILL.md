@@ -55,6 +55,13 @@ a helper there), not a guarded statement.
 
 GPU legs require the lead's grant.
 
+An empty shared lease directory can report an unnamed holder indefinitely:
+`CliLease.IsStale` cannot reclaim missing metadata. Diagnose it under the
+existing exclusive `.guard` file, never by the absence of a World alone.
+If that guard is available and the directory is empty while it is held,
+removing only the empty directory lets the normal `puck lease` acquire again.
+Never unlink the guard file or remove a directory containing holder metadata.
+
 Judge performance by code, disassembly and load-independent counts; only
   counts gate a change. Wall-clock and GPU timing are evidence
   read beside those counts, never alone, and run on a quiet machine: the lead
@@ -78,9 +85,15 @@ reports drift. Restore a fresh worktree once
 ## Boot every World with `--devices none`
 
 A World you boot to verify a change passes `--devices none`: the stdin recipe,
-an MCP World with its own `--state-dir`, a scratch `.puck` world. Without it
-the World opens the owner's pads and reads the owner's keyboard and mouse
-through its window, so the owner's presses drive your run. The ruling, what the
+a scratch `.puck` world, and a World you drive over MCP, which you start with
+the `puck` server's `puck_world_start` from your worktree's Release build
+(`checkout`: the worktree's absolute path) instead of a hand-written boot
+line. That tool passes `--devices none`, its own state directory and
+`--control`, holds the GPU lease for a windowed World until it exits, and
+returns the `processId` to name on every call; `host.log` reads the World's
+stderr lines, and `puck_world_stop` ends it and releases the lease. Without
+`--devices none` the World opens the owner's pads and reads the owner's
+keyboard and mouse through its window, so the owner's presses drive your run. The ruling, what the
 flag does and the verbs that pass it themselves are in
 [the `puck-world` skill](../puck-world/SKILL.md#an-agents-world-opens-no-physical-device).
 Drive a verification World with scripted input only (`player.signal`, `body.*`,
@@ -126,7 +139,7 @@ the skip exception, so a test that wraps a call which can skip reports
 
 ## What uses the GPU
 
-Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation.
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
 Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
 `gate` and `affected` hold the same heavy lease through each heavy suite and
 check host headroom after acquisition. When an ancestor already owns it,

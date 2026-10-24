@@ -124,7 +124,7 @@ kits {
       collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
       motion {
         facingSnap: false
-        groundStick: 2
+        groundSnap: 0.3
         holds [
           {
             name: "ground"

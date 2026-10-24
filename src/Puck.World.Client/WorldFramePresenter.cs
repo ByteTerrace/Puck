@@ -162,6 +162,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Every kit's compiled collider, indexed by kit row, for the definition it was compiled from: the volume a chase
     // eye keeps out of when it frames a body of that kit.
     private FixedWorldCollider?[] m_subjectColliders = [];
+    // The drawn volumes of the creation and stamp scale a chase eye last framed (WorldChaseBody.DrawnVolumes).
+    private Vector4[] m_subjectDrawn = [];
+    private WorldPrototype? m_subjectDrawnCreation;
+    private float m_subjectDrawnScale;
 
     private WorldDefinition? m_subjectCollidersFor;
 
@@ -750,27 +754,29 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             target: ref target
         );
 
-        if (
-            presentedHere &&
-            ReferenceEquals(
+        // The eye keeps out of the framed body as well as the static field, which holds no body, on the seat's own
+        // spring arm, eased on the chase rig's dynamics.
+        var clearanceNear = view.Clear(
+            deltaSeconds: deltaSeconds,
+            dynamics: chase.Dynamics,
+            enabled: (presentedHere && ReferenceEquals(
                 objA: rig,
                 objB: chase
-            )
-        ) {
-            // The eye keeps out of the framed body as well as the static field, which holds no body.
-            eye = WorldCameraClearance.Resolve(
-                desiredEye: eye,
-                field: m_client.StaticField,
-                subject: new WorldChaseBody(
-                    collider: SubjectCollider(body: perceivedBody),
-                    orientation: bodyOrientation,
-                    position: bodyPosition,
-                    scale: liveScale
-                ),
-                target: target,
-                up: seatUp
-            );
-        }
+            )),
+            eye: ref eye,
+            field: m_client.StaticField,
+            subject: new WorldChaseBody(
+                collider: SubjectCollider(body: perceivedBody),
+                drawn: SubjectDrawn(body: perceivedBody),
+                orientation: bodyOrientation,
+                position: bodyPosition,
+                scale: liveScale
+            ),
+            target: target,
+            up: seatUp
+        );
+        var clearedEye = eye;
+        var clearedTarget = target;
 
         // A boom through a same-world door puts the eye past the counterpart's glass, looking back through it.
         _ = WorldPortalStraddle.CarryBoom(
@@ -819,8 +825,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             viewportWidth: placed.X
         ) with {
             Near = MathF.Max(
-                x: near,
-                y: tabletopNear
+                x: MathF.Max(
+                    x: near,
+                    y: tabletopNear
+                ),
+                // The clearance's cutaway holds only for the eye and target it was measured on; a door or a framing that
+                // moved them since owns the near plane.
+                y: (((eye == clearedEye) && (target == clearedTarget))
+                    ? clearanceNear
+                    : 0f
+                )
             ),
         };
     }
@@ -966,6 +980,36 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ? m_subjectColliders[kit]
             : null
         );
+    }
+    // The bounding spheres of the shapes the body is drawn with (WorldChaseBody.DrawnVolumes), derived again only when the
+    // framed creation row or its stamp scale changes; empty for a body drawn as a catalog avatar.
+    private ReadOnlyMemory<Vector4> SubjectDrawn(int body) {
+        if (!WorldBodyStampCensus.TryResolveCreation(
+            creation: out var creation,
+            definition: m_client.Definition,
+            index: body,
+            scale: out var scale,
+            source: m_client
+        )) {
+            return ReadOnlyMemory<Vector4>.Empty;
+        }
+
+        if (
+            !ReferenceEquals(
+                objA: creation,
+                objB: m_subjectDrawnCreation
+            ) ||
+            (scale != m_subjectDrawnScale)
+        ) {
+            m_subjectDrawn = WorldChaseBody.DrawnVolumes(
+                document: creation.EngineDocument,
+                scale: scale
+            );
+            m_subjectDrawnCreation = creation;
+            m_subjectDrawnScale = scale;
+        }
+
+        return m_subjectDrawn;
     }
     // The extent, in display pixels, of a placed rect: what a camera projects for. A collapsed axis of an arriving slot
     // counts one pixel, keeping a finite projection while it draws nothing; a positive axis stays fractional.

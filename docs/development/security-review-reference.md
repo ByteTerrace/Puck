@@ -10,6 +10,10 @@ separate evidence. Passing these tests is not a security certification.
 
 ## Trust boundaries
 
+Azure Front Door configuration is out of scope under the owner's ruling. The
+`api` rule set's authorization-header handling is assumed correct. Azure
+findings must stand independently of a proxy misconfiguration.
+
 | Actor | Authority to assume | Boundary to try to cross |
 |---|---|---|
 | Unauthenticated network peer | Can create its own key and complete the generic QUIC peer handshake. | World admission, an expected federation namespace, or unbounded pre-admission work. |
@@ -108,6 +112,33 @@ someone else's private key are different threat models.
 | Transform dependencies omitted hidden inputs | Authored transforms could use hidden selectors, control conditions or source membership to influence public output. A principal already granted mutation and edit rights could also sort a public row after one of its cells became private. | Resolved dependencies and the shared arena preflight check whole read rows, runtime cell visibility and containing zones before writes. [Compiler/evaluator cases](../../tests/Puck.State.Rules.Tests/TransformDisclosureLawTests.cs) include rollback; [server cases](../../tests/Puck.World.Server.Tests/TransformDisclosureLawTests.cs) exercise a restricted principal and a confined control. This is conservative admission, not precise dynamic taint tracking. |
 | Addon identity used truncated SHA-256 | The compilation cache and authored integrity pins used only the first 64 bits. Distinct approved bytes could alias if such a collision were supplied; no cryptographic collision was generated. | Addon approval pins and cache keys use full SHA-256. [Asset cases](../../tests/Puck.Assets.Tests/BoundedAssetLoadingTests.cs) use synthetic digests with equal short prefixes; [guest cases](../../tests/Puck.World.Server.Tests/AddonGuestLawTests.cs) refuse the former short pin and a changed full-pin suffix, with a valid-pin control. |
 | Addon intake and guest resources lacked combined limits | Whole source files reached native parsing/compilation before a size check. A guest could declare additional hidden memories within each memory's individual ceiling. This requires an authorized addon mount; no ordinary remote-player upload route was found. | Bounded source reads and declaration checks precede native compilation. The store limits instance, memory and table counts and growth; [guest cases](../../tests/Puck.World.Server.Tests/AddonGuestLawTests.cs) include hidden resources, boundary controls and cache-eviction lifetime. Native compiler workspace and aggregate host budgets remain separate questions. |
+| Release signing subject could name another app | A signing key admitted for another subject under the trusted root could sign canonical bytes naming the target app. A CDN without that key cannot forge this claim. | The replay requirement's subject must equal the manifest app before sequence reservation. `AttestationReleaseVerifierTests.Verify_Refuses_ClaimSubjectMismatchingManifestApp` failed with the check withheld and passed with it. |
+| Release directory names admitted ambiguous metadata | Channels admitted traversal/separators and leading whitespace; version names admitted leading spaces that pointer readers trim. Exploitation of signed metadata requires an authorized signer. | Channels are single portable components and path segments reject leading spaces. `ReleaseManifestTests` has four rejected-channel cases and a leading-space version case, each failing without the fix. |
+| Signed payload could occupy install metadata | A signer could declare `state-generation` as a payload file; activation would overwrite those already-hashed bytes with install metadata. | The filename is reserved case-insensitively. `Validate_RefusesReservedStateGenerationPayloadFile` failed without the exclusion and passed with it. |
+| Rollback left a stale minimum-supported check | An interrupted valid signed update could resume after rollback below its minimum supported version because recovery checked the former installed version. | Recovery checks the current pointer before staging. `Recovery_RefusesWhenRollbackDropsCurrentBelowPendingIntentsMinimumSupported` reached staging without the fix and refuses with it. |
+| Case-alias release could reuse an active directory | Case-sensitive prerelease ordering could choose a case alias of current or last-good on a case-insensitive filesystem. Requires a signed alias release and an existing active directory. | The service refuses before staging and the applier independently refuses activation. `Apply_RefusesCaseInsensitiveVersionCollisionWithActiveInstall` and both `Apply_RefusesCaseAliasOfAnActiveDirectory` cases failed without the checks and pass with them. |
+| Rule-local evaluation escaped transform control checks | A hidden local can affect whether evaluation reaches a transform, including through expression failure. Requires an authored rule, or a later runtime visibility restriction. | The compiler includes all compiled local reads in transform controls. Both `HiddenRuleLocalsCannotControlAPublicTransform` cases failed without the fix and pass with it. This remains conservative audience enforcement, not precise taint analysis. |
+| Push-ray disclosure used field indices as row ordinals | An authored pool transform checked unrelated arena rows and omitted its pool domain. | The check resolves domain and backing-field rows through the pool catalog. `PushRayDisclosureChecksThePoolsOwnBackingRows` failed with an incorrect refusal without the fix and passes with it; this witness proves the mapping defect, not an end-to-end disclosure exploit. |
+| Parenthesized vector subject named the operand instead of its row | An authored transform reported `(secretVec[a])` as its read subject, obscuring the actual row from consumers. | Balanced enclosing parentheses are stripped before subject extraction. `ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject` failed without stripping and passes with it; the witness does not establish a complete remote authorization bypass. |
+| Decision transforms omitted remaining local controls | Decision-only effects did not inherit every local evaluation dependency. An authored hidden local can fault before effects; the restriction is conservative compiler policy. | World compilation collects compiled local reads for decision transforms. `DecisionDisclosureTests.LocalEvaluationCannotControlATransformOutsideItsAudience` fails for the public destination without the fix and passes with it; the confined control passes both. Direct local-score reads were already protected. |
+
+The `codex-security` follow-up withdrew the unverified WIP before reintroducing
+individually proven changes. Its original prose about pruning and untrimmed stub
+pointer parsing did not match the patch and was removed. The stub whitespace
+change remains withdrawn; the open-items entry records why. Decision-local checks
+have their own schema regression. Full launcher, state-rules, state and world-schema
+suites passed on the merged integration head after fresh Release builds on Windows.
+No World was booted and no GPU or deployment check was performed. Remaining review
+candidates are tracked separately and are not established by these runs.
+
+The SAS trigger uses the authenticated caller's on-behalf-of storage credential.
+Accepting a container, blob and permission selection is not by itself evidence
+that storage honors authority the caller lacks. Initial key issuance also binds
+the caller's subject, not an arbitrary target account. Deployment policy and any
+proof-of-possession requirement need separate evidence. The Entra path uses a
+bearer token with an explicitly pinned server transport key; the earlier review
+did not demonstrate a bypass of that pin. See the scoped questions in
+[open items](../plans/open-items.md#standalone).
 
 Install recovery treats a protected local intent as already-authorized work.
 It checks the current trust policy at the original verification instant; expiry

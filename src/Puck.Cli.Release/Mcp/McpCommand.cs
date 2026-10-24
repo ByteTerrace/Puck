@@ -39,6 +39,23 @@ public static class McpCommand {
                 Console.Error.WriteLine(value: warning);
             }
 
+            // A World the adapter starts boots from this checkout or one of its worktrees, and a windowed one holds the
+            // machine's shared GPU lease, the one `puck lease gpu` takes.
+            var checkout = RepositoryPaths.FindRoot();
+            var launch = ((checkout is null)
+                ? null
+                : new OperatorWorldLaunch(
+                    AcquireGpuLease: async (holder, wait, token) => await CliLease.AcquireAsync(
+                        cancellationToken: token,
+                        clock: TimeProvider.System,
+                        holder: holder,
+                        name: "gpu",
+                        root: await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false),
+                        wait: wait
+                    ).ConfigureAwait(continueOnCapturedContext: false),
+                    Checkout: checkout
+                ));
+
             // Worlds publish their capability files in the user's temporary directory, so following the newest World
             // is following that directory.
             await OperatorMcpServer
@@ -48,6 +65,7 @@ public static class McpCommand {
                     : attachmentPath),
                 cancellationToken: stop.Token,
                 input: Console.OpenStandardInput(),
+                launch: launch,
                 output: Console.OpenStandardOutput()
             )
                 .ConfigureAwait(continueOnCapturedContext: false);

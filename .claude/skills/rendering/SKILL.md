@@ -462,9 +462,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   with the same entry filenames: a renamed wrapper changes document identity,
   so garden/night back-references can instantiate another debug world. Keep
   device-machine screens intact and disclose the desktop substitution in the
-  capture report. After a suit change, allow its rule to run and wait for
-  `world.wait bakes` before capturing; a tick wait alone can show the old mesh
-  stretched over the new rig. Clear an operator camera with
+  capture report. After a suit change, allow its rule to run and check the
+  residency's `[sdf.mesh-bake] done` log before capturing; `world.wait` accepts
+  tick counts, and a tick wait alone can show the old mesh stretched over the
+  new rig. Clear an operator camera with
   `view.override camera auto` before switching to a following motion layout.
 - GPU captures, device faults and the validation layers:
   [kernels](references/kernels.md#captures-faults-and-validation).
@@ -476,6 +477,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 | [references/kernels.md](references/kernels.md) | The shader build, hot reload, the frame's passes, the visibility record, bindings, diagnostics, captures and device faults |
 | [references/sync-pairs.md](references/sync-pairs.md) | Every C#↔HLSL coupling and which side is generated |
 | [references/mesh-bake.md](references/mesh-bake.md) | The bake's contouring, groups, mesh region, store and `puck mesh audit` |
+| [references/mesh-gi.md](references/mesh-gi.md) | Probe visibility, the volume boundary, CPU bounce sampling and exposure |
 | [references/runtime-contracts.md](references/runtime-contracts.md) | The render-graph runtime's invariants, before changing `RenderGraphRuntime`, a recorder, a capture path or pacing |
 
 ## Route adjacent work

@@ -9,7 +9,7 @@ namespace Puck.World.Schema.Tests;
 /// Laws pinning the review corrections around the state traits and draw sites: the runtime cell validator refuses
 /// every shape the boot walk refuses, a drive-gate row never carries a cycling cell, persisted drawn masks must fit
 /// their source, a fractional comparand lowers to the exact integer gate, a rule's generate reaches a lattice draw
-/// fill, dynamics state rides the fixed spelling on every row kind, and a motion row's ground-stick bias compiles
+/// fill, dynamics state rides the fixed spelling on every row kind, and a motion row's ground-snap distance compiles
 /// independently of the kit's own speed.
 /// </summary>
 public sealed class ReviewFixLawTests {
@@ -271,12 +271,12 @@ public sealed class ReviewFixLawTests {
         );
     }
     [Fact]
-    public void GroundStick_CompilesIndependentlyOfSpeed_AndDefaultsToTheEngineConstant() {
-        static FixedMotionTuning Compile(float speed, float? groundStick = null) => WorldMotionTuningFactory.Compile(
+    public void GroundSnap_CompilesIndependentlyOfSpeed_AndDefaultsToTheEngineConstant() {
+        static FixedMotionTuning Compile(float speed, float? groundSnap = null) => WorldMotionTuningFactory.Compile(
             tuning: new WorldMotion(
                 Speed: new WorldSpeed(Value: speed),
                 Turn: new WorldTurn(Rate: 1f),
-                GroundStick: (groundStick ?? 2f)
+                GroundSnap: (groundSnap ?? 0.3f)
             ),
             channels: WorldChannelTable.Empty,
             dynamics: [],
@@ -285,26 +285,24 @@ public sealed class ReviewFixLawTests {
         var slow = Compile(speed: 1f);
         var fast = Compile(speed: 50f);
 
-        // A faster kit's own resolved move speed must never widen the surface catch-up bias: scaling it by speed
-        // over-corrects a shallow slope climb (the bias converts to downhill drift under depenetration faster than
-        // it converts to held contact).
+        // Walking faster does not widen the authored snap distance.
         Assert.Equal(
-            expected: slow.GroundStick,
-            actual: fast.GroundStick
+            expected: slow.GroundSnap,
+            actual: fast.GroundSnap
         );
         Assert.Equal(
-            expected: FixedQ4816.FromDouble(value: 2d),
-            actual: slow.GroundStick
+            expected: FixedQ4816.FromDouble(value: 0.3f),
+            actual: slow.GroundSnap
         );
 
         var authored = Compile(
-            groundStick: 5f,
+            groundSnap: 5f,
             speed: 1f
         );
 
         Assert.Equal(
             expected: FixedQ4816.FromDouble(value: 5d),
-            actual: authored.GroundStick
+            actual: authored.GroundSnap
         );
     }
     [Fact]

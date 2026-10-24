@@ -24,6 +24,11 @@ internal sealed class OperatorAttachment(string target, TimeProvider clock) : ID
     private volatile string? m_current;
     private bool m_disposed;
 
+    /// <summary>Gets whether the adapter follows a directory of attachment files rather than one pinned World.</summary>
+    public bool Follows => Directory.Exists(path: target);
+    /// <summary>Gets the capability file or directory the adapter attaches through.</summary>
+    public string Target => target;
+
     /// <summary>Closes every attachment. Does not stop any World.</summary>
     public void Dispose() {
         m_disposed = true;

@@ -139,9 +139,10 @@ own:
 
 - `puck_worlds` lists the running Worlds that accept an Operator attachment
   through this adapter: each one's `attachmentId`, `processId`, world
-  `document` (the path the World booted from), `startedUtc` (its process start)
-  and whether it is the `current` World, which unnamed calls run on. It takes no
-  arguments and never waits behind a call in flight.
+  `document` (the path the World booted from), `startedUtc` (its process start),
+  whether it is the `current` World, which unnamed calls run on, and whether
+  this adapter `started` it. It takes no arguments and never waits behind a
+  call in flight.
 - `puck_exec`, `puck_capture_frame` and `puck_state_vector_write` take an
   optional `world`: an `attachmentId` or a `processId` from that list. The call
   attaches to exactly that World, with an attachment of its own that the adapter
@@ -154,6 +155,42 @@ own:
   `processId`, `document`, `startedUtc`) naming the World the call reached, null
   for a refusal that reached none, so a caller that named nothing can see it
   landed on a wrong one.
+
+### Starting and stopping a World
+
+An agent that needs a World of its own starts it through the adapter rather
+than writing a boot line:
+
+- `puck_world_start` boots a world `document` (default `worlds/debug`) from a
+  `checkout`'s Release build of `src/Puck.World`, headless unless `windowed`.
+  The checkout is the adapter's own (the default) or a worktree of its
+  repository, named by absolute path, so a lane boots its own build; the
+  document must lie under that checkout's `worlds/`. Anything else is refused
+  before a process starts. The World always gets `--devices none`, unless
+  `ownerPlay` says the owner asked to play in it (`--devices all`); a state
+  directory of its own under `puck-mcp-worlds/` in the temporary directory; and
+  `--control`. A windowed start first takes the machine's GPU lease (the one
+  `puck lease gpu` takes, recorded under `holder`) and holds it until the World
+  exits. The call returns once the World accepts an attachment, with its
+  identity as `puck_worlds` lists it, the build that runs, and the files its
+  stdout and stderr are copied to; `timeoutSeconds` (1–540, default 300)
+  bounds the lease wait and the boot, and a World that has not attached by
+  then is stopped. It runs from the checkout's build output, so stop it before
+  rebuilding that checkout.
+- `puck_world_stop` ends a World this adapter started, by its recorded
+  process: it sends `quit`, kills the process tree if the World has not exited
+  within `timeoutMs`, releases its lease, deletes its state directory and
+  reports the exit code. A World the adapter did not start is refused by name
+  and left running.
+- When the adapter exits it stops every World it started, so none outlives it
+  holding the GPU.
+
+Every World keeps its newest lines of stdout and stderr in a bounded ring
+(`HostLog`, 4096 lines and 1,048,576 characters), each stamped with the tick
+it had completed, and the console verb `host.log` reads it with filters by
+sequence, tick range, category tag, stream and text. It is a verb rather than a
+tool so that `puck_exec`, a stdin script and the on-screen console all read it
+the same way, from any World, including one this adapter did not start.
 
 A World publishes that identity in its attachment file, beside the capability
 secret, when `world.control start` or `--control` opens the endpoint; the
@@ -310,7 +347,9 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 
 | Tool | Arguments | Result |
 |---|---|---|
-| `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc` and `current`. |
+| `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, `current` and `started`. |
+| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–540, default 300). Local stdio only. | Structured `status` (`started` or `refused`), `output`, `isError`, `world` (as `puck_worlds` lists it), `processId`, `checkout`, `build`, `stateDirectory`, `stdoutLog`, `stderrLog`. |
+| `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode`, `killed` and `leaseReleased`. |
 | `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`, and `world`, the World reached. Empty output is `submitted`, not authoritative application. |
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. Optional `mode`: `settled` (default) or `presented`. Optional `tick` (settled): the simulation tick the still shows. Optional `frames` (presented, 1–120, default 1) and `region` (presented: `{x, y, width, height}` in fractions of the frame, origin top-left). No path. | Settled: completed PNG image content, up to 16 MiB, plus completion metadata; the capture holds presentation from the frame it is armed in until it is served, temporal views converge over the held frame, and the PNG is a render of it. The World steps no tick past the one the still is armed at until it is served, and `output` names that tick and its state hashes (`Settled still held at tick=<T> hash=<world.state.hash at T> pose=<pose hash>; the frame shows tick <T>.`). With `tick`, the call holds its session (`world.wait until <tick>`) and arms the still right after that tick completes, so the still is exactly that tick; a tick the World has already completed is refused. Without it, the still is of whichever tick was last completed when the call reached the World. Presented: nothing is held or settled; each frame is read back as the display presented it. One frame returns its PNG inline with a one-frame report in `output`; a burst writes its PNGs to a private temporary directory on the World's machine, kept for the caller, and returns no image: `output` is the report, a line per frame (path, presentation index, the presentation its image was rendered on, tick, and changed pixels and mean and largest absolute Rec. 709 luma change against the frame before, over the region or whole frame) and a summary line. Both include the composed view and overlays and require an initialized renderer. |
 | `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`), `timeoutMs`, same range/default, and `world`. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
@@ -418,7 +457,10 @@ answers at its release tick, a wait refused for outlasting its call, and a
 boots two such Worlds side by side and checks that `puck_worlds` lists both, that a
 call naming either by attachment id or process id reaches it whichever one the
 adapter is on, and that after one is killed, leaving its capability file behind, it
-is no longer listed and a call naming it is refused by name. Each gives the child a private temporary directory, so
+is no longer listed and a call naming it is refused by name. A fourth starts the
+checkout's debug world headless through `puck_world_start`, reads the line a
+`world.at` pin wrote through `host.log` at the tick it ran, refuses to stop a
+World it did not start, and stops its own. Each gives the child a private temporary directory, so
 `latest` can only find that test's World. Each connection ends as the stdio
 transport specifies: the client closes the adapter's stdin and the adapter must
 exit with code 0. The SDK's own `StdioClientTransport` never closes that stdin,
