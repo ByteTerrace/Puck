@@ -6,7 +6,7 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for <see cref="SdfMeshRegionArena"/>: a mesh a list stops naming keeps its words, so a list naming it again places
 /// nothing, and the arena packs only once the words of meshes no list names outnumber both the named meshes' words and
-/// the retained slack.
+/// the retained slack, or retaining them would append past the region's ceiling.
 /// </summary>
 public sealed class SdfMeshRegionArenaLawTests {
     [Fact]
@@ -44,6 +44,7 @@ public sealed class SdfMeshRegionArenaLawTests {
         var dropped = Enumerable.Range(count: 19, start: 0).Select(selector: _ => Draw(mesh: (template with { }))).ToArray();
         var arena = new SdfMeshRegionArena();
 
+        // The clones share their vertex storage but occupy distinct arena placements, near the region's ceiling.
         arena.Plan(draws: [.. kept, .. dropped]);
         Assert.True(condition: ((((ulong)arena.Words) * sizeof(uint)) <= SdfWorldTables.MostMeshRegionBytes));
 
