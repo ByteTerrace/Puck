@@ -46,7 +46,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | Hex cells, tile or chunk order, rings | `HexagonalCoordinate`, `HilbertCurve`, `LayerSequence` | Hand-rolled axial math |
 | Floor or ceiling division, low masks, alignment, PDEP/PEXT, Morton codes | `BinaryIntegerFunctions` (`FloorDivide`, `CeilingDivide`, `LowMask`, `AlignUp`, `ParallelBitDeposit`, `BitwisePair`) | `/` on a negative dividend, `(1 << n) - 1`, a `Bmi2` call |
 | Exact GF(2^k), mod p, a primality decision | `BinaryField<T>`, `PrimeField64`, `PrimeExtensions.IsPrime` | Floats; a rounded product |
-| The Nth prime, a prime count, a uniformly random prime | `PrimeExtensions.NthPrime` / `PrimeCountingFunction`, `PrimeExploration.TryRandomPrime` | A sieve walk from zero; "a random integer, then the next prime" |
+| The Nth prime or a prime count within `uint` | `PrimeExtensions.NthPrime(uint)` / `PrimeCountingFunction(uint)` | A second sieve or counting implementation |
 | A graph, lattice, language or finite structure | The `Oracle/` presented algebra | A bespoke solver |
 
 `FixedQ3232`, `FixedInterval`, `FixedMassProperties`,
@@ -118,16 +118,12 @@ maps each question to its wing and README section.
 
 ## Prime kernels
 
-Work on `PrimeExploration`, `PrimeKernels`, `ScaledResidueRing64` and the
-kernels under them carries its own rules and a list of measured dead ends in
-[references/prime-kernels.md](references/prime-kernels.md); read it before
-proposing a change there. In short: one core, no threads or GPU; AVX2 is the
-tuned floor, AVX-512 the upper path, and the 128-bit and scalar rungs stay as
-correct fallbacks; gate on capability, never on vendor; a table may speed the
-work but never replace it (no tables of answers over the query range); and
-counted work and JIT listings decide a change, with wall-clock time read beside
-them.
-
+Work on `PrimeExtensions.IsPrime`, `NthPrime(uint)`, `PrimeKernels` and
+`ScaledResidueRing64` follows
+[references/prime-kernels.md](references/prime-kernels.md). Preserve the fast
+single-value decision and its SIMD fallbacks. The owner's prime-research
+cleanup removes wide counting, selection and interval exploration, while
+`Research/`, `Algebra/` and `Oracle/` remain outside that cleanup.
 ## Verify
 
 Build the test project (`dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj
@@ -164,3 +160,4 @@ registers and coverage ratchets; completeness is checked from the current declar
 | [`content-search`](../content-search/SKILL.md) | Finding textual occurrences, candidate hand-rollings, tokens or patterns across the tree. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Semantic C# questions about references, implementers, dead code, renames or deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
+
