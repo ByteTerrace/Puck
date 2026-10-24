@@ -107,4 +107,18 @@ public sealed class RoundedBoxContactLawTests {
         Assert.InRange(actual: ((double)blocked.RequiredStepHeight), low: 0.0299, high: 0.0301);
         Assert.Equal(FixedQ4816.Zero, velocity.Y);
     }
+    [Fact]
+    public void ANearlyFlatFilletBelowTheFootRemainsWalkable() {
+        var volume = Volume(kind: FixedBodyColliderKind.Sphere);
+        var start = V(x: 1.93, y: 2.01, z: 0);
+        var position = V(x: 1.925, y: 2.009, z: 0);
+        var velocity = -FixedVector3.UnitX;
+        var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.5), MaxIterations: 4);
+        var resolution = solver.ResolveSweep([Cube], [], start, ref position, ref velocity,
+            FixedQuaternion.Identity, [volume], FixedVector3.UnitY);
+
+        Assert.True(condition: resolution.Grounded);
+        Assert.Equal(FixedVector3.Zero, resolution.ObstructionNormal);
+        Assert.Equal(FixedQ4816.Zero, resolution.RequiredStepHeight);
+    }
 }

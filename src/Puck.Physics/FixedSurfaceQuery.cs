@@ -257,7 +257,8 @@ public static class FixedSurfaceQuery {
 
         return (Point: box.ToWorld(local: surfaceLocal), Normal: box.ToWorldOffset(local: normal));
     }
-    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
+
+    internal static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
         FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.Nearest(collider: in collider, probe: probe),
         FixedStaticColliderKind.RoundedBox => NearestOnRoundedBox(collider: in collider, probe: probe),
         FixedStaticColliderKind.Cylinder => NearestOnCylinder(collider: in collider, probe: probe),
@@ -286,6 +287,7 @@ public static class FixedSurfaceQuery {
     ),
         _ => throw new InvalidOperationException(message: $"Unknown collider kind {collider.Kind}."),
     };
+
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnRoundedBox(in FixedStaticCollider collider, FixedVector3 probe) {
         var nearest = FixedRoundedBoxContact.Nearest(point: collider.Rotation.RotateInverse(vector: (probe - collider.Center)),
             halfExtents: collider.Extent);

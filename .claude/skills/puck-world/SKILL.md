@@ -476,7 +476,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   apply that bound to outward error. Other finite primitives use
   oriented bounds. The Moth's capsule has a 0.35 m radius and is 2.06 m tall;
   sharp and rounded boxes use closest segment/box features. Lateral edge/rim
-  approach requires enough step height to clear the top support plane;
+  approach requires enough step height to clear the local touched edge plus
+  its fillet radius, never the distant apex of a tilted ramp; an edge witness
+  at or below the pre-move foot remains walkable support;
   resting and falling still meet the rounded surface. Every
   boolean carve collides as the uncarved shape. Build a doorway,
   window or stairwell as a union of boxes around the opening, never a

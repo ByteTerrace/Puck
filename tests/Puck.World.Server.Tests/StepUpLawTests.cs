@@ -25,7 +25,7 @@ public sealed class StepUpLawTests {
     );
     // The author frame is read through the half-turn (-x, y, -z): the riser authored at +z stands ahead of a body at
     // yaw 0, which faces -Z, its near face 1.5 m from the origin.
-    private static WorldDefinition Document(float stepHeight) {
+    private static WorldDefinition Document(float stepHeight, bool ramp = false) {
         var document = Fixtures.BuildDocument();
         var canonical = CreationCanonicalizer.Canonicalize(
             document: new CreationDocument(
@@ -44,7 +44,11 @@ public sealed class StepUpLawTests {
                         id: 1,
                         name: "kerb",
                         position: new Vector3(x: 0f, y: 0.05f, z: 3.5f)
-                    ),
+                    ) with {
+                        Rotation = (ramp ? Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (MathF.PI / 12f)) : Quaternion.Identity),
+                        Position = new Vector3(x: 0f, y: (ramp ? 0.3876f : 0.05f), z: 3.5f),
+                        Scale = (ramp ? new Vector3(x: 2.0189f, y: 0.15f, z: 2f) : new Vector3(x: 2f, y: 0.05f, z: 2f)),
+                    },
                 ],
                 Frames: null
             ),
@@ -83,14 +87,14 @@ public sealed class StepUpLawTests {
             }),
         };
     }
-    private static FixedVector3 Walk(float stepHeight) {
-        using var fixture = Fixtures.FreshServer(definition: Document(stepHeight: stepHeight));
+    private static FixedVector3 Walk(float stepHeight, bool ramp = false) {
+        using var fixture = Fixtures.FreshServer(definition: Document(ramp: ramp, stepHeight: stepHeight));
         var body = fixture.JoinSeat();
 
         body.Pose(
             pitchRadians: 0f,
             rollRadians: 0f,
-            x: 0f,
+            x: (ramp ? 1.7f : 0f),
             y: 0f,
             yawRadians: 0f,
             z: 0f
@@ -125,5 +129,13 @@ public sealed class StepUpLawTests {
             condition: ((blocked.Y < FixedQ4816.FromDouble(value: 0.05)) && (blocked.Z > FixedQ4816.FromDouble(value: -1.5))),
             userMessage: $"with no step height the riser's face should stop the walker; it is at {blocked}"
         );
+    }
+    [Fact]
+    public void AWalkerStepsSidewaysOntoARampsLowEdgeBelowItsGlobalApex() {
+        var stepped = Walk(ramp: true, stepHeight: 0.3f);
+
+        Assert.InRange(((double)stepped.Y), 0.04, 0.3);
+        Assert.True(condition: (stepped.Z < FixedQ4816.FromDouble(value: -2)),
+            userMessage: $"the ramp's low side should admit the 0.3 m step; the walker is at {stepped}");
     }
 }
