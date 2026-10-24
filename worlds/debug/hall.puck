@@ -27,19 +27,34 @@ let storey = galleryStorey
 let hallTop = 18.05
 let parapet = 18.6
 
-// The palette every shell piece shares: cream walls, warm grey floors and stairs, charcoal trim, the light strips'
-// warm white, and the signs' cream boards and charcoal letters.
+// The hall is the gallery's inspection room, a debug tool for a person looking and an agent capturing, so its light is
+// chosen for reading surfaces, not for mood. Every surface the light reaches before an exhibit is a neutral grey, so the
+// light reflected onto an exhibit carries no tint and an albedo reads as itself: light grey walls, a white ceiling, a mid
+// grey floor (light enough to fill an exhibit's underside), near-black trim. The light itself is a neutral 6500 K, the
+// display's own white, and comes from overhead area light: the strips' wide luminous bands lit through the irradiance
+// volume, with the downlights over them as a soft key, at an inspection level (EN 12464-1 asks 750 lux for inspection
+// work) that keeps a lit level above the darkest exposure the world adapts to, so a lit room never exposes darker than
+// its light. The blinds stay down by default, as a gallery keeps daylight off its exhibits: daylight through three
+// window walls is many times the electric light and changes with the view, which pushed the exposure several stops
+// between neighbouring exhibits. The light is still physical: shadows, occlusion and the traced bounce all stay, so a
+// leak or a lighting bug shows as it would anywhere else.
 let hallWall = 0
 let hallFloor = 1
 let hallTrim = 2
 let hallLight = 3
 let hallBoard = 4
+let hallCeiling = 5
+let hallCarLight = 6
 let hallPalette = [
-  { color: "#E6E0D2", roughness: 0.85, specular: 0.04 }
-  { color: "#8F8B84", roughness: 0.7, specular: 0.08 }
-  { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
-  { color: "#FFF1DC", roughness: 0.5, emissive: 2500nit }
-  { color: "#F2EEE4", roughness: 0.6 }
+  { color: "#D4D4D4", roughness: 0.85, specular: 0.04 }
+  { color: "#9A9A9A", roughness: 0.7, specular: 0.08 }
+  { color: "#3E3F42", roughness: 0.6, specular: 0.15 }
+  { color: "#FFFFFF", roughness: 0.5, emissive: 3000nit }
+  { color: "#EEEEEB", roughness: 0.6 }
+  { color: "#E8E8E8", roughness: 0.9, specular: 0.02 }
+  // The lift car's luminous ceiling: the car's light spread over nearly its whole ceiling, dim enough to read as a
+  // bright white panel at the darkest exposure rather than a glare.
+  { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }
 ]
 // The same palette with the light strips switched off: a pale unlit diffuser in the strips' slot, so a slab drawn in it
 // is the same geometry (the mesh library keys materials by their place, so it bakes nothing new) with nothing glowing.
@@ -47,8 +62,10 @@ let hallPaletteDark = [
   hallPalette[0]
   hallPalette[1]
   hallPalette[2]
-  { color: "#D9D4C9", roughness: 0.5, specular: 0.06 }
+  { color: "#D9D9D9", roughness: 0.5, specular: 0.06 }
   hallPalette[4]
+  hallPalette[5]
+  hallPalette[6]
 ]
 // Each slab and the roof come lit and dark: a placement shows its dark variant while its level's `hallLights` cell is
 // Off (the placement's `respond` facet), and its lit one otherwise.
@@ -96,6 +113,13 @@ template hallStrips(top, aisles) {
   }
 }
 
+// A slab or roof piece: the floor finish on top and a white ceiling under it, two boxes stacked into the one slab, so
+// the ceiling bounces the strips' and downlights' light back down as a gallery's white ceiling does.
+template hallSlab(label, x0, x1, y0, y1, z0, z1) {
+  hallBox(label: $"{label}-ceiling", x0: x0, x1: x1, y0: y0, y1: (y0 + 0.02), z0: z0, z1: z1, slot: hallCeiling)
+  hallBox(label: label, x0: x0, x1: x1, y0: (y0 + 0.02), y1: y1, z0: z0, z1: z1, slot: hallFloor)
+}
+
 // The lift. Its car is a population body (`lift-car`, kit `lift`) carrying attached solid platform, cab and door
 // placements. The car moves only by the rules below: `liftAt` is its height in
 // sixteenths of a metre, `liftTarget` where it is going, and every tick `lift-ride` poses the car at cell `liftAt` of
@@ -123,7 +147,8 @@ let switchReach = map(range(0, 4), k => { level: k, x0: 10.3, x1: 11.8, z0: (swi
 // On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
 let hallSwitchStates = [{ name: "on", indicator: "#FFC46B", glow: 300 }, { name: "off", indicator: "#5BE38A", glow: 200 }]
 
-// The blinds, tied to each level's lights: Off lowers them, On raises them. A level's windows open in the south, north and
+// The blinds, each level's set by its `hallBlinds` cell, Up or Down, apart from its lights: every level's start Down, so
+// the gallery is lit by its own light alone, and `gallery.blinds` raises a level's to see it by daylight. A level's windows open in the south, north and
 // east faces from 0.9 m to 3.3 m over its slab top (the south face's ten 3 m windows from x = 21, and above the lobby the
 // one over the entrance; the north face's ten; the east face's five), and level 3 has three skylights in the roof. A
 // lowered blind is a slatted panel standing in the wall's thickness, 5 cm back from the room face: one board per face and
@@ -132,15 +157,15 @@ let hallSwitchStates = [{ name: "on", indicator: "#FFC46B", glow: 300 }, { name:
 // lattice its length sets, so a level's blinds cost few triangles. A raised blind has rolled into the charcoal cassette
 // at the head of its opening (part of `hall-shell`, always drawn), so its placement shows `hall-blinds-up`, a creation
 // with nothing to draw: raising blinds bakes nothing, and lowering them bakes their boards the first time they show (the
-// mesh store keeps them after; the lobby's bake with the boot, since it starts dark). The boards are solid, so a line of
-// sight through a window reads its blind (`hall-tests.puck`).
+// mesh store keeps them after; every level's bake with the boot, since they start down). The boards are solid, so a line
+// of sight through a window reads its blind (`hall-tests.puck`).
 let windowStarts = map(range(0, 10), i => 21 + (5 * i))
 let eastStarts = [14.5, 19.5, 24.5, 29.5, 34.5]
 let skylightStarts = [24, 36, 48]
 // Each opening, for its cassette: its level, its face, and its extent along the face (x, or z on the east face).
 let hallOpenings = reduce(range(0, 4), [], (rows, k) => concat(concat(concat(rows, map(concat(((k == 0) ? [] : [14]), windowStarts), x => { level: k, face: "south", a0: x, a1: ((x == 14) ? 18 : (x + 3)) })), map(windowStarts, x => { level: k, face: "north", a0: x, a1: (x + 3) })), map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })))
 // Each blind board: its level, its name, and its world bounds.
-let hallBlinds = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
+let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
   { level: k, name: "south", x0: ((k == 0) ? 20.97 : 13.97), x1: 69.03, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 12.03, z1: 12.25 }
   { level: k, name: "north", x0: 20.97, x1: 69.03, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 39.75, z1: 39.97 }
   { level: k, name: "east", x0: 69.75, x1: 69.97, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 14.47, z1: 37.53 }
@@ -148,22 +173,25 @@ let hallBlinds = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
 ), map(((k == 3) ? skylightStarts : []), x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 })
 )
 )
-let blindPalette = [{ color: "#D8CFBD", roughness: 0.9, specular: 0.03 }]
+let blindPalette = [{ color: "#CFCFCC", roughness: 0.9, specular: 0.03 }]
 // The seams painted across a window's board, the most a palette slot's paints hold.
 let blindSeams = 8
 
 // The ceiling fixtures a level owns, by `hallLamps` key, with the luminous power, in lumens, each emits while its level
-// is On: every level's downlights (a commercial LED downlight's 3,000 lm, a neutral 4,000 K), and the stairwell's
+// is On: every level's downlights (a high-output LED downlight's 5,000 lm, at the hall's neutral 6500 K), and the stairwell's
 // pendant (800 lm, a 60 W bulb's) on level 1's switch. A fixture stands still, so the irradiance volume traces it: its
 // light bounces about its room and stops at the slab under it.
-let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 3000 }), [{ key: "stairs", level: 1, lumens: 800 }])
+let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 5000 }), [{ key: "stairs", level: 1, lumens: 800 }])
 // Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
-// ceiling, each a warm-white spot casting down in a 50-degree cone. Level 0's columns stop short of the painting wing's
-// partition at x 51 (paintings.puck), which would swallow a fixture on it; the wing hangs its own.
+// ceiling, each a neutral spot casting down in a 50-degree cone. Level 3's strips hang only beside its skylights, so
+// with the skylights' blinds down its downlights also run in three rows across the skylights' frames, over its motion
+// rows. Level 0's columns stop short of the painting wing's partition at x 51 (paintings.puck), which would swallow a
+// fixture on it; the wing hangs its own.
 let hallDownlightColumns = [[27, 39, 49], [27, 39, 51, 63], [27, 39, 51, 63], [27, 39, 51, 63]]
-let hallDownlights = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, reduce(((k == 3) ? [15, 37] : hallLightAisles[k]), [], (aisle, z) => concat(aisle, map(hallDownlightColumns[k], x => { level: k, x: x, z: z })))), map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })))
+let hallDownlightAisles = concat(hallLightAisles, [[15, 21, 26, 31, 37]])
+let hallDownlights = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, reduce(hallDownlightAisles[k], [], (aisle, z) => concat(aisle, map(hallDownlightColumns[k], x => { level: k, x: x, z: z })))), map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })))
 // The painting wing's own fixtures (paintings.puck), lit whatever level 0's switch says, since the wing is a windowless
 // room whose paintings are its exhibits and its ceiling strips go dark with the lobby's: a grid of 8,000-lumen
 // downlights clear of the endless fall's ceiling canvas at (66, 22.6), and a track of washes 1.2 m off each wall a
@@ -251,10 +279,10 @@ prototypes {
           schema: "puck.creation.v1"
           palette: look.palette
           for (piece, n) in ((k == 1) ? fallSlab : [{ x0: 10.3, x1: 69.7, z0: 12.3, z1: stairStart }]) {
-            hallBox(label: $"slab-{k}-south-{n}", x0: piece.x0, x1: piece.x1, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: piece.z0, z1: piece.z1, slot: hallFloor)
+            hallSlab(label: $"slab-{k}-south-{n}", x0: piece.x0, x1: piece.x1, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: piece.z0, z1: piece.z1)
           }
-          hallBox(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7, slot: hallFloor)
-          hallBox(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4, slot: hallFloor)
+          hallSlab(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7)
+          hallSlab(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4)
           hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
         }
       }
@@ -267,12 +295,12 @@ prototypes {
         name: $"hall-roof{look.suffix}"
         schema: "puck.creation.v1"
         palette: look.palette
-        hallBox(label: "roof-south", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 12.3, z1: 18, slot: hallFloor)
-        hallBox(label: "roof-north", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 34, z1: 39.7, slot: hallFloor)
-        hallBox(label: "roof-west", x0: 10.3, x1: 24, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-        hallBox(label: "roof-mullion-a", x0: 34, x1: 36, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-        hallBox(label: "roof-mullion-b", x0: 46, x1: 48, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
-        hallBox(label: "roof-east", x0: 58, x1: 69.7, y0: 17.75, y1: hallTop, z0: 18, z1: 34, slot: hallFloor)
+        hallSlab(label: "roof-south", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 12.3, z1: 18)
+        hallSlab(label: "roof-north", x0: 10.3, x1: 69.7, y0: 17.75, y1: hallTop, z0: 34, z1: 39.7)
+        hallSlab(label: "roof-west", x0: 10.3, x1: 24, y0: 17.75, y1: hallTop, z0: 18, z1: 34)
+        hallSlab(label: "roof-mullion-a", x0: 34, x1: 36, y0: 17.75, y1: hallTop, z0: 18, z1: 34)
+        hallSlab(label: "roof-mullion-b", x0: 46, x1: 48, y0: 17.75, y1: hallTop, z0: 18, z1: 34)
+        hallSlab(label: "roof-east", x0: 58, x1: 69.7, y0: 17.75, y1: hallTop, z0: 18, z1: 34)
         hallStrips(top: 17.75, aisles: [15, 37])
       }
     }
@@ -300,7 +328,7 @@ prototypes {
   }
 
   // Each lowered blind board, a creation of its own, so each bakes as one flat group.
-  for blind in hallBlinds {
+  for blind in hallBlindBoards {
     prototype $"hall-blind-{blind.level}-{blind.name}" {
       document {
         name: $"hall-blind-{blind.level}-{blind.name}"
@@ -312,7 +340,7 @@ prototypes {
             color: blindPalette[0].color
             roughness: blindPalette[0].roughness
             specular: blindPalette[0].specular
-            paints: map(((blind.y0 > 17) ? [] : range(1, blindSeams)), i => { type: "Plane", position [0, ((blind.y0 + 0.03) + ((2.4 / (blindSeams + 1)) * i)), 0], stroke: 0.007, color: "#9A907E" })
+            paints: map(((blind.y0 > 17) ? [] : range(1, blindSeams)), i => { type: "Plane", position [0, ((blind.y0 + 0.03) + ((2.4 / (blindSeams + 1)) * i)), 0], stroke: 0.007, color: "#8C8C89" })
           }
         ]
         hallBox(label: "board", x0: blind.x0, x1: blind.x1, y0: blind.y0, y1: blind.y1, z0: blind.z0, z1: blind.z1, slot: 0)
@@ -416,10 +444,11 @@ prototypes {
         position [0, 2.61, 0]
         scale [1.4, 0.06, 1.55]
       }
+      // The luminous ceiling under the car's lamp, nearly as large as the ceiling, so the car reads evenly.
       shape Box "lamp" {
-        material: hallLight
+        material: hallCarLight
         position [0, 2.53, 0]
-        scale [0.5, 0.02, 0.5]
+        scale [1.25, 0.02, 1.4]
       }
       for pad in carPads {
         shape Box $"pad-{pad.level}" {
@@ -552,15 +581,15 @@ placements {
       ]
     }
   }
-  // A level's blinds are down while its lights are off and up while they are on.
-  for blind in hallBlinds {
+  // A level's blinds are down while its `hallBlinds` cell is Down and rolled up while it is Up.
+  for blind in hallBlindBoards {
     placement $"hall-blind-{blind.level}-{blind.name}" {
       prototype: $"hall-blind-{blind.level}-{blind.name}"
       position [0, 0, 0]
       solid
       respond [
         {
-          "when": state(state: hallLights, key: $"level{blind.level}", comparison: Equal, value: 1)
+          "when": state(state: hallBlinds, key: $"level{blind.level}", comparison: Equal, value: 0)
           prototypeId: "hall-blinds-up"
         }
       ]
@@ -669,19 +698,23 @@ placements {
 // A point or spot light reaches only as far as its light still shows at the darkest exposure the world takes, and each
 // view shades only the fixtures that reach what it sees. A fixture that stands still is traced into the irradiance
 // volume, which bounces its light and occludes it where the probes about a surface cannot see it; the lift car's lamp
-// rides a body, so it is neither. The rooms' light is also the emissive strips' and the windows', carried indoors by
-// the traced indirect light, the shadows and the occlusion.
+// rides a body, so it is neither. The rooms' light is also the emissive strips' (and the windows', with a level's
+// blinds up), carried by the traced indirect light, the shadows and the occlusion.
 render {
   lighting {
     lights: concat(
       [
         directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
         point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
-        point(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.1, 0], temperature: 3500K, power: 400lm)
+        // The car's light, just under its luminous ceiling: a spot opening almost to a hemisphere, so it lights the
+        // walls up to the ceiling but not the panel above it, riding the car's body, so neither traced nor bounced. It
+        // carries enough light (some 200 to 400 lux on the walls above waist height) for the car to read at the darkest
+        // exposure, which is what the car takes because the volume cannot see the moving car's own light.
+        spot(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.22, 0], direction: [0, -1, 0], angle: 89deg, innerAngle: 75deg, temperature: 6500K, power: 6000lm)
         // Wonderland's one lamp (wonderland.puck), dim enough that its device screens glow under the roof.
         point(name: "wonderland-lamp", position: [5.2, 4.3, 29], temperature: 2700K, power: 300lm)
       ],
-      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: $"state.hallLamps.level{hallDownlights[i].level}")),
+      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 6500K, power: $"state.hallLamps.level{hallDownlights[i].level}")),
       map(range(0, length(wingDownlights)), i => spot(name: $"wing-down-{i}", position: [wingDownlights[i].x, (hallCeilings[0] - 0.1), wingDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: 8000lm)),
       map(range(0, length(wingWashes)), i => spot(name: $"wing-wash-{i}", position: [wingWashes[i].x, (hallCeilings[0] - 0.1), wingWashes[i].z], direction: wingWashes[i].aim, angle: 35deg, innerAngle: 20deg, temperature: 3500K, power: 4000lm))
     )
@@ -749,6 +782,11 @@ state {
     On
   }
 
+  enum HallBlind {
+    Up
+    Down
+  }
+
   world {
     table hallLights: HallLight {
       level0 = Off
@@ -756,12 +794,19 @@ state {
       level2 = On
       level3 = On
     }
+    // Each level's blinds, apart from its lights: Down keeps daylight off the exhibits.
+    table hallBlinds: HallBlind {
+      level0 = Down
+      level1 = Down
+      level2 = Down
+      level3 = Down
+    }
     // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
     table hallLamps {
       level0 = 0.0
-      level1 = 3000
-      level2 = 3000
-      level3 = 3000
+      level1 = 5000
+      level2 = 5000
+      level3 = 5000
       stairs = 800
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
@@ -897,6 +942,17 @@ commands [
     ]
     lines [
       "world.state.cell.set hallLights level{level} {state}"
+    ]
+  }
+  {
+    name: "gallery.blinds"
+    help: "Raises or lowers a level's blinds in the gallery hall (0 to 3): Down, the default, keeps daylight off the exhibits so the room's own light alone shows them; Up lets the windows light the level."
+    parameters [
+      { name: "level", kind: Choice, values ["0", "1", "2", "3"] }
+      { name: "state", kind: Choice, values ["Up", "Down"] }
+    ]
+    lines [
+      "world.state.cell.set hallBlinds level{level} {state}"
     ]
   }
   {
