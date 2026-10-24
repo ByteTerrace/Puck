@@ -24,8 +24,10 @@ internal static class FixedCylinderContact {
             Y: FixedQ4816.Clamp(value: point.Y, minimum: -halfHeight, maximum: halfHeight), Z: closestRadial.Z);
         var delta = (point - closest);
         var gap = delta.Length;
+        // Rounding the radial projection can land a point a raw unit outside the wall exactly on `closest`.
+        var outward = ((gap > FixedQ4816.Zero) ? (delta / gap) : ((side > FixedQ4816.Zero) ? radialNormal : capNormal));
 
-        return (closest, (delta / gap), gap);
+        return (closest, outward, gap);
     }
     internal static bool TryPush(in FixedStaticCollider cylinder, FixedVector3 position,
         in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 skin,
