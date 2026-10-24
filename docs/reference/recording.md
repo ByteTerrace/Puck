@@ -1,11 +1,11 @@
 # Capture and recording pipeline
 
 Puck.Recording is the platform-neutral half of Puck's recording graph. A
-versioned `RecordingDocument` describes one capture—its output path, clock
+typed `RecordingConfiguration` describes one capture—its output path, clock
 model, video lane, audio rows, and capture-only overlays—and
-`RecordingSession` drives that document against caller-supplied video-encoder
+`RecordingSession` drives that configuration against caller-supplied video-encoder
 and audio-source factories, muxing what lands into a hand-rolled deterministic
-Matroska/WebM container. The document is the primitive that lives above any
+Matroska/WebM container. The configuration is the primitive that lives above any
 one game: a host can drive the same shape from a window or a headless render.
 `Puck.World` does not compose this native video library; its session recording
 and playback use `replay.*`.
@@ -18,9 +18,8 @@ capture, probes and audio rendering remain separate platform services.
 
 ## Key features
 
-- *One document, several drivers:* `RecordingDocument` (`puck.recording.configuration.v1`)
-  is schema-versioned, extension-preserving JSON; any host that can supply the
-  two platform factories can drive it.
+- *Typed configuration:* callers supply `RecordingConfiguration` directly.
+  There is no recording JSON schema, loader, serializer or extension-data bag.
 - *A factory ladder that declines loudly:* a video or audio factory returns
   `null` with a reason instead of throwing, so a missing microphone or an
   unencodable codec becomes a status line, never a crash.
@@ -46,7 +45,7 @@ capture, probes and audio rendering remain separate platform services.
 
 ```mermaid
 flowchart LR
-    Doc["📄 RecordingDocument"] --> Options["🧩 RecordingSessionOptions"]
+    Doc["📄 RecordingConfiguration"] --> Options["🧩 RecordingSessionOptions"]
     VideoFactory["🎥 caller's IVideoEncoderFactory"] --> Options
     AudioFactory["🎙️ caller's IAudioCaptureSourceFactory"] --> Options
     Options --> Session["🎬 RecordingSession.TryCreate"]
@@ -62,7 +61,7 @@ flowchart LR
     Mux --> File["💾 .webm / .mkv"]
 ```
 
-`RecordingSession.TryCreate` resolves the document's codec ladder and audio
+`RecordingSession.TryCreate` resolves the configuration's codec ladder and audio
 rows against the supplied factories, opening only what the machine can
 actually encode and capture, and reports a loud reason for whatever declined.
 It never half-starts silently: if neither a video encoder nor an audio lane
@@ -73,8 +72,8 @@ rendering. One encode thread composites overlays, encodes, and writes to the
 muxer; one audio thread drains, mixes, encodes to Opus, and writes to the
 muxer; both serialize through one lock around the muxer.
 
-`RecordingSessionOptions.Document.Clock` chooses what a playback position
-means: `Wall` (the document default) stamps frames and audio from the wall
+`RecordingSessionOptions.Configuration.Clock` chooses what a playback position
+means: `Wall` (the configuration default) stamps frames and audio from the wall
 clock at consume time, while `Sim` stamps frames from the engine tick clock
 for a deterministic offline re-render and forbids audio rows. Either way the
 container timeline is rebased so the first written block sits at zero—an
@@ -84,14 +83,14 @@ the whole take.
 
 ## Quick start
 
-A minimal session needs a document, caller-supplied factories and the source
+A minimal session needs a configuration, caller-supplied factories and the source
 frame extent:
 
 ```csharp
-using Puck.Recording.Document;
+using Puck.Recording.Configuration;
 using Puck.Recording.Session;
 
-var document = RecordingDocument.CreateDefault() with {
+var configuration = RecordingConfiguration.CreateDefault() with {
     Output = "recordings/session.webm",
 };
 
@@ -99,7 +98,7 @@ if (!RecordingSession.TryCreate(
     options: new RecordingSessionOptions {
         AudioSourceFactory = audioSourceFactory,
         Clock = clock,                             // shared with the supplied audio sources
-        Document = document,
+        Configuration = configuration,
         SourceHeight = 1080,
         SourceWidth = 1920,
         VideoEncoderFactory = videoEncoderFactory,
@@ -116,10 +115,8 @@ if (!RecordingSession.TryCreate(
 }
 ```
 
-Loading and saving a document keeps the file diffable: `RecordingDocumentSerialization.Save`
-writes the canonical form (declaration member order, LF newlines, one trailing
-newline), and `TryLoad` runs the one thick `RecordingDocumentValidator` and
-never half-accepts a malformed document.
+`RecordingConfigurationValidator` checks the typed settings before the session
+opens its factories. The retired recording document format has no reader.
 
 ## Muxing and codecs
 
@@ -133,7 +130,7 @@ carry. `EbmlWriter` and `MatroskaIds` are the byte-level half: every element
 the muxer emits crosses one of `EbmlWriter`'s typed helpers, so the container
 layout is defined in exactly one place.
 
-The document type is chosen by what actually landed: `webm` for an AV1 +
+The container document type is chosen by what actually landed: `webm` for an AV1 +
 Opus program, `matroska` for the H.264 fallback—WebM is a Matroska subset,
 so one writer serves both with a data-chosen doc-type string and file
 extension. `Av1TemporalDelimiterFilter` strips the leading
@@ -157,12 +154,12 @@ CPU-pixel frame to any registered `ICaptureFrameObserver`s and then encodes it
 to PNG through `Puck.Assets`'s `PngEncoder`, either to one fixed path or to
 numbered files under a directory.
 
-`OverlayCompositor` alpha-blends the document's overlay rows onto the copied
-CPU frame after capture, at zero cost when a document has no overlay rows.
+`OverlayCompositor` alpha-blends the configuration's overlay rows onto the copied
+CPU frame after capture, at zero cost when a configuration has no overlay rows.
 Text overlays render through `BitmapFont` (in `Puck.Assets`), a compact embedded 8×8 monospace
 ASCII glyph set rendered at integer scale so overlay text stays crisp with no
 filtering blur—a self-contained path with no cross-project font
-dependency. `Rgba32` parses and carries the document's `#RRGGBBAA` /
+dependency. `Rgba32` parses and carries the configuration's `#RRGGBBAA` /
 `#RRGGBB` colors, shared by the validator (to reject malformed colors at the
 boundary) and the compositor (to blend them).
 
@@ -170,9 +167,9 @@ boundary) and the compositor (to blend them).
 
 | Area | Types | Role |
 |---|---|---|
-| Document | `RecordingDocument`, `RecordingVideo`, `RecordingAudioRow`, `OverlayRow`, `RecordingEnums` (`RecordingClock`, `RecordingAudioKind`, `RecordingAudioTrackMode`, `OverlayKind`, `OverlayAnchor`, `OverlayClock`) | The versioned, data-defined capture description. |
-| Document plumbing | `RecordingDocumentValidator`, `RecordingDocumentSerialization`, `RecordingJsonContext` | The one thick validation gate and the canonical (de)serializer. |
-| Session | `RecordingSession`, `RecordingSessionOptions`, `RecordingStatus` | Drives a document against platform factories and reports honest progress. |
+| Configuration | `RecordingConfiguration`, `RecordingVideo`, `RecordingAudioRow`, `OverlayRow`, `RecordingEnums` (`RecordingClock`, `RecordingAudioKind`, `RecordingAudioTrackMode`, `OverlayKind`, `OverlayAnchor`, `OverlayClock`) | The typed capture settings. |
+| Validation | `RecordingConfigurationValidator` | Validates typed settings before opening a session. |
+| Session | `RecordingSession`, `RecordingSessionOptions`, `RecordingStatus` | Drives a configuration against platform factories and reports honest progress. |
 | Muxing | `MatroskaMuxer`, `EbmlWriter`, `MatroskaIds` | The hand-rolled deterministic Matroska/WebM writer. |
 | Audio | `OpusAudioLane`, `AudioLaneSource`, `OpusStreamEncoder`, `OpusHead`, `LinearResampler`, `FloatRing`, `IAudioPacketSink` | Resampling, mixing, and Opus encoding for the audio lane. |
 | Capture | `CaptureSink`, `ICaptureFrameObserver`, `FrameSlotQueue`, `Av1TemporalDelimiterFilter` | The default sink, frame observation, and the render/encode handoff. |

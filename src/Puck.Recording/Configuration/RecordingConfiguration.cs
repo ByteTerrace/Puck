@@ -1,7 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
-namespace Puck.Recording.Document;
+namespace Puck.Recording.Configuration;
 
 /// <summary>
 /// The video lane configuration: the ordered codec preference ladder, the output extent (null components take the
@@ -23,7 +20,7 @@ public sealed record RecordingVideo(
 /// One audio capture row: which source to open, its gain, and whether it mixes into the default stereo track or
 /// lands on its own isolated track.
 /// </summary>
-/// <param name="Id">A stable identifier, unique among the document's audio rows.</param>
+/// <param name="Id">A stable identifier, unique among the configuration's audio rows.</param>
 /// <param name="Kind">The capture source kind.</param>
 /// <param name="Device">The device identifier, or <see langword="null"/> for the system default.</param>
 /// <param name="Gain">The linear gain applied before mixing.</param>
@@ -38,7 +35,7 @@ public sealed record RecordingAudioRow(
 /// <summary>
 /// One capture-only overlay row composited onto the recorded frame after frame capture — it exists in the
 /// recording and never in the game window. The fields relevant to a row depend on its <see cref="Kind"/>; the
-/// document validator enforces the per-kind requirements. Positions are normalized (0..1) and measured from
+/// configuration validator enforces the per-kind requirements. Positions are normalized (0..1) and measured from
 /// <see cref="Anchor"/>.
 /// </summary>
 /// <param name="Kind">The overlay kind, which selects the relevant fields.</param>
@@ -66,37 +63,25 @@ public sealed record OverlayRow(
     OverlayClock Clock = OverlayClock.Session
 );
 /// <summary>
-/// The recording graph document (<c>puck.recording.configuration.v1</c>): a versioned, data-defined description of one capture
-/// — the output path, the clock model, the video lane, the audio rows, and the capture-only overlays. It is the
-/// primitive that lives above any one game; World, the demo, or a headless render all drive the same document.
+/// Typed configuration for one capture: its output path, clock, video lane, audio rows and capture-only overlays.
+/// Callers supply it directly to a recording session; it has no persisted configuration schema.
 /// </summary>
-/// <param name="Schema">The schema tag; must equal <see cref="SchemaVersion"/>.</param>
 /// <param name="Output">The output file path, or <see langword="null"/> to compose one (extension chosen by the landed codec).</param>
 /// <param name="Clock">The timestamp source.</param>
 /// <param name="Video">The video lane, or <see langword="null"/> for the baked default.</param>
 /// <param name="Audio">The audio rows; empty or <see langword="null"/> for none.</param>
 /// <param name="Overlays">The capture-only overlays; empty or <see langword="null"/> for none.</param>
-public sealed record RecordingDocument(
-    string? Schema = RecordingDocument.SchemaVersion,
+public sealed record RecordingConfiguration(
     string? Output = null,
     RecordingClock Clock = RecordingClock.Wall,
     RecordingVideo? Video = null,
     IReadOnlyList<RecordingAudioRow>? Audio = null,
     IReadOnlyList<OverlayRow>? Overlays = null
 ) {
-    /// <summary>The only accepted schema tag.</summary>
-    public const string SchemaVersion = "puck.recording.configuration.v1";
-
-    /// <summary>Gets or sets the unrecognized top-level members preserved verbatim across a load/save round trip. A
-    /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization, and an
-    /// <c>init</c> accessor makes the source generator try to bind it through the positional constructor and throw.</summary>
-    [JsonExtensionData]
-    public IDictionary<string, JsonElement>? Extensions { get; set; }
-
     /// <summary>Builds the baked default: mic + loopback mixed to one track, the av1 to h264 ladder, no overlays.</summary>
-    /// <returns>The default document.</returns>
-    public static RecordingDocument CreateDefault() {
-        return new RecordingDocument(
+    /// <returns>The default configuration.</returns>
+    public static RecordingConfiguration CreateDefault() {
+        return new RecordingConfiguration(
             Audio: [
                 new RecordingAudioRow(
                     Id: "microphone",

@@ -22,9 +22,8 @@ namespace Puck.Abstractions.Documents;
 /// <para>
 /// Applied per enum at the declaration — <c>[JsonConverter(typeof(StrictEnumConverter&lt;ThatEnum&gt;))]</c> — so the
 /// enum itself declares how it crosses a wire once, rather than a central list every source-gen context must repeat
-/// and keep in sync. Every enum <c>Puck.World.WorldJsonContext</c> (<c>puck.world.definition.v1</c>) and
-/// <c>Puck.Recording.Document.RecordingJsonContext</c> (<c>puck.recording.configuration.v1</c>) reach through their document
-/// graphs carries this attribute.
+/// and keep in sync. The enums <c>Puck.World.WorldJsonContext</c> (<c>puck.world.definition.v1</c>) reaches through its
+/// document graph declare this attribute.
 /// </para>
 /// </remarks>
 public sealed class StrictEnumConverter<TEnum> : JsonStringEnumConverter<TEnum> where TEnum : struct, Enum {

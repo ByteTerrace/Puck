@@ -3,8 +3,8 @@ using System.Globalization;
 namespace Puck.Recording.Overlay;
 
 /// <summary>
-/// A straight (non-premultiplied) 8-bit RGBA color, and the parser for the document's <c>#RRGGBBAA</c> /
-/// <c>#RRGGBB</c> hex form. Shared by the document validator (to reject malformed colors at the boundary) and the
+/// A straight (non-premultiplied) 8-bit RGBA color, and the parser for the configuration's <c>#RRGGBBAA</c> /
+/// <c>#RRGGBB</c> hex form. Shared by the configuration validator (to reject malformed colors at the boundary) and the
 /// overlay compositor (to alpha-over onto the frame).
 /// </summary>
 /// <param name="R">The red channel.</param>

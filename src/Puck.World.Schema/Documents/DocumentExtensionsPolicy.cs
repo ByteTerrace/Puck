@@ -18,8 +18,7 @@ namespace Puck.World;
 /// the document loads at all. This regime applies to document roots only; the families riding
 /// <see cref="Puck.Assets.Documents.DocumentCanonicalizer"/> (<c>puck.creation.v1</c>, <c>puck.tune.v1</c>,
 /// <c>puck.synthesizer-patch.v1</c>, <c>puck.release.manifest.v1</c>) carry their own <c>[JsonExtensionData]</c> bags and validate them
-/// through <see cref="Puck.Assets.Documents.DocumentCanonicalizer.ValidateExtensions"/> instead; <c>Puck.Recording</c>'s
-/// own <c>[JsonExtensionData]</c> bag on <c>RecordingDocument</c> rides neither regime.</para>
+/// through <see cref="Puck.Assets.Documents.DocumentCanonicalizer.ValidateExtensions"/> instead.</para>
 /// </remarks>
 public static class DocumentExtensionsPolicy {
     /// <summary>True when <paramref name="key"/> is a reserved escape hatch ('$' or '_' prefixed) rather than an

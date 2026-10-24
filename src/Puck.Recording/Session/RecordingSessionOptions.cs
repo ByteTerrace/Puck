@@ -1,13 +1,13 @@
 using Puck.Abstractions.Recording;
-using Puck.Recording.Document;
+using Puck.Recording.Configuration;
 
 namespace Puck.Recording.Session;
 
 /// <summary>
-/// The wiring surface for a <see cref="RecordingSession"/>: the recording document plus the platform's two
+/// The wiring surface for a <see cref="RecordingSession"/>: the recording configuration plus the platform's two
 /// Abstractions factories (video encoders, audio sources) and the source resolution frame capture delivers. A
-/// consumer (World, the demo) fills this and calls <see cref="RecordingSession.TryCreate"/>; the session resolves
-/// the codec ladder and audio rows against real hardware, opening only what this machine can encode and capture.
+/// caller fills this and calls <see cref="RecordingSession.TryCreate"/>; the session resolves
+/// the codec ladder and audio rows through the supplied factories.
 /// </summary>
 public sealed class RecordingSessionOptions {
     /// <summary>Gets or sets the audio capture source factory, or <see langword="null"/> to record video only.</summary>
@@ -15,13 +15,13 @@ public sealed class RecordingSessionOptions {
     /// <summary>Gets or sets the shared session clock video frames stamp against — the same one the audio sources
     /// were handed, so both media share one timeline.</summary>
     public required RecordingSessionClock Clock { get; set; }
-    /// <summary>Gets or sets the recording document that describes the capture.</summary>
-    public required RecordingDocument Document { get; set; }
+    /// <summary>Gets or sets the recording configuration that describes the capture.</summary>
+    public required RecordingConfiguration Configuration { get; set; }
     /// <summary>Gets or sets the encode queue depth (frames buffered between the render and encode threads).</summary>
     public int EncodeQueueCapacity { get; set; } = 8;
-    /// <summary>Gets or sets the file-name prefix used when the document supplies no output path.</summary>
+    /// <summary>Gets or sets the file-name prefix used when the configuration supplies no output path.</summary>
     public string FileNamePrefix { get; set; } = "puck";
-    /// <summary>Gets or sets the directory used when the document supplies no output path.</summary>
+    /// <summary>Gets or sets the directory used when the configuration supplies no output path.</summary>
     public string OutputDirectory { get; set; } = "recordings";
     /// <summary>Gets or sets the source frame height the capture controller delivers, in pixels.</summary>
     public required int SourceHeight { get; set; }

@@ -727,7 +727,7 @@ public sealed class MatroskaMuxer : IDisposable {
     /// <param name="trackNumber">The destination track number.</param>
     /// <param name="data">The compressed frame payload.</param>
     /// <param name="timestampNanoseconds">The presentation timestamp in nanoseconds on the session clock (which clock
-    /// that is, is the recording document's choice). The first block written defines zero and every later timestamp is
+    /// that is, is the recording configuration's choice). The first block written defines zero and every later timestamp is
     /// stored relative to it, so the container's timeline is rebased even when the caller's clock is not.</param>
     /// <param name="isKeyframe">Whether a decoder can start at this block. It decides where a cluster may open and
     /// where a cue may point, so it must come from the bitstream, not from an encoder's optional report.</param>

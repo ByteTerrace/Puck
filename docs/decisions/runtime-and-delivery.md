@@ -71,7 +71,9 @@ not a replay system and had no debug-world caller. Its boot flag, default asset
 and capture verbs are deleted, together with their orphaned native A/V backends
 and registration helpers. Audio output keeps its shared WASAPI interop under
 `src/Puck.Platform.Windows/Audio/`. The reusable `Puck.Recording` library remains in
-the build. `WorldProbes`, `probe.*` and probe tracks remain for the stretch goal.
+the build with typed `RecordingConfiguration`; its orphaned JSON schema, reader,
+serialization context and extension-data bag are deleted. `WorldProbes`,
+`probe.*` and probe tracks remain for the stretch goal.
 
 ## ROMs
 
