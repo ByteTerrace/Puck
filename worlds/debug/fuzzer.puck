@@ -28,7 +28,11 @@ placements {
     inhabit {
       count: 1
       distribution {
-        fill { name: "additive", offset: 0, step: 0.001 }
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
         region: disc(radius: 0.01)
       }
       kit: "walker"

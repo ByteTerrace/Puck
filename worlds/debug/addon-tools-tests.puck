@@ -4,7 +4,9 @@ basis: "debug"
 documentId: "addon-tools-tests"
 
 test "development tools start idle and the scope stays empty" {
-  when { ticks 12 }
+  when {
+    ticks 12
+  }
   expect {
     fuzzer[steps] == 0
     traversal[done] == 0

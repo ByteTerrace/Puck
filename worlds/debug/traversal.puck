@@ -50,10 +50,14 @@ state {
         { key: $"{i}x", value: $"{traversalGoals[i].x}" }
         { key: $"{i}y", value: $"{traversalGoals[i].y}" }
         { key: $"{i}z", value: $"{traversalGoals[i].z}" }
-      ]))
+      ]
+      )
+      )
     }
-    table traversalFailures { "0" = 0 }
-    table traversalFalls { }
+    table traversalFailures {
+      "0" = 0
+    }
+    table traversalFalls
   }
 }
 
@@ -63,7 +67,11 @@ prototypes {
       schema: "puck.creation.v1"
       name: "traversal-marker"
       palette [{ color: "#FF5845" }]
-      shape Sphere "failure" { material: 0, position [0, 0.12, 0], scale [0.09, 0.09, 0.09] }
+      shape Sphere "failure" {
+        material: 0
+        position [0, 0.12, 0]
+        scale [0.09, 0.09, 0.09]
+      }
     }
   }
 }
@@ -75,7 +83,11 @@ placements {
     inhabit {
       count: 1
       distribution {
-        fill { name: "additive", offset: 0, step: 0.001 }
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
         region: disc(radius: 0.01)
       }
       kit: "walker"

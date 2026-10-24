@@ -11,12 +11,24 @@ state {
       contacts = 0
     }
     slot scopeTrace = ""
-    table scopeHeight { "0" = 0.0 }
-    table scopeVelocity { "0" = 0.0 }
-    table scopeFacts { "0" = 0 }
-    table scopeContacts { "0" = 0 }
-    table scopeTicks { "0" = 0 }
-    table scopeEvents { "0" = 0 }
+    table scopeHeight {
+      "0" = 0.0
+    }
+    table scopeVelocity {
+      "0" = 0.0
+    }
+    table scopeFacts {
+      "0" = 0
+    }
+    table scopeContacts {
+      "0" = 0
+    }
+    table scopeTicks {
+      "0" = 0
+    }
+    table scopeEvents {
+      "0" = 0
+    }
   }
 }
 
