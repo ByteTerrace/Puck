@@ -11,13 +11,15 @@ public sealed partial class WorldServer {
     /// <param name="principal">The envelope's authenticated actor.</param>
     /// <param name="connectionId">The submitting connection, retained for future operation narration.</param>
     /// <param name="correlationId">The envelope correlation, retained for future operation narration.</param>
+    /// <param name="recomputed">A mounted addon re-derives this operation under receipt-pinned replay.</param>
     /// <returns>A typed provider outcome. Preparation and commit remain host-owned so replacement admission is not
     /// confused with live runtime application.</returns>
     public MachineOperationResult ApplyMachineOperation(
         WorldMachineOperation operation,
         Principal principal,
         int connectionId,
-        long correlationId
+        long correlationId,
+        bool recomputed = false
     ) {
         _ = connectionId;
         _ = correlationId;
@@ -49,7 +51,7 @@ public sealed partial class WorldServer {
 
         // Generic operation receipts are not part of the current replay format. Refuse before preparation while
         // recording, rather than let an untaped runtime change contaminate an otherwise valid tape.
-        if (ScreenOpTap is not null) {
+        if (ScreenOpTap is not null && !(recomputed && principal.Kind == PrincipalKind.Addon)) {
             return new MachineOperationResult(
                 MachineOperationStatus.Refused,
                 reason: $"machine operations cannot execute while recording ({nameof(WorldMachineOperationRefusal.WhileRecording)}); the current replay format does not capture provider operations"

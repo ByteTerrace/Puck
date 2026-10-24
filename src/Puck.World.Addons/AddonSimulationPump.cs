@@ -116,7 +116,9 @@ public sealed class AddonSimulationPump {
     private bool TryValidateAsk(in AddonOutCell cell, ushort ordinal, out string error) {
         if (
             (cell.Verb != ((ushort)AddonSubjectKind.Body)) &&
-            (cell.Verb != ((ushort)AddonSubjectKind.Section))
+            (cell.Verb != ((ushort)AddonSubjectKind.Section)) &&
+            (cell.Verb != ((ushort)AddonSubjectKind.Screen)) &&
+            (cell.Verb != ((ushort)AddonSubjectKind.State))
         ) {
             error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
             return false;
@@ -138,10 +140,12 @@ public sealed class AddonSimulationPump {
         }
 
         var mask = ((ulong)cell.B);
-        var admissible = ((subjectKind == AddonSubjectKind.Section)
-            ? AddonCapabilityMask.Mutate
-            : AddonCapabilityMask.Drive | AddonCapabilityMask.Observe
-        );
+        var admissible = subjectKind switch {
+            AddonSubjectKind.Section => AddonCapabilityMask.Mutate,
+            AddonSubjectKind.State => AddonCapabilityMask.Observe,
+            AddonSubjectKind.Screen => AddonCapabilityMask.Observe | AddonCapabilityMask.Control,
+            _ => AddonCapabilityMask.Drive | AddonCapabilityMask.Observe,
+        };
 
         if (
             (mask == 0UL) ||
@@ -152,7 +156,7 @@ public sealed class AddonSimulationPump {
             return false;
         }
 
-        if (subjectKind == AddonSubjectKind.Body) {
+        if (subjectKind is AddonSubjectKind.Body or AddonSubjectKind.Screen) {
             if (cell.C != 0L) {
                 error = $"a Body ask requires C = 0 (C={cell.C})";
                 return false;
@@ -169,7 +173,7 @@ public sealed class AddonSimulationPump {
             SubjectKind: subjectKind,
             SubjectIndex: cell.A,
             CapabilityMask: mask,
-            NameLength: ((subjectKind == AddonSubjectKind.Section)
+            NameLength: ((subjectKind is AddonSubjectKind.Section or AddonSubjectKind.State)
             ? cell.C
             : 0L)
         );
@@ -258,6 +262,15 @@ public sealed class AddonSimulationPump {
         if (cell.Verb >= verbCount) {
             error = $"request verb {cell.Verb} outside the declared range [0, {verbCount})";
             return false;
+        }
+
+        if (cell.Verb >= AddonAbi.RequestVerbs.StateCell) {
+            // Magnitudes and pointers are per-request refusals, like SubmitMutation; the entire validated
+            // batch remains atomic with respect to structural faults.
+            m_queries[m_queryCount++] = new AddonQuerySubmission(ordinal, cell.Verb, cell.HandleIndex,
+                cell.HandleGeneration, cell.A, cell.B, cell.C);
+            error = "";
+            return true;
         }
 
         if (cell.Verb == AddonAbi.RequestVerbs.SubmitMutation) {

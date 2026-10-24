@@ -3,6 +3,22 @@ using Puck.Abstractions.Machines;
 namespace Puck.AdvancedGamingBrick;
 
 public sealed partial class AdvancedGamingBrickCore : IMachineHardwareAccess {
+    private static byte InspectByte(AgbBus bus, uint address) => (byte)(((address >> 24) == 4)
+        ? bus.DebugRead16(address & ~1U) >> ((int)(address & 1) * 8)
+        : bus.DebugRead8(address));
+
+    /// <inheritdoc/>
+    public byte PeekByte(int address) => InspectByte((AgbBus)m_instance.GetRequiredService<IAgbBus>(), unchecked((uint)address));
+    /// <inheritdoc/>
+    public void PeekBytes(int address, Span<byte> destination) {
+        var bus = (AgbBus)m_instance.GetRequiredService<IAgbBus>();
+        for (var offset = 0; offset < destination.Length; offset++) {
+            destination[offset] = InspectByte(bus, unchecked((uint)(address + offset)));
+        }
+    }
+    /// <inheritdoc/>
+    public void PokeByte(int address, byte value) => _ = Write(
+        new MachineMemoryAddress("bus", unchecked((uint)address), 1), value, MachineAccessMode.Patch);
     /// <summary>The AGB address space. Inspect is coherent and does not charge clocks; patch admits EWRAM/IWRAM.
     /// Bus accesses use native widths, non-sequential wait states, and real register/DMA side effects, including their
     /// elapsed peripheral cycles. Inspection of save devices requires a dedicated pure provider capability.</summary>
@@ -35,8 +51,7 @@ public sealed partial class AdvancedGamingBrickCore : IMachineHardwareAccess {
 
         if (mode == MachineAccessMode.Inspect) {
             value = address.Width switch {
-                1 when ((location >> 24) == 4) => ((uint)(bus.DebugRead16(address: location & ~1U) >> (((int)(location & 1)) * 8))) & 0xFFU,
-                1 => bus.DebugRead8(address: location),
+                1 => InspectByte(bus, location),
                 2 => bus.DebugRead16(address: location),
                 _ => bus.DebugRead32(address: location),
             };

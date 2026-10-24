@@ -46,6 +46,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     // consumer reads from any thread.
     private StereoSampleRing m_audioRing;
     private long m_checkpointCompletedSteps;
+    private long m_nativeFrameIndex;
+    /// <summary>Gets native progress at the latest worker publication.</summary>
+    public long NativeFrameIndex => Interlocked.Read(ref m_nativeFrameIndex);
     private IQueuedMachineCore? m_core;
     // The host tick-to-cycle phase: the remainder each engine-tick budget carries into the next conversion.
     private RationalRateAccumulator m_cyclePhase;
@@ -583,6 +586,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
     }
     private void StageMachineFrame(IQueuedMachineCore core) {
+        Interlocked.Exchange(ref m_nativeFrameIndex, core.NativeFrameIndex);
         // Present the runahead lookahead's framebuffer while it is live and primed; otherwise the authoritative machine's
         // own. The real machine stays the tick-locked audio authority either way.
         var pixels = (((m_timeTravel is { } timeTravel) && timeTravel.TryGetDisplayFramebuffer(framebuffer: out var lookahead))

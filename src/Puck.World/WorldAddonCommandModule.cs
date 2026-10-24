@@ -66,6 +66,7 @@ internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldSe
             _ = builder.Append(value: StateLabel(entry: entry))
                 .Append(value: " fuel-budget:").Append(value: entry.FuelPerTick)
                 .Append(value: " fuel-last-tick:").Append(value: entry.LastTickFuelConsumed)
+                .Append(value: " fuel-peak-tick:").Append(value: entry.PeakTickFuelConsumed)
                 .Append(value: " fuel-total:").Append(value: entry.TotalFuelConsumed)
                 .Append(value: " answers-dropped-total:").Append(value: entry.TotalAnswersDropped)
                 .Append(value: " event-gaps-total:").Append(value: entry.EventGaps)

@@ -8,6 +8,26 @@ namespace Puck.World.Machines.Tests;
 
 /// <summary>Exercises the hardware boundary independently of display ownership and content compilation.</summary>
 public sealed class MachineHardwareAccessLawTests {
+    [Fact]
+    public void AdvancedHostPeeksWideBusRangesCoherentlyAndRewindsNativeProgress() {
+        using var host = new AdvancedMachineHost(new byte[16384], AdvancedLoop());
+        var memory = Assert.IsAssignableFrom<IMachineMemoryPeek>(host);
+        memory.PokeByte(0x02000040, 0x12);
+        memory.PokeByte(0x02000041, 0x34);
+        Span<byte> bytes = stackalloc byte[2];
+        memory.PeekBytes(0x02000040, bytes);
+        Assert.Equal((byte)0x12, bytes[0]);
+        Assert.Equal((byte)0x34, bytes[1]);
+        var checkpoint = host.CaptureCheckpoint();
+        var frame = host.NativeFrameIndex;
+        Assert.True(host.Advance(65536));
+        Assert.True(host.NativeFrameIndex > frame);
+        host.RestoreCheckpoint(checkpoint);
+        Assert.Equal(frame, host.NativeFrameIndex);
+        memory.PeekBytes(0x02000040, bytes);
+        Assert.Equal((byte)0x12, bytes[0]);
+        Assert.Equal((byte)0x34, bytes[1]);
+    }
     private static byte[] AdvancedLoop() {
         var image = new byte[0xC0];
         // ARM B . at the native cartridge entry.

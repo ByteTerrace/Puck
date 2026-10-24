@@ -108,7 +108,10 @@ public sealed partial class WorldAddonRuntime {
                     ? GrantSubject.Body(index: ((int)ask.SubjectIndex))
                     : GrantSubject.All
                 );
-            } else if (ask.SubjectKind == AddonSubjectKind.Section) {
+            } else if (ask.SubjectKind == AddonSubjectKind.Screen) {
+                inRange = ask.SubjectIndex is >= 0 and <= int.MaxValue;
+                subject = inRange ? GrantSubject.Screen((int)ask.SubjectIndex) : GrantSubject.All;
+            } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
                 if (!TryResolveSectionAskName(
                     addon: addon,
                     ask: in ask,
@@ -130,6 +133,10 @@ public sealed partial class WorldAddonRuntime {
                 // a fixed, PUBLIC set (every member name ships in this repository's own docs and console grammar),
                 // so answering "no such section" for an unresolvable name leaks nothing a body-liveness answer
                 // would — there is no enumeration oracle to protect against for a static enum.
+                if (ask.SubjectKind == AddonSubjectKind.State) {
+                    inRange = !string.IsNullOrWhiteSpace(sectionName);
+                    subject = GrantSubject.State(sectionName);
+                } else {
                 if (!GrantSubject.TryParseSectionName(
                     name: sectionName,
                     section: out var resolvedSection
@@ -146,6 +153,7 @@ public sealed partial class WorldAddonRuntime {
 
                 inRange = true;
                 subject = GrantSubject.Section(section: resolvedSection);
+                }
             } else {
                 inRange = false;
                 subject = GrantSubject.All;
@@ -260,7 +268,7 @@ public sealed partial class WorldAddonRuntime {
     // Response channel, each repeating the SAME allowing verdict and carrying the part index in the Verb byte, with both
     // handle lanes zero — a pose grants no handle. Host-written explicit framing, never an implied pairing the guest has
     // to reconstruct.
-    private void ResolveQueries(MountedAddon addon) {
+    private void ResolveQueries(MountedAddon addon, ulong tick) {
         var queries = addon.Pump.Queries;
         var grants = m_server.Grants;
         var handles = grants.HandleTable(
@@ -288,6 +296,11 @@ public sealed partial class WorldAddonRuntime {
                 // into the "verb not served" discrepancy branch below) keeps that branch meaning what it says: a
                 // verb this host genuinely does not recognize, not one a DIFFERENT stage already answered.
                 if (query.Verb == AddonAbi.RequestVerbs.SubmitMutation) {
+                    continue;
+                }
+
+                if (query.Verb >= AddonAbi.RequestVerbs.StateCell) {
+                    ResolveDebuggerQuery(addon, in query, tick);
                     continue;
                 }
 

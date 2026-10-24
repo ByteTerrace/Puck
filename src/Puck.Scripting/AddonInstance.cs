@@ -703,6 +703,21 @@ public sealed class AddonInstance : IDisposable {
             fuelConsumed: fuelConsumed
         );
     }
+    /// <summary>Charges deterministic host work against the current tick's remaining Wasm fuel.
+    /// Exhaustion faults the mount before the operation executes.</summary>
+    /// <param name="cost">The bounded operation's declared cost.</param>
+    /// <param name="spent">Fuel charged, including the remaining fuel on exhaustion.</param>
+    /// <returns>Whether the operation may execute.</returns>
+    public bool TryChargeHostFuel(ulong cost, out ulong spent) {
+        var remaining = m_store!.Fuel;
+        spent = Math.Min(remaining, cost);
+        m_store.Fuel = remaining - spent;
+        if (remaining < cost) {
+            SetFault(AddonFaultKind.OutOfFuel, "OutOfFuel during host query");
+            return false;
+        }
+        return m_state == AddonState.Enabled;
+    }
     /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
     /// memory into <paramref name="destination"/>, immediately — no live span is ever handed back, so nothing
     /// outlives this call that could observe a later guest write. The addon mutation seam's stage-5 pointer-safety

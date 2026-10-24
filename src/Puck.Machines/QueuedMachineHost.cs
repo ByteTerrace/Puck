@@ -10,7 +10,7 @@ namespace Puck.Machines;
 /// </summary>
 public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime, IMachineContentSlot,
     IMachineVideoOutputs, IMachineVideoOutput, IMachineAudioOutputs, IAudioMachine,
-    IMachineInputPorts, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime {
+    IMachineInputPorts, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime, IMachineFrameProgress {
     private readonly SeatPort[] m_seats;
     private readonly QueuedMachineWorker m_worker;
 
@@ -81,6 +81,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public long BackpressureEvents => m_worker.BackpressureEvents;
     /// <inheritdoc/>
     public long CompletedSteps => m_worker.CompletedSteps;
+    /// <inheritdoc/>
+    public long NativeFrameIndex => m_worker.NativeFrameIndex;
     /// <inheritdoc/>
     public Vector3 EmittedLight => m_worker.EmittedLight;
     /// <inheritdoc/>

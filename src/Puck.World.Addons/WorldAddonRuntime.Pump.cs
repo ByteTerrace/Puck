@@ -412,6 +412,7 @@ public sealed partial class WorldAddonRuntime {
         // row its full allowance again.
         Array.Clear(array: addon.DispatchCounts);
         addon.EventCounts.Clear();
+        addon.QueryCounts.Clear();
 
         // A guest that declared no Response channel can be handed nothing: every answer and every grant disclosure is
         // undeliverable by construction, which also means it can never learn a handle and therefore can never reach a
@@ -457,7 +458,7 @@ public sealed partial class WorldAddonRuntime {
             budget: budget
         );
         ResolveAsks(addon: addon);
-        ResolveQueries(addon: addon);
+        ResolveQueries(addon: addon, tick: tick);
         MergeAnswers(
             addon: addon,
             budget: budget
@@ -681,6 +682,7 @@ public sealed partial class WorldAddonRuntime {
             var fuelConsumedThisTick = addon.Pump.FuelConsumed;
 
             addon.LastTickFuelConsumed = fuelConsumedThisTick;
+            addon.PeakTickFuelConsumed = Math.Max(addon.PeakTickFuelConsumed, fuelConsumedThisTick);
             addon.TotalFuelConsumed = addon.TotalFuelConsumed.AddSaturating(right: fuelConsumedThisTick);
 
             if (!pumped) {

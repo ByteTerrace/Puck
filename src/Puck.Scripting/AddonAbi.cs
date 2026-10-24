@@ -180,8 +180,31 @@ public static class AddonAbi {
         public const int BodyPoseAnswerParts = 4;
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
-        /// fewer verbs (<c>3</c>).</summary>
-        public const int Count = 3;
+        /// fewer verbs.</summary>
+        public const int Count = 11;
+        /// <summary>Observe/screen runtime status (A) and completed steps (B); all payload lanes zero.</summary>
+        public const int MachineStatus = 10;
+        /// <summary>Reads a granted state cell. A/B name UTF-8 key pointer/length; C is -1 for a numeric
+        /// value or the byte offset of a 16-byte text chunk. Answers carry raw numeric value/kind or two packed lanes.</summary>
+        public const int StateCell = 3;
+        /// <summary>Reads 1..8 bus bytes through Observe/screen. A is address, B length, C zero.
+        /// Answer A is little-endian bytes and B native frame progress (-1 when unsupported).</summary>
+        public const int MachineRead = 4;
+        /// <summary>Hashes 1..262144 coherent bus bytes through Observe/screen. Same payload as MachineRead.
+        /// Answer A is FNV-1a-64 and B native frame progress (-1 when unsupported).</summary>
+        public const int MachineHash = 5;
+        /// <summary>Control/screen checkpoint: A=0 capture, 1 restore, 2 release; B=C=0.
+        /// One bounded checkpoint per mount; restore requires the identical runtime incarnation.</summary>
+        public const int MachineSnapshot = 6;
+        /// <summary>Drive/body engagement: A is screen index, or -1 to dissolve; B=C=0.
+        /// Also requires requested Control over every affected screen.</summary>
+        public const int Engage = 7;
+        /// <summary>Control/screen provider operation: A/B UTF-8 JSON pointer/length, C zero.
+        /// The envelope is {operation,payload}; named-machine Control must also be requested and granted.</summary>
+        public const int MachineOperation = 8;
+        /// <summary>Guest log line through an Observe handle: A/B UTF-8 pointer/length (up to 2048), C zero.
+        /// The host prefixes the mount identity and settled tick.</summary>
+        public const int Log = 9;
         /// <summary>The target-designation verb (<c>2</c>): a guest acts through a Drive handle over the source
         /// body; <c>A</c> is the target body index, <c>B</c> is the target-register index, and <c>C</c> is zero.</summary>
         public const int Designate = 2;

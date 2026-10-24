@@ -34,6 +34,7 @@ import "size"
 import "addon-hud"
 import "watchdog"
 import "guide"
+import "machine-debugger"
 import "range"
 
 // The test room's palette slots.

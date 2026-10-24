@@ -28,7 +28,8 @@ namespace Puck.World.Addons;
 /// <param name="RouteEventsDelivered">Route-engaged/disengaged cells delivered across the mount's lifetime.</param>
 /// <param name="CollisionEventsDelivered">Collision begin/end cells delivered across the mount's lifetime.</param>
 /// <param name="FaultDetail">The sticky fault detail, or <see langword="null"/> when healthy.</param>
-public readonly record struct AddonCostReport(string Name, AddonState State, long FuelPerTick, ulong LastTickFuelConsumed, ulong TotalFuelConsumed, ulong TotalAnswersDropped, ulong EventGaps, ulong EventCellsDelivered, ulong RouteEventsDelivered, ulong CollisionEventsDelivered, string? FaultDetail);
+/// <param name="PeakTickFuelConsumed">Largest single-tick spend, including charged host work, since mount.</param>
+public readonly record struct AddonCostReport(string Name, AddonState State, long FuelPerTick, ulong LastTickFuelConsumed, ulong TotalFuelConsumed, ulong TotalAnswersDropped, ulong EventGaps, ulong EventCellsDelivered, ulong RouteEventsDelivered, ulong CollisionEventsDelivered, string? FaultDetail, ulong PeakTickFuelConsumed);
 public sealed partial class WorldAddonRuntime {
     private static int CountMaterialized(MountedAddon addon, WorldCapability capability, GrantSubject[] subjects) {
         var count = 0;
@@ -904,6 +905,7 @@ public sealed partial class WorldAddonRuntime {
                 State: instance.State,
                 FuelPerTick: instance.FuelPerTick,
                 LastTickFuelConsumed: addon.LastTickFuelConsumed,
+                PeakTickFuelConsumed: addon.PeakTickFuelConsumed,
                 TotalFuelConsumed: addon.TotalFuelConsumed,
                 TotalAnswersDropped: addon.TotalAnswersDropped,
                 EventGaps: addon.EventGapCount,

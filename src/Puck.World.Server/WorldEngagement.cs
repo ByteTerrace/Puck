@@ -430,6 +430,22 @@ public sealed partial class WorldEngagement {
 
         return true;
     }
+    /// <summary>Composes or dissolves the live body's application set on behalf of an authorized driver.
+    /// Resolves the body's admitted identity here; callers never manufacture a peer principal.</summary>
+    /// <param name="bodyIndex">The driven body.</param>
+    /// <param name="screenIndex">A screen, or -1 to dissolve.</param>
+    /// <param name="actor">The authenticated driver; requires Drive/body and Control over affected targets.</param>
+    /// <returns>Whether the application changed or was already dissolved.</returns>
+    public bool EngageDrivenBody(int bodyIndex, int screenIndex, Principal actor) {
+        if (Body(bodyIndex) is null || !m_grants.Allows(actor, WorldCapability.Drive, GrantSubject.Body(bodyIndex)).IsAllowed) {
+            return false;
+        }
+        var principal = PrincipalOf(bodyIndex);
+        if (screenIndex < 0) {
+            return Dissolve(bodyIndex, actor, principal) != ControlOutcome.Denied;
+        }
+        return Compose(bodyIndex, GrantSubject.Screen(screenIndex), true, actor, principal);
+    }
     /// <summary>Dissolves every non-own-body application in <paramref name="targetPrincipal"/>'s set, restoring the
     /// own-body default — the mutating half of <see cref="PeekDissolve"/>'s decision. Requires
     /// <paramref name="actingPrincipal"/> to hold <see cref="WorldCapability.Control"/> over each dissolved target;
