@@ -13,6 +13,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Keep `Incoming` and `sdfMeshProbesAt`/`sdfMeshIrradianceAt` together. A sky
   fallback in the CPU read feeds later bounce sweeps even if the final pixel
   read rejects it.
+- Scene readiness is `SdfMeshPathBake.IrradiancePending`, not the whole bake's
+  `Pending`: only opaque static groups enter the scene. An animated rebake,
+  glass or a diagnostic slice must not postpone its first measurement or a
+  refresh. `world.wait bakes` still waits for all geometry; an initial
+  `world.exposure` reading with `meter=none` is not a backend-parity result.
 - A depth axis stores its first hit. Averaging it with rays that escape beside
   a blocker, or choosing the farther distance, erases that blocker.
 - At the volume boundary, clamp the lookup to the boundary probes, then test
@@ -102,6 +107,36 @@ before/after comparison found a remaining triangular bright patch there in both
 indirect and final shading; its cause is unconfirmed and tracked in
 [open items](../../../../docs/plans/open-items.md). Do not infer a clean roof
 from the lower reference view.
+
+## Gallery isolation checks
+
+Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
+`view.override camera look` poses are:
+
+| Exhibit | Body pose | Camera look |
+|---|---|---|
+| SPHERE, level 0 | `18 0.07 15 0 0 0` | `23 2.4 14 23 1.1 16` |
+| REVOLVED, level 0 | `18 0.07 31 0 0 0` | `30.8 2.4 30 30.8 1.1 34` |
+| SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
+| COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
+
+The SPHERE step and REVOLVED floor rectangle reproduce in `indirect`; the
+floor is shadowed in `shadow`. Do not attribute those patches to sun cascades.
+Removing mutual-probe weighting alone leaves the SPHERE step. Removing depth
+rejection reduces the discontinuity but admits light through walls; smoothing
+the directional planes while dropping axis rejection reopens the high teal
+roof junction. Neither is a valid repair. The six first-hit depths and 26
+planes are coarse support, and can reject visible receivers beside a finite
+occluder; normalization cannot recover light when all accepted weights vanish.
+The SPIN dotted ceiling seam reproduces in beauty but not in indirect and
+needs a separate geometry/direct-light investigation.
+
+COAT's authored `specular: 0.35` is dielectric F0, not coat strength: it
+reflects a substantial neutral environment over its red diffuse albedo.
+`coat` currently adds a direct-light lobe in `sdfMaterialSpecular`; it is not
+read by the environment-reflection branch in `sdf-light-stage.hlsli`. Compare
+the material with coat disabled separately from changing its base F0 before
+attributing a pale colour to the coat layer.
 
 See the [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 for the lighting model and [verification](../../verification/SKILL.md) for GPU

@@ -250,6 +250,21 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
+    /// frame. Only these groups enter the irradiance scene: animated groups, glass and diagnostic field slices must
+    /// not hold its first lighting measurement or a later static-scene refresh behind unrelated work.</summary>
+    public bool IrradiancePending {
+        get {
+            lock (m_gate) {
+                if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
+                foreach (var group in m_groups) {
+                    if (!group.Dynamic && !group.Glass && !group.Done) { return true; }
+                }
+                return false;
+            }
+        }
+    }
+
     /// <summary>Queues a field slice, whose lattices the frame's bake dispatch takes before any group's, one reference
     /// frame's share at a time; its completion action runs on the thread that answers its last lattice, and a new program
     /// restarts it. One slice samples at a time.</summary>

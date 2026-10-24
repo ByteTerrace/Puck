@@ -152,9 +152,11 @@ in the frame.
   coordinates name modulo the volume's size, keyed by the cell, so a camera move
   rewrites only the slots of the cells it brings in, and views reject a slot
   holding another cell's probe.
-- **The trace.** `SdfMeshIrradianceScene` gathers every static mesh draw (not
-  dynamic) into a bounding volume hierarchy on the thread
-  pool, once the mesh bake has settled. Probes trace on the pool, nearest the
+- **The trace.** `SdfMeshIrradianceScene` gathers every opaque static mesh draw
+  into a bounding volume hierarchy on the thread pool, once those groups have
+  finished baking and reached the dressed frame. Dynamic groups, glass and
+  diagnostic slices do not enter that scene and do not delay it
+  (`SdfMeshPathBake.IrradiancePending`). Probes trace on the pool, nearest the
   camera first, every probe's first sweep before any second. A probe stores two
   ambient cubes, one value per axis direction: the share of cosine-weighted sky
   its rays reach, and the cosine-weighted mean radiance the static geometry

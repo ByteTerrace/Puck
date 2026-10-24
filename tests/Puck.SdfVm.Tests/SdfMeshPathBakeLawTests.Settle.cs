@@ -25,6 +25,9 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var index = 0L;
         var settles = library.Settles;
 
+        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f));
+        Assert.True(condition: bake.Pending);
+        Assert.False(condition: bake.IrradiancePending);
         DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f), index: ref index);
 
         var baked = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f)).MeshDraws).Mesh;
@@ -45,6 +48,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var waiting = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f)).MeshDraws).Mesh;
 
         Assert.True(condition: bake.Pending);
+        Assert.False(condition: bake.IrradiancePending);
         Assert.Same(actual: waiting, expected: baked);
         Assert.Equal(expected: 1L, actual: settles.Read(kind: SdfMeshSettle.Queued));
         DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f), index: ref index);
