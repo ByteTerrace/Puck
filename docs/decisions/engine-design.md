@@ -251,6 +251,22 @@ rather than rescaling the object.
 Why: the owner's ruling. The debug world's sizing follows the owner's choices
 for the Moth, which are an author's choices and not the engine's.
 
+## A collider follows the drawn solid
+
+A placement collides as the solid it draws, not as a bound around it. A
+circular cylinder collides as its surface. A Box, which every vocabulary draws
+with a built-in fillet, collides as an inner box plus that fillet's radius, read
+from the same source the renderer uses. A shape with no exact contact gets a
+conservative one that lies inside the drawn solid, never outside it: a body may
+sink a hair into a surface it can't resolve exactly, but it never stands on air.
+How a walker climbs an edge is decided by its step height, not by the contact
+normal a corner happens to produce. The colliders diagnostic therefore has no
+allowance for a bound: a collider outside its drawn solid is a finding.
+
+Why: the owner's ruling. Bodies floating at the round dais and at box corners
+were visible flaws. Removing the drawn fillet instead would make plain boxes look
+machined and leave authored rounding needing the same contact anyway.
+
 ## A derived product is a cache, never the truth
 
 A baked mesh, an irradiance volume, a compiled shader or any other product
