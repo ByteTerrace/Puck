@@ -243,6 +243,14 @@ mesh pass's attachments to its own tables, so the law moves in the same change.
 The host-written tables are regions, not scratch: the residency's upload
 transitions each buffer it copied into, once.
 
+A package pass that draws nothing can forward its input as its output. Later
+package inputs resolve through that alias; their barriers skip the unused
+output allocation and preserve its prior state for a later draw. The forwarded
+image is already shader-readable from the read that established the alias.
+Transitioning the unused allocation instead produces Vulkan's
+undefined-to-read-only warning at startup; the composition-chain runtime law
+also exercises the return to drawing after all frame slots forwarded inputs.
+
 ## Registers and bindings
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
