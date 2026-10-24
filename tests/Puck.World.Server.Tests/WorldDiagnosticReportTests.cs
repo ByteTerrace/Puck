@@ -79,4 +79,44 @@ public sealed class WorldDiagnosticReportTests {
         Assert.Null(WorldDiagnosticGeometry.ClassifyBoundary(budget.Total, budget));
         Assert.NotNull(WorldDiagnosticGeometry.ClassifyBoundary(budget.Total + (double)FixedQ4816.Epsilon, budget));
     }
+
+    [Theory]
+    [InlineData(0, 0.08, false)]
+    [InlineData(-Math.PI / 4, 0.08, false)]
+    [InlineData(0.6, 0.4, true)]
+    [InlineData(-Math.PI / 4, 0, false)]
+    public void RoundedBoxWitnessesAgreeWithPhysicsAtFacesEdgesAndCorners(double angle, double radius, bool rod) {
+        var collider = FixedStaticCollider.RoundedBox(
+            FixedVector3.FromVector3(new Vector3(31, 2, -17)),
+            FixedQuaternion.FromAxisAngle(FixedVector3.UnitY, FixedQ4816.FromDouble(angle)),
+            FixedVector3.FromVector3(rod ? new Vector3(2, 0, 0) : new Vector3(2, 1, 0.25f)),
+            FixedQ4816.FromDouble(radius));
+        var budget = new WorldDiagnosticBudget(0, 0, WorldDiagnosticGeometry.Numerical(collider));
+        var samples = WorldDiagnosticGeometry.SurfaceSamples(collider).ToArray();
+        Assert.Equal(26, samples.Length);
+        var sphere = new FixedBodyColliderVolume(Kind: FixedBodyColliderKind.Sphere,
+            Center: FixedVector3.Zero, Endpoint: FixedVector3.Zero, HalfExtents: FixedVector3.Zero,
+            Rotation: FixedQuaternion.Identity, Radius: FixedQ4816.FromDouble(0.02));
+        foreach (var point in samples) {
+            // The production hold query and narrowphase independently certify each diagnostic witness.
+            var probe = FixedVector3.FromVector3(point);
+            Assert.True(FixedSurfaceQuery.TryNearest([collider], [], probe, FixedQ4816.One, out var nearest));
+            Assert.InRange((double)nearest.Distance, 0, budget.Total);
+            Assert.True(collider.TryGetPush(probe, FixedQuaternion.Identity, sphere, FixedQ4816.Zero, out var push));
+            Assert.InRange((double)push.Penetration, 0.02 - budget.Total, 0.02 + budget.Total);
+            Assert.Null(WorldDiagnosticGeometry.ClassifyBoundary(WorldDiagnosticGeometry.SignedDistance(collider, point), budget));
+            foreach (var offset in new[] { -0.01, 0.01 }) {
+                var displaced = point + nearest.Normal.ToVector3() * (float)offset;
+                Assert.True(collider.TryGetPush(FixedVector3.FromVector3(displaced), FixedQuaternion.Identity,
+                    sphere, FixedQ4816.Zero, out var displacedPush));
+                var signed = (double)(sphere.Radius - displacedPush.Penetration);
+                Assert.InRange(WorldDiagnosticGeometry.SignedDistance(collider, displaced), signed - budget.Total, signed + budget.Total);
+                // At radius zero, a sharp edge has several normals; moving along one may stay on another face.
+                if (radius > 0) { Assert.InRange(signed, offset - budget.Total, offset + budget.Total); }
+            }
+        }
+        // Signed interior distance includes the offset, rather than just the inner half-extents.
+        Assert.InRange(WorldDiagnosticGeometry.SignedDistance(collider, collider.Center.ToVector3()),
+            -(rod ? 0 : 0.25) - radius - budget.Total, -(rod ? 0 : 0.25) - radius + budget.Total);
+    }
 }

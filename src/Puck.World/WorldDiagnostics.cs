@@ -141,6 +141,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                                 ["comparison"] = "collision-versus-authored-field",
                                 ["colliderCenter"] = row.Collider.Center.ToVector3().ToString(),
                                 ["colliderExtent"] = row.Collider.Extent.ToVector3().ToString(),
+                                ["colliderRadius"] = ((double)row.Collider.Radius).ToString("R", CultureInfo.InvariantCulture),
                                 ["colliderRotation"] = row.Collider.Rotation.ToString(),
                                 ["sampling"] = "finite boundary witnesses; not a complete surface proof",
                             }));

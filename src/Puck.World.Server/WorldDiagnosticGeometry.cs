@@ -17,7 +17,7 @@ public static class WorldDiagnosticGeometry {
     /// <param name="collider">The actual compiled solver input.</param>
     /// <returns>The rounding bound.</returns>
     public static double Numerical(FixedStaticCollider collider) =>
-        (double)FixedQ4816.Epsilon * (16 + collider.Extent.ToVector3().Length() * 8);
+        (double)FixedQ4816.Epsilon * (16 + (collider.Extent.ToVector3().Length() + (double)collider.Radius) * 8);
 
     /// <summary>Measures a point against the compiled analytic surface using presentation arithmetic.</summary>
     /// <param name="collider">The compiled surface.</param>
@@ -25,7 +25,7 @@ public static class WorldDiagnosticGeometry {
     /// <returns>Signed separation in metres.</returns>
     public static double SignedDistance(FixedStaticCollider collider, Vector3 point) {
         var relative = FixedVector3.FromVector3(point) - collider.Center;
-        var p = (collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.Cylinder
+        var p = (collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Cylinder
             ? collider.Rotation.RotateInverse(relative) : relative).ToVector3();
         var e = collider.Extent.ToVector3();
         if (collider.Kind == FixedStaticColliderKind.HalfSpace) { return Vector3.Dot(p, e); }
@@ -35,7 +35,10 @@ public static class WorldDiagnosticGeometry {
             return Vector2.Max(d, Vector2.Zero).Length() + Math.Min(Math.Max(d.X, d.Y), 0);
         }
         var q = Vector3.Abs(p) - e;
-        return Vector3.Max(q, Vector3.Zero).Length() + Math.Min(Math.Max(q.X, Math.Max(q.Y, q.Z)), 0);
+        // RoundedBox.Extent is the inner box, exactly as in FixedRoundedBoxContact:
+        // the spherical offset is applied after the Euclidean distance to its features.
+        return Vector3.Max(q, Vector3.Zero).Length() + Math.Min(Math.Max(q.X, Math.Max(q.Y, q.Z)), 0)
+            - (collider.Kind == FixedStaticColliderKind.RoundedBox ? (double)collider.Radius : 0);
     }
 
     /// <summary>Enumerates deterministic boundary witnesses of the compiled collider.</summary>
@@ -58,8 +61,12 @@ public static class WorldDiagnosticGeometry {
                 var radial = new Vector2(x, z);
                 if (radial != Vector2.Zero) { radial = Vector2.Normalize(radial) * extent.X; }
                 local = new Vector3(radial.X, y * extent.Y, radial.Y);
+            } else if (collider.Kind == FixedStaticColliderKind.RoundedBox) {
+                // Six face centres, twelve fillet mid-edges and eight fillet corners.
+                // This also covers a collapsed inner box (the chamfer provider's axis rods).
+                local = direction * extent + Vector3.Normalize(direction) * (float)collider.Radius;
             } else { local = direction * extent; }
-            yield return center + (collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.Cylinder
+            yield return center + (collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Cylinder
                 ? collider.Rotation.Rotate(FixedVector3.FromVector3(local)).ToVector3() : local);
         } } }
     }

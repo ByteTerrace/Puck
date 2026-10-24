@@ -42,6 +42,16 @@ involved. A second `SdfWorldPicker` per instance asynchronously reads cluster
 depth without stealing pointer requests; discard results across camera, mesh,
 program or view changes.
 
+`WorldDiagnosticGeometry` must read each compiled collider as physics does.
+For `RoundedBox`, `Extent` is the inner box and `Radius` is its spherical
+offset: sample its faces, edge fillets and corner fillets, then apply `Rotation`.
+Distance queries inverse-rotate and subtract the radius after measuring the
+inner box. Treating this kind as an unrotated sharp box creates metre-scale
+false findings and also misclassifies buried union surfaces. Compare witnesses
+with `FixedSurfaceQuery` and the contact narrowphase. Chamfered authored Boxes
+can still yield real inward discrepancies from their conservative inside
+colliders; neither the fillet nor the chamfer is an error-budget allowance.
+
 Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
 `TryNearestSurface`, not normal-ray hits. The nearest query reuses both levels
 of the trace hierarchy and tests world-space triangle distances (object-space
