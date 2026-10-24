@@ -321,10 +321,13 @@ check the flag: the owner may be holding the pad.
   last edit and the same script, rerun through this recipe with its own
   `--state-dir`, shows the behavior. Report what ran (build, command, script,
   what it showed); the commit body carries it.
-- **Keep a windowed World's life short.** A windowed debug World's working set
-  grows while it runs (14.4, 16.0, then 17.3 GB over some 50 minutes of
-  gallery captures; 19 GB within about 20 minutes in another run), enough to
-  starve the machine and get lanes killed. Boot, pose, capture and stop in one
+- **Keep a windowed World's life short.** A windowed debug World holds about
+  10 GB of working set and 15 GB of private bytes once booted, most of it the
+  managed large object heap and the mesh region's copies (the
+  [open item](../../../docs/plans/open-items.md) breaks it down); read it with
+  `host.memory` (`host.memory collect` for the reachable managed part) beside
+  `Get-Process`. Two windowed Worlds and a couple of builds still starve a
+  32 GB machine and get lanes killed. Boot, pose, capture and stop in one
   batch of under 10 minutes; tune light values on a headless World or with
   `world.reload` inside a batch, never by holding a World open between steps.
   Arm a whole batch with `world.rate pause`, `world.at` scripts at absolute

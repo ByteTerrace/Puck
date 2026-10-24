@@ -388,6 +388,14 @@ compares and fails naming the file that drifted, it writes nothing.
   `RequiredDynamicTransformCapacity` throws, because a slot rendering at
   identity is a bug. Fix the emission so the frame supplies the transforms it
   needs; do not raise the capacity.
+- Large GPU buffers give their memory back. Both arenas (`DirectXHeapArena`,
+  `VulkanMemoryArena`) free a resource's own heap (one past half a shared
+  heap) as it empties and keep only a shared one spare; a kept large heap takes
+  later small buffers and is pinned for the run. A staged `GpuRegion` slot's
+  staging buffer shrinks to twice its flush (`GpuRegion.StagingFloorBytes`
+  floor) once it holds four times more, and a relocated mesh region shrinks to
+  its need (`GpuRegion.Shrink`). Upload heaps are system memory: a staging
+  buffer kept at a whole region's size costs the process that much working set.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.

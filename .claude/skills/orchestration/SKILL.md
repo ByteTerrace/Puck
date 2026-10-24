@@ -108,9 +108,9 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
   memory). Claude Code can reap background jobs under memory pressure while
   the session idles. When that happens, save the reaped lane's tree as a WIP
   commit and restart it with a continuation note. Keep one heavy integration
-  job at a time. A windowed debug World holds 16 to 19 GB of system memory
-  within minutes of boot. On a 32 GB machine, while one runs, only a couple of
-  building lanes fit beside it. Keep windowed capture batches short (boot,
+  job at a time. A windowed debug World holds about 10 GB of working set
+  (15 GB private) within a minute of boot. On a 32 GB machine, while one runs,
+  only a couple of building lanes fit beside it. Keep windowed capture batches short (boot,
   capture, stop), and tune on a headless World.
 - **The integration lane** is one long-running lane. It takes finished branches
   in the order the lead names, merges each onto its own staging branch, and
