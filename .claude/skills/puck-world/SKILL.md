@@ -468,9 +468,12 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - The debug world uses the analytic contact provider (`collision.requirements`
   empty): spheres, circular cylinders and Boxes have surface contact. Box
   fillets derive from `SdfSolidGeometry.BoxCornerRadius`; chamfered Boxes use
-  conservative inside rounded boxes with the outer face planes retained;
-  deep chamfers use three inside rounded axis rods retaining surviving face
-  centres, with a smaller support footprint. Other finite primitives use
+  their exact lifted-profile support map, including deep bevels and the
+  cap/profile corner. Superellipsoids use their Lp surface (the chair seat
+  and back are exponent 4, not Boxes). Rounded/chamfered circular rims use
+  contained cylinder cores with a computed inward-error bound; diagnostics
+  name errors within it as known approximations, red beyond it, and never
+  apply that bound to outward error. Other finite primitives use
   oriented bounds. The Moth's capsule has a 0.35 m radius and is 2.06 m tall;
   sharp and rounded boxes use closest segment/box features. Lateral edge/rim
   approach requires enough step height to clear the top support plane;

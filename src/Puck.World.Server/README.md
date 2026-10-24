@@ -850,11 +850,13 @@ bounds together with those of any field lattice's solid columns (`FixedFieldCont
 counted as the `physics.sweep` work source). The analytic provider emits isotropically
 scaled spheres, circular cylinders and rounded Boxes with their surfaces. Box
 fillets derive from `SdfSolidGeometry.BoxCornerRadius`, the renderer's own
-source, retaining the authored flat-face extents at every yaw. A chamfered Box
-uses an inside rounded box with radius r + b/(2 − √2), retaining the outer
-face planes. Deep chamfers that cannot fit this radius use three inside
-rounded axis rods that retain surviving face centres, with a smaller support
-footprint. Other finite primitives retain their oriented
+source, retaining the authored flat-face extents at every yaw. Chamfered Boxes
+use the exact lifted-profile support map at every bevel depth, and
+Superellipsoids use their Lp surface, including the chair seat and back.
+Circular rims without an exact contact use contained cylinder cores and
+report the computed radial/height contraction bound as a known inward
+approximation; outward error never receives that allowance.
+Other finite primitives retain their oriented
 bounds, and a solid screen keeps its world-axis bounds. Smoothing and boolean
 carving remain approximations there. See [contact geometry](../../docs/reference/physics.md#contact-and-rigid-body-kernels)
 for the queries and remaining approximations. A solid row participates in simulation, which is why

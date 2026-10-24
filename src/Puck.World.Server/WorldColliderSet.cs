@@ -19,9 +19,10 @@ namespace Puck.World.Server;
 /// obstruction and the full clearance a step-up needs; vertical landing retains the rounded surface normal.</para>
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
-/// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; a chamfered Box
-/// uses an inside rounded box retaining face planes, or rounded axis rods for deep chamfers. Spheres and circular cylinders
-/// use their closest-point geometry. A slab's <c>Round</c>, boolean carving, smoothing, and other finite primitive
+/// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; chamfered Boxes
+/// and Superellipsoids use their exact convex support maps. Spheres and plain circular cylinders
+/// use their closest-point geometry; rounded/chamfered circular rims use contained cores with computed error bounds.
+/// Boolean carving, smoothing, and other finite primitive
 /// surfaces are not modelled: those primitives use their oriented bounding box (<see cref="FixedStaticCollider.Box"/>). A
 /// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. No broadphase:
 /// O(bodies × colliders); a Y-sorted array with an AABB reject on the swept bounds is the cheap first cull if profiling
@@ -55,7 +56,9 @@ public sealed class WorldColliderSet : IContactField {
     // holdable or tetherable today.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
+
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private init; } = [];
+
     // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
     // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
     // surface along the probe, if it is holdable", and the latter lets an ordinary floor shadow every holdable wall
@@ -189,7 +192,7 @@ public sealed class WorldColliderSet : IContactField {
                 } else {
                     placementBoxes = AddSaturated(
                         left: placementBoxes,
-                        right: CreationStampLattice.MultiplySaturated(ceiling: long.MaxValue, left: shapeCopies, right: BoxPartCount(shape: shape))
+                        right: shapeCopies
                     );
                 }
             }
@@ -232,6 +235,8 @@ public sealed class WorldColliderSet : IContactField {
         hash.Add(value: collider.Extent.Y.Value);
         hash.Add(value: collider.Extent.Z.Value);
         hash.Add(value: collider.Radius.Value);
+        hash.Add(value: collider.Chamfer.Value);
+        hash.Add(value: collider.Exponent.Value);
         hash.Add(value: collider.Rotation.X.Value);
         hash.Add(value: collider.Rotation.Y.Value);
         hash.Add(value: collider.Rotation.Z.Value);
@@ -242,60 +247,32 @@ public sealed class WorldColliderSet : IContactField {
     private static readonly FixedQ4816 SqrtTwo = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2));
     private static readonly FixedQ4816 BevelFactor = (FixedQ4816.FromInteger(value: 2) - SqrtTwo);
 
-    private static int BoxPartCount(ShapeDocument shape) {
-        if (shape.Type != SdfSolidPrimitive.Box) { return 1; }
-        var minimum = FixedQ4816.FromDouble(value: MathF.Max(x: SdfSolidGeometry.MinimumScale,
-            y: MathF.Min(x: MathF.Abs(x: shape.Scale.X), y: MathF.Min(x: MathF.Abs(x: shape.Scale.Y), y: MathF.Abs(x: shape.Scale.Z)))));
-        var radius = FixedQ4816.FromDouble(value: SdfSolidGeometry.BoxCornerRadius(scale: shape.Scale));
-        var tangent = (radius + (FixedQ4816.FromDouble(value: (shape.Chamfer ?? 0f)) / BevelFactor));
-
-        return ((tangent <= minimum) ? 1 : 3);
-    }
-    private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin, int part = 0) {
+    private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if (copy.Shape.Type == SdfSolidPrimitive.Box) {
             var shapeScaleX = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.X)),
                 y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
             var stampScale = (copy.LocalHalfExtents.X / shapeScaleX);
             var radius = (FixedQ4816.FromDouble(value: SdfSolidGeometry.BoxCornerRadius(scale: copy.Shape.Scale)) * stampScale);
             var chamfer = (FixedQ4816.FromDouble(value: (copy.Shape.Chamfer ?? 0f)) * stampScale);
-            var tangent = (radius + (chamfer / BevelFactor));
-            FixedVector3 inner;
+            var inner = FixedVector3.Max(left: FixedVector3.Zero, right: (copy.LocalHalfExtents - new FixedVector3(X: radius, Y: radius, Z: radius)));
 
-            if (BoxPartCount(shape: copy.Shape) == 1) {
-                // In a two-face section an inset R removes (2-sqrt(2))*R at the bevel's midpoint.
-                // R=r+b/(2-sqrt(2)) fits inside the eroded bevel plus r and keeps every outer face plane.
-                // The cap/profile corner constraint has the same bound: (1+sqrt(2))/sqrt(2)=1/(2-sqrt(2)).
-                radius = tangent;
-                inner = FixedVector3.Max(left: FixedVector3.Zero, right: (copy.LocalHalfExtents -
-                    new FixedVector3(X: radius, Y: radius, Z: radius)));
-            } else {
-                // That radius cannot fit a very deep bevel. Use three axis rods inside the SDF's eroded
-                // polyhedron, then offset each by the original fillet. Their ends retain every surviving face
-                // centre. Convexity proves each core segment is inside; Minkowski addition preserves containment.
-                var a = (copy.LocalHalfExtents - new FixedVector3(X: radius, Y: radius, Z: radius));
-                var c = FixedQ4816.Max(x: FixedQ4816.Zero, y: (chamfer - (radius * BevelFactor)));
-                var xy = ((a.X + a.Y) - c);
-                var xz = ((a.X + a.Z) - c);
-                var yz = ((a.Y + a.Z) - c);
-                var corner = (((a.X + a.Y) + (SqrtTwo * a.Z)) - (c * (FixedQ4816.One + SqrtTwo)));
-                var lengths = new FixedVector3(
-                    X: FixedQ4816.Min(x: a.X, y: FixedQ4816.Min(x: xy, y: FixedQ4816.Min(x: xz, y: corner))),
-                    Y: FixedQ4816.Min(x: a.Y, y: FixedQ4816.Min(x: xy, y: FixedQ4816.Min(x: yz, y: corner))),
-                    Z: FixedQ4816.Min(x: a.Z, y: FixedQ4816.Min(x: xz, y: FixedQ4816.Min(x: yz, y: (corner / SqrtTwo)))));
+            if (chamfer > FixedQ4816.Zero) {
+                // Match SdfProgramBuilder.ChamferedRectangle's erosion, including the cap/profile corner.
+                var insetChamfer = FixedQ4816.Max(x: FixedQ4816.Zero, y: (chamfer - (radius * BevelFactor)));
 
-                inner = part switch {
-                    0 => new FixedVector3(X: lengths.X, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
-                    1 => new FixedVector3(X: FixedQ4816.Zero, Y: lengths.Y, Z: FixedQ4816.Zero),
-                    _ => new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: lengths.Z),
-                };
-                inner = FixedVector3.Max(left: FixedVector3.Zero, right: inner);
+                return FixedStaticCollider.ChamferedBox(copy.Center, copy.Rotation, inner, insetChamfer, (radius + margin));
             }
-            return FixedStaticCollider.RoundedBox(center: copy.Center, rotation: copy.Rotation,
-                innerHalfExtents: inner, radius: (radius + margin));
+            return FixedStaticCollider.RoundedBox(copy.Center, copy.Rotation, inner, (radius + margin));
+        }
+        if (copy.Shape.Type == SdfSolidPrimitive.Superellipsoid) {
+            return FixedStaticCollider.Superellipsoid(copy.Center, copy.Rotation, copy.LocalHalfExtents,
+                FixedQ4816.FromDouble(value: (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent))) with { Radius = margin };
         }
         if ((copy.Shape.Type == SdfSolidPrimitive.Cylinder) && (copy.LocalHalfExtents.X == copy.LocalHalfExtents.Z)) {
-            return FixedStaticCollider.Cylinder(center: copy.Center, radius: (copy.LocalHalfExtents.X + margin),
-                halfHeight: (copy.LocalHalfExtents.Y + margin), rotation: copy.Rotation);
+            var inset = CylinderInset(copy: copy);
+
+            return FixedStaticCollider.Cylinder(center: copy.Center, radius: ((copy.LocalHalfExtents.X - inset.X) + margin),
+                halfHeight: ((copy.LocalHalfExtents.Y - inset.Y) + margin), rotation: copy.Rotation);
         }
         return FixedStaticCollider.Box(
             center: copy.Center,
@@ -306,6 +283,16 @@ public sealed class WorldColliderSet : IContactField {
             )),
             rotation: copy.Rotation
         );
+    }
+    // A rim without an exact cylinder contact uses its contained core. The maximum missing distance follows
+    // from the two radial/height contractions and the authored enclosing cylinder, not a shape-name allowance.
+    private static FixedVector2 CylinderInset(in FixedCreationStampPrimitiveCopy copy) {
+        var scale = (copy.LocalHalfExtents.X / FixedQ4816.Max(x: FixedQ4816.FromDouble(value: MathF.Abs(x: copy.Shape.Scale.X)),
+            y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale)));
+        var chamfer = (FixedQ4816.FromDouble(value: (copy.Shape.Chamfer ?? 0f)) * scale);
+        var rounding = (FixedQ4816.FromDouble(value: (copy.Shape.Rounding ?? 0f)) * scale);
+
+        return ((chamfer > FixedQ4816.Zero) ? new FixedVector2(X: chamfer, Y: FixedQ4816.Zero) : new FixedVector2(X: rounding, Y: rounding));
     }
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
@@ -374,7 +361,7 @@ public sealed class WorldColliderSet : IContactField {
             );
 
             colliders.Add(item: screenCollider);
-            diagnosticColliders.Add(new WorldDiagnosticCollider(screenCollider, $"screen:{screen.Index}", "screen", "slab", "box", solid.Margin));
+            diagnosticColliders.Add(item: new WorldDiagnosticCollider(screenCollider, $"screen:{screen.Index}", "screen", "slab", "box", solid.Margin));
             // A screen carries no grip facet — its collider always follows the world default, never an override.
             if (worldDefaultGrip) {
                 holdableColliders.Add(item: screenCollider);
@@ -443,53 +430,52 @@ public sealed class WorldColliderSet : IContactField {
                         ReflectionNormal: instance.ReflectionNormal
                     ),
                     visitor: copy => {
-                        for (var part = 0; (part < BoxPartCount(shape: copy.Shape)); part++) {
-                            FixedStaticCollider placementCollider;
+                        FixedStaticCollider placementCollider;
 
-                            if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                                var normal = copy.PlaneNormal;
+                        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+                            var normal = copy.PlaneNormal;
 
-                                placementCollider = FixedStaticCollider.HalfSpace(
-                                    point: (copy.Center + (normal * margin)),
-                                    normal: normal
-                                );
-                                planes++;
-                                placementPlanes++;
-                            } else if (
-                                (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
-                                (copy.UniformScale > FixedQ4816.Zero)
-                            ) {
-                                var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+                            placementCollider = FixedStaticCollider.HalfSpace(
+                                point: (copy.Center + (normal * margin)),
+                                normal: normal
+                            );
+                            planes++;
+                            placementPlanes++;
+                        } else if (
+                            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
+                            (copy.UniformScale > FixedQ4816.Zero)
+                        ) {
+                            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
-                                placementCollider = FixedStaticCollider.Sphere(
-                                    center: copy.Center,
-                                    radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                                );
-                                spheres++;
-                                placementSpheres++;
+                            placementCollider = FixedStaticCollider.Sphere(
+                                center: copy.Center,
+                                radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
+                            );
+                            spheres++;
+                            placementSpheres++;
+                        } else {
+                            placementCollider = PlacementFinite(
+                                copy: copy,
+                                margin: margin
+                            );
+                            if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
+                                placementCylinders++;
                             } else {
-                                placementCollider = PlacementFinite(
-                                    copy: copy,
-                                    margin: margin,
-                                    part: part
-                                );
-                                if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
-                                    placementCylinders++;
-                                } else {
-                                    boxes++;
-                                    placementBoxes++;
-                                }
+                                boxes++;
+                                placementBoxes++;
                             }
+                        }
 
-                            colliders.Add(item: placementCollider);
-                            diagnosticColliders.Add(new WorldDiagnosticCollider(placementCollider, placement.Id.ToString(),
-                                creation.Id.ToString(), copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                                $"{copy.Shape.Type}/{copy.Shape.Blend}", solid.Margin, !creation.EngineDocument.IsGlassShape(copy.Shape)));
+                        colliders.Add(item: placementCollider);
+                        diagnosticColliders.Add(item: new WorldDiagnosticCollider(placementCollider, placement.Id.ToString(),
+                            creation.Id.ToString(), (copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+                            $"{copy.Shape.Type}/{copy.Shape.Blend}", solid.Margin, !creation.EngineDocument.IsGlassShape(shape: copy.Shape)) {
+                            ConservativeInset = ((placementCollider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
+                        });
 
-                            if (placementHoldable) {
-                                holdableColliders.Add(item: placementCollider);
-                                holdableGrantedByOverride.Add(item: placementHoldableIsOverride);
-                            }
+                        if (placementHoldable) {
+                            holdableColliders.Add(item: placementCollider);
+                            holdableGrantedByOverride.Add(item: placementHoldableIsOverride);
                         }
                     }
                 )
@@ -589,51 +575,48 @@ public sealed class WorldColliderSet : IContactField {
                     ReflectionNormal: null
                 ),
                 visitor: copy => {
-                    for (var part = 0; (part < BoxPartCount(shape: copy.Shape)); part++) {
-                        FixedStaticCollider attached;
+                    FixedStaticCollider attached;
 
-                        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                            var normal = copy.PlaneNormal;
+                    if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+                        var normal = copy.PlaneNormal;
 
-                            attached = FixedStaticCollider.HalfSpace(
-                                point: (copy.Center + (normal * margin)),
-                                normal: normal
-                            );
-                            m_attachedColliders.Add(item: attached);
-                            m_attachedColliderRows.Add(item: colliderRow);
-                            FoldCollider(
-                                collider: in attached,
-                                hash: ref hash
-                            );
-                        } else if (
-                            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
-                            (copy.UniformScale > FixedQ4816.Zero)
-                        ) {
-                            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+                        attached = FixedStaticCollider.HalfSpace(
+                            point: (copy.Center + (normal * margin)),
+                            normal: normal
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        m_attachedColliderRows.Add(item: colliderRow);
+                        FoldCollider(
+                            collider: in attached,
+                            hash: ref hash
+                        );
+                    } else if (
+                        (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
+                        (copy.UniformScale > FixedQ4816.Zero)
+                    ) {
+                        var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
-                            attached = FixedStaticCollider.Sphere(
-                                center: copy.Center,
-                                radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                            );
-                            m_attachedColliders.Add(item: attached);
-                            m_attachedColliderRows.Add(item: colliderRow);
-                            FoldCollider(
-                                collider: in attached,
-                                hash: ref hash
-                            );
-                        } else {
-                            attached = PlacementFinite(
-                                copy: copy,
-                                margin: margin,
-                                part: part
-                            );
-                            m_attachedColliders.Add(item: attached);
-                            m_attachedColliderRows.Add(item: colliderRow);
-                            FoldCollider(
-                                collider: in attached,
-                                hash: ref hash
-                            );
-                        }
+                        attached = FixedStaticCollider.Sphere(
+                            center: copy.Center,
+                            radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        m_attachedColliderRows.Add(item: colliderRow);
+                        FoldCollider(
+                            collider: in attached,
+                            hash: ref hash
+                        );
+                    } else {
+                        attached = PlacementFinite(
+                            copy: copy,
+                            margin: margin
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        m_attachedColliderRows.Add(item: colliderRow);
+                        FoldCollider(
+                            collider: in attached,
+                            hash: ref hash
+                        );
                     }
                 }
             );

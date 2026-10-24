@@ -10,10 +10,11 @@ namespace Puck.World.Server;
 /// <param name="Numerical">Fixed-point and transform arithmetic uncertainty.</param>
 /// <param name="BakeHalfDiagonal">Half the rendered bake cell diagonal, when a baked mesh is compared.</param>
 public sealed record WorldDiagnosticBudget(double CollisionMargin, double ContactSkin, double Numerical, double BakeHalfDiagonal = 0) {
+    /// <summary>A shape-derived maximum inward error of a conservative collider. Never permits outward error.</summary>
+    public double ConservativeInset { get; init; }
     /// <summary>Total explained uncertainty.</summary>
-    public double Total => Math.Abs(CollisionMargin) + Math.Abs(ContactSkin) + Math.Abs(Numerical) + Math.Abs(BakeHalfDiagonal);
+    public double Total => (((Math.Abs(value: CollisionMargin) + Math.Abs(value: ContactSkin)) + Math.Abs(value: Numerical)) + Math.Abs(value: BakeHalfDiagonal));
 }
-
 /// <summary>The source and matching-state identity of one diagnostic observation.</summary>
 /// <param name="Snapshot">Unique report snapshot id.</param>
 /// <param name="Tick">Completed simulation tick.</param>
@@ -30,7 +31,6 @@ public sealed record WorldDiagnosticIdentity(long Snapshot, ulong Tick, long? Fr
     /// <summary>The authored world entry point; stamp, creation and node identify the source within its composition.</summary>
     public string? SourceFile { get; init; }
 }
-
 /// <summary>One causal cluster. This record is shared by text, JSON, log and capture consumers.</summary>
 /// <param name="Id">Stable finding id.</param>
 /// <param name="View">Diagnostic category.</param>
@@ -63,14 +63,15 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
     public Vector3? SurfaceWitness { get; init; }
     /// <summary>The coverage of the check snapshot, retained when this finding is picked alone.</summary>
     public WorldDiagnosticCoverage? Coverage { get; init; }
+
     /// <summary>Serializes a picked finding with the same schema as its report.</summary>
     /// <returns>The structured causal record.</returns>
-    public string ToJson() => JsonSerializer.Serialize(this, WorldDiagnosticReport.JsonOptions);
+    public string ToJson() => JsonSerializer.Serialize(options: WorldDiagnosticReport.JsonOptions, value: this);
+
     /// <summary>The causal grouping key; screen position never changes identity.</summary>
     [JsonIgnore]
     public string Cause => $"{View}|{Identity.Instance}|{Identity.Subject}|{Source}|{Check}";
 }
-
 /// <summary>Coverage explicitly distinguishes a sampled audit from a complete surface proof.</summary>
 /// <param name="Tested">Number of evaluated witnesses.</param>
 /// <param name="Eligible">Number of eligible witnesses in this audit.</param>
@@ -80,13 +81,11 @@ public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnly
     /// <summary>Per-comparison witness counts, distinct from clustered finding counts. Unknown samples are never clean.</summary>
     public IReadOnlyDictionary<string, WorldDiagnosticSampleCounts> Comparisons { get; init; } = new Dictionary<string, WorldDiagnosticSampleCounts>();
 }
-
 /// <summary>Mutually exclusive outcomes of sampled witnesses for one comparison.</summary>
 /// <param name="Red">Certified contract violations.</param>
 /// <param name="Clean">Evaluated witnesses within their own precision budgets.</param>
 /// <param name="Unknown">Witnesses without certified correspondence or required state.</param>
 public sealed record WorldDiagnosticSampleCounts(int Red, int Clean, int Unknown);
-
 /// <summary>An immutable diagnostic snapshot, including incomplete coverage.</summary>
 /// <param name="Snapshot">Snapshot identity.</param>
 /// <param name="View">Requested view.</param>
@@ -96,19 +95,22 @@ public sealed record WorldDiagnosticSampleCounts(int Red, int Clean, int Unknown
 public sealed record WorldDiagnosticReport(long Snapshot, string View, ulong Tick,
     IReadOnlyList<WorldDiagnosticFinding> Findings, WorldDiagnosticCoverage Coverage) {
     internal static readonly JsonSerializerOptions JsonOptions = new() {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase, IncludeFields = true, WriteIndented = true,
+        IncludeFields = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
     };
+
     /// <summary>Serializes the same record used by every diagnostic consumer.</summary>
     /// <returns>The JSON report.</returns>
-    public string ToJson() => JsonSerializer.Serialize(value: this, options: JsonOptions);
+    public string ToJson() => JsonSerializer.Serialize(options: JsonOptions, value: this);
     /// <summary>A concise severity and coverage summary.</summary>
     /// <returns>The console/banner summary.</returns>
-    public string Summary() => $"{View}: red={Findings.Count(f => !f.Resolved && f.Severity == "red")} amber={Findings.Count(f => !f.Resolved && f.Severity == "amber")} unknown={Findings.Count(f => !f.Resolved && f.Severity == "unknown")} tested={Coverage.Tested}/{Coverage.Eligible} coverage={(Coverage.Complete ? "complete" : "incomplete")}";
+    public string Summary() => $"{View}: red={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "red")))} amber={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "amber")))} unknown={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "unknown")))} tested={Coverage.Tested}/{Coverage.Eligible} coverage={(Coverage.Complete ? "complete" : "incomplete")}";
 }
-
 /// <summary>Stable cause clustering and witness hysteresis, independent of rendering and analysis scheduling.</summary>
 public sealed class WorldDiagnosticTracker {
-    private readonly Dictionary<string, WorldDiagnosticFinding> m_causes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, WorldDiagnosticFinding> m_causes = new(comparer: StringComparer.Ordinal);
+
     private long m_nextId;
 
     /// <summary>Publishes evaluated causes, retaining transient resolved evidence. Incomplete checks never resolve an old cause.</summary>
@@ -120,42 +122,55 @@ public sealed class WorldDiagnosticTracker {
     /// <returns>One finding per cause.</returns>
     public IReadOnlyList<WorldDiagnosticFinding> Update(string view, ulong tick,
         IEnumerable<WorldDiagnosticFinding> observations, bool complete, Func<WorldDiagnosticFinding, bool>? evaluated = null) {
-        var active = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var observation in observations.OrderByDescending(f => Math.Abs(f.Observed ?? 0))) {
-            if (!active.Add(observation.Cause)) {
+        var active = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var observation in observations.OrderByDescending(keySelector: f => Math.Abs(value: (f.Observed ?? 0)))) {
+            if (!active.Add(item: observation.Cause)) {
                 continue;
             }
             var next = observation;
-            if (m_causes.TryGetValue(observation.Cause, out var previous)) {
+
+            if (m_causes.TryGetValue(key: observation.Cause, value: out var previous)) {
                 // A new anchor must improve by at least the check's own precision, or ten percent of the excess.
-                var oldExcess = Math.Max(0, Math.Abs(previous.Observed ?? 0) - previous.Budget.Total);
-                var newExcess = Math.Max(0, Math.Abs(next.Observed ?? 0) - next.Budget.Total);
-                if (!previous.Resolved && previous.Identity.Revision == next.Identity.Revision &&
-                    newExcess <= oldExcess + Math.Max(next.Budget.Numerical, oldExcess * 0.1)) {
-                    next = next with { PinAnchor = (previous.PinAnchor ?? previous.Witness) +
-                        (next.Identity.Subject.StartsWith("body:", StringComparison.Ordinal) ? next.Witness - previous.Witness : Vector3.Zero) };
+                var oldExcess = Math.Max(val1: 0, val2: (Math.Abs(value: (previous.Observed ?? 0)) - previous.Budget.Total));
+                var newExcess = Math.Max(val1: 0, val2: (Math.Abs(value: (next.Observed ?? 0)) - next.Budget.Total));
+
+                if (!previous.Resolved && (previous.Identity.Revision == next.Identity.Revision) &&
+                    (newExcess <= (oldExcess + Math.Max(val1: next.Budget.Numerical, val2: (oldExcess * 0.1))))) {
+                    next = next with {
+                        PinAnchor = ((previous.PinAnchor ?? previous.Witness) +
+                        (next.Identity.Subject.StartsWith(comparisonType: StringComparison.Ordinal, value: "body:") ? (next.Witness - previous.Witness) : Vector3.Zero)),
+                    };
                 }
-                next = next with { Id = previous.Id, FirstSeen = previous.Resolved ? tick : previous.FirstSeen,
-                    LastSeen = tick, ActiveTicks = previous.Resolved ? 1 : tick - Math.Min(tick, previous.FirstSeen) + 1 };
+                next = next with {
+                    Id = previous.Id,
+                    FirstSeen = (previous.Resolved ? tick : previous.FirstSeen),
+                    LastSeen = tick,
+                    ActiveTicks = (previous.Resolved ? 1 : ((tick - Math.Min(val1: tick, val2: previous.FirstSeen)) + 1)),
+                };
             } else {
-                next = next with { Id = (++m_nextId).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    FirstSeen = tick, LastSeen = tick, ActiveTicks = 1 };
+                next = next with {
+                    Id = (++m_nextId).ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                    FirstSeen = tick,
+                    LastSeen = tick,
+                    ActiveTicks = 1,
+                };
             }
             m_causes[observation.Cause] = next;
         }
         foreach (var (key, value) in m_causes.ToArray()) {
-                if (value.View == view && !active.Contains(key)) {
-                    if (complete || evaluated?.Invoke(value) == true || value.Check == "not-evaluated") {
-                        m_causes[key] = value with { Resolved = true };
-                    } else if (!value.Resolved) {
-                        // Keep the last measured snapshot, but never present an unevaluated current state as red or clean.
-                        m_causes[key] = value with { Severity = "unknown" };
-                    }
+            if ((value.View == view) && !active.Contains(item: key)) {
+                if (complete || (evaluated?.Invoke(value) == true) || (value.Check == "not-evaluated")) {
+                    m_causes[key] = value with { Resolved = true };
+                } else if (!value.Resolved) {
+                    // Keep the last measured snapshot, but never present an unevaluated current state as red or clean.
+                    m_causes[key] = value with { Severity = "unknown" };
                 }
+            }
         }
-        return m_causes.Values.Where(f => f.View == view).OrderBy(f => f.Resolved)
-            .ThenBy(f => f.Severity == "red" ? 0 : f.Severity == "amber" ? 1 : 2)
-            .ThenByDescending(f => Math.Max(0, Math.Abs(f.Observed ?? 0) - f.Budget.Total))
+        return m_causes.Values.Where(predicate: f => (f.View == view)).OrderBy(keySelector: f => f.Resolved)
+            .ThenBy(keySelector: f => ((f.Severity == "red") ? 0 : ((f.Severity == "amber") ? 1 : 2)))
+            .ThenByDescending(keySelector: f => Math.Max(val1: 0, val2: (Math.Abs(value: (f.Observed ?? 0)) - f.Budget.Total)))
             .ThenBy(f => f.Id, StringComparer.Ordinal).ToArray();
     }
 }

@@ -23,6 +23,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     // landings would climb a 10 cm kerb even with a 5 cm step height.
     private static FixedQ4816 EdgeTop(in FixedStaticCollider collider, in FixedVector3 up) {
         var axis = ((collider.Kind == FixedStaticColliderKind.AxisAlignedBox) ? up : collider.Rotation.RotateInverse(vector: up));
+
+        if (collider.Kind is FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid) {
+            return (FixedVector3.Dot(left: collider.Center, right: up) + FixedVector3.Dot(left: FixedConvexGeometry.Support(collider: in collider, direction: axis), right: axis));
+        }
         var radius = ((collider.Kind == FixedStaticColliderKind.Cylinder)
             ? ((collider.Extent.X * new FixedVector2(X: axis.X, Y: axis.Z).Length) + (collider.Extent.Y * FixedQ4816.Abs(value: axis.Y)))
             : (FixedVector3.Dot(left: collider.Extent, right: FixedVector3.Abs(value: axis)) + collider.Radius));
@@ -78,8 +82,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     ) {
         var pushed = false;
 
-        for (var index = 0; index < colliders.Length; index++) {
+        for (var index = 0; (index < colliders.Length); index++) {
             var collider = colliders[index];
+
             if (collider.TryGetPush(
                 orientation: in orientation,
                 position: position,
@@ -107,10 +112,11 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     velocity: ref velocity
                 );
                 if (FixedVector3.Dot(left: push.Normal, right: up) >= GroundedThreshold) {
-                    support = new ContactSupportWitness(Collider: collider, Volume: volume, Position: position,
-                        Orientation: orientation, Push: push, Source: source, ColliderIndex: index) {
-                        BodyPoint = position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal),
-                        Up = up, WalkableThreshold = GroundedThreshold,
+                    support = new ContactSupportWitness(Collider: collider, ColliderIndex: index, Orientation: orientation,
+                        Position: position, Push: push, Source: source, Volume: volume) {
+                        BodyPoint = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)),
+                        Up = up,
+                        WalkableThreshold = GroundedThreshold,
                     };
                 }
                 pushed = true;
@@ -172,8 +178,6 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             foreach (ref readonly var volume in volumes) {
                 pushed |= Sweep(
                     colliders: colliders,
-                    source: FixedSurfaceColliderSource.Static,
-                    support: ref support,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
@@ -182,14 +186,14 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     position: ref position,
                     previousPosition: in previousPosition,
                     requiredStepHeight: ref requiredStepHeight,
+                    source: FixedSurfaceColliderSource.Static,
+                    support: ref support,
                     up: in up,
                     velocity: ref velocity,
                     volume: in volume
                 );
                 pushed |= Sweep(
                     colliders: dynamicColliders,
-                    source: FixedSurfaceColliderSource.Dynamic,
-                    support: ref support,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
@@ -198,6 +202,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     position: ref position,
                     previousPosition: in previousPosition,
                     requiredStepHeight: ref requiredStepHeight,
+                    source: FixedSurfaceColliderSource.Dynamic,
+                    support: ref support,
                     up: in up,
                     velocity: ref velocity,
                     volume: in volume
