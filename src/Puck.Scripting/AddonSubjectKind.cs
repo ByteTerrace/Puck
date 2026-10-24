@@ -25,4 +25,7 @@ public enum AddonSubjectKind : byte {
 
     /// <summary>A profile. Reserved; not admitted.</summary>
     Profile = 4,
+
+    /// <summary>A state row, named by UTF-8 pointer/length in A/C, paired with Observe only.</summary>
+    State = 5,
 }

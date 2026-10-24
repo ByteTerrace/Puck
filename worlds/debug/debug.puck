@@ -23,6 +23,9 @@ import "controls"
 import "pad"
 import "devices"
 import "desktop"
+import "fuzzer"
+import "traversal"
+import "kinematics-scope"
 import "companion"
 import "hall"
 import "chess"
@@ -124,14 +127,14 @@ commands: galleryCommands
 // car the next (hall.puck), the chess board cursor the next and the pieces the 32 below it (chess.puck); the imports
 // name populations of their own, so this body settles it. Each body's size is its `size` register (size.puck).
 bodies {
-  capacity: 43
+  capacity: 45
 }
 
 placements {
   // Eight derived face screens: the painting wing's six canvases (paintings.puck) and the Wonderland doors' two
   // (wonderland.puck).
   policy {
-    authoringHeadroomPlacements: 0
+    authoringHeadroomPlacements: 32
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1

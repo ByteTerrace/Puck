@@ -1,0 +1,59 @@
+// Optional development scope. The controller bar remains the normal play UI; this panel starts hidden.
+state {
+  world {
+    table scope {
+      enabled = 0
+      body = 0
+      samples = 0
+      height = 0
+      velocity = 0
+      facts = 0
+      contacts = 0
+    }
+    slot scopeTrace = ""
+    table scopeHeight { "0" = 0.0 }
+    table scopeVelocity { "0" = 0.0 }
+    table scopeFacts { "0" = 0 }
+    table scopeContacts { "0" = 0 }
+    table scopeTicks { "0" = 0 }
+    table scopeEvents { "0" = 0 }
+  }
+}
+
+hud {
+  panels [
+    {
+      id: "kinematics-scope"
+      rect { x: 0.02, y: 0.13, width: 0.62, height: 0.07 }
+      layer: Over
+      style: Panel
+      visible { $type: "state", binding: "state.scope.enabled", comparison: NotEqual, value: 0 }
+      elements [
+        { id: "values", kind: Text, rect { x: 0.02, y: 0, width: 0.96, height: 0.5 }, style: Dim, "template": "DEV body {state.scope.body} yQ16 {state.scope.height} vyQ16 {state.scope.velocity} facts {state.scope.facts} contact {state.scope.contacts}" }
+        { id: "trace", kind: Text, rect { x: 0.02, y: 0.5, width: 0.96, height: 0.5 }, style: Accent, "template": "{state.scopeTrace}" }
+      ]
+    }
+  ]
+}
+
+let scopeRows = ["scope", "scopeTrace", "scopeHeight", "scopeVelocity", "scopeFacts", "scopeContacts", "scopeTicks", "scopeEvents"]
+addon "kinematics-scope" {
+  modulePath: "addons/kinematics-scope.wat"
+  hash: "auto"
+  fuel: 0
+  enabled: true
+  requests: concat(
+    [{ capability: Observe, subject: "state:scope" }, { capability: Mutate, subject: "section:State" }],
+    map(scopeRows, row => { capability: Edit, subject: $"state:{row}" }),
+    map(range(0, 45), body => { capability: Observe, subject: $"body:{body}" })
+  )
+}
+
+grants: concat(
+  [
+    { grantee: "addon:kinematics-scope", capability: Observe, subject: "state:scope", budget: 2 }
+    { grantee: "addon:kinematics-scope", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 16 }
+  ],
+  map(scopeRows, row => { grantee: "addon:kinematics-scope", capability: Edit, subject: $"state:{row}", kindMask: "UpsertStateCell" }),
+  map(range(0, 45), body => { grantee: "addon:kinematics-scope", capability: Observe, subject: $"body:{body}", budget: 2 })
+)
