@@ -14,6 +14,22 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfCameraProgramLawTests {
     [Fact]
+    public void SelectedProgramsCarryTheirAuthoredFirstPersonDestinationAndStateRequest() {
+        var point = new Vector3(0f, 1.75f, 0.22f);
+        var set = new SdfCameraProgramSet([
+            new SdfCameraProgram("select", [new SdfCameraOp.Select(SdfCameraScalar.FromLiteral(1f), [new SdfCameraSelectCase(1, 1)], 2)]),
+            new SdfCameraProgram("eye", [new SdfCameraOp.FirstPerson(point, SdfCameraScalar.FromSlot(0), 0.5f, 0.45f)]),
+            new SdfCameraProgram("other", []),
+        ]);
+        var rig = new SdfCameraProgramRig(set, scalarCount: 1, subjectCount: 0);
+        rig.Scalars[0] = 1f;
+        var pose = rig.ResolvePose(new SdfAnchor(Vector3.Zero, Quaternion.Identity), default);
+        Assert.Equal(new SdfCameraFirstPerson(point, true, 0.5f, 0.45f), pose.FirstPerson);
+        Assert.Equal(pose.FirstPerson, rig.FirstPerson);
+        rig.Scalars[0] = 0f;
+        Assert.False(rig.ResolvePose(new SdfAnchor(Vector3.Zero, Quaternion.Identity), default).FirstPerson!.Value.Active);
+    }
+    [Fact]
     public void ASelectedAndBlendedLookAtCarriesItsCloseTargetInTheSubjectsFrame() {
         var anchor = new SdfAnchor(new Vector3(x: 3f, y: 5f, z: 7f), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, (MathF.PI / 2f)));
         var set = new SdfCameraProgramSet(Programs: [

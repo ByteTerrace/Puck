@@ -3065,6 +3065,45 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpSelectProgram"
     },
+    "WorldCameraProgramOpFirstPerson": {
+      "description": "Authors the seat\u0027s first-person destination and eased transition. The eye point is in the reference body\u0027s local axes at full size. Active may bind state: zero requests third person, one first person; an explicit player choice overrides it. The caller applies live body scale and view-local hiding.",
+      "properties": {
+        "$type": {
+          "const": "firstPerson"
+        },
+        "eyePoint": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The eye in the avatar\u0027s local frame."
+        },
+        "active": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The authored view request, a literal or state binding in [0, 1]."
+        },
+        "transitionSeconds": {
+          "description": "The duration of a complete eased move.",
+          "type": "number",
+          "default": 0.5
+        },
+        "hideRadius": {
+          "description": "The head shell radius within which the own stamp is hidden.",
+          "type": "number",
+          "default": 0.45
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "eyePoint",
+        "active"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpFirstPerson"
+    },
     "WorldCameraProgramOp": {
       "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
       "type": [
@@ -3104,6 +3143,9 @@
         },
         {
           "$ref": "#/$defs/WorldCameraProgramOpSelectProgram"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpFirstPerson"
         }
       ],
       "title": "WorldCameraProgramOp"
