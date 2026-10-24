@@ -96,7 +96,11 @@ public abstract record WorldCameraProgramOp {
     /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, used only
     /// when <paramref name="Subject"/> is <see langword="null"/>.</param>
-    public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f) : WorldCameraProgramOp;
+    /// <param name="CloseTargetOffset">The target offset approached as collision shortens a seat's boom; absent keeps the rest target.</param>
+    /// <param name="CloseTargetStartFraction">The boom fraction below which target migration begins.</param>
+    /// <param name="CloseTargetFullFraction">The boom fraction at which migration reaches the close target.</param>
+    public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f,
+        DocumentVector3? CloseTargetOffset = null, float CloseTargetStartFraction = 0.6f, float CloseTargetFullFraction = 0.2f) : WorldCameraProgramOp;
     /// <summary>Orbits the eye about its pivot. <paramref name="Yaw"/> and <paramref name="Pitch"/> are live-bindable
     /// like <see cref="FieldOfView"/>'s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell
     /// changes — look behind is <c>state.look.behind</c> flipping between 0 and π — while the seat's facing (what

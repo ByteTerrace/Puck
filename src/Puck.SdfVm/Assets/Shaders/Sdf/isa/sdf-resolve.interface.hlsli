@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/b14670645f7a4b14929ee25dfd78502255ad87a3aaecae5214eb934f782384c5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/53430eff899a7641797441492903c2d9885c35a1f07ad654aa31eabfe33f7828). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -199,28 +199,34 @@ struct SdfResolvePass {
     [[vk::offset(716)]] uint shadowSlotCount;
     [[vk::offset(720)]] int4 shadowSlots;
     [[vk::offset(736)]] float skyPeakLuminance;
-    [[vk::offset(740)]] float tanHalfFieldOfView;
-    [[vk::offset(744)]] uint temporal;
+    [[vk::offset(740)]] uint _pad740;
+    [[vk::offset(744)]] uint _pad744;
     [[vk::offset(748)]] uint _pad748;
-    [[vk::offset(752)]] float4 toonBands;
-    [[vk::offset(768)]] float3 toonInk;
+    [[vk::offset(752)]] float3 stampFade;
+    [[vk::offset(764)]] float tanHalfFieldOfView;
+    [[vk::offset(768)]] uint temporal;
+    [[vk::offset(772)]] uint _pad772;
+    [[vk::offset(776)]] uint _pad776;
     [[vk::offset(780)]] uint _pad780;
-    [[vk::offset(784)]] float4 toonOutline;
-    [[vk::offset(800)]] float4 toonShadow;
-    [[vk::offset(816)]] float upscaleSharpness;
-    [[vk::offset(820)]] uint viewBase;
-    [[vk::offset(824)]] uint _pad824;
-    [[vk::offset(828)]] uint _pad828;
-    [[vk::offset(832)]] float3 viewForward;
-    [[vk::offset(844)]] uint _pad844;
-    [[vk::offset(848)]] float3 viewPosition;
+    [[vk::offset(784)]] float4 toonBands;
+    [[vk::offset(800)]] float3 toonInk;
+    [[vk::offset(812)]] uint _pad812;
+    [[vk::offset(816)]] float4 toonOutline;
+    [[vk::offset(832)]] float4 toonShadow;
+    [[vk::offset(848)]] float upscaleSharpness;
+    [[vk::offset(852)]] uint viewBase;
+    [[vk::offset(856)]] uint _pad856;
     [[vk::offset(860)]] uint _pad860;
-    [[vk::offset(864)]] float3 viewRight;
+    [[vk::offset(864)]] float3 viewForward;
     [[vk::offset(876)]] uint _pad876;
-    [[vk::offset(880)]] float3 viewUp;
-    [[vk::offset(892)]] uint viewportCount;
-    [[vk::offset(896)]] uint workCounterRow;
-    [[vk::offset(900)]] uint workCounterRowDetail;
+    [[vk::offset(880)]] float3 viewPosition;
+    [[vk::offset(892)]] uint _pad892;
+    [[vk::offset(896)]] float3 viewRight;
+    [[vk::offset(908)]] uint _pad908;
+    [[vk::offset(912)]] float3 viewUp;
+    [[vk::offset(924)]] uint viewportCount;
+    [[vk::offset(928)]] uint workCounterRow;
+    [[vk::offset(932)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaF930DEC9 : register(b0, space3);
 #define passGroup passGroupIsaF930DEC9

@@ -33,6 +33,32 @@ adapter with `--attach <file>`, naming the file the World prints on stderr
 (`[world.control: operator attachment <file>]`); without it, the adapter keeps
 whichever World it attached to first.
 
+## Tight-space camera comparison
+
+The chase camera defaults to `fade`, keeping the room ahead visible as the boom
+shortens and raising the target toward the Moth's head. Try these console lines:
+
+```text
+gallery.lift 0
+debug.go lift
+player.camera.clearance fade
+world.view.camera
+player.camera.clearance cutaway
+debug.go stairs
+player.camera.clearance
+```
+
+`cutaway` keeps her solid and rises over her while cutting away an obstructing
+wall. No mode argument toggles the two; `auto` restores the identity/world
+preference. The screen-door fade affects only her own seat view; mirrors and
+portals still show her. The camera's full authoring contract is in
+[views](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance).
+
+For the wall fade, use `body.pose 16 0.1 38.7 0 0 0` in `fade`, then
+`body.pose 16 0.1 39.1 0 0 0` to move closer and hide her completely. The lift's
+usual 1.4 m boom remains outside the fade range: its improvement is the shared
+higher look target. `gallery.lights 0 On` lights the lobby for the comparison.
+
 ## Addons
 
 The world mounts three WebAssembly addons: a watchdog that records invariant

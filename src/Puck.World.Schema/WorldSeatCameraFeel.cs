@@ -111,6 +111,7 @@ public sealed record WorldSeatGyro(
 /// <param name="InvertPitch">Whether the final semantic pitch response (pointer, stick, and gyro) is inverted.</param>
 /// <param name="StickLookRate">The look stick's yaw/pitch rate in radians per second at full deflection.</param>
 /// <param name="GyroRaw">The optional full-axis gyro projection. Absent resolves to <see cref="WorldSeatGyro.Default"/>.</param>
+/// <param name="ClearanceMode">The player's clearance preference; Auto inherits the framing world's default.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSeatCameraFeel(
     float YawSensitivity,
@@ -118,7 +119,8 @@ public sealed record WorldSeatCameraFeel(
     bool InvertYaw,
     bool InvertPitch,
     float StickLookRate,
-    [property: JsonPropertyName("gyro"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatGyro? GyroRaw = null
+    [property: JsonPropertyName("gyro"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatGyro? GyroRaw = null,
+    WorldCameraClearanceChoice ClearanceMode = WorldCameraClearanceChoice.Auto
 ) {
     /// <summary>Gets the inert seat feel — zero pointer/stick response and the default gyro projection.</summary>
     public static WorldSeatCameraFeel Default { get; } = new(

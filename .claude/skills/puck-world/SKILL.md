@@ -260,7 +260,7 @@ device lands there with a test.
    often exists already. A camera tunable belongs to the seat camera path:
    framing and pitch limits in `views.seatControl` and the camera program's ops
    (`views.seatRig`), input feel in `seatDefaults.seatCameraFeel`
-   (`WorldSeatCameraFeel`: pointer `yawSensitivity`/`pitchSensitivity` in
+   (`WorldSeatCameraFeel`: optional `clearanceMode` override, pointer `yawSensitivity`/`pitchSensitivity` in
    radians per pixel, `stickLookRate`, inversion, gyro; absent means zero
    response). A seat reads the feel of the document that owns it: the world's
    for an unclaimed seat, the claiming identity document's own

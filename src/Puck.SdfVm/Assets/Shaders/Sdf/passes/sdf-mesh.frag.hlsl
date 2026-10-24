@@ -7,11 +7,11 @@
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-mesh-raster.hlsli"
+#include "../frame/sdf-stamp-fade.hlsli"
 
-// The depth test runs before the stage, so a fragment it rejects never runs and never counts; each one that runs writes
-// its texel and counts it.
-[earlydepthstencil]
+// Discard must precede depth writes: an early-depth annotation would leave invisible avatar depth in the holes.
 float4 PSMain(MeshRasterVertex input) : SV_Target0 {
+    sdfStampFade(input.draw, uint2(input.position.xy));
     ViewportData view = worldView();
     float3 relative = (input.world - view.position.xyz);
 

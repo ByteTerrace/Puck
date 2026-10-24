@@ -215,6 +215,19 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 case WorldCameraProgramOp.LookAt lookAt:
+                    RequireRange(value: lookAt.CloseTargetStartFraction, min: 0f, max: 1f, name: $"{opPath}.closeTargetStartFraction", errors: errors);
+                    RequireRange(value: lookAt.CloseTargetFullFraction, min: 0f, max: 1f, name: $"{opPath}.closeTargetFullFraction", errors: errors);
+                    if (lookAt.CloseTargetFullFraction >= lookAt.CloseTargetStartFraction) {
+                        errors.Add(item: $"{opPath}.closeTargetFullFraction must be less than closeTargetStartFraction.");
+                    }
+                    if (lookAt.CloseTargetOffset is { } closeTarget) {
+                        if (!VectorFunctions.IsFinite(vector: closeTarget)) {
+                            errors.Add(item: $"{opPath}.closeTargetOffset must contain finite coordinates.");
+                        }
+                        if (lookAt.Subject is null) {
+                            errors.Add(item: $"{opPath}.closeTargetOffset requires a subject.");
+                        }
+                    }
                     if (lookAt.Subject is null) {
                         RequireNonNegative(
                             value: lookAt.FocusDistance,
@@ -877,6 +890,18 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.YawReference)) {
             errors.Add(item: $"{path}.yawReference is unknown.");
         }
+        if (!Enum.IsDefined(value: control.ClearanceMode) || (control.ClearanceMode == WorldCameraClearanceChoice.Auto)) {
+            errors.Add(item: $"{path}.clearanceMode must be Fade or Cutaway.");
+        }
+        RequireRange(value: control.ClearanceMaxElevation, min: 0f, max: (MathF.PI / 2f), name: $"{path}.clearanceMaxElevation", errors: errors);
+        if (control.CharacterFade is { } fade) {
+            RequirePositive(value: fade.StartDistance, name: $"{path}.characterFade.startDistance", errors: errors);
+            RequireNonNegative(value: fade.EndDistance, name: $"{path}.characterFade.endDistance", errors: errors);
+            RequirePositive(value: fade.MinimumBoom, name: $"{path}.characterFade.minimumBoom", errors: errors);
+            if (fade.EndDistance >= fade.StartDistance) {
+                errors.Add(item: $"{path}.characterFade.endDistance must be less than startDistance.");
+            }
+        }
         RequireRange(
             value: control.MinPitch,
             min: (-MathF.PI / 2f),
@@ -914,6 +939,9 @@ public static partial class WorldDefinitionValidator {
     // finite and non-negative. The member itself is required — an absent row is refused by the caller before this
     // runs, never silently defaulted.
     private static void ValidateSeatLook(WorldSeatCameraFeel seatLook, string path, List<string> errors) {
+        if (!Enum.IsDefined(value: seatLook.ClearanceMode)) {
+            errors.Add(item: $"{path}.clearanceMode is unknown.");
+        }
         RequireNonNegative(
             value: seatLook.YawSensitivity,
             name: $"{path}.yawSensitivity",

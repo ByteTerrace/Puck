@@ -17,6 +17,8 @@ public interface IWorldCameraProgramRig : ISdfCameraRig {
     /// <summary>Gets the response the last resolve reported (the program's
     /// <see cref="WorldCameraProgramOp.Dynamics"/>, or <see cref="SdfCameraDynamics.None"/>).</summary>
     SdfCameraDynamics Dynamics { get; }
+    /// <summary>Gets the close-target migration reported by the last resolved program.</summary>
+    SdfCameraTargetShift TargetShift { get; }
 
     /// <summary>Repoints this rig's document reads at the current live document.</summary>
     /// <param name="definition">The current document.</param>
@@ -378,7 +380,10 @@ public static class WorldCameraRigCompiler {
                             ? Subject(subject: lookSubject)
                             : SdfCameraProgram.FacingSubject),
                             TargetOffset: (lookAt.TargetOffset?.Value ?? Vector3.Zero),
-                            WorldAxes: lookAt.WorldAxes
+                            WorldAxes: lookAt.WorldAxes,
+                            CloseTargetOffset: lookAt.CloseTargetOffset?.Value,
+                            CloseTargetStartFraction: lookAt.CloseTargetStartFraction,
+                            CloseTargetFullFraction: lookAt.CloseTargetFullFraction
                         ));
 
                         break;
@@ -595,6 +600,7 @@ public static class WorldCameraRigCompiler {
             set => m_rig.Look = value;
         }
         public float Spread { get; set; }
+        public SdfCameraTargetShift TargetShift => m_rig.TargetShift;
 
         // Refills the evaluator's per-frame slots: a bound operand presents its state mirror slot, which the mirror
         // read at the delivered tick and engine tick and the frame interpolated, and a keyed one its keys at their

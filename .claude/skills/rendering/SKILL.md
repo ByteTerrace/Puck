@@ -153,6 +153,16 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
   (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
   the draw there.
+- **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
+  a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
+  fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.
+  Cache new view-only offsets in `SdfFrameBlock.ViewOffsets`, outside the outer
+  type's initializer reached by `WriteMeshBake`, so they do not invalidate meshes.
+  Keep the opaque fragment free of `earlydepthstencil`: discarded pixels must
+  reveal the room. Shadow passes and independently filmed mirror/portal views
+  receive no fade. Vulkan requires `shaderDemoteToHelperInvocation` at device
+  creation and capability 5379 in `VulkanShaderCapabilities`; `clip` compiles to
+  that feature even when the live opacity is one.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **Cel shading is an optional material response, not a whole-image filter.**

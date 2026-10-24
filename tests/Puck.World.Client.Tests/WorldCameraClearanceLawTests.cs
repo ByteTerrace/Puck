@@ -13,9 +13,71 @@ namespace Puck.World.Client.Tests;
 /// these laws resolve the eye frame by frame against walls and a body whose collider is the debug world's Moth: a
 /// capsule of radius 0.35 standing 2.06 m tall, framed from 1 m above its root.</summary>
 public sealed class WorldCameraClearanceLawTests {
+    [InlineData(WorldCameraClearanceChoice.Fade)]
+    [InlineData(WorldCameraClearanceChoice.Cutaway)]
+    [Theory]
+    public void CompressionRaisesTheTargetAndRecoveryRestoresTheAuthoredFraming(WorldCameraClearanceChoice choice) {
+        var wall = Walls((new Vector3(x: 0f, y: 2f, z: 1.8f), new Vector3(x: 4f, y: 4f, z: 0.1f)));
+        var arm = new WorldCameraClearance();
+        var shift = new SdfCameraTargetShift(new Vector3(x: 0f, y: 0.74f, z: 0f), 0.6f, 0.2f);
+        var desired = Desired(yaw: 0.2f, pitch: 0.3f);
+
+        for (var i = 0; (i < 120); i++) {
+            _ = arm.Resolve(wall, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice);
+        }
+        Assert.InRange(arm.Target.Y, 1.4f, 1.74f);
+        Assert.Equal(Heading(eye: desired, target: Target), Heading(eye: arm.Eye, target: arm.Target), tolerance: 1e-5f);
+        Assert.True(condition: (arm.Length < arm.AuthoredLength));
+        if (choice == WorldCameraClearanceChoice.Cutaway) {
+            Assert.Equal(1f, arm.BodyOpacity);
+        }
+        for (var i = 0; (i < 180); i++) {
+            _ = arm.Resolve(null, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice);
+        }
+        Assert.Equal(1f, arm.Target.Y, tolerance: 0.001f);
+        Assert.Equal(4.2f, arm.Length, tolerance: 0.001f);
+        Assert.Equal(1f, arm.BodyOpacity);
+    }
+    [InlineData(1f)]
+    [InlineData(0.25f)]
+    [Theory]
+    public void FadeKeepsTheRoomAndHeadingAtEveryBodyScale(float scale) {
+        var wall = Walls(((new Vector3(x: 0f, y: 2f, z: 0.7f) * scale), (new Vector3(x: 4f, y: 4f, z: 0.1f) * scale)));
+        var arm = new WorldCameraClearance();
+        var target = (Target * scale);
+        var desired = (Desired(yaw: 0f, pitch: 0f) * scale);
+        var eye = arm.Resolve(wall, desired, target, Body(scale: scale), Vector3.UnitY, SdfCameraDynamics.None, Frame,
+            targetShift: new SdfCameraTargetShift((new Vector3(x: 0f, y: 0.74f, z: 0f) * scale), 0.6f, 0.2f),
+            choice: WorldCameraClearanceChoice.Fade, scale: scale);
+
+        Assert.Equal((1.74f * scale), arm.Target.Y, tolerance: 0.0001f);
+        Assert.Equal(0f, arm.Rise);
+        Assert.Equal(0f, arm.Near);
+        Assert.Equal(0f, arm.BodyOpacity);
+        Assert.True(condition: (FieldDistance(field: wall, point: eye) >= (WorldCameraClearance.SurfaceSkin * scale)));
+        Assert.Equal(Vector3.UnitZ, Vector3.Normalize(value: (eye - arm.Target)));
+        Assert.True(condition: (arm.Length < Body(scale: scale).Exit(arm.Target, Vector3.UnitZ, (WorldCameraClearance.EyeRadius * scale))));
+    }
+    [Fact]
+    public void SessionAndPortableChoicesOverrideTheAuthorAndAutoRestoresThem() {
+        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, ClearanceMode: WorldCameraClearanceChoice.Fade);
+        var feel = WorldSeatCameraFeel.Default;
+        var seat = new WorldSeatViewState();
+
+        Assert.Equal(WorldCameraClearanceChoice.Fade, seat.ClearanceChoice(control: control, feel: feel));
+        feel = feel with { ClearanceMode = WorldCameraClearanceChoice.Cutaway };
+        Assert.Equal(WorldCameraClearanceChoice.Cutaway, seat.ClearanceChoice(control: control, feel: feel));
+        seat.SetClearanceChoice(choice: WorldCameraClearanceChoice.Fade);
+        Assert.Equal(WorldCameraClearanceChoice.Fade, seat.ClearanceChoice(control: control, feel: feel));
+        seat.SetClearanceChoice(choice: WorldCameraClearanceChoice.Auto);
+        Assert.Equal(WorldCameraClearanceChoice.Cutaway, seat.ClearanceChoice(control: control, feel: feel));
+    }
+
     // The debug world's camera-boom row: 4 Hz, critically damped.
-    private static readonly SdfCameraDynamics Boom = new(Frequency: 4f, Damping: 1f, Response: 0f);
+    private static readonly SdfCameraDynamics Boom = new(Damping: 1f, Frequency: 4f, Response: 0f);
+
     private const float Frame = (1f / 60f);
+
     private static readonly WorldCollider.Capsule MothCollider = new(
         Endpoint: new DocumentVector3(x: 0f, y: 1.36f, z: 0f),
         Radius: 0.35f
@@ -147,10 +209,10 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.Equal(expected: (0.35f + WorldCameraClearance.EyeRadius), actual: (pushed - Target).Length(), tolerance: 1e-4f);
 
         // A drawn pack behind her reaches past the collider: the eye clears the pack, not just the capsule.
-        ReadOnlyMemory<Vector4> pack = new[] { new Vector4(x: 0f, y: 1.1f, z: 0.4f, w: 0.3f) };
+        ReadOnlyMemory<Vector4> pack = new[] { new Vector4(w: 0.3f, x: 0f, y: 1.1f, z: 0.4f) };
         var cleared = Run(arm: new WorldCameraClearance(), body: Body(drawn: pack), desired: shortBoom, field: null, frames: 1);
 
-        Assert.True(condition: (Vector3.Distance(value1: cleared, value2: new Vector3(x: 0f, y: 1.1f, z: 0.4f)) >= (0.3f + WorldCameraClearance.EyeRadius - 1e-3f)), userMessage: $"eye {cleared} is within the eye radius of the pack");
+        Assert.True(condition: (Vector3.Distance(value1: cleared, value2: new Vector3(x: 0f, y: 1.1f, z: 0.4f)) >= ((0.3f + WorldCameraClearance.EyeRadius) - 1e-3f)), userMessage: $"eye {cleared} is within the eye radius of the pack");
         Assert.True(condition: (CapsuleDistance(point: cleared) >= (WorldCameraClearance.EyeRadius - 0.01f)), userMessage: $"eye {cleared} is within the eye radius of the body");
 
         var wall = Walls((new Vector3(x: 0f, y: 1.5f, z: 0.45f), new Vector3(x: 4f, y: 1.5f, z: 0.05f)));
@@ -191,7 +253,7 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.Equal(expected: Desired(distance: 1f, pitch: 0f, yaw: 0f), actual: Run(arm: new WorldCameraClearance(), body: none, desired: Desired(distance: 1f, pitch: 0f, yaw: 0f), field: plate, frames: 1));
         Assert.Equal(expected: desired, actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: plate, frames: 1));
         Assert.Equal(expected: desired, actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: thick, frames: 1));
-        Assert.Equal(expected: (3f - 0.05f - WorldCameraClearance.EyeRadius - 0.05f), actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: beyond, frames: 60).Z, tolerance: 0.02f);
+        Assert.Equal(expected: (((3f - 0.05f) - WorldCameraClearance.EyeRadius) - 0.05f), actual: Run(arm: new WorldCameraClearance(), body: none, desired: desired, field: beyond, frames: 60).Z, tolerance: 0.02f);
     }
     /// <summary>The body's keep-out is its collider and its drawn shapes placed at its pose and scale, inflated by the
     /// swept radius: exact for a sphere, a capsule and a box along their axes, scaled with the body, turned with it, and
@@ -215,7 +277,7 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.Equal(expected: 0f, actual: box.Exit(direction: Vector3.Normalize(value: new Vector3(x: 1f, y: 1f, z: 0f)), origin: new Vector3(x: -3f, y: 0.5f, z: 0f), radius: 0.3f));
         Assert.Equal(expected: 0.55f, actual: point.Exit(direction: Vector3.UnitX, origin: new Vector3(x: 0f, y: 0.25f, z: 0f), radius: 0.3f), tolerance: 1e-4f);
         Assert.Equal(expected: 0.65f, actual: capsule.Exit(direction: Vector3.UnitX, origin: Target, radius: 0.3f), tolerance: 1e-4f);
-        Assert.Equal(expected: (2.06f + 0.3f - 1f), actual: capsule.Exit(direction: Vector3.UnitY, origin: Target, radius: 0.3f), tolerance: 1e-4f);
+        Assert.Equal(expected: ((2.06f + 0.3f) - 1f), actual: capsule.Exit(direction: Vector3.UnitY, origin: Target, radius: 0.3f), tolerance: 1e-4f);
         Assert.Equal(expected: 0f, actual: capsule.Exit(direction: Vector3.UnitY, origin: new Vector3(x: 2f, y: 1f, z: 0f), radius: 0.3f));
         Assert.Equal(expected: 0f, actual: capsule.Exit(direction: Vector3.UnitX, origin: new Vector3(x: -3f, y: 1f, z: 2f), radius: 0.3f));
         Assert.Equal(expected: 0f, actual: capsule.Exit(direction: Vector3.UnitX, origin: new Vector3(x: -3f, y: -2f, z: 0f), radius: 0.3f));
@@ -223,7 +285,7 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.Equal(expected: 1.3f, actual: Body(scale: 2f).Exit(direction: Vector3.UnitX, origin: (Target * 2f), radius: 0.6f), tolerance: 1e-4f);
         Assert.Equal(expected: 0.65f, actual: Body(scale: 0f).Exit(direction: Vector3.UnitX, origin: Target, radius: 0.3f), tolerance: 1e-4f);
         Assert.Equal(expected: 0.65f, actual: Body(orientation: default(Quaternion)).Exit(direction: Vector3.UnitX, origin: Target, radius: 0.3f), tolerance: 1e-4f);
-        Assert.Equal(expected: (2.06f + 0.3f - 1f), actual: Body(orientation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-MathF.PI / 2f))).Exit(direction: Vector3.UnitX, origin: Vector3.UnitX, radius: 0.3f), tolerance: 1e-4f);
+        Assert.Equal(expected: ((2.06f + 0.3f) - 1f), actual: Body(orientation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: (-MathF.PI / 2f))).Exit(direction: Vector3.UnitX, origin: Vector3.UnitX, radius: 0.3f), tolerance: 1e-4f);
         Assert.Equal(expected: 0f, actual: new WorldChaseBody(collider: null, orientation: Quaternion.Identity, position: Vector3.Zero, scale: 1f).Exit(direction: Vector3.UnitX, origin: Target, radius: 0.3f));
 
         var drawn = WorldChaseBody.DrawnVolumes(

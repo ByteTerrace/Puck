@@ -12,6 +12,9 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
+    /// <summary>A screen-door fade of one stamp's transform-slot range in this view only. Default draws every stamp.</summary>
+    public SdfStampFade StampFade { get; init; }
+
     /// <summary>The infinity layers fitted to this consumer's camera, identified by their authored names.
     /// Their producer names identify existing render-graph outputs; the sky recorder binds them under the frame's
     /// graph-read leases. Empty means no fitted infinity image. The residency's authored sky remains shared.</summary>
@@ -55,13 +58,11 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The quality the view renders at. Each view's pass block carries its own, so views of one frame, and of
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
-
     /// <summary>The view's screen fidelity, from 0 to 1, which its pass block carries
     /// (<c>SdfWorldPackage.ScreenFidelity</c>): the share of a screen's own pixels that reaches the view untouched, past
     /// the CRT glass's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
     /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
     public float ScreenFidelity { get; init; }
-
     /// <summary>Whether the view publishes the luminance it shades for a window: a window's view of the world beyond its
     /// glass, or a sky layer's view of another world, whose consumer shows it in its own scene. Such a view applies the
     /// window share of its exposure (<see cref="SdfPhotometry.WindowAdaptation"/>) and the consumer the rest of its own,
@@ -70,6 +71,11 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// the tonemap.</summary>
     public bool Unexposed { get; init; }
 }
+/// <summary>A view-local stamp fade. The shared transforms, mirrors, portal views and shadow casters remain intact.</summary>
+/// <param name="FirstSlot">The stamp's first dynamic-transform slot.</param>
+/// <param name="SlotCount">The number of slots owned by the stamp; zero disables fading.</param>
+/// <param name="Opacity">The screen coverage, from zero (hidden) to one (solid).</param>
+public readonly record struct SdfStampFade(int FirstSlot, int SlotCount, float Opacity);
 /// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
 /// <param name="Layer">The infinity layer's unique authored name.</param>
 /// <param name="Parameters">The sampling basis and rectangle fitted to this consumer. The sky retains the

@@ -13,6 +13,25 @@ namespace Puck.SdfVm.Tests;
 /// contract is plain poses, plain scalars, and a look sample.
 /// </summary>
 public sealed class SdfCameraProgramLawTests {
+    [Fact]
+    public void ASelectedAndBlendedLookAtCarriesItsCloseTargetInTheSubjectsFrame() {
+        var anchor = new SdfAnchor(new Vector3(x: 3f, y: 5f, z: 7f), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, (MathF.PI / 2f)));
+        var set = new SdfCameraProgramSet(Programs: [
+            new SdfCameraProgram(Name: "select", Operations: [new SdfCameraOp.Select(SdfCameraScalar.FromLiteral(value: 1f), [new SdfCameraSelectCase(Program: 1, Value: 1)], 2)]),
+            new SdfCameraProgram(Name: "blend", Operations: [new SdfCameraOp.Blend(ProgramA: 2, ProgramB: 3, Weight: SdfCameraScalar.FromLiteral(value: 0.5f))]),
+            new SdfCameraProgram(Name: "low", Operations: [new SdfCameraOp.LookAt(SdfCameraProgram.ReferenceSubject, Vector3.UnitY, false, SdfCameraScalar.FromLiteral(value: 4f), new Vector3(x: 0f, y: 1.4f, z: 0f))]),
+            new SdfCameraProgram(Name: "high", Operations: [new SdfCameraOp.LookAt(SdfCameraProgram.ReferenceSubject, Vector3.UnitY, false, SdfCameraScalar.FromLiteral(value: 4f), new Vector3(x: 0f, y: 1.8f, z: 0f))]),
+        ]);
+        var rig = new SdfCameraProgramRig(set, scalarCount: 0, subjectCount: 0);
+        var pose = rig.ResolvePose(anchor: anchor, clock: default);
+
+        Assert.Equal(-0.6f, pose.TargetShift.Offset.X, tolerance: 1e-5f);
+        Assert.Equal(0f, pose.TargetShift.Offset.Y, tolerance: 1e-5f);
+        Assert.Equal(0.6f, pose.TargetShift.StartFraction);
+        Assert.Equal(0.2f, pose.TargetShift.FullFraction);
+        Assert.Equal(pose.TargetShift, rig.TargetShift);
+    }
+
     // The framing the island's seatRig authors (puck.world.json), transcribed op for op.
     private const float ChaseDistance = 5.4626001f;
     private const float ChaseFov = 0.9599311f;

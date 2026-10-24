@@ -3808,6 +3808,26 @@ export type WorldCameraAnchorCandidate = {
   when?: OverlayPredicateNullable | null;
 };
 
+export type WorldCameraCharacterFade = {
+  /**
+   * The boom distance at which the body starts dissolving.
+   */
+  startDistance?: number;
+  /**
+   * The distance at which the body is completely hidden.
+   */
+  endDistance?: number;
+  /**
+   * The preferred shortest boom; a nearer wall takes precedence.
+   */
+  minimumBoom?: number;
+};
+
+/**
+ * How a seat's chase view handles a room that cannot fit its boom and body.
+ */
+export type WorldCameraClearanceChoice = "Auto" | "Cutaway" | "Fade";
+
 /**
  * An authored camera program — the ordered op list a rig resolves through every frame.
  */
@@ -4064,6 +4084,18 @@ export type WorldCameraProgramOpLookAt = {
    */
   focusDistance?: number;
   /**
+   * The target offset approached as collision shortens a seat's boom; absent keeps the rest target.
+   */
+  closeTargetOffset?: DocumentVector3;
+  /**
+   * The boom fraction below which target migration begins.
+   */
+  closeTargetStartFraction?: number;
+  /**
+   * The boom fraction at which migration reaches the close target.
+   */
+  closeTargetFullFraction?: number;
+  /**
    * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
    */
   opcode?: string | null;
@@ -4089,6 +4121,18 @@ export type WorldCameraProgramOpLookAtNullable = {
    * The finite target distance along the current subject's forward axis, used only when Subject is null.
    */
   focusDistance?: number;
+  /**
+   * The target offset approached as collision shortens a seat's boom; absent keeps the rest target.
+   */
+  closeTargetOffset?: DocumentVector3;
+  /**
+   * The boom fraction below which target migration begins.
+   */
+  closeTargetStartFraction?: number;
+  /**
+   * The boom fraction at which migration reaches the close target.
+   */
+  closeTargetFullFraction?: number;
   /**
    * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
    */
@@ -11613,6 +11657,10 @@ export type WorldSeatCameraFeel = {
    * The optional full-axis gyro projection. Absent resolves to Default.
    */
   gyro?: WorldSeatGyro | null;
+  /**
+   * The player's clearance preference; Auto inherits the framing world's default.
+   */
+  clearanceMode?: WorldCameraClearanceChoice;
 };
 
 export type WorldSeatFollow = {
@@ -11700,6 +11748,18 @@ export type WorldSeatViewControl = {
    * The follow camera: with no look input the camera yaw eases in behind the body's heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World — a body-relative yaw already rides the body.
    */
   follow?: WorldSeatFollow | null;
+  /**
+   * The author's tight-space behavior; players may override it.
+   */
+  clearanceMode?: WorldCameraClearanceChoice;
+  /**
+   * The full-size fade distances; absent uses the standard distances.
+   */
+  characterFade?: WorldCameraCharacterFade | null;
+  /**
+   * The cutaway boom's highest elevation above the seat's level plane, in radians.
+   */
+  clearanceMaxElevation?: number;
 };
 
 export type WorldSeatYawReference = "World" | "Body";

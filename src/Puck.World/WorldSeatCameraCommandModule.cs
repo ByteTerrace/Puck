@@ -17,6 +17,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         var gyro = seatLook.Gyro;
         var control = definition.Views.SeatControl;
         var state = seat?.View;
+        var choice = (state?.ClearanceChoice(control: control, feel: seatLook) ?? ((seatLook.ClearanceMode == WorldCameraClearanceChoice.Auto) ? control.ClearanceMode : seatLook.ClearanceMode));
         var angularVelocity = (seat?.MotionAngularVelocity ?? Vector3.Zero);
         var route = seatRouter.Route(slot: slot);
         var builder = new StringBuilder(value: "[world.view.camera: ");
@@ -47,6 +48,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         );
 
         if (state is not null) {
+            _ = builder.Append(value: $" mode={choice.ToString().ToLowerInvariant()}");
             _ = builder.Append(value: ' ').Append(value: state.DescribeClearance());
         }
 
@@ -59,9 +61,38 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.clearance",
+            description: "Chooses this seat's tight-space camera: player.camera.clearance [fade|cutaway|auto|toggle]. No argument toggles fade/cutaway. Auto restores the portable preference or world's default. Heading is preserved; world.view.camera echoes mode and fade.",
+            handler: (context, args) => {
+                if (args.Count > 1) {
+                    return CommandResult.Error(output: "[player.camera.clearance: expected fade|cutaway|auto|toggle]");
+                }
+                var token = ((args.Count == 0) ? "toggle" : args[0].ToString());
+                var seat = roster.Seat(slot: context.Slot);
+
+                if (seat is null) {
+                    return CommandResult.Error(output: "[player.camera.clearance: no occupied seat]");
+                }
+                var definition = instances.ResolveRoutedDefinition(slot: context.Slot);
+                var feel = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
+                WorldCameraClearanceChoice choice;
+
+                if (string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    choice = ((seat.View.ClearanceChoice(control: definition.Views.SeatControl, feel: feel) == WorldCameraClearanceChoice.Fade)
+                        ? WorldCameraClearanceChoice.Cutaway : WorldCameraClearanceChoice.Fade);
+                } else if (!Enum.TryParse(token, ignoreCase: true, out choice) || !Enum.IsDefined(value: choice)) {
+                    return CommandResult.Error(output: "[player.camera.clearance: expected fade|cutaway|auto|toggle]");
+                }
+                seat.View.SetClearanceChoice(choice: choice);
+                return new CommandResult(Output: Describe(slot: context.Slot));
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.camera",
-            description: $"Echoes a seat's live control policy, held free-look state, motion-input state, camera orbit, and where its chase eye last stood: world.view.camera [player], player 1..{PlayerRoster.MaxSlots}. eye= and target= are world metres, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, clearance= none, open, shortened, risen or crowded. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
+            description: $"Echoes a seat's live control policy, held free-look state, motion-input state, camera orbit, and where its chase eye last stood: world.view.camera [player], player 1..{PlayerRoster.MaxSlots}. eye= and target= are world metres, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, mode= fade or cutaway, fade= zero (solid) to one (hidden), clearance= none, open, shortened, risen or crowded. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
             handler: (context, args) => {
                 if (args.Count > 1) {
                     return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");

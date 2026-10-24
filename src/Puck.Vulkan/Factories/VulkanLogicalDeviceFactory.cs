@@ -8,7 +8,7 @@ namespace Puck.Vulkan.Factories;
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
 /// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>fragmentStoresAndAtomics</c> and
-/// <c>shaderStorageImageExtendedFormats</c> always, refusing a device without any of them,
+/// <c>shaderStorageImageExtendedFormats</c> and <c>shaderDemoteToHelperInvocation</c> always, refusing a device without any of them,
 /// and the optional pipeline-executable-properties,
 /// storage-image-without-format, external memory and semaphore,
 /// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
@@ -20,6 +20,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     /// enabling it is pixel-neutral.</summary>
     private const string PipelineExecutablePropertiesExtension = "VK_KHR_pipeline_executable_properties";
     private const uint StructureTypePhysicalDevice16BitStorageFeatures = 1000083000;
+    // Vulkan 1.3 core; the first VkBool32 is shaderDemoteToHelperInvocation. The seat-local screen-door fade
+    // discards fragments in the mesh and glass passes. Verified against Vulkan SDK 1.4.350 vulkan_core.h.
+    private const uint StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures = 1000276000;
     // Extension feature struct sTypes, verified against the Vulkan SDK 1.4.350 header
     // (vulkan_core.h). Each enables the struct's first VkBool32 when chained.
     private const uint StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr = 1000269000;
@@ -182,6 +185,14 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     ) {
         var extensions = new List<string> { SwapchainExtension };
         var featureStructureTypes = new List<uint>();
+        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures
+        )) {
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDemoteToHelperInvocation, which the view-local character fade needs to discard fragments.");
+        }
+        featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures);
         var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
 

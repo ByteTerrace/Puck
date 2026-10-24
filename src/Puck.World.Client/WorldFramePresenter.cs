@@ -81,6 +81,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly MarkerStore m_markers;
     private readonly IOverlayPredicateEvaluator? m_overlayFacts;
     private readonly WorldViewGraphHost? m_graphs;
+
     // The instance each view FilmViews appended renders as, and the display pixels each of the frame's views is shown over.
     private readonly List<string?> m_filmedViewNames = [];
     private readonly List<float> m_rateViewPixels = [];
@@ -164,9 +165,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private FixedWorldCollider?[] m_subjectColliders = [];
     // The drawn volumes of the creation and stamp scale a chase eye last framed (WorldChaseBody.DrawnVolumes).
     private Vector4[] m_subjectDrawn = [];
+
     private WorldPrototype? m_subjectDrawnCreation;
     private float m_subjectDrawnScale;
-
     private WorldDefinition? m_subjectCollidersFor;
 
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
@@ -772,8 +773,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 position: bodyPosition,
                 scale: liveScale
             ),
-            target: target,
-            up: seatUp
+            target: ref target,
+            up: seatUp,
+            targetShift: chase.TargetShift with { Offset = (chase.TargetShift.Offset * liveScale) },
+            choice: view.ClearanceChoice(control: views.SeatControl, feel: (m_roster.Seat(slot: slot)?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook)),
+            control: views.SeatControl,
+            scale: liveScale
         );
         var clearedEye = eye;
         var clearedTarget = target;
@@ -1570,6 +1575,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private bool SettlesCapture => (CapturePending?.Invoke() ?? false);
     // Whether presentation runs in lockstep with the ticks.
     private bool TickLocked => (HistoryFree?.Invoke() ?? false);
+
     bool ISdfFrameDresser.TickLocked => TickLocked;
 
     /// <summary>Returns the cull a frame renders with: the box cull in place of the occlusion test, whose first phase
@@ -1580,6 +1586,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public static SdfMeshCullLevel CullOf(SdfMeshCullLevel cull, bool settles) => ((settles && (cull == SdfMeshCullLevel.Occlusion))
         ? SdfMeshCullLevel.Frustum
         : cull);
+
     // The display pixels each of the frame's views is shown over, which the bodies lever rates a body by: a seat's view its
     // region of the display, and a view the binder filmed after them the display's height times the share of it the view
     // reached last frame (WorldViewGraphHost.DisplayShareOf), which is none for a window out of every view's sight; a
@@ -1606,6 +1613,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return codes;
     }
+
     /// <summary>Returns the rated work a frame rates: none while the frame is held for a settled capture, since a rated
     /// update held from an earlier frame would show an earlier tick in the still, and the session's levers otherwise.</summary>
     /// <param name="rates">The session's rate levers.</param>
@@ -1877,6 +1885,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Camera: camera,
                 Region: region
             ) {
+                StampFade = (((presentedElsewhere is null) && m_animator.TryBodyTransformSlot(bodyIndex: m_anchor.PerceivedBody(slot: slot), transformSlot: out var fadeSlot))
+                    ? new SdfStampFade(fadeSlot, WorldStampPool.SlotsPerPlacement, m_roster.Seat(slot: slot)!.View.BodyOpacity)
+                    : default),
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
@@ -2130,7 +2141,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,
             Exposure = lighting.Exposure,
-            Toon = m_settings.ResolveToon(m_client.Definition.Render),
+            Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
             Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.

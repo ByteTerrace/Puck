@@ -167,7 +167,13 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as
 /// it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs
 /// <see cref="WorldSeatYawReference.World"/> — a body-relative yaw already rides the body.</param>
-public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null);
+/// <param name="ClearanceMode">The author's tight-space behavior; players may override it.</param>
+/// <param name="CharacterFade">The full-size fade distances; absent uses the standard distances.</param>
+/// <param name="ClearanceMaxElevation">The cutaway boom's highest elevation above the seat's level plane, in radians.</param>
+public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
+    WorldCameraClearanceChoice ClearanceMode = WorldCameraClearanceChoice.Cutaway,
+    WorldCameraCharacterFade? CharacterFade = null, float ClearanceMaxElevation = 1.1f);
 /// <summary>The follow camera's shape.</summary>
 /// <param name="Rate">The exponential rate (per second) the camera yaw closes on the heading — about 63% of the
 /// remaining angle per <c>1/rate</c> seconds; larger is a stiffer follow.</param>
