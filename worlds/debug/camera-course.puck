@@ -1,0 +1,161 @@
+// The tight-space camera course: four small solid structures for comparing the chase camera's modes (cutaway, fade,
+// first person) on the same input, west of the gi-corner test room on the open ground at x -26 .. -13, z 16 .. 44. The
+// lift car and the switchback stairs (hall.puck) are the other two tight spaces; `debug.go lift` and `debug.go stairs`
+// reach them, and `debug.go camera-course` reaches this one (places.puck lists every place). Each structure is one
+// camera problem, and a spawn point stands before it:
+//
+//   camera-course     the L-corridor: 1.6 m wide, 2.6 m high, a west entrance, a turn south and a dead end, with a
+//                     side niche on the north wall to turn about in
+//   camera-tunnel     a 2.4 m wide passage whose ceiling drops from 3.5 m to a 2.25 m soffit, 19 cm over the suited
+//                     Moth's 2.06 m helmet
+//   camera-colonnade  eight 0.35 m pillars on a 1.6 m pitch, with 1.2 m of walkway between them and the wall behind
+//   camera-bays       two bays under their own ceiling lamps (warm and cool) divided by a 0.15 m partition, open at
+//                     the south end so the Moth can step from one to the other
+//
+// Everything is a box, because the analytic contact provider collides a carved shape as its whole bounding box, and
+// one placement carries all of them. `courseBox` takes bounds in the course's own frame (x east, z south from the
+// placement's origin) and writes the author-frame row (`hallBox`, shapes.puck), so every number below reads as a
+// distance from the course's north-west corner at (-26, 0, 18). The bays' lamps are emissive slabs lit through the
+// irradiance volume. A screen on the cool bay's back wall shows the debug world's probe (probe-beacon.puck): a camera's
+// view of the reference cubes tinted by a recorded track.
+
+import "shapes"
+
+let courseWall = 0
+let courseSoffit = 1
+let coursePillar = 2
+let courseWarm = 3
+let courseCool = 4
+let courseAlcove = 5
+
+template courseBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  hallBox(label: label, x0: x0, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1, slot: slot)
+}
+
+// The L-corridor: leg 1 runs east along z 0 .. 1.6, the corner is x 6.4 .. 8, and leg 2 runs south along x 6.4 .. 8 to a
+// dead end at z 8. Walls are 0.2 m thick, the ceiling is a 0.2 m slab on them at 2.6 m.
+template courseCorridor() {
+  courseBox(label: "corridor-north-west", x0: -0.2, x1: 2.4, y0: 0, y1: 2.6, z0: -0.2, z1: 0, slot: courseWall)
+  courseBox(label: "corridor-north-east", x0: 4, x1: 8.2, y0: 0, y1: 2.6, z0: -0.2, z1: 0, slot: courseWall)
+  courseBox(label: "corridor-south", x0: -0.2, x1: 6.4, y0: 0, y1: 2.6, z0: 1.6, z1: 1.8, slot: courseWall)
+  courseBox(label: "corridor-east", x0: 8, x1: 8.2, y0: 0, y1: 2.6, z0: 0, z1: 8.2, slot: courseWall)
+  courseBox(label: "corridor-leg-two-west", x0: 6.2, x1: 6.4, y0: 0, y1: 2.6, z0: 1.8, z1: 8.2, slot: courseWall)
+  courseBox(label: "corridor-dead-end", x0: 6.4, x1: 8, y0: 0, y1: 2.6, z0: 8, z1: 8.2, slot: courseAlcove)
+  courseBox(label: "niche-west", x0: 2.2, x1: 2.4, y0: 0, y1: 2.6, z0: -1.8, z1: 0, slot: courseWall)
+  courseBox(label: "niche-east", x0: 4, x1: 4.2, y0: 0, y1: 2.6, z0: -1.8, z1: 0, slot: courseWall)
+  courseBox(label: "niche-back", x0: 2.4, x1: 4, y0: 0, y1: 2.6, z0: -1.8, z1: -1.6, slot: courseAlcove)
+  courseBox(label: "corridor-ceiling", x0: -0.2, x1: 8.2, y0: 2.6, y1: 2.8, z0: -0.2, z1: 1.8, slot: courseSoffit)
+  courseBox(label: "corridor-leg-two-ceiling", x0: 6.2, x1: 8.2, y0: 2.6, y1: 2.8, z0: 1.8, z1: 8.2, slot: courseSoffit)
+  courseBox(label: "niche-ceiling", x0: 2.2, x1: 4.2, y0: 2.6, y1: 2.8, z0: -1.8, z1: -0.2, slot: courseSoffit)
+}
+
+// The low-soffit tunnel along x 0 .. 10 at z 11 .. 13.4: a 3.5 m ceiling over the first 3.5 m, then a lintel and a
+// 2.25 m soffit the rest of the way.
+template courseTunnel() {
+  courseBox(label: "tunnel-north", x0: -0.2, x1: 10.2, y0: 0, y1: 3.7, z0: 10.8, z1: 11, slot: courseWall)
+  courseBox(label: "tunnel-south", x0: -0.2, x1: 10.2, y0: 0, y1: 3.7, z0: 13.4, z1: 13.6, slot: courseWall)
+  courseBox(label: "tunnel-high-ceiling", x0: -0.2, x1: 3.5, y0: 3.5, y1: 3.7, z0: 10.8, z1: 13.6, slot: courseSoffit)
+  courseBox(label: "tunnel-lintel", x0: 3.5, x1: 3.7, y0: 2.45, y1: 3.7, z0: 10.8, z1: 13.6, slot: courseSoffit)
+  courseBox(label: "tunnel-soffit", x0: 3.7, x1: 10.2, y0: 2.25, y1: 2.45, z0: 10.8, z1: 13.6, slot: courseSoffit)
+}
+
+// The colonnade: a wall along z 16.4 .. 16.6 from x 0 to 13, and eight 0.35 m pillars 3 m high at z 15, on a 1.6 m
+// pitch from x 1, leaving 1.2 m of walkway behind them.
+template courseColonnade() {
+  courseBox(label: "colonnade-wall", x0: 0, x1: 13, y0: 0, y1: 3, z0: 16.4, z1: 16.6, slot: courseWall)
+  for k in range(0, 8) {
+    courseBox(label: $"pillar-{k}", x0: ((1 + (1.6 * k)) - 0.175), x1: ((1 + (1.6 * k)) + 0.175), y0: 0, y1: 3, z0: 14.825, z1: 15.175, slot: coursePillar)
+  }
+}
+
+// The two bays, x -0.2 .. 10.2 and z 20 .. 26.2 under one ceiling at 2.8 m: a back wall, two side walls, and the
+// 0.15 m partition on x 4.925 .. 5.075 from the back wall to z 21.6, leaving a 1.6 m opening at the south end. A lamp
+// slab hangs under the ceiling in each bay, warm in the west one and cool in the east.
+template courseBays() {
+  courseBox(label: "bays-back", x0: -0.2, x1: 10.2, y0: 0, y1: 2.8, z0: 26, z1: 26.2, slot: courseWall)
+  courseBox(label: "bays-west", x0: -0.2, x1: 0, y0: 0, y1: 2.8, z0: 20, z1: 26, slot: courseWall)
+  courseBox(label: "bays-east", x0: 10, x1: 10.2, y0: 0, y1: 2.8, z0: 20, z1: 26, slot: courseWall)
+  courseBox(label: "bays-partition", x0: 4.925, x1: 5.075, y0: 0, y1: 2.8, z0: 21.6, z1: 26, slot: courseWall)
+  courseBox(label: "bays-ceiling", x0: -0.2, x1: 10.2, y0: 2.8, y1: 3, z0: 20, z1: 26.2, slot: courseSoffit)
+  courseBox(label: "bays-lamp-warm", x0: 1, x1: 4, y0: 2.74, y1: 2.8, z0: 22, z1: 25, slot: courseWarm)
+  courseBox(label: "bays-lamp-cool", x0: 6, x1: 9, y0: 2.74, y1: 2.8, z0: 22, z1: 25, slot: courseCool)
+}
+
+placements {
+  placement "camera-course" {
+    prototype: "camera-course"
+    position [-26, 0, 18]
+    solid
+  }
+
+  // The probe's screen on the cool bay's back wall (inner face at world z 44), 1.2 m over the floor, facing the bays' open
+  // end.
+  placement "beacon-screen" {
+    prototype: "beacon-screen"
+    position [-18.5, 1.6, 43.9]
+    faceSources [
+      {
+        face: "display"
+        source: probe(id: "meter")
+      }
+    ]
+  }
+}
+
+prototypes {
+  prototype "beacon-screen" {
+    document {
+      name: "beacon-screen"
+      schema: "puck.creation.v1"
+      behavior {
+        faces [
+          {
+            defaultSource: null
+            name: "display"
+            shapeId: 0
+          }
+        ]
+      }
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      palette [{ color: "#DDE8EA" }]
+      shape Box "panel" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.2, 0.675, 0.05]
+      }
+    }
+  }
+
+  prototype "camera-course" {
+    document {
+      name: "camera-course"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#D8D4CC", roughness: 0.9, specular: 0.02 }
+        { color: "#8E949C", roughness: 0.85, specular: 0.03 }
+        { color: "#E8B341", roughness: 0.7, specular: 0.05 }
+        { color: "#FFD9A8", roughness: 0.5, emissive: 600nit }
+        { color: "#BFD9FF", roughness: 0.5, emissive: 600nit }
+        { color: "#C8322B", roughness: 0.9, specular: 0.02 }
+      ]
+      courseCorridor()
+      courseTunnel()
+      courseColonnade()
+      courseBays()
+    }
+  }
+}
+
+// One place before each structure, facing into it. A body stands on the ground (y 0), and yaw 270 faces east, 180
+// south.
+spawnPoints [
+  { id: "camera-course", position [-28, 0, 18.8], yawDegrees: 270 }
+  { id: "camera-tunnel", position [-28, 0, 30.2], yawDegrees: 270 }
+  { id: "camera-colonnade", position [-27.5, 0, 33.8], yawDegrees: 270 }
+  { id: "camera-bays", position [-23.5, 0, 36.8], yawDegrees: 180 }
+]

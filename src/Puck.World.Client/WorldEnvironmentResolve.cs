@@ -59,6 +59,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private int[] m_skyLayerIndex = [];
 
     private PresentedTick m_tick;
+    private SdfExposure m_exposure = SdfExposure.Default;
 
     /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
@@ -127,6 +128,16 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                 sky: m_sky
             );
             WriteIndirect(mirror, definition.Render.Indirect);
+            m_exposure = WorldRenderExposure.Held(
+                exposure: definition.Render.Exposure,
+                hold: Scalar(
+                    fallback: 0f,
+                    field: WorldValueFields.ExposureHold,
+                    mirror: mirror,
+                    scalar: definition.Render.Exposure?.Hold,
+                    site: new WorldValueSite(Index: 0, Section: "render.exposure")
+                )
+            );
             m_generation = mirror.Generation;
             m_resolvedAt = mirror.Revision;
             m_tick = mirror.Presented;
@@ -150,7 +161,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
-        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: WorldRenderExposure.Resolve(exposure: definition.Render.Exposure));
+        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure);
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored

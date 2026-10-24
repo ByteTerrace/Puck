@@ -69,6 +69,12 @@ let hallPaletteDark = [
 ]
 // Each slab and the roof come lit and dark: a placement shows its dark variant while its level's `hallLights` cell is
 // Off (the placement's `respond` facet), and its lit one otherwise.
+// What `gallery.inspect On` writes: the sky's ambient gain and the pinned exposure, in EV100 (a lit room is about 7).
+let inspectAmbient = 2.5
+// The basis's ambient gain (avatars/moth.puck). A multiple of 1/64, so the state cell holds it exactly and Off restores
+// it bit for bit.
+let authoredAmbient = 0.40625
+let inspectHold = 8
 let hallLooks = [{ suffix: "", palette: hallPalette }, { suffix: "-dark", palette: hallPaletteDark }]
 
 // The lift's panels and displays: a satin steel plate, charcoal legends, chrome bezels and black display glass, with the
@@ -892,6 +898,29 @@ render {
       map(range(0, length(wingWashes)), i => spot(name: $"wing-wash-{i}", position: [wingWashes[i].x, (hallCeilings[0] - 0.1), wingWashes[i].z], direction: wingWashes[i].aim, angle: 35deg, innerAngle: 20deg, temperature: 3500K, power: 4000lm))
     )
   }
+  // The inspection lever (`gallery.inspect`). Each of the three values below reads a `galleryFill` cell that the lever's
+  // rules write, and the cells hold exactly the values the basis authors while the lever is Off, so the authored
+  // lighting renders unchanged: the sky's ambient gain (the basis's 0.40625, restated with its reflection gain, since a
+  // section member replaces the basis's whole), the camera exposure (the basis's automatic bounds restated, plus the
+  // hold that pins it while the lever is On) and the screens' share of the traced light.
+  environment {
+    ambient: "state.galleryFill.ambient"
+    reflection: 1
+  }
+  exposure {
+    mode: Auto
+    minimum: 7
+    maximum: 16
+    compensation: 2.5
+    adaptation: 0.75
+    "local": 0.5
+    hold: "state.galleryFill.hold"
+  }
+  indirect {
+    sources {
+      screens: "state.galleryFill.screens"
+    }
+  }
 }
 
 // A spawn on each level's landing, before the lift door and facing it, and one before each level's light switch,
@@ -973,6 +1002,17 @@ state {
       level1 = Down
       level2 = Down
       level3 = Down
+    }
+    // The inspection lever (`gallery.inspect`), and the render values its rules write: the sky's ambient gain, the
+    // exposure hold in EV100 (zero releases it) and the screens' gain on the traced light, at their authored values
+    // while the lever is Off.
+    table galleryInspect: HallLight {
+      mode = Off
+    }
+    table galleryFill {
+      ambient = authoredAmbient
+      hold = 0
+      screens = 1
     }
     // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
     table hallLamps {
@@ -1279,7 +1319,36 @@ for lamp in hallLampLevels {
   }
 }
 
+// The inspection lever: On fills every surface with a flat sky ambient, pins the camera at one exposure and takes the
+// screens out of the traced light, so an agent's capture or a person's eye reads albedo and form the same at every
+// exhibit; Off writes the authored values back. The physical lighting (fixtures, strips, blinds, the traced bounce) is
+// untouched either way, so a lighting check turns it Off.
+rule "gallery-inspect-on" {
+  when galleryInspect[$"mode"] == 1
+  mode: Edge
+  galleryFill[$"ambient"] = inspectAmbient
+  galleryFill[$"hold"] = inspectHold
+  galleryFill[$"screens"] = 0
+}
+rule "gallery-inspect-off" {
+  when galleryInspect[$"mode"] == 0
+  mode: Edge
+  galleryFill[$"ambient"] = authoredAmbient
+  galleryFill[$"hold"] = 0
+  galleryFill[$"screens"] = 1
+}
+
 commands [
+  {
+    name: "gallery.inspect"
+    help: "Switches the gallery's inspection fill On or Off: On gives every surface a flat sky ambient, pins the camera's exposure and keeps the screens out of the traced light, so captures read the same at every exhibit; Off restores the authored lighting exactly. Beside the physical lighting (gallery.lights, gallery.blinds), which it does not touch."
+    parameters [
+      { name: "state", kind: Choice, values ["On", "Off"], default: "On" }
+    ]
+    lines [
+      "world.state.cell.set galleryInspect mode {state}"
+    ]
+  }
   {
     name: "gallery.lights"
     help: "Switches a level's room lights in the gallery hall (0 to 3) on or off, as its wall switch does: off darkens the level's ceiling strips and its point light."

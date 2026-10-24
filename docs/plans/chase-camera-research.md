@@ -220,7 +220,7 @@ To let the owner evaluate **Winner 1 (`fade`)**, **Winner 2 (`cutaway`)**, and *
 
 ### A compact tight-space camera gallery course
 
-While `hall.puck` has the lift and the switchback stairs, its main exhibition halls are `50 m × 28 m` open floors, so four classic tight-space edge cases are absent from the debug world. A small solid test structure (placed near the `gi-corner` test room or along the ground-floor lobby edge) should provide:
+While `hall.puck` has the lift and the switchback stairs, its main exhibition halls are `50 m × 28 m` open floors, so four classic tight-space edge cases are absent from the debug world. `camera-course.puck` now provides them as one solid placement west of the `gi-corner` test room (reached by `debug.go camera-course`, `camera-tunnel`, `camera-colonnade` and `camera-bays`, listed in `debug.md`):
 
 - **A narrow L-corridor and dead-end alcove (`1.6 m` wide, `2.6 m` ceiling)**: Tests turning `90°` and `180°` in a hallway narrower than half the authored `4.2 m` boom, comparing how `fade`, `cutaway`, and `firstPerson` handle continuous side-wall and back-wall compression.
 - **A low-soffit tunnel (`2.25 m` ceiling dropping from `3.5 m`)**: Just `19 cm` above the suited Moth's `2.06 m` helmet, where an overhead rise (`63°`) is immediately blocked by the ceiling slab above her head. This directly contrasts Winner 1 (which stays level and fades her as the back wall closes) against Winner 2 (which must cut away the ceiling slab as well as the wall) and Option 3 (which pulls into her head under the soffit).

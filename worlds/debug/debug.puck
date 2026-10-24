@@ -31,6 +31,8 @@ import "hall"
 import "chess"
 import "paintings"
 import "wonderland"
+import "camera-course"
+import "probe-beacon"
 import "places"
 import "noclip"
 import "size"
@@ -114,7 +116,29 @@ views {
   studioLayouts()
 }
 
-cameras: concat(studioCameras, motionCameras)
+// The probe's camera (probe-beacon.puck): a small offscreen view of the reference cubes from the south, which the probe
+// tints and the camera course's screen shows.
+cameras: concat(
+  studioCameras,
+  motionCameras,
+  [
+    {
+      anchor: null
+      name: "beacon-eye"
+      renderHeight: 72
+      renderWidth: 128
+      rig {
+        name: "beacon-eye"
+        operations [
+          anchor(subject: worldPoint(point: [-8, 2.5, 13]))
+          lookAt(subject: worldPoint(point: [-8, 1.5, 6]))
+          fieldOfView(fieldOfViewRadians: 0.9)
+        ]
+        version: "puck.camera.program.v1"
+      }
+    }
+  ]
+)
 
 // Recovery at the hero spawn lands above the studio platform. The gallery adds a spawn point per exhibit
 // (shapes.puck's gallerySpawns) and the gallery.* commands (galleryCommands) that walk, inspect and flag them.
@@ -135,14 +159,14 @@ bodies {
 }
 
 placements {
-  // Eleven derived face screens: the painting wing's six canvases (paintings.puck), the Wonderland doors' two
-  // (wonderland.puck) and the rate range's three windows (range.puck).
+  // Twelve derived face screens: the painting wing's six canvases (paintings.puck), the Wonderland doors' two
+  // (wonderland.puck), the rate range's three windows (range.puck) and the probe screen (camera-course.puck).
   policy {
-    authoringHeadroomPlacements: 24
+    authoringHeadroomPlacements: 22
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    derivedFaceScreens: 11
+    derivedFaceScreens: 12
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1

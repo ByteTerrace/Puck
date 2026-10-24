@@ -7427,7 +7427,7 @@ render {
   upscaleSharpness: 0
   tonemap: Filmic
   environment {
-    ambient: 0.4
+    ambient: 0.40625
     reflection: 1
   }
 }

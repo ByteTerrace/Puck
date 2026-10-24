@@ -10544,6 +10544,59 @@
                 "null"
               ],
               "default": null
+            },
+            "hold": {
+              "description": "A bindable EV100 that pins the exposure while it is above zero, in [0, 20]: every view then renders manual at that value with no local adaptation, whatever Mode and the bounds say, and zero (the value of an unbound or released hold) leaves the authored exposure exactly as it was. The bounds still size each point and spot light\u0027s range, so a hold never changes the lights the volume traces. Absent is no hold.",
+              "default": null,
+              "title": "BindableScalar",
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "clock": {
+                      "type": "string"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "value": {
+                            "type": "number"
+                          },
+                          "ease": {
+                            "type": "string",
+                            "enum": [
+                              "Linear",
+                              "Smooth",
+                              "Step"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "clock",
+                    "keys"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             }
           },
           "additionalProperties": false,

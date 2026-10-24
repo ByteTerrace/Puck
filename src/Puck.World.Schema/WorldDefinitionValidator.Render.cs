@@ -372,10 +372,12 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The camera exposure: each value within the range a camera can take, and the automatic bounds in order.
-    private static void ValidateExposure(WorldRenderExposure? exposure, List<string> errors) {
+    private static void ValidateExposure(WorldDefinition definition, WorldRenderExposure? exposure, List<string> errors) {
         if (exposure is null) {
             return;
         }
+
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureHold, path: "render.exposure.hold", scalar: exposure.Hold);
 
         foreach (var (value, name) in new (float?, string)[] { (exposure.Ev100, "ev100"), (exposure.Minimum, "minimum"), (exposure.Maximum, "maximum") }) {
             if (value is { } ev) {

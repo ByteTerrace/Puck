@@ -2199,12 +2199,23 @@ own declared range; a parameter binding targeting the same field overwrites a
 single-instance row's one instance is written and a seat-relative row's every
 live instance is written; with a suffix, only that one instance.
 
-No live world declares a probe. A quarantined example track
-(`experimental/src/Puck.World/Assets/probes/tracks/brio-head.probe-track.json`) and the verbs above are the
-probe surface. A district that needs a camera reading authors its `probes` rows
-on the one world and proves them with `probe.status`, `body.channels`, and
-`wire.errors`; the kernel's own numbers are pinned hardware-free by
-`tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs`.
+The debug world declares two probes (`worlds/debug/probe-beacon.puck`): `beacon`, a
+track-input row of the `average` kind that plays `worlds/debug/probes/beacon.probe-track.json`
+(32 readings at 4 Hz, looping every 8 s), and `meter`, an `average` kernel reading the
+offscreen camera `beacon-eye`. Three `parameter` bindings write the track's channels into
+the meter's `tintR`, `tintG` and `tintB`, and the meter's output is the face of the
+`beacon-screen` placement on the camera course's cool-bay wall, so the picture breathes
+between colours with no device attached. `probe.status` shows both probes, the latest
+reading and each binding's value and write count. The playback clock is the wall clock,
+so a probe's reading is not reproducible: an `axis` binding feeds a channel into the
+authoritative tick and makes `puck test --reproduce` refuse the world, while a `parameter`
+binding writes presentation only. A probe that steers state belongs in an operated world.
+A district that needs a camera reading authors its `probes` rows the same way and proves
+them with `probe.status`, `body.channels`, and `wire.errors`; the kernel's own numbers
+are pinned hardware-free by
+`tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs`. A quarantined example track
+(`experimental/src/Puck.World/Assets/probes/tracks/brio-head.probe-track.json`) records a
+live head.
 
 ## Graphics options
 

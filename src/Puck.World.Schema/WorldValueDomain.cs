@@ -107,6 +107,11 @@ public static class WorldValueFields {
     ));
     /// <summary>The sky's ambient gain.</summary>
     public static WorldValueField EnvironmentAmbient { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Ambient), WorldValueDomain.NonNegative);
+    /// <summary>The camera exposure's hold, in <c>EV100</c>: zero releases it.</summary>
+    public static WorldValueField ExposureHold { get; } = new(typeof(WorldRenderExposure), nameof(WorldRenderExposure.Hold), new WorldValueDomain(
+        Maximum: SdfPhotometry.MaximumEv100,
+        Minimum: 0f
+    ));
     /// <summary>The sky's reflection gain.</summary>
     public static WorldValueField EnvironmentReflection { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Reflection), WorldValueDomain.NonNegative);
     /// <summary>A sky panel's intensity.</summary>
@@ -281,6 +286,7 @@ public static class WorldValueFields {
         PanelBlur,
         EnvironmentAmbient,
         EnvironmentReflection,
+        ExposureHold,
         RimLuminance,
         RimPower,
         PointIntensity,

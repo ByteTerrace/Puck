@@ -9655,6 +9655,10 @@ export type WorldRenderExposure = {
    * The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.
    */
   local?: number | null;
+  /**
+   * A bindable EV100 that pins the exposure while it is above zero, in [0, 20]: every view then renders manual at that value with no local adaptation, whatever Mode and the bounds say, and zero (the value of an unbound or released hold) leaves the authored exposure exactly as it was. The bounds still size each point and spot light's range, so a hold never changes the lights the volume traces. Absent is no hold.
+   */
+  hold?: BindableScalar;
 };
 
 export type WorldRenderFog = {

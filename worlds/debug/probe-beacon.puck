@@ -1,0 +1,38 @@
+// The debug world's one live probe: a recorded track standing in for a camera. The `beacon` probe plays
+// probes/beacon.probe-track.json (a `puck.probe.track.v1` document: 32 readings of the `average` kind's three channels at
+// 4 Hz, looping every 8 s) in place of a live device. Its three channels drive the tint of a second probe, `meter`, an
+// `average` kernel reading the offscreen camera `beacon-eye` (debug.puck; it looks at the reference cubes), so the picture
+// the meter writes breathes between colours every 8 s with no device attached. The meter's output is the face of the
+// screen on the camera course's back wall in its cool bay (camera-course.puck): `debug.go camera-bays`, then look at
+// the wall. `probe.status` echoes both probes, the latest reading and each binding's value and write count;
+// `probe.record <probe> <path> <seconds>` records a live probe to the same format.
+//
+// The path from the track to the picture is presentation only, so it never touches simulation state: a probe plays on the
+// wall clock and a reading that reached a rule or a body register through an axis binding would make two runs of a world
+// differ (`puck test --reproduce` refuses such a world). A probe drives a presentation float, a post pass field or another
+// probe's config, as here; to steer a body or a rule, route its axis through an input channel in a world that is
+// operated rather than reproduced.
+
+schema: "puck.world.definition.v1"
+
+probes [
+  {
+    id: "beacon"
+    kind: "average"
+    rateHz: 30
+    track: "probes/beacon.probe-track.json"
+    bindings [
+      { $type: "parameter", channel: "red", target { $type: "probe", id: "meter", field: "tintR" }, range [0.2, 1], maxAgeSeconds: 1 }
+      { $type: "parameter", channel: "green", target { $type: "probe", id: "meter", field: "tintG" }, range [0.2, 1], maxAgeSeconds: 1 }
+      { $type: "parameter", channel: "blue", target { $type: "probe", id: "meter", field: "tintB" }, range [0.2, 1], maxAgeSeconds: 1 }
+    ]
+  }
+  {
+    id: "meter"
+    kind: "average"
+    rateHz: 30
+    inputs {
+      frame: view(cameraName: "beacon-eye")
+    }
+  }
+]

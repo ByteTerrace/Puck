@@ -54,6 +54,25 @@ preference. The screen-door fade affects only her own seat view; mirrors and
 portals still show her. The camera's full authoring contract is in
 [views](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance).
 
+### The camera course
+
+West of the `gi-corner` room, at x -26 .. -13 and z 16 .. 44, a small solid
+course (`camera-course.puck`) holds four more tight spaces, each reached with
+`debug.go`:
+
+| Place | Structure | What it tests |
+|---|---|---|
+| `camera-course` | An L-corridor 1.6 m wide and 2.6 m high: a west entrance, a turn south and a dead end, with a side niche on the north wall | 90 and 180 degree turns in a hallway narrower than half the 4.2 m boom |
+| `camera-tunnel` | A 2.4 m wide passage whose ceiling drops from 3.5 m to a 2.25 m soffit | Overhead blocking 19 cm over the suited Moth's helmet |
+| `camera-colonnade` | Eight 0.35 m pillars on a 1.6 m pitch, with a 1.2 m walkway between them and the wall | Pillars passing between the camera and the Moth while walking parallel to a wall |
+| `camera-bays` | Two bays under their own ceiling lamps (warm and cool) divided by a 0.15 m partition, open at the south end | Whether the camera reveals the adjacent bay when she backs against the partition |
+
+`debug.go lift` and `debug.go stairs` reach the lift car and the stairwell's
+half landing. The screen on the cool bay's back wall is the debug world's
+probe: a recorded `puck.probe.track.v1` track (`probes/beacon.probe-track.json`,
+`probe-beacon.puck`) tints a camera's view of the reference cubes and breathes
+between colours every 8 s; `probe.status` reads both probes.
+
 For the wall fade, use `body.pose 16 0.1 38.7 0 0 0` in `fade`, then
 `body.pose 16 0.1 39.1 0 0 0` to move closer and hide her completely. The lift's
 usual 1.4 m boom remains outside the fade range: its improvement is the shared
@@ -157,6 +176,9 @@ case, `stage` when omitted:
 | `portal-link` | (54.5, 0.05, 34.5), before the west painting of the linked pair | -X; walk ahead to come out of the east one |
 | `portal-fall` | (66, 0.05, 18.6), south of the floor painting | +Z; walk ahead to drop in |
 | `gallery` | (16, 0, 9), outside the gallery hall's entrance | +Z, through the door |
+| `lift`, `stairs` | (16, 0.1, 38) in the lift car (call it with `gallery.lift 0`) and (12.2, 2.3, 38.7) on the stairwell's half landing | -Z |
+| `camera-course`, `camera-tunnel`, `camera-colonnade` | (-28, 0, 18.8), (-28, 0, 30.2) and (-27.5, 0, 33.8), before the course's L-corridor, tunnel and colonnade | +X, into the structure |
+| `camera-bays` | (-23.5, 0, 36.8), before the two bays and their partition | +Z |
 | `gallery-level-0` .. `gallery-level-3` | (15.9, 4.5k + 0.05, 34), each level's landing in the hall | +Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |
 | `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |

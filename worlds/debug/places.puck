@@ -29,7 +29,7 @@ spawnPoints [
 commands [
   {
     name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, chess, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the debug world's places (stage, devices, chess, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, or any spawn point) and returns the view to the play layout's chase camera."
     parameters [
       { name: "place", kind: Spawn, default: "stage" }
       { name: "body", kind: Body, default: "0" }

@@ -224,6 +224,10 @@ public sealed record WorldRenderDefaults(
 /// dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts
 /// across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the
 /// irradiance volume on.</param>
+/// <param name="Hold">A bindable <c>EV100</c> that pins the exposure while it is above zero, in <c>[0, 20]</c>: every
+/// view then renders manual at that value with no local adaptation, whatever <paramref name="Mode"/> and the bounds say,
+/// and zero (the value of an unbound or released hold) leaves the authored exposure exactly as it was. The bounds still
+/// size each point and spot light's range, so a hold never changes the lights the volume traces. Absent is no hold.</param>
 public sealed record WorldRenderExposure(
     SdfExposureMode Mode = SdfExposureMode.Manual,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Ev100 = null,
@@ -231,7 +235,8 @@ public sealed record WorldRenderExposure(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Maximum = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Compensation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Adaptation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Hold = null
 ) {
     /// <summary>The lowest an exposure's compensation admits, in stops.</summary>
     public const float MinCompensation = -10f;
@@ -248,6 +253,26 @@ public sealed record WorldRenderExposure(
         if (exposure is null) {
             return SdfExposure.Default;
         }
+
+        return ResolveSection(exposure: exposure);
+    }
+    /// <summary>Returns the exposure a frame's views map luminance by under a resolved hold: the pinned manual exposure
+    /// while <paramref name="hold"/> is above zero, otherwise <see cref="Resolve(WorldRenderExposure?)"/>.</summary>
+    /// <param name="exposure">The authored section, or <see langword="null"/>.</param>
+    /// <param name="hold">The resolved <see cref="Hold"/>, in <c>EV100</c>; zero or less is no hold.</param>
+    /// <returns>The exposure.</returns>
+    public static SdfExposure Held(WorldRenderExposure? exposure, float hold) {
+        var authored = Resolve(exposure: exposure);
+
+        return ((hold > 0f)
+            ? (authored with {
+                Ev100 = hold,
+                Local = 0f,
+                Mode = SdfExposureMode.Manual,
+            })
+            : authored);
+    }
+    private static SdfExposure ResolveSection(WorldRenderExposure exposure) {
 
         var automatic = (exposure.Mode == SdfExposureMode.Auto);
         var minimum = (exposure.Minimum ?? (automatic ? SdfPhotometry.MinimumEv100 : (exposure.Ev100 ?? SdfExposure.DefaultEv100)));
