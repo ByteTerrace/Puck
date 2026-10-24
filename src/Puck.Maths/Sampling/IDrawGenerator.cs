@@ -8,10 +8,6 @@ namespace Puck.Maths;
 /// copy of it. Implemented by both generators; never boxed — a caller constrains its own generic parameter
 /// <c>where TGenerator : struct, IDrawGenerator</c> and threads it by <c>ref</c>, so the JIT specializes one
 /// non-virtual body per concrete generator with no interface dispatch at the call site.
-/// An implementer holding no references is treated as a pure value whose draws are a function of its own fields
-/// alone, so a copy taken after a draw restores the stream exactly; <see cref="PrimeExploration.TryRandomPrime{TGenerator}(ulong, ulong, ref TGenerator, out ulong, int)"/>
-/// decides candidates speculatively on that basis. An implementer whose draws depend on static, native or other
-/// external state must hold a reference, which selects the sequential order instead.
 /// </summary>
 public interface IDrawGenerator {
     /// <summary>Draws the next 32 uniformly random bits.</summary>

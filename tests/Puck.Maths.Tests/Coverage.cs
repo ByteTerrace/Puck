@@ -222,7 +222,7 @@ internal static class Coverage {
     // the category reviewable as a category rather than as a pile of one-off prose.
     private const string FieldSeamCarrierReason = "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.";
     private const string FieldSeamReason = "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.";
-    private const string KernelShapeReason = "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung and signed-byte-vectors.dot-tiers-vs-scalar-rung, the eight packet residues at prime-exploration.wheel-tables-match-their-derivation, the three prefix windows at prime-selection.gourdon-leaf-sieve-rungs-vs-oracle, and the two units-below lookups at prime-selection.gourdon-quotient-rungs. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.";
+    private const string KernelShapeReason = "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung and signed-byte-vectors.dot-tiers-vs-scalar-rung.";
     private const string PositionalCarrierReason = "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.";
     private const string ReferenceRungLabelReason = "The label of the always-available reference rung. The rung laws reach that rung by calling its kernel by name (BinaryFieldKernels.MultiplyAccumulateRegionScalar, SignedByteVectorFunctions.DotScalar) and credit the kernel, which binary-field.region-tiers-vs-scalar-rung, binary-field.narrow-degree-regions-vs-oracle, signed-byte-vectors.dot-vs-oracle and signed-byte-vectors.dot-tiers-vs-scalar-rung gate. No dispatch selects a rung by passing this label, and each support predicate answers true for it unconditionally, so nothing a law could observe turns on it.";
     private const string SecondOrderPrecisionBudgetReason = "A working-precision budget inside the exact BigInteger evaluation SecondOrderDynamics.Compile runs (the guard fraction bit count, the exponential's range-reduction shift and its underflow floor): it states no value of its own, and any setting at or past what the Q32 propagator needs leaves every public entry bit-identical, so no law can pin THIS number without pinning the implementation. What the budget buys is gated at the public result: dynamics.step-vs-evaluate-close-agreement holds Compile against the independently built Evaluate path, and dynamics.guard-scale-public-divergence-search transcribes these constants to reach the exact roundings Compile performs.";
@@ -557,18 +557,6 @@ internal static class Coverage {
             names: ["Add", "ByteCount", "Load", "Multiply", "Sum", "Widen"],
             type: typeof(ISignedByteWideningLanes<,,>)
         ),
-        .. KernelShapeWaivers(
-            names: ["Masks", "Residue"],
-            type: typeof(PrimeSieveKernels.IPacketResidue)
-        ),
-        .. KernelShapeWaivers(
-            names: ["IsPrimeCandidate"],
-            type: typeof(IPrimeCandidateDecision)
-        ),
-        .. KernelShapeWaivers(
-            names: ["Below", "InstructionSet", "IsSupported"],
-            type: typeof(PrimeDivisionKernels.IGourdonUnitsBelow512)
-        ),
 
         (new CoverRef(
             Name: "Scalar",
@@ -585,22 +573,6 @@ internal static class Coverage {
         (new CoverRef(
             Name: "value__",
             Type: typeof(SignedByteVectorTier)
-        ), EnumStorageReason),
-        (new CoverRef(
-            Name: "value__",
-            Type: typeof(PrimeCountRoute)
-        ), EnumStorageReason),
-        (new CoverRef(
-            Name: "value__",
-            Type: typeof(PrimeRequestRoute)
-        ), EnumStorageReason),
-        (new CoverRef(
-            Name: "value__",
-            Type: typeof(PrimeSieveMode)
-        ), EnumStorageReason),
-        (new CoverRef(
-            Name: "value__",
-            Type: typeof(PrimeLeafKernels.CombinatorialPrefixWindowKind)
         ), EnumStorageReason),
 
         .. new[] { ".ctor", "CenterX", "CenterY", "CenterZ", "Ixx", "Ixy", "Ixz", "Iyy", "Iyz", "Izz", "Mass" }.Select(selector: name => (new CoverRef(

@@ -4,8 +4,7 @@ using Puck.Maths;
 namespace Puck.Cli.Bench;
 
 // The two noise samplers at a field-fill shape (one seed, many positions), the hex-grid distance a pathfinder pays per
-// neighbour, the modular cusp action, and a segmented sieve window — the machine-word paths that replaced wide or
-// per-bit work.
+// neighbour and the modular cusp action — the machine-word paths that replaced wide or per-bit work.
 [MemoryDiagnoser]
 public class LatticeKernels {
     private const int Count = 4096;
@@ -85,17 +84,5 @@ public class LatticeKernels {
         }
 
         return sink;
-    }
-    [Benchmark]
-    public long SieveWindow() {
-        var count = 0L;
-
-        PrimeExploration.Enumerate(
-            high: ((1UL << 32) + (1UL << 20)),
-            low: (1UL << 32),
-            onPrime: _ => ++count
-        );
-
-        return count;
     }
 }

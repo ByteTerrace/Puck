@@ -39,19 +39,13 @@ dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReus
 | --- | --- | --- |
 | Default | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build` | Ordinary laws and structural checks |
 | Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Deep` | Broader domains and finite carriers |
-| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Exhaustive` | full-carrier sweeps and expensive finite combinatorial-prime checks |
+| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Exhaustive` | full-carrier sweeps |
 
 The Default tier reaches the line coverage CI counts for `Puck.Maths`. Deep holds
 what Default does not reach: the exhaustive
 four-operand edge cross product (`Domains.Quads`), finite carriers swept whole (the 16-bit unit fraction, GF(2^8)), and
 modulus, degree and band ladders longer than Default's. A Deep row that only draws more random operands from the
 same domain as its Default sibling adds no evidence and does not belong. For the same reason there is no Smoke tier.
-
-The high-bound combinatorial-prime checks use Exhaustive to keep expensive
-counts and rank searches out of the ordinary Deep run. Their declarations
-name a finite set of operands: this scheduling choice does not establish a
-whole-domain proof. Run budgets are measured separately through the prime-request
-survey; a selected finite fixture does not bound every request in its tier.
 
 ## Structural law completeness
 
