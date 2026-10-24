@@ -177,6 +177,10 @@ than writing a boot line:
   bounds the lease wait and the boot, and a World that has not attached by
   then is stopped. It runs from the checkout's build output, so stop it before
   rebuilding that checkout.
+  Worktree discovery runs Git with its own closed stdin, because Git for Windows
+  probes inherited input during startup and can block behind the adapter's MCP
+  read. A discovery refusal distinguishes a 30-second timeout, a failure to start
+  Git, and Git's own exit code and stderr.
 - `puck_world_stop` ends a World this adapter started, by its recorded
   process: it sends `quit`, kills the process tree if the World has not exited
   within `timeoutMs`, releases its lease, deletes its state directory and
