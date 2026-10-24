@@ -268,7 +268,7 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real `Puck
 | `Puck.HumbleGamingBrick.Tests` | The component snapshot round-trip law, the battery hang guard, and the executable self-contained battery over an empty corpus cache. |
 | `Puck.HumbleGamingDeck.Tests` | Deck M2 edge timing, loader-header tests, AccuracyCoin result reporting, and the executable Tier A gate. |
 | `Puck.HumbleGamingDeck.Post` | The Deck battery: determinism, allocation, snapshots, the shared host-contract probes, original CPU, picture, controller, DMA and APU fixtures with independent oracles, the shipped test cartridges' pictures, all nes6502 vectors, nestest's trace with its PPU column, and a nestest boot driven through the controller. |
-| `Puck.AdvancedGamingBrick.Post` | Advanced core conformance, determinism, commercial-ROM, link, co-simulation, and diagnostic tooling. |
+| `Puck.AdvancedGamingBrick.Post` | Advanced core conformance, determinism, link, co-simulation, and diagnostic tooling. |
 | `Puck.Machines.Post` | The battery scaffold all three Post projects reference: `PostVerdict`/`PostTier` (verdict class and fast→slow tier), `PostStageOutcome`/`PostStageResult` (a stage's return and its report row), the generic runner `PostBattery<TContext>` over `IPostStage<TContext>` into a `PostReport`, `PostProgressGuard` (the hang guard), `HashDivergenceReport`, `CorpusManifest`, and `CommandLineArguments` (flag-value lookup). Each battery's own `PostContext` and stage list stay in the owning project—they diverge per machine (BIOS image, corpus roots, console model) and are not shared. |
 
 ## Experimental projects

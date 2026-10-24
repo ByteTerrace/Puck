@@ -19,14 +19,10 @@ BIOS the BIOS-dependent stages skip.
 | `--tier A|B|C` | Run one tier. |
 | `--filter <text>` | Run stages whose names contain the text. |
 | `--parallelism <n>` | Cases measured at once inside a corpus stage; default one per logical processor. |
-| `--bios <file>` | The 16 KiB comparison/test BIOS. Without it the battery runs a zeroed stub, on which its BIOS-dependent stages skip, and the diagnostics (`--render`, `--probe`, `--trace-crash` and the rest) run the bundled Puck firmware a World boots. Bundled-firmware stages always use the packaged Puck image. |
+| `--bios <file>` | The 16 KiB comparison/test BIOS. Without it the battery runs a zeroed stub, on which its BIOS-dependent stages skip, and the diagnostics (`--render`, `--trace-crash` and the rest) run the bundled Puck firmware a World boots. Bundled-firmware stages always use the packaged Puck image. |
 | `--roms <directory>` | A conformance-corpus root instead of the cached `gba-tests` corpus. |
 | `--fuzz <directory>` | A fuzz-corpus root instead of the cached `fuzzarm` corpus. |
-| `--games <directory>` | The commercial-ROM directory for the render-hash floors. |
 | `--accuracy-suite <file>` | The accuracy-suite ROM; its stage skips without it. |
-| `--ags <file>` | The AGS aging-cartridge ROM; its stage skips without it. |
-| `--link-game <file>` | A commercial multiplayer cartridge for `link-game-replay`; skips without it. |
-| `--solar-rom <file>` | A commercial solar-sensor cartridge for `solar-replay`; skips without it. |
 | `--artifacts <directory>` | Override `artifacts/agb-post`. |
 | `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
 | `--corpus-cache <directory>` | Cache root used for fetching and resolving corpora; default is `Puck/corpora` under the OS local application-data directory. |
@@ -45,9 +41,13 @@ except the throughput and zero-alloc measurements, which run alone.
 
 | Tier | Coverage | Assets |
 |---|---|---|
-| A | CPU and bus smoke vectors; bundled firmware services, reset, presentation and legacy sound; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; solar-sensor device protocol; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; selected firmware and execution-parity fixtures additionally use a verified retail BIOS when available |
-| B | firmware result oracle; conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
-| C | normal serial clock ownership; native firmware download; deterministic multiplayer cable replay, a commercial link-game replay and a commercial solar-sensor light-script replay | synthetic replay and firmware download need none; commercial replays need a retail BIOS and `--link-game` or `--solar-rom` |
+| A | CPU and bus smoke vectors; bundled firmware services, reset, presentation and legacy sound; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; solar-sensor device protocol; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; selected firmware and execution-parity fixtures add retail-BIOS controls only when a retail image is named by hand with `--bios` |
+| B | conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite | assets listed below; stages skip when absent |
+| C | normal serial clock ownership; native firmware download; deterministic multiplayer cable replay and churn | none |
+
+No stage requires a commercial ROM or a retail BIOS, and no CI step supplies
+one. A retail image is a local, by-hand input to `--bios` or a diagnostic and
+is never committed.
 
 The asset-free `lifecycle` stage checks HALT/STOP cycle budgets, keypad wake
 and snapshot replay, DMA during HALT, the fourteen-bit DMA0–2 and sixteen-bit
@@ -100,21 +100,6 @@ image identical across compared builds: another firmware implementation may
 reach a different frame within that budget. A shifted floor needs an explanation,
 not an automatic update merely because a replacement BIOS can draw a picture.
 
-`firmware-oracle` compares the bundled image with a locally supplied, verified
-retail BIOS through original ARM and Thumb calling cartridges. It compares
-documented arithmetic results, affine outputs (including zero and odd byte
-strides), transfers, bit unpacking and
-decompression in RAM, plus SoundBias direction and output-resolution bits in
-its I/O register. It reports bounded mismatch examples and per-service
-totals; it neither reads out firmware code nor treats timing or unspecified
-register clobbers as functional equality. Without a verified retail image,
-this stage skips instead of claiming independent evidence.
-Explicit non-unit numerators divided by zero are reported separately: both
-images must remain within BIOS for a two-million-instruction observation,
-advance clocks and preserve snapshot replay. That is bounded nonreturn evidence,
-not a proof of infinite execution or a successful arithmetic result. Every
-unexpected timeout in a returning-result case remains a failure.
-
 `firmware-legacy-sound` checks music-player management, exported commands,
 installed command/note/PSG callbacks and all four PSG voice layouts. It also
 checks exact stereo PCM blocks, fractional-rate interpolation, release and fade
@@ -166,11 +151,7 @@ everything else is a per-machine file named on the command line.
 | 16 KiB AGB BIOS | (retail dump) | `--bios` |
 | conformance + PPU corpus | jsmolka `gba-tests` | `corpora.json`, or `--roms` |
 | ARM fuzz corpus | `DenSinH/FuzzARM` | `corpora.json`, or `--fuzz` |
-| commercial-ROM root | (user ROMs) | `--games` |
 | accuracy-suite ROM | `mgba-emu/suite` (built from source) | `--accuracy-suite` |
-| TCHK10 AGS aging cartridge | (aging-cartridge dump) | `--ags` |
-| commercial multiplayer cartridge | (user ROM) | `--link-game` |
-| commercial solar-sensor cartridge | (user ROM) | `--solar-rom` |
 
 Diagnostics that depend on retail BIOS timing reject replacement or unknown
 images unless `--allow-replacement-bios` is supplied deliberately. Missing
@@ -247,7 +228,7 @@ machines and identifies the first differing snapshot section and byte. Use
 - `--iodump` records I/O state.
 - `--gen-rom` writes a hand-assembled diagnostic cartridge.
 - `--oracle` runs the self-contained cycle-probe set.
-- `--ags` and `--accuracy-suite` run their configured evidence cartridges.
+- `--accuracy-suite` runs the configured evidence cartridge.
   `--accuracy-suite <rom> --suite-focus <text>` prints the failing-subtest
   detail only for suites whose names contain the text, case-insensitively, and
   prints it for every failing suite without the flag, at most 80 lines a suite.
@@ -271,17 +252,17 @@ the cosim oracle. Normalize the traces before interpreting a mismatch:
 - Puck's pipeline representation exposes PC four bytes ahead of the oracle's trace;
 - direct-boot and full-BIOS runs have different initial state. Lockstep boots
   the BIOS by default; its positional `direct` selects direct boot on both
-  sides. The `--render` and `--probe` inspectors default to direct boot and
-  accept `--full-boot` to start from BIOS reset.
+  sides. The `--render` inspector defaults to direct boot and accepts
+  `--full-boot` to start from BIOS reset.
 
 Use a minimal self-checking ROM when isolating one timing rule. Store the result
 in emulated memory and compare the observable value before using an instruction
 trace to explain it.
-`--ags-trace` enables detailed AGS tracing. `--no-rtc`, `--no-prefetch` and `--bus-trace`
+`--no-rtc`, `--no-prefetch` and `--bus-trace`
 map to `AgbMachineOptions`; the trace goes to standard error. These overrides
-are supported by `--render`, `--probe`, `--ags`, `--accuracy-suite`,
-`--lockstep`, `--pctrace`, `--statetrace`, `--trace-cycles`, `--trace-crash`,
-`--iodump` and `--link-init-trace`. Battery, benchmark, oracle and snapshot
+are supported by `--render`, `--accuracy-suite`,
+`--lockstep`, `--pctrace`, `--statetrace`, `--trace-cycles`, `--trace-crash`
+and `--iodump`. Battery, benchmark, oracle and snapshot
 comparison runs use normal hardware settings and reject these overrides.
 
 ## Accuracy workflow

@@ -283,8 +283,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
                     access: BusAccessType.NonSequential,
                     address: 0x04000088
                 );
-                // Independently checked by firmware-oracle: up means raise to at least 0x200, never lower a
-                // caller-selected higher bias. Both directions retain the output-resolution bits.
+                // Up means raise to at least 0x200, never lower a caller-selected higher bias. Both directions retain the output-resolution bits.
                 var expected = (initial & ~0x3FF) | (enabled
                     ? Math.Max(
                         val1: initial & 0x3FF,

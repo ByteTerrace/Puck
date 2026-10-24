@@ -4,9 +4,9 @@ using Puck.AdvancedGamingBrick.Post;
 // Puck.AdvancedGamingBrick.Post — the AdvancedGamingBrick machine's power-on self-test and the primary way the machine is
 // validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check failed), or 2 (a
 // stage could not run). There is no rich CLI for the battery: a few hand-parsed knobs — where artifacts land, the corpus
-// roots and per-machine cartridges, and an optional tier/name subset for iterating. Tier A runs anywhere on
+// roots and the accuracy-suite cartridge, and an optional tier/name subset for iterating. Tier A runs anywhere on
 // hand-assembled vectors and a synthetic cartridge; Tier B needs the corpora declared in corpora.json (--fetch-corpora
-// fills the cache), a real BIOS (--bios), or user ROMs (--games), and its stages skip when those are absent. The
+// fills the cache) or the accuracy-suite cartridge, and its stages skip when those are absent. The
 // accuracy-frontier diagnostic modes (the cosim oracles, single-ROM inspectors) live in Diagnostics and run before the
 // battery when their flag is present; see the README.
 
@@ -49,7 +49,7 @@ if (
     machineOptions.DisableRtc ||
     (machineOptions.BusTrace is not null)
 ) {
-    string[] supported = ["--render", "--probe", "--ags", "--accuracy-suite", "--lockstep", "--pctrace", "--statetrace", "--trace-cycles", "--trace-crash", "--iodump", "--link-init-trace"];
+    string[] supported = ["--render", "--accuracy-suite", "--lockstep", "--pctrace", "--statetrace", "--trace-cycles", "--trace-crash", "--iodump"];
 
     if (!args.Any(predicate: arg => supported.Contains(
         value: arg,
@@ -124,10 +124,6 @@ var context = new PostContext(
         args: args,
         name: "--accuracy-suite"
     )),
-    agsPath: ExistingFile(path: CommandLineArguments.Value(
-        args: args,
-        name: "--ags"
-    )),
     artifactsDirectory: artifactsDirectory,
     biosImage: (explicitBios ?? new byte[ReplacementBios.ImageSize]),
     fuzzRoot: corpora.Resolve(
@@ -135,19 +131,7 @@ var context = new PostContext(
         flag: "--fuzz",
         name: "fuzzarm"
     ),
-    gamesRoot: ExistingDirectory(path: CommandLineArguments.Value(
-        args: args,
-        name: "--games"
-    )),
-    linkGamePath: ExistingFile(path: CommandLineArguments.Value(
-        args: args,
-        name: "--link-game"
-    )),
     parallelism: parallelism,
-    solarRomPath: ExistingFile(path: CommandLineArguments.Value(
-        args: args,
-        name: "--solar-rom"
-    )),
     testRomRoot: corpora.Resolve(
         args: args,
         flag: "--roms",
@@ -165,11 +149,6 @@ if (report.Abandoned) {
     Environment.Exit(exitCode: report.ExitCode);
 }
 return report.ExitCode;
-static string? ExistingDirectory(string? path) =>
-    (((path is not null) && Directory.Exists(path: path))
-        ? path
-        : null
-    );
 static string? ExistingFile(string? path) =>
     (((path is not null) && File.Exists(path: path))
         ? path

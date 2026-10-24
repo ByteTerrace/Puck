@@ -12,8 +12,11 @@ destination with the GBATEK contract: copy and fill, 16- and 32-bit units,
 counts, alignment and CpuFastSet's rounding to eight words. Fault laws drive a
 hosted core into Undefined mode, Abort mode and an unmapped fetch, and a linked
 console into Undefined mode through `AgbLinkSession`, and require the named
-`AgbExecutionFaultException`. Hardware accuracy and co-simulation
-evidence belong to the Advanced Post battery.
+`AgbExecutionFaultException`. The self-contained-battery fact launches the
+Advanced Post battery's real executable with an empty corpus cache: every
+self-contained stage runs on hand-assembled vectors and synthetic cartridges, every
+corpus stage skips, and the run must exit 0 and leave its JUnit report. Hardware
+accuracy and co-simulation evidence belong to the Advanced Post battery.
 
 ## Verification
 

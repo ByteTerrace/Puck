@@ -4,9 +4,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// The diagnostic surface of the POST: the cosim-oracle tooling and single-ROM inspectors that drive the
 /// accuracy surface. These are investigative tools, not
 /// self-checking stages; <see cref="TryRun"/> dispatches them from CLI flags before the POST battery runs, so the battery
-/// stays the default. The menu-driven accuracy suite (<see cref="RunAccuracySuite"/>) and the AGS aging cartridge
-/// (<see cref="RunAgs"/>) are conformance runs shared with their Tier-B measurement stages
-/// (<see cref="AccuracySuiteStage"/> / <see cref="AgsStage"/>). Split by mode across the <c>Diagnostics/</c> folder
+/// stays the default. The menu-driven accuracy suite (<see cref="RunAccuracySuite"/>) is a conformance run shared with its
+/// Tier-B measurement stage (<see cref="AccuracySuiteStage"/>). Split by mode across the <c>Diagnostics/</c> folder
 /// (partial-class files, one per CLI flag); this file holds only the dispatch entry and the state every mode shares.
 /// </summary>
 internal sealed partial class Diagnostics {
@@ -256,11 +255,6 @@ internal sealed partial class Diagnostics {
             }
         }
 
-        // --probe <rom> <steps> | --link-init-trace <rom> <loHex> <hiHex> <count> [skip]: blank-screen boot diagnostics.
-        if (TryDiagnostic(args: args)) {
-            return true;
-        }
-
         // --trace-cycles <rom> <steps>: per-instruction cycle trace, to diff against the cosim oracle.
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (args[index] == "--trace-cycles") {
@@ -292,22 +286,6 @@ internal sealed partial class Diagnostics {
                     ),
                     romPath: args[(index + 1)],
                     name: "accuracy suite"
-                );
-
-                return true;
-            }
-        }
-
-        // --ags <rom>: run the AGS aging cartridge (TCHK10 dump) headlessly and print the per-test result stream.
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (args[index] == "--ags") {
-                _ = RunAgs(
-                    trace: args.Contains(
-                        value: "--ags-trace",
-                        comparer: StringComparer.OrdinalIgnoreCase
-                    ),
-                    romPath: args[(index + 1)],
-                    name: Path.GetFileName(path: args[(index + 1)])
                 );
 
                 return true;

@@ -37,7 +37,7 @@ Use evidence in this order:
 4. Game behavior as a compatibility signal, not proof of a hardware rule.
 
 The primary public suites and their use are recorded in
-[Test ROMs and Evidence](test-roms-and-evidence.md). AGS, gba-suite,
+[Test ROMs and Evidence](test-roms-and-evidence.md). The mGBA suite, gba-tests,
 ARMWrestler, and FuzzARM cover different parts of the machine and should not be
 collapsed into a single compatibility score.
 

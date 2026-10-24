@@ -17,11 +17,15 @@ and emulator stop conditions can change a reported total.
 | FuzzARM | broad randomized instruction semantics | failure marker in EWRAM |
 | Puck `--oracle` probes | DMA, timer, IRQ, SIO, latch, and HALTCNT mechanisms | self-check or measured cycle count |
 | mGBA suite | memory, I/O, timing, DMA, timer, SIO, and PPU categories | itemized cells and category totals |
-| AGS TCHK10 cartridge | broad retail-hardware conformance | rendered cell grid |
 | Render-hash floors | deterministic framebuffer behavior | named 64-bit hash |
 | ares lockstep | per-instruction CPU and bus state | first trace divergence |
 | mGBA cycle trace | instruction cycle attribution | normalized delta trace |
-| Commercial games | integration and content compatibility | scripted observable behavior |
+
+No test or battery stage reads a commercial ROM or a retail BIOS. A commercial
+game or retail BIOS is a local, by-hand input to a diagnostic such as `--render`
+or `--lockstep`, and is never committed. The open gaps this leaves (retail
+hardware conformance, commercial link-game behavior) are in
+[open items](../../plans/open-items.md#machines-and-cartridges).
 
 ## Running the optional suites
 
@@ -29,20 +33,12 @@ The battery takes every input on its command line:
 
 ```powershell
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier B `
-    --bios '<16-KiB retail BIOS>' --accuracy-suite '<mGBA suite ROM>' --ags '<TCHK10 AGS cartridge>'
+    --accuracy-suite '<mGBA suite ROM>'
 ```
 
-Commercial render and link stages additionally use `--games` and
-`--link-game`. Missing assets produce skips. The
+Missing assets produce skips. The
 [battery README](../../../src/Puck.AdvancedGamingBrick.Post/README.md) lists
 every option, including `--corpus-cache` for the fetched test-ROM corpora.
-
-## AGS aging cartridge
-
-Use the TCHK10 dump because output-patch locations and cell layout vary between
-revisions. Run with a retail BIOS. One cell depends on a link partner; classify
-that result separately from single-machine failures. Preserve the rendered grid
-as an artifact so a summary count can be audited.
 
 ## mGBA suite totals
 
