@@ -30,7 +30,8 @@ public static class ChildProcess {
     /// <param name="capture">The capture switch: <see langword="true"/> reads both output streams as UTF-8, and
     /// <see langword="false"/> lets the child inherit the console's output streams and leaves both texts empty.</param>
     /// <param name="input">The text written to the child's standard input, which is then closed. When it is
-    /// <see langword="null"/>, standard input is inherited.</param>
+    /// <see langword="null"/>, standard input is inherited. Use <see cref="string.Empty"/> for a noninteractive tool
+    /// that must not share the caller's input pipe (such as an MCP transport).</param>
     /// <param name="timeout">The bound on the run, measured on <paramref name="clock"/>. <see langword="null"/> or
     /// <see cref="Timeout.InfiniteTimeSpan"/> leaves <paramref name="cancellationToken"/> as the only bound.</param>
     /// <param name="clock">The clock the timeout runs on; system time when it is <see langword="null"/>.</param>

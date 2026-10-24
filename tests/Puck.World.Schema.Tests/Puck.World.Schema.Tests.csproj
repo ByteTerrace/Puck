@@ -21,6 +21,9 @@
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
         <Compile Include="../Shared/World/PortalFixtures.cs" Link="World/PortalFixtures.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <!-- The shipped worlds carry mutation-kind masks (an addon's Mutate grants), which parse only through the
+             vocabulary every host installs. -->
+        <Compile Include="../Shared/World/VocabularyHooks.Server.cs" Link="World/VocabularyHooks.Server.cs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="JsonSchema.Net" Version="[9.*, )" />
@@ -30,6 +33,7 @@
         <!-- The shipped worlds are read as the game resolves them: a document with a .puck source is that source,
              compiled and composed through the transpiler's document composer. -->
         <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

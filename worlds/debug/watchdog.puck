@@ -32,7 +32,14 @@ hud {
       rect { x: 0.66, y: 0.02, width: 0.32, height: 0.05 }
       layer: Over
       style: Chip
-      visible { $type: "state", binding: "state.watchdog.count", comparison: NotEqual, value: 0 }
+      // Shown only with the addon HUD toggle on (addon-hud.puck) and a violation recorded.
+      visible {
+        $type: "all"
+        predicates [
+          { $type: "state", binding: "state.addonHud", comparison: Equal, value: 1 }
+          { $type: "state", binding: "state.watchdog.count", comparison: NotEqual, value: 0 }
+        ]
+      }
       elements [
         { id: "line", kind: Text, rect { x: 0.03, y: 0, width: 0.94, height: 1 }, style: Danger, "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}" }
       ]
