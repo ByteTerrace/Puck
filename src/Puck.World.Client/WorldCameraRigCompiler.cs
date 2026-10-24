@@ -19,6 +19,8 @@ public interface IWorldCameraProgramRig : ISdfCameraRig {
     SdfCameraDynamics Dynamics { get; }
     /// <summary>Gets the close-target migration reported by the last resolved program.</summary>
     SdfCameraTargetShift TargetShift { get; }
+    /// <summary>Gets the first-person destination reported by the resolved program.</summary>
+    SdfCameraFirstPerson? FirstPerson { get; }
 
     /// <summary>Repoints this rig's document reads at the current live document.</summary>
     /// <param name="definition">The current document.</param>
@@ -373,6 +375,11 @@ public static class WorldCameraRigCompiler {
                         ));
 
                         break;
+                    case WorldCameraProgramOp.FirstPerson firstPerson:
+                        operations.Add(item: new SdfCameraOp.FirstPerson(firstPerson.EyePoint.Value,
+                            Scalar(fallback: 0f, field: WorldValueFields.FirstPersonActive, scalar: firstPerson.Active,
+                                site: SiteOf(index: index, program: program)), firstPerson.TransitionSeconds, firstPerson.HideRadius));
+                        break;
                     case WorldCameraProgramOp.LookAt lookAt:
                         operations.Add(item: new SdfCameraOp.LookAt(
                             FocusDistance: SdfCameraScalar.FromLiteral(value: lookAt.FocusDistance),
@@ -601,6 +608,7 @@ public static class WorldCameraRigCompiler {
         }
         public float Spread { get; set; }
         public SdfCameraTargetShift TargetShift => m_rig.TargetShift;
+        public SdfCameraFirstPerson? FirstPerson => m_rig.FirstPerson;
 
         // Refills the evaluator's per-frame slots: a bound operand presents its state mirror slot, which the mirror
         // read at the delivered tick and engine tick and the frame interpolated, and a keyed one its keys at their

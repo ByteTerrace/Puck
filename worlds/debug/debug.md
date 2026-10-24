@@ -59,6 +59,20 @@ For the wall fade, use `body.pose 16 0.1 38.7 0 0 0` in `fade`, then
 usual 1.4 m boom remains outside the fade range: its improvement is the shared
 higher look target. `gallery.lights 0 On` lights the lobby for the comparison.
 
+`player.camera.view first` eases into the Moth's authored eye in half a second;
+`player.camera.view third` eases back out and `player.camera.view toggle` reverses
+the choice. All bar and wheel slots are occupied, so this toggle is a bindable
+console verb without a default physical binding. Look uses the existing
+authored stick and pointer controls, rotating at the eye in first person. Only
+this seat's own Moth is hidden; mirrors and portal views keep her stamp.
+
+Automatic pull-in starts off. To try it, use `player.camera.view auto` followed
+by `player.camera.automatic on`. Below 0.85 m of room for 0.2 s it enters; above
+1.35 m for 0.15 s it leaves. `player.camera.automatic off` disables it, and
+`player.camera.automatic auto` restores the author/profile preference.
+`world.view.camera` reports the requested view, transition fraction, automatic
+preference, independent room probe and dwell with the actual camera pose.
+
 ## Addons
 
 The world mounts three WebAssembly addons: a watchdog that records invariant

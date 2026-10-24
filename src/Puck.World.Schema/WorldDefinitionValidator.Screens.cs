@@ -176,6 +176,7 @@ public static partial class WorldDefinitionValidator {
         var seenDynamics = false;
         var seenBlend = false;
         var seenSelect = false;
+        var seenFirstPerson = false;
 
         for (var index = 0; (index < operations.Count); index++) {
             var opPath = $"{path}.operations[{index}]";
@@ -213,6 +214,19 @@ public static partial class WorldDefinitionValidator {
                         errors: errors
                     );
 
+                    break;
+                case WorldCameraProgramOp.FirstPerson firstPerson:
+                    if (seenFirstPerson) {
+                        errors.Add(item: $"{opPath} is a second 'firstPerson' op — at most one is admitted.");
+                    }
+                    seenFirstPerson = true;
+                    if (!VectorFunctions.IsFinite(vector: firstPerson.EyePoint)) {
+                        errors.Add(item: $"{opPath}.eyePoint must contain finite coordinates.");
+                    }
+                    RequirePositive(value: firstPerson.TransitionSeconds, name: $"{opPath}.transitionSeconds", errors: errors);
+                    RequirePositive(value: firstPerson.HideRadius, name: $"{opPath}.hideRadius", errors: errors);
+                    JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FirstPersonActive,
+                        path: $"{opPath}.active", scalar: firstPerson.Active);
                     break;
                 case WorldCameraProgramOp.LookAt lookAt:
                     RequireRange(value: lookAt.CloseTargetStartFraction, min: 0f, max: 1f, name: $"{opPath}.closeTargetStartFraction", errors: errors);
@@ -894,6 +908,15 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.clearanceMode must be Fade or Cutaway.");
         }
         RequireRange(value: control.ClearanceMaxElevation, min: 0f, max: (MathF.PI / 2f), name: $"{path}.clearanceMaxElevation", errors: errors);
+        if (control.AutoFirstPerson is { } automatic) {
+            RequirePositive(value: automatic.EntryDistance, name: $"{path}.autoFirstPerson.entryDistance", errors: errors);
+            RequirePositive(value: automatic.ExitDistance, name: $"{path}.autoFirstPerson.exitDistance", errors: errors);
+            RequirePositive(value: automatic.EntrySeconds, name: $"{path}.autoFirstPerson.entrySeconds", errors: errors);
+            RequirePositive(value: automatic.ExitSeconds, name: $"{path}.autoFirstPerson.exitSeconds", errors: errors);
+            if (automatic.ExitDistance <= automatic.EntryDistance) {
+                errors.Add(item: $"{path}.autoFirstPerson.exitDistance must exceed entryDistance.");
+            }
+        }
         if (control.CharacterFade is { } fade) {
             RequirePositive(value: fade.StartDistance, name: $"{path}.characterFade.startDistance", errors: errors);
             RequireNonNegative(value: fade.EndDistance, name: $"{path}.characterFade.endDistance", errors: errors);
