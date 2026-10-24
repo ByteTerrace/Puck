@@ -96,7 +96,7 @@ stops. Literal `text`, `binding` and `template` resolve through the same HUD
 binding resolver and template grammar the screen uses. The debug guide's note
 and the nearby map sign use this hook in `worlds/debug/guide.puck`, behind
 the existing `addonHud` toggle. The sign reads the same directions the map
-board embosses, in a lower voice.
+board embosses, in its own sampled voice.
 
 `TextSpeechSource` pulls the existing `VoiceSynth` at exact character
 boundaries. Each Unicode scalar has an interval: vowels select two band-pass

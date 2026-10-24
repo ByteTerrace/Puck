@@ -22,3 +22,8 @@ same source the live mixer pulls.
 The set plays at 1500 thousandths before the speaker pitch scale. The sign's
 800 pitch scale makes its effective sample rate 1.2 times the recording, while
 its pace independently controls the deterministic character spacing.
+
+The gallery note "The sphere primitive at a uniform scale." was rendered
+twice through synthesis and twice through this bank: each source's pair was
+byte-identical, with 107,520 frames, 33 voiced characters and seven exactly
+silent rests. The two sources share that schedule and retain quiet letter tails.
