@@ -28,70 +28,88 @@ state {
     }
     // Provider payloads are data the agent can replace. The guest interprets none of their content.
     table machineDebuggerOperations {
-      swap0 = """{"operation":"content.insert","payload":{"schema":"puck.gaming-brick.content-insert.v1","content":{"path":"cartridges/cgb/hgb-mirror.cgb.puck"}}}"""
+      swap0 = """{"operation":"content.insert","contentName":"hgb-mirror.cgb.puck","payload":{"schema":"puck.gaming-brick.content-insert.v1"}}"""
       eject0 = """{"operation":"content.eject","payload":{"schema":"puck.gaming-brick.content-eject.v1"}}"""
-      swap1 = """{"operation":"content.insert","payload":{"schema":"puck.advanced-gaming-brick.content-insert.v1","content":{"path":"cartridges/agb/pip.agb.puck"}}}"""
+      swap1 = """{"operation":"content.insert","contentName":"pip.agb.puck","payload":{"schema":"puck.advanced-gaming-brick.content-insert.v1"}}"""
       eject1 = """{"operation":"content.eject","payload":{"schema":"puck.advanced-gaming-brick.content-eject.v1"}}"""
-      swap2 = """{"operation":"content.insert","payload":{"schema":"puck.humble-gaming-deck.content-insert.v1","content":{"path":"cartridges/deck/moving-sprite.nes"}}}"""
+      swap2 = """{"operation":"content.insert","contentName":"moving-sprite.nes","payload":{"schema":"puck.humble-gaming-deck.content-insert.v1"}}"""
       eject2 = """{"operation":"content.eject","payload":{"schema":"puck.humble-gaming-deck.content-eject.v1"}}"""
     }
-      table machineDebugger0 {
-        alive = 0
-        responsive = 0
-        rewind = 0
-        deterministic = 0
-        swap = 0
-        eject = 0
-        tick = -1
-        frames = 0
-        samples = 0
-        hash = 0
-        trace1 = 0
-        trace2 = 0
-        changed = 0
-        mismatches = 0
-        phase = 0
-        driven = 0
-        randomState = 0
-      }
-      table machineDebugger1 {
-        alive = 0
-        responsive = 0
-        rewind = 0
-        deterministic = 0
-        swap = 0
-        eject = 0
-        tick = -1
-        frames = 0
-        samples = 0
-        hash = 0
-        trace1 = 0
-        trace2 = 0
-        changed = 0
-        mismatches = 0
-        phase = 0
-        driven = 0
-        randomState = 0
-      }
-      table machineDebugger2 {
-        alive = 0
-        responsive = 0
-        rewind = 0
-        deterministic = 0
-        swap = 0
-        eject = 0
-        tick = -1
-        frames = 0
-        samples = 0
-        hash = 0
-        trace1 = 0
-        trace2 = 0
-        changed = 0
-        mismatches = 0
-        phase = 0
-        driven = 0
-        randomState = 0
-      }
+    table machineDebugger0 {
+      alive = 0
+      responsive = 0
+      rewind = 0
+      deterministic = 0
+      swap = 0
+      eject = 0
+      tick = -1
+      frames = 0
+      samples = 0
+      hash = 0
+      trace1 = 0
+      trace2 = 0
+      changed = 0
+      mismatches = 0
+      phase = 0
+      driven = 0
+      randomState = 0
+      aliveTick = -1
+      responsiveTick = -1
+      rewindTick = -1
+      deterministicTick = -1
+      swapTick = -1
+      ejectTick = -1
+    }
+    table machineDebugger1 {
+      alive = 0
+      responsive = 0
+      rewind = 0
+      deterministic = 0
+      swap = 0
+      eject = 0
+      tick = -1
+      frames = 0
+      samples = 0
+      hash = 0
+      trace1 = 0
+      trace2 = 0
+      changed = 0
+      mismatches = 0
+      phase = 0
+      driven = 0
+      randomState = 0
+      aliveTick = -1
+      responsiveTick = -1
+      rewindTick = -1
+      deterministicTick = -1
+      swapTick = -1
+      ejectTick = -1
+    }
+    table machineDebugger2 {
+      alive = 0
+      responsive = 0
+      rewind = 0
+      deterministic = 0
+      swap = 0
+      eject = 0
+      tick = -1
+      frames = 0
+      samples = 0
+      hash = 0
+      trace1 = 0
+      trace2 = 0
+      changed = 0
+      mismatches = 0
+      phase = 0
+      driven = 0
+      randomState = 0
+      aliveTick = -1
+      responsiveTick = -1
+      rewindTick = -1
+      deterministicTick = -1
+      swapTick = -1
+      ejectTick = -1
+    }
     table machineDebuggerViolations {
       count = 0
       tick = -1

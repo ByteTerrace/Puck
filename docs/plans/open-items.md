@@ -186,15 +186,29 @@ These items belong to no single programme.
 
 ## Addon system
 
+- [x] Ship a generic machine debugger in the debug world, off by default: runtime input
+  segments and seeded fuzzing through engaged bodies; four runtime byte probes;
+  alive/responsive/rewind/deterministic/swap/eject verdicts with ticks, summary rows
+  and watchdog-style violations. WAT source and grants live in its imported module.
+- [x] Add on-demand machine reads/hashes, bounded mount-local checkpoints, body engagement,
+  text state reads and provider operations to the addon ABI. Reuse numeric state reads,
+  logging, content-folder resolution, authority, receipts and replay. Charge guest and host
+  work from one fuel store; expose peak tick fuel. Fix the AGB queued core's zero-valued
+  default peek by connecting pure bus inspection.
+- [ ] Qualify sub-frame button timing if a future game profile needs it. The generic
+  debugger deliberately holds one world-tick input across the native frames it spans;
+  its repeated RAM traces compare the same checkpointed rational clock phase.
+
 The addon system is improved as it is used ([addons](../../.claude/skills/puck-world/references/addons.md)).
 These gaps came up writing the debug world's guests ([worlds/debug/addons.md](../../worlds/debug/addons.md)).
 
 - [x] Let a guest read numeric authored data. `ReadStateCell` reads int/fixed/bool cells through a named Observe/State handle, with a row dispatch budget, strict UTF-8 and remaining-tick fuel charges. The fuzzer reads its seed, limit and bounds; traversal reads its authored route; the scope reads its selected body.
-- [ ] Extend authored reads to text and vectors. The guide's exhibit names and notes still live in `worlds/debug/addons/guide.wat`: the scalar answer lanes cannot carry variable-length text. Add a bounded chunk/copy protocol before moving those strings to authored rows; the numeric tools do not need it.
+- [x] Extend authored reads to bounded text chunks. ReadStateText returns 16 UTF-8 bytes per query through Observe/State and shares the numeric read budget.
+- [ ] Move the guide's exhibit names and notes from `worlds/debug/addons/guide.wat` to authored rows using ReadStateText; add vector state reads when a guest needs them.
 - [ ] Give federation link events the manifest-order index region events carry: their `A` lane is still the `adjacencies` row's document ordinal, which a guest cannot resolve to a name.
 - [ ] Read more bodies a tick. A pose query answers in four cells, so a 64-cell input ring reads about fifteen bodies a tick. The watchdog fills its spare pose budget with up to four chess pieces in turn (two with every range/tool body present). A batched pose query over every body a guest observes, or an event when a body crosses a height, would let a watchdog check every body every tick.
 - [x] Wire `UpsertStateCell`/`RemoveStateCell` into the addon mutation decoder. They use the ordinary typed mutation door, Edit/state grants, kind masks, dispatch/byte budgets and replay; repeated/unknown JSON members refuse. The three development tools use per-cell writes.
-- [x] Give guests ground/contact queries and log output. `BodyKinematics` reads the settled solver's height, vertical speed, facts and ground/obstruction witnesses; the scope derives contact edges between samples. `Log` writes one attributed, control-sanitized UTF-8 line of at most 256 bytes per guest per tick into `host.log`. Both charge remaining tick fuel.
+- [x] Give guests ground/contact queries and log output. `BodyKinematics` reads the settled solver's height, vertical speed, facts and ground/obstruction witnesses; the scope derives contact edges between samples. `Log` writes up to eight attributed, control-sanitized UTF-8 lines of at most 2048 bytes per guest per tick into `host.log`. Both charge remaining tick fuel.
 - [ ] Reduce the cost of high-frequency state writes in a large world. The scope submits thirteen cell mutations per sampled tick, each through full composition/validation and narration; bounded fuel and cell budgets do not bound that host cost tightly. Keep the mutation pipeline and authority semantics, and measure a coalesced/transactional cell path rather than bypassing validation in a guest.
 - [ ] Diagnose the traversal probes' world findings. The studio's closed wall blocks the route's exit toward the gallery after all fifteen studio goals pass. A separate `start=17` stairwell/lift pass reaches both flights and seven of eight goals, but falls entering the car and times out waypoint 22 even when waiting for `liftAt=72`. Inspect the boarding path and moving platform contact before assigning an engine defect; the cause is unconfirmed. The bot records misses, falls and red markers without teleporting itself.
 - [ ] Compare text in a test or rule gate. An `expect` line reads numbers only, so the guide and the watchdog write numeric rows (`guideAt`, `watchdog`) beside their text rows for their tests to read.
@@ -655,4 +669,4 @@ Every package below carries its own check on the programme page; tick it there a
   - [x] The debug world records and drives mid-session with its machines running and portals observing it: the start checkpoint carries the live sessions with their rows and last forwarded input (`WorldGrantsCheckpoint.Sessions`), every screen slot's selector and link row (`WorldMachineHostCheckpoint.Slots`/`Links`) and every machine core, and `replay.drive`/`replay.fork` restore it over the running host (`ReplayArmingLawTests.AMidRunArmWithALiveSessionCarriesItInTheStartCheckpoint`, `ReplayMachineDriveLawTests`).
   - [x] Every drive of a tape restores the same continuation: a body's stale contact-field observation restores as the version just below the current one, never the low bit flipped, which equalled the next version at every even version and let a sleeping body skip the wake the live run took (the debug world's lift refreshes its attached collider every tick, so the version moves between a drive's restore and its first step). Four consecutive headless drives of one mid-session tape match every tick with one end hash (`BodySleepLawTests.APendingContactFieldWakeSurvivesAFieldChangeBeforeTheNextStepAtEitherVersionParity`).
   - [x] Machine cores stay outside the per-tick authoritative hash (a per-tick digest would wait on every queued machine worker every tick); a tape pins each core's image digest once, at its end (`WorldReplaySnapshot.RecordedMachineDigests`, captured at `replay.stop`), and `replay.stop`, `replay.verify` and a drive that reaches the tape's end read the re-driven cores against it, naming a core that re-derived another state (`ReplayMachineDriveLawTests`).
-  - [ ] A live coupled machine link still refuses a checkpoint by name; a generic machine operation is refused while a recording is armed (no tape entry).
+  - [ ] A live coupled machine link still refuses a checkpoint by name; ordinary console machine operations are refused while a recording is armed (no tape entry), while receipt-pinned addon operations are recomputed by their guest.

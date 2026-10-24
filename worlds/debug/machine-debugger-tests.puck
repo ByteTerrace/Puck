@@ -28,6 +28,16 @@ machines [
     }
     contentFolders ["cartridges/agb"]
   }
+  {
+    name: "humble-gaming-deck"
+    engine: "humble-gaming-deck"
+    configuration {
+      schema: "puck.humble-gaming-deck.configuration.v1"
+      content { path: "cartridges/deck/colour-bars.nes" }
+    }
+    contentFolders ["cartridges/deck"]
+    preferFolderDefault: false
+  }
 ]
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {
@@ -144,6 +154,53 @@ test "the seeded fuzzer consumes the reproducible PCG stream for its window" {
     machineDebugger2[driven] == 12
     machineDebugger2[randomState] != 0
     machineDebugger2[phase] == 99
+    machineDebuggerViolations[count] == 0
+  }
+}
+
+
+test "an out-of-reach driver reports unknown checks with ticks" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger address 0
+    seat1: world.state.cell.set machineDebugger length 2048
+    ticks 30
+    seat1: body.pose 0 0.05 0 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 1
+    ticks 20
+  }
+  expect {
+    machineDebugger2[alive] == 0
+    machineDebugger2[responsive] == 0
+    machineDebugger2[rewind] == 0
+    machineDebugger2[deterministic] == 0
+    machineDebugger2[swap] == 0
+    machineDebugger2[eject] == 0
+    machineDebugger2[aliveTick] > 30
+    machineDebugger2[ejectTick] > 30
+    machineDebugger2[phase] == 99
+    machineDebuggerViolations[count] == 0
+  }
+}
+
+
+test "switching off cancels and publishes the input program" {
+  when {
+    seat1: world.state.cell.set machineDebugger screen 2
+    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger p0 153617
+    ticks 30
+    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: world.state.cell.set machineDebugger run 2
+    ticks 20
+    seat1: world.state.cell.set machineDebugger run 0
+    ticks 5
+  }
+  expect {
+    machineDebugger2[driven] > 0 and machineDebugger2[driven] < 25
+    machineDebugger2[phase] == 99
+    machineDebugger2[tick] > 30
     machineDebuggerViolations[count] == 0
   }
 }

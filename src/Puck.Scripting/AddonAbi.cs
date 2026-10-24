@@ -181,44 +181,31 @@ public static class AddonAbi {
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
         /// fewer verbs.</summary>
-<<<<<<< HEAD
-        public const int Count = 11;
-        /// <summary>Observe/screen runtime status (A) and completed steps (B); all payload lanes zero.</summary>
-        public const int MachineStatus = 10;
-        /// <summary>Reads a granted state cell. A/B name UTF-8 key pointer/length; C is -1 for a numeric
-        /// value or the byte offset of a 16-byte text chunk. Answers carry raw numeric value/kind or two packed lanes.</summary>
-        public const int StateCell = 3;
-        /// <summary>Reads 1..8 bus bytes through Observe/screen. A is address, B length, C zero.
-        /// Answer A is little-endian bytes and B native frame progress (-1 when unsupported).</summary>
-        public const int MachineRead = 4;
-        /// <summary>Hashes 1..262144 coherent bus bytes through Observe/screen. Same payload as MachineRead.
-        /// Answer A is FNV-1a-64 and B native frame progress (-1 when unsupported).</summary>
-        public const int MachineHash = 5;
-        /// <summary>Control/screen checkpoint: A=0 capture, 1 restore, 2 release; B=C=0.
-        /// One bounded checkpoint per mount; restore requires the identical runtime incarnation.</summary>
-        public const int MachineSnapshot = 6;
-        /// <summary>Drive/body engagement: A is screen index, or -1 to dissolve; B=C=0.
-        /// Also requires requested Control over every affected screen.</summary>
-        public const int Engage = 7;
-        /// <summary>Control/screen provider operation: A/B UTF-8 JSON pointer/length, C zero.
-        /// The envelope is {operation,payload}; named-machine Control must also be requested and granted.</summary>
-        public const int MachineOperation = 8;
-        /// <summary>Guest log line through an Observe handle: A/B UTF-8 pointer/length (up to 2048), C zero.
-        /// The host prefixes the mount identity and settled tick.</summary>
-        public const int Log = 9;
-=======
-        public const int Count = 6;
+        public const int Count = 13;
         /// <summary>Reads height/vertical world velocity, then body facts/contact flags (two answer parts).</summary>
         public const int BodyKinematics = 3;
+        /// <summary>Reads a 16-byte UTF-8 text chunk through Observe/State. A/B name the key; C is byte offset.</summary>
+        public const int ReadStateText = 6;
+        /// <summary>Observe/screen: A address, B 1..8 bytes, C zero. Returns packed bytes and native frame.</summary>
+        public const int MachineRead = 7;
+        /// <summary>Observe/screen: A address, B 1..262144 bytes, C zero. Returns FNV-1a-64 and native frame.</summary>
+        public const int MachineHash = 8;
+        /// <summary>Control/screen: A=0 capture, 1 restore, 2 release; B=C=0. One bounded checkpoint per mount.</summary>
+        public const int MachineSnapshot = 9;
+        /// <summary>Drive/body: A screen index or -1 to dissolve; B=C=0. Requires requested Control on affected screens.</summary>
+        public const int Engage = 10;
+        /// <summary>Control/screen: A/B point to a UTF-8 {operation,payload} envelope; C zero. Also requires named-machine Control.</summary>
+        public const int MachineOperation = 11;
+        /// <summary>Observe/screen: all payload lanes zero. Returns runtime status and completed steps.</summary>
+        public const int MachineStatus = 12;
         /// <summary>The number of answer cells for height/velocity and facts/contact flags.</summary>
         public const int BodyKinematicsAnswerParts = 2;
         /// <summary>Reads one numeric cell through an Observe/State handle. A/B name UTF-8 key bytes; C is zero.
         /// The answer carries its raw value and CellKind ordinal. Text and vector cells are refused.</summary>
         public const int ReadStateCell = 4;
         /// <summary>Writes one attributed diagnostic line. A/B name UTF-8 bytes; handles and C are zero.
-        /// At most one 256-byte line per guest per tick, charged against remaining tick fuel.</summary>
+        /// At most eight 2048-byte lines per guest per tick, charged against remaining tick fuel.</summary>
         public const int Log = 5;
->>>>>>> lead/catch-up
         /// <summary>The target-designation verb (<c>2</c>): a guest acts through a Drive handle over the source
         /// body; <c>A</c> is the target body index, <c>B</c> is the target-register index, and <c>C</c> is zero.</summary>
         public const int Designate = 2;

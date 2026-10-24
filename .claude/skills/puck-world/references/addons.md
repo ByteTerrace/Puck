@@ -237,10 +237,9 @@ Development tools extend this surface without changing ABI 1. `BodyKinematics`
 (request 3, Observe/Body) reads height, world vertical speed, body facts and
 grounded/obstruction witnesses in two cells. `ReadStateCell` (4) reads a numeric
 cell through an Observe/State handle, acquired by a named `State` Ask (wire
-kind 5). `Log` (5) emits one attributed 256-byte UTF-8 line per guest per tick
+kind 5). `Log` (5) emits up to eight attributed 2048-byte UTF-8 lines per guest per tick
 into the World's `host.log` ring. State names and keys use strict UTF-8;
-numeric values remain raw fixed-point or integer values. Text/vector reads
-remain an open gap. The [ABI reference](../../../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
+numeric values remain raw fixed-point or integer values. ReadStateText (6) provides bounded text chunks; vector reads remain an open gap. The [ABI reference](../../../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
 owns the exact layouts and remaining-fuel charges.
 
 The decoder also serves `UpsertStateCell`/`RemoveStateCell` (47/48), through
@@ -279,6 +278,22 @@ write every few ticks; its refusals still toast.
 `Control = 1<<2`, `Mutate = 1<<3`, `Edit = 1<<4`; any other bit in an Ask resolves
 to no capability.
 
+## Machine debugging
+
+The generic debugger is authored in [machine-debugger.puck](../../../../worlds/debug/machine-debugger.puck)
+and [its WAT guest](../../../../worlds/debug/addons/machine-debugger.wat); its runtime
+configuration and agent recipe are in [the debug addon guide](../../../../worlds/debug/addons.md#machine-debugger).
+It starts idle, draws no panel, and tests every hosted arcade device through an engaged
+body. Runtime byte probes, RAM hashes, bounded checkpoints and provider operations use
+Screen Observe/Control handles; engagement uses Drive/Body plus Control/Screen.
+The [scripting ABI](../../../../docs/reference/scripting.md) owns request ordinals 6–12.
+Reuse ReadStateCell and Log rather than adding another numeric/log protocol.
+
+A runtime text payload is not an asset reference and test staging cannot relocate a
+path embedded inside it. Use MachineOperation's contentName to reuse the existing
+content-folder resolver; never bake a staged path into a guest. Report operation refusals
+with the provider's reason. Checkpoints stay mount-local, bounded and tied to one runtime.
+
 ## Fuel
 
 Per-row `Fuel` (0 → `AddonAbi.DefaultFuelPerTick` = 1,000,000). Measured
@@ -293,7 +308,7 @@ since that is a genuinely fresh instance. Exhaustion traps deterministically
 → `OutOfFuel`, a sticky fault: the guest is skipped every tick until its own
 row's structural identity moves (bump `revision`, or change any other
 field) — resubmitting the byte-identical row never restarts it. Fuel bounds
-a guest's COMPUTE, never its authority.
+a guest's compute and charged host query work, never its authority. Host queries debit the same store's remaining fuel and contribute to last/peak/total counters.
 
 ## Receipts and replay
 
@@ -341,7 +356,7 @@ answer. Continue through the named World's MCP attachment, then quit it there.
   document order — the joined configuration/runtime read-back, never a
   mounted-guest-only enumeration. A disabled row reads `DISABLED` with no
   cost figures; an enabled row always reads
-  `<name> <ENABLED|FAULTED(detail)> fuel-budget fuel-last-tick fuel-total
+  `<name> <ENABLED|FAULTED(detail)> fuel-budget fuel-last-tick fuel-peak-tick fuel-total
   answers-dropped-total` — the cost surface — because an enabled row that
   cannot prepare refuses the whole mutation/rebuild/boot that would have
   installed it, so the document and the runtime can never disagree about

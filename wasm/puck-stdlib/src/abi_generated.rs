@@ -76,6 +76,8 @@ pub enum SubjectKind {
     Section = 3,
     /// `Puck.Scripting.AddonSubjectKind.Profile` (`4`).
     Profile = 4,
+    /// `Puck.Scripting.AddonSubjectKind.State` (`5`).
+    State = 5,
 }
 
 /// Mirrors `Puck.Scripting.AddonVerdict` (`src/Puck.Scripting/AddonVerdict.cs`).
@@ -226,16 +228,38 @@ pub const CHANNEL_DESCRIPTOR_OFFSET_VERB_COUNT: usize = 2;
 pub const CHANNEL_DESCRIPTOR_OFFSET_VERB_TABLE_PTR: usize = 4;
 
 // `Puck.Scripting.AddonAbi.RequestVerbs` — the Request channel's closed numeric vocabulary.
+/// `AddonAbi.RequestVerbs.BodyKinematics` (`3`).
+pub const REQUEST_VERB_BODY_KINEMATICS: usize = 3;
+/// `AddonAbi.RequestVerbs.BodyKinematicsAnswerParts` (`2`).
+pub const REQUEST_VERB_BODY_KINEMATICS_ANSWER_PARTS: usize = 2;
 /// `AddonAbi.RequestVerbs.BodyPose` (`0`).
 pub const REQUEST_VERB_BODY_POSE: usize = 0;
 /// `AddonAbi.RequestVerbs.BodyPoseAnswerParts` (`4`).
 pub const REQUEST_VERB_BODY_POSE_ANSWER_PARTS: usize = 4;
-/// `AddonAbi.RequestVerbs.Count` (`3`).
-pub const REQUEST_VERB_COUNT: usize = 3;
+/// `AddonAbi.RequestVerbs.Count` (`13`).
+pub const REQUEST_VERB_COUNT: usize = 13;
 /// `AddonAbi.RequestVerbs.Designate` (`2`).
 pub const REQUEST_VERB_DESIGNATE: usize = 2;
 /// `AddonAbi.RequestVerbs.DesignateAnswerParts` (`1`).
 pub const REQUEST_VERB_DESIGNATE_ANSWER_PARTS: usize = 1;
+/// `AddonAbi.RequestVerbs.Engage` (`10`).
+pub const REQUEST_VERB_ENGAGE: usize = 10;
+/// `AddonAbi.RequestVerbs.Log` (`5`).
+pub const REQUEST_VERB_LOG: usize = 5;
+/// `AddonAbi.RequestVerbs.MachineHash` (`8`).
+pub const REQUEST_VERB_MACHINE_HASH: usize = 8;
+/// `AddonAbi.RequestVerbs.MachineOperation` (`11`).
+pub const REQUEST_VERB_MACHINE_OPERATION: usize = 11;
+/// `AddonAbi.RequestVerbs.MachineRead` (`7`).
+pub const REQUEST_VERB_MACHINE_READ: usize = 7;
+/// `AddonAbi.RequestVerbs.MachineSnapshot` (`9`).
+pub const REQUEST_VERB_MACHINE_SNAPSHOT: usize = 9;
+/// `AddonAbi.RequestVerbs.MachineStatus` (`12`).
+pub const REQUEST_VERB_MACHINE_STATUS: usize = 12;
+/// `AddonAbi.RequestVerbs.ReadStateCell` (`4`).
+pub const REQUEST_VERB_READ_STATE_CELL: usize = 4;
+/// `AddonAbi.RequestVerbs.ReadStateText` (`6`).
+pub const REQUEST_VERB_READ_STATE_TEXT: usize = 6;
 /// `AddonAbi.RequestVerbs.SubmitMutation` (`1`).
 pub const REQUEST_VERB_SUBMIT_MUTATION: usize = 1;
 /// `AddonAbi.RequestVerbs.SubmitMutationAnswerParts` (`1`).

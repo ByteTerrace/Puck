@@ -143,6 +143,31 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
    [open-items](../../../docs/plans/open-items.md) tracks them.
 5. Report the exact commands, selected stages and asset-gated skips.
 
+## Test a hosted machine with the debugger
+
+Start a headless worktree World with devices none and use the debug world's
+[machine debugger](../../../worlds/debug/addons.md#machine-debugger). Set its screen,
+body and hardware RAM range while run is zero, pose the driver beside the screen
+from the host, then set run=1. It uses ordinary engagement and player input folding,
+checks native progress, compares neutral/held RAM, restores a checkpoint, compares
+two program traces, and swaps/ejects through provider operations. Read each machine's
+summary and per-check ticks, host.log and machineDebuggerViolations; use world.addons
+for last/peak/total fuel. Run=2 plays runtime segments; run=3 fuzzes a seeded window.
+No game addresses or title knowledge belongs in this guest.
+
+The debug world runs 30 world ticks per second, holding inputs across about two native
+frames. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
+so these generic checks need no extra frame-stamped input seam. AGB's queued core must
+implement pure PeekByte/PeekBytes: inheriting the default zero peek concealed live RAM.
+Its peek now delegates to pure bus inspection, including byte lanes of 16-bit IO registers.
+The focused hardware-access law checks nonzero bytes and native progress after restore.
+
+The authored machine-debugger-tests.puck runs bundled diagnostic cartridges, with a
+withheld-input responsive failure as a negative control. All default cartridges also
+need a live headless pass: a diagnostic passing does not prove an arbitrary game handles
+a particular button. Record from boot before any addon steps when investigating a
+failure with replay.drive; the addon receipt and machine inputs reproduce the check.
+
 ## Run it
 
 The batteries are CPU-only executables; none opens the GPU.

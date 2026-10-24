@@ -483,7 +483,14 @@ as any other malformed record—the moment a declared ordinal repeats.
 | 2 | `Designate` | through a **Drive** handle over the source BODY: `A` = target body index, `B` = authored target-register index, `C = 0`; the target must also be requested and held through **Observe** | **1 cell**: `AddonVerdict.Applied` or a refusal |
 | 3 | `BodyKinematics` | through an **Observe/Body** handle; `A = B = C = 0` | **2 parts**: `(height, vertical world velocity)` in Q48.16 raw bits; `(body facts, contact flags)` where contact bit 0 is grounded and bit 1 is an obstruction witness |
 | 4 | `ReadStateCell` | through an **Observe/State** handle; `A/B` = unsigned UTF-8 key pointer/length (128 bytes maximum), `C = 0` | **1 cell**: numeric raw value in `A`, `CellKind` ordinal in `B`; missing, text and vector cells answer `NoSuchSubject` |
-| 5 | `Log` | zero handle fields; `A/B` = unsigned UTF-8 pointer/length (256 bytes maximum), `C = 0` | **1 cell**: `Applied` or a refusal; one line per guest per tick, attributed as `[addon.log] <name>: <text>` in `host.log` |
+| 5 | `Log` | zero handle fields; `A/B` = unsigned UTF-8 pointer/length (2048 bytes maximum), `C = 0` | **1 cell**: `Applied` or a refusal; at most eight lines per guest per tick, attributed as `[addon.log] <name>: <text>` in `host.log` |
+| 6 | `ReadStateText` | Observe/State; A/B name a UTF-8 key, C is a byte offset (0–4096) | One cell: two packed little-endian lanes holding 16 UTF-8 bytes, zero padded after the text |
+| 7 | `MachineRead` | Observe/Screen; A is a bus address, B is 1–8 bytes, C=0 | One cell: packed little-endian bytes in A, native frame index in B (-1 if unsupported) |
+| 8 | `MachineHash` | Observe/Screen; A is a bus address, B is 1–262144 bytes, C=0 | One cell: FNV-1a-64 in A, native frame index in B |
+| 9 | `MachineSnapshot` | Control/Screen; A=0 capture, 1 restore, 2 release; B=C=0 | One cell: Applied or refusal, checkpoint byte length in A |
+| 10 | `Engage` | Drive/Body; A is a screen index or -1 to dissolve; B=C=0 | One cell: Applied or refusal; requested Control on every affected screen is also required |
+| 11 | `MachineOperation` | Control/Screen; A/B name a UTF-8 JSON envelope up to 2048 bytes, C=0 | One cell: provider status in A; Applied or refusal; also requires requested and granted Control on the named machine |
+| 12 | `MachineStatus` | Observe/Screen; A=B=C=0 | One cell: runtime status in A, completed steps in B |
 
 Orientation is the body's canonical `FixedQuaternion`, never a yaw scalar; any derived heading
 projection is the guest's own work. Every `BodyPose` part cell carries the response channel in
@@ -508,12 +515,13 @@ verdict is staged into the guest's NEXT batch regardless of when it was decided.
 ### `Ask`—rides the `Request` channel
 
 `Verb` = the subject kind (`Body` pairs with the `Drive`/`Observe` mask bits;
-`State` with `Observe`; `Section` with `Mutate` alone), `B` = the capability mask, handle
+`State` with `Observe`; `Screen` with `Observe`/`Control`; `Section` with `Mutate` alone), `B` = the capability mask, handle
 fields zero. `A`/`C` are shaped PER SUBJECT KIND, never uniformly:
 
 | Subject | `A` | `C` |
 |---|---|---|
 | `Body` | the body's 0-based entity index | `0` (required) |
+| `Screen` (wire kind 2, Observe or Control) | the screen index | `0` (required) |
 | `State` (wire kind 5, Observe only) | unsigned UTF-8 pointer to the exact authored state row name | unsigned name byte length, bounded by `AddonAbi.MaxSectionNameBytes` |
 | `Section` | an UNSIGNED guest-memory pointer to the section's declared NAME's UTF-8 bytes (reinterpreted from the signed `i64` lane, the same convention `SubmitMutation`'s `B` lane uses for a payload) | the name's UNSIGNED UTF-8 byte length (reinterpreted; bounded by `AddonAbi.MaxSectionNameBytes`) |
 
@@ -542,16 +550,31 @@ Asks and `BodyPose` queries drain at the pinned drain point, after the authorita
 tick they were written in, so a verdict reflects the grant table as of that point.
 `SubmitMutation` is the one exception—see above.
 
+Screen asks (kind 2) admit Observe or Control and use the ordinary index shape.
+Text and numeric state reads share their row's Observe budget. A mount owns at most
+one checkpoint of at most 4 MiB; a restore requires the identical runtime incarnation,
+so a swap cannot restore a stale machine. Memory and checkpoints drain queued work.
+The host charges 128 fuel per new request, one fuel per inspected byte, and 300000
+for a checkpoint or provider operation before doing the work; UTF-8 decoding also
+charges bytes. All host paths debit the same Wasm store's remaining tick fuel;
+exhaustion faults the mount. `world.addons` includes the peak whole-tick spend.
+
+A machine operation envelope is `{operation,payload,contentName?}`. For content.insert,
+`contentName` resolves through the machine's ordinary content-folder listing/name matcher
+and supplies payload.content.path. Provider schemas, admission, generations and commit
+remain host-owned. Addon operations are recomputed during receipt-pinned replay,
+including when recording; ordinary untaped console provider operations still refuse.
+
 `State` asks use the same manifest-before-existence and live grant gates as body reads.
 `ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key.
 These additions are prefix growth: the ABI remains 1, smaller request vocabularies still mount,
-and receipts still pin each guest's content and fuel. They add no imports or external reads.
+and receipts still pin each guest's content and fuel. They add no host imports; content operations use the existing host admission and receipt paths.
 
 Host work on the new paths shares the guest's remaining tick fuel. A UTF-8 read costs 32 plus
 its byte length, a state read costs another 64, a kinematics read costs 64, and a log attempt
 costs another 16. UTF-8 is strict and log control characters become spaces. Cell mutation
 payloads (`UpsertStateCell`/`RemoveStateCell`) cost 64 plus bytes before copy/decode, including
-malformed payloads. Insufficient remaining fuel answers `QuotaExhausted`; it never overruns the
+malformed payloads. Insufficient remaining fuel faults the mount as `OutOfFuel`; work never overruns the
 tick budget. `world.addons` includes those charges in its last-tick and lifetime figures.
 
 ### `Observation`—disclosure push

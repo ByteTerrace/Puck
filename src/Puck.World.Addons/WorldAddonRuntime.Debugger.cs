@@ -9,15 +9,6 @@ using Puck.World.Protocol;
 namespace Puck.World.Addons;
 
 public sealed partial class WorldAddonRuntime {
-    private bool ChargeHost(MountedAddon addon, ulong cost) {
-        var allowed = addon.Instance.TryChargeHostFuel(cost, out var spent);
-        addon.LastTickFuelConsumed = addon.LastTickFuelConsumed.AddSaturating(spent);
-        addon.PeakTickFuelConsumed = Math.Max(addon.PeakTickFuelConsumed, addon.LastTickFuelConsumed);
-        addon.TotalFuelConsumed = addon.TotalFuelConsumed.AddSaturating(spent);
-        if (!allowed) { ReportFault(addon); }
-        return allowed;
-    }
-
     private bool QueryAuthority(MountedAddon addon, in AddonQuerySubmission query, WorldCapability capability,
         out GrantSubject subject, out AddonVerdict verdict) {
         var grants = m_server.Grants;
@@ -38,28 +29,21 @@ public sealed partial class WorldAddonRuntime {
         if (capability != WorldCapability.Control) {
             var key = (capability, subject);
             var bodyDrive = capability == WorldCapability.Drive && subject.Kind == GrantSubjectKind.Body;
-            var count = bodyDrive ? addon.DriveDispatchCounts[subject.Value] : addon.QueryCounts.GetValueOrDefault(key);
+            var stateRead = capability == WorldCapability.Observe && subject.Kind == GrantSubjectKind.State;
+            var count = bodyDrive ? addon.DriveDispatchCounts[subject.Value] : stateRead ? addon.StateReadCounts.GetValueOrDefault(subject) : addon.QueryCounts.GetValueOrDefault(key);
             if (!grants.TryGetBudget(addon.Principal, capability, subject, out var budget) || count >= budget) {
                 verdict = AddonVerdict.QuotaExhausted;
                 return false;
             }
             if (bodyDrive) { addon.DriveDispatchCounts[subject.Value] = count + 1; }
+            else if (stateRead) { addon.StateReadCounts[subject] = count + 1; }
             else { addon.QueryCounts[key] = count + 1; }
         }
         return true;
     }
 
-    private static bool CopyText(MountedAddon addon, long pointer, long length, int limit, out string text) {
-        text = "";
-        if (length < 0 || length > limit || !addon.Instance.TryCopyMemory(pointer, length, addon.ReadBuffer, out _)) {
-            return false;
-        }
-        try { text = new UTF8Encoding(false, true).GetString(addon.ReadBuffer, 0, (int)length); return true; }
-        catch (DecoderFallbackException) { return false; }
-    }
-
     private void ResolveDebuggerQuery(MountedAddon addon, in AddonQuerySubmission query, ulong tick) {
-        if (addon.Instance.State != AddonState.Enabled || !ChargeHost(addon, 128)) { return; }
+        if (addon.Instance.State != AddonState.Enabled || !ChargeHostFuel(addon, 128)) { return; }
         var capability = query.Verb switch {
             AddonAbi.RequestVerbs.MachineSnapshot or AddonAbi.RequestVerbs.MachineOperation => WorldCapability.Control,
             AddonAbi.RequestVerbs.Engage => WorldCapability.Drive,
@@ -74,24 +58,15 @@ public sealed partial class WorldAddonRuntime {
         verdict = AddonVerdict.Rejected;
         try {
             switch (query.Verb) {
-                case AddonAbi.RequestVerbs.Log:
-                    if (subject.Kind == GrantSubjectKind.State && query.C == 0 && CopyText(addon, query.A, query.B, 2048, out var line) &&
-                        ChargeHost(addon, (ulong)query.B)) {
-                        Console.Error.WriteLine($"[world.addon: {addon.Instance.Name} t={tick} guest: {line.Replace('\n', ' ').Replace('\r', ' ')}]");
-                        verdict = AddonVerdict.Applied;
-                    }
-                    break;
-                case AddonAbi.RequestVerbs.StateCell:
-                    if (subject.Kind != GrantSubjectKind.State || query.C < -1 || query.C > 4096 ||
-                        !CopyText(addon, query.A, query.B, 128, out var keyName)) { break; }
+                case AddonAbi.RequestVerbs.ReadStateText:
+                    if (subject.Kind != GrantSubjectKind.State || query.C < 0 || query.C > 4096 ||
+                        !TryReadUtf8(addon, query.A, query.B, 128, out var keyName, out _)) { break; }
                     var arena = m_server.Arena;
                     if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) ||
                         !arena.Keys.TryResolve(CellName.Parse(keyName), out var key) ||
                         !arena.TryReadLive(row.Ordinal, key, m_server.DeliveryTime, out var cell)) { break; }
-                    if (query.C == -1 && cell.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool) {
-                        a = cell.Raw; b = (long)cell.Kind; verdict = AddonVerdict.Applied;
-                    } else if (query.C >= 0 && cell.Kind == CellKind.Text) {
-                        if (cell.AsText.Length > 4096 || !ChargeHost(addon, (ulong)cell.AsText.Length * 3)) { break; }
+                    if (cell.Kind == CellKind.Text) {
+                        if (cell.AsText.Length > 4096 || !ChargeHostFuel(addon, (ulong)cell.AsText.Length * 3)) { break; }
                         var byteCount = Encoding.UTF8.GetBytes(cell.AsText, addon.ReadBuffer);
                         var text = addon.ReadBuffer.AsSpan(0, byteCount);
                         Span<byte> chunk = stackalloc byte[16];
@@ -121,7 +96,7 @@ public sealed partial class WorldAddonRuntime {
                 case AddonAbi.RequestVerbs.MachineHash:
                     if (subject.Kind != GrantSubjectKind.Screen || query.C != 0 || query.A is < 0 or > int.MaxValue ||
                         query.B < 1 || query.B > (query.Verb == AddonAbi.RequestVerbs.MachineRead ? 8 : 262144) ||
-                        query.A + query.B > (long)int.MaxValue + 1 || !ChargeHost(addon, (ulong)query.B) ||
+                        query.A + query.B > (long)int.MaxValue + 1 || !ChargeHostFuel(addon, (ulong)query.B) ||
                         m_server.Machines.MachineAt(subject.Value) is not IMachineMemoryPeek memory) { break; }
                     var bytes = addon.ReadBuffer.AsSpan(0, (int)query.B);
                     memory.PeekBytes((int)query.A, bytes);
@@ -146,7 +121,7 @@ public sealed partial class WorldAddonRuntime {
                     break;
                 case AddonAbi.RequestVerbs.MachineSnapshot:
                     if (subject.Kind != GrantSubjectKind.Screen || query.A is < 0 or > 2 || query.B != 0 || query.C != 0 ||
-                        !ChargeHost(addon, 300000)) { break; }
+                        !ChargeHostFuel(addon, 300000)) { break; }
                     var runtime = m_server.Machines.MachineAt(subject.Value);
                     if (query.A == 2) {
                         addon.MachineSnapshot = null; addon.SnapshotRuntime = null; verdict = AddonVerdict.Applied;
@@ -163,7 +138,7 @@ public sealed partial class WorldAddonRuntime {
                     break;
                 case AddonAbi.RequestVerbs.MachineOperation:
                     if (subject.Kind != GrantSubjectKind.Screen || query.C != 0 ||
-                        !CopyText(addon, query.A, query.B, 2048, out var json) || !ChargeHost(addon, 300000)) { break; }
+                        !ChargeHostFuel(addon, 300000) || !TryReadUtf8(addon, query.A, query.B, 2048, out var json, out _)) { break; }
                     var screen = m_server.Definition.Screens.FirstOrDefault(s => s.Index == subject.Value);
                     if (screen?.Source is not WorldScreenSource.Machine machine ||
                         !IsRequested(addon, WorldCapability.Control, GrantSubject.Machine(machine.Instance)) ||
@@ -172,8 +147,25 @@ public sealed partial class WorldAddonRuntime {
                         var root = document.RootElement;
                         if (!root.TryGetProperty("operation", out var op) || !root.TryGetProperty("payload", out var payload) ||
                             op.ValueKind != JsonValueKind.String) { break; }
+                        var operationId = op.GetString()!;
+                        if (root.TryGetProperty("contentName", out var contentName)) {
+                            var declaration = m_server.Definition.Machines.FirstOrDefault(item => item.Name == machine.Instance);
+                            if (operationId != "content.insert" || contentName.ValueKind != JsonValueKind.String || declaration is null ||
+                                !WorldMachineContentFolder.TryList(declaration, m_server.Definition.DocumentDirectory,
+                                    m_server.Machines.ValidationCatalog, out _, out var entries, out var reason)) { break; }
+                            if (!WorldMachineContentFolder.TryFind(entries, contentName.GetString()!, out var entry, out reason)) {
+                                Console.Error.WriteLine($"[world.addon: {addon.Instance.Name} t={tick} content refused: {reason}]");
+                                break;
+                            }
+                            var tree = System.Text.Json.Nodes.JsonNode.Parse(payload.GetRawText())!.AsObject();
+                            tree["content"] = new System.Text.Json.Nodes.JsonObject { ["path"] = entry.ContentPath };
+                            payload = MachineOperationValidation.CloneJson(tree);
+                        }
                         var result = m_server.ApplyMachineOperation(new WorldMachineOperation(machine.Instance,
-                            state.Generation, op.GetString()!, payload), addon.Principal, 0, 0, recomputed: true);
+                            state.Generation, operationId, payload), addon.Principal, 0, 0, recomputed: true);
+                        if (result.Status != MachineOperationStatus.Applied) {
+                            Console.Error.WriteLine($"[world.addon: {addon.Instance.Name} t={tick} operation refused: {result.Reason}]");
+                        }
                         a = (long)result.Status;
                         verdict = result.Status == MachineOperationStatus.Applied ? AddonVerdict.Applied : AddonVerdict.Rejected;
                     }

@@ -117,10 +117,7 @@ public sealed class AddonSimulationPump {
         if (
             (cell.Verb != ((ushort)AddonSubjectKind.Body)) &&
             (cell.Verb != ((ushort)AddonSubjectKind.Section)) &&
-<<<<<<< HEAD
             (cell.Verb != ((ushort)AddonSubjectKind.Screen)) &&
-=======
->>>>>>> lead/catch-up
             (cell.Verb != ((ushort)AddonSubjectKind.State))
         ) {
             error = $"ask subject kind {cell.Verb} is not admitted (admitted: {((byte)AddonSubjectKind.Body)} = Body, {((byte)AddonSubjectKind.Section)} = Section)";
@@ -145,11 +142,8 @@ public sealed class AddonSimulationPump {
         var mask = ((ulong)cell.B);
         var admissible = subjectKind switch {
             AddonSubjectKind.Section => AddonCapabilityMask.Mutate,
-            AddonSubjectKind.State => AddonCapabilityMask.Observe,
-<<<<<<< HEAD
             AddonSubjectKind.Screen => AddonCapabilityMask.Observe | AddonCapabilityMask.Control,
-=======
->>>>>>> lead/catch-up
+            AddonSubjectKind.State => AddonCapabilityMask.Observe,
             _ => AddonCapabilityMask.Drive | AddonCapabilityMask.Observe,
         };
 
@@ -179,11 +173,7 @@ public sealed class AddonSimulationPump {
             SubjectKind: subjectKind,
             SubjectIndex: cell.A,
             CapabilityMask: mask,
-<<<<<<< HEAD
             NameLength: ((subjectKind is AddonSubjectKind.Section or AddonSubjectKind.State)
-=======
-            NameLength: ((subjectKind != AddonSubjectKind.Body)
->>>>>>> lead/catch-up
             ? cell.C
             : 0L)
         );
@@ -274,7 +264,7 @@ public sealed class AddonSimulationPump {
             return false;
         }
 
-        if (cell.Verb >= AddonAbi.RequestVerbs.StateCell) {
+        if (cell.Verb >= AddonAbi.RequestVerbs.ReadStateText) {
             // Magnitudes and pointers are per-request refusals, like SubmitMutation; the entire validated
             // batch remains atomic with respect to structural faults.
             m_queries[m_queryCount++] = new AddonQuerySubmission(ordinal, cell.Verb, cell.HandleIndex,

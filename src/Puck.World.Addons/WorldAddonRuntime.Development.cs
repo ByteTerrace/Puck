@@ -11,11 +11,11 @@ public sealed partial class WorldAddonRuntime {
     // Host work uses the guest's remaining tick fuel as well as bounded bytes/cells. There are no imports,
     // clocks or external reads. Meter before copying/decoding, including refused requests.
     private static bool ChargeHostFuel(MountedAddon addon, ulong cost) {
-        var remaining = (ulong)addon.Instance.FuelPerTick - addon.LastTickFuelConsumed;
-        var charged = Math.Min(remaining, cost);
-        addon.LastTickFuelConsumed += charged;
-        addon.TotalFuelConsumed = addon.TotalFuelConsumed.AddSaturating(right: charged);
-        return remaining >= cost;
+        var allowed = addon.Instance.TryChargeHostFuel(cost, out var spent);
+        addon.LastTickFuelConsumed = addon.LastTickFuelConsumed.AddSaturating(spent);
+        addon.PeakTickFuelConsumed = Math.Max(addon.PeakTickFuelConsumed, addon.LastTickFuelConsumed);
+        addon.TotalFuelConsumed = addon.TotalFuelConsumed.AddSaturating(spent);
+        return allowed;
     }
 
     private static bool TryReadUtf8(MountedAddon addon, long pointer, long length, int ceiling, out string text, out AddonVerdict refusal) {
@@ -46,12 +46,12 @@ public sealed partial class WorldAddonRuntime {
     }
 
     private void ResolveLog(MountedAddon addon, in AddonQuerySubmission query) {
-        if (!ChargeHostFuel(addon, 16) || addon.LoggedThisTick) {
+        if (!ChargeHostFuel(addon, 16) || addon.LogLinesThisTick >= 8) {
             QueueAnswer(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
             return;
         }
-        addon.LoggedThisTick = true;
-        if (!TryReadUtf8(addon, query.A, query.B, 256, out var text, out var refusal)) {
+        addon.LogLinesThisTick++;
+        if (!TryReadUtf8(addon, query.A, query.B, 2048, out var text, out var refusal)) {
             QueueAnswer(addon, query.Ordinal, refusal);
             return;
         }

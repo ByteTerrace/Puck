@@ -1,6 +1,6 @@
 # Debug world addons
 
-The debug world mounts six WebAssembly addons, each authored as WebAssembly
+The debug world mounts seven WebAssembly addons, each authored as WebAssembly
 text under [addons/](addons) and mounted by its own module beside the others,
 with its grants authored there too. A text module is source: nothing is compiled
 into the package, the module's `hash: "auto"` pins its text, and the World
@@ -14,16 +14,17 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 | Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 42, that follows the Moth |
 | Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 44; off by default |
 | Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 43 through authored waypoints and marks misses/falls; off by default |
+| Machine debugger | [machine-debugger.puck](machine-debugger.puck) | [addons/machine-debugger.wat](addons/machine-debugger.wat) | Generic input, probes and machine health checks; off by default |
 | Kinematics scope | [kinematics-scope.puck](kinematics-scope.puck) | [addons/kinematics-scope.wat](addons/kinematics-scope.wat) | Samples a selected body into a 128-tick history; off by default |
 
-`world.addons` lists all six with their fuel. Measured on a headless run, each
+`world.addons` lists all seven with their fuel. Measured on a headless run, each
 spends a small part of the default budget of 1,000,000 a tick: the watchdog
 about 8,000, the companion 1,200 to 2,500, and the guide about 60, rising to
 about 30,000 on the tick it writes an exhibit near the end of its table.
 
 ## Development tools
 
-All three tool guests stay mounted but start idle. Set cells with
+All four tool guests stay mounted but start idle. Set cells with
 `world.state.cell.set <row> <key> <value>` over MCP, naming your own World on
 every call. An agent's headless World uses `--devices none`. The scope panel
 also requires `world.state.cell.set addonHud $value 1`; sampling can run with
@@ -192,3 +193,106 @@ the stairs to level 1, stopping 1.9 m from her.
 It cannot follow a teleport (`debug.go`, `gallery.go`, a respawn): a guest
 drives a body through intents only and cannot pose it, so the companion walks
 the straight line to her new place.
+
+## Machine debugger
+
+The debugger has no game addresses, titles or rules in its guest. Its module
+imports with the debug world, authors its own grants, and starts with
+`machineDebugger[run] = 0`. It draws no panel. Results are available through
+`world.state machineDebugger0`, `machineDebugger1`, `machineDebugger2`
+and `host.log category addon.log`, with the addon HUD hidden.
+
+Set configuration while `run` is zero, then set it to 1 for all six checks,
+2 to play the input program, or 3 to fuzz for `window` ticks. Return `run`
+to zero before starting another attempt. Configuration is latched at start,
+except the four probe addresses, which can change during the run. Ending or
+cancelling releases input, disengages the body and releases its checkpoint.
+A health pass swaps and ejects content; insert a cartridge before another pass.
+
+| Device | screen | body | Pose before starting (x y z) | RAM address | length |
+|---|---:|---:|---|---:|---:|
+| Humble Gaming Brick | 0 | 4 | 7 0.05 29.4 | 49152 (WRAM) | 8192 |
+| Advanced Gaming Brick | 1 | 5 | 5.5 0.05 31.6 | 33554432 (EWRAM) | 262144 |
+| Humble Gaming Deck | 2 | 6 | 2 0.05 30.5 | 0 (CPU RAM) | 2048 |
+
+These are hardware ranges, replaceable at runtime. Pose the body with
+`body.pose <x> <y> <z> 0 0 0 <body>` from the host; the guest never teleports
+it. Its Drive handle engages that body with the screen under ordinary reach,
+Control and application rules, then sends the same channels a player uses.
+
+For example, on the Deck, set `screen=2`, `body=6`, `address=0`,
+`length=2048`, pose body 6 at the table position, and set `run=1`. Each
+setting uses `world.state.cell.set machineDebugger <key> <integer>`. Over MCP,
+put related commands in one `world.at` schedule and read after
+`world.wait`; separate MCP calls do not land on adjacent ticks.
+
+The numeric program occupies `p0` through `p7`: each integer is
+`duration * 256 + buttonMask`. A zero duration contributes no ticks.
+Masks are A=1, B=2, Start=4, Select=8, Right=16, Left=32, Up=64, Down=128;
+combine buttons by addition. Thus Start for one tick is 260, wait 60 is
+15360, and Right+A for 30 is 7697. The default program waits 30 ticks and
+holds Right+A for 30. Mode 2 plays all eight segments and releases;
+mode 3 uses PCG32 XSH-RR stream 0, seeded by `seed`, for exactly `window`
+ticks, recording `driven` and the full signed RNG bits in `randomState`.
+
+`probe`, `probe1`, `probe2` and `probe3` are runtime byte addresses;
+-1 disables each. During a run the guest reads each enabled address every
+tick and logs every sampled change as `probe t=… address=… old=… new=…`.
+Changing an address establishes a fresh baseline. Sub-tick changes are not
+observed; no game address is compiled into the guest.
+
+Health mode uses `window` (1–240, default 60) samples per leg:
+
+- `alive`: native frame progress increases during the neutral window.
+- `responsive`: at least one RAM hash differs between neutral and held
+  `mask` windows started from the same checkpoint. `changed` counts those
+  samples. `withhold=1` is a diagnostic negative control: it withholds the
+  held mask and program, so responsive must fail on the bundled diagnostic.
+- `rewind`: after play, restoring the checkpoint returns the initial RAM hash.
+- `deterministic`: the same numeric program from that checkpoint produces
+  equal per-tick RAM hashes twice. `mismatches` counts disagreements and
+  `trace1`/`trace2` are rolling FNV-1a trace hashes.
+- `swap`: the configured insertion applies and the replacement is Running.
+- `eject`: the configured ejection applies and the machine is Empty, after
+  the driver releases its route.
+
+Each check is 1=pass, -1=fail, 0=unknown/unrun, with its own `<check>Tick`.
+Missing memory/checkpoint capabilities or refused engagement leave checks
+unknown. A static menu or a button the program ignores can fail responsive;
+that reports an observation, not a diagnosis of an emulator defect.
+`machineDebuggerViolations` keeps cumulative `count`, `first` and latest
+`tick`, in the watchdog's style. Every assessment also logs its summary.
+
+`machineDebuggerOperations` holds replaceable provider JSON envelopes.
+`swap0`/`swap1`/`swap2` and their `eject` partners select the operations
+for each screen. An insertion can carry `contentName` beside `operation`
+and `payload`; the host resolves it through the same content-folder listing
+and name matcher as `machine.swap`. The guest reads at most 256 UTF-8 bytes
+per envelope, and knows none of its provider schema or cartridge content.
+This works when test staging relocates the world and its content folders.
+
+Inputs are world-tick stamped: the debug world runs at 30 Hz, holding each pad
+across about two native frames at 60 Hz. No frame-stamped input path is needed
+for these checks. Memory reads drain the queued worker and report native frame
+progress; reads/restores happen at the addon read boundary before that tick's
+pad fold and machine advance. A checkpoint includes the machine's rational
+clock phase. Both trace legs therefore sample the same frame boundaries.
+
+Run `puck test worlds/debug/machine-debugger-tests.puck --reproduce --jobs 1`
+for diagnostic cartridges, withheld input, segmented input, seeded fuzzing,
+unknown verdicts and cancellation.
+The ordinary `addons-tests.puck` also asserts an idle debugger at boot.
+For replay, arm `replay.record <name>` on stdin before the first World step,
+then drive the rows or run the generated scenario; after `replay.stop`,
+`replay.drive <name> to <violation tick + 2>` recreates the guest and its
+machine operations under pinned receipts. An MCP-only recording cannot arm
+after the mounted guests have already stepped; see the open addon item.
+
+Measured headlessly with the default cartridges and 60 samples per leg, all six
+checks passed on each device. HGB advanced 119 native frames; AGB and Deck 120.
+Each held window differed at 59 of 60 RAM samples, with zero trace mismatches.
+Peak charged fuel per tick was 328991 (HGB), 582987 (AGB), and 322847 (Deck),
+against 1000000. Idle polling cost 459 fuel per tick. Peaks vary slightly with
+the decimal values formatted in summaries. The diagnostic negative control
+recorded responsive=-1 and one violation at tick 61; a 140-tick tape matched
+at stop and verify, and replay.drive to tick 63 recreated that violation.

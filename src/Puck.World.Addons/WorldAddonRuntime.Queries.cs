@@ -108,13 +108,9 @@ public sealed partial class WorldAddonRuntime {
                     ? GrantSubject.Body(index: ((int)ask.SubjectIndex))
                     : GrantSubject.All
                 );
-<<<<<<< HEAD
             } else if (ask.SubjectKind == AddonSubjectKind.Screen) {
                 inRange = ask.SubjectIndex is >= 0 and <= int.MaxValue;
                 subject = inRange ? GrantSubject.Screen((int)ask.SubjectIndex) : GrantSubject.All;
-            } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
-                if (!TryResolveSectionAskName(
-=======
             } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
                 string sectionName;
                 if (ask.SubjectKind == AddonSubjectKind.State) {
@@ -123,7 +119,6 @@ public sealed partial class WorldAddonRuntime {
                         continue;
                     }
                 } else if (!TryResolveSectionAskName(
->>>>>>> lead/catch-up
                     addon: addon,
                     ask: in ask,
                     error: out var copyError,
@@ -145,16 +140,9 @@ public sealed partial class WorldAddonRuntime {
                 // so answering "no such section" for an unresolvable name leaks nothing a body-liveness answer
                 // would — there is no enumeration oracle to protect against for a static enum.
                 if (ask.SubjectKind == AddonSubjectKind.State) {
-<<<<<<< HEAD
-                    inRange = !string.IsNullOrWhiteSpace(sectionName);
-                    subject = GrantSubject.State(sectionName);
-                } else {
-                if (!GrantSubject.TryParseSectionName(
-=======
                     inRange = true;
                     subject = GrantSubject.State(name: sectionName);
                 } else if (!GrantSubject.TryParseSectionName(
->>>>>>> lead/catch-up
                     name: sectionName,
                     section: out var resolvedSection
                 )) {
@@ -170,13 +158,6 @@ public sealed partial class WorldAddonRuntime {
                     inRange = true;
                     subject = GrantSubject.Section(section: resolvedSection);
                 }
-<<<<<<< HEAD
-
-                inRange = true;
-                subject = GrantSubject.Section(section: resolvedSection);
-                }
-=======
->>>>>>> lead/catch-up
             } else {
                 inRange = false;
                 subject = GrantSubject.All;
@@ -322,17 +303,16 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
-<<<<<<< HEAD
-                if (query.Verb >= AddonAbi.RequestVerbs.StateCell) {
+                if (query.Verb >= AddonAbi.RequestVerbs.ReadStateText) {
                     ResolveDebuggerQuery(addon, in query, tick);
-=======
+                    continue;
+                }
                 if (query.Verb == AddonAbi.RequestVerbs.Log) {
                     ResolveLog(addon, in query);
                     continue;
                 }
                 if (query.Verb == AddonAbi.RequestVerbs.ReadStateCell) {
                     ResolveStateRead(addon, in query);
->>>>>>> lead/catch-up
                     continue;
                 }
 
