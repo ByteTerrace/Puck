@@ -105,9 +105,10 @@ public sealed partial class WorldScreenBinder {
     /// with ambient occlusion and soft shadows off (<see cref="CameraViewQuality"/>): a low-resolution diegetic display
     /// may add restrictions to the world's quality but never lift one. The view's instance renders it from the world's
     /// residency (<see cref="TryResolveView"/>), and the registration's export is set on its node.</remarks>
-    public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views) {
+    public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views, List<string?> names) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: views);
+        ArgumentNullException.ThrowIfNull(argument: names);
 
         m_viewTransforms = transforms;
         m_viewAuthoritativeTick = authoritativeTick;
@@ -122,6 +123,7 @@ public sealed partial class WorldScreenBinder {
 
         foreach (var (name, registration) in m_cameraViews) {
             m_cameraViewIndices[name] = views.Count;
+            names.Add(item: name);
             views.Add(item: new SdfViewSnapshot(
                 Camera: FilmCamera(
                     name: name,
@@ -142,12 +144,17 @@ public sealed partial class WorldScreenBinder {
             }
         }
 
-        FilmHomeViews(views: views);
+        FilmHomeViews(names: names, views: views);
+
+        // The cameras of the levels those sessions show render as no instance of their own.
+        while (names.Count < (views.Count - m_hostViewCount)) {
+            names.Add(item: null);
+        }
     }
     // Films every session of the boot world, at any depth, as a view of the world's own frame after its camera views
     // (SettleSessionRoutes), then the cameras of each level those sessions show: the world is resident once, however many
     // windows show it. Each view records the level whose screens it shows (ReadOf).
-    private void FilmHomeViews(List<SdfViewSnapshot> views) {
+    private void FilmHomeViews(List<SdfViewSnapshot> views, List<string?> names) {
         m_homeViewIndices.Clear();
         m_homeCameras.Clear();
         EnsureFeeds();
@@ -163,6 +170,7 @@ public sealed partial class WorldScreenBinder {
             m_homeCameras[feed.RegistrationName] = view.Camera;
             m_hostLevels.Add(item: feed.Nested);
             views.Add(item: view);
+            names.Add(item: feed.RegistrationName);
         }
 
         m_nestedFilms.Begin(target: m_homeFilms);

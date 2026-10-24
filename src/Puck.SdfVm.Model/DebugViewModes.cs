@@ -19,15 +19,28 @@ public static class DebugViewModes {
         "ao",
         "shadow",
         "indirect",
+        "rates",
+        "rate-flash",
     ];
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");
     /// <summary>The sky-cost diagnostic, whose RGB shows evaluations, hashes and texture loads.</summary>
     public static readonly int SkyCost = Array.IndexOf(array: Names, value: "sky-cost");
+    /// <summary>The tier view: the final image with every item a <c>world.rates</c> lever holds tinted by the tier it
+    /// updates at (<see cref="SdfUpdateRateCode"/>).</summary>
+    public static readonly int Rates = Array.IndexOf(array: Names, value: "rates");
+    /// <summary>The tier view that tints a rated item only on the frames it updates, so its cadence shows as a
+    /// flicker.</summary>
+    public static readonly int RateFlash = Array.IndexOf(array: Names, value: "rate-flash");
 
     /// <summary>Gets the number of debug view modes.</summary>
     public static int Count => Names.Length;
 
+    /// <summary>Returns whether a mode is one of the tier views, which read each rated item's
+    /// <see cref="SdfUpdateRateCode"/>.</summary>
+    /// <param name="mode">The mode value.</param>
+    /// <returns><see langword="true"/> for <see cref="Rates"/> and <see cref="RateFlash"/>.</returns>
+    public static bool ShowsRates(int mode) => ((mode == Rates) || (mode == RateFlash));
     /// <summary>Returns the name of a mode, or <c>"off"</c> when out of range.</summary>
     /// <param name="mode">The mode value.</param>
     /// <returns>The mode name.</returns>

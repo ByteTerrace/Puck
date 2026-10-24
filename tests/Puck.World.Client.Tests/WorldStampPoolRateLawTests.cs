@@ -198,6 +198,24 @@ public sealed class WorldStampPoolRateLawTests {
             Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
         }
     }
+    // A view the display shows none of, as a window out of every view's sight, rates nothing by what it holds: a body
+    // close before it is still rated as no view sees it, and the same view shown over the display's height poses it
+    // every frame.
+    [InlineData(0f, false)]
+    [InlineData(900f, true)]
+    [Theory]
+    public void AViewTheDisplayShowsNoneOfRatesNoBody(float pixels, bool everyFrame) {
+        var (client, pool, transforms) = Stage();
+        var counts = SdfUpdateRateCounts.Counters();
+
+        pool.RateBy(counts: counts, height: 900U, intervals: null, pixels: [pixels], rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 3f));
+
+        for (var tick = 1UL; (tick <= 6UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+        }
+
+        Assert.Equal(expected: everyFrame, actual: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) == 0L));
+    }
     [Fact]
     public void ABodyLargeOnScreenOrPackedWithTheLeverOffPosesEveryFrame() {
         foreach (var (rates, distance) in new[] { (SdfUpdateRates.All, 3f), (SdfUpdateRates.None, 500f) }) {
@@ -215,8 +233,47 @@ public sealed class WorldStampPoolRateLawTests {
             Assert.Equal(expected: 0L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesHeld));
         }
     }
+    // A tier view reads each body's tier from its slots and flags the frames it posed; world.rates reads its size and
+    // tier. With the lever off the body updates every frame and nothing is rated.
+    [Fact]
+    public void ATierViewReadsABodysTierAndTheFramesItPoses() {
+        var (client, pool, transforms) = Stage();
+        var readings = new SdfUpdateRateReadings();
+
+        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, rate: Paced60, rates: SdfUpdateRates.All, readings: readings, views: ViewFrom(distance: 500f));
+
+        var codes = new List<SdfUpdateRateCode>();
+
+        for (var tick = 1UL; (tick <= 5UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+            codes.Add(item: (SdfUpdateRateCode)pool.SlotRateCodes.Span[0]);
+            Assert.Equal(expected: pool.SlotRateCodes.Span[0], actual: pool.SlotRateCodes.Span[2]);
+            Assert.Equal(expected: ((byte)SdfUpdateRateCode.None), actual: pool.SlotRateCodes.Span[3]);
+        }
+
+        var posed = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true);
+        var held = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: false);
+
+        Assert.Equal(expected: [posed, held, held, held, posed], actual: codes);
+
+        var reading = Assert.Single(collection: readings.Latest(lever: SdfUpdateRates.Bodies));
+
+        Assert.Equal(expected: "body:0", actual: reading.Name);
+        Assert.Equal(expected: 15, actual: reading.Hertz);
+        Assert.InRange(actual: reading.Size, low: 0d, high: 15d);
+
+        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, rate: Paced60, rates: SdfUpdateRates.None, readings: readings, views: ViewFrom(distance: 500f));
+        _ = Walk(client: client, pool: pool, tick: 6UL, transforms: transforms);
+
+        Assert.Equal(expected: ((byte)SdfUpdateRateTiers.CodeOf(hertz: 60, updated: true)), actual: pool.SlotRateCodes.Span[0]);
+        Assert.Empty(collection: readings.Latest(lever: SdfUpdateRates.Bodies));
+        Assert.Empty(collection: readings.Latest(lever: SdfUpdateRates.Views));
+    }
     [Fact]
     public void TheTiersFollowPixelsPerMetreAndTheDisplayRate() {
+        Assert.Equal(expected: SdfUpdateRateCode.Every, actual: SdfUpdateRateTiers.CodeOf(hertz: 60, updated: false));
+        Assert.Equal(expected: SdfUpdateRateCode.Half, actual: SdfUpdateRateTiers.CodeOf(hertz: 30, updated: false));
+        Assert.Equal(expected: ((SdfUpdateRateCode)7), actual: SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true));
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 31f));
         Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 30f));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 15f));

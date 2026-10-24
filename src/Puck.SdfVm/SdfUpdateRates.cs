@@ -97,6 +97,18 @@ public static class SdfUpdateRateTiers {
     /// <summary>The tier that means every frame: content at it is not rated.</summary>
     public const int EveryFrameHertz = 60;
 
+    /// <summary>Returns the code a tier view shows a rated item by (<see cref="SdfUpdateRateCode"/>).</summary>
+    /// <param name="hertz">The item's tier: 60 or more for every frame, 30 or 15.</param>
+    /// <param name="updated">Whether the item updated on the frame the code is for.</param>
+    /// <returns>The tier's code, plus <see cref="SdfUpdateRateCode.Updated"/> when <paramref name="updated"/>.</returns>
+    public static SdfUpdateRateCode CodeOf(int hertz, bool updated) {
+        var tier = ((hertz >= EveryFrameHertz)
+            ? SdfUpdateRateCode.Every
+            : ((hertz >= 30) ? SdfUpdateRateCode.Half : SdfUpdateRateCode.Quarter));
+
+        return (updated ? ((SdfUpdateRateCode)(((int)tier) + ((int)SdfUpdateRateCode.Updated))) : tier);
+    }
+
     /// <summary>Returns whether a rated item holds its latest update through this frame: its tier is below every frame
     /// and the floor at its tier still holds (<see cref="PresentationRate.Holds"/>), so it updates at least
     /// <paramref name="hertz"/> times a second of presentation time whatever the frames' pace.</summary>
@@ -196,6 +208,49 @@ public sealed class SdfUpdateRateIntervals {
             var longest = Math.Max(val1: m_current[slot], val2: m_previous[slot]);
 
             return ((longest > 0d) ? longest : null);
+        }
+    }
+}
+/// <summary>
+/// The items each <see cref="SdfUpdateRates"/> lever rated on the latest frame that rated any, with the size on screen
+/// each was rated by and the tier it took, which <c>world.rates</c> lists: a body by its pixels per metre, a nested view
+/// by its display pixels high and a screen by its height on the display over its image's. Any thread publishes and
+/// reads; presentation only.
+/// </summary>
+public sealed class SdfUpdateRateReadings {
+    /// <summary>One rated item's reading.</summary>
+    /// <param name="Name">The item: <c>body:&lt;index&gt;</c>, or the instance a view or screen shows.</param>
+    /// <param name="Size">The size on screen the item was rated by, in the lever's unit.</param>
+    /// <param name="Hertz">The tier it took: 60 for every frame, 30 or 15.</param>
+    public readonly record struct Reading(string Name, double Size, int Hertz);
+
+    private readonly Lock m_gate = new();
+    private readonly Dictionary<SdfUpdateRates, List<Reading>> m_latest = [];
+
+    /// <summary>Replaces a lever's readings with the latest frame's, copying them into storage the next publish of the
+    /// lever reuses.</summary>
+    /// <param name="lever">The lever.</param>
+    /// <param name="readings">The items the lever rated, in report order.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="readings"/> is <see langword="null"/>.</exception>
+    public void Publish(SdfUpdateRates lever, IReadOnlyCollection<Reading> readings) {
+        ArgumentNullException.ThrowIfNull(argument: readings);
+
+        lock (m_gate) {
+            if (!m_latest.TryGetValue(key: lever, value: out var latest)) {
+                latest = [];
+                m_latest[lever] = latest;
+            }
+
+            latest.Clear();
+            latest.AddRange(collection: readings);
+        }
+    }
+    /// <summary>Returns a lever's latest readings.</summary>
+    /// <param name="lever">The lever.</param>
+    /// <returns>A copy of the readings, empty when the lever published none.</returns>
+    public IReadOnlyList<Reading> Latest(SdfUpdateRates lever) {
+        lock (m_gate) {
+            return (m_latest.TryGetValue(key: lever, value: out var readings) ? [.. readings] : []);
         }
     }
 }

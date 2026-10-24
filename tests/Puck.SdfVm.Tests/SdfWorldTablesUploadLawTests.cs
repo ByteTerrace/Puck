@@ -456,6 +456,33 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: Table()
         );
     }
+    // A tier view's codes ride each slot's position row and each screen's ripple state row, a ripple rewrite keeping the
+    // screen's; leaving the view clears every slot's once, and a frame after it owes nothing.
+    [Fact]
+    public void ATierViewsCodesRideTheSlotsAndScreensAndClearOnceItEnds() {
+        const int Screen = 3;
+        const int Rows = (7 + SdfScreenRipple.Rows);
+        using var rig = new Rig(slots: 4);
+
+        float W(int slot) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)))[(slot * 12) + 3];
+        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)((SdfWorldTables.MaxScreenSurfaces * Rows) * 16))))[(((Screen * Rows) + 7) * 4) + 2];
+
+        rig.Warm();
+        rig.Engine.DebugMode = DebugViewModes.Rates;
+        rig.Engine.SetScreenRate(code: SdfUpdateRateCode.Half, screenIndex: Screen);
+        rig.Engine.SetScreenRipple(ripple: new SdfScreenRipple(Clock: 1f, Contact0: default, Contact1: default, Contact2: default, Contact3: default), screenIndex: Screen);
+        rig.Render(slotRateCodes: new byte[] { 0, 7, 3 }, time: 0f);
+        Assert.Equal(expected: [0f, 7f, 3f, 0f], actual: [W(slot: 0), W(slot: 1), W(slot: 2), W(slot: 3)]);
+        Assert.Equal(expected: ((float)SdfUpdateRateCode.Half), actual: Rate());
+
+        rig.Engine.DebugMode = 0;
+        rig.Engine.SetScreenRate(code: SdfUpdateRateCode.None, screenIndex: Screen);
+        rig.Render(slotRateCodes: new byte[] { 0, 7, 3 }, time: 0f);
+        Assert.Equal(expected: [0f, 0f, 0f, 0f], actual: [W(slot: 0), W(slot: 1), W(slot: 2), W(slot: 3)]);
+        Assert.Equal(expected: 0f, actual: Rate());
+        rig.Render(time: 0f);
+        Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+    }
     // A screen's glyph decal reaches the device's decal table: its descriptor (columns, rows, the first cell, the distance
     // range's bits) in the screen's descriptor row and its cells in the screen's run of the cell region. The same decal
     // again owes nothing, clearing it zeroes its descriptor alone, clearing a clear slot owes nothing, and a grid past the
@@ -1129,7 +1156,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
-        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null, IReadOnlyList<SdfVolume>? volumes = null) {
+        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null, IReadOnlyList<SdfVolume>? volumes = null, ReadOnlyMemory<byte> slotRateCodes = default) {
             if (resetTallies) {
                 Gpu.ResetTallies();
             }
@@ -1165,6 +1192,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             ) with {
                 MeshDraws = (meshDraws ?? []),
                 MovedTransforms = m_moved,
+                SlotRateCodes = slotRateCodes,
                 Volumes = (volumes ?? []),
             });
             Engine.SubmitUpload();

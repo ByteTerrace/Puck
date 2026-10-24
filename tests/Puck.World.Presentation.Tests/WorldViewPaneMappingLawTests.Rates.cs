@@ -33,10 +33,34 @@ public sealed partial class WorldViewPaneMappingLawTests {
             Assert.True(condition: (settings.RateCounts.Read(kind: SdfUpdateRateCounts.ViewsRated) > 0L));
             // The schedule shows the session rendering every fourth frame between holds: a 15 Hz tier's whole period.
             Assert.Equal(expected: (4d / 60d), actual: (settings.RateIntervals.Longest(hertz: 15, lever: SdfUpdateRates.Views) ?? 0d), tolerance: 1e-9d);
+            // world.rates lists the session at its tier, and a tier view tints the glass that shows it.
+            var reading = Assert.Single(collection: settings.RateReadings.Latest(lever: SdfUpdateRates.Views));
+
+            Assert.Equal(expected: BootSession, actual: reading.Name);
+            Assert.Equal(expected: 15, actual: reading.Hertz);
+            Assert.InRange(actual: (m_host.DisplayShareOf(instance: BootSession) ?? 0d), high: 1d, low: 0.01d);
+            Assert.Equal(expected: 0d, actual: m_host.DisplayShareOf(instance: "nothing"));
+
+            var codes = new byte[4];
+
+            m_host.WriteScreenRateCodes(codes: codes);
+            Assert.Equal(expected: ((byte)SdfUpdateRateCode.Quarter), actual: ((byte)(codes[0] % ((byte)SdfUpdateRateCode.Updated))));
         } else {
             Assert.InRange(actual: renders, high: 16, low: 14);
             Assert.Equal(expected: 0L, actual: settings.RateCounts.Read(kind: SdfUpdateRateCounts.ViewsRated));
             Assert.Null(@object: settings.RateIntervals.Longest(hertz: 15, lever: SdfUpdateRates.Views));
+            Assert.Empty(collection: settings.RateReadings.Latest(lever: SdfUpdateRates.Views));
+            Assert.Null(@object: m_host.DisplayShareOf(instance: BootSession));
+
+            // Nothing rated tints nothing, and a host showing no screens tints none.
+            var codes = new byte[] { 9, 9, 9, 9 };
+
+            m_host.WriteScreenRateCodes(codes: codes);
+            Assert.All(collection: codes, action: static code => Assert.Equal(expected: ((byte)SdfUpdateRateCode.None), actual: code));
+            m_host.Screens = null;
+            codes[0] = 9;
+            m_host.WriteScreenRateCodes(codes: codes);
+            Assert.Equal(expected: ((byte)SdfUpdateRateCode.None), actual: codes[0]);
         }
     }
 }

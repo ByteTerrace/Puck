@@ -1569,7 +1569,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     m_portalExtents[footprint.Producer] = held;
                     m_footprints.Add(item: (footprint with {
                         Height = held.Height,
-                        Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer),
+                        Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: m_portalGlass),
                         Width = held.Width,
                     }));
 
@@ -1590,12 +1590,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         RateEnvironmentReads();
+        PublishRateReadings();
     }
     // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with, and how much
     // of its image the glass spans: a consumer in another world than the glass's sees none of it, and one whose camera or
     // glass is not known yet is taken to see it at the session's declared extent.
     private PortalSight PortalCoverage(string consumer, string producer, out (double Width, double Height) coverage) {
         coverage = default;
+        m_portalGlass = -1;
 
         if (ViewScenes is not { } scenes) {
             return PortalSight.Unknown;
@@ -1629,6 +1631,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     camera: in camera,
                     glass: glass!
                 );
+                // The glass a tier view tints: one of the boot world's screens, which its residency's tables hold.
+                m_portalGlass = (scenes.TryPlacements(placements: out _, view: consumer) ? -1 : glass!.Index);
 
                 return PortalSight.Seen;
             default:

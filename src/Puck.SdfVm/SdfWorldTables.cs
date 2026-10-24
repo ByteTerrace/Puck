@@ -32,7 +32,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
-    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in field/sdf-layout.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
+    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = the slot's SdfUpdateRateCode while a tier view shows, zero otherwise) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfRateCode in debug/sdf-debug-views.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
     // The fillers' format: the views' color format, which the storage image they stand in for declares.
     private const GpuPixelFormat Format = RenderGraphPackageCatalog.WorkingFormat;
     // The glyph atlas's format: RGBA8 coverage and color, as the host rasterizes it.
@@ -46,6 +46,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const int ScreenMappingStride = (ScreenMappingByteLength + ScreenRippleByteLength);
     private const int ScreenRippleOffset = ScreenMappingByteLength;
     private const int ScreenRippleByteLength = ((sizeof(float) * 4) * SdfScreenRipple.Rows);
+    // The ripple record's first row's third float: the screen's SdfUpdateRateCode while a tier view shows. KEEP IN SYNC
+    // with sdfRateCode in debug/sdf-debug-views.hlsli.
+    private const int ScreenRateOffset = (ScreenRippleOffset + (sizeof(float) * 2));
     // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats, the glass flag in its
     // fourth.
     private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
@@ -159,6 +162,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // while its handle and extent hold, so an unchanged screen packs nothing.
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
+    // Each screen's SdfUpdateRateCode as SetScreenRate wrote it, which SetScreenRipple's rewrite of the record keeps.
+    private readonly float[] m_screenRates = new float[MaxScreenSurfaces];
     // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
     private readonly IGpuStorageBuffer[] m_brickRequestBuffers = new IGpuStorageBuffer[SdfBrickPoolLayout.MaxBricks];

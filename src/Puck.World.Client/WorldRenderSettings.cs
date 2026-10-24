@@ -88,6 +88,13 @@ public sealed partial class WorldRenderSettings {
     /// <summary>Gets the window every frame's rated work records its achieved intervals between updates into
     /// (<see cref="SdfUpdateRateIntervals"/>), which <c>world.rates</c> prints against each tier's period.</summary>
     public SdfUpdateRateIntervals RateIntervals { get; } = new();
+    /// <summary>Gets the items each lever rated on the latest frame and the tier each took (<see cref="SdfUpdateRateReadings"/>),
+    /// which <c>world.rates</c> lists.</summary>
+    public SdfUpdateRateReadings RateReadings { get; } = new();
+    /// <summary>Gets or sets whether each frame carries its rated items' tiers (<see cref="SdfFrame.SlotRateCodes"/>,
+    /// <see cref="SdfFrame.ScreenRateCodes"/>), which a tier view shows; <c>world.debug-view</c> sets it while one is
+    /// selected. Presentation only.</summary>
+    public bool RateTints { get; set; }
     /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
     /// (<c>world.render-scale auto</c>; <see cref="Client.WorldDynamicResolution"/>), between
     /// each view's quality floor and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a

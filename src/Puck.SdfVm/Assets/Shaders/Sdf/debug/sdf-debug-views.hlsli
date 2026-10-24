@@ -16,6 +16,39 @@ float3 materialPalette(int material) {
     return saturate(ramp);
 }
 
+// The update tier a pixel's rated item carries (SdfUpdateRateCode): a screen's from its ripple record's state row, and a
+// surface drawn under a dynamic slot from the slot's position row, where the host writes them while a tier view shows.
+uint sdfRateCode(SdfSurfaceSample s) {
+    if (!s.hit) {
+        return SDF_RATE_NONE;
+    }
+    if (sdfScreenSurfaceShades(s.material)) {
+        return (uint)round(worldScreenRipple((uint)(s.material - SDF_SCREEN_MATERIAL - 1)).state.z);
+    }
+    if (s.frameSlot != SDF_TRANSFORM_SLOT_NONE) {
+        return (uint)round(sdfDynamicTransforms[3u * (uint)s.frameSlot].w);
+    }
+    return SDF_RATE_NONE;
+}
+// The tier views: a rated item held to 30 Hz is tinted amber and one held to 15 Hz magenta, over its own shading, with a
+// floor of light so a dark surface still shows its tier; rate-flash tints only on the frames the item updated. The tint
+// is in nits, so it is scaled by the inverse of the exposure the composite applies.
+float3 sdfRateTint(SdfPixel p, SdfSurfaceSample s, float3 color) {
+    uint code = sdfRateCode(s);
+    uint tier = (code % SDF_RATE_UPDATED);
+    bool updated = (code >= SDF_RATE_UPDATED);
+
+    if ((tier < SDF_RATE_HALF) || ((p.viewMode == SDF_DEBUG_VIEW_RATE_FLASH) && !updated)) {
+        return color;
+    }
+
+    float3 hue = ((tier == SDF_RATE_HALF) ? float3(1.0, 0.6, 0.05) : float3(0.95, 0.1, 0.8));
+    float luminance = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float3 tinted = (hue * (luminance + (0.3 / max(passGroup.exposure, 1.0e-12))));
+
+    return lerp(color, tinted, ((p.viewMode == SDF_DEBUG_VIEW_RATE_FLASH) ? 1.0 : 0.75));
+}
+
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 
@@ -63,6 +96,11 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
 
             viewColor = ((s.hit && sdfMeshIrradianceEnabled()) ? min((sdfMeshIndirect(sdfMeshProbesAt(surfacePoint, s.normal), s.normal) * passGroup.exposure), SDF_LUMINANCE_CEILING) : float3(0.0, 0.0, 0.0));
+            break;
+        }
+        case SDF_DEBUG_VIEW_RATES:
+        case SDF_DEBUG_VIEW_RATE_FLASH: { // each rated item tinted by its update tier
+            viewColor = sdfRateTint(p, s, color);
             break;
         }
     }

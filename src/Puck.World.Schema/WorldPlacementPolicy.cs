@@ -16,7 +16,7 @@ public static class WorldPlacementPolicy {
     /// collides with authored screens (which pack from index 0). Single-sourced here (rather than beside
     /// <c>Client.WorldPrototypeFacets.Derive</c>, which needs Puck.SdfVm and so cannot live in Puck.World.Schema)
     /// because the document validator must exclude the same reserved band an authored screen index cannot enter.</summary>
-    public const int DerivedFaceBase = 24;
+    public const int DerivedFaceBase = 20;
     /// <summary>The per-animated-placement shape-slot pool — equal to <see cref="MaxShapesPerStamp"/>, so an animated
     /// creation obeys the same stamp budget as a static one. CONTRACT INVARIANT for the same reason as
     /// <see cref="MaxShapesPerStamp"/>.</summary>

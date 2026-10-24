@@ -6,9 +6,11 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     private int m_packedTransformCount;
+    // Whether the latest packed frame wrote its slots' update tiers (PackSlotRateCodes).
+    private bool m_slotRateCodesPacked;
 
     // Packs the rows the frame's moved set owes into the dynamic-transform region — 3 float4 per slot: position.xyz
-    // (+ shadow participation), the orientation quaternion (xyzw), then the lanes — the table
+    // (+ the tier views' code, PackSlotRateCodes), the orientation quaternion (xyzw), then the lanes — the table
     // SDF_OP_TRANSFORM_DYNAMIC indexes by slot; the region owes the words of each packed row that changed. The packed
     // rows are the ones the producer's SdfMovedTransforms recorded since the last frame this engine consumed from it; a
     // frame with no moved set declares its table static and packs nothing past the first frame that carries that
@@ -111,6 +113,34 @@ public sealed partial class SdfWorldTables {
 
         return changed;
     }
+    // Writes each packed slot's update tier into its position row's fourth component while a tier view shows
+    // (SdfUpdateRateCode), and zero into every one once on the frame it stops showing, so no frame outside a tier view
+    // carries a code. A slot the frame repacked has had that component zeroed, and the region owes only what differs.
+    private void PackSlotRateCodes(SdfFrame frame) {
+        var shows = DebugViewModes.ShowsRates(mode: DebugMode);
+
+        if (!shows && !m_slotRateCodesPacked) {
+            return;
+        }
+
+        var codes = frame.SlotRateCodes.Span;
+        var changed = false;
+
+        for (var slot = 0; (slot < m_packedTransformCount); slot++) {
+            var code = ((shows && (slot < codes.Length)) ? ((float)codes[slot]) : 0f);
+
+            if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in code)), offset: ((slot * DynamicTransformByteLength) + (3 * sizeof(float))))) {
+                m_changedTransforms.Add(length: 1, start: slot);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            m_dynamicTransformRevision++;
+        }
+
+        m_slotRateCodesPacked = shows;
+    }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
     private bool WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
         if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
@@ -121,7 +151,8 @@ public sealed partial class SdfWorldTables {
     }
 
     // The lanes row is what an op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity
-    // lane) reads through sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero. position.w is unused.
+    // lane) reads through sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero. position.w packs zero here;
+    // PackSlotRateCodes writes it while a tier view shows.
     /// <summary>Packs a transform into the world table's three float4 rows: position, orientation, then render
     /// lanes.</summary>
     /// <param name="floats">The destination, with at least twelve elements.</param>
@@ -243,6 +274,7 @@ public sealed partial class SdfWorldTables {
         }
 
         _ = PackDynamicTransforms(frame: frame);
+        PackSlotRateCodes(frame: frame);
 
         // The volume table is packed every frame; UploadProgram seeds the screen-surface table and
         // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.

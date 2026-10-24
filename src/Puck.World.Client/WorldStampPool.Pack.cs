@@ -86,6 +86,7 @@ public sealed partial class WorldStampPool {
         m_packedSlotBase = slotBase;
         m_volumes.Clear();
         m_slotClipRun.Clear();
+        BeginRateCodes(slotBase: slotBase);
 
         var doors = WorldPortalStraddle.Doors(definition: client.Definition);
 
@@ -162,6 +163,7 @@ public sealed partial class WorldStampPool {
             }
 
             var packedBefore = ReferenceEquals(objA: m_packedRegistrations[index], objB: live);
+            var posed = false;
 
             if (Wake(
                 client: client,
@@ -223,6 +225,7 @@ public sealed partial class WorldStampPool {
                     if (live.BodyIndex is not null) {
                         m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
                         RecordPose(deltaSeconds: deltaSeconds, live: live);
+                        posed = true;
                     }
                     live.RateSeconds = 0f;
                     live.RateOwed = false;
@@ -239,6 +242,7 @@ public sealed partial class WorldStampPool {
                 );
             }
 
+            NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: (ReachOf(live: live) * placementScale), rootSlot: rootSlot);
             AppendVolumes(
                 document: document,
                 hidden: live.Hidden,
@@ -278,6 +282,8 @@ public sealed partial class WorldStampPool {
                 index: index
             );
         }
+
+        EndRateCodes();
 
         // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
         // sees a new list, so a body holding still across a door keeps the one it was first clipped by.

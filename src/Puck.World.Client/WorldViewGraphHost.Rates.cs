@@ -21,6 +21,10 @@ public sealed partial class WorldViewGraphHost {
     // Each producer a rated footprint showed: what its footprints asked this frame and its interval since it last
     // rendered.
     private readonly Dictionary<string, RatedProducer> m_ratedProducers = new(comparer: StringComparer.Ordinal);
+    // The boot world's screen the latest seen portal's glass is, or -1 (PortalCoverage).
+    private int m_portalGlass = -1;
+    // The readings PublishRateReadings gathers a lever's into.
+    private readonly List<SdfUpdateRateReadings.Reading> m_rateReadings = [];
     // The frame of the latest schedule the rated producers were measured against, so a frame the runtime did not
     // schedule is not read twice.
     private long m_ratedMeasured = -1;
@@ -28,8 +32,14 @@ public sealed partial class WorldViewGraphHost {
     private sealed class RatedProducer {
         // The lever its footprints rate it under.
         public SdfUpdateRates Lever;
-        // The most frequent tier its footprints asked for this frame, or 0 when none asked.
+        // The most frequent tier its footprints asked for this frame, or 0 when none asked, and the largest size on
+        // screen they asked it by.
         public int Asked;
+        public double Size;
+        // Whether the latest schedule rendered it.
+        public bool RenderedLatest;
+        // The boot world's screen whose glass shows it this frame, or -1 for none.
+        public int Glass = -1;
         // The slowest tier asked since its latest render.
         public int Slowest = SdfUpdateRateTiers.EveryFrameHertz;
         // The presentation time of its latest render, valid while Chained.
@@ -49,7 +59,7 @@ public sealed partial class WorldViewGraphHost {
         m_displayShares.Clear();
         m_sourceRefresh.Clear();
 
-        if ((RenderSettings is not { } settings) || ((settings.UpdateRates & (SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0)) {
+        if ((RenderSettings is not { } settings) || ((settings.UpdateRates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0)) {
             return;
         }
 
@@ -80,9 +90,17 @@ public sealed partial class WorldViewGraphHost {
             }
         }
     }
+    /// <summary>Returns the share of the display's height an instance reached through the previous frame's footprints: a
+    /// root's its own, and a producer's its largest consumer's share times the footprint's.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The share, zero for an instance no footprint showed, or <see langword="null"/> while no lever measures
+    /// the shares.</returns>
+    public double? DisplayShareOf(string instance) => ((m_displayShares.Count == 0)
+        ? null
+        : m_displayShares.GetValueOrDefault(key: instance));
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
-    private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage) {
+    private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass) {
         if (
             (RenderSettings is not { } settings) ||
             ((settings.UpdateRates & SdfUpdateRates.Views) == 0) ||
@@ -91,11 +109,19 @@ public sealed partial class WorldViewGraphHost {
             return RenderGraphRefresh.EveryFrame;
         }
 
-        return Rated(counts: settings.RateCounts, hertz: SdfUpdateRateTiers.ViewHertz(pixels: ((share * coverage) * m_displayHeight)), kind: SdfUpdateRateCounts.ViewsRated, lever: SdfUpdateRates.Views, producer: producer);
+        var pixels = ((share * coverage) * m_displayHeight);
+        var refresh = Rated(counts: settings.RateCounts, hertz: SdfUpdateRateTiers.ViewHertz(pixels: pixels), kind: SdfUpdateRateCounts.ViewsRated, lever: SdfUpdateRates.Views, producer: producer, size: pixels);
+
+        if ((glass >= 0) && m_ratedProducers.TryGetValue(key: producer, value: out var rated)) {
+            rated.Glass = glass;
+        }
+
+        return refresh;
     }
-    // The refresh a tier asks for, counting a footprint it rates and noting the tier its producer was asked at: a floor
-    // at the tier (RenderGraphRefresh.AtLeast), or every frame at the full tier or on a host not paced to a display.
-    private RenderGraphRefresh Rated(int hertz, WorkCounterSet counts, WorkKind kind, SdfUpdateRates lever, string producer) {
+    // The refresh a tier asks for, counting a footprint it rates and noting the tier its producer was asked at and the
+    // size on screen it was asked by: a floor at the tier (RenderGraphRefresh.AtLeast), or every frame at the full tier or
+    // on a host not paced to a display.
+    private RenderGraphRefresh Rated(int hertz, WorkCounterSet counts, WorkKind kind, SdfUpdateRates lever, string producer, double size) {
         if (!m_presentationRate.IsPaced) {
             return RenderGraphRefresh.EveryFrame;
         }
@@ -105,6 +131,7 @@ public sealed partial class WorldViewGraphHost {
         }
 
         rated.Lever = lever;
+        rated.Size = ((rated.Asked == 0) ? size : Math.Max(val1: rated.Size, val2: size));
         rated.Asked = Math.Max(val1: rated.Asked, val2: hertz);
 
         if (hertz >= SdfUpdateRateTiers.EveryFrameHertz) {
@@ -132,6 +159,8 @@ public sealed partial class WorldViewGraphHost {
                 var index = runtime.Instances.IndexOf(name: name);
                 var row = (((index >= 0) && (index < latest.Instances.Count)) ? latest.Instances[index] : default);
 
+                rated.RenderedLatest = ((rated.Asked != 0) && string.Equals(a: row.Instance, b: name, comparisonType: StringComparison.Ordinal) && (row.Status == RenderGraphInstanceStatus.Rendered));
+
                 if ((rated.Asked == 0) || !string.Equals(a: row.Instance, b: name, comparisonType: StringComparison.Ordinal)) {
                     rated.Chained = false;
                 } else if (row.Status == RenderGraphInstanceStatus.Rendered) {
@@ -153,6 +182,7 @@ public sealed partial class WorldViewGraphHost {
 
         foreach (var rated in m_ratedProducers.Values) {
             rated.Asked = 0;
+            rated.Glass = -1;
         }
     }
     // The refresh a footprint showing a source on the boot world's screens asks for: every frame unless the screens lever
@@ -241,6 +271,56 @@ public sealed partial class WorldViewGraphHost {
             largest = Math.Max(val1: largest, val2: (((coverage * consumerShare) * m_displayHeight) / Math.Max(val1: 1, val2: mapping.Crop.Height)));
         }
 
-        return Rated(counts: settings.RateCounts, hertz: (shown ? SdfUpdateRateTiers.ScreenHertz(share: largest) : SdfUpdateRateTiers.EveryFrameHertz), kind: SdfUpdateRateCounts.ScreensRated, lever: SdfUpdateRates.Screens, producer: footprint.Producer);
+        return Rated(counts: settings.RateCounts, hertz: (shown ? SdfUpdateRateTiers.ScreenHertz(share: largest) : SdfUpdateRateTiers.EveryFrameHertz), kind: SdfUpdateRateCounts.ScreensRated, lever: SdfUpdateRates.Screens, producer: footprint.Producer, size: largest);
+    }
+    // Publishes the views and screens this frame's footprints rated, each at the size and tier it was asked at.
+    private void PublishRateReadings() {
+        if (RenderSettings?.RateReadings is not { } readings) {
+            return;
+        }
+
+        foreach (var lever in (ReadOnlySpan<SdfUpdateRates>)[SdfUpdateRates.Views, SdfUpdateRates.Screens]) {
+            var latest = m_rateReadings;
+
+            latest.Clear();
+
+            foreach (var (name, rated) in m_ratedProducers) {
+                if ((rated.Lever == lever) && (rated.Asked != 0)) {
+                    latest.Add(item: new SdfUpdateRateReadings.Reading(Hertz: rated.Asked, Name: name, Size: rated.Size));
+                }
+            }
+
+            latest.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Name, strB: right.Name));
+            readings.Publish(lever: lever, readings: latest);
+        }
+    }
+    /// <summary>Writes each screen's <see cref="SdfUpdateRateCode"/> for the frame this host's footprints were reset for:
+    /// a screen whose source a rated footprint asked for this frame, or the boot world's glass a rated session shows
+    /// through, carries the tier it was asked at and whether the latest schedule rendered it; every other screen
+    /// <see cref="SdfUpdateRateCode.None"/>.</summary>
+    /// <param name="codes">The codes, indexed by screen; a screen past its end is left out.</param>
+    public void WriteScreenRateCodes(Span<byte> codes) {
+        codes.Clear();
+
+        foreach (var rated in m_ratedProducers.Values) {
+            if ((rated.Asked != 0) && (((uint)rated.Glass) < ((uint)codes.Length))) {
+                codes[rated.Glass] = ((byte)SdfUpdateRateTiers.CodeOf(hertz: rated.Asked, updated: rated.RenderedLatest));
+            }
+        }
+
+        if (Screens is not { } screens) {
+            return;
+        }
+
+        foreach (var screen in screens.Screens) {
+            if (
+                (((uint)screen.Index) < ((uint)codes.Length)) &&
+                (screens.InstanceOf(screen: screen.Index) is { } instance) &&
+                m_ratedProducers.TryGetValue(key: instance, value: out var rated) &&
+                (rated.Asked != 0)
+            ) {
+                codes[screen.Index] = ((byte)SdfUpdateRateTiers.CodeOf(hertz: rated.Asked, updated: rated.RenderedLatest));
+            }
+        }
     }
 }

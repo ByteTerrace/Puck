@@ -96,6 +96,13 @@ public sealed partial class WorldViewPaneMappingLawTests {
         // A view the display reached no share of asks every frame.
         Assert.Equal(expected: 1, actual: divisors[UnplacedView]);
         Assert.Equal(expected: lever, actual: (rated > 0L));
+
+        // A tier view tints both screens showing the source at its tier, and nothing while the lever is off.
+        var codes = new byte[4];
+
+        m_host.WriteScreenRateCodes(codes: codes);
+        Assert.Equal(expected: (lever ? SdfUpdateRateCode.Quarter : SdfUpdateRateCode.None), actual: ((SdfUpdateRateCode)(codes[0] % ((byte)SdfUpdateRateCode.Updated))));
+        Assert.Equal(expected: codes[0], actual: codes[1]);
     }
     // A view with a share of the display whose camera is not placed yet asks every frame, beside the views that are placed.
     [Fact]

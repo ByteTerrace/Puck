@@ -6,10 +6,11 @@
 #include "sdf-lights.hlsli"
 #include "sdf-debug-modes.hlsli"
 
-// Whether a pixel of `viewMode` takes the final shading: the final image, and the sky-cost view, which tallies what the
-// sky really costs beside it.
+// Whether a pixel of `viewMode` takes the final shading: the final image, the sky-cost view, which tallies what the
+// sky really costs beside it, and the tier views, which tint it.
 bool worldFinalShadingMode(int viewMode) {
-    return ((viewMode <= 0) || (viewMode >= SDF_DEBUG_VIEW_COUNT) || (viewMode == SDF_DEBUG_VIEW_SKY_COST));
+    return ((viewMode <= 0) || (viewMode >= SDF_DEBUG_VIEW_COUNT) || (viewMode == SDF_DEBUG_VIEW_SKY_COST)
+        || sdfDebugComposesFinal((uint)viewMode));
 }
 // The per-view shader-feature levers (World's world.shadows drives the shadows; world.ao drives ambient occlusion): each
 // defaults to the shipped behavior, every feature on.

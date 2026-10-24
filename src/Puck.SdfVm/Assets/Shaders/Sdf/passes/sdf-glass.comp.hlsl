@@ -127,7 +127,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 front = glassVisibility.Load(int3(pixel, 0));
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, extent));
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
-    bool glass = ((passGroup.debugMode == 0u) && (front.y >= 1.0) && (front.x < opaque));
+    bool glass = (sdfDebugComposesFinal(passGroup.debugMode) && (front.y >= 1.0) && (front.x < opaque));
     float reactive = 0.0;
 
     if (glass) {
