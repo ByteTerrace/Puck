@@ -35,6 +35,15 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var snapshot = ++m_snapshot;
         var findings = new List<WorldDiagnosticFinding>();
         var skipped = new Dictionary<string, int>(StringComparer.Ordinal);
+        var comparisons = new Dictionary<string, WorldDiagnosticSampleCounts>(StringComparer.Ordinal);
+        void Count(string comparison, bool? red) {
+            var counts = comparisons.GetValueOrDefault(comparison) ?? new(0, 0, 0);
+            comparisons[comparison] = red switch {
+                true => counts with { Red = counts.Red + 1 },
+                false => counts with { Clean = counts.Clean + 1 },
+                null => counts with { Unknown = counts.Unknown + 1 },
+            };
+        }
         var tested = 0;
         var eligible = 0;
         var evaluated = new HashSet<string>(StringComparer.Ordinal);
@@ -77,36 +86,50 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                         }
                         tested++;
                         var observed = (double)distance;
-                        if (scene is not null && row.Opaque && !InsideAnother(row, point, budget.Numerical)) {
+                        var buried = InsideAnother(row, point, budget.Numerical);
+                        if (!buried) { Count("collision-versus-authored-field", WorldDiagnosticGeometry.ClassifyBoundary(observed, budget) is not null); }
+                        if (row.Opaque && !buried) {
                             meshEvaluated.Add(scope);
                             var normal = gradient.ToVector3();
-                            if (TryDrawnSurface(scene, point, normal, row.Collider.Extent.ToVector3().Length() + 1, out var drawn, out var drawnNormal, out var hitError)) {
+                            if (scene is not null && WorldDiagnosticMeshQuery.Measure(scene, point, budget, bakeError) is { } sample) {
+                                var drawn = sample.Surface;
+                                var drawnNormal = sample.Normal;
+                                var hitError = sample.Budget.BakeHalfDiagonal;
+                                Count("collision-versus-baked-mesh", sample.IsRed);
                                 var meshBudget = budget with { BakeHalfDiagonal = hitError };
-                                var separation = Vector3.Dot(point - drawn, normal);
-                                if (Math.Abs(separation) > meshBudget.Total) {
-                                    findings.Add(new("", view, "red", source, separation > 0 ? "collider-in-drawn-air" : "drawn-solid-outside-collider",
+                                var separation = sample.Distance;
+                                if (sample.IsRed) {
+                                    findings.Add(new("", view, "red", source, "collision-versus-baked-mesh",
                                         "effective collision boundary agrees with retained opaque mesh within margin and bake precision",
                                         separation, meshBudget, point, normal,
                                         Identity(row.Stamp, row.Stamp, row.Creation, row.Node, row.Operation) with { Frame = render?.Root?.FramesProduced },
-                                        Details: new Dictionary<string, string> { ["comparison"] = "collision-versus-baked-mesh", ["meshNormal"] = drawnNormal.ToString() }) {
+                                        Details: new Dictionary<string, string> { ["comparison"] = "collision-versus-baked-mesh", ["meshNormal"] = drawnNormal.ToString(), ["correspondence"] = "bounded nearest triangle; unsigned Euclidean distance" }) {
                                         MeshRevision = frame!.MeshDrawsRevision, SurfaceWitness = drawn,
                                     });
                                 }
                                 var fieldMeshBudget = new WorldDiagnosticBudget(0, 0, budget.Numerical, hitError);
-                                if (m_field.Probe(FixedVector3.FromVector3(drawn), out var fieldError, out _, out _) && Math.Abs((double)fieldError) > fieldMeshBudget.Total) {
+                                var fieldAnswered = m_field.Probe(FixedVector3.FromVector3(drawn), out var fieldError, out _, out _);
+                                Count("field-versus-baked-mesh", fieldAnswered ? Math.Abs((double)fieldError) > fieldMeshBudget.Total : null);
+                                if (!fieldAnswered) { Skip("authored field does not answer certified mesh witness"); meshFailed.Add(scope); }
+                                if (fieldAnswered && Math.Abs((double)fieldError) > fieldMeshBudget.Total) {
                                     findings.Add(new("", view, "red", source, "field-versus-baked-mesh",
                                         "retained mesh lies on authored field within the actual bake cell budget", (double)fieldError,
                                         fieldMeshBudget, drawn, drawnNormal, Identity(row.Stamp, row.Stamp, row.Creation, row.Node, row.Operation) with { Frame = render?.Root?.FramesProduced }) {
                                         MeshRevision = frame!.MeshDrawsRevision,
                                     });
                                 }
-                            } else { Skip("mesh surface search has no witness"); meshFailed.Add(scope); }
+                            } else {
+                                Count("collision-versus-baked-mesh", null);
+                                Count("field-versus-baked-mesh", null);
+                                Skip("mesh correspondence uncertified: no nearest triangle within precision search radius or no matching scene");
+                                meshFailed.Add(scope);
+                            }
                         }
                         if (WorldDiagnosticGeometry.ClassifyBoundary(observed, budget) is not { } contradiction) {
                             continue;
                         }
                         // Buried union boundaries are not effective outer collision surfaces.
-                        if (InsideAnother(row, point, budget.Numerical)) {
+                        if (buried) {
                             continue;
                         }
                         findings.Add(new WorldDiagnosticFinding("", view, "red", source,
@@ -184,34 +207,32 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                 }
                 if (scene is not null && row?.Opaque == true && frame!.Clock.Whole == server.CompletedEngineTicks && frame.Clock.Fraction == 0) {
                     meshEvaluated.Add($"body:{index}|analytic/{support.Source}/{support.ColliderIndex}");
-                    var drawnBudget = fieldBudget with { BakeHalfDiagonal = bakeError };
                     var footPoint = foot.ToVector3();
-                    var reach = Math.Max((float)drawnBudget.Total * 4, (float)(double)support.Volume.Radius + 1);
-                    if (scene.Intersect(footPoint + normal * (float)drawnBudget.Total, -normal, reach,
-                        out var depth, out var drawnNormal, out _, out var hitError) &&
-                        FixedVector3.Dot(FixedVector3.FromVector3(drawnNormal), support.Up) >= support.WalkableThreshold) {
-                        var drawnGap = depth - drawnBudget.Total;
-                        drawnBudget = drawnBudget with { BakeHalfDiagonal = hitError };
+                    if (WorldDiagnosticMeshQuery.Measure(scene, surface.Point.ToVector3(), fieldBudget, bakeError) is { } sample &&
+                        FixedVector3.Dot(FixedVector3.FromVector3(sample.Normal), support.Up) >= support.WalkableThreshold) {
+                        var drawnBudget = sample.Budget;
+                        var drawnGap = Vector3.Dot(footPoint - sample.Surface, normal);
+                        Count("solver-versus-baked-mesh", drawnGap > drawnBudget.Total);
+                        details["comparison"] = "solver-versus-baked-mesh";
+                        details["correspondence"] = "bounded nearest triangle at retained solver support";
                         if (drawnGap > drawnBudget.Total) {
                             findings.Add(new("", view, "red", $"analytic/{support.Source}/{support.ColliderIndex}", "grounded-on-air",
                                 "actual grounded support has a walkable retained opaque surface within its precision budget",
                                 drawnGap, drawnBudget, footPoint, normal, identity with { Frame = render?.Root?.FramesProduced }, Details: details) {
-                                MeshRevision = frame!.MeshDrawsRevision, SurfaceWitness = footPoint - normal * (float)drawnGap,
+                                MeshRevision = frame!.MeshDrawsRevision, SurfaceWitness = sample.Surface,
                             });
                         }
                         if (drawnGap > drawnBudget.Total && body.DiagnosticSettled) {
                             findings.Add(new("", view, "red", $"analytic/{support.Source}/{support.ColliderIndex}", "hovering-over-drawn-surface",
                                 "settled support gap <= contact skin plus collision and bake precision; snap reach is informational",
                                 drawnGap, drawnBudget, footPoint, normal, identity with { Frame = render?.Root?.FramesProduced }, Details: details) {
-                                MeshRevision = frame!.MeshDrawsRevision, SurfaceWitness = footPoint - normal * (float)drawnGap,
+                                MeshRevision = frame!.MeshDrawsRevision, SurfaceWitness = sample.Surface,
                             });
                         }
                     } else {
-                        findings.Add(new("", view, "red", $"analytic/{support.Source}/{support.ColliderIndex}", "grounded-on-air",
-                            "actual grounded support has a walkable retained opaque surface within its precision budget",
-                            reach, drawnBudget, footPoint, normal, identity with { Frame = render?.Root?.FramesProduced }, Details: details) {
-                            MeshRevision = frame!.MeshDrawsRevision,
-                        });
+                        Count("solver-versus-baked-mesh", null);
+                        Skip($"body:{index}: mesh support correspondence or walkability uncertified");
+                        meshFailed.Add($"body:{index}|analytic/{support.Source}/{support.ColliderIndex}");
                     }
                 } else if (scene is not null) { Skip($"body:{index}: interpolated presentation has no exact solver pose witness"); }
             }
@@ -222,7 +243,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         foreach (var reason in skipped.Keys) {
             findings.Add(Unknown("coverage", reason) with { Source = reason });
         }
-        var coverage = new WorldDiagnosticCoverage(tested, eligible, skipped, skipped.Count == 0);
+        var coverage = new WorldDiagnosticCoverage(tested, eligible, skipped, skipped.Count == 0) { Comparisons = comparisons };
         var report = new WorldDiagnosticReport(snapshot, view, tick, m_tracker.Update(view, tick, findings.Select(f => f with { Coverage = coverage }), complete: skipped.Count == 0,
             evaluated: f => evaluated.Contains($"{f.Identity.Subject}|{f.Source}") && !failed.Contains($"{f.Identity.Subject}|{f.Source}") &&
                 (f.MeshRevision is null || meshEvaluated.Contains($"{f.Identity.Subject}|{f.Source}") && !meshFailed.Contains($"{f.Identity.Subject}|{f.Source}"))),
@@ -240,28 +261,6 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         m_logTicks[report.View] = report.Tick;
         using var parsed = System.Text.Json.JsonDocument.Parse(report.ToJson());
         Console.Error.WriteLine($"[world.debug-view.{report.View}] {System.Text.Json.JsonSerializer.Serialize(parsed.RootElement)}");
-    }
-
-    private static bool TryDrawnSurface(SdfMeshIrradianceScene scene, Vector3 point, Vector3 normal, float reach,
-        out Vector3 surface, out Vector3 surfaceNormal, out float bakeHalfDiagonal) {
-        surface = default;
-        surfaceNormal = default;
-        bakeHalfDiagonal = 0;
-        if (normal.LengthSquared() < 0.01f) { return false; }
-        normal = Vector3.Normalize(normal);
-        var outward = scene.Intersect(point, normal, reach, out var outside, out var outsideNormal, out _, out var outsideError);
-        var inward = scene.Intersect(point, -normal, reach, out var inside, out var insideNormal, out _, out var insideError);
-        if (outward && Vector3.Dot(outsideNormal, normal) > 0 && (!inward || outside < inside)) {
-            surface = point + normal * outside;
-            surfaceNormal = outsideNormal;
-            bakeHalfDiagonal = outsideError;
-            return true;
-        }
-        if (!inward || Vector3.Dot(insideNormal, normal) <= 0) { return false; }
-        surface = point - normal * inside;
-        surfaceNormal = insideNormal;
-        bakeHalfDiagonal = insideError;
-        return true;
     }
 
     private void PrepareField() {

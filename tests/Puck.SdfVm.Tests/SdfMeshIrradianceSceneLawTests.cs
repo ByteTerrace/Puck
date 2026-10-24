@@ -12,6 +12,42 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceSceneLawTests {
     [Fact]
+    public void NearestSurfaceAgreesWithAnIndependentWorldTriangleSearch() {
+        var draws = Draws(Sheet(8, 3), Cube());
+        var scene = SdfMeshIrradianceScene.Build(draws)!;
+        var triangles = Flatten(draws);
+        foreach (var (point, _) in Rays()) {
+            // Independent oracle: project to each triangle plane, then compare the interior projection and all edges.
+            var expected = triangles.Min(t => Distance(point, t));
+            foreach (var radius in new[] { 0.05f, 0.5f, 5f }) {
+                var found = scene.TryNearestSurface(point, radius, out var surface, out var normal, out _);
+                Assert.Equal(expected <= radius, found);
+                if (!found) { continue; }
+                Assert.Equal(expected, Vector3.Distance(point, surface), 0.00001f);
+                Assert.Equal(1f, normal.Length(), 0.00001f);
+            }
+        }
+        Assert.False(scene.TryNearestSurface(Vector3.Zero, -1, out _, out _, out _));
+        Assert.False(scene.TryNearestSurface(Vector3.Zero, float.NaN, out _, out _, out _));
+
+        static float Distance(Vector3 p, World t) {
+            var ab = t.B - t.A;
+            var ac = t.C - t.A;
+            var n = Vector3.Normalize(Vector3.Cross(ab, ac));
+            var projected = p - Vector3.Dot(p - t.A, n) * n;
+            var result = Math.Min(Edge(t.A, t.B), Math.Min(Edge(t.B, t.C), Edge(t.C, t.A)));
+            if (Vector3.Dot(Vector3.Cross(ab, projected - t.A), n) >= 0 &&
+                Vector3.Dot(Vector3.Cross(t.C - t.B, projected - t.B), n) >= 0 &&
+                Vector3.Dot(Vector3.Cross(t.A - t.C, projected - t.C), n) >= 0) {
+                result = Math.Min(result, Vector3.Distance(p, projected));
+            }
+            return result;
+            float Edge(Vector3 a, Vector3 b) => Vector3.Distance(p,
+                a + Math.Clamp(Vector3.Dot(p - a, b - a) / (b - a).LengthSquared(), 0, 1) * (b - a));
+        }
+    }
+
+    [Fact]
     public void ADiagnosticHitCarriesOnlyItsOwnTransformedBakeCell() {
         var mesh = Cube() with { BakeCell = new Vector3(0.02f, 0.04f, 0.06f) };
         var scene = SdfMeshIrradianceScene.Build([
@@ -21,6 +57,9 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         Assert.NotNull(scene);
         Assert.True(scene.Intersect(new Vector3(0, 3, 0), -Vector3.UnitY, 10, out _, out _, out _, out var error));
         Assert.Equal(mesh.BakeCell.Length(), error, 0.000001f);
+        Assert.True(scene.TryNearestSurface(new Vector3(0, 3, 0), 3, out var point, out _, out var nearestError));
+        Assert.Equal(new Vector3(0, 1, 0), point);
+        Assert.Equal(error, nearestError);
     }
     // A rippled sheet of quads, wide enough that its hierarchy and preparation run in parallel.
     private static SdfMesh Sheet(int quads, uint materials) {

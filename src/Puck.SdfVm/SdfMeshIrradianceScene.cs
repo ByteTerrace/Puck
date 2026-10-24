@@ -14,7 +14,7 @@ namespace Puck.SdfVm;
 /// reaches a distance unblocked. Presentation only: the tracing is single-precision and nothing it answers reaches
 /// simulation state.
 /// </summary>
-public sealed class SdfMeshIrradianceScene {
+public sealed partial class SdfMeshIrradianceScene {
     /// <summary>The most triangles of geometry no draw of a scene uses that the scene keeps for a later scene built from
     /// it, the most recently drawn first: a responding placement toggled back takes its earlier geometry again.</summary>
     public const long RetainedTriangles = 8_000_000L;

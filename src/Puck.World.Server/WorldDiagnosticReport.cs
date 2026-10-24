@@ -38,7 +38,7 @@ public sealed record WorldDiagnosticIdentity(long Snapshot, ulong Tick, long? Fr
 /// <param name="Source">The effective provider and source.</param>
 /// <param name="Check">Named contract.</param>
 /// <param name="Expected">Expected relation.</param>
-/// <param name="Observed">Measured signed separation in metres.</param>
+/// <param name="Observed">Measured separation in metres; signed for field/support checks, unsigned for nearest mesh distance.</param>
 /// <param name="Budget">Explained error components.</param>
 /// <param name="Witness">Worst witness in world space.</param>
 /// <param name="Normal">Witness normal.</param>
@@ -53,7 +53,7 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
     string Expected, double? Observed, WorldDiagnosticBudget Budget, Vector3 Witness, Vector3 Normal,
     WorldDiagnosticIdentity Identity, ulong FirstSeen = 0, ulong LastSeen = 0, ulong ActiveTicks = 0,
     bool Resolved = false, string Visibility = "unknown", IReadOnlyDictionary<string, string>? Details = null) {
-    /// <summary>The units of the signed separation and budget.</summary>
+    /// <summary>The units of the separation and budget.</summary>
     public string Units => "m";
     /// <summary>The stable presentation anchor; measurements always retain their own current witness.</summary>
     public Vector3? PinAnchor { get; init; }
@@ -76,7 +76,16 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
 /// <param name="Eligible">Number of eligible witnesses in this audit.</param>
 /// <param name="Skipped">Reasons and counts of unevaluated inputs.</param>
 /// <param name="Complete">Whether all required representations and witnesses were evaluated.</param>
-public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnlyDictionary<string, int> Skipped, bool Complete);
+public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnlyDictionary<string, int> Skipped, bool Complete) {
+    /// <summary>Per-comparison witness counts, distinct from clustered finding counts. Unknown samples are never clean.</summary>
+    public IReadOnlyDictionary<string, WorldDiagnosticSampleCounts> Comparisons { get; init; } = new Dictionary<string, WorldDiagnosticSampleCounts>();
+}
+
+/// <summary>Mutually exclusive outcomes of sampled witnesses for one comparison.</summary>
+/// <param name="Red">Certified contract violations.</param>
+/// <param name="Clean">Evaluated witnesses within their own precision budgets.</param>
+/// <param name="Unknown">Witnesses without certified correspondence or required state.</param>
+public sealed record WorldDiagnosticSampleCounts(int Red, int Clean, int Unknown);
 
 /// <summary>An immutable diagnostic snapshot, including incomplete coverage.</summary>
 /// <param name="Snapshot">Snapshot identity.</param>

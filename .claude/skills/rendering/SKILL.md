@@ -42,6 +42,19 @@ involved. A second `SdfWorldPicker` per instance asynchronously reads cluster
 depth without stealing pointer requests; discard results across camera, mesh,
 program or view changes.
 
+Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
+`TryNearestSurface`, not normal-ray hits. The nearest query reuses both levels
+of the trace hierarchy and tests world-space triangle distances (object-space
+nearest points are wrong under nonuniform scaling). It includes edges and
+zero-distance witnesses. The search radius is four times the sum of
+collision/arithmetic precision and the scene's largest bake half diagonal; only the returned
+triangle's own precision enters its budget. A miss is unknown. Grounded checks
+require the nearest retained support surface to be walkable; a missing or
+unqualified hit is unknown too. `coverage.comparisons` counts red, clean and
+unknown witnesses separately from causal findings. Never add a fillet, bound
+or snap-reach allowance, or suppress authored-field findings to quiet the mesh
+audit. The owning decision is [diagnostic evidence](../../../docs/decisions/rendering.md#a-diagnostic-view-never-covers-its-evidence).
+
 Captures on the synthesized overlaid root retain the beauty image, annotated
 image and JSON together. Attach the companion to `WorldRootGraph.OverlayInstance`,
 which serves the screenshot, not `ComparisonLiveRoot`, which is the beauty

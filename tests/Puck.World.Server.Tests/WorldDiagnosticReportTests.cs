@@ -44,10 +44,18 @@ public sealed class WorldDiagnosticReportTests {
     public void MissingRepresentationsRemainUnknownInTheSharedRecord() {
         var unknown = Finding(0) with { Severity = "unknown", Observed = null };
         var report = new WorldDiagnosticReport(7, "colliders", 8, [unknown],
-            new(0, 3, new Dictionary<string, int> { ["mesh pending"] = 3 }, false));
+            new(0, 3, new Dictionary<string, int> { ["mesh pending"] = 3 }, false) {
+                Comparisons = new Dictionary<string, WorldDiagnosticSampleCounts> {
+                    ["collision-versus-baked-mesh"] = new(0, 0, 3),
+                },
+            });
         using var json = JsonDocument.Parse(report.ToJson());
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("findings")[0].GetProperty("observed").ValueKind);
         Assert.False(json.RootElement.GetProperty("coverage").GetProperty("complete").GetBoolean());
+        var samples = json.RootElement.GetProperty("coverage").GetProperty("comparisons").GetProperty("collision-versus-baked-mesh");
+        Assert.Equal(0, samples.GetProperty("red").GetInt32());
+        Assert.Equal(0, samples.GetProperty("clean").GetInt32());
+        Assert.Equal(3, samples.GetProperty("unknown").GetInt32());
         Assert.Contains("unknown=1", report.Summary());
         Assert.Contains("tested=0/3", report.Summary());
     }

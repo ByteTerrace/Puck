@@ -803,10 +803,12 @@ Run `world.debug-view report colliders --json` or
 `world.debug-view report contacts --json` to inspect a world without enabling
 an overlay. `report all` evaluates both categories. These commands also work
 headless. Each finding names its snapshot, tick, view, subject and revision;
-its expected relation, signed separation in metres, precision components and
+its expected relation, separation in metres, precision components and
 witness; its first/last seen ticks and resolved state; and its authored stamp,
 creation, node and operation. The report carries tested/eligible counts and
-explicit skipped reasons. Missing evaluation is **unknown**, never a zero.
+explicit skipped reasons. `coverage.comparisons` gives red, clean and unknown
+sample counts for each attempted comparison; these count witnesses, while the
+banner counts clustered causes. Missing evaluation is **unknown**, never a zero.
 
 `world.debug-view colliders` or `world.debug-view contacts` keeps the beauty
 image and adds at most sixteen causal pins, exterior marks and support calipers.
@@ -838,14 +840,22 @@ directions against the authored solid union. This is a finite witness audit,
 not a proof over every point of the surface. Collision-versus-field findings
 stay separate from field-versus-baked-mesh findings. Rendered comparisons
 require the same delivered document version, a settled bake and matching retained draw
-records; their budget includes the actual hit mesh's contour cell half diagonal.
+records. Correspondence is certified by a bounded nearest-triangle search over
+the retained scene, including edges, vertices and zero-distance witnesses.
+The search radius is `4 × (collision/arithmetic precision + largest scene bake
+half diagonal)`. This radius
+bounds coverage, not acceptable error; the budget includes only the returned
+triangle's own contour cell half diagonal. Collider/mesh separation is unsigned
+Euclidean distance. A distant ray hit or a missing local nearest point is
+unknown, never red or clean. The authored-field comparison is independent.
 Opaque solids participate in that contract; transmissive geometry does not
 become a missing opaque surface. Attached poses and providers without a
 retained witness are reported as unknown. Contacts use the actual analytic
 support push and loaded rigid-manifold anchor. A hover requires settled normal
 velocity and a gap beyond contact skin and precision; ground-snap reach is
 reported separately. A drawn contact check requires an exact presented solver
-tick; interpolation without such a witness stays unknown.
+tick and a certified nearest walkable surface at its retained solver support;
+interpolation or missing correspondence stays unknown.
 
 With a diagnostic view on, a capture of the synthesized overlaid root writes
 `name.png` (annotated), `name.raw.png` (the retained beauty image before HUD and
