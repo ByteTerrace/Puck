@@ -36,6 +36,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
     private sealed class Started(Process process, string document, string checkout, string build, string runDirectory, IDisposable? lease) {
         public string? AttachmentId;
+
         public readonly Process Process = process;
         public readonly string Build = build;
         public readonly string Checkout = checkout;
@@ -53,12 +54,11 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     /// <param name="processId">The World's process id.</param>
     /// <returns><see langword="true"/> for a World this adapter started that has not been stopped.</returns>
     public bool Owns(int processId) => m_started.ContainsKey(key: processId);
-
     /// <summary>Stops every World this adapter started: each is asked to quit, then its process tree is killed.</summary>
     public void Dispose() {
         foreach (var started in m_started.Values) {
             try {
-                _ = Stop(started: started, grace: DisposeGrace);
+                _ = Stop(grace: DisposeGrace, started: started);
             } catch (Exception error) when ((error is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)) { }
         }
     }
@@ -100,7 +100,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             return Refuse(output: "This adapter is pinned to one World by --attach, so a World it started could not be reached; run it without --attach to start Worlds.");
         }
 
-        var (checkout, refusal) = await CheckoutAsync(requested: checkoutArgument, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var (checkout, refusal) = await CheckoutAsync(cancellationToken: cancellationToken, requested: checkoutArgument).ConfigureAwait(continueOnCapturedContext: false);
 
         if (checkout is null) {
             return Refuse(output: refusal!);
@@ -146,7 +146,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (started.Process.HasExited) {
-                    _ = Stop(started: started, grace: TimeSpan.Zero);
+                    _ = Stop(grace: TimeSpan.Zero, started: started);
 
                     return Refuse(output: $"Refused: World process {started.Process.Id} exited with code {started.Process.ExitCode} before it accepted an attachment.{Tail(path: started.StderrLog)}", started: started);
                 }
@@ -164,15 +164,15 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                     return Result(metadata: Metadata(output: $"Started World process {started.Process.Id} ({(windowed ? "windowed, holding the GPU lease" : "headless")}, --devices {(ownerPlay ? "all" : "none")}) from {build}; name it by processId or attachmentId in every call, read its output with host.log, and end it with puck_world_stop.", started: started, status: "started", world: reached));
                 }
                 if (clock.GetElapsedTime(startingTimestamp: begun) >= budget) {
-                    _ = Stop(started: started, grace: TimeSpan.Zero);
+                    _ = Stop(grace: TimeSpan.Zero, started: started);
 
                     return Refuse(output: $"Refused: World process {started.Process.Id} did not accept an attachment within {seconds} s and was stopped.{Tail(path: started.StderrLog)}", started: started);
                 }
 
-                await Task.Delay(delay: AttachPoll, timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                await Task.Delay(cancellationToken: cancellationToken, delay: AttachPoll, timeProvider: clock).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch (OperationCanceledException) {
-            _ = Stop(started: started, grace: TimeSpan.Zero);
+            _ = Stop(grace: TimeSpan.Zero, started: started);
 
             throw;
         }
@@ -200,8 +200,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         }
 
         var started = m_started.Values.FirstOrDefault(predicate: entry =>
-            string.Equals(a: entry.AttachmentId, b: selector, comparisonType: StringComparison.OrdinalIgnoreCase) ||
-            (int.TryParse(s: selector, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var processId) && (processId == entry.Process.Id)));
+            (string.Equals(a: entry.AttachmentId, b: selector, comparisonType: StringComparison.OrdinalIgnoreCase) ||
+            (int.TryParse(s: selector, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var processId) && (processId == entry.Process.Id))));
 
         if (started is null) {
             return Refuse(output: $"Refused: '{selector}' names no World this adapter started with puck_world_start, so nothing was stopped; a World it did not start is never touched.");
@@ -218,6 +218,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     }
 
     private static StringComparison PathComparison => (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path));
     // The newest Release build of the World in a checkout, whatever its target framework.
     private static string? NewestBuild(string checkout) {
@@ -259,16 +260,15 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     // The last lines a World wrote to standard error, for a refusal that says why it never attached.
     private static string Tail(string path) {
         try {
-            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: (FileShare.ReadWrite | FileShare.Delete));
+            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream: stream, encoding: Encoding.UTF8);
-            var lines = reader.ReadToEnd().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries);
+            var lines = reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
 
-            return ((lines.Length == 0) ? string.Empty : $"{Environment.NewLine}Last stderr lines:{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: lines.TakeLast(count: 8).Select(selector: static line => line.TrimEnd('\r')))}");
+            return ((lines.Length == 0) ? string.Empty : $"{Environment.NewLine}Last stderr lines:{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: lines.TakeLast(count: 8).Select(selector: static line => line.TrimEnd(trimChar: '\r')))}");
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
             return string.Empty;
         }
     }
-
     // The checkout a start boots from: the adapter's own, or another worktree of its repository by absolute path.
     private async Task<(string? Checkout, string? Refusal)> CheckoutAsync(string? requested, CancellationToken cancellationToken) {
         var own = Normalize(path: launch!.Checkout);
@@ -278,15 +278,27 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             return (own, null);
         }
 
-        var listing = await ChildProcess.RunAsync(
-            arguments: ["-C", own, "worktree", "list", "--porcelain"],
-            cancellationToken: cancellationToken,
-            clock: clock,
-            fileName: "git",
-            timeout: TimeSpan.FromSeconds(seconds: 30)
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        ChildProcessResult listing;
 
-        if ((listing.ExitCode != 0) || listing.TimedOut) {
+        try {
+            listing = await ChildProcess.RunAsync(
+                arguments: ["-C", own, "worktree", "list", "--porcelain"],
+                cancellationToken: cancellationToken,
+                clock: clock,
+                fileName: "git",
+                // The adapter is already reading its MCP pipe. Git for Windows probes inherited stdin during
+                // startup; that probe waits behind the adapter's pending read. Give this noninteractive query EOF.
+                input: string.Empty,
+                timeout: TimeSpan.FromSeconds(seconds: 30)
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception error) when ((error is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+            return (null, $"Refused: git failed to start while listing the worktrees of {own}: {error.Message}");
+        }
+
+        if (listing.TimedOut) {
+            return (null, $"Refused: git timed out after 30 s while listing the worktrees of {own}; its process tree was stopped. {listing.Stderr.Trim()}");
+        }
+        if (listing.ExitCode != 0) {
             return (null, $"Refused: git could not list the worktrees of {own} (exit {listing.ExitCode}): {listing.Stderr.Trim()}");
         }
 
@@ -343,7 +355,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     // Copies both streams to the run's log files, and releases the lease once the World has exited.
     private static async Task WatchAsync(Started started) {
         async Task CopyAsync(Stream source, string path) {
-            await using var file = new FileStream(access: FileAccess.Write, bufferSize: 0, mode: FileMode.Create, path: path, share: (FileShare.ReadWrite | FileShare.Delete));
+            await using var file = new FileStream(access: FileAccess.Write, bufferSize: 0, mode: FileMode.Create, path: path, share: FileShare.ReadWrite | FileShare.Delete);
 
             try {
                 await source.CopyToAsync(destination: file).ConfigureAwait(continueOnCapturedContext: false);
@@ -357,7 +369,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
         try {
             await started.Process.WaitForExitAsync().ConfigureAwait(continueOnCapturedContext: false);
-            _ = await Task.WhenAny(pumps, Task.Delay(delay: ChildProcess.ExitDrainGrace)).ConfigureAwait(continueOnCapturedContext: false);
+            _ = await Task.WhenAny(task1: pumps, task2: Task.Delay(delay: ChildProcess.ExitDrainGrace)).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             Interlocked.Exchange(location1: ref started.Lease, value: null)?.Dispose();
         }

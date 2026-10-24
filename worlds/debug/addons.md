@@ -47,7 +47,9 @@ Two state rows hold the record, and `world.state` reads them over MCP:
 - `watchdogLog`, text: `first` and `last`, as lines such as
   `t=61 below-floor body=0 y=-3.01`.
 
-The `watchdog` HUD panel shows the count and the last line while there is one.
+The `watchdog` HUD panel shows the count and the last line while there is one, once the addon HUD toggle is on:
+every addon panel stays hidden until `world.state.cell.set addonHud $value 1` ([addon-hud.puck](addon-hud.puck)), and
+the rows are readable with `world.state` either way.
 
 ### Finding a transient and replaying to its tick
 

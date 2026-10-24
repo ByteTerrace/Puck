@@ -22,6 +22,52 @@ public sealed class McpInteropTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
     private static string Cli => CliPaths.Tool;
 
+    // The harness launcher leaves the adapter reading a real, open MCP stdin pipe. A different checkout forces the
+    // Git query even on CI with no linked worktrees; a foreign-checkout refusal proves Git finished without booting.
+    [Fact]
+    public async Task HookLaunchListsWorktreesWhileMcpInputRemainsOpen() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "The session launcher uses PowerShell on Windows."); return; }
+        using var directory = new TemporaryDirectory();
+        await using var adapter = await ConnectAsync(attach: "latest", directory: directory, revision: "2025-11-25", hook: true);
+        var result = await adapter.Client.CallToolAsync(
+            "puck_world_start",
+            new Dictionary<string, object?> { ["checkout"] = directory.RootPath, ["windowed"] = false },
+            cancellationToken: Token
+        );
+
+        Assert.True(condition: result.IsError);
+        Assert.Contains(expectedSubstring: "is not a checkout of this repository", actualString: result.StructuredContent!.Value.GetProperty(propertyName: "output").GetString());
+        Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: result.StructuredContent.Value.GetProperty(propertyName: "processId").ValueKind);
+    }
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public async Task WorktreeDiscoveryReportsStartFailureOrGitsExitAndStderr(bool failedStart) {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows process interop is required."); return; }
+        using var directory = new TemporaryDirectory();
+        await using var adapter = await ConnectAsync(
+            attach: "latest",
+            directory: directory,
+            revision: "2025-11-25",
+            configure: start => {
+                if (failedStart) { start.Environment["PATH"] = directory.RootPath; } else { start.Environment["GIT_CONFIG_COUNT"] = "invalid"; }
+            }
+        );
+        var result = await adapter.Client.CallToolAsync(
+            "puck_world_start",
+            new Dictionary<string, object?> { ["checkout"] = directory.RootPath },
+            cancellationToken: Token
+        );
+        var output = result.StructuredContent!.Value.GetProperty(propertyName: "output").GetString();
+
+        Assert.True(condition: result.IsError);
+        if (failedStart) {
+            Assert.Contains(actualString: output, expectedSubstring: "git failed to start");
+        } else {
+            Assert.Contains(actualString: output, expectedSubstring: "(exit 128)");
+            Assert.Contains(actualString: output, expectedSubstring: "bogus count in GIT_CONFIG_COUNT");
+        }
+    }
     // The handshake revisions are what an editor or an agent harness opens with; the last is per-request metadata.
     [InlineData("2025-06-18", false)]
     [InlineData("2025-11-25", false)]
@@ -424,7 +470,6 @@ public sealed class McpInteropTests {
             }
         }
     }
-
     // Law: puck_world_start boots the checkout's debug world headless from its Release build and answers once the World
     // accepts an attachment; host.log reads that World's stderr, its boot line saying no device is open and the line a
     // world.at pin wrote, anchored to the tick it ran at; puck_world_stop quits it and reports its exit. A World the
@@ -456,7 +501,7 @@ public sealed class McpInteropTests {
             }
 
             foreach (var refused in new Dictionary<string, object?>[] { new() { ["document"] = "src" }, new() { ["checkout"] = directory.RootPath } }) {
-                var refusal = await CallAsync(tool: "puck_world_start", arguments: refused);
+                var refusal = await CallAsync(arguments: refused, tool: "puck_world_start");
 
                 Assert.Equal(expected: "refused", actual: refusal.GetProperty(propertyName: "status").GetString());
                 Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refusal.GetProperty(propertyName: "processId").ValueKind);
@@ -473,7 +518,7 @@ public sealed class McpInteropTests {
                 ignoreCase: true
             );
 
-            var listed = (await CallAsync(tool: "puck_worlds", arguments: [])).GetProperty(propertyName: "worlds").EnumerateArray().ToDictionary(
+            var listed = (await CallAsync(arguments: [], tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray().ToDictionary(
                 elementSelector: static world => world.GetProperty(propertyName: "started").GetBoolean(),
                 keySelector: static world => world.GetProperty(propertyName: "processId").GetInt32()
             );
@@ -491,7 +536,7 @@ public sealed class McpInteropTests {
 
             var pinned = await ExecAsync(command: "host.log category world.at", world: startedProcess);
 
-            Assert.Matches(expectedRegexPattern: $@"(?m)^#\d+ t{tick} err \[world\.at\] tick {tick} ran: world\.status", actualString: pinned);
+            Assert.Matches(actualString: pinned, expectedRegexPattern: $@"(?m)^#\d+ t{tick} err \[world\.at\] tick {tick} ran: world\.status");
             Assert.Contains(expectedSubstring: "err [world.host] physical input devices are off (--devices none)", actualString: await ExecAsync(command: "host.log text \"physical input devices\" stream err", world: startedProcess));
 
             var foreignStop = await CallAsync(tool: "puck_world_stop", arguments: new() { ["world"] = foreign.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) });
@@ -508,7 +553,7 @@ public sealed class McpInteropTests {
             Assert.False(condition: stop.GetProperty(propertyName: "leaseReleased").GetBoolean());
             Assert.Contains(expectedSubstring: "[world.host] physical input devices are off", actualString: File.ReadAllText(path: stop.GetProperty(propertyName: "stderrLog").GetString()!));
             Assert.DoesNotContain(
-                collection: (await CallAsync(tool: "puck_worlds", arguments: [])).GetProperty(propertyName: "worlds").EnumerateArray(),
+                collection: (await CallAsync(arguments: [], tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray(),
                 filter: world => (world.GetProperty(propertyName: "processId").GetInt32() == startedProcess)
             );
             Assert.Equal(expected: "refused", actual: (await CallAsync(tool: "puck_world_stop", arguments: new() { ["world"] = startedProcess.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) })).GetProperty(propertyName: "status").GetString());
@@ -580,19 +625,29 @@ public sealed class McpInteropTests {
             File.Copy(destFileName: copy, sourceFileName: file);
         }
     }
-    private static Process Start(string attach, TemporaryDirectory directory) {
-        // The adapter runs outside any checkout, so its revision check reads nothing and its standard error is its own.
+    private static Process Start(string attach, TemporaryDirectory directory, bool hook = false, Action<ProcessStartInfo>? configure = null) {
+        // Direct launches run outside any checkout so their revision check reads nothing. The hook uses the session's
+        // checkout and launch path, including its copied CLI and inherited MCP streams.
         var start = new ProcessStartInfo(fileName: "dotnet") { CreateNoWindow = true, RedirectStandardError = true, RedirectStandardInput = true, RedirectStandardOutput = true, StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), UseShellExecute = false, WorkingDirectory = directory.RootPath };
 
-        foreach (var argument in new[] { Cli, "mcp", "--profile", "operator", "--attach", attach }) { start.ArgumentList.Add(item: argument); }
+        if (hook) {
+            start.FileName = "pwsh";
+            start.WorkingDirectory = RepositoryPaths.RequireRoot();
+            foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-File", Path.Combine(path1: start.WorkingDirectory, path2: ".claude/hooks/puck-mcp.ps1") }) { start.ArgumentList.Add(item: argument); }
+        } else {
+            foreach (var argument in new[] { Cli, "mcp", "--profile", "operator", "--attach", attach }) { start.ArgumentList.Add(item: argument); }
+        }
         start.Environment["TEMP"] = directory.RootPath;
         start.Environment["TMP"] = directory.RootPath;
+        configure?.Invoke(obj: start);
         return Process.Start(startInfo: start)!;
     }
-    private static async Task<OperatorAdapter> ConnectAsync(string attach, TemporaryDirectory directory, string revision) {
+    private static async Task<OperatorAdapter> ConnectAsync(string attach, TemporaryDirectory directory, string revision, bool hook = false, Action<ProcessStartInfo>? configure = null) {
         var process = Start(
             attach: attach,
-            directory: directory
+            configure: configure,
+            directory: directory,
+            hook: hook
         );
         var errors = process.StandardError.ReadToEndAsync(cancellationToken: Token);
 
