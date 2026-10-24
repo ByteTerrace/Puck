@@ -248,13 +248,13 @@ public static partial class SdfFrameBlock {
         WriteVector3(block: block, offset: ViewOffsets.StampFade, value: new System.Numerics.Vector3(x: snapshot.StampFade.FirstSlot, y: snapshot.StampFade.SlotCount, z: snapshot.StampFade.Opacity));
     }
 
-    // The offset a pass-block member lies at.
     // View-only additions belong here rather than in the outer type's initializer: WriteMeshBake reaches that
     // initializer, so changing it would invalidate the mesh cache for a value the bake never reads.
     private static class ViewOffsets {
         public static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
     }
 
+    // The offset a pass-block member lies at.
     private static int Offset(string member) =>
         ((int)Layout.BlockOffsetOf(member: member));
     private static void WriteFlag(Span<byte> block, int offset, bool value) =>

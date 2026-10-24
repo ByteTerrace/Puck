@@ -54,6 +54,11 @@ preference. The screen-door fade affects only her own seat view; mirrors and
 portals still show her. The camera's full authoring contract is in
 [views](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance).
 
+For the wall fade, use `body.pose 16 0.1 38.7 0 0 0` in `fade`, then
+`body.pose 16 0.1 39.1 0 0 0` to move closer and hide her completely. The lift's
+usual 1.4 m boom remains outside the fade range: its improvement is the shared
+higher look target. `gallery.lights 0 On` lights the lobby for the comparison.
+
 ## Addons
 
 The world mounts three WebAssembly addons: a watchdog that records invariant
