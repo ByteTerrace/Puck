@@ -4,7 +4,8 @@ namespace Puck.Physics;
 
 // GJK distance and EPA penetration over the exact support map. The simplex stores both witnesses, so surface
 // attachment and body contact use the same solid. Q32 intermediates retain sub-millimetre simplex predicates.
-internal static class FixedConvexContact {
+/// <summary>Fixed-point GJK distance and EPA contact over the exact convex support map.</summary>
+public static class FixedConvexContact {
     private readonly record struct Vertex(FixedVector3 A, FixedVector3 B) {
         internal FixedVector3 Delta => (A - B);
     }
@@ -18,7 +19,8 @@ internal static class FixedConvexContact {
         (FixedQ3232.FromFixedQ4816(value: a.Y) * FixedQ3232.FromFixedQ4816(value: b.Y))) +
         (FixedQ3232.FromFixedQ4816(value: a.Z) * FixedQ3232.FromFixedQ4816(value: b.Z)));
     private static Vertex Support(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedQ4816 skin, FixedVector3 direction) {
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, FixedVector3 direction, ref int supportQueries) {
+        supportQueries++;
         var unit = direction.Normalize();
         var a = FixedConvexGeometry.Support(collider: in collider, direction: unit);
         var b = ((position + orientation.Rotate(vector: FixedRigidWitness.LocalSupportPoint(volume, orientation.RotateInverse(vector: -unit)))) - (unit * skin));
@@ -99,25 +101,19 @@ internal static class FixedConvexContact {
     }
     private static bool Contains(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedVector3 d) =>
         (SameSide(a: a, b: b, c: c, opposite: d) && SameSide(a: a, b: c, c: d, opposite: b) && SameSide(a: a, b: d, c: b, opposite: c) && SameSide(a: b, b: d, c: c, opposite: a));
-    private static bool StrictlyContains(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedVector3 d) =>
-        (Contains(a: a, b: b, c: c, d: d) &&
-        (FixedQ4816.Abs(value: FixedVector3.Dot(left: Normal(a: a, b: b, c: c), right: a)) > FixedQ4816.Epsilon) &&
-        (FixedQ4816.Abs(value: FixedVector3.Dot(left: Normal(a: a, b: c, c: d), right: a)) > FixedQ4816.Epsilon) &&
-        (FixedQ4816.Abs(value: FixedVector3.Dot(left: Normal(a: a, b: d, c: b), right: a)) > FixedQ4816.Epsilon) &&
-        (FixedQ4816.Abs(value: FixedVector3.Dot(left: Normal(a: b, b: d, c: c), right: b)) > FixedQ4816.Epsilon));
     private static bool Distance(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedQ4816 skin, Span<Vertex> simplex, out int count,
-        out FixedVector3 delta, out FixedVector3 witness) {
+        out FixedVector3 delta, out FixedVector3 witness, ref int supportQueries) {
         count = 1;
         var direction = ((position == FixedVector3.Zero) ? FixedVector3.UnitX : position);
 
-        simplex[0] = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, volume: in volume);
+        simplex[0] = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
         delta = simplex[0].Delta;
         witness = simplex[0].A;
         for (var iteration = 0; (iteration < 64); iteration++) {
             if (delta.Length <= Tolerance) { return true; }
             direction = -delta.Normalize();
-            var next = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, volume: in volume);
+            var next = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
             var advance = FixedVector3.Dot(left: (next.Delta - delta), right: direction);
 
             if (advance <= FixedQ4816.Epsilon) { return false; }
@@ -131,11 +127,26 @@ internal static class FixedConvexContact {
         }
         return (delta.Length <= Tolerance);
     }
-    private static Face MakeFace(ReadOnlySpan<Vertex> vertices, int a, int b, int c) {
+    private static Face MakeFace(ReadOnlySpan<Vertex> vertices, int a, int b, int c, FixedVector3 interior) {
         var normal = Normal(a: vertices[a].Delta, b: vertices[b].Delta, c: vertices[c].Delta);
-        var distance = FixedVector3.Dot(left: normal, right: vertices[a].Delta);
 
-        return ((distance < FixedQ4816.Zero) ? new Face(A: a, B: c, C: b, Distance: -distance, Normal: -normal) : new Face(A: a, B: b, C: c, Distance: distance, Normal: normal));
+        if (Dot(a: normal, b: (interior - vertices[a].Delta)) > FixedQ3232.Zero) {
+            (b, c) = (c, b);
+            normal = -normal;
+        }
+        return new Face(A: a, B: b, C: c, Normal: normal,
+            Distance: FixedVector3.Dot(left: normal, right: vertices[a].Delta));
+    }
+    private static Face SeedFace(ReadOnlySpan<Vertex> vertices, int a, int b, int c, int opposite) {
+        var normal = Normal(a: vertices[a].Delta, b: vertices[b].Delta, c: vertices[c].Delta);
+
+        // At zero distance the origin cannot choose the outward side. The opposite tetrahedron vertex can.
+        if (Dot(a: normal, b: (vertices[opposite].Delta - vertices[a].Delta)) > FixedQ3232.Zero) {
+            (b, c) = (c, b);
+            normal = -normal;
+        }
+        return new Face(A: a, B: b, C: c, Normal: normal,
+            Distance: FixedVector3.Dot(left: normal, right: vertices[a].Delta));
     }
     private static void Horizon(Span<Edge> edges, ref int count, int a, int b) {
         for (var i = 0; (i < count); i++) {
@@ -144,68 +155,38 @@ internal static class FixedConvexContact {
         if (count < edges.Length) { edges[count++] = new Edge(A: a, B: b); }
     }
     private static bool Penetration(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedQ4816 skin, ReadOnlySpan<Vertex> simplex, out FixedContactPush push) {
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, ReadOnlySpan<Vertex> simplex, out FixedContactPush push, ref int supportQueries) {
         Span<Vertex> vertices = stackalloc Vertex[128];
         var count = simplex.Length;
 
         simplex.CopyTo(destination: vertices);
-        // A face/edge hit can end GJK before it has a tetrahedron. Complete it from the simplex's own
-        // feature normals and symmetric support directions, then choose a containing tetrahedron.
-        Span<FixedVector3> directions = stackalloc FixedVector3[36];
-        var directionCount = 0;
-
-        for (var x = -1; (x <= 1); x++) {
-            for (var y = -1; (y <= 1); y++) {
-                for (var z = -1; (z <= 1); z++) {
-                    if ((x != 0) || (y != 0) || (z != 0)) {
-                        directions[directionCount++] = new FixedVector3(X: FixedQ4816.FromInteger(value: x), Y: FixedQ4816.FromInteger(value: y), Z: FixedQ4816.FromInteger(value: z));
-                    }
-                }
-            }
-        }
-        if (simplex.Length >= 2) {
-            var axis = (simplex[1].Delta - simplex[0].Delta).Normalize();
+        // The reduced GJK simplex reaches the origin within tolerance, possibly on an edge or face. Grow it to one
+        // tetrahedron, leaving boundary faces for EPA to expand. A support plane through the origin
+        // proves touching immediately; searching for a strictly enclosing tetrahedron cannot succeed there.
+        if (count == 1) { push = default; return false; }
+        if (count == 2) {
+            var axis = (vertices[1].Delta - vertices[0].Delta).Normalize();
             var perpendicular = FixedVector3.Cross(left: axis, right: FixedVector3.UnitX).Normalize();
 
             if (perpendicular == FixedVector3.Zero) { perpendicular = FixedVector3.Cross(left: axis, right: FixedVector3.UnitY).Normalize(); }
-            directions[directionCount++] = perpendicular; directions[directionCount++] = -perpendicular;
-            var other = FixedVector3.Cross(left: axis, right: perpendicular).Normalize();
+            var vertex = Support(collider: in collider, direction: perpendicular, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
 
-            directions[directionCount++] = other; directions[directionCount++] = -other;
+            if (FixedVector3.Dot(left: perpendicular, right: vertex.Delta) <= Tolerance) { push = default; return false; }
+            vertices[count++] = vertex;
         }
-        if (simplex.Length >= 3) {
-            var n = Normal(a: simplex[0].Delta, b: simplex[1].Delta, c: simplex[2].Delta);
+        if (count == 3) {
+            var normal = Normal(a: vertices[0].Delta, b: vertices[1].Delta, c: vertices[2].Delta);
+            var vertex = Support(collider: in collider, direction: normal, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
 
-            directions[directionCount++] = n; directions[directionCount++] = -n;
+            if ((normal == FixedVector3.Zero) || (FixedVector3.Dot(left: normal, right: vertex.Delta) <= Tolerance)) { push = default; return false; }
+            vertices[count++] = vertex;
         }
-        var complete = ((simplex.Length == 4) && StrictlyContains(a: simplex[0].Delta, b: simplex[1].Delta, c: simplex[2].Delta, d: simplex[3].Delta));
-
-        if (!complete) {
-            for (var i = 0; (i < directionCount); i++) {
-                vertices[count++] = Support(in collider, position, in orientation, in volume, skin, directions[i]);
-            }
-        }
-        var seeded = false;
-
-        for (var a = 0; ((a < count) && !seeded); a++) {
-            for (var b = (a + 1); ((b < count) && !seeded); b++) {
-                for (var c = (b + 1); ((c < count) && !seeded); c++) {
-                    for (var d = (c + 1); (d < count); d++) {
-                        if (!StrictlyContains(a: vertices[a].Delta, b: vertices[b].Delta, c: vertices[c].Delta, d: vertices[d].Delta)) { continue; }
-                        var va = vertices[a]; var vb = vertices[b]; var vc = vertices[c]; var vd = vertices[d];
-
-                        vertices[0] = va; vertices[1] = vb; vertices[2] = vc; vertices[3] = vd;
-                        seeded = true; break;
-                    }
-                }
-            }
-        }
-        if (!seeded) { push = default; return false; }
-        count = 4;
         Span<Face> faces = stackalloc Face[256];
+        var interior = ((((vertices[0].Delta + vertices[1].Delta) + vertices[2].Delta) + vertices[3].Delta) /
+            FixedQ4816.FromInteger(value: 4));
 
-        faces[0] = MakeFace(a: 0, b: 1, c: 2, vertices: vertices); faces[1] = MakeFace(a: 0, b: 3, c: 1, vertices: vertices);
-        faces[2] = MakeFace(a: 0, b: 2, c: 3, vertices: vertices); faces[3] = MakeFace(a: 1, b: 3, c: 2, vertices: vertices);
+        faces[0] = SeedFace(a: 0, b: 1, c: 2, opposite: 3, vertices: vertices); faces[1] = SeedFace(a: 0, b: 3, c: 1, opposite: 2, vertices: vertices);
+        faces[2] = SeedFace(a: 0, b: 2, c: 3, opposite: 1, vertices: vertices); faces[3] = SeedFace(a: 1, b: 3, c: 2, opposite: 0, vertices: vertices);
         var faceCount = 4;
         Span<Edge> edges = stackalloc Edge[768];
         var best = faces[0];
@@ -213,9 +194,10 @@ internal static class FixedConvexContact {
         for (var iteration = 0; ((iteration < 96) && (count < vertices.Length)); iteration++) {
             best = faces[0];
             for (var i = 1; (i < faceCount); i++) { if (faces[i].Distance < best.Distance) { best = faces[i]; } }
-            var vertex = Support(in collider, position, in orientation, in volume, skin, best.Normal);
+            var vertex = Support(in collider, position, in orientation, in volume, skin, best.Normal, ref supportQueries);
             var depth = FixedVector3.Dot(left: best.Normal, right: vertex.Delta);
 
+            if (depth <= Tolerance) { push = default; return false; }
             if ((depth - best.Distance) <= Tolerance) {
                 // The support plane is an upper bound on separation; use it, never the inscribed EPA face.
                 push = new FixedContactPush(best.Normal, depth, FixedRoundedBoxContact.IsEdge(delta: best.Normal));
@@ -233,13 +215,13 @@ internal static class FixedConvexContact {
             if ((edgeCount == 0) || ((faceCount + edgeCount) > faces.Length)) { break; }
             vertices[count] = vertex;
             for (var i = 0; (i < edgeCount); i++) {
-                var face = MakeFace(vertices, edges[i].A, edges[i].B, count);
+                var face = MakeFace(vertices, edges[i].A, edges[i].B, count, interior);
 
                 if (face.Normal != FixedVector3.Zero) { faces[faceCount++] = face; }
             }
             count++;
         }
-        var final = Support(in collider, position, in orientation, in volume, skin, best.Normal);
+        var final = Support(in collider, position, in orientation, in volume, skin, best.Normal, ref supportQueries);
         var penetration = FixedVector3.Dot(left: best.Normal, right: final.Delta);
 
         push = new FixedContactPush(best.Normal, penetration, FixedRoundedBoxContact.IsEdge(delta: best.Normal));
@@ -247,7 +229,25 @@ internal static class FixedConvexContact {
     }
 
     internal static bool TryPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) {
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) =>
+        TryPush(collider: in collider, orientation: in orientation, position: position, push: out push, skin: skin, supportQueries: out _, volume: in volume);
+
+    /// <summary>Queries an exact chamfered-box or superellipsoid contact and reports the deterministic number
+    /// of support-map evaluations spent by GJK, the simplex bootstrap, EPA and face-normal recovery.</summary>
+    /// <param name="collider">The exact convex static collider.</param>
+    /// <param name="position">The body's world position.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local volume.</param>
+    /// <param name="skin">The separation skin.</param>
+    /// <param name="push">The separating push, when penetration exceeds fixed-point tolerance.</param>
+    /// <param name="supportQueries">The support-map evaluation count, including a touching or rejected query.</param>
+    /// <returns>Whether a separating push is required.</returns>
+    public static bool TryPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push, out int supportQueries) {
+        supportQueries = 0;
+        if (collider.Kind is not (FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid)) {
+            throw new ArgumentException(message: "An exact convex contact requires a chamfered box or superellipsoid.", paramName: nameof(collider));
+        }
         var localPosition = collider.Rotation.RotateInverse(vector: (position - collider.Center));
         var localOrientation = (collider.Rotation.Conjugate() * orientation).Normalize();
 
@@ -260,8 +260,8 @@ internal static class FixedConvexContact {
         }
         Span<Vertex> simplex = stackalloc Vertex[4];
 
-        if (!Distance(collider: in collider, count: out var count, delta: out _, orientation: in localOrientation, position: localPosition, simplex: simplex, skin: skin, volume: in volume, witness: out _) ||
-            !Penetration(in collider, localPosition, in localOrientation, in volume, skin, simplex[..count], out push)) {
+        if (!Distance(collider: in collider, count: out var count, delta: out _, orientation: in localOrientation, position: localPosition, simplex: simplex, skin: skin, supportQueries: ref supportQueries, volume: in volume, witness: out _) ||
+            !Penetration(in collider, localPosition, in localOrientation, in volume, skin, simplex[..count], out push, ref supportQueries)) {
             push = default; return false;
         }
         // Recover exact face normals from the analytic vocabulary after EPA. In particular, a microscopic
@@ -278,7 +278,7 @@ internal static class FixedConvexContact {
                         Z: (FixedQ4816.FromInteger(value: z) * ((axes == 3) ? rootTwo : FixedQ4816.One))).Normalize();
 
                     if (FixedVector3.Dot(left: normal, right: push.Normal) < FixedQ4816.FromDouble(value: 0.95)) { continue; }
-                    var vertex = Support(collider: in collider, direction: normal, orientation: in localOrientation, position: localPosition, skin: skin, volume: in volume);
+                    var vertex = Support(collider: in collider, direction: normal, orientation: in localOrientation, position: localPosition, skin: skin, supportQueries: ref supportQueries, volume: in volume);
                     var depth = FixedVector3.Dot(left: normal, right: vertex.Delta);
 
                     if (depth <= push.Penetration) { push = new FixedContactPush(IsEdge: (axes > 1), Normal: normal, Penetration: depth); }
@@ -288,6 +288,7 @@ internal static class FixedConvexContact {
         push = push with { Normal = collider.Rotation.Rotate(vector: push.Normal) };
         return (push.Penetration > FixedQ4816.Zero);
     }
+
     internal static (FixedVector3 Point, FixedVector3 Normal) Nearest(in FixedStaticCollider collider, FixedVector3 probe) {
         var local = collider.Rotation.RotateInverse(vector: (probe - collider.Center));
         var field = FixedConvexGeometry.Field(collider: in collider, point: local);
@@ -298,12 +299,13 @@ internal static class FixedConvexContact {
         var pointVolume = new FixedBodyColliderVolume(FixedBodyColliderKind.Sphere, FixedVector3.Zero, FixedVector3.Zero,
             FixedVector3.Zero, FixedQuaternion.Identity, FixedQ4816.Zero);
         var identity = FixedQuaternion.Identity;
+        var supportQueries = 0;
         Span<Vertex> simplex = stackalloc Vertex[4];
         var inside = Distance(in collider, local, in identity, in pointVolume, FixedQ4816.Zero,
-            simplex, out var count, out var delta, out var point);
+            simplex, out var count, out var delta, out var point, ref supportQueries);
         FixedVector3 normal;
 
-        if (inside && Penetration(in collider, local, in identity, in pointVolume, FixedQ4816.Zero, simplex[..count], out var push)) {
+        if (inside && Penetration(in collider, local, in identity, in pointVolume, FixedQ4816.Zero, simplex[..count], out var push, ref supportQueries)) {
             normal = push.Normal;
             point = (local + (normal * push.Penetration));
         } else {

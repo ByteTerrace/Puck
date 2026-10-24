@@ -933,8 +933,10 @@ field resolves the retry against the other bodies too. The retry replaces the
 blocked step only when it lands grounded on a walkable surface, so a face
 steeper than `maxSlopeDegrees` is never stepped onto. A lateral approach to a
 box edge/fillet or cylinder rim is an obstruction even when its closest-feature
-normal tilts into the walkable cone. Its `RequiredStepHeight` measures full
-clearance to the top support plane; a shorter step cannot climb by repeated
+normal tilts into the walkable cone, provided the surface witness stands above
+the pre-move foot. Its `RequiredStepHeight` measures the local edge clearance,
+including a rounded box's full fillet radius; a tilted ramp's distant apex
+never gates its low end. A shorter step cannot climb a kerb by repeated
 partial landings. Falling or resting at the same edge retains its surface
 normal and rounded support. `body.motion` echoes
 the body's effective `stepHeight=`, and `world.kits` the kit's.

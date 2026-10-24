@@ -64,7 +64,7 @@ public sealed class ChamferedBoxContactLawTests {
         Assert.False(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out _));
     }
     [Fact]
-    public void FallingUsesTheBevelButLateralApproachStillNeedsTheFullStep() {
+    public void FallingUsesTheBevelButLateralApproachNeedsItsLocalClearance() {
         var body = Body(kind: FixedBodyColliderKind.Sphere);
         var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(x: 0.5), MaxIterations: 8);
         var target = V(x: 1.805, y: 1.805, z: 0);
@@ -82,6 +82,6 @@ public sealed class ChamferedBoxContactLawTests {
 
         Assert.False(condition: walking.Grounded);
         Assert.Equal(target.Y, position.Y);
-        Assert.InRange(((double)walking.RequiredStepHeight), 0.204, 0.206);
+        Assert.InRange(((double)walking.RequiredStepHeight), 0.004, 0.006);
     }
 }

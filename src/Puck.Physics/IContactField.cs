@@ -122,13 +122,12 @@ public enum ContactRefusal {
 /// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
 /// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
 /// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
-/// <param name="RequiredStepHeight">The lift needed to clear an approached edge's support plane, measured from the
-/// pre-move body's bottom. A step must buy this whole clearance, even when it first lands partway up the edge.</param>
+/// <param name="RequiredStepHeight">The lift needed to clear the local approached edge, including its fillet and
+/// skin, measured from the pre-move body's bottom. A step must buy this whole clearance.</param>
 public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false, FixedQ4816 RequiredStepHeight = default) {
     /// <summary>The actual walkable analytic solve, retained for diagnostics only; absent for providers that do not publish it.</summary>
     public ContactSupportWitness? Support { get; init; }
 }
-
 /// <summary>The input and outcome of the last walkable analytic push. Read-back only; never part of simulation decisions.</summary>
 /// <param name="Collider">The effective collider used by the solve.</param>
 /// <param name="Volume">The body's volume used by the solve.</param>

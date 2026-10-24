@@ -326,14 +326,26 @@ a face. `FixedStaticContactSolver.ResolveSweep` projects an approached edge's
 push across up without lifting or converting forward drive into upward
 velocity. Vertical landings and resting queries retain the measured rounded
 surface normal, and a sloped face remains a ramp. The blocked sweep reports
-`RequiredStepHeight`: the lift from the pre-move body's bottom to the
-primitive's highest support plane, including skin. `FixedStepUp` requires
-that whole clearance; repeated partial landings cannot turn stairs into ramps.
+`RequiredStepHeight`: the lift from the pre-move body's bottom to the touched
+edge, including skin. Rounded boxes charge the inner edge plus its full fillet
+radius; the coordinate along a tilted edge stays local to the contact, so a
+ramp's distant apex cannot wall its low end. A surface witness at or below the
+pre-move foot remains support. `FixedStepUp` requires the reported clearance;
+repeated partial landings cannot turn a kerb into a ramp.
 The raised across move must be free of obstruction and make more progress
 than the blocked step. The landing must ground on a walkable surface, no higher
 than the step height above the start and higher than the blocked step. A wall costs
 two sweeps; an accepted step costs `LandingProbes` plus four. The World calls
 it from the kit's `motion.stepHeight`, zero by default.
+
+Exact chamfered-box and superellipsoid contacts use GJK followed by EPA. The
+EPA bootstrap expands the GJK simplex along its edge/face normals into one
+tetrahedron, then expands its boundary faces. A support plane at zero depth
+ends a touching query; no search through support-point subsets is needed.
+Faces are oriented from a known interior point even when the origin lies on
+their boundary. `FixedConvexContact.TryPush` also reports support-map evaluations
+for deterministic work measurements: at most 65 GJK queries, two bootstrap
+queries, 97 EPA queries and 26 face-normal recovery queries.
 
 Each sweep takes an explicit bounds-query budget
 (`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact

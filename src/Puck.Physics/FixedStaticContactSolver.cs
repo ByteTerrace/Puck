@@ -18,20 +18,20 @@ namespace Puck.Physics;
 /// ground the body.</param>
 /// <param name="MaxIterations">The relaxation iteration count; values below one resolve one pass.</param>
 public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, FixedQ4816 GroundedThreshold, int MaxIterations) {
-    // Highest support plane of a finite edge-bearing primitive. This is the clearance a step must buy, rather
-    // than the small rise where the capsule first touches the edge's Minkowski arc. Otherwise repeated partial
-    // landings would climb a 10 cm kerb even with a 5 cm step height.
-    private static FixedQ4816 EdgeTop(in FixedStaticCollider collider, in FixedVector3 up) {
-        var axis = ((collider.Kind == FixedStaticColliderKind.AxisAlignedBox) ? up : collider.Rotation.RotateInverse(vector: up));
+    // The touched edge's local clearance, not the apex of an entire tilted ramp. For rounded boxes, remove
+    // the fillet offset before clamping to the inner edge and charge its full radius above that edge. This
+    // still prevents repeated partial landings from climbing a kerb taller than the permitted step.
+    private static FixedQ4816 EdgeTop(in FixedStaticCollider collider, in FixedVector3 up,
+        in FixedVector3 witness, in FixedVector3 normal) {
+        if (collider.Kind is FixedStaticColliderKind.AxisAlignedBox or FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox) {
+            var point = (witness - (normal * collider.Radius));
+            var local = ((collider.Kind == FixedStaticColliderKind.AxisAlignedBox) ? (point - collider.Center) : collider.Rotation.RotateInverse(vector: (point - collider.Center)));
 
-        if (collider.Kind is FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid) {
-            return (FixedVector3.Dot(left: collider.Center, right: up) + FixedVector3.Dot(left: FixedConvexGeometry.Support(collider: in collider, direction: axis), right: axis));
+            local = FixedVector3.Clamp(value: local, minimum: -collider.Extent, maximum: collider.Extent);
+            point = (collider.Center + ((collider.Kind == FixedStaticColliderKind.AxisAlignedBox) ? local : collider.Rotation.Rotate(vector: local)));
+            return (FixedVector3.Dot(left: point, right: up) + collider.Radius);
         }
-        var radius = ((collider.Kind == FixedStaticColliderKind.Cylinder)
-            ? ((collider.Extent.X * new FixedVector2(X: axis.X, Y: axis.Z).Length) + (collider.Extent.Y * FixedQ4816.Abs(value: axis.Y)))
-            : (FixedVector3.Dot(left: collider.Extent, right: FixedVector3.Abs(value: axis)) + collider.Radius));
-
-        return (FixedVector3.Dot(left: collider.Center, right: up) + radius);
+        return FixedVector3.Dot(left: witness, right: up);
     }
     private void ApplyPush(
         ref FixedVector3 position,
@@ -92,14 +92,24 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 skin: ContactSkin,
                 volume: in volume
             )) {
-                var blockClimb = (push.IsEdge && (FixedVector3.Dot(left: push.Normal, right: up) > FixedQ4816.Zero) &&
+                var blockClimb = (push.IsEdge &&
+                    (FixedVector3.Dot(left: push.Normal, right: up) > FixedQ4816.Zero) &&
                     (FixedVector3.Dot(left: movement.RejectFrom(unitAxis: up), right: push.Normal) < FixedQ4816.Zero));
 
                 if (blockClimb) {
                     var bottom = FixedColliderBounds.MinimumProjection(normal: up, orientation: in orientation,
                         position: previousPosition, volume: in volume);
+                    var probe = ((position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)) +
+                        (push.Normal * (push.Penetration - ContactSkin)));
 
-                    requiredStepHeight = FixedQ4816.Max(x: requiredStepHeight, y: ((EdgeTop(collider: in collider, up: in up) + ContactSkin) - bottom));
+                    var (witness, normal) = FixedSurfaceQuery.NearestOnCollider(collider: in collider, probe: probe);
+
+                    // A nearly flat fillet at or below the pre-move foot is support, not a new riser.
+                    blockClimb = ((FixedVector3.Dot(left: witness, right: up) - bottom) > FixedQ4816.Epsilon);
+                    if (blockClimb) {
+                        requiredStepHeight = FixedQ4816.Max(x: requiredStepHeight, y: ((EdgeTop(collider: in collider, normal: in normal,
+                            up: in up, witness: in witness) + ContactSkin) - bottom));
+                    }
                 }
                 ApplyPush(
                     blockClimb: blockClimb,
@@ -147,8 +157,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         return ResolveSweep(colliders: colliders, dynamicColliders: dynamicColliders, orientation: in orientation,
             position: ref position, previousPosition: position, up: in up, velocity: ref velocity, volumes: volumes);
     }
-    /// <summary>Resolves a move, keeping lateral edge approach separate from vertical support. An edge met while
-    /// moving into it is a wall; a vertical landing still uses its measured surface normal.</summary>
+    /// <summary>Resolves a move, keeping lateral edge approach separate from vertical support. An edge above the
+    /// pre-move foot met laterally is a wall; a vertical landing still uses its measured surface normal.</summary>
     /// <param name="colliders">The static colliders.</param>
     /// <param name="dynamicColliders">The per-tick colliders.</param>
     /// <param name="previousPosition">The foot point before the move.</param>

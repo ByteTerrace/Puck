@@ -135,4 +135,33 @@ public sealed class FixedStepUpLawTests {
             Assert.InRange(((double)result.Position.Y), 0.01, 0.1);
         }
     }
+    [InlineData(15)]
+    [InlineData(30)]
+    [Theory]
+    public void ASideApproachStepsOntoTheLowEndOfATiltedRamp(double degrees) {
+        var angle = FixedQ4816.FromDegrees(degrees: degrees);
+        var rotation = FixedQuaternion.FromAxisAngle(axis: FixedVector3.UnitX, angle: -angle);
+        var center = Vector(x: 0, y: 0, z: 0) with {
+            Y = (((FixedQ4816.Sin(angle: angle) * FixedQ4816.FromInteger(value: 2)) -
+                (FixedQ4816.Cos(angle: angle) * FixedQ4816.FromDouble(value: 0.15))) + FixedQ4816.FromDouble(value: 0.01)),
+        };
+        var ramp = FixedStaticCollider.RoundedBox(center: center, rotation: rotation,
+            innerHalfExtents: Vector(x: 1.48, y: 0.13, z: 1.98), radius: FixedQ4816.FromDouble(value: 0.02));
+        var edge = (center + rotation.Rotate(vector: Vector(x: 1.5, y: 0.15, z: -1.7)));
+        var start = Vector(x: 1.75, y: 0, z: 0) with { Z = edge.Z };
+        var intended = start with { X = FixedQ4816.FromDouble(value: 1.7) };
+        var velocity = -FixedVector3.UnitX;
+        var blocked = intended;
+        var blockedVelocity = velocity;
+        var step = new StaticStep(colliders: [Ground, ramp]);
+        var resolution = step.Sweep(position: ref blocked, previousPosition: in start, velocity: ref blockedVelocity);
+
+        Assert.NotEqual(FixedVector3.Zero, resolution.ObstructionNormal);
+        Assert.InRange(((double)resolution.RequiredStepHeight), 0.03, 0.3);
+        Assert.True(condition: FixedStepUp.TryStep(ref step, in start, in intended, in velocity, FixedVector3.UnitY,
+            StepHeight, in blocked, out var result, resolution.RequiredStepHeight));
+        Assert.True(condition: result.Resolution.Grounded);
+        Assert.InRange(((double)result.Position.Y), 0.001, 0.3);
+        Assert.True(condition: (result.Position.X < blocked.X));
+    }
 }
