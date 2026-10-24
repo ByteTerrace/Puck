@@ -24,7 +24,7 @@ Game camera systems draw from nine building blocks when geometry encroaches on a
 
 ## What the camera-design community and players think
 
-Evidence on third-person tight-space behavior comes from four sources: GDC technical post-mortems by camera engineers, foundational textbooks, engine and studio engineering blogs, and player feedback across action RPGs, platformers, and MMOs.
+The research lane had no web access, so the sources below are cited from recall and are unverified: talk titles, mistake numbers, player-sentiment claims and the quoted game settings need checking before anything relies on them. Evidence on third-person tight-space behavior comes from four sources: GDC technical post-mortems by camera engineers, foundational textbooks, engine and studio engineering blogs, and player feedback across action RPGs, platformers, and MMOs.
 
 ### GDC talks and practitioner post-mortems
 
@@ -43,7 +43,7 @@ McIntosh details how *Uncharted* handles narrow urban alleys, stairwells, and in
 - **Target migration on pull-in**: When a wall forces the boom inward, keeping the aim point at the character's pelvis or lower back forces the camera to stare at the character's spine. Shifting the look target upward toward the head/neck and slightly toward the shoulder as distance shortens keeps the horizon and forward room layout occupying the upper two-thirds of the screen.
 - **Dithered occlusion over erratic motion**: For pillars, foliage, and close foreground geometry, Naughty Dog uses distance-based screen-door dithering in the pixel shader rather than jerking the camera forward for brief occlusions.
 
-**Guillaumeimos / *God of War* and modern over-the-shoulder action cameras (GDC talks by Sony Santa Monica and Guerrilla Games)** — *Moderate-to-strong practitioner evidence (industry pattern across modern action-adventure titles).*
+**Modern over-the-shoulder action cameras (*God of War*, Sony Santa Monica; *Horizon*, Guerrilla Games)** — *Moderate-to-strong practitioner evidence (industry pattern across modern action-adventure titles).*
 - In confined interiors (elevators, boat cabins, narrow ledges), keeping pitch near horizontal (`-10°` to `+25°`) while pulling the camera close to the shoulder or fading the character preserves combat and interaction readability far better than tilting the camera to a steep overhead angle (`> 50°`), because an overhead angle hides wall switches, signage, and enemies standing more than two meters away.
 
 ### Textbooks and academic literature
