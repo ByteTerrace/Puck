@@ -92,6 +92,43 @@
           "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians.",
           "type": "number",
           "default": 1.1
+        },
+        "autoFirstPerson": {
+          "description": "The optional automatic pull-in policy; absent is off with standard hysteresis.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Whether automatic pull-in is the author\u0027s default.",
+              "type": "boolean",
+              "default": false
+            },
+            "entryDistance": {
+              "description": "Maximum constrained room for entry.",
+              "type": "number",
+              "default": 0.85
+            },
+            "entrySeconds": {
+              "description": "Continuous constrained time before entry.",
+              "type": "number",
+              "default": 0.2
+            },
+            "exitDistance": {
+              "description": "Minimum open room for exit, greater than entry.",
+              "type": "number",
+              "default": 1.35
+            },
+            "exitSeconds": {
+              "description": "Continuous clear time before exit.",
+              "type": "number",
+              "default": 0.15
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldCameraAutoFirstPerson"
         }
       },
       "required": [
