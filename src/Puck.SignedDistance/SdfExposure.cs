@@ -63,12 +63,12 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
         Minimum: DefaultEv100,
         Mode: SdfExposureMode.Manual
     );
-
     /// <summary>Gets the largest exposure multiplier any view of the world takes: its darkest <c>EV100</c> less any
     /// compensation, which sizes each point light's range (<see cref="SdfPhotometry.RangeOf"/>).</summary>
     public float BrightestGain => SdfPhotometry.ExposureOf(ev100: ((Mode == SdfExposureMode.Auto)
         ? MathF.Min(x: Minimum, y: Ev100)
         : Ev100));
+
     /// <summary>Returns the <c>EV100</c> an automatic exposure aims for at a metered average luminance: the meter's reading
     /// less the compensation, within the bounds.</summary>
     /// <param name="luminance">The metered average luminance, in nits.</param>

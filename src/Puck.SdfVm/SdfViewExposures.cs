@@ -19,6 +19,7 @@ public sealed class SdfViewExposures {
     private float[] m_metered = [];
     private float[] m_airLight = [];
     private bool[] m_reads = [];
+    private string[] m_sources = [];
     private int m_count;
 
     /// <summary>Gets each view's exposure multiplier, per nit, for the frame <see cref="Stage"/> last staged.</summary>
@@ -66,7 +67,8 @@ public sealed class SdfViewExposures {
             Array.Resize(array: ref m_metered, newSize: grown);
             Array.Resize(array: ref m_airLight, newSize: grown);
             Array.Resize(array: ref m_reads, newSize: grown);
-            Array.Fill(array: m_ev100, value: float.NaN, startIndex: first, count: (grown - first));
+            Array.Resize(array: ref m_sources, newSize: grown);
+            Array.Fill(array: m_ev100, count: (grown - first), startIndex: first, value: float.NaN);
         }
         for (var index = count; (index < m_count); index++) {
             m_ev100[index] = float.NaN;
@@ -81,7 +83,17 @@ public sealed class SdfViewExposures {
             var ev100 = exposure.Ev100;
 
             m_cuts[index] = view.CutRevision;
-            m_reads[index] = Meter(airLight: out m_airLight[index], irradiance: irradiance, luminance: out m_metered[index], view: in view);
+            m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, luminance: out var luminance,
+                position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
+            m_sources[index] = source switch {
+                SdfExposureMeterSource.Probes => "probes",
+                SdfExposureMeterSource.CameraTrace => "camera-trace",
+                _ => (float.IsFinite(f: m_ev100[index]) ? "held" : "initial"),
+            };
+            if (m_reads[index] || !float.IsFinite(f: m_ev100[index])) {
+                m_airLight[index] = airLight;
+                m_metered[index] = luminance;
+            }
             if (exposure.Mode == SdfExposureMode.Auto) {
                 ev100 = (m_reads[index]
                     ? exposure.Target(luminance: m_metered[index])
@@ -100,16 +112,15 @@ public sealed class SdfViewExposures {
     /// <returns>The multiplier, per nit.</returns>
     public float MultiplierOf(int view) => (((view >= 0) && (view < m_count)) ? m_multipliers[view] : 1f);
     /// <summary>Returns the share of the sky the air about a view's camera sees open, which scales the sky's in-scatter
-    /// into the view's atmosphere: one in the open, and wherever the irradiance volume holds no probe about the
-    /// camera.</summary>
+    /// into the view's atmosphere: one in the open, held at its last reading while the scene cannot answer.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
     /// <returns>The share, in [0, 1]; one for a view it did not stage.</returns>
     public float AirLightOf(int view) => (((view >= 0) && (view < m_count)) ? m_airLight[view] : 1f);
     /// <summary>Returns the luminance a view's meter read about its camera, in nits, which the local adaptation measures
-    /// each surface's surroundings against.</summary>
+    /// each surface's surroundings against, held at its last reading while the scene cannot answer.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
-    /// <returns>The reading, or zero for a view it did not stage or whose meter had no reading.</returns>
-    public float MeteredOf(int view) => (((view >= 0) && (view < m_count) && m_reads[view]) ? m_metered[view] : 0f);
+    /// <returns>The last reading, or zero for a view it did not stage or whose meter never had a reading.</returns>
+    public float MeteredOf(int view) => (((view >= 0) && (view < m_count)) ? m_metered[view] : 0f);
     /// <summary>Describes each staged view's exposure: its <c>EV100</c>, multiplier, the meter's reading and the open
     /// sky its air sees.</summary>
     /// <returns>One line a view.</returns>
@@ -117,23 +128,10 @@ public sealed class SdfViewExposures {
         var lines = new List<string>(capacity: m_count);
 
         for (var index = 0; (index < m_count); index++) {
-            lines.Add(item: $"view {index}: ev100={m_ev100[index]:0.00} multiplier={m_multipliers[index]:G4} meter={(m_reads[index] ? $"{m_metered[index]:0.###} nits" : "none")} air={m_airLight[index]:0.###}");
+            lines.Add(item: $"view {index}: ev100={m_ev100[index]:0.00} multiplier={m_multipliers[index]:G4} meter={(m_reads[index] ? $"{m_metered[index]:0.###} nits" : "none")} source={m_sources[index]} air={m_airLight[index]:0.###}");
         }
 
         return lines;
     }
 
-    // The meter's reading about a view's camera: the irradiance volume's luminance there, which carries every traced
-    // light's bounce, and the open sky the volume sees there (one without a reading).
-    private static bool Meter(SdfMeshIrradiance irradiance, in SdfViewSnapshot view, out float luminance, out float airLight) {
-        var camera = view.Camera;
-
-        if (!irradiance.TryMeter(forward: camera.Forward, luminance: out luminance, position: camera.Position, skyVisibility: out airLight)) {
-            airLight = 1f;
-
-            return false;
-        }
-
-        return true;
-    }
 }

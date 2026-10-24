@@ -157,6 +157,7 @@ These items belong to no single programme.
 - [ ] Make the external prime comparisons reproducible as `puck bench` workloads: primecount 8.8 `-t1` on pi(10^16..10^18) and nth(10^15, 10^16), and machine-prime 1.5.7 `is_prime` per bucket (2^32 to 2^63) and input class (primes, composites with no factor through 163 or 727, random odd words), with agreement checked against a deterministic Miller-Rabin oracle. Both ran from session scratch harnesses on one Zen 4 machine; Intel (Alder Lake) and Zen 2 timings are unmeasured.
 
 - [ ] Fix the flaws the owner found walking the debug world on the GPU (Direct3D 12, 1280×900):
+  - [ ] Reproduce the reported black lift and hanging-sign interiors with the original camera and lighting state. Settled medium-GI checks with all gallery lights on read both interiors without the camera-meter fallback; the base exposure already held its previous EV on a missing reading. The meter now traces at a camera with no visible lattice probe and retains local-adaptation and sky readings when no scene can answer, but that does not establish the cause of the earlier blackout. The [GI notes](../../.claude/skills/rendering/references/mesh-gi.md) give fixed interior cameras and explain the meter sources.
   - [x] Indirect light leaks through walls. Fixed the irradiance volume's indirect term carrying:
     - a soft rectangular band on the hall's outer wall that shifts as the camera moves;
     - a near-white far half of the gallery hall, which also drags auto exposure and washes out the near hall;

@@ -28,8 +28,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   farther or holding the previous room's exposure cannot measure its light.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
-  the previous exposure, local-adaptation meter and sky visibility. The authored EV is only the
-  initial value before a reading. `world.exposure` distinguishes `probes`,
+  the previous exposure, local-adaptation meter and sky visibility. The authored
+  EV is only the initial value before a reading. `world.exposure` distinguishes `probes`,
   `camera-trace`, `held` and `initial`; the last two report `meter=none`.
 - The depth fade stays thinner than the thinnest floor. A wall sample at a
   floor junction is level with the floor, so a broad fade admits the probe
@@ -65,6 +65,14 @@ Each row gives `body.pose` arguments, then `view.override camera look` arguments
 | Along the hall | `17.33 0.07 24.30 271 0 0` | `14.3657 1.759 24.3516 17.33 1.3 24.30` |
 | Teal room corner | `4.60 0.07 29.76 152 0 0` | `5.929 2.188 27.222 4.60 1.3 29.76` |
 | Outdoor control | `-8 0.07 -10 225 0 0` | `-11 3 -13 -3 1 -5` |
+
+For exposure, turn `gallery.lights.all on` and inspect the lift after
+`gallery.lift 0` and `body.pose 16 0.1 38 0 0 0`. A fixed interior eye clear of
+the avatar is `view.override camera pose 16 2.3 37 180 10`; the hanging
+PRIMITIVES sign is visible from `view.override camera pose 18 2.8 16 270 0`.
+Read the primary view's meter after the scene and lighting settle, and during
+changes: an initial `meter=none` alone cannot establish that a settled room has
+no visible probe. Keep the authored exposure bounds and world headroom intact.
 
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the
