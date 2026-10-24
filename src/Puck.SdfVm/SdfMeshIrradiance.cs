@@ -107,6 +107,21 @@ public sealed class SdfMeshIrradiance {
     private SdfWorldTables? m_writeTables;
     private Action<ReadOnlyMemory<uint>>? m_write;
     private SdfMeshIrradianceScene? m_scene;
+    /// <summary>Returns the existing opaque static BVH only when it represents the supplied frame's exact draw inputs.</summary>
+    /// <param name="frame">The retained rendered frame.</param>
+    /// <returns>The matching scene, or null while absent or building.</returns>
+    public SdfMeshIrradianceScene? DiagnosticScene(SdfFrame frame) {
+        ArgumentNullException.ThrowIfNull(frame);
+        lock (m_gate) {
+            var index = 0;
+            foreach (var draw in frame.MeshDraws) {
+                if (!SdfMeshIrradianceScene.IsStatic(in draw)) { continue; }
+                if (index >= m_diagnosticDraws.Length || draw != m_diagnosticDraws[index++]) { return null; }
+            }
+            return index == m_diagnosticDraws.Length ? m_scene : null;
+        }
+    }
+    private SdfMeshDraw[] m_diagnosticDraws = [];
     private int m_sceneKey;
     private int m_buildingKey;
     private Task? m_build;
@@ -460,6 +475,7 @@ public sealed class SdfMeshIrradiance {
             Counters.Add(amount: (scene?.TrianglesBuilt ?? 0L), kind: TrianglesBuilt);
             lock (m_gate) {
                 m_scene = scene;
+                m_diagnosticDraws = snapshot.Where(d => SdfMeshIrradianceScene.IsStatic(d)).ToArray();
                 m_sceneKey = key;
                 m_buildingKey = 0;
                 m_generation++;

@@ -11,6 +11,8 @@ namespace Puck.SdfVm;
 /// carries each vertex's normal and each triangle's palette entry, and, for a group whose shapes ride slots of their own,
 /// each vertex's member (<see cref="Members"/>). The mesh pass rasterizes it.</remarks>
 public sealed record SdfMesh {
+    /// <summary>The actual contour lattice spacing in object space; zero for an authored triangle mesh.</summary>
+    public Vector3 BakeCell { get; init; }
     /// <summary>Creates a mesh, refusing a malformed index list, a non-finite vertex, or a vertex or triangle attribute
     /// of the wrong length.</summary>
     /// <param name="positions">The object-space vertex positions.</param>

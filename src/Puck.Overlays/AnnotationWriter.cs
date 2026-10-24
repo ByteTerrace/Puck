@@ -42,7 +42,7 @@ public interface IAnnotationSource {
 /// </summary>
 /// <param name="source">The annotation state.</param>
 /// <param name="theme">The live overlay theme (the label and banner type size).</param>
-public sealed class AnnotationWriter(IAnnotationSource source, OverlayThemeStore theme) {
+public sealed partial class AnnotationWriter(IAnnotationSource source, OverlayThemeStore theme) {
     /// <summary>The most outlines one frame keeps; the host refuses another past it.</summary>
     public const int MaxCircles = 16;
     /// <summary>The characters of one outline's index label.</summary>

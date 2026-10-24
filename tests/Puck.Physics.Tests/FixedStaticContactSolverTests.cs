@@ -71,6 +71,11 @@ public sealed class FixedStaticContactSolverTests {
         );
 
         Assert.True(condition: resolution.Grounded);
+        var support = Assert.IsType<ContactSupportWitness>(resolution.Support);
+        Assert.Equal(colliders[0], support.Collider);
+        Assert.Equal(FixedSurfaceColliderSource.Static, support.Source);
+        Assert.Equal(0, support.ColliderIndex);
+        Assert.Equal(position, support.Position);
         Assert.Equal(
             actual: resolution.ObstructionNormal,
             expected: FixedVector3.Zero

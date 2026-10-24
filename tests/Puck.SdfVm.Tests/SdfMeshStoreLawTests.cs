@@ -19,7 +19,7 @@ public sealed class SdfMeshStoreLawTests {
     public void AWrittenMeshReadsBackExactlyUnderItsIdentityAndGeometryAlone() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
-        var mesh = Mesh();
+        var mesh = Mesh() with { BakeCell = new Vector3(0.01f, 0.02f, 0.03f) };
 
         // An empty store holds nothing and has made no directory.
         Assert.False(condition: store.Contains(geometry: Geometry, identity: Identity));
@@ -35,6 +35,7 @@ public sealed class SdfMeshStoreLawTests {
         Assert.Equal(expected: mesh.Normals.ToArray(), actual: read.Normals.ToArray());
         Assert.Equal(expected: mesh.Indices.ToArray(), actual: read.Indices.ToArray());
         Assert.Equal(expected: mesh.TriangleMaterials.ToArray(), actual: read.TriangleMaterials.ToArray());
+        Assert.Equal(mesh.BakeCell, read.BakeCell);
 
         // Another bake, another surface, or the same surface in a slot's frame reads nothing.
         Assert.False(condition: store.Contains(geometry: Geometry, identity: (Identity + 1)));

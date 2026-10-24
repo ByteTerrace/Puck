@@ -32,6 +32,7 @@
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-resolve.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
+#include "../frame/sdf-debug-modes.hlsli"
 #include "../frame/sdf-reprojection.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-transport.hlsli"
@@ -447,7 +448,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (any(id.xy >= extent)) return;
     uint2 render = passGroup.imageExtent;
     float2 jitter = passGroup.jitter;
-    bool temporal = ((passGroup.temporal != 0u) && (passGroup.debugMode == 0u));
+    bool temporal = ((passGroup.temporal != 0u) && sdfDebugPreservesScene(passGroup.debugMode));
     // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
     bool unjittered = (!temporal || all(jitter == 0.0));
     float3 airOrigin = passGroup.viewPosition;

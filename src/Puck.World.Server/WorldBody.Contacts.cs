@@ -4,6 +4,15 @@ using Puck.Physics;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
+    private FixedVector3? m_diagnosticManifoldPoint;
+    /// <summary>The actual last analytic support solve, absent when ungrounded or not evaluated by that provider.</summary>
+    public ContactSupportWitness? DiagnosticSupport { get; private set; }
+    /// <summary>The authored snap search reach, information only, never a diagnostic hover tolerance.</summary>
+    public double DiagnosticSnapReach => (double)GroundSnap;
+    /// <summary>Whether the solved normal velocity is within one fixed-point unit of rest.</summary>
+    public bool DiagnosticSettled => DiagnosticSupport is { } support &&
+        FixedQ4816.Abs(FixedVector3.Dot(IsRigid ? m_rigidVelocity : m_planarVelocity + m_up * m_verticalVelocity,
+            support.Push.Normal)) <= FixedQ4816.Epsilon;
     // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
     // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState — see its
@@ -11,6 +20,7 @@ public sealed partial class WorldBody {
     // informational for every model (RunActionTriggers' ActionFact.Grounded/Airborne reads them under any program),
     // since they never feed back into an integration.
     private void ResolveProgramContacts(ref BodyMotionScratch scratch) {
+        DiagnosticSupport = null;
         if (
             (m_contactField is { } field) &&
             (m_collider is { } collider)
@@ -76,6 +86,7 @@ public sealed partial class WorldBody {
             }
 
             m_grounded = contactResolution.Grounded;
+            DiagnosticSupport = contactResolution.Support;
             if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel) {
                 resolvedVelocity = resolvedVelocity.RejectFrom(unitAxis: contactResolution.GroundNormal);
             }

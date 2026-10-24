@@ -162,6 +162,17 @@ suspicion and is off by default. Unknown means not evaluated, so an incomplete
 scan never reads as clean. There are no allowlists or recorded baselines: a
 misfiring check is made precise, or the data is fixed.
 
+A mesh comparison certifies surface correspondence before it can be red. A
+normal ray that misses a nearby edge and reaches a distant surface proves no
+local discrepancy. Diagnostics search the retained mesh hierarchy for the
+nearest triangle point within a precision-derived neighbourhood, including
+edges, vertices and zero-distance contact. The search radius bounds coverage,
+never the error budget: the returned triangle supplies its own bake precision.
+No local match means unknown, never clean or red. Collider boundary separation
+is the unsigned Euclidean distance; a nearest point alone does not certify
+which side of a closed solid contains the witness. Reports distinguish sampled
+red, clean and unknown outcomes from clustered finding counts.
+
 Every view has a console companion, `world.debug-view report`, which runs with
 the view off and headless. Each finding carries its identity, the predicate and
 its witness, coverage, lifetime and provenance back to the `.puck` source. Pins

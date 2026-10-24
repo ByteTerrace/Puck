@@ -20,6 +20,7 @@ namespace Puck.Overlays;
 /// <param name="Inspector">The optional editor inspector text source.</param>
 /// <param name="HistoryRow">The optional editor history scrubber row source.</param>
 /// <param name="Annotations">The optional on-screen annotation source.</param>
+/// <param name="Diagnostics">The optional evidence-preserving diagnostic source.</param>
 public sealed record UnifiedOverlaySources(
     IConsoleTapeSource? Console,
     IBindingBarSource? BindingBar,
@@ -32,5 +33,6 @@ public sealed record UnifiedOverlaySources(
     IWheelSource? Wheel = null,
     IInspectorSource? Inspector = null,
     IHistoryRowSource? HistoryRow = null,
-    IAnnotationSource? Annotations = null
+    IAnnotationSource? Annotations = null,
+    IDiagnosticOverlaySource? Diagnostics = null
 );

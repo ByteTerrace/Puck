@@ -659,7 +659,7 @@ The generated console verb catalog (`WorldConsoleVerbCatalog`, written by
 [`puck verbs`](cli.md#puck-verbsconsole-verb-catalog)) holds every verb any
 boot shape registers, headless and rendered. A live registry reads it
 (`CommandRegistry.UseVerbCatalog`): a line naming a verb this boot shape
-lacks but another registers (`world.debug-view` and `world.slice` exist only
+lacks but another registers (`world.slice` exists only
 in a rendered World) passes validation, judged by the catalog's facts, and is
 refused by name when it runs in a host without it (`[world.slice: not
 available in this host — another boot shape (a rendered World) registers
@@ -796,6 +796,79 @@ its mapping with the `Passthrough` destination and the local-user opener, and
 the windowed World host routes its pointer and keys to the captured window
 through `SourcePassthroughRouter`. Delivery to a window is Windows-only
 (`Win32PassthroughWindow`).
+
+## Scene diagnostics
+
+Run `world.debug-view report colliders --json` or
+`world.debug-view report contacts --json` to inspect a world without enabling
+an overlay. `report all` evaluates both categories. These commands also work
+headless. Each finding names its snapshot, tick, view, subject and revision;
+its expected relation, separation in metres, precision components and
+witness; its first/last seen ticks and resolved state; and its authored stamp,
+creation, node and operation. The report carries tested/eligible counts and
+explicit skipped reasons. `coverage.comparisons` gives red, clean and unknown
+sample counts for each attempted comparison; these count witnesses, while the
+banner counts clustered causes. Missing evaluation is **unknown**, never a zero.
+
+`world.debug-view colliders` or `world.debug-view contacts` keeps the beauty
+image and adds at most sixteen causal pins, exterior marks and support calipers.
+The banner counts severities and reports pin overflow, including badges that
+cannot fit beside their witnesses without covering evidence or another badge.
+In-view badges have short direct leaders. Leaders and marks are
+clipped out of conservative evidence footprints with an untouched moat.
+Occluded witnesses become hollow after asynchronous depth readback; off-screen
+witnesses dock at the viewport edge. `focus` desaturates other context while
+preserving its luminance. Protection uses exact witness rectangles; if more
+than 512 intersect the viewport, marks conservatively protect the overflow
+and focus leaves the context unchanged. `pins-only` omits contours and calipers. `off` clears
+the diagnostic presentation. The primary view is the default scope; a nested
+view must first become the explicitly isolated primary presentation.
+
+Use `world.view.pick <view-or-instance> finding <id>` for a pin's retained
+causal record, including while that diagnostic view is off or another is active.
+Run `world.debug-view report` first if no findings have been collected.
+`primary` resolves to the first seat's current rendered instance (`world`
+before presentation); an explicit render instance name is also accepted.
+The coordinate form is `world.view.pick <view-or-instance> <x> <y>`,
+with normalized coordinates. `world.debug-view goto <id>` moves the operator
+camera toward the witness; it never moves the body. Changed structured reports
+are debounced under `world.debug-view.colliders` and
+`world.debug-view.contacts` in `host.log`.
+
+The collider audit samples compiled primitive boundaries in both signed
+directions against the authored solid union. This is a finite witness audit,
+not a proof over every point of the surface. Collision-versus-field findings
+stay separate from field-versus-baked-mesh findings. Rendered comparisons
+require the same delivered document version, a settled bake and matching retained draw
+records. Correspondence is certified by a bounded nearest-triangle search over
+the retained scene, including edges, vertices and zero-distance witnesses.
+The search radius is `4 × (collision/arithmetic precision + largest scene bake
+half diagonal)`. This radius
+bounds coverage, not acceptable error; the budget includes only the returned
+triangle's own contour cell half diagonal. Collider/mesh separation is unsigned
+Euclidean distance. A distant ray hit or a missing local nearest point is
+unknown, never red or clean. The authored-field comparison is independent.
+Opaque solids participate in that contract; transmissive geometry does not
+become a missing opaque surface. Attached poses and providers without a
+retained witness are reported as unknown. Contacts use the actual analytic
+support push and loaded rigid-manifold anchor. A hover requires settled normal
+velocity and a gap beyond contact skin and precision; ground-snap reach is
+reported separately. A drawn contact check requires an exact presented solver
+tick and a certified nearest walkable surface at its retained solver support;
+interpolation or missing correspondence stays unknown.
+
+With a diagnostic view on, a capture of the synthesized overlaid root writes
+`name.png` (annotated), `name.raw.png` (the retained beauty image before HUD and
+diagnostic marks), and `name.report.json`. Both pixel arrays and the report are
+retained before asynchronous encoding. A custom authored render root must
+provide an equivalent beauty source to support these companion files.
+
+The windowed integration check compares a held frame with `off`, default,
+`focus` and `pins-only`: flagged footprints must remain byte-identical, including
+glass, fog, exposure and temporal resolve. Capture the studio dais near
+`47.5, -48.7`, a deliberate box/round-solid mismatch, a grounded contact and an
+occluded/off-screen witness; verify overflow, calipers, camera-only navigation
+and the PNG/JSON triplet. This is a GPU check, separate from the headless audit.
 
 ## Core types
 

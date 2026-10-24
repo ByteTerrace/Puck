@@ -945,6 +945,9 @@ public static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+        services.AddSingleton<WorldDiagnostics>();
+        services.AddSingleton<WorldDiagnosticOverlay>();
+        services.AddSingleton<ICommandModule, WorldDebugViewCommandModule>();
         services.AddSingleton<ICommandModule, WorldReseedCommandModule>();
 
         // The on-screen annotations (view.annotate): presentation-only state, core like view.override because the
@@ -1803,7 +1806,8 @@ public static class WorldBootComposition {
                         Wheel: sp.GetRequiredService<WheelStore>(),
                         Inspector: sp.GetRequiredService<IInspectorSource>(),
                         HistoryRow: sp.GetRequiredService<IHistoryRowSource>(),
-                        Annotations: sp.GetRequiredService<WorldAnnotations>()
+                        Annotations: sp.GetRequiredService<WorldAnnotations>(),
+                        Diagnostics: sp.GetRequiredService<WorldDiagnosticOverlay>()
                     ),
                     theme: themeResolve.Resolve(
                         definition: sp.GetRequiredService<WorldDefinition>(),
