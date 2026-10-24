@@ -59,7 +59,7 @@ public sealed partial class WorldViewGraphHost {
         m_displayShares.Clear();
         m_sourceRefresh.Clear();
 
-        if ((RenderSettings is not { } settings) || ((settings.UpdateRates & (SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0)) {
+        if ((RenderSettings is not { } settings) || ((settings.UpdateRates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0)) {
             return;
         }
 
@@ -90,6 +90,14 @@ public sealed partial class WorldViewGraphHost {
             }
         }
     }
+    /// <summary>Returns the share of the display's height an instance reached through the previous frame's footprints: a
+    /// root's its own, and a producer's its largest consumer's share times the footprint's.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The share, zero for an instance no footprint showed, or <see langword="null"/> while no lever measures
+    /// the shares.</returns>
+    public double? DisplayShareOf(string instance) => ((m_displayShares.Count == 0)
+        ? null
+        : m_displayShares.GetValueOrDefault(key: instance));
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
     private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass) {

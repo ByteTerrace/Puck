@@ -81,6 +81,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly MarkerStore m_markers;
     private readonly IOverlayPredicateEvaluator? m_overlayFacts;
     private readonly WorldViewGraphHost? m_graphs;
+    // The instance each view FilmViews appended renders as, and the display pixels each of the frame's views is shown over.
+    private readonly List<string?> m_filmedViewNames = [];
+    private readonly List<float> m_rateViewPixels = [];
 
     // The display extent this frame's cameras and placements share.
     private uint m_displayHeight;
@@ -1533,6 +1536,24 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public static SdfMeshCullLevel CullOf(SdfMeshCullLevel cull, bool settles) => ((settles && (cull == SdfMeshCullLevel.Occlusion))
         ? SdfMeshCullLevel.Frustum
         : cull);
+    // The display pixels each of the frame's views is shown over, which the bodies lever rates a body by: a seat's view its
+    // region of the display, and a view the binder filmed after them the display's height times the share of it the view
+    // reached last frame (WorldViewGraphHost.DisplayShareOf), which is none for a window out of every view's sight; a
+    // filmed view no instance renders, or one before any share was measured, takes the whole display.
+    private List<float> RateViewPixels(uint height) {
+        m_rateViewPixels.Clear();
+
+        for (var index = 0; (index < m_frameViews.Count); index++) {
+            var filmed = (index - m_views.Count);
+            var share = (((filmed >= 0) && (filmed < m_filmedViewNames.Count) && (m_filmedViewNames[filmed] is { } name))
+                ? (m_graphs?.DisplayShareOf(instance: name) ?? 1d)
+                : ((filmed >= 0) ? 1d : m_frameViews[index].Region.Height));
+
+            m_rateViewPixels.Add(item: ((float)(share * height)));
+        }
+
+        return m_rateViewPixels;
+    }
     // Each screen's tier code as the graph host's footprints asked for it this frame, or none without a host.
     private byte[] ScreenRateCodes() {
         var codes = new byte[SdfProgramBuilder.MaxScreenSurfaces];
@@ -1969,8 +1990,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The camera views film this frame as views of it after its own, so they render from the world's residency.
         m_frameViews.Clear();
         m_frameViews.AddRange(collection: m_views);
+        m_filmedViewNames.Clear();
         m_binder.FilmViews(
             authoritativeTick: m_simulation.Tick,
+            names: m_filmedViewNames,
             presentationSeconds: m_elapsedSeconds,
             transforms: transforms,
             views: m_frameViews
@@ -1981,6 +2004,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             counts: m_settings.RateCounts,
             height: height,
             intervals: m_settings.RateIntervals,
+            pixels: RateViewPixels(height: height),
             rate: m_presentationRate,
             rates: m_settings.UpdateRates,
             readings: m_settings.RateReadings,

@@ -198,6 +198,24 @@ public sealed class WorldStampPoolRateLawTests {
             Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
         }
     }
+    // A view the display shows none of, as a window out of every view's sight, rates nothing by what it holds: a body
+    // close before it is still rated as no view sees it, and the same view shown over the display's height poses it
+    // every frame.
+    [InlineData(0f, false)]
+    [InlineData(900f, true)]
+    [Theory]
+    public void AViewTheDisplayShowsNoneOfRatesNoBody(float pixels, bool everyFrame) {
+        var (client, pool, transforms) = Stage();
+        var counts = SdfUpdateRateCounts.Counters();
+
+        pool.RateBy(counts: counts, height: 900U, intervals: null, pixels: [pixels], rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 3f));
+
+        for (var tick = 1UL; (tick <= 6UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+        }
+
+        Assert.Equal(expected: everyFrame, actual: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) == 0L));
+    }
     [Fact]
     public void ABodyLargeOnScreenOrPackedWithTheLeverOffPosesEveryFrame() {
         foreach (var (rates, distance) in new[] { (SdfUpdateRates.All, 3f), (SdfUpdateRates.None, 500f) }) {

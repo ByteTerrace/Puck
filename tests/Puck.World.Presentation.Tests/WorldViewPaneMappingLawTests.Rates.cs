@@ -38,6 +38,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             Assert.Equal(expected: BootSession, actual: reading.Name);
             Assert.Equal(expected: 15, actual: reading.Hertz);
+            Assert.InRange(actual: (m_host.DisplayShareOf(instance: BootSession) ?? 0d), high: 1d, low: 0.01d);
+            Assert.Equal(expected: 0d, actual: m_host.DisplayShareOf(instance: "nothing"));
 
             var codes = new byte[4];
 
@@ -48,6 +50,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
             Assert.Equal(expected: 0L, actual: settings.RateCounts.Read(kind: SdfUpdateRateCounts.ViewsRated));
             Assert.Null(@object: settings.RateIntervals.Longest(hertz: 15, lever: SdfUpdateRates.Views));
             Assert.Empty(collection: settings.RateReadings.Latest(lever: SdfUpdateRates.Views));
+            Assert.Null(@object: m_host.DisplayShareOf(instance: BootSession));
 
             // Nothing rated tints nothing, and a host showing no screens tints none.
             var codes = new byte[] { 9, 9, 9, 9 };

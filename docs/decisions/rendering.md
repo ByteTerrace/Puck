@@ -103,7 +103,10 @@ screen (the owner's request), by the same rule: a reduced rate is a visible
 trade-off, so each switches only where a held update jumps by at most two
 pixels on screen for the speed it is sized for (`SdfUpdateRateTiers`). A body's
 pose evaluation updates at least 30 times a second at or below 30 pixels per
-metre and at least 15 at or below 15, its root followed every frame; a nested
+metre and at least 15 at or below 15, its root followed every frame, its pixels
+taken in the view that shows it largest, a window's or a camera screen's view
+counted by its share of the display and one the display shows none of not at
+all; a nested
 portal or session view renders at least 30 times a second at or below 120
 display pixels high and at least 15 at or below 60; a screen's source uploads
 at least 30 times a second once shown at or below its own height and at least

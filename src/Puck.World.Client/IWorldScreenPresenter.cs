@@ -39,7 +39,9 @@ public interface IWorldScreenPresenter {
     /// <param name="authoritativeTick">The latest authoritative simulation tick, which a camera's rig clock reads.</param>
     /// <param name="presentationSeconds">The frame's presentation time, which a camera's rig clock reads.</param>
     /// <param name="views">The frame's views: its own, to which the camera views are appended.</param>
-    void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views);
+    /// <param name="names">The render-graph instance each appended view renders as, one entry a view in the order they are
+    /// appended, or <see langword="null"/> for a view no instance of its own renders.</param>
+    void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views, List<string?> names);
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current
     /// source is not text.</summary>
     /// <param name="index">The engine screen-surface index.</param>

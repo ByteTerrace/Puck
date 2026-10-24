@@ -45,8 +45,10 @@ public sealed partial class WorldStampPool {
     /// <param name="readings">The readings the pool publishes its rated bodies' sizes and tiers into each pack, or
     /// <see langword="null"/> for none.</param>
     /// <param name="codes">Whether each pack writes its bodies' tiers into <see cref="SlotRateCodes"/>.</param>
+    /// <param name="pixels">The display pixels each view is shown over, by view, or <see langword="null"/> for each
+    /// view's region of <paramref name="height"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void RateBy(SdfUpdateRates rates, PresentationRate rate, WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false) {
+    public void RateBy(SdfUpdateRates rates, PresentationRate rate, WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false, IReadOnlyList<float>? pixels = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         m_rates = rates;
@@ -58,7 +60,7 @@ public sealed partial class WorldStampPool {
         m_rateViews.Clear();
 
         for (var index = 0; (index < views.Count); index++) {
-            m_rateViews.Add(item: (views[index].Camera, (views[index].Region.Height * height)));
+            m_rateViews.Add(item: (views[index].Camera, (((pixels is not null) && (index < pixels.Count)) ? pixels[index] : (views[index].Region.Height * height))));
         }
     }
     // The rate a body updates at: its largest pixels per metre over the views that may see the sphere it reaches, every
@@ -77,6 +79,10 @@ public sealed partial class WorldStampPool {
         var half = new Vector3(value: radius);
 
         foreach (var (camera, pixels) in m_rateViews) {
+            // A view the display shows none of (a window out of every view's sight) sees nothing a body shows.
+            if (pixels <= 0f) {
+                continue;
+            }
             if (!camera.MaySee(center: center, halfX: (Vector3.UnitX * half.X), halfY: (Vector3.UnitY * half.Y), halfZ: (Vector3.UnitZ * half.Z), margin: WorldPortalVisibility.Margin)) {
                 continue;
             }
