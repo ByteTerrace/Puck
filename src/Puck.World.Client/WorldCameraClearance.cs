@@ -97,6 +97,25 @@ public sealed class WorldCameraClearance {
     /// <summary>Gets the target the latest frame looked at, in world units.</summary>
     public Vector3 Target { get; private set; }
 
+    /// <summary>Measures room behind an authored eye independently of the currently placed camera.</summary>
+    public static float AvailableRoom(SdfFieldEvaluator? field, Vector3 head, Vector3 backward, float length, float scale) =>
+        ((field is null) ? length : Clear(field, false, head, backward, length,
+            FixedQ4816.FromDouble(EyeRadius * scale), scale));
+
+    /// <summary>Publishes the seat's first-person transition through the same view-local fade and read-back.</summary>
+    public void ApplyView(WorldCameraViewTransition transition, Vector3 head, Vector3 forward, float hideRadius) {
+        var eye = Eye;
+        var target = Target;
+        var opacity = BodyOpacity;
+        transition.Apply(head, forward, hideRadius, ref eye, ref target, ref opacity);
+        Eye = eye;
+        Target = target;
+        BodyOpacity = opacity;
+        Length *= (1f - transition.Blend);
+        Rise *= (1f - transition.Blend);
+        Near *= (1f - transition.Blend);
+    }
+
     // How far along the boom the eye can travel from the target before geometry, swept by a sphere of radius, stops it or
     // its sightline, up to the boom's whole length.
     private static float Clear(SdfFieldEvaluator field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale) {

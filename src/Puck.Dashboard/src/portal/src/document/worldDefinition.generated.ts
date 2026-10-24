@@ -3808,6 +3808,29 @@ export type WorldCameraAnchorCandidate = {
   when?: OverlayPredicateNullable | null;
 };
 
+export type WorldCameraAutoFirstPerson = {
+  /**
+   * Whether automatic pull-in is the author's default.
+   */
+  enabled?: boolean;
+  /**
+   * Maximum constrained room for entry.
+   */
+  entryDistance?: number;
+  /**
+   * Continuous constrained time before entry.
+   */
+  entrySeconds?: number;
+  /**
+   * Minimum open room for exit, greater than entry.
+   */
+  exitDistance?: number;
+  /**
+   * Continuous clear time before exit.
+   */
+  exitSeconds?: number;
+};
+
 export type WorldCameraCharacterFade = {
   /**
    * The boom distance at which the body starts dissolving.
@@ -3889,7 +3912,7 @@ export type WorldCameraProgram = {
 /**
  * One instruction in an authored camera program's ordered op list — the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame's bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator — which parses no document — walks the result. Floats throughout; presentation carries no fixed-point burden.
  */
-export type WorldCameraProgramOp = WorldCameraProgramOpAnchor | WorldCameraProgramOpOffset | WorldCameraProgramOpLookAt | WorldCameraProgramOpOrbit | WorldCameraProgramOpPath | WorldCameraProgramOpDynamics | WorldCameraProgramOpClampPitch | WorldCameraProgramOpFieldOfView | WorldCameraProgramOpBlend | WorldCameraProgramOpSelectProgram | null;
+export type WorldCameraProgramOp = WorldCameraProgramOpAnchor | WorldCameraProgramOpOffset | WorldCameraProgramOpLookAt | WorldCameraProgramOpOrbit | WorldCameraProgramOpPath | WorldCameraProgramOpDynamics | WorldCameraProgramOpClampPitch | WorldCameraProgramOpFieldOfView | WorldCameraProgramOpBlend | WorldCameraProgramOpSelectProgram | WorldCameraProgramOpFirstPerson | null;
 
 /**
  * Establishes the CURRENT subject — the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject's own position (the "first person" default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.
@@ -4054,6 +4077,33 @@ export type WorldCameraProgramOpFieldOfViewNullable = {
    * The field of view.
    */
   fieldOfViewRadians: BindableScalar;
+  /**
+   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
+   */
+  opcode?: string | null;
+};
+
+/**
+ * Authors the seat's first-person destination and eased transition. The eye point is in the reference body's local axes at full size. Active may bind state: zero requests third person, one first person; an explicit player choice overrides it. The caller applies live body scale and view-local hiding.
+ */
+export type WorldCameraProgramOpFirstPerson = {
+  $type?: "firstPerson";
+  /**
+   * The eye in the avatar's local frame.
+   */
+  eyePoint: DocumentVector3;
+  /**
+   * The authored view request, a literal or state binding in [0, 1].
+   */
+  active: BindableScalar;
+  /**
+   * The duration of a complete eased move.
+   */
+  transitionSeconds?: number;
+  /**
+   * The head shell radius within which the own stamp is hidden.
+   */
+  hideRadius?: number;
   /**
    * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
    */
@@ -11665,6 +11715,10 @@ export type WorldSeatCameraFeel = {
    * The player's clearance preference; Auto inherits the framing world's default.
    */
   clearanceMode?: WorldCameraClearanceChoice;
+  /**
+   * The player's automatic pull-in choice; null inherits the author's default.
+   */
+  autoFirstPerson?: boolean | null;
 };
 
 export type WorldSeatFollow = {
@@ -11764,6 +11818,10 @@ export type WorldSeatViewControl = {
    * The cutaway boom's highest elevation above the seat's level plane, in radians.
    */
   clearanceMaxElevation?: number;
+  /**
+   * The optional automatic pull-in policy; absent is off with standard hysteresis.
+   */
+  autoFirstPerson?: WorldCameraAutoFirstPerson | null;
 };
 
 export type WorldSeatYawReference = "World" | "Body";
@@ -13098,7 +13156,7 @@ export type WorldViewSlot = {
 };
 
 /**
- * A character voice over an existing synth patch. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.
+ * A character voice over an existing synth patch or an authored syllable sample set. HUD Text elements speak their resolved text on visible arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.
  */
 export type WorldVoiceProfile = {
   /**
@@ -13121,6 +13179,10 @@ export type WorldVoiceProfile = {
    * Speech speed, 250..4000; 2000 halves each character's interval.
    */
   paceThousandths?: number;
+  /**
+   * Optional syllable-bank document path, replacing synthesis for HUD text.
+   */
+  sampleSet?: string | null;
 };
 
 /**

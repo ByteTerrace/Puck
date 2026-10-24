@@ -5,13 +5,19 @@ namespace Puck.Audio.Mixing;
 
 /// <summary>One character's sample-frame interval. A rest has no synth trigger.</summary>
 public readonly record struct SpeechSyllable(int Character, long StartFrame, int Frames, bool Rest);
-/// <summary>Animalese-style text voiced by <see cref="VoiceSynth"/>. The audio pull advances an integer frame
+/// <summary>Animalese-style text voiced by <see cref="VoiceSynth"/> or six authored PCM syllables. The audio pull advances an integer frame
 /// clock; neither the schedule nor the noise seeds depend on presentation cadence or utterance history.</summary>
 public sealed class TextSpeechSource : IAudioBlockSource {
     private readonly VoicePatch m_patch;
     private readonly int m_pitch;
     private readonly int m_formant;
     private readonly ulong m_seed;
+    private readonly short[][]? m_samples;
+    private readonly long m_sampleStep;
+
+    private short[]? m_sample;
+    private int m_sampleFrame;
+    private int m_sampleDuration;
 
     private readonly VoiceSynth m_synth = new();
     private readonly short[] m_mono = new short[AudioMixer.MaxBlockFrames];
@@ -21,13 +27,20 @@ public sealed class TextSpeechSource : IAudioBlockSource {
 
     /// <summary>Builds the complete text-derived schedule. Cadence uses the existing 240 Hz audio tick.</summary>
     public TextSpeechSource(string text, VoicePatch patch, int cadenceTicks, int pitchThousandths = 1000,
-        int formantThousandths = 1000, int paceThousandths = 1000) {
+        int formantThousandths = 1000, int paceThousandths = 1000, short[][]? samples = null,
+        int sampleRateThousandths = 1500) {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentOutOfRangeException.ThrowIfLessThan(cadenceTicks, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(cadenceTicks, 240);
         CheckScale(value: pitchThousandths);
         CheckScale(value: formantThousandths);
         CheckScale(value: paceThousandths);
+        CheckScale(value: sampleRateThousandths);
+        if ((samples is not null) && ((samples.Length != 6) || samples.Any(predicate: sample => ((sample is null) || (sample.Length == 0))))) {
+            throw new ArgumentException(message: "A sample bank needs six nonempty syllables (A, E, I, O, U, consonant).", paramName: nameof(samples));
+        }
+        m_samples = samples;
+        m_sampleStep = (((long)pitchThousandths) * sampleRateThousandths);
         m_patch = patch;
         m_pitch = pitchThousandths;
         m_formant = formantThousandths;
@@ -59,10 +72,21 @@ public sealed class TextSpeechSource : IAudioBlockSource {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 4000);
     }
     private void Start(SpeechSyllable syllable, int ordinal) {
+        m_sample = null;
         if (syllable.Rest) {
             return;
         }
         var letter = Rune.ToLowerInvariant(value: new Rune(value: syllable.Character)).Value;
+
+        if (m_samples is not null) {
+            var index = letter switch { 'a' => 0, 'e' => 1, 'i' or 'y' => 2, 'o' => 3, 'u' => 4, _ => 5 };
+
+            m_sample = m_samples[index];
+            m_sampleFrame = 0;
+            m_sampleDuration = ((int)Math.Min(val1: ((syllable.Frames * 3L) / 4),
+                val2: ((((m_sample.Length * 1_000_000L) + m_sampleStep) - 1) / m_sampleStep)));
+            return;
+        }
 
         var (first, second) = letter switch {
             'a' => (700, 1220),
@@ -121,7 +145,11 @@ public sealed class TextSpeechSource : IAudioBlockSource {
             var boundary = ((m_next < Schedule.Count) ? Schedule[m_next].StartFrame : TotalFrames);
             var count = ((int)Math.Min(val1: Math.Min(val1: (frames - written), val2: AudioMixer.MaxBlockFrames), val2: (boundary - m_frame)));
 
-            m_synth.Render(destination: m_mono, frames: count);
+            if (m_samples is null) {
+                m_synth.Render(destination: m_mono, frames: count);
+            } else {
+                RenderSample(output: m_mono.AsSpan(length: count, start: 0));
+            }
             for (var index = 0; (index < count); index++) {
                 interleavedStereo[((written + index) * 2)] = m_mono[index];
                 interleavedStereo[(((written + index) * 2) + 1)] = m_mono[index];
@@ -130,5 +158,20 @@ public sealed class TextSpeechSource : IAudioBlockSource {
             written += count;
         }
         return written;
+    }
+
+    private void RenderSample(Span<short> output) {
+        output.Clear();
+        if (m_sample is null) { return; }
+        for (var index = 0; ((index < output.Length) && (m_sampleFrame < m_sampleDuration)); index++, m_sampleFrame++) {
+            var position = (m_sampleFrame * m_sampleStep);
+            var frame = ((int)(position / 1_000_000));
+            var fraction = (position % 1_000_000);
+            var first = m_sample[frame];
+            var second = m_sample[Math.Min(val1: (frame + 1), val2: (m_sample.Length - 1))];
+            var value = (((first * (1_000_000 - fraction)) + (second * fraction)) / 1_000_000);
+            // A short release prevents a clipped authored sample from clicking at the character boundary.
+            output[index] = ((short)((value * Math.Min(val1: 48, val2: (m_sampleDuration - m_sampleFrame))) / 48));
+        }
     }
 }

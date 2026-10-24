@@ -14,6 +14,8 @@ public sealed class WorldSeatViewState {
     private readonly Lock m_gate = new();
     private readonly SdfCameraBoomFollower m_boom = new();
     private readonly WorldCameraClearance m_clearance = new();
+    private readonly WorldCameraViewTransition m_viewTransition = new();
+    private static readonly WorldCameraAutoFirstPerson DefaultAutomatic = new();
     private Quaternion m_upAlignment = Quaternion.Identity;
     private Vector3 m_alignedUp = Vector3.UnitY;
     private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
@@ -55,6 +57,19 @@ public sealed class WorldSeatViewState {
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
 
     private WorldCameraClearanceChoice m_clearanceOverride;
+
+    /// <summary>Whether look rotates at the first-person eye and steers the upright body.</summary>
+    public bool FirstPersonLook { get { lock (m_gate) { return m_viewTransition.LookFirstPerson; } } }
+    /// <summary>Whether this seat requests first person.</summary>
+    public bool FirstPerson { get { lock (m_gate) { return m_viewTransition.FirstPerson; } } }
+    /// <summary>Sets an explicit view; null restores authored state and automatic preference.</summary>
+    public void SetView(bool? first) { lock (m_gate) { m_viewTransition.SetView(first); } }
+    /// <summary>Sets an explicit automatic preference; null restores the portable/author default.</summary>
+    public void SetAutomaticFirstPerson(bool? enabled) { lock (m_gate) { m_viewTransition.SetAutomatic(enabled); } }
+    /// <summary>Resolves the automatic preference.</summary>
+    public bool AutomaticFirstPerson(WorldSeatViewControl control, WorldSeatCameraFeel feel) {
+        lock (m_gate) { return m_viewTransition.Automatic(control, feel); }
+    }
 
     /// <summary>Gets the last clearance frame's opacity for the body's stamp in this seat's own view.</summary>
     public float BodyOpacity { get { lock (m_gate) { return m_clearance.BodyOpacity; } } }
@@ -249,15 +264,22 @@ public sealed class WorldSeatViewState {
     /// <param name="choice">The resolved clearance preference.</param>
     /// <param name="control">The world's camera clearance parameters.</param>
     /// <param name="scale">The perceived body's live scale.</param>
+    /// <param name="firstPerson">The resolved program's authored first-person destination.</param>
+    /// <param name="feel">The portable automatic pull-in preference.</param>
+    /// <param name="viewForward">The rig's look direction before boom smoothing.</param>
     public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, ref Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
-        SdfCameraTargetShift targetShift = default, WorldCameraClearanceChoice choice = WorldCameraClearanceChoice.Cutaway, WorldSeatViewControl? control = null, float scale = 1f) {
+        SdfCameraTargetShift targetShift = default, WorldCameraClearanceChoice choice = WorldCameraClearanceChoice.Cutaway, WorldSeatViewControl? control = null, float scale = 1f,
+        SdfCameraFirstPerson? firstPerson = null, WorldSeatCameraFeel? feel = null, Vector3? viewForward = null) {
         lock (m_gate) {
             if (!enabled) {
                 m_clearance.Reset();
+                m_viewTransition.Reset();
 
                 return 0f;
             }
 
+            var forward = (viewForward ?? Vector3.Normalize(target - eye));
+            var authoredLength = Vector3.Distance(eye, target);
             eye = m_clearance.Resolve(
                 deltaSeconds: deltaSeconds,
                 desiredEye: eye,
@@ -272,6 +294,16 @@ public sealed class WorldSeatViewState {
                 scale: scale,
                 maxElevation: (control?.ClearanceMaxElevation ?? WorldCameraClearance.LiftCeiling)
             );
+            if ((firstPerson is { } destination) && (control is not null)) {
+                var head = subject.Point(destination.EyePoint);
+                var room = WorldCameraClearance.AvailableRoom(field, head, -forward, authoredLength, scale) / scale;
+                m_viewTransition.Advance(destination, (control.AutoFirstPerson ?? DefaultAutomatic),
+                    m_viewTransition.Automatic(control, (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);
+                m_clearance.ApplyView(m_viewTransition, head, forward, destination.HideRadius * scale);
+                eye = m_clearance.Eye;
+            } else {
+                m_viewTransition.Reset();
+            }
             target = m_clearance.Target;
 
             return m_clearance.Near;
@@ -281,7 +313,7 @@ public sealed class WorldSeatViewState {
     /// <returns>The read-back text.</returns>
     public string DescribeClearance() {
         lock (m_gate) {
-            return m_clearance.Describe();
+            return $"{m_viewTransition.Describe()} {m_clearance.Describe()}";
         }
     }
     /// <summary>The total orbit pitch — the authored rig pitch plus the live delta — in radians.</summary>

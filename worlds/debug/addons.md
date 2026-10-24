@@ -167,10 +167,13 @@ watchdog records `below-floor` for body 0 on the next settled tick.
 
 With `addonHud` on, the guide speaks the exhibit note its panel shows, once
 per arrival or changed note. Hiding the panel stops the utterance. The map
-board's directions also speak in a lower voice while a joined seat is within
+board also speaks its directions in a sampled voice while a joined seat is within
 2.5 m of the board and the same HUD toggle is on. Both voices are authored in
-[guide.puck](guide.puck); the shared synth patch is
-[patches/guide-voice.patch.json](patches/guide-voice.patch.json). The
+[guide.puck](guide.puck); the guide's synth patch is
+[patches/guide-voice.patch.json](patches/guide-voice.patch.json), and the sign's
+sample set is [voices/gallery.sample-set.json](voices/gallery.sample-set.json).
+Its six syllables were generated from that synth; [the bank notes](voices/README.md)
+describe their provenance. The
 [audio reference](../../docs/reference/audio.md#text-speech) explains the
 profile and `audio.render`'s device-free WAV export.
 

@@ -96,7 +96,7 @@ stops. Literal `text`, `binding` and `template` resolve through the same HUD
 binding resolver and template grammar the screen uses. The debug guide's note
 and the nearby map sign use this hook in `worlds/debug/guide.puck`, behind
 the existing `addonHud` toggle. The sign reads the same directions the map
-board embosses, in a lower voice.
+board embosses, in its own sampled voice.
 
 `TextSpeechSource` pulls the existing `VoiceSynth` at exact character
 boundaries. Each Unicode scalar has an interval: vowels select two band-pass
@@ -127,7 +127,47 @@ audio.render gallery-sign directions speech-sign.wav
 Two exports of unchanged text and voice are byte-identical. The Windows
 `WorldAudioRenderService` remains the device governor; offline export drives
 the source directly through `WorldSpeechRenderer`. Authored syllable sample
-sets remain the second source, tracked in [open items](../plans/open-items.md).
+sets provide the second source below.
+
+## Authored syllable samples
+
+A voice chooses either `patchId` or `sampleSet`, plus `cadenceTicks`. The
+sample set replaces synthesis while keeping the same text-derived character
+schedule, punctuation rests and quiet tails:
+
+```puck
+voice { sampleSet: "voices/gallery.sample-set.json", cadenceTicks: 18,
+  pitchThousandths: 800, paceThousandths: 1100 }
+```
+
+The set is a JSON asset resolved beside the document authoring the voice;
+its six WAV paths resolve beside the set itself:
+
+```json
+{ "name": "gallery-syllables", "a": "gallery/a.wav", "e": "gallery/e.wav",
+  "i": "gallery/i.wav", "o": "gallery/o.wav", "u": "gallery/u.wav",
+  "consonant": "gallery/b.wav", "playbackRateThousandths": 1500 }
+```
+
+WAV assets must be nonempty signed 16-bit PCM at 48 kHz, mono or stereo,
+and at most one second each. Stereo is averaged to mono. Loading refuses
+missing files, unsupported formats and malformed chunks by name. The bank
+requires all six classes; Y uses I, and other letters and digits use the
+consonant class, matching synthesis. Non-alphanumeric characters stay silent.
+
+`playbackRateThousandths` defaults to 1500 (1.5 times recorded speed), in
+250..4000. Playback rate multiplies the speaker's `pitchThousandths`; integer
+linear interpolation changes sample speed and pitch together. `paceThousandths`
+changes character spacing independently. Playback ends by three quarters of
+the character interval and tapers its final 48 frames. `formantThousandths`
+controls synthesis only; an authored sample carries its own formants.
+
+The gallery guide keeps synthesis; the map sign uses the committed sample
+bank under `worlds/debug/voices/`. Those six assets were created from the
+repository's synth through `WorldSpeechRenderer`/`audio.render`, with no
+external recording or licensing dependency. See the bank's README for the
+reproduction recipe. Live speech and `audio.render` resolve both sources
+through `WorldTextSpeechFactory` and pull the same `TextSpeechSource`.
 
 ## Layering
 

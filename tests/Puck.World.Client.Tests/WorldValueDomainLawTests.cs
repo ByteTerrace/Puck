@@ -172,6 +172,21 @@ public sealed class WorldValueDomainLawTests {
                 clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f)
             ).FovRadians
         ),
+        // The first-person view's amount reaches the camera as the view transition's target, so the validator's
+        // judgement is the law for it.
+        [WorldValueFields.FirstPersonActive] = new Case(
+            Author: static s => Fixtures.BuildDocument() with {
+                CamerasRaw = [Camera(name: "probe", rig: new WorldCameraProgram(
+                    Name: "probe-rig",
+                    Operations: [
+                        new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: LowFov),
+                        new WorldCameraProgramOp.FirstPerson(new Vector3(0f, 1.75f, 0.22f), s),
+                    ],
+                    Version: WorldCameraProgram.CurrentVersion
+                ))],
+            },
+            Path: "cameras[0].rig.operations[1].active"
+        ),
         [WorldValueFields.MarkerRingAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: 0.9f, Size: 12f, RingAlpha: s, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Ring, member: "ringAlpha"),
     };
 

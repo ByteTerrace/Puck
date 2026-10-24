@@ -1228,7 +1228,8 @@ public static partial class WorldDefinitionValidator {
         ValidateIdentityVoiceProfile(
             identity: definition.Identity,
             patchIds: patchIds,
-            errors: errors
+            errors: errors,
+            documentDirectory: definition.DocumentDirectory
         );
 
         // The declared SOURCES validate before anything resolves a reference against them, so a site's refusal is

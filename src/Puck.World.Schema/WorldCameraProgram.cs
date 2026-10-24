@@ -52,6 +52,7 @@ public abstract record WorldCameraSubject {
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.FieldOfView), typeDiscriminator: "fieldOfView")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Blend), typeDiscriminator: "blend")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.SelectProgram), typeDiscriminator: "selectProgram")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.FirstPerson), typeDiscriminator: "firstPerson")]
 [System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldCameraProgramOp {
     private WorldCameraProgramOp() {
@@ -65,6 +66,7 @@ public abstract record WorldCameraProgramOp {
         ClampPitch => "clampPitch",
         Dynamics => "dynamics",
         FieldOfView => "fieldOfView",
+        FirstPerson => "firstPerson",
         LookAt => "lookAt",
         Offset => "offset",
         Orbit => "orbit",
@@ -72,6 +74,15 @@ public abstract record WorldCameraProgramOp {
         SelectProgram => "selectProgram",
         _ => "unknown",
     });
+
+    /// <summary>Authors the seat's first-person destination and eased transition. The eye point is in the
+    /// reference body's local axes at full size. Active may bind state: zero requests third person, one first person;
+    /// an explicit player choice overrides it. The caller applies live body scale and view-local hiding.</summary>
+    /// <param name="EyePoint">The eye in the avatar's local frame.</param>
+    /// <param name="Active">The authored view request, a literal or state binding in [0, 1].</param>
+    /// <param name="TransitionSeconds">The duration of a complete eased move.</param>
+    /// <param name="HideRadius">The head shell radius within which the own stamp is hidden.</param>
+    public sealed record FirstPerson(DocumentVector3 EyePoint, BindableScalar Active, float TransitionSeconds = 0.5f, float HideRadius = 0.45f) : WorldCameraProgramOp;
 
     /// <summary>Establishes the CURRENT subject — the pose <see cref="Offset"/>/<see cref="Orbit"/> place the eye
     /// relative to, and <see cref="LookAt"/> aims along the facing of when it names no subject of its own. Also

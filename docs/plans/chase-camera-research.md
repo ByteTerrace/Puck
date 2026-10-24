@@ -77,8 +77,11 @@ through the existing seat rig. The debug default is `fade`;
 choice, with no argument toggling the two. `world.view.camera` reports `mode`
 and the fade amount. Both currently share the rig's authored 1.74 m close target;
 the table below remains design guidance for further per-form tuning. First
-person, automatic pull-in with hysteresis and a simultaneous comparison layout
-remain separate follow-up work. The current implementation contract is in
+person is now a deliberate eased view (`player.camera.view first|third|toggle|auto`),
+with `player.camera.automatic on|off|auto|toggle` selecting opt-in pull-in and its
+separate entry/exit dwell. All composed bar and wheel slots are occupied, so the
+bindable view verb has no default physical binding. A
+simultaneous comparison layout remains follow-up work. The current implementation contract is in
 [Chase eye clearance](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance).
 
 Puck's debug world serves both as a playable third-person action showcase and as a visual inspection tool for the Moth's sculpted SDF rig, gait, and thrusters ([`AGENTS.md`](../../AGENTS.md)). Evaluating all nine behaviors from the table narrows the general tight-space choice to two winners:
@@ -196,7 +199,7 @@ The owner's direction: model the first- and third-person change on Metroid Prime
 The automatic, collision-driven transition stays a supported option, not a discarded one (the owner's direction: authorship, player choice and debug needs rule). An author sets which triggers a world allows and its default, and the player may override them, for example turning automatic pull-in on or off. A debug toggle forces any mode for inspection. When automatic is chosen, it uses the hysteresis below.
 
 - **Do not make automatic collision-driven first-person pull-in a default chase mode.** In stairwells and around columns, uncommanded transitions between `d = 4.2 m` and `d = 0 m` cause optical looming and hide the avatar's feet when stepping onto ledges or the lift platform.
-- **Offer `firstPerson` as an opt-in third mode (`clearanceMode: "firstPerson"`) with mandatory hysteresis, alongside a manual zoom/toggle binding.**
+- **Offer first person as an independent state-driven view with opt-in automatic pull-in and mandatory hysteresis, alongside a manual toggle binding.** The implemented view choice is separate from `clearanceMode`, so choosing first person deliberately works in open space and returning to third person preserves the chosen fade/cutaway treatment.
   - When selected as the reactive third option for side-by-side evaluation, prevent yo-yoing with a two-part hysteresis gate:
     1. **Entry dwell**: Only collapse from minimum third-person shoulder distance (`0.6 m`) into the eye (`0.0 m`) after geometry has restricted the boom below `0.85 m` continuously for `0.20 s` (or immediately when `room < 0.25 m`).
     2. **Exit hysteresis**: Hold the first-person eye pose until unobstructed room behind the head exceeds `1.35 m` for `0.15 s`, then ease back out on `camera-boom` dynamics.

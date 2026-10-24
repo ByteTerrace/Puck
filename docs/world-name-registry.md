@@ -278,6 +278,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `cameras[].rig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `cameras[].rig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `cameras[].rig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `cameras[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -1341,6 +1342,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.seatRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.seatRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.seatRig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `views.cameraRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
@@ -1350,6 +1352,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.cameraRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.cameraRig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `looks.rows[].source[creation].prototypeId` | Prototype | Names | Read | `WorldLookSource.Creation.PrototypeId` |
 | `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
 | `looks.rows[].motion.lanes[]{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |

@@ -812,7 +812,7 @@ public static partial class WorldDefinitionValidator {
                     if (element.Kind != WorldHudElementKind.Text) {
                         errors.Add(item: $"{voicePath} is only available on Text elements.");
                     }
-                    ValidateVoiceProfile(voice, definition.Patches.Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal), voicePath, true, errors);
+                    ValidateVoiceProfile(voice, definition.Patches.Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal), voicePath, true, errors, definition.DocumentDirectory);
                 }
                 if (element.Kind != WorldHudElementKind.Frame) {
                     continue;
@@ -868,16 +868,22 @@ public static partial class WorldDefinitionValidator {
     // posture ValidateIdentityMotionState takes for its two state-slot fields. patchIds is the same asset-row id
     // set every other patchId reference (speaker sources, emission facets, cue rows, embellishments) resolves
     // against, computed once before row validation runs (see this file's caller).
-    private static void ValidateIdentityVoiceProfile(WorldIdentityDefinition? identity, HashSet<string> patchIds, List<string> errors) {
+    private static void ValidateIdentityVoiceProfile(WorldIdentityDefinition? identity, HashSet<string> patchIds, List<string> errors, string? documentDirectory) {
         if (identity?.Voice is not { } voice) {
             return;
         }
 
-        ValidateVoiceProfile(errors: errors, patchIds: patchIds, path: "identity.voice", required: false, voice: voice);
+        ValidateVoiceProfile(documentDirectory: documentDirectory, errors: errors, patchIds: patchIds, path: "identity.voice", required: false, voice: voice);
     }
-    private static void ValidateVoiceProfile(WorldVoiceProfile voice, HashSet<string> patchIds, string path, bool required, List<string> errors) {
-        if (required && ((voice.PatchId is null) || (voice.CadenceTicks is null))) {
-            errors.Add(item: $"{path} requires patchId and cadenceTicks.");
+    private static void ValidateVoiceProfile(WorldVoiceProfile voice, HashSet<string> patchIds, string path, bool required, List<string> errors, string? documentDirectory) {
+        if (required && (((voice.PatchId is null) && (voice.SampleSet is null)) || (voice.CadenceTicks is null))) {
+            errors.Add(item: $"{path} requires patchId or sampleSet, and cadenceTicks.");
+        }
+        if (voice.SampleSet is { } sampleSet) {
+            if (voice.PatchId is not null) { errors.Add(item: $"{path} must choose patchId or sampleSet, not both."); }
+            if (!WorldVoiceSampleLoader.TryLoad(documentDirectory: documentDirectory, error: out var sampleError, rate: out _, samples: out _, source: sampleSet)) {
+                errors.Add(item: $"{path}: {sampleError}");
+            }
         }
         if (
             (voice.PatchId is { } patchId) &&

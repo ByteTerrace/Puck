@@ -194,6 +194,36 @@ Before stopping a hung test host or World process, capture its managed stacks
 with an existing `dotnet-stack report -p <pid>`. The optional installation is
 owner-only [machine setup](../../../docs/development/contributing.md#setting-up-a-machine).
 
+## Checking for a leak
+
+A leak shows as memory that climbs across repetitions of one action, read after
+a full collection; a long session is not needed and proves less, since its
+working set mixes warm-up, caches and garbage. The owner's method:
+
+1. Boot one World (windowed for a GPU leak, under `puck lease gpu`, stopped
+   within 10 minutes by its PID) and drive it from a stdin script, so every
+   repetition is the same and no round trip spaces the cycles.
+2. Warm up (`world.wait bakes <s>`, then some ticks), then `host.memory collect`
+   as the baseline: a full blocking collection that compacts the large object
+   heap, then process working set, private bytes and the managed heap by
+   generation.
+3. Repeat the cycle 10 to 20 times and run `host.memory collect` every few
+   cycles.
+4. Compare checkpoints. The managed heap after collection must stay flat. Read
+   native growth as private bytes less the GC's committed bytes, so a native
+   leak cannot hide behind a falling managed heap; a page-level probe
+   (`VirtualQueryEx` over the process, split by private, write-combined and
+   mapped pages) separates upload heaps from native heap.
+5. A one-off rise over the first cycles that then holds is warm-up, not a leak.
+   A rise every cycle is a leak: bisect the cycle by dropping actions from the
+   script and repeating, then fix the action's cause. The managed heap read
+   between collections shows each action's garbage, which bisects churn the
+   same way.
+6. Private bytes lag the GC: after a collection the GC reports its freed
+   regions released, but the process holds them for a while, so a single
+   private reading can sit several GB above the floor. Compare the floor
+   across samples, never one reading.
+
 ## Branches
 
 `git log A..B` lists commits reachable from B and not from A. It says nothing
