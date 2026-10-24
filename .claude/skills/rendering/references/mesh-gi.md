@@ -44,6 +44,25 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 indirect canaries and comparison workloads under `experimental/` describe a
 retired renderer and are not live verification scenes.
 
+## Debug-world corner and boundary checks
+
+Use a fixed camera for comparisons so chase collision cannot change the view.
+Each row gives `body.pose` arguments, then `view.override camera look` arguments
+(eye and target). Capture settled `indirect` and `off` views at each location.
+
+| Location | Body pose | Camera look |
+|---|---|---|
+| Outer hall wall | `7.01 0.02 -5.35 307 0 0` | `4.6517 1.759 -3.5533 7.01 1.3 -5.35` |
+| Along the hall | `17.33 0.07 24.30 271 0 0` | `14.3657 1.759 24.3516 17.33 1.3 24.30` |
+| Teal room corner | `4.60 0.07 29.76 152 0 0` | `5.929 2.188 27.222 4.60 1.3 29.76` |
+| Outdoor control | `-8 0.07 -10 225 0 0` | `-11 3 -13 -3 1 -5` |
+
+Read `world.exposure` in the hall. Double the outer-wall camera's distance,
+and move the hall camera and target 8 m along +X, to check that moving the
+toroidal volume creates no rectangular wall patch or bright distance band.
+The teal corner must also stay closed high up where its walls meet the roof;
+checking only the lower stepped strip misses the diagonal-probe case.
+
 See the [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 for the lighting model and [verification](../../verification/SKILL.md) for GPU
 leases and named, device-free World runs.
