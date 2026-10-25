@@ -424,6 +424,8 @@ public static partial class ExpressionSpelling {
                     )
                     : null
                 );
+            case { Operation: ExpressionOp.Not }:
+                return stack.Count >= 1 ? new Unary(Operator: "not", Operand: stack.Pop()) : null;
         }
         if (BinaryOperator(instruction: instruction) is { } symbol) {
             return ((Pop(
@@ -1263,26 +1265,27 @@ public static partial class ExpressionSpelling {
     /// <param name="Operator">The operator spelling.</param>
     /// <param name="Operand">The operand.</param>
     public sealed record Unary(string Operator, SyntaxNode Operand) : SyntaxNode {
-        internal override int Level => UnaryLevel;
+        internal override int Level => Operator == "not" ? ExpressionOperators.Find(ExpressionOp.Not)!.Binding : UnaryLevel;
 
         internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             Operand.Emit(
                 builder: builder,
                 into: into
             );
-            into.Add(item: Instruction.Of(operation: ((Operator == "-")
-                ? ExpressionOp.Negate
-                : ExpressionOp.BitNot)));
+            into.Add(item: Instruction.Of(operation: Operator switch {
+                "-" => ExpressionOp.Negate, "not" => ExpressionOp.Not, _ => ExpressionOp.BitNot,
+            }));
         }
         internal override void PrintBare(StringBuilder into) {
             into.Append(value: Operator);
+            if (Operator == "not") { into.Append(value: ' '); }
             // A unary or negative-literal operand is parenthesized so "- -a" never prints as "--a".
             var wrap = ((Operand is Unary) || (Operand is Literal { Value: < 0m }));
 
             if (wrap) { into.Append(value: '('); }
             Operand.Print(
                 into: into,
-                parentLevel: UnaryLevel,
+                parentLevel: Level,
                 rightOperand: false
             );
             if (wrap) { into.Append(value: ')'); }
@@ -1624,6 +1627,12 @@ public static partial class ExpressionSpelling {
                 m_position = end;
                 return;
             }
+            if (text.AsSpan(m_position).StartsWith("||", StringComparison.Ordinal)) {
+                throw Fail(message: "'||' is retired; write 'or'");
+            }
+            if (text.AsSpan(m_position).StartsWith("&&", StringComparison.Ordinal)) {
+                throw Fail(message: "'&&' is retired; write 'and'");
+            }
             foreach (var punctuation in Punctuations) {
                 if (string.CompareOrdinal(
                     strA: text,
@@ -1641,15 +1650,26 @@ public static partial class ExpressionSpelling {
             throw Fail(message: $"unexpected character '{character}'");
         }
         private static string? BinaryOperator(string symbol) => (ExpressionOperators.TryFindSymbol(
-            descriptor: out _,
+            descriptor: out var descriptor,
             symbol: symbol
-        )
+        ) && descriptor!.Arity == 2
             ? symbol
             : null
         );
         private void Expect(string punctuation) {
             if (!Accept(punctuation: punctuation)) {
+                RefuseKindSuffix();
                 throw Fail(message: $"expected '{punctuation}'{Found()}");
+            }
+        }
+        private void RefuseKindSuffix() {
+            if (!sourceSyntax || m_value is not (":" or "as")) { return; }
+            var remainder = text.AsSpan(m_position).TrimStart();
+            foreach (var kind in new[] { "Int", "Fixed", "Text" }) {
+                if (remainder.StartsWith(kind, StringComparison.Ordinal) &&
+                    (remainder.Length == kind.Length || !char.IsLetterOrDigit(remainder[kind.Length]))) {
+                    throw Fail(message: $"'{m_value} {kind}' is retired; write the expression without a kind suffix (its kind is inferred)");
+                }
             }
         }
         private void Descend() {
@@ -1674,7 +1694,7 @@ public static partial class ExpressionSpelling {
             while (true) {
                 Prime();
                 if (
-                    (m_kind != Lexeme.Punctuation) ||
+                    (m_kind is not (Lexeme.Punctuation or Lexeme.Name) || m_quoted) ||
                     (BinaryOperator(symbol: m_value) is not { } symbol)
                 ) {
                     m_depth -= spine;
@@ -2186,6 +2206,17 @@ public static partial class ExpressionSpelling {
             );
         }
         private SyntaxNode ParseUnary() {
+            Prime();
+            if (m_kind == Lexeme.Name && !m_quoted && m_value is "and" or "or") {
+                throw Fail(message: $"operator '{m_value}' needs a left operand");
+            }
+            if (m_kind == Lexeme.Name && !m_quoted && m_value == "not") {
+                Advance();
+                Descend();
+                var operand = ParseBinary(minimumLevel: ExpressionOperators.Find(ExpressionOp.Not)!.Binding);
+                m_depth--;
+                return new Unary(Operator: "not", Operand: operand);
+            }
             if (Accept(punctuation: "-")) {
                 Descend();
 
@@ -2225,6 +2256,7 @@ public static partial class ExpressionSpelling {
         public void ExpectEnd() {
             Prime();
             if (m_kind != Lexeme.End) {
+                RefuseKindSuffix();
                 throw Fail(message: $"unexpected '{m_value}' after the expression");
             }
         }

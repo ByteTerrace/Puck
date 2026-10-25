@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Parsing;
 
@@ -520,18 +519,13 @@ public static partial class WorldDecompiler {
         (comparandState.ToString() ?? ""),
         node["comparandKey"]?.ToString()
     ))),
-        // A `compareValue` whose two operands are simple enough to re-lower as `compareState` can only keep its
-        // `$type` when the printed text carries a kind annotation forcing it back (`LowerComparison` treats any
-        // annotation as that force), so a node with no `kind` at all in that position has no sugar spelling.
+        // An explicitly encoded kind or a noncanonical lowering uses the document form; ordinary
+        // authored conditions infer their kind and let the emitter choose the comparison representation.
         "compareValue" => (ExpressionComparisons.TryParseName(
         node["comparison"]?.ToString(),
         out _
     )
-            && ((node["kind"] is null) || PuckDslVocabulary.TryParseComparisonKind(
-        node["kind"]!.ToString(),
-        out _
-    ))
-            && ((node["kind"] is not null) || !CompareValueNeedsKindAnnotation(node: node))),
+            && node["kind"] is null && !CompareValueNeedsDocumentForm(node: node)),
         // A single-child (or empty) `all`/`any` has no bare-sugar spelling at all: `AndGate`/`OrGate` only ever
         // build the `All`/`Any` wrapper when MORE than one operand was matched at the same keyword — one operand
         // (or zero) collapses to that operand directly (or nothing), so the wrapper itself is unrecoverable from
@@ -671,7 +665,7 @@ public static partial class WorldDecompiler {
     // Whether the operands are simple enough that `LowerComparison` would read the bare `left cmp right` text back
     // as a `compareState` node, so a kindless `compareValue` over them has no bare spelling. A comparison reading a
     // pool field (`t.noun == text`) lowers to a kindless `compareValue` before that shape is asked, so it has one.
-    private static bool CompareValueNeedsKindAnnotation(JsonObject node) =>
+    private static bool CompareValueNeedsDocumentForm(JsonObject node) =>
         (!ReadsOnePoolField(program: node["left"]) &&
         !ReadsOnePoolField(program: node["right"]) &&
         (WorldDocumentEmitter.ClassifyBareComparison(
@@ -681,13 +675,6 @@ public static partial class WorldDecompiler {
             out _
         )
             != WorldDocumentEmitter.BareComparisonShape.CompareValue));
-    // A kind annotation is wrapped in parens around the WHOLE comparison it names, `(left cmp right : Int)`,
-    // unconditionally of where the comparison sits: printed bare, the suffix would trail whatever came textually
-    // last in an `and`/`or` chain (`FormatConjunction` joins operands with no delimiter of its own), leaving a
-    // reader unable to tell whether it annotates that one comparison or the entire chain. Wrapping reuses the
-    // parenthesized-subgate grammar the language already has (`when (Gate)` — `ParseAtom`'s leading-`(` case), so
-    // nothing in `Parsing/` changes. A comparison with no kind infers it, so it prints bare; a declared kind is
-    // always printed, since the bare text would re-lower to an inferred one.
     private static string FormatCompareValue(JsonObject node) {
         // A composed operand is parenthesized: the comparison joins the two printed operands with its own symbol,
         // and an operand whose own top-level operator binds looser than a comparison would otherwise re-parse as a
@@ -697,13 +684,7 @@ public static partial class WorldDecompiler {
         var symbol = ComparisonToSymbol(comparison: node["comparison"]?.ToString());
         var comparison = $"{left} {symbol} {right}";
 
-        if (!PuckDslVocabulary.TryParseComparisonKind(
-            node["kind"]?.ToString(),
-            out var kind
-        )) {
-            return comparison;
-        }
-        return $"({comparison} : {Enum.GetName(value: kind)})";
+        return comparison;
     }
     // Only ever reached for a node `IsPredicateSafeForGateSugar` already accepted, which is what guarantees the wire
     // spelling names an enum member exactly.

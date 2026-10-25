@@ -32,7 +32,7 @@ state {
   }
 }
 rule "accumulate-device-displacement" {
-  when channel(1, sampleDelta) != 0
+  when channel(1, sampleDelta)
   mode: Level
   deltaTotal[0] += channel(1, sampleDelta)
 }

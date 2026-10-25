@@ -1465,7 +1465,7 @@ public static partial class WorldDecompiler {
                 node: v
             )}");
         }
-        return $"{type}({string.Join(
+        return $"{(type == "not" ? "`not`" : type)}({string.Join(
             separator: ", ",
             values: args
         )})";

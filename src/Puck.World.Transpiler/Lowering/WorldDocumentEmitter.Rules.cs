@@ -538,10 +538,6 @@ public static partial class WorldDocumentEmitter {
         var comparison = Enum.GetName(value: parsedComparison)!;
 
         if (cmp.Left.Syntax is ExpressionSpelling.SourceString || cmp.Right.Syntax is ExpressionSpelling.SourceString) {
-            if (cmp.Kind is not null) {
-                scope.Diagnostics.ReportError(PuckDiagnosticCodes.OperandParse,
-                    "A Text comparison cannot carry a numeric kind annotation", cmp.Span);
-            }
             var literal = (cmp.Right.Syntax as ExpressionSpelling.SourceString) ?? (ExpressionSpelling.SourceString)cmp.Left.Syntax!;
             var stateText = cmp.Right.Syntax is ExpressionSpelling.SourceString ? leftText : rightText;
             if (ClassifyBareComparison(stateText, "0", out var stateToken, out _) == BareComparisonShape.StateAgainstConstant &&
@@ -562,19 +558,6 @@ public static partial class WorldDocumentEmitter {
                 ["comparison"] = comparison,
                 ["left"] = DocumentPoolFieldExpression(scope: scope, text: leftText),
                 ["right"] = DocumentPoolFieldExpression(scope: scope, text: rightText),
-            };
-        }
-
-        // An explicit `: Kind`/`as Kind` suffix always forces compareValue, even for two simple single-token
-        // operands — CompareState carries no Kind field at all, so an authored kind annotation on it is meaningless;
-        // forcing compareValue is the only reading that keeps the annotation.
-        if (cmp.Kind is not null) {
-            return new JsonObject {
-                ["$type"] = "compareValue",
-                ["comparison"] = comparison,
-                ["kind"] = cmp.Kind,
-                ["left"] = DocumentExpression(text: leftText),
-                ["right"] = DocumentExpression(text: rightText),
             };
         }
 

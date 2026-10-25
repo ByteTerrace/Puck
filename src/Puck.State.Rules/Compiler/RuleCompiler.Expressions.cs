@@ -1,6 +1,35 @@
 namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
+    // Type checking sees both operands. Execution stores the right subtree as a call body so an
+    // unneeded operand does not read state or produce a domain fault.
+    private static CompiledExpressionToken[] ShortCircuit(CompiledExpressionToken[] tokens) {
+        if (!tokens.Any(static token => token.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not)) { return tokens; }
+        var stack = new Stack<List<CompiledExpressionToken>>();
+        foreach (var token in tokens) {
+            var arity = token.Call?.Arity ?? ExpressionOperators.Arity(token.Operation);
+            var operands = new List<CompiledExpressionToken>[arity];
+            for (var index = arity - 1; index >= 0; index--) { operands[index] = stack.Pop(); }
+            var result = arity == 0 ? [] : operands[0];
+            if (token.Operation == ExpressionOp.Not) {
+                var body = result.ToArray();
+                result = [token with { Call = new CompiledSubprogram("not", 0, body, RuleWorkBudget.Steps(tokens: body)) }];
+            } else if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
+                var left = result.ToArray();
+                result = [new CompiledExpressionToken(ExpressionOp.Not,
+                    Call: new CompiledSubprogram("truth", 0, left, RuleWorkBudget.Steps(tokens: left))),
+                    new CompiledExpressionToken(ExpressionOp.Not)];
+                var right = operands[1].ToArray();
+                result.Add(token with { Call = new CompiledSubprogram(
+                    Name: token.Operation.ToString(), Arity: 1, Body: right, Steps: RuleWorkBudget.Steps(tokens: right)) });
+            } else {
+                for (var index = 1; index < arity; index++) { result.AddRange(operands[index]); }
+                result.Add(token);
+            }
+            stack.Push(result);
+        }
+        return stack.Pop().ToArray();
+    }
     /// <summary>Compiles a postfix expression program into its evaluated token program, proving it with a typed
     /// stack: every slot's kind is known at compile time, so an Int comparison result can feed a select inside a
     /// Fixed expression while never reaching an arithmetic operator of the wrong kind. The program leaves exactly
@@ -206,7 +235,7 @@ public static partial class RuleCompiler {
 
         return FoldConstants(
             kind: kind,
-            tokens: tokens
+            tokens: ShortCircuit(tokens)
         );
 
         CompiledExpressionToken Absence() {
@@ -519,6 +548,12 @@ public static partial class RuleCompiler {
             }
             if (descriptor.Signature == ExpressionSignature.Sign) {
                 return SignOf();
+            }
+            if (descriptor.Signature == ExpressionSignature.Truth) {
+                Require(arity: descriptor.Arity, operation: operation);
+                depth -= descriptor.Arity - 1;
+                kinds[depth - 1] = CellKind.Int;
+                return new CompiledExpressionToken(Operation: operation);
             }
             if (descriptor.Signature == ExpressionSignature.Comparison) {
                 return Comparison(operation: operation);

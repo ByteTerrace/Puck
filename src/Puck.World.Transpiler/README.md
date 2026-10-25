@@ -245,27 +245,15 @@ per element, rather than n hand-written blocks. They are the core's, not this vo
 
 ### `when` gates
 
-```puck
-when Operand cmp Operand [ (":"|"as") (Int|Fixed) ]     // cmp: == != < <= > >=
-when Gate and Gate and Gate                              // -> one flat `all`
-when Gate or Gate                                         // -> one flat `any`
-when not Gate
-when (Gate)                                                // one opaque child; never flattened into its parent
-```
+`when`, `if`, and `expect` take ordinary expressions. Numeric zero and absence are false;
+nonzero values are true. `and`, `or`, and `not` return Int 0/1; `and` and `or` skip an
+unneeded right operand. Their precedence is below comparisons, while bitwise operators
+bind above comparisons. See the [operator table](../../docs/reference/dsl.md#comparisons-are-1-or-0).
 
-`and`/`or`/`not`/`as`/`when` are reserved only inside a gate. An `Operand` is opaque text handed whole to
-`Puck.State.ExpressionSpelling`—the DSL never re-implements that grammar; `row`/`row[key]`/`row.key` reads,
-`$name:segment` reserved channels, and a `$zones[...]`-folded selector all pass through untouched. A bare comparison between two
-single state reads lowers to `compareState`; anything else, or an explicit `: Int`/`: Fixed`/`as Int`/`as Fixed`
-suffix (which always forces it, even for two simple reads), lowers to `compareValue`. The suffix binds to the one
-comparison it follows, never to an enclosing `and`/`or` chain—but printed bare at the end of a chain it reads as
-though it scoped the whole thing, so wrap the annotated comparison in its own `(Operand cmp Operand : Kind)` (the
-generic `when (Gate)` grouping above) whenever it sits beside `and`/`or`. An unsuffixed comparison lowers with no
-`kind`, and the engine infers one the way it infers a local's: `Int`, unless both sides are constants and one holds a
-fraction. `WorldDecompiler` prints a declared kind wrapped, `(left cmp right : Kind)`, and a kindless comparison bare;
-a kindless `compareValue` over two plain row reads has no bare spelling, since that text lowers to `compareState`,
-so it prints call-form.
-
+The emitter chooses `compareState` for a simple state comparison and `compareValue` for
+an expression comparison. Numeric kinds are inferred; `: Int` and `as Int` are refused.
+The decompiler prints expressions, retaining the document call form only where sugar
+would change the document's structure.
 ### Rules
 
 A rule's own spelling, the effect statements its body admits, and the decision block's members are rows of
@@ -815,7 +803,7 @@ no text that recompiles to a null comparand.
 ## Diagnostics
 
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
-state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word on a comparison), PUCK006 (never
+state read), PUCK005 (an unknown declared kind), PUCK006 (never
 emitted: a `local`'s kind is inferred, never required), PUCK007 (`local` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
 on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing

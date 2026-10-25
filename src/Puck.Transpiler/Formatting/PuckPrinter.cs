@@ -1552,11 +1552,17 @@ public static partial class PuckPrinter {
         private void Predicate(PredicateNode predicate, bool parenthesize) {
             switch (predicate) {
                 case ComparisonPredicateNode comparison: {
-                        var annotated = (comparison.Kind is not null);
-
-                        if (annotated) { m_builder.Append(value: '('); }
-                        m_builder.Append(value: comparison.Left.Text).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: comparison.Right.Text);
-                        if (annotated) { m_builder.Append(value: " : ").Append(value: comparison.Kind).Append(value: ')'); }
+                        if (comparison.Comparator == "!=" &&
+                            comparison.Right.Syntax is ExpressionSpelling.Literal { Value: 0 }) {
+                            var group = comparison.Left.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary;
+                            if (group) { m_builder.Append(value: '('); }
+                            m_builder.Append(value: comparison.Left.Text);
+                            if (group) { m_builder.Append(value: ')'); }
+                            break;
+                        }
+                        ComparisonOperand(comparison.Left);
+                        m_builder.Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ');
+                        ComparisonOperand(comparison.Right);
 
                         break;
                     }
@@ -1600,6 +1606,12 @@ public static partial class PuckPrinter {
                     }
             }
         }
+        private void ComparisonOperand(OperandExpressionNode operand) {
+            var group = operand.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary or ExpressionSpelling.Unary { Operator: "not" };
+            if (group) { m_builder.Append(value: '('); }
+            m_builder.Append(value: operand.Text);
+            if (group) { m_builder.Append(value: ')'); }
+        }
         private void Chain(IReadOnlyList<PredicateNode> operands, string keyword, bool parenthesize) {
             if (parenthesize) { m_builder.Append(value: '('); }
             for (var index = 0; (index < operands.Count); index++) {
@@ -1612,6 +1624,7 @@ public static partial class PuckPrinter {
             if (parenthesize) { m_builder.Append(value: ')'); }
         }
         private static int Precedence(ExpressionNode @operator) => (@operator switch {
+            UnaryExpressionNode { Operator: "not" } => PuckParser.InfixLevel(symbol: "not"),
             BinaryExpressionNode binary => PuckParser.InfixLevel(symbol: binary.Operator),
             RangeExpressionNode => PuckParser.RangeLevel,
             ConditionalExpressionNode => PuckParser.ConditionalLevel,

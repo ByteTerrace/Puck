@@ -116,6 +116,32 @@ public static class RuleExpressions {
 
                     continue;
                 }
+                if (token.Operation == ExpressionOp.Not) {
+                    if (token.Call is { } truthBody) {
+                        if (!Run(reader, truthBody.Body, kind, member, arguments, out var truthValue, out var truthFault)) {
+                            if (truthFault != ExpressionFault.Absent) { value = 0L; fault = truthFault; return false; }
+                            truthValue = 0L;
+                        }
+                        stack[top] = truthValue;
+                        absent[top++] = false;
+                    }
+                    stack[top - 1] = absent[top - 1] || stack[top - 1] == 0L ? 1L : 0L;
+                    absent[top - 1] = false;
+                    continue;
+                }
+                if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
+                    var truth = !absent[top - 1] && stack[top - 1] != 0L;
+                    if ((token.Operation == ExpressionOp.And && truth) || (token.Operation == ExpressionOp.Or && !truth)) {
+                        if (!Run(reader, token.Call!.Body, kind, member, arguments, out var rightTruth, out var rightFault)) {
+                            if (rightFault != ExpressionFault.Absent) { value = 0L; fault = rightFault; return false; }
+                            rightTruth = 0L;
+                        }
+                        truth = rightTruth != 0L;
+                    }
+                    stack[top - 1] = truth ? 1L : 0L;
+                    absent[top - 1] = false;
+                    continue;
+                }
                 if (token.Operation == ExpressionOp.Coalesce) {
                     var fallback = stack[--top];
                     var fallbackAbsent = absent[top];

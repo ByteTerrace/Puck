@@ -15,7 +15,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | Folder | Owns |
 |---|---|
 | `Ast/` | The syntax tree: documents, blocks, properties, expressions, rules, predicates, effect statements. |
-| `Parsing/` | `PuckParser` (partial, over Parlot): the document reader, its operand scanner, its predicate and rule-body readers. |
+| `Parsing/` | `PuckParser` (partial, over Parlot): the document reader, its operand scanner, its expression gates and rule-body readers. |
 | `Diagnostics/` | `Diagnostic`/`DiagnosticBag`/`SourceSpan`/`SourceMap` and the `PUCK…` code constants. |
 | `Formatting/` | `PuckPrinter`: the one formatter, printing a parsed tree back as source. |
 | `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
@@ -23,7 +23,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Editing/` | `LspJson`: the Language Server Protocol items, positions and ranges the editor services answer with. |
 | `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
 | `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `min`, `h`, `m`, `cm`, `mm`, `hz`, `%` represent. |
-| (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s cell-kind enum. |
+| (root) | `CompilationResult<T>`. |
 
 ## Names
 
@@ -410,31 +410,39 @@ own vocabulary (a cartridge's `map(row:, column:, tile:)` rule step is untouched
 
 Value expressions carry the rule language's infix operators, member access, indexing, calls, arrays, objects,
 ranges and colours. The infix operators and their grouping come from one table, `ExpressionOperators`, which both
-parsers read, so `1 << 2 + 3` groups the same way in a `let` as in a rule. From loosest to tightest, in C's order,
-each infix operator associating to the left:
+parsers read, so `1 << 2 + 3` groups the same way in a `let` as in a rule. From loosest to tightest:
 
-1. `condition ? whenTrue : whenFalse`, which associates to the right, so `a ? x : b ? y : z` is a chain
+1. `condition ? whenTrue : whenFalse`, associating to the right
 2. `??`
-3. `|`
-4. `^`
-5. `&`
+3. `or`
+4. `and`
+5. prefix `not`
 6. `==` `!=`
 7. `<` `<=` `>` `>=`
-8. `..`, a range, which only a value spells
-9. `<<` `>>` `>>>`
-10. `+` `-`
-11. `*` `/` `%`
-12. prefix `-` and `~`
+8. `|`
+9. `^`
+10. `&`
+11. `..`, a range, which only a document value spells
+12. `<<` `>>` `>>>`
+13. `+` `-`
+14. `*` `/` `%`
+15. prefix `-` and `~`
 
-The conditional is the one spelling of a choice in both languages; no call spells it. The prefix operators are the rule language's two: a value is written
-without a `+` sign.
+Binary operators associate to the left. Bitwise operators bind tighter than comparisons:
+`x & 1 == 0` means `(x & 1) == 0`. They read signed 64-bit integers; a shift counts 0 to 63.
+`a ?? b` reads `b` only when `a` is absent.
 
-As in C, the bitwise operators bind looser than a comparison: `x & 1 == 0` reads as `x & (1 == 0)`, so write
-`(x & 1) == 0`. `&`, `|`, `^`, the shifts and `~` read signed 64-bit whole numbers and are evaluated by the engine's
-own `ExpressionArithmetic`, so a value and a rule cannot disagree on them; a shift counts 0 to 63, and any other count
-is refused. A zero divisor under `/` or `%` is refused, as a rule faults on one. `a ?? b` is `a` unless `a` is
-absent, and then `b`.
+A world gate (`when`, `if`, `expect`) is an ordinary expression. Zero and absence are false;
+nonzero Int and Fixed values are true. `and`, `or`, and `not` yield Int 0 or 1. `and` skips
+its right operand when the left is false; `or` skips it when the left is true. A skipped
+operand neither reads state nor faults, but must still be well-typed. Other arithmetic
+propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write `and`, not `&&`.
 
+Kinds come from state declarations and earlier locals. Numeric literals take their expression's
+kind; an unconstrained integer expression is Int, while a decimal literal such as `1.0` selects
+Fixed. There is no implicit conversion between Int and Fixed state reads. A gate needs no
+`: Int` or `as Int` suffix, and a Boolean expression needs no `== 1` wrapper. The emitter chooses
+`compareState` or `compareValue` from the expression.
 A comparison yields `1` or `0`, never a JSON boolean—the rule language has no boolean either, so
 `cleared + (row > 0)` means the same thing on both sides of the compiler. `filter`'s lambda, a conditional's
 condition, and a `for`'s own reads are all read back through the same truth test: a number is true when non-zero, a string
@@ -460,9 +468,7 @@ expression is handed to `ExpressionSpelling.TryParse` rather than re-parsed here
 never disagree about what `a + b * c` means; a scalar function call in ordinary value position is handed to
 `ExpressionVocabulary`/`DocumentScalars` for the reasons above. A comparison's operator and document spellings are
 the same choice: `ExpressionComparisons` reads both from the expression operator table's comparison rows, so a
-comparison operator can never mean one thing in a gate and another in an expression. `PuckDslVocabulary` does the
-same for the cell-kind words—one table, read by the parser, the emitter, the decompiler and the language server
-alike, instead of four hand-typed lists of member names.
+comparison operator can never mean one thing in a gate and another in an expression.
 
 ## Unit conversion boundaries
 

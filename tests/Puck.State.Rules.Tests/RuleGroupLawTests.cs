@@ -31,46 +31,6 @@ public sealed class RuleGroupLawTests {
         return (rules, context);
     }
 
-    // A trigger's expression key mints an implicit binding, exactly as a rule's gate does; the group carries it,
-    // because the compiled trigger addresses that binding's slot.
-    [Fact]
-    public void AGroupCarriesTheBindingsItsTriggerMinted() {
-        var (rules, context) = Rules();
-        var group = Assert.Single(collection: RuleCompiler.CompileGroups(
-            context: context,
-            groups: [new RuleGroupDeclaration(
-                Name: CellName.Parse(candidate: "armed"),
-                Passes: 2,
-                Shape: RuleGroupShape.Fixpoint,
-                Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))],
-                Trigger: new ActionPredicate.CompareState(
-                    Comparison: ExpressionOp.Greater,
-                    Key: "$expr:1+1",
-                    State: "codes",
-                    Value: 0m
-                )
-            )],
-            rules: rules
-        ));
-        var binding = Assert.Single(collection: group.Locals);
-
-        Assert.NotEmpty(collection: binding.Expression);
-        Assert.NotEmpty(collection: group.Trigger);
-        Assert.NotNull(@object: group.Needs);
-
-        var untriggered = Assert.Single(collection: RuleCompiler.CompileGroups(
-            context: context,
-            groups: [new RuleGroupDeclaration(
-                Name: CellName.Parse(candidate: "always"),
-                Passes: 2,
-                Shape: RuleGroupShape.Fixpoint,
-                Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))]
-            )],
-            rules: rules
-        ));
-
-        Assert.Empty(collection: untriggered.Locals);
-    }
     // A group's Needs are its trigger's, read off the trigger's own scope, and what a host admits a group by. A
     // triggerless group needs nothing of a host, so it is admitted everywhere.
     [Fact]

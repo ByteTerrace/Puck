@@ -320,7 +320,7 @@ public static partial class RuleCompiler {
 
         context.Needs.Add(facet: FacetRef.Of<ILiveBodies>());
     }
-    private static bool IsFractionalConstantExpression(ExpressionProgram? expression) {
+    private static bool IsFixedConstantExpression(ExpressionProgram? expression) {
         if (expression is null) {
             return false;
         }
@@ -331,7 +331,7 @@ public static partial class RuleCompiler {
             !instructions.Any(predicate: static instruction => (instruction.Payload is InstructionPayload.State)) &&
             instructions.Any(predicate: static instruction => (
                 (instruction.Payload is InstructionPayload.Constant constant) &&
-                (decimal.Truncate(d: constant.Value) != constant.Value)
+                ((decimal.GetBits(constant.Value)[3] & 0x00FF0000) != 0)
             ))
         );
     }
@@ -387,7 +387,7 @@ public static partial class RuleCompiler {
         // An expression that compiles under neither is refused for the reason its first reading gave. A key binding
         // the first attempt minted stays: a key expression is Int under either kind, and the second attempt reads it
         // back through the key-expression cache by the ordinal it holds.
-        var kind = (local.Kind ?? (IsFractionalConstantExpression(expression: local.Expression)
+        var kind = (local.Kind ?? (IsFixedConstantExpression(expression: local.Expression)
             ? CellKind.Fixed
             : CellKind.Int
         ));

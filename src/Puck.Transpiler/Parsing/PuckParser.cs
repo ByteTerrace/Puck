@@ -1257,6 +1257,17 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Unexpected end of file while expecting expression");
         }
 
+        if (cursor.Current == '`') {
+            if (!TryReadBackquotedName(context, out var quoted)) {
+                throw CreateException(context, "Expected a nonempty backquoted name");
+            }
+            var length = cursor.Offset - startOffset;
+            SkipWhiteSpace(context);
+            return cursor.Current == '('
+                ? ParseCallExpression(context, quoted, startOffset, line, col)
+                : new IdentifierExpressionNode(Name: $"`{quoted}`", Offset: startOffset, Length: length, Line: line, Column: col);
+        }
+
         if (TryMatchKeyword(context: context, keyword: "asset")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var path)) {

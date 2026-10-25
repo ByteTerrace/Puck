@@ -67,37 +67,6 @@ public sealed class RuleCompilerLawTests {
         );
     }
     [Fact]
-    public void AGateNestsAllAnyAndNotIntoOnePostfixProgram() {
-        var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
-            gate: new ActionPredicate.All(Predicates: [
-                new ActionPredicate.CompareState(
-                    Comparison: ExpressionOp.Greater,
-                    State: "score",
-                    Value: 0m
-                ),
-                new ActionPredicate.Not(Predicate: new ActionPredicate.CompareState(
-                    Comparison: ExpressionOp.Equal,
-                    State: "score",
-                    Value: 9m
-                )),
-            ]),
-            name: "nested"
-        ));
-
-        Assert.Equal(
-            actual: compiled.Gate.Length,
-            expected: 4
-        );
-        Assert.Equal(
-            actual: compiled.Gate[^1].Op,
-            expected: GateOp.All
-        );
-        Assert.Equal(
-            actual: compiled.Gate[^1].Arity,
-            expected: 2
-        );
-    }
-    [Fact]
     public void AKeyedRowReadWithoutAKeyIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(

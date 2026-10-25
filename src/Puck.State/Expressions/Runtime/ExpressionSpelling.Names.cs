@@ -43,7 +43,7 @@ public static partial class ExpressionSpelling {
         ((ScanBareName(
             start: 0,
             text: name
-        ) == name.Length) && (name.Length > 0));
+        ) == name.Length) && (name.Length > 0) && name is not ("not" or "and" or "or"));
     /// <summary>Whether a name can be spelled at all: a name the bare form cannot carry is backquoted, and the
     /// backquoted form has no escape, so a name is spelled exactly when it is nonempty and holds no backquote. Every
     /// <see cref="CellName"/> is one; an expression operand naming anything else is refused where it is built.</summary>

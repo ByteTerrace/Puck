@@ -10,12 +10,10 @@ public abstract record PredicateNode(int Offset = 0, int Length = 0, int Line = 
     Line,
     Column
 );
-/// <summary>One comparison: <c>left cmp right</c>, with an optional <c>: Kind</c>/<c>as Kind</c> suffix that always
-/// forces a <c>compareValue</c> lowering regardless of how simple either operand is.</summary>
+/// <summary>A comparison extracted from an ordinary gate expression for lowering.</summary>
 /// <param name="Left">The parsed left operand.</param>
 /// <param name="Comparator">The comparison token (<c>==</c>, <c>!=</c>, <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c>).</param>
 /// <param name="Right">The parsed right operand.</param>
-/// <param name="Kind">The optional forced kind annotation (<c>"Int"</c> or <c>"Fixed"</c>), or <see langword="null"/>.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -24,7 +22,6 @@ public sealed record ComparisonPredicateNode(
     OperandExpressionNode Left,
     string Comparator,
     OperandExpressionNode Right,
-    string? Kind,
     int Offset = 0,
     int Length = 0,
     int Line = 1,

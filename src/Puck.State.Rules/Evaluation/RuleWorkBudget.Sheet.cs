@@ -273,6 +273,9 @@ public static partial class RuleWorkBudget {
     /// <returns>The pins, in cell order.</returns>
     public static IReadOnlyList<RulePinnedCell> PinnedCells(GateToken[] gate, out bool contradictory) {
         ArgumentNullException.ThrowIfNull(argument: gate);
+        if (Array.Exists(gate, static token => token.Op == GateOp.ShortCircuit)) {
+            gate = Array.FindAll(gate, static token => token.Op != GateOp.ShortCircuit);
+        }
 
         contradictory = false;
 

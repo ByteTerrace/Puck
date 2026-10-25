@@ -208,7 +208,7 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "rules[].gate",
             Enclosing: "rule",
-            Grammar: "when Operand cmp Operand [: Int|Fixed] | when Gate and|or Gate | when not Gate | when (Gate)",
+            Grammar: "when <expression>",
             Keyword: "when",
             Members: [
                 new(

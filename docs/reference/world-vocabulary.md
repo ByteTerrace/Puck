@@ -778,7 +778,7 @@ Printed back as `transform` when the node carries `transform`, and its target ro
 ### `when`
 
 ```puck
-when Operand cmp Operand [: Int|Fixed] | when Gate and|or Gate | when not Gate | when (Gate)
+when <expression>
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |

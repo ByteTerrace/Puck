@@ -282,12 +282,12 @@ belong to their own vocabulary (a cartridge's `map` step is untouched).
 ## Comparisons are 1 or 0
 
 The rule language's conditional (`c ? a : b`, loosest and right-associative, and
-the only spelling of a choice), its infix operators (`?? | ^ & == != < <= > >= << >> >>> + - * / %`),
-and its two prefix operators (`-` and `~`; there is no prefix `+`), member access, calls, arrays, objects, ranges (`a..b`),
+the only spelling of a choice), its infix operators (`?? or and == != < <= > >= | ^ & << >> >>> + - * / %`),
+and its prefix operators (`not`, `-` and `~`; there is no prefix `+`), member access, calls, arrays, objects, ranges (`a..b`),
 colors (`#rrggbb[aa]`), unit-suffixed numbers. Both parsers read the infix
 operators and their binding from `Puck.State.ExpressionOperators` (the
-`Binding` column, C's order, left-associative), so a `let` and a rule group the
-same text the same way; the range sits between the relational comparisons and
+`Binding` column, left-associative), so a `let` and a rule group the
+same text the same way; the range sits between the bitwise operators and
 the shifts. `& | ^ << >> >>> ~` read whole numbers and fold through
 `ExpressionArithmetic`; a zero divisor under `/` or `%` and a shift count
 outside 0..63 are refused. Never add an operator or a precedence level to the
@@ -297,6 +297,13 @@ JSON boolean — the rule language has no
 boolean either. `filter`'s lambda, a conditional's condition, and a `for`'s reads
 all use the same truth test: a number is true when non-zero, a string when
 non-empty, a present container is true, an absent value is false.
+
+World gates use the same expression grammar. `not` binds below comparisons,
+then `and`, then `or`; bitwise operators bind above comparisons. Zero and
+absence are false. Logical operators yield Int 0/1; `and` and `or` skip an
+unneeded right operand, including its faults. Kind suffixes are refused;
+state and earlier locals supply kinds, and an unconstrained decimal literal
+such as `1.0` selects Fixed.
 
 ## Control flow, call gates, and compound assignment are cross-vocabulary
 
@@ -308,11 +315,11 @@ carry them is that vocabulary's own answer:
 | Code | Refusal |
 |---|---|
 | PUCK037 | Control flow (`repeat`/`break`, or `if` in a vocabulary whose rule shape has nothing to lower it onto) in a rule shape that can't carry it. |
-| PUCK038 | A call-form gate where the vocabulary admits comparisons only. |
+| PUCK038 | A cartridge-only `key(...)` gate in a world rule. |
 
 The world vocabulary's rule body lowers `if`/`else if`/`else` to the state
 engine's conditional effect (`ActionEffect.If`), reusing the `when` gate's own
-predicate lowering for the condition — see the [world transpiler
+expression lowering for the condition — see the [world transpiler
 guide](../../../../src/Puck.World.Transpiler/README.md#rules). `repeat`/`break`
 have nothing to lower onto there, so PUCK037 fires for them, naming the
 rule's `forEach` as the alternative. Its effects carry `=` (`setState`) and

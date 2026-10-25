@@ -1,4 +1,5 @@
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -27,10 +28,10 @@ public class ParserSugarTests {
     }
 
     private static readonly Dictionary<string, Refusal> Refusals = new(comparer: StringComparer.Ordinal) {
-        ["PUCK004: a chained comparison"] = new(
-            Body: "rule \"r\" {\n    when a == 1 == 2\n    flag = 1\n}\n",
-            Code: "PUCK004",
-            Needle: "when a == 1 == 2"
+        ["PUCK002: a symbolic logical operator"] = new(
+            Body: "rule \"r\" {\n    when a || b\n    flag = 1\n}\n",
+            Code: "PUCK002",
+            Needle: "when a || b"
         ),
         ["PUCK009: text added to a cell"] = new(
             Body: "rule \"r\" {\n    hp += \"oops\"\n}\n",
@@ -133,28 +134,14 @@ public class ParserSugarTests {
             schedule.DelaySeconds
         );
     }
-    // `: Int` and `as Int` are one annotation: it forces compareValue and is stripped from the operand it follows.
     [InlineData(": Int")]
     [InlineData("as Int")]
     [Theory]
-    public void AKindSuffixForcesCompareValueAndIsStrippedFromItsOperand(string suffix) {
-        var doc = WorldSources.ParseClean(body: $$"""
-            rule "solitaireFreecell-move" {
-                when solitaireFreecell[from] != solitaireFreecell[to] {{suffix}}
-                flag = 1
-            }
-            """);
-        var when = Assert.IsType<WhenStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
-        var cmp = Assert.IsType<ComparisonPredicateNode>(@object: when.Predicate);
-
-        Assert.Equal(
-            "solitaireFreecell[to]",
-            cmp.Right.Text
-        );
-        Assert.Equal(
-            "Int",
-            cmp.Kind
-        );
+    public void AKindSuffixIsRefusedWithItsReplacement(string suffix) {
+        var operand = PuckParser.CreateOperand($"hp == flag {suffix}", Puck.Transpiler.Lowering.DocumentValueForm.Expression);
+        Assert.Null(operand.Syntax);
+        Assert.Contains(suffix, operand.SyntaxError, StringComparison.Ordinal);
+        Assert.Contains("without a kind suffix", operand.SyntaxError, StringComparison.Ordinal);
     }
     // Inside a rule body a bracket after a name is its cell key, and a `$zones[...]` row reference keeps its own
     // brackets while the key after it folds to a cell channel.
@@ -226,7 +213,6 @@ public class ParserSugarTests {
             "1",
             cmp.Right.Text
         );
-        Assert.Null(@object: cmp.Kind);
     }
     [Fact]
     public void BarePlacementSolidFlagBecomesFlagStatement() {
@@ -296,7 +282,6 @@ public class ParserSugarTests {
             "solitaireFreecell[applied]",
             cmp.Right.Text
         );
-        Assert.Null(@object: cmp.Kind);
     }
     [Fact]
     public void DecisionWithOptionInterruptAndOnNoChoice() {
@@ -353,10 +338,10 @@ public class ParserSugarTests {
         Assert.Single(collection: onNoChoice.Effects);
     }
     [Fact]
-    public void ExpressionOperandKeepsFullTextWithKindSuffixStripped() {
+    public void ExpressionOperandKeepsFullText() {
         var doc = WorldSources.ParseClean(body: """
             rule "rumor" {
-                when boneHolderClaimMark[$each] != boneHolder[0] << 32 | claimSeq : Int
+                when boneHolderClaimMark[$each] != boneHolder[0] << 32 | claimSeq
                 flag = 1
             }
             """);
@@ -371,16 +356,12 @@ public class ParserSugarTests {
             "boneHolder[0] << 32 | claimSeq",
             cmp.Right.Text
         );
-        Assert.Equal(
-            "Int",
-            cmp.Kind
-        );
     }
     [Fact]
     public void FlatFourWayConjunctionStaysOneAndNode() {
         var doc = WorldSources.ParseClean(body: """
             rule "solitaireFreecell-move" {
-                when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[from] != solitaireFreecell[to] : Int
+                when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[from] != solitaireFreecell[to]
                 flag = 1
             }
             """);

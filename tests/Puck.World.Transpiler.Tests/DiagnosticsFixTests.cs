@@ -60,20 +60,20 @@ public class DiagnosticsFixTests {
     // One mistake, one error, at the thing that is wrong, under the code no other report site uses. A case marked
     // alone is the only error its source draws: the parser resynchronizes after it.
     private static readonly Dictionary<string, Refusal> Mistakes = new(comparer: StringComparer.Ordinal) {
-        ["a chained comparison"] = new(
-            Body: "rule \"r\" {\n    when a[x] < b[y] < c[z]\n    hp[0] = 1\n}\n",
-            Code: PuckDiagnosticCodes.ChainedComparison,
-            Needle: "when a[x] < b[y] < c[z]"
+        ["a symbolic logical operator"] = new(
+            Body: "rule \"r\" {\n    when a[x] || b[y]\n    hp[0] = 1\n}\n",
+            Code: PuckDiagnosticCodes.OperandParse,
+            Needle: "when a[x] || b[y]"
         ) { Alone = true },
         ["an unknown kind after `as`"] = new(
             Body: "rule \"r\" {\n    when a[x] == b[y] as Floaty\n    hp[0] = 1\n}\n",
-            Code: PuckDiagnosticCodes.UnknownKindAnnotation,
+            Code: PuckDiagnosticCodes.OperandParse,
             Needle: "as Floaty"
         ) { Alone = true },
         // The ': Kind' spelling is the one the decompiler writes, so its diagnostic must name the rule too.
         ["an unknown kind after `:`"] = new(
             Body: "rule \"r\" {\n    when a[x] == b[y] : Floaty\n    hp[0] = 1\n}\n",
-            Code: PuckDiagnosticCodes.UnknownKindAnnotation,
+            Code: PuckDiagnosticCodes.OperandParse,
             Needle: ": Floaty"
         ),
         ["a row reference that is an expression"] = new(

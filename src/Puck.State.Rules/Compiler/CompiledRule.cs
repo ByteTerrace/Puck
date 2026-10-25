@@ -12,6 +12,8 @@ public enum GateOp : byte {
     Any,
     /// <summary>Invert the preceding result.</summary>
     Not,
+    /// <summary>Skip the rest of a conjunction or disjunction once its answer is known.</summary>
+    ShortCircuit,
 }
 /// <summary>One token in a compiled postfix rule gate. The representation preserves arbitrary nested
 /// <see cref="ActionPredicate.All"/>/<see cref="ActionPredicate.Any"/>/<see cref="ActionPredicate.Not"/> trees while
@@ -23,7 +25,9 @@ public enum GateOp : byte {
 /// <param name="Describe">The authored spelling of this conjunct.</param>
 /// <param name="Op">The postfix Boolean operation.</param>
 /// <param name="Arity">The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</param>
-public readonly record struct GateToken(CompiledValueSource LeftSource, ExpressionOp Comparison, CompiledValueSource RightSource, CellKind ValueKind, string Describe, GateOp Op = GateOp.Compare, int Arity = 0);
+/// <param name="Skip">Tokens skipped by a short-circuit instruction.</param>
+/// <param name="SkipWhen">The truth value that takes that skip.</param>
+public readonly record struct GateToken(CompiledValueSource LeftSource, ExpressionOp Comparison, CompiledValueSource RightSource, CellKind ValueKind, string Describe, GateOp Op = GateOp.Compare, int Arity = 0, int Skip = 0, bool SkipWhen = false);
 /// <summary>One token in an allocation-free postfix numeric expression.</summary>
 /// <param name="Operation">The stack operation.</param>
 /// <param name="Constant">The raw destination-kind literal for a constant token, or the argument slot for an

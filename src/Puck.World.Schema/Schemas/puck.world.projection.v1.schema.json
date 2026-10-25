@@ -15522,7 +15522,10 @@
                                                                 "RepeatBits",
                                                                 "IsAbsent",
                                                                 "Coalesce",
-                                                                "Member"
+                                                                "Member",
+                                                                "And",
+                                                                "Or",
+                                                                "Not"
                                                               ]
                                                             }
                                                           },
@@ -16036,7 +16039,10 @@
                                                                       "RepeatBits",
                                                                       "IsAbsent",
                                                                       "Coalesce",
-                                                                      "Member"
+                                                                      "Member",
+                                                                      "And",
+                                                                      "Or",
+                                                                      "Not"
                                                                     ]
                                                                   }
                                                                 },
@@ -16844,7 +16850,10 @@
                                               "RepeatBits",
                                               "IsAbsent",
                                               "Coalesce",
-                                              "Member"
+                                              "Member",
+                                              "And",
+                                              "Or",
+                                              "Not"
                                             ]
                                           }
                                         },
@@ -17267,7 +17276,10 @@
                                                     "RepeatBits",
                                                     "IsAbsent",
                                                     "Coalesce",
-                                                    "Member"
+                                                    "Member",
+                                                    "And",
+                                                    "Or",
+                                                    "Not"
                                                   ]
                                                 }
                                               },
@@ -17703,7 +17715,10 @@
                                               "RepeatBits",
                                               "IsAbsent",
                                               "Coalesce",
-                                              "Member"
+                                              "Member",
+                                              "And",
+                                              "Or",
+                                              "Not"
                                             ]
                                           }
                                         },
@@ -18126,7 +18141,10 @@
                                                     "RepeatBits",
                                                     "IsAbsent",
                                                     "Coalesce",
-                                                    "Member"
+                                                    "Member",
+                                                    "And",
+                                                    "Or",
+                                                    "Not"
                                                   ]
                                                 }
                                               },
@@ -19017,7 +19035,10 @@
                                                         "RepeatBits",
                                                         "IsAbsent",
                                                         "Coalesce",
-                                                        "Member"
+                                                        "Member",
+                                                        "And",
+                                                        "Or",
+                                                        "Not"
                                                       ]
                                                     }
                                                   },
@@ -19440,7 +19461,10 @@
                                                               "RepeatBits",
                                                               "IsAbsent",
                                                               "Coalesce",
-                                                              "Member"
+                                                              "Member",
+                                                              "And",
+                                                              "Or",
+                                                              "Not"
                                                             ]
                                                           }
                                                         },
@@ -19876,7 +19900,10 @@
                                                         "RepeatBits",
                                                         "IsAbsent",
                                                         "Coalesce",
-                                                        "Member"
+                                                        "Member",
+                                                        "And",
+                                                        "Or",
+                                                        "Not"
                                                       ]
                                                     }
                                                   },
@@ -20299,7 +20326,10 @@
                                                               "RepeatBits",
                                                               "IsAbsent",
                                                               "Coalesce",
-                                                              "Member"
+                                                              "Member",
+                                                              "And",
+                                                              "Or",
+                                                              "Not"
                                                             ]
                                                           }
                                                         },
@@ -21221,7 +21251,10 @@
                                                                 "RepeatBits",
                                                                 "IsAbsent",
                                                                 "Coalesce",
-                                                                "Member"
+                                                                "Member",
+                                                                "And",
+                                                                "Or",
+                                                                "Not"
                                                               ]
                                                             }
                                                           },
@@ -21644,7 +21677,10 @@
                                                                       "RepeatBits",
                                                                       "IsAbsent",
                                                                       "Coalesce",
-                                                                      "Member"
+                                                                      "Member",
+                                                                      "And",
+                                                                      "Or",
+                                                                      "Not"
                                                                     ]
                                                                   }
                                                                 },
@@ -22080,7 +22116,10 @@
                                                                 "RepeatBits",
                                                                 "IsAbsent",
                                                                 "Coalesce",
-                                                                "Member"
+                                                                "Member",
+                                                                "And",
+                                                                "Or",
+                                                                "Not"
                                                               ]
                                                             }
                                                           },
@@ -22503,7 +22542,10 @@
                                                                       "RepeatBits",
                                                                       "IsAbsent",
                                                                       "Coalesce",
-                                                                      "Member"
+                                                                      "Member",
+                                                                      "And",
+                                                                      "Or",
+                                                                      "Not"
                                                                     ]
                                                                   }
                                                                 },
@@ -28338,7 +28380,10 @@
                                   "RepeatBits",
                                   "IsAbsent",
                                   "Coalesce",
-                                  "Member"
+                                  "Member",
+                                  "And",
+                                  "Or",
+                                  "Not"
                                 ]
                               }
                             },
@@ -28761,7 +28806,10 @@
                                         "RepeatBits",
                                         "IsAbsent",
                                         "Coalesce",
-                                        "Member"
+                                        "Member",
+                                        "And",
+                                        "Or",
+                                        "Not"
                                       ]
                                     }
                                   },
@@ -31862,7 +31910,10 @@
                                           "RepeatBits",
                                           "IsAbsent",
                                           "Coalesce",
-                                          "Member"
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
                                         ]
                                       }
                                     },
@@ -32285,7 +32336,10 @@
                                                 "RepeatBits",
                                                 "IsAbsent",
                                                 "Coalesce",
-                                                "Member"
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
                                               ]
                                             }
                                           },
@@ -33135,7 +33189,10 @@
                                           "RepeatBits",
                                           "IsAbsent",
                                           "Coalesce",
-                                          "Member"
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
                                         ]
                                       }
                                     },
@@ -33558,7 +33615,10 @@
                                                 "RepeatBits",
                                                 "IsAbsent",
                                                 "Coalesce",
-                                                "Member"
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
                                               ]
                                             }
                                           },
@@ -34287,7 +34347,10 @@
                                           "RepeatBits",
                                           "IsAbsent",
                                           "Coalesce",
-                                          "Member"
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
                                         ]
                                       }
                                     },
@@ -34710,7 +34773,10 @@
                                                 "RepeatBits",
                                                 "IsAbsent",
                                                 "Coalesce",
-                                                "Member"
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
                                               ]
                                             }
                                           },
@@ -39679,7 +39745,10 @@
                                                   "RepeatBits",
                                                   "IsAbsent",
                                                   "Coalesce",
-                                                  "Member"
+                                                  "Member",
+                                                  "And",
+                                                  "Or",
+                                                  "Not"
                                                 ]
                                               }
                                             },
@@ -40102,7 +40171,10 @@
                                                         "RepeatBits",
                                                         "IsAbsent",
                                                         "Coalesce",
-                                                        "Member"
+                                                        "Member",
+                                                        "And",
+                                                        "Or",
+                                                        "Not"
                                                       ]
                                                     }
                                                   },
@@ -40538,7 +40610,10 @@
                                                   "RepeatBits",
                                                   "IsAbsent",
                                                   "Coalesce",
-                                                  "Member"
+                                                  "Member",
+                                                  "And",
+                                                  "Or",
+                                                  "Not"
                                                 ]
                                               }
                                             },
@@ -40961,7 +41036,10 @@
                                                         "RepeatBits",
                                                         "IsAbsent",
                                                         "Coalesce",
-                                                        "Member"
+                                                        "Member",
+                                                        "And",
+                                                        "Or",
+                                                        "Not"
                                                       ]
                                                     }
                                                   },
@@ -43257,7 +43335,10 @@
                                           "RepeatBits",
                                           "IsAbsent",
                                           "Coalesce",
-                                          "Member"
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
                                         ]
                                       }
                                     },
@@ -43680,7 +43761,10 @@
                                                 "RepeatBits",
                                                 "IsAbsent",
                                                 "Coalesce",
-                                                "Member"
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
                                               ]
                                             }
                                           },
@@ -44395,7 +44479,10 @@
                                           "RepeatBits",
                                           "IsAbsent",
                                           "Coalesce",
-                                          "Member"
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
                                         ]
                                       }
                                     },
@@ -44818,7 +44905,10 @@
                                                 "RepeatBits",
                                                 "IsAbsent",
                                                 "Coalesce",
-                                                "Member"
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
                                               ]
                                             }
                                           },
@@ -45362,7 +45452,10 @@
                                           "RepeatBits",
                                           "IsAbsent",
                                           "Coalesce",
-                                          "Member"
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
                                         ]
                                       }
                                     },
@@ -45785,7 +45878,10 @@
                                                 "RepeatBits",
                                                 "IsAbsent",
                                                 "Coalesce",
-                                                "Member"
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
                                               ]
                                             }
                                           },

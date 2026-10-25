@@ -188,7 +188,7 @@ test "knight capture records move kind two" {
   expect {
     verdict == 1
     move.kind == Capture
-    move.captured == -Pawn
+    move.captured == -((Pawn))
     pieceCell.piece1 == 21
     pieceCell.piece16 == -1
     turn == Black
@@ -209,7 +209,7 @@ test "pawn diagonal capture records legal" {
   expect {
     verdict == 1
     move.kind == Capture
-    move.captured == -Pawn
+    move.captured == -((Pawn))
     move.mover == Pawn
     pieceCell.piece12 == 20
     pieceCell.piece19 == -1
@@ -428,7 +428,7 @@ test "en passant capture records move kind en passant" {
   expect {
     verdict == 1
     move.kind == EnPassant
-    move.captured == -Pawn
+    move.captured == -((Pawn))
     pieceCell.piece12 == 44
     pieceCell.piece19 == -1
     turn == Black

@@ -21,6 +21,7 @@ public static partial class RuleCompiler {
             ruleName: ruleName
         );
 
+        gate = ShortCircuitGate(gate);
         if (gate.Count > RuleCapacity.MaxPredicateTokens) {
             throw new RuleException(
                 detail: $"gate compiles to {gate.Count} tokens, exceeding the {RuleCapacity.MaxPredicateTokens}-token ceiling",
@@ -30,6 +31,28 @@ public static partial class RuleCompiler {
         }
 
         return [.. gate];
+    }
+    private static List<GateToken> ShortCircuitGate(List<GateToken> tokens) {
+        var stack = new Stack<List<GateToken>>();
+        foreach (var token in tokens) {
+            var arity = token.Op == GateOp.Compare ? 0 : token.Op == GateOp.Not ? 1 : token.Arity;
+            var children = new List<GateToken>[arity];
+            for (var index = arity - 1; index >= 0; index--) { children[index] = stack.Pop(); }
+            var result = new List<GateToken>();
+            var jumps = new List<int>();
+            for (var index = 0; index < arity; index++) {
+                result.AddRange(children[index]);
+                if (index + 1 < arity && token.Op is GateOp.All or GateOp.Any) {
+                    jumps.Add(result.Count);
+                    result.Add(new GateToken(default, default, default, default, token.Describe,
+                        Op: GateOp.ShortCircuit, Arity: index, SkipWhen: token.Op == GateOp.Any));
+                }
+            }
+            result.Add(token);
+            foreach (var jump in jumps) { result[jump] = result[jump] with { Skip = result.Count - jump - 1 }; }
+            stack.Push(result);
+        }
+        return stack.Count == 0 ? [] : stack.Pop();
     }
     /// <summary>Compiles an expression key evaluated where it is read or written. Repeated spellings
     /// in the same binding scope share compiled code, never a pre-gate value.</summary>
@@ -79,30 +102,49 @@ public static partial class RuleCompiler {
     // Both sides of a compareValue share one domain. A declared kind is that domain; an undeclared one is inferred
     // the way a local's carrier is: Int, unless both sides are constants alone and one holds a fraction, and the
     // other domain when the first reading refuses either side. A refusal under both readings reports the first.
-    private static CellKind CompileComparisonSides(ActionPredicate.CompareValue expression, string ruleName, RuleCompileContext context, out CompiledExpressionToken[] left, out CompiledExpressionToken[] right) {
-        var kind = (expression.Kind ?? (((IsFractionalConstantExpression(expression: expression.Left) || IsFractionalConstantExpression(expression: expression.Right)) &&
+    private static (CellKind Result, CellKind LeftCarrier, CellKind RightCarrier) CompileComparisonSides(ActionPredicate.CompareValue expression, string ruleName, RuleCompileContext context, out CompiledExpressionToken[] left, out CompiledExpressionToken[] right) {
+        var kind = (expression.Kind ?? (((IsFixedConstantExpression(expression: expression.Left) || IsFixedConstantExpression(expression: expression.Right)) &&
             IsConstantExpression(expression: expression.Left) && IsConstantExpression(expression: expression.Right))
             ? CellKind.Fixed
             : CellKind.Int
         ));
 
         try {
-            left = CompileExpression(context: context, expression: expression.Left, kind: kind, ruleName: ruleName, verb: "compareValue left");
-            right = CompileExpression(context: context, expression: expression.Right, kind: kind, ruleName: ruleName, verb: "compareValue right");
-
-            return kind;
+            return CompileComparisonCarrier(expression, kind, ruleName, context, out left, out right);
         } catch (RuleException first) when ((expression.Kind is null)) {
             var other = ((kind == CellKind.Int) ? CellKind.Fixed : CellKind.Int);
 
             try {
-                left = CompileExpression(context: context, expression: expression.Left, kind: other, ruleName: ruleName, verb: "compareValue left");
-                right = CompileExpression(context: context, expression: expression.Right, kind: other, ruleName: ruleName, verb: "compareValue right");
+                return CompileComparisonCarrier(expression, other, ruleName, context, out left, out right);
             } catch (RuleException) {
                 throw first;
             }
-
-            return other;
         }
+    }
+    private static (CellKind Result, CellKind LeftCarrier, CellKind RightCarrier) CompileComparisonCarrier(
+        ActionPredicate.CompareValue expression, CellKind carrier, string ruleName, RuleCompileContext context,
+        out CompiledExpressionToken[] left, out CompiledExpressionToken[] right) {
+        left = CompileExpression(expression.Left, carrier, ruleName, "compareValue left", context,
+            resultKind: expression.Kind, result: out var leftKind);
+        right = CompileExpression(expression.Right, carrier, ruleName, "compareValue right", context,
+            resultKind: expression.Kind, result: out var rightKind);
+        var leftCarrier = carrier;
+        var rightCarrier = carrier;
+        if (leftKind != rightKind && expression.Kind is null) {
+            if (IsConstantExpression(expression.Right)) {
+                rightCarrier = leftKind;
+                right = CompileExpression(expression.Right, leftKind, ruleName, "compareValue right", context);
+                rightKind = leftKind;
+            } else if (IsConstantExpression(expression.Left)) {
+                leftCarrier = rightKind;
+                left = CompileExpression(expression.Left, rightKind, ruleName, "compareValue left", context);
+                leftKind = rightKind;
+            }
+        }
+        if (leftKind != rightKind) {
+            throw new RuleException(detail: "comparison operands have different numeric kinds", refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName);
+        }
+        return (leftKind, leftCarrier, rightCarrier);
     }
     private static bool IsConstantExpression(ExpressionProgram expression) =>
         !expression.Instructions.Concat(second: expression.Subprograms.SelectMany(selector: static subprogram => subprogram.Instructions))
@@ -656,7 +698,7 @@ public static partial class RuleCompiler {
                 }
 
                 var comparison = expression.Comparison;
-                var valueKind = CompileComparisonSides(
+                var (valueKind, leftCarrier, rightCarrier) = CompileComparisonSides(
                     context: context,
                     expression: expression,
                     left: out var left,
@@ -699,8 +741,8 @@ public static partial class RuleCompiler {
                 gate.Add(item: new GateToken(
                     Comparison: comparison,
                     Describe: $"compareValue {valueKind} {comparison.Symbol()}",
-                    LeftSource: CompiledValueSource.FromExpression(expression: left),
-                    RightSource: CompiledValueSource.FromExpression(expression: right),
+                    LeftSource: CompiledValueSource.FromExpression(expression: left, carrierKind: leftCarrier),
+                    RightSource: CompiledValueSource.FromExpression(expression: right, carrierKind: rightCarrier),
                     ValueKind: valueKind
                 ));
 

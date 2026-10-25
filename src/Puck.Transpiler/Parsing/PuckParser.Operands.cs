@@ -13,7 +13,6 @@ namespace Puck.Transpiler.Parsing;
 public static partial class PuckParser {
     private static readonly string[] ComparatorPunctuation = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">"];
     private static readonly HashSet<string> ComparisonStopOperators = new(comparer: StringComparer.Ordinal) { "==", "!=", "<=", ">=", "<", ">" };
-    private static readonly HashSet<string> GateReservedWords = new(comparer: StringComparer.Ordinal) { "and", "or", "not", "as" };
 
     /// <summary>Scans one contiguous span of opaque operand text: brackets and parentheses are tracked as one
     /// combined depth counter, a backquoted span and a string literal are passed through uninterpreted, and scanning always stops
@@ -128,65 +127,6 @@ public static partial class PuckParser {
         }
 
         return buffer[start..cursor.Offset].Trim();
-    }
-    /// <summary>Reads the comparator token a right-scan stopped on (one of <see cref="ComparisonStopOperators"/>),
-    /// advancing past it. The caller must only invoke this after <see cref="ScanOperandSpan"/> reported
-    /// <c>sawComparator</c>.</summary>
-    private static string ConsumeComparatorToken(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var matched = LongestMatchingPunctuation(
-            context.Scanner.Buffer,
-            cursor.Offset,
-            ComparatorPunctuation
-        );
-
-        if (
-            (matched is null) ||
-            !ComparisonStopOperators.Contains(item: matched)
-        ) {
-            throw CreateException(
-                context: context,
-                message: "Expected a comparison operator ('==', '!=', '<', '<=', '>', '>=')"
-            );
-        }
-        cursor.Advance(count: matched.Length);
-        return matched;
-    }
-    // Strips a trailing ": Int"/": Fixed" kind suffix a right-operand scan swallowed whole (':' is not itself a stop
-    // token — it is legitimate inside a ternary and inside a "$name:segment" reserved channel, so the suffix is
-    // recognized only after the fact, as an exact trailing pattern). The "as Int"/"as Fixed" spelling never reaches
-    // here: "as" is a gate-reserved word (GateReservedWords), so the scan already stops there and the caller reads
-    // it directly (see ParseComparisonPredicate).
-    private static bool TryStripTrailingColonKind(string text, out string exprText, out string? kind) {
-        exprText = text;
-        kind = null;
-        var trimmed = text.TrimEnd();
-
-        foreach (var candidate in PuckDslVocabulary.ComparisonKindNames) {
-            if (!trimmed.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: candidate
-            )) {
-                continue;
-            }
-            var beforeWord = (trimmed.Length - candidate.Length);
-
-            if (
-                (beforeWord > 0) &&
-                IdentifierSpelling.IsNameCharacter(character: trimmed[(beforeWord - 1)])
-            ) {
-                continue;
-            }
-            var head = trimmed[..beforeWord].TrimEnd();
-
-            if (!head.EndsWith(value: ':')) {
-                continue;
-            }
-            exprText = head[..^1].TrimEnd();
-            kind = candidate;
-            return true;
-        }
-        return false;
     }
     private static OperandExpressionNode ValidatedOperand(string text, SourceSpan span, DiagnosticBag? diagnostics) =>
         ValidateOperand(diagnostics: diagnostics, operand: CreateOperand(span: span, text: text));
@@ -590,76 +530,5 @@ public static partial class PuckParser {
         }
 
         return (((i - lineStart) + 1) > keywordColumn);
-    }
-    /// <summary>Matches one cell-kind keyword a <c>: Kind</c>/<c>as Kind</c> annotation or a <c>local</c> admits,
-    /// spelled from the enum through <see cref="PuckDslVocabulary.ComparisonKindNames"/>. Returns
-    /// <see langword="null"/>, consuming nothing, when the next word is not one.</summary>
-    private static string? TryMatchKindKeyword(ParseContext context) {
-        foreach (var candidate in PuckDslVocabulary.ComparisonKindNames) {
-            if (TryMatchKeyword(
-                context: context,
-                keyword: candidate
-            )) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-    /// <summary>Returns the bare word a trailing <c>: word</c> names, or <see langword="null"/> when
-    /// <paramref name="text"/> does not end in one. Used to tell a mis-spelled kind annotation apart from a colon
-    /// that belongs to the operand itself (a ternary, a reserved channel segment).</summary>
-    private static string? TrailingColonWord(string text) {
-        var trimmed = text.TrimEnd();
-        var colon = trimmed.LastIndexOf(value: ':');
-
-        if (
-            (colon < 0) ||
-            (colon == (trimmed.Length - 1))
-        ) {
-            return null;
-        }
-        var word = trimmed[(colon + 1)..].TrimStart();
-
-        if (!IdentifierSpelling.IsIdentifier(text: word)) {
-            return null;
-        }
-        // A reserved channel carries its own colons inside one unbroken name ("$cell:row:key"); only a colon that
-        // stands apart from the text before it can be a kind annotation.
-        return (char.IsWhiteSpace(c: trimmed[(colon - 1)])
-            ? word
-            : null
-        );
-    }
-    /// <summary>Names the cell kinds an annotation admits, for a diagnostic message.</summary>
-    private static string DescribeAdmittedKinds() =>
-        string.Join(
-            separator: " or ",
-            values: PuckDslVocabulary.ComparisonKindNames.Select(selector: static name => $"'{name}'")
-        );
-    /// <summary>Advances to the end of the current statement — the next newline, <c>;</c>, <c>,</c> or the enclosing
-    /// <c>}</c>, whichever comes first, without consuming the terminator. A diagnostic that has already named the
-    /// real defect resynchronizes here so the rest of the statement cannot raise a second, misleading one.</summary>
-    private static void SkipToEndOfStatement(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var depth = 0;
-
-        while (!cursor.Eof) {
-            var c = cursor.Current;
-
-            if (c is '(' or '[') {
-                depth++;
-            } else if (c is ')' or ']') {
-                if (depth == 0) {
-                    return;
-                }
-                depth--;
-            } else if (
-                (depth == 0) &&
-                (c is '\n' or '\r' or ';' or ',' or '}')
-            ) {
-                return;
-            }
-            cursor.Advance();
-        }
     }
 }

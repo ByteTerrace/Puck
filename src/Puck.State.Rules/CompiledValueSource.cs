@@ -8,7 +8,8 @@ namespace Puck.State.Rules;
 /// <param name="Operand">The live operand, or <see langword="null"/>.</param>
 /// <param name="Expression">The compiled postfix program, or <see langword="null"/>.</param>
 /// <param name="Text">The literal text of a Text comparison, or null for the numeric and operand forms.</param>
-public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOperand? Operand = null, CompiledExpressionToken[]? Expression = null, string? Text = null) {
+/// <param name="CarrierKind">The expression's arithmetic kind when it differs from the result kind.</param>
+public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOperand? Operand = null, CompiledExpressionToken[]? Expression = null, string? Text = null, CellKind? CarrierKind = null) {
     /// <summary>Gets a value indicating whether this source is a compiled expression.</summary>
     public bool IsExpression => (Expression is not null);
     /// <summary>Gets a value indicating whether this source is a literal constant.</summary>
@@ -22,8 +23,9 @@ public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOpera
     public static CompiledValueSource Constant(long rawValue) => new(RawValue: rawValue);
     /// <summary>Creates an expression value source.</summary>
     /// <param name="expression">The compiled postfix program.</param>
+    /// <param name="carrierKind">The arithmetic kind, or null to use the destination kind.</param>
     /// <returns>The source.</returns>
-    public static CompiledValueSource FromExpression(CompiledExpressionToken[] expression) => new(Expression: expression);
+    public static CompiledValueSource FromExpression(CompiledExpressionToken[] expression, CellKind? carrierKind = null) => new(Expression: expression, CarrierKind: carrierKind);
     /// <summary>Creates an operand value source.</summary>
     /// <param name="operand">The live operand.</param>
     /// <returns>The source.</returns>
@@ -61,7 +63,7 @@ public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOpera
         if (Expression is { } expression) {
             return RuleWorkBudget.ExpressionCost(
                 context: context,
-                kind: kind,
+                kind: CarrierKind ?? kind,
                 tokens: expression
             );
         }

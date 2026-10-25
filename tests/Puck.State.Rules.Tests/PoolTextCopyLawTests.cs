@@ -128,6 +128,6 @@ public sealed class PoolTextCopyLawTests {
         var unequal = RuleCompiler.Compile(new Rule(Name("unequal"), [],
             Gate: new ActionPredicate.CompareState(source, ExpressionOp.NotEqual, Text: "fresh")), context, requireEffects: false);
         Assert.False(RuleEvaluation.GateHolds(reader, unequal.Gate, out var fault));
-        Assert.Equal(ExpressionFault.Absent, fault);
+        Assert.Equal(ExpressionFault.None, fault);
     }
 }

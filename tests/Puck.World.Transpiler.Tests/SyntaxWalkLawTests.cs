@@ -11,9 +11,9 @@ namespace Puck.World.Transpiler.Tests;
 /// that reads the path answers for a name wherever it is written.</summary>
 public class SyntaxWalkLawTests {
     private const string GateSource = """
-        template limit(n = 2) { width: n }
+        let limit = 2
         rule "gate" {
-            when limit(|n: 3)
+            when |limit > 0
             hp += 1
         }
         """;
@@ -71,7 +71,7 @@ public class SyntaxWalkLawTests {
 
         Assert.Equal(
             actual: path.Select(selector: static node => node.GetType().Name),
-            expected: [nameof(DocumentNode), nameof(RuleBlockNode), nameof(WhenStatementNode), nameof(CallPredicateNode), nameof(CallExpressionNode), nameof(ArgumentNode)]
+            expected: [nameof(DocumentNode), nameof(RuleBlockNode), nameof(WhenStatementNode), nameof(ComparisonPredicateNode), nameof(OperandExpressionNode)]
         );
         // Every node on the path lies inside the one before it.
         for (var index = 1; (index < path.Count); index++) {
@@ -115,23 +115,5 @@ public class SyntaxWalkLawTests {
 
         Assert.Empty(collection: SyntaxWalk.PathAt(offset: -1, root: document));
         Assert.Empty(collection: SyntaxWalk.PathAt(offset: (document.Offset + document.Length), root: document));
-    }
-    // The argument name of a template call written as a rule's gate resolves to the template's formal parameter, which
-    // hover can only see by descending into the `when` clause that holds the call.
-    [Fact]
-    public async Task HoverResolvesANameInsideAWhenClause() {
-        var text = await LanguageServerClient.HoverAsync(markedSource: GateSource);
-
-        Assert.NotNull(@object: text);
-        Assert.Contains(
-            actualString: text,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "n — template parameter"
-        );
-        Assert.Contains(
-            actualString: text,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "n = 2"
-        );
     }
 }

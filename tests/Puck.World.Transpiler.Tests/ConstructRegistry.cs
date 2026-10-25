@@ -1,12 +1,11 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
-using Puck.Transpiler;
 
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>Every construct the world vocabulary registers, read from the registries themselves rather than from a
 /// hand-typed list: the polymorphic <c>$type</c> tables in <c>Puck.State</c> that a document's nodes discriminate
-/// on, and <see cref="PuckDslVocabulary"/>'s comparison operators and comparison kinds.</summary>
+/// on, and the expression table's comparison operators.</summary>
 /// <remarks>A name here is <c>family/discriminator</c>. Adding an arm to any registered table adds a name, which
 /// the projection law then demands the generator cover — a construct nobody wrote a source for fails by that
 /// name rather than passing unnoticed.</remarks>
@@ -25,6 +24,5 @@ internal static class ConstructRegistry {
         Arms(family: "cellSet", registry: typeof(CellSetExpression)),
         Arms(family: "pattern", registry: typeof(PatternNode)),
         ExpressionComparisons.All.Select(selector: static comparison => $"comparison/{Enum.GetName(value: comparison)}"),
-        PuckDslVocabulary.ComparisonKindNames.Select(selector: static kind => $"comparisonKind/{kind}"),
     }.SelectMany(selector: static names => names).Order(comparer: StringComparer.Ordinal)];
 }

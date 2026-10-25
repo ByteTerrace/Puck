@@ -1226,7 +1226,7 @@ for f in range(0, 4) {
 
 // A stopped car with its dwell over and nothing to serve has no direction.
 rule "lift-idle" {
-  when liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and liftDir != 0
+  when liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and liftDir
   mode: Level
   liftDir = 0
 }
@@ -1288,7 +1288,7 @@ rule "lift-lamps-out" {
 rule "lift-floor-down" {
   when liftDir < 0
   mode: Level
-  liftFloor = ((liftAt + liftCells) - 1) / liftCells
+  liftFloor = (liftAt + liftCells - 1) / liftCells
 }
 rule "lift-floor" {
   when liftDir >= 0

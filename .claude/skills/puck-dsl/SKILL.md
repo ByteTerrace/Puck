@@ -87,7 +87,7 @@ A document's `schema:` field selects its vocabulary, never the filename.
   folds into one effect (`x += 3`). A world rule carries `=` (`setState`) and
   `+=` and `-=` (`addState`, negating subtraction's operand). Other compound
   operators lower to `setState` over an expression; a computed destination key
-  is evaluated once when that effect runs. A call-form gate where only comparisons are legal is
+  is evaluated once when that effect runs. A cartridge-only `key(...)` gate in a world is
   **PUCK038**. Cartridge rules admit `if`, `repeat`, `break`, `key(...)` gates
   and compound assignment.
 - **A `test`'s `expect` reads one world, or names the document it reads.** A line
@@ -97,8 +97,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   when nothing crossed. An absent body reads every register as 0, so a claim of
   `0` there also claims presence
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
-- A `: Kind`/`as Kind` comparison-kind suffix binds only to the one comparison
-  it follows; wrap it in parentheses beside `and`/`or`.
+- Gates (`when`, `if`, `expect`) accept ordinary expressions. Zero and absence
+  are false; nonzero numeric values are true. `and` and `or` short-circuit;
+  `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise
+  `&`/`|` bind above comparisons. Kind suffixes are retired: write the expression
+  directly.
 - **One bracket rule.** `row.key` names a literal key; `row[expression]`
   evaluates. Names in brackets resolve lexically, so an unknown bare word is
   an error. Use `row["key"]` for a quoted literal key. Read a local as `name`,

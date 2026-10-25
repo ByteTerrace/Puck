@@ -101,9 +101,11 @@ public static partial class WorldDocumentEmitter {
                     WriteIndex(index: index, operand: operand);
                     break;
                 case Syntax.Unary unary:
+                    if (unary.Operator == "not") { m_text.Append(value: '('); }
                     m_text.Append(value: unary.Operator).Append(value: '(');
                     Write(unary.Operand, DocumentValueForm.Expression, operand);
                     m_text.Append(value: ')');
+                    if (unary.Operator == "not") { m_text.Append(value: ')'); }
                     break;
                 case Syntax.Binary binary:
                     m_text.Append(value: '(');
@@ -258,6 +260,12 @@ public static partial class WorldDocumentEmitter {
             m_text.Append(value: ']');
         }
         private void WriteCall(Syntax.SourceCall call, OperandExpressionNode operand) {
+            if (call is { Name: "maximum", Arguments: [var left, var right] } &&
+                BooleanSyntax(left.Value) && BooleanSyntax(right.Value)) {
+                Refuse(message: "maximum() over Boolean expressions is retired; write 'left or right'.", span: operand.Span);
+                m_text.Append(value: '0');
+                return;
+            }
             if (call.Name == "local") {
                 Refuse(message: "local(name) is retired; read the local by its bare name: name.", span: operand.Span);
                 m_text.Append(value: '0');
@@ -277,6 +285,12 @@ public static partial class WorldDocumentEmitter {
             }
             m_text.Append(value: ')');
         }
+        private static bool BooleanSyntax(Syntax.SyntaxNode node) => node switch {
+            Syntax.SourceGroup group => BooleanSyntax(group.Value),
+            Syntax.Binary { Operator: "==" or "!=" or "<" or "<=" or ">" or ">=" or "and" or "or" } => true,
+            Syntax.Unary { Operator: "not" } => true,
+            _ => false,
+        };
         private void WriteValue(JsonNode? value, DocumentValueForm form, SourceSpan span) {
             if (value is JsonValue scalar) {
                 if (scalar.TryGetValue<string>(value: out var text)) {

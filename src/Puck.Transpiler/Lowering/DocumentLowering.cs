@@ -639,6 +639,13 @@ public static partial class DocumentLowering {
                 fieldKey: fieldKey
             ));
         }
+        if (bin.Operator is "and" or "or") {
+            var left = IsTruthy(node: leftNode);
+            if ((bin.Operator == "and" && !left) || (bin.Operator == "or" && left)) {
+                return JsonValue.Create(value: left ? 1L : 0L);
+            }
+            return JsonValue.Create(value: IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L);
+        }
 
         var rightNode = EvaluateValue(
             expr: bin.Right,
@@ -932,6 +939,7 @@ public static partial class DocumentLowering {
             scope,
             fieldKey
         );
+        if (un.Operator == "not") { return JsonValue.Create(value: IsTruthy(node: operand) ? 0L : 1L); }
 
         if (un.Operator == "~") {
             if (

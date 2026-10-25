@@ -152,7 +152,7 @@ test "the seeded fuzzer consumes the reproducible PCG stream for its window" {
   }
   expect {
     machineDebugger2.driven == 12
-    machineDebugger2.randomState != 0
+    machineDebugger2.randomState
     machineDebugger2.phase == 99
     machineDebuggerViolations.count == 0
   }
