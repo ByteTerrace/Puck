@@ -13,6 +13,10 @@ public sealed partial class WorldTick {
     // is never entered here and is swept in full every tick. The mask catches a write the sweep did not make (an undo,
     // a console upsert), which moves the row without moving any cell.
     private readonly Dictionary<string, (long[] Values, bool[] Present, int Holding)> m_responseObservedValues = [];
+    // The sweep's scratch, reused every tick: each moved row with its new holding and the snapshot that admits a skip
+    // (null when the row cannot be skipped).
+    private readonly List<(WorldPlacement Placement, int Holding, long[]? Values, bool[]? Present)> m_responseMoves = [];
+    private readonly List<WorldMutation> m_responseMutations = [];
 
     /// <summary>Describes every placement carrying a response trait: the prototype it shows, its authored one, and
     /// which entries the last sweep recorded as holding.</summary>
@@ -59,17 +63,20 @@ public sealed partial class WorldTick {
         : string.Empty)} {state.Comparison}",
         _ => "?",
     });
-    // Runs after StepFields, so a Field entry reads this tick's own lattice writes — unchanged from before this
-    // facet gained a state arm. A State entry reads the installed document directly (WorldStateReader, the same
-    // reader every other row-name comparand in this file already goes through), so it sees a rule's own write the
-    // moment EvaluateWorldRules' end-of-tick fold installs it, and a field reaction's or the console's write the
-    // moment IT installs, both still within this same tick's sweep.
+    // Runs after StepFields, so a Field entry reads this tick's own lattice writes. A State entry reads the installed
+    // document directly (WorldStateReader, the same reader every other row-name comparand in this file goes
+    // through), so it sees a rule's own write the moment EvaluateWorldRules' end-of-tick fold installs it, and a field
+    // reaction's or the console's write the moment it installs, both within this same tick's sweep. Every row whose
+    // holding moved this tick lands in one mutation — the row alone, or a batch of every moved row — so a switch that
+    // flips several rows pays one admission and one install, and the rows land together or not at all.
     private void SweepPlacementResponses(ulong tick) {
         var lattice = Host.Population.Fields;
         // Declared once and reused every iteration below — a stackalloc inside the loop body would not release its
         // frame slot between iterations, growing with the placement count instead of staying constant.
         Span<long> values = stackalloc long[(WorldResponseCapacity.MaxEntries * 2)];
         Span<bool> present = stackalloc bool[(WorldResponseCapacity.MaxEntries * 2)];
+
+        m_responseMoves.Clear();
 
         foreach (var placement in Host.Document.Definition.Placements) {
             if (placement.Respond is not { Count: > 0 } responses) {
@@ -104,36 +111,63 @@ public sealed partial class WorldTick {
                 responses: responses,
                 tick: tick
             );
-            var applied = (
-                (holding == placement.Holding) ||
-                Host.TryApplyMutation(
-                connectionId: SubmissionEnvelope.LocalConnectionId,
-                correlationId: 0,
-                // Principal.World — the same structural-exemption door StampContribution/RetractContribution
-                // use — so the write is journalled and undoable through the ordinary UpsertPlacement compose arm.
-                mutation: new WorldMutation.UpsertPlacement(
-                    Placement: (placement with { Holding = holding }),
-                    Principal: Principal.World
-                ),
-                preMetered: false,
-                tick: tick,
-                engineTick: CompletedEngineTicks
-            ));
 
-            if (skippable) {
-                m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray(), (applied
+            if (holding == placement.Holding) {
+                if (skippable) {
+                    m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray(), holding);
+                } else if (m_responseObservedValues.Count > 0) {
+                    m_responseObservedValues.Remove(key: placement.Id);
+                }
+
+                continue;
+            }
+
+            m_responseMoves.Add(item: (placement, holding, (skippable ? values[..count].ToArray() : null), (skippable ? present[..count].ToArray() : null)));
+        }
+
+        if (m_responseMoves.Count == 0) {
+            return;
+        }
+
+        m_responseMutations.Clear();
+
+        foreach (var move in m_responseMoves) {
+            // Principal.World — the same structural-exemption door StampContribution/RetractContribution use — so the
+            // write is journalled and undoable through the ordinary UpsertPlacement compose arm.
+            m_responseMutations.Add(item: new WorldMutation.UpsertPlacement(
+                Placement: (move.Placement with { Holding = move.Holding }),
+                Principal: Principal.World
+            ));
+        }
+
+        var applied = Host.TryApplyMutation(
+            connectionId: SubmissionEnvelope.LocalConnectionId,
+            correlationId: 0,
+            mutation: ((m_responseMutations.Count == 1)
+                ? m_responseMutations[0]
+                : new WorldMutation.Batch(
+                    Mutations: [.. m_responseMutations],
+                    Principal: Principal.World
+                )),
+            preMetered: false,
+            tick: tick,
+            engineTick: CompletedEngineTicks
+        );
+
+        foreach (var (placement, holding, observed, observedPresent) in m_responseMoves) {
+            if (observed is not null) {
+                m_responseObservedValues[placement.Id] = (observed, observedPresent!, (applied
                     ? holding
                     : placement.Holding));
             } else if (m_responseObservedValues.Count > 0) {
                 m_responseObservedValues.Remove(key: placement.Id);
             }
 
-            if (
-                (holding == placement.Holding) ||
-                !applied
-            ) {
+            if (!applied) {
                 continue;
             }
+
+            var responses = placement.Respond!;
 
             if (Host.Output.HasNarrationSink) {
                 var respondId = placement.Id;

@@ -102,6 +102,8 @@ The [server reference](../../../../src/Puck.World.Server/README.md) owns the
 eligibility checks and scratch-store lifetime. Seed a borrowed compose arena
 inside its scope, so rewind empties it on acceptance and rejection alike;
 catalog identity alone does not prove unchanged row declarations or lane widths.
+Partial seeding recomputes only boards whose inputs it loaded. An unrelated
+board's empty scratch inputs must never journal and export over its live row.
 
 Compose → validate → capacity → solids → install (swap + derived rebuild) →
 journal → echo. Precisely:
@@ -115,11 +117,18 @@ journal → echo. Precisely:
    dangling reference, foreign asset hash) rejects loudly, definition
    unchanged.
 3. **Validate.** `WorldDefinitionValidator.TryValidate` over the WHOLE
-   candidate — builders and appliers never repeat semantic checks.
+   candidate — builders and appliers never repeat semantic checks. Two kinds
+   validate only what they can have changed: a state-value write its touched
+   rows (`TryValidateStateMutation`), and a **response swap**
+   (`WorldDocument.IsResponseSwap`: an `UpsertPlacement`, or a `Batch` of them,
+   moving nothing of an existing responding row but its `holding` bits) its
+   bits alone, since every alternative the row can show, with its colliders
+   and faces, was validated with the document.
 4. **Capacity.** If the kind is render-envelope-affecting
-   (`AffectsRenderEnvelope`), `m_envelope.TryFit(candidate)` checks the probed
-   render envelope — a loud apply-time rejection, never a later GPU
-   allocation failure.
+   (`AffectsRenderEnvelope`), `m_envelope.TryFit(candidate)` counts the
+   candidate's render scene on the CPU (`WorldSceneEnvelope`, registered on
+   every boot) against the engine's instance and material ceilings — a loud
+   apply-time rejection, never a later GPU allocation failure.
 5. **Solids.** If the kind is solid-affecting (`AffectsSolidField`), rebuild
    the SDF contact field (`WorldSolidField.TryBuild`) — a solid naming an op
    the warp-free evaluator cannot interpret is a loud apply-time rejection.
@@ -128,6 +137,13 @@ journal → echo. Precisely:
 6. **Install.** Swap the live definition; `Install` rebuilds only the changed
    section's derived state, with a population rebuild when
    `AffectsPopulation(mutation)` (or a field change under the field provider).
+   A response swap keeps the live arena, the compiled rules and every other
+   derived product (`InstallResponseSwap`): it marks the definition delivery
+   and rebuilds the population only when a swapped row is solid, whose shown
+   creation's colliders the contact field holds. The response sweep
+   (`WorldTick.SweepPlacementResponses`) lands every row a tick moves as one
+   such mutation, so a switch that flips eight rows pays one admission, one
+   install and one journal entry, and the rows land together or not at all.
 7. **Journal.** Append a `WorldJournalEntry(Tick, EngineTick, Mutation)` to `WorldDocument`'s journal. The `dirty` count in
    `world.status` IS the journal length.
 8. **Echo.** One `[world.mutation: … applied]` stderr line plus a

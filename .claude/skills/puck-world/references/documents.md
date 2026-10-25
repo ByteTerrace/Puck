@@ -236,22 +236,33 @@ its whole authority surface.
   `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128, an
   independent value), `TimelineSecondsPerFrame = 8f/60f`, and the reserved
   derived-face screen band. The stamp pool's worst-case instance draw is
-  `MaxStampRegistrations x MaxShapesPerStamp` against
-  `Puck.SignedDistance.SdfProgramBuilder.MaxInstances`. A world's whole
-  COMPOSED boot probe (the presenter's four emitters: the scene — stamp pool,
-  avatar catalog, static placements, screens — plus the SDF-document,
-  adjacency-band, and field reservations) must fit under that cap; the scene
-  emitter alone under-counts by the adjacency and field reservations.
-  `world.budget` reports the composed render figures where a render probe is
-  attached (windowed composition fills them).
-- `WorldRenderEnvelope.cs` — the render-capacity oracle: `ConfigureGrowing`
-  (every live renderer) or `Configure` (fixed ceilings) at boot from the probe,
-  `TryFit(candidate)` at every apply; unconfigured reads as "fits". `TryFit`
-  runs once per render-relevant mutation, each responding placement included,
-  and emits the whole worst-case candidate, so a growing measurer emits without
-  building (`SdfProgramMeasure.Instances`, into kept `SdfProgramBuilderStorage`);
-  a measurer that builds the `SdfProgram` makes about 1.8 GB of large-object
-  garbage per debug-world `gallery.lights.all`.
+  `MaxStampRegistrations x MaxShapesPerStamp` (46,976) against
+  `Puck.SignedDistance.SdfProgramBuilder.MaxInstances`, most of the debug
+  world's envelope. A world's whole composed scene (screens, static placements,
+  the stamp pool, the avatar catalog and one reservation per adjacency band)
+  must fit under that cap and under `ScreenMaterialId` materials.
+  `Puck.World.Client.WorldSceneEnvelope` counts it on the CPU from the
+  definition alone, so every boot, headless or windowed, prints
+  `[world.render] envelope: …` with each part's instances and the reservation,
+  and refuses a boot scene past a ceiling by name. A presented boot also prints
+  `[world.render] probe: …` (the construction probe's instances, program words
+  and dynamic slots) and an `envelope mismatch` line should the probe and the
+  count ever disagree.
+- `WorldRenderEnvelope.cs` — the render-capacity oracle: each consumer
+  `Configure`s a measurer returning a `WorldRenderCost` (instances,
+  materials), and `TryFit(candidate)` at every apply refuses a candidate past
+  an engine ceiling; unconfigured reads as "fits". The boot registers the
+  world scene's count on every boot shape (`WorldPostBuildWiring`), session and
+  infinity views register theirs on the instance they show. A measure runs once
+  per render-relevant mutation, each responding placement a light switch flips
+  included, so it counts and never emits: the stamp pool's and the avatar
+  catalog's worst cases are emitted once a process, a candidate's own rows are
+  counted (`WorldPlacementStamper.StaticStampReservation`, one slab a screen,
+  bands times one band's reservation).
+- `placements.policy.authoringHeadroomInstances` — the instances the
+  construction probe reserves beyond the boot scene, clamped to what the
+  ceiling leaves. Buffers grow past it; it is no quota, and only an engine
+  ceiling refuses a candidate.
 - `CreationDocument.PaletteSize = 32` bounds `puck.creation.v1`'s `palette`
   array — see [documents-render.md](documents-render.md) for the entry shape
   (weathering/inset lanes), which is decision prose, not a bare catalog.

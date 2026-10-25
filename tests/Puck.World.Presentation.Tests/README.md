@@ -19,8 +19,9 @@ naming the shipped unbindable `world.grant` destination without changing the
 document; the same mutation naming a bindable command applies. The child owns
 the process-wide registry, so it cannot change parallel laws' validation.
 
-`WorldRenderEnvelopeLawTests` exercises the real scene capacity probe without a
-GPU, including new per-shape placements within authored headroom.
+`WorldRenderEnvelopeLawTests` holds the world scene's CPU count to what the real
+construction probe and static stamper emit, without a GPU, and the oracle's
+refusals at the engine's instance and material ceilings.
 
 The laws that boot the quarantined worlds (the flagship, the courtyard, the
 parity world, the counters workloads, the canary and game fixtures, and the

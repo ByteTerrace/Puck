@@ -1,65 +1,71 @@
 namespace Puck.World;
 
+/// <summary>What a candidate definition's render scene declares against the engine's program ceilings, counted on the
+/// CPU: its instances and its materials.</summary>
+/// <param name="Instances">The instances the composed program declares.</param>
+/// <param name="Materials">The materials the composed program registers.</param>
+public readonly record struct WorldRenderCost(int Instances, int Materials) {
+    /// <summary>Adds two costs.</summary>
+    /// <param name="left">The first cost.</param>
+    /// <param name="right">The second cost.</param>
+    /// <returns>The sum, checked.</returns>
+    public static WorldRenderCost operator +(WorldRenderCost left, WorldRenderCost right) => new(
+        Instances: checked((left.Instances + right.Instances)),
+        Materials: checked((left.Materials + right.Materials))
+    );
+    /// <summary>Scales a cost.</summary>
+    /// <param name="cost">The cost of one.</param>
+    /// <param name="count">How many.</param>
+    /// <returns>The product, checked.</returns>
+    public static WorldRenderCost operator *(WorldRenderCost cost, int count) => new(
+        Instances: checked((cost.Instances * count)),
+        Materials: checked((cost.Materials * count))
+    );
+    /// <summary>Names the engine ceiling this cost exceeds, or returns <see langword="null"/> when it fits every one:
+    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxInstances"/> instances and
+    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId"/> materials (the first screen sentinel).</summary>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public string? Exceeds() {
+        if (Instances > Puck.SignedDistance.SdfProgramBuilder.MaxInstances) {
+            return $"instances {Instances} exceed the engine ceiling {Puck.SignedDistance.SdfProgramBuilder.MaxInstances}";
+        }
+
+        return ((Materials > Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId)
+            ? $"materials {Materials} exceed the engine ceiling {Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId}"
+            : null);
+    }
+}
+
 /// <summary>
-/// The render-capacity oracle the server consults before it applies a scene/screen mutation — the seam that keeps the
-/// "capacity honesty" contract: each active renderer registers the render envelope (program words, instances) it
-/// probed at construction. Fixed consumers refuse overflow; growable consumers measure the full candidate against
-/// engine limits and expand their GPU buffers when it is delivered. A shared DI singleton:
-/// <c>Puck.World.Client.WorldFramePresenter</c> and session-screen views each register their own
-/// floors and candidate measurer; <c>Puck.World.Server.WorldServer</c> reads their conjunction while draining its
-/// mutation queue.
+/// The render-capacity oracle the server consults before it applies a render-relevant mutation. Each consumer that
+/// renders the world registers a measurer that counts a candidate definition's render scene on the CPU
+/// (<see cref="WorldRenderCost"/>); every renderer grows its program and instance buffers to what is delivered, so only
+/// the engine's own ceilings bound a candidate. A shared DI singleton: the composition root registers the world scene's
+/// own measurer on every boot, headless or windowed (<c>Puck.World.Client.WorldSceneEnvelope</c>), and session-screen
+/// views register theirs on the instance they show; <c>Puck.World.Server.WorldServer</c> reads their conjunction while
+/// draining its mutation queue.
 /// </summary>
-/// <remarks>Single-threaded: configured on the window-pump thread during startup, read on the same thread while the
-/// server drains its pre-tick queue, so no lock guards it. Unconfigured (a mutation somehow racing startup) reads as
-/// "fits" — the boot definition is what the envelope was probed for, so it always fits.</remarks>
+/// <remarks>Single-threaded: configured during startup and by views on the window-pump thread, read on the same thread
+/// while the server drains its pre-tick queue, so no lock guards it. Unconfigured, a candidate reads as fitting.</remarks>
 public sealed class WorldRenderEnvelope {
-    private readonly Dictionary<long, Constraint> m_constraints = [];
+    private readonly Dictionary<long, Func<WorldDefinition, WorldRenderCost>> m_measurers = [];
 
-    private long m_nextConstraintId;
+    private long m_nextId;
 
-    /// <summary>Registers one fixed render consumer's probed ceilings and worst-case program measurer.</summary>
-    /// <param name="programWordCapacity">The program-word ceiling.</param>
-    /// <param name="instanceCapacity">The instance ceiling.</param>
-    /// <param name="measure">Measures a candidate definition's render-relevant sections (scene, screens, placements +
-    /// their creations) against the same worst-case avatar build, returning its program-word and instance counts.</param>
-    /// <returns>The registration lease. Disposing it removes only this consumer's constraint; all other active
-    /// registrations continue to govern admission.</returns>
+    /// <summary>Registers one render consumer's measurer.</summary>
+    /// <param name="measure">Counts a candidate definition's render scene as this consumer would draw it. It runs once
+    /// per render-relevant mutation, so it counts rather than emits; a candidate it cannot measure throws
+    /// <see cref="WorldRenderMeasureRefusedException"/>.</param>
+    /// <returns>The registration lease. Disposing it removes only this consumer's measurer.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="measure"/> is <see langword="null"/>.</exception>
-    public IDisposable Configure(int programWordCapacity, int instanceCapacity, Func<WorldDefinition, (int Words, int Instances)> measure) {
+    public IDisposable Configure(Func<WorldDefinition, WorldRenderCost> measure) {
         ArgumentNullException.ThrowIfNull(argument: measure);
 
-        return Register(constraint: new Constraint(
-            GrowingInstances: null,
-            InstanceCapacity: instanceCapacity,
-            Measure: measure,
-            ProgramWordCapacity: programWordCapacity
-        ));
-    }
-    /// <summary>Registers one render consumer that grows its program and instance buffers to what is delivered, so only
-    /// the engine's own limits bound it: the instance ceiling, and every refusal the candidate's emission makes.</summary>
-    /// <param name="measureInstances">Emits a candidate definition's render-relevant sections against the same
-    /// worst-case avatar build and returns its instance count. It runs once per render-relevant mutation, so it emits
-    /// without packing a program; a structural limit it reaches throws <c>SdfProgramCapacityException</c> or
-    /// <see cref="WorldRenderMeasureRefusedException"/>.</param>
-    /// <returns>The registration lease. Disposing it removes only this consumer's constraint; all other active
-    /// registrations continue to govern admission.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="measureInstances"/> is <see langword="null"/>.</exception>
-    public IDisposable ConfigureGrowing(Func<WorldDefinition, int> measureInstances) {
-        ArgumentNullException.ThrowIfNull(argument: measureInstances);
+        var id = m_nextId++;
 
-        return Register(constraint: new Constraint(
-            GrowingInstances: measureInstances,
-            InstanceCapacity: 0,
-            Measure: null,
-            ProgramWordCapacity: 0
-        ));
-    }
-    private Registration Register(Constraint constraint) {
-        var id = m_nextConstraintId++;
-
-        m_constraints.Add(
+        m_measurers.Add(
             key: id,
-            value: constraint
+            value: measure
         );
 
         return new Registration(
@@ -67,49 +73,24 @@ public sealed class WorldRenderEnvelope {
             owner: this
         );
     }
-    /// <summary>Tests whether a candidate definition's render-relevant sections fit every active consumer's limits.</summary>
+    /// <summary>Tests whether a candidate definition's render scene fits every registered consumer.</summary>
     /// <param name="candidate">The composed candidate definition.</param>
-    /// <param name="reason">On a miss, the loud ceiling reason; empty otherwise.</param>
-    /// <returns><see langword="true"/> when the candidate fits every active registration (or none exists).</returns>
+    /// <param name="reason">On a miss, the ceiling the candidate exceeds; empty otherwise.</param>
+    /// <returns><see langword="true"/> when the candidate fits every registration (or none exists).</returns>
     public bool TryFit(WorldDefinition candidate, out string reason) {
-        foreach (var constraint in m_constraints.Values) {
-            var words = 0;
-            int instances;
+        foreach (var measure in m_measurers.Values) {
+            WorldRenderCost cost;
 
-            // Emitting the composed candidate is how a measurer enforces the program's structural limits, so a limit
-            // it reaches is this candidate's refusal, never the host's failure.
             try {
-                if (constraint.GrowingInstances is { } growing) {
-                    instances = growing(arg: candidate);
-                } else {
-                    (words, instances) = constraint.Measure!(arg: candidate);
-                }
-            } catch (Puck.SignedDistance.SdfProgramCapacityException error) {
-                reason = error.Message;
-
-                return false;
+                cost = measure(arg: candidate);
             } catch (WorldRenderMeasureRefusedException error) {
                 reason = error.Message;
 
                 return false;
             }
 
-            if (constraint.GrowingInstances is not null) {
-                if (instances > Puck.SignedDistance.SdfProgramBuilder.MaxInstances) {
-                    reason = $"instances {instances} exceed the engine ceiling {Puck.SignedDistance.SdfProgramBuilder.MaxInstances}";
-                    return false;
-                }
-                continue;
-            }
-
-            if (words > constraint.ProgramWordCapacity) {
-                reason = $"program words {words} exceed the probed render envelope {constraint.ProgramWordCapacity}";
-
-                return false;
-            }
-
-            if (instances > constraint.InstanceCapacity) {
-                reason = $"instances {instances} exceed the probed render envelope {constraint.InstanceCapacity}";
+            if (cost.Exceeds() is { } exceeded) {
+                reason = exceeded;
 
                 return false;
             }
@@ -120,8 +101,6 @@ public sealed class WorldRenderEnvelope {
         return true;
     }
 
-    // A fixed consumer carries Measure and its ceilings; a growing one carries GrowingInstances alone.
-    private readonly record struct Constraint(int ProgramWordCapacity, int InstanceCapacity, Func<WorldDefinition, (int Words, int Instances)>? Measure, Func<WorldDefinition, int>? GrowingInstances);
     private sealed class Registration(WorldRenderEnvelope owner, long id) : IDisposable {
         private WorldRenderEnvelope? m_owner = owner;
 
@@ -131,7 +110,7 @@ public sealed class WorldRenderEnvelope {
             }
 
             m_owner = null;
-            _ = current.m_constraints.Remove(key: id);
+            _ = current.m_measurers.Remove(key: id);
         }
     }
 }

@@ -28,19 +28,43 @@ public static class WorldPlacementStamper {
         var usable = new List<WorldPlacement>();
 
         foreach (var placement in placements) {
-            try {
-                var builder = new SdfProgramBuilder();
+            var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId);
 
-                EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
-                _ = new SdfFieldEvaluator(program: builder.Build());
+            // Whether the evaluator reads a placement is a fact of its row and the creation it shows, so a row that
+            // came through a delivery unchanged keeps its verdict and only a moved row is emitted and evaluated again.
+            if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation)) {
+                string? refusal = null;
+
+                try {
+                    var builder = new SdfProgramBuilder();
+
+                    EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
+                    _ = new SdfFieldEvaluator(program: builder.Build());
+                } catch (ArgumentException exception) {
+                    refusal = exception.Message.ReplaceLineEndings(replacementText: " ");
+                }
+
+                verdict = new QueryVerdict(
+                    Creation: creation,
+                    Refusal: refusal
+                );
+                QueryVerdicts.AddOrUpdate(key: placement, value: verdict);
+            }
+
+            if (verdict.Refusal is { } reason) {
+                excluded?.Invoke(placement, reason);
+            } else {
                 usable.Add(item: placement);
-            } catch (ArgumentException exception) {
-                excluded?.Invoke(placement, exception.Message.ReplaceLineEndings(replacementText: " "));
             }
         }
 
         return usable;
     }
+
+    // Each placement row's evaluator verdict, with the creation it showed when judged.
+    private static readonly ConditionalWeakTable<WorldPlacement, QueryVerdict> QueryVerdicts = [];
+
+    private sealed record QueryVerdict(WorldPrototype? Creation, string? Refusal);
 
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).

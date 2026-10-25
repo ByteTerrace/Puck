@@ -196,11 +196,10 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         ) with { Id = "past-the-envelope" });
 
         using var fixture = Fixtures.FreshServer(definition: Sequence(new WorldEffect.UpsertPlacement(Placement: created)));
-        using var full = fixture.Server.Envelope.Configure(
-            instanceCapacity: 0,
-            measure: static _ => (1, 1),
-            programWordCapacity: 0
-        );
+        using var full = fixture.Server.Envelope.Configure(measure: static _ => new WorldRenderCost(
+            Instances: (Puck.SignedDistance.SdfProgramBuilder.MaxInstances + 1),
+            Materials: 0
+        ));
         var installs = 0;
 
         fixture.Server.MutationJournalTap = (_, _, _) => installs++;

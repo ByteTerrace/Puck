@@ -670,14 +670,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             ScreensRaw = null,
         }));
 
-    /// <summary>Counts the instances a proposed destination definition emits in this view's probed program shape.</summary>
-    public int MeasureCandidate(WorldDefinition candidate) =>
-        WorldSessionRenderEnvelope.MeasureCandidate(
-            candidate: Scoped(definition: candidate),
-            bodyColor: m_bodyColor,
-            colors: BakedColors(),
-            pool: m_pool
-        );
+    /// <summary>Counts what a proposed destination definition costs this view's composed program: its scene as this
+    /// view draws it, without the adjacency bands a session never reserves.</summary>
+    /// <param name="candidate">The candidate destination definition.</param>
+    /// <returns>The cost.</returns>
+    public WorldRenderCost MeasureCandidate(WorldDefinition candidate) => WorldSceneEnvelope.Of(
+        adjacency: false,
+        candidate: Scoped(definition: candidate)
+    ).Cost;
     /// <inheritdoc/>
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
     /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase, repacking

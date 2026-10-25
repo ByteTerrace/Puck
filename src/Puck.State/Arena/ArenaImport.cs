@@ -25,7 +25,10 @@ public sealed partial class StateArena {
     /// counts the distinct new names against the key table's remaining room, and only the apply pass interns, so
     /// the retained key ledger never records a load that did not land.</para>
     /// </remarks>
-    public bool TryLoad(IReadOnlyList<StateRow>? rows, in ArenaTime time, out string reason) {
+    public bool TryLoad(IReadOnlyList<StateRow>? rows, in ArenaTime time, out string reason) =>
+        TryLoadCore(rows, in time, out reason, onlyLoadedBoards: false);
+
+    private bool TryLoadCore(IReadOnlyList<StateRow>? rows, in ArenaTime time, out string reason, bool onlyLoadedBoards) {
         if (!TryValidateLoad(
             admitted: out var admitted,
             reason: out reason,
@@ -56,15 +59,30 @@ public sealed partial class StateArena {
         }
 
         for (var rowOrdinal = 0; (rowOrdinal < m_layout.RowCount); rowOrdinal++) {
-            if (m_layout[rowOrdinal].IsDerivedBoard) {
-                RecomputeDerivedBoard(boardOrdinal: rowOrdinal);
+            ref readonly var board = ref m_layout[rowOrdinal];
+
+            if (!board.IsDerivedBoard) { continue; }
+            if (onlyLoadedBoards) {
+                var loaded = false;
+
+                foreach (var member in admitted) {
+                    if ((member.RowOrdinal == rowOrdinal) || (member.RowOrdinal == board.InverseTokensOrdinal) || (member.RowOrdinal == board.InverseCodesOrdinal)) {
+                        loaded = true;
+                        break;
+                    }
+                }
+                // A partially seeded scratch store has no values for unrelated boards' inputs. Recomputing one
+                // here would journal it and export an empty board over the installed document's populated board.
+                if (!loaded) { continue; }
             }
+            RecomputeDerivedBoard(boardOrdinal: rowOrdinal);
         }
 
         reason = string.Empty;
 
         return true;
     }
+
     /// <summary>Determines whether <see cref="TryLoad"/> would admit every named row without moving the arena,
     /// interning a key, or opening a journal scope.</summary>
     /// <param name="rows">The rows to validate; a row the list omits keeps what the arena holds.</param>

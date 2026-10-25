@@ -476,7 +476,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - `WorldBodiesLimits.CapacityCeiling` is 4096 bodies; detailed rigs cover the
   first 128 indices.
 - `SdfProgramBuilder.MaxInstances` is 65536; `WorldRenderEnvelope.TryFit` is the
-  apply-time capacity gate.
+  apply-time capacity gate, counted on the CPU by `WorldSceneEnvelope`, so a
+  headless boot and `puck test` see it: every boot prints
+  `[world.render] envelope: …` and refuses a boot scene past a ceiling.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
   empty): spheres, circular cylinders and Boxes have surface contact. Box

@@ -247,12 +247,11 @@ public static class WorldBootComposition {
         // activates — the one body system the snapshot reports (up to 4096 bodies, rendered through the hybrid avatar/crowd representation).
         services.AddSingleton<WorldPopulation>();
 
-        // The render-capacity oracle the server consults before applying a scene/screen mutation — configured by the
-        // frame source once it has probed the boot envelope (presentation-only), so an over-envelope edit is rejected
-        // loudly at apply time. Unconfigured (headless, or before presentation's frame source has run) reads as
-        // "fits" (WorldRenderEnvelope's own documented default) — the boot definition is what a probe would measure,
-        // so it always fits until something narrower configures it.
+        // The render-capacity oracle the server consults before applying a render-relevant mutation, and the boot
+        // scene's envelope counted on the CPU, which WorldPostBuildWiring checks the boot against and registers with
+        // the oracle on every boot, headless or windowed, so an over-ceiling edit is refused at apply time either way.
         services.AddSingleton<WorldRenderEnvelope>();
+        services.AddSingleton(implementationFactory: static sp => new WorldSceneEnvelope(boot: sp.GetRequiredService<WorldClient>().Definition));
         services.AddSingleton<WorldTextCatalog>();
 
         // Bound to stderr, and registered so the WorldServer constructor below resolves it as its own optional
@@ -1306,7 +1305,7 @@ public static class WorldBootComposition {
             simulation: sp.GetRequiredService<HeadlessWorldSimulation>(),
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             binder: sp.GetRequiredService<IWorldScreenPresenter>(),
-            envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+            envelope: sp.GetRequiredService<WorldSceneEnvelope>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             animator: sp.GetRequiredService<WorldStampPool>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),
@@ -1712,7 +1711,7 @@ public static class WorldBootComposition {
             simulation: sp.GetRequiredService<WorldSimulation>(),
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             binder: sp.GetRequiredService<IWorldScreenPresenter>(),
-            envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+            envelope: sp.GetRequiredService<WorldSceneEnvelope>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             animator: sp.GetRequiredService<WorldStampPool>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),

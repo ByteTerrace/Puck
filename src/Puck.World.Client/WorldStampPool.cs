@@ -1082,38 +1082,60 @@ public sealed partial class WorldStampPool {
     public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null, IReadOnlyList<WorldScreen>? screens = null) {
         ArgumentNullException.ThrowIfNull(argument: colors);
 
-        for (var index = 0; (index < m_pool.Length); index++) {
-            var live = (probeWorstCase
-                ? null
-                : m_pool[index]
+        if (probeWorstCase) {
+            EmitProbe(
+                builder: builder,
+                maxPlacementScale: maxPlacementScale,
+                slotBase: slotBase
             );
 
-            if (!probeWorstCase && (live is null)) {
+            return;
+        }
+
+        for (var index = 0; (index < m_pool.Length); index++) {
+            if (m_pool[index] is not { } live) {
                 continue;
             }
 
-            var rootSlot = (slotBase + (index * SlotsPerPlacement));
-
             var firstInstance = builder.InstanceCount;
 
-            if (live is not null) {
-                live.Hidden = Isolation.HiddenFor(document: live.Creation.EngineDocument, prototype: live.Creation.Id.Value);
-            }
-
+            live.Hidden = Isolation.HiddenFor(document: live.Creation.EngineDocument, prototype: live.Creation.Id.Value);
             EmitOne(
                 builder: builder,
                 colors: colors,
                 live: live,
                 maxPlacementScale: maxPlacementScale,
                 picks: picks,
-                probeWorstCase: probeWorstCase,
-                rootSlot: rootSlot,
-                screenMaterials: ((live is null) ? null : CarriedScreenMaterials(live: live, screens: screens)),
+                probeWorstCase: false,
+                rootSlot: (slotBase + (index * SlotsPerPlacement)),
+                screenMaterials: CarriedScreenMaterials(live: live, screens: screens),
                 textCatalog: textCatalog
             );
-            if (live is not null) {
-                picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
-            }
+            picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
+        }
+    }
+    /// <summary>Emits the pool's worst case, never rendered: every registration slot in the largest legal form a
+    /// creation can take, whatever the pool holds.</summary>
+    /// <param name="builder">The program builder.</param>
+    /// <param name="maxPlacementScale">The placement scale envelope's ceiling, which feeds only the slots' bound
+    /// radii.</param>
+    /// <param name="slotBase">The pool's first dynamic-transform slot.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
+    public static void EmitProbe(SdfProgramBuilder builder, float maxPlacementScale, int slotBase) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        for (var index = 0; (index < WorldPlacementPolicy.MaxStampRegistrations); index++) {
+            EmitOne(
+                builder: builder,
+                colors: null,
+                live: null,
+                maxPlacementScale: maxPlacementScale,
+                picks: null,
+                probeWorstCase: true,
+                rootSlot: (slotBase + (index * SlotsPerPlacement)),
+                screenMaterials: null,
+                textCatalog: null
+            );
         }
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>

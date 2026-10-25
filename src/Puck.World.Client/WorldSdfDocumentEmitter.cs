@@ -21,30 +21,23 @@ namespace Puck.World.Client;
 /// constants, a document that loads successfully in isolation can never outgrow what this probe already reserved for
 /// this emitter alone.
 /// <para>
-/// That reservation alone is not enough: the probed envelope is shared with <c>WorldSceneEmitter</c> (one
-/// combined worst-case build — see <c>WorldFramePresenter</c>'s constructor), and a live scene
-/// mutation may have already spent capacity this emitter's own reservation covers but the scene's did not need at
-/// the time. So <see cref="Load"/> also runs a composed admission check (<see cref="Configure"/>) — the same joint
-/// measurer <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation, with the roles swapped: the
-/// candidate is the incoming document, composed against the current live world definition — before committing.
-/// Refused there, the previously loaded document (if any) keeps rendering unchanged, exactly like every other
-/// refusal this door can produce.
+/// The composed program's ceilings are shared with the world scene, so <see cref="Load"/> also runs the composed
+/// admission check <see cref="ConfigureAdmission"/> installs: the incoming document's materials counted beside the
+/// scene the live world definition draws (<see cref="WorldSceneEnvelope"/>), before committing. Refused there, the
+/// previously loaded document (if any) keeps rendering unchanged, exactly like every other refusal this door can
+/// produce.
 /// </para>
 /// </remarks>
 public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
-    private int m_instanceCapacity;
-    private Func<SdfDocumentProgram, (int Words, int Instances)>? m_measureComposed;
-    private Func<SdfDocumentProgram, int>? m_measureComposedInstances;
+    private Func<SdfDocumentProgram, string?>? m_refuseComposed;
     private SdfDocumentProgram? m_program;
-    private int m_programWordCapacity;
     private int m_revision;
 
     /// <summary>The currently loaded document's content hash (FNV-1a over its received UTF-8 bytes, computed before
     /// decode), or <see langword="null"/> when no document has loaded successfully yet.</summary>
     public ulong? ContentHash => m_program?.ContentHash;
-    /// <summary>The currently loaded document (or <see langword="null"/> when none has loaded successfully yet) —
-    /// read by <c>WorldFramePresenter</c>'s composed measurer so a scene mutation is checked
-    /// against whatever this emitter is actually holding, never a stale or assumed value.</summary>
+    /// <summary>The currently loaded document (or <see langword="null"/> when none has loaded successfully yet), whose
+    /// materials the world scene's count adds (<see cref="WorldSceneEnvelope.DocumentMaterials"/>).</summary>
     public SdfDocumentProgram? CurrentProgram => m_program;
     /// <inheritdoc/>
     public bool OwnsMaterialScope => true;
@@ -80,37 +73,15 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
         }
     }
 
-    /// <summary>Records the probed envelope floors and the composed-candidate measurer: given a candidate document,
-    /// returns the program-word/instance counts of that document composed alongside the current live world
-    /// definition. Configured once by <c>WorldFramePresenter</c>'s constructor, reusing the
-    /// exact same joint-measurement method <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation
-    /// (roles swapped) — see the type remarks. Unconfigured (a load somehow racing startup, or a probe-only test
-    /// double), <see cref="Load"/> skips the composed check — the same "unconfigured reads as fits" posture
-    /// <see cref="Puck.World.WorldRenderEnvelope"/> documents.</summary>
-    /// <param name="programWordCapacity">The program-word ceiling.</param>
-    /// <param name="instanceCapacity">The instance ceiling.</param>
-    /// <param name="measureComposed">Composes a candidate document against the current world definition and measures
-    /// the result.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="measureComposed"/> is <see langword="null"/>.</exception>
-    public void Configure(int programWordCapacity, int instanceCapacity, Func<SdfDocumentProgram, (int Words, int Instances)> measureComposed) {
-        ArgumentNullException.ThrowIfNull(argument: measureComposed);
+    /// <summary>Installs the composed admission check <see cref="Load"/> runs before committing a document.
+    /// Unconfigured, <see cref="Load"/> skips it.</summary>
+    /// <param name="refuse">Counts a candidate document composed with the live world scene and names the engine
+    /// ceiling it exceeds, or returns <see langword="null"/> when it fits.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="refuse"/> is <see langword="null"/>.</exception>
+    public void ConfigureAdmission(Func<SdfDocumentProgram, string?> refuse) {
+        ArgumentNullException.ThrowIfNull(argument: refuse);
 
-        m_programWordCapacity = programWordCapacity;
-        m_instanceCapacity = instanceCapacity;
-        m_measureComposed = measureComposed;
-        m_measureComposedInstances = null;
-    }
-    /// <summary>Configures the composed-admission check for a renderer that grows its program and instance buffers to
-    /// what is delivered, so only the engine's limits bound a document: the instance ceiling, and every refusal the
-    /// composed emission makes.</summary>
-    /// <param name="measureComposedInstances">Composes a candidate document against the current world definition and
-    /// returns the composed instance count, emitting without packing a program.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="measureComposedInstances"/> is <see langword="null"/>.</exception>
-    public void ConfigureGrowing(Func<SdfDocumentProgram, int> measureComposedInstances) {
-        ArgumentNullException.ThrowIfNull(argument: measureComposedInstances);
-
-        m_measureComposed = null;
-        m_measureComposedInstances = measureComposedInstances;
+        m_refuseComposed = refuse;
     }
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
@@ -142,8 +113,8 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     public (int Ops, int Materials, ulong Hash) Load(ReadOnlyMemory<byte> utf8Json) {
         var program = SdfDocumentDecoder.Decode(utf8Json: utf8Json);
 
-        // Dry-run against a THROWAWAY builder, in its own material scope (mirrors WorldSceneEmitter.ComposeCandidate's
-        // own scope) — every builder throw the document could ever trigger surfaces HERE, at load time, rather than
+        // Dry-run against a THROWAWAY builder, in its own material scope (the scope the composition wraps this emitter
+        // in) — every builder throw the document could ever trigger surfaces HERE, at load time, rather than
         // silently waiting for the next composition rebuild to discover it. ISOLATED on purpose: this catches a
         // structurally-broken document (a builder-level refusal) regardless of what else is loaded; it says nothing
         // about capacity, which the composed check below owns.
@@ -165,44 +136,13 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
             );
         }
 
-        // THE COMPOSED-ADMISSION CHECK (the fix for the asymmetric join): a document that validates alone can still,
-        // combined with whatever the live world scene is currently spending, exceed the ONE shared envelope the two
-        // sides split — the packed tables a program carries are computed over the WHOLE composed build, not
-        // additively per contributor. Measured and refused HERE, before commit, exactly mirroring how a scene
-        // mutation is refused against this same envelope rather than discovered later as an UploadProgram throw.
-        if ((m_measureComposed is not null) || (m_measureComposedInstances is not null)) {
-            var growing = (m_measureComposedInstances is not null);
-            var words = 0;
-            int instances;
-
-            try {
-                if (m_measureComposedInstances is { } measureInstances) {
-                    instances = measureInstances(program);
-                } else {
-                    (words, instances) = m_measureComposed!(program);
-                }
-            } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
-                throw new SdfDocumentException(
-                    message: exception.Message,
-                    reason: SdfRefusal.BuilderRejectedProgram
-                );
-            }
-
-            if (!growing && (words > m_programWordCapacity)) {
-                throw new SdfDocumentException(
-                    message: $"document: composed with the live world scene, program words {words} exceed the probed render envelope {m_programWordCapacity} — the previously loaded document (if any) keeps rendering unchanged.",
-                    reason: SdfRefusal.ComposedProgramWordsExceeded
-                );
-            }
-
-            var instanceLimit = (growing ? SdfProgramBuilder.MaxInstances : m_instanceCapacity);
-
-            if (instances > instanceLimit) {
-                throw new SdfDocumentException(
-                    message: $"document: composed with the live world scene, instances {instances} exceed the render limit {instanceLimit} — the previously loaded document (if any) keeps rendering unchanged.",
-                    reason: SdfRefusal.ComposedInstancesExceeded
-                );
-            }
+        // Composed with the scene the live world draws, before commit: a document that validates alone can still spend
+        // what the composed program's ceilings leave.
+        if (m_refuseComposed?.Invoke(arg: program) is { } refusal) {
+            throw new SdfDocumentException(
+                message: $"document: composed with the live world scene, {refusal} — the previously loaded document (if any) keeps rendering unchanged.",
+                reason: SdfRefusal.ComposedEnvelopeExceeded
+            );
         }
 
         m_program = program;

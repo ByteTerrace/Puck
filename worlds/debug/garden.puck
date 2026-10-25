@@ -78,7 +78,7 @@ views {
 placements {
   // Two derived face screens: the arrival frame's glass and the far frame's.
   policy {
-    authoringHeadroomPlacements: 0
+    authoringHeadroomInstances: 0
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1

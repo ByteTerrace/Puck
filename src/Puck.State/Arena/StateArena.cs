@@ -259,7 +259,7 @@ public sealed partial class StateArena {
     /// <param name="reason">Why a row was refused.</param>
     /// <returns>Whether the load succeeded. An enclosing scope can rewind the entire load.</returns>
     public bool TryLoadSeeding(IReadOnlyList<StateRow> rows, IReadOnlySet<string> seeded, in ArenaTime time, out string reason) =>
-        TryLoad(rows: SeededRows(seeded: seeded, source: rows), time: in time, reason: out reason);
+        TryLoadCore(rows: SeededRows(seeded: seeded, source: rows), time: in time, reason: out reason, onlyLoadedBoards: true);
 
     private static bool TryValidateDerivedDomains(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<StateRow> rows, out string reason) {
         for (var boardOrdinal = 0; (boardOrdinal < layout.RowCount); boardOrdinal++) {

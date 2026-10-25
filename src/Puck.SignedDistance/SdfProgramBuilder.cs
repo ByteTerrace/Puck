@@ -153,20 +153,6 @@ public sealed partial class SdfProgramBuilder {
             val2: screenSurfaceCapacity
         ));
     }
-    /// <summary>Creates a builder that emits into a caller's storage, emptied first, so a caller that emits a whole
-    /// world's program again and again (a capacity measure) reuses its backing arrays rather than growing large-object
-    /// arrays from empty every time. <see cref="Build"/> copies what it reads, so a built program never shares the
-    /// storage; the caller hands the storage to no other builder while this one is in use.</summary>
-    /// <param name="storage">The storage the builder emits into.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="storage"/> is <see langword="null"/>.</exception>
-    public SdfProgramBuilder(SdfProgramBuilderStorage storage) : this() {
-        ArgumentNullException.ThrowIfNull(argument: storage);
-
-        storage.Clear();
-        m_instructions = storage.Instructions;
-        m_instances = storage.Instances;
-        m_materials = storage.Materials;
-    }
 
     // Allocated only when a scope opens. Each entry owns its pop parameters and empty-scope admission count.
     private Stack<(SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen, Vector4 Data0, float StepCount)>? m_fieldScopes;

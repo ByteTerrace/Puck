@@ -1,13 +1,12 @@
 using System.Numerics;
-using Puck.SdfVm;
 using Puck.SignedDistance;
-using Puck.World.Server;
 
 namespace Puck.World.Client;
 
-/// <summary>Builds the candidate-aware worst-case program used by session-screen renderers. The
+/// <summary>Emits the worst-case program a session-screen renderer's construction probe sizes its buffers from. The
 /// placement rows come from the candidate definition while avatar colors come from the live mirror; the stamp pool's
-/// worst case and every catalog avatar/rig are emitted, matching the renderer's construction probe.</summary>
+/// worst case and every catalog avatar/rig are emitted. Admission counts the same parts
+/// (<see cref="WorldSceneEnvelope.Of"/>).</summary>
 internal static class WorldSessionRenderEnvelope {
     // Reserves every currently-authored slab, the whole derived-face band, and the document's authored screen
     // headroom. The hidden headroom slabs are capacity probes only; live emission adds them if and when an authored
@@ -101,34 +100,6 @@ internal static class WorldSessionRenderEnvelope {
             probeWorstCase: true,
             slotBase: slotBase
         );
-    }
-    // (See WorldSessionWindowLeases below for the WINDOW projection's own render-cost lease — a distinct concern
-    // from this type's program-capacity measurement, kept in the same file because both answer "what does this
-    // session render cost.")
-
-    /// <summary>Emits a candidate definition in the program shape the offscreen renderer probed and counts its
-    /// instances, without packing a program: the measure of a renderer that grows to what is delivered.</summary>
-    public static int MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, bool includeAdjacencies = false) {
-        ArgumentNullException.ThrowIfNull(argument: candidate);
-        ArgumentNullException.ThrowIfNull(argument: bodyColor);
-
-        return SdfProgramMeasure.Instances(emit: builder => {
-            EmitProbe(
-                bodyColor: bodyColor,
-                builder: builder,
-                candidate: candidate,
-                colors: colors,
-                pool: pool,
-                slotBase: 0
-            );
-
-            if (includeAdjacencies) {
-                WorldPlacementStamper.EmitProbe(
-                    builder: builder,
-                    reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
-                );
-            }
-        });
     }
 }
 

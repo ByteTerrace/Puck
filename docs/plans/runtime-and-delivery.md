@@ -381,7 +381,7 @@ and resolves a target lock inside a register's range and cone, so either the
 register table is disclosed as static document geometry or cone resolution
 moves to the authority and the client submits an aim ray. The envelope is
 `Authoring.MaxPlacementScale`, `AuthoringHeadroomScreens`,
-`AuthoringHeadroomPlacements`, and `DerivedFaceScreens`, which are derived from
+`AuthoringHeadroomInstances`, and `DerivedFaceScreens`, which are derived from
 the placements when unauthored, so the presenters most likely recompute it from
 the disclosed placements and screens; an explicitly authored policy row is the
 case that decides it. Check: a designation from a view-only client reaches the

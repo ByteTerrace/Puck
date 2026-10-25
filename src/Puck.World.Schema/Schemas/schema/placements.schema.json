@@ -152,8 +152,8 @@
           "description": "Boot-consumed. The extra screen slots the probe reserves, bounded by the engine\u0027s MaxScreenSurfaces ceiling.",
           "type": "integer"
         },
-        "authoringHeadroomPlacements": {
-          "description": "Boot-consumed. The placement rows of headroom the probe reserves beyond the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count; these independent conservative buffer floors are not a strict row quota.",
+        "authoringHeadroomInstances": {
+          "description": "Boot-consumed. The instances the probe reserves beyond the boot scene, so live editing grows into buffers already sized for it; clamped to what the engine\u0027s instance ceiling leaves above the boot scene. It is no quota: buffers grow past it, and only the engine ceiling refuses a candidate.",
           "type": "integer"
         },
         "minPlacementScale": {
@@ -183,7 +183,7 @@
       },
       "required": [
         "authoringHeadroomScreens",
-        "authoringHeadroomPlacements",
+        "authoringHeadroomInstances",
         "minPlacementScale",
         "maxPlacementScale",
         "candidateRadius",

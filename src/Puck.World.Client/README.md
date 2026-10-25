@@ -18,12 +18,15 @@ audio director imports `Puck.World.Audio` types directly. `WorldFramePresenter`,
 root-crossing dependency, the audio director, reaches them only through
 `IWorldAudioFrameFeed`/`IWorldAudioCueSink` below.
 
-Live static-placement admission reserves both rendering forms at boot: whole
-creation stamps and per-shape instances. Each `authoringHeadroomPlacements` slot
-reserves a whole stamp and up to `WorldPlacementPolicy.MaxShapesPerStamp` entries
-in the per-shape floor. The floors are conservative GPU capacity reservations,
-not a strict count of editable rows. This keeps newly discovered or authored
-simple creations inside the same frozen envelope as scoped creations.
+`WorldSceneEnvelope` counts a world scene's render envelope on the CPU from the
+definition alone: the screens' slabs, the static placements' stamp reservation
+(whole creation stamps and per-shape instances), the stamp pool's and the avatar
+catalog's worst cases, and the adjacency bands. Every boot reports and checks
+it, and the render-capacity oracle admits each render-relevant mutation by it.
+The construction probe reserves the boot scene plus
+`authoringHeadroomInstances` per-shape instances, clamped to the instance
+ceiling; buffers grow past that reservation, so only an engine ceiling refuses
+an edit.
 
 The animated stamp pool also separates capacity from live geometry. Its boot
 probe reserves every registration and shape slot, while the running program

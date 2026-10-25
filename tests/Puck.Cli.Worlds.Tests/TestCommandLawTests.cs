@@ -157,7 +157,7 @@ public sealed class TestCommandLawTests {
 
             placements {
               policy {
-                authoringHeadroomPlacements: 0
+                authoringHeadroomInstances: 0
                 authoringHeadroomScreens: 0
                 candidateCap: 1
                 candidateRadius: 1
@@ -243,7 +243,7 @@ public sealed class TestCommandLawTests {
 
             placements {
               policy {
-                authoringHeadroomPlacements: 0
+                authoringHeadroomInstances: 0
                 authoringHeadroomScreens: 0
                 candidateCap: 1
                 candidateRadius: 1

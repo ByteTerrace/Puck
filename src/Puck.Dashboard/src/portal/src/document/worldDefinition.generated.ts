@@ -7511,9 +7511,9 @@ export type WorldPlacementPolicyDefaults = {
    */
   authoringHeadroomScreens: number;
   /**
-   * Boot-consumed. The placement rows of headroom the probe reserves beyond the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count; these independent conservative buffer floors are not a strict row quota.
+   * Boot-consumed. The instances the probe reserves beyond the boot scene, so live editing grows into buffers already sized for it; clamped to what the engine's instance ceiling leaves above the boot scene. It is no quota: buffers grow past it, and only the engine ceiling refuses a candidate.
    */
-  authoringHeadroomPlacements: number;
+  authoringHeadroomInstances: number;
   /**
    * Live-consumed. The placement uniform-scale envelope's floor — a pure validator bound, revalidated on every placement mutation.
    */

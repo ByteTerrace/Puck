@@ -227,11 +227,60 @@ public static class WorldDefinitionRows {
     /// <param name="creations">The section's creations.</param>
     /// <param name="id">The creation id to find.</param>
     /// <returns>The creation, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldPrototype? FindCreation(IReadOnlyList<WorldPrototype>? creations, string id) => Find(
-        rows: creations,
-        name: id,
-        selector: static creation => creation.Id
-    );
+    public static WorldPrototype? FindCreation(IReadOnlyList<WorldPrototype>? creations, string id) {
+        if ((creations is null) || (creations.Count < IndexedCreationCount)) {
+            return Find(
+                rows: creations,
+                name: id,
+                selector: static creation => creation.Id
+            );
+        }
+
+        var index = CreationIndexOf(creations: creations);
+
+        if (!index.Positions.TryGetValue(key: id, value: out var position)) {
+            return null;
+        }
+
+        return creations[position];
+    }
+
+    // A section of at least this many creations resolves an id through an index rather than a scan: every placement a
+    // scene emits, a collider set compiles or a face derivation walks resolves its creation, so a scan is a placement
+    // count times a creation count per pass.
+    private const int IndexedCreationCount = 16;
+
+    // Each creations list's first position for every id, built once per list. A definition's sections are immutable
+    // once composed; the count recorded beside the index rebuilds it should a list grow after it was indexed.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<WorldPrototype>, CreationIndex> CreationIndices = [];
+
+    private static CreationIndex CreationIndexOf(IReadOnlyList<WorldPrototype> creations) {
+        if (
+            CreationIndices.TryGetValue(key: creations, value: out var held) &&
+            (held.Count == creations.Count)
+        ) {
+            return held;
+        }
+
+        var positions = new Dictionary<string, int>(capacity: creations.Count, comparer: StringComparer.Ordinal);
+
+        for (var position = 0; (position < creations.Count); position++) {
+            if ((((object?)creations[position]) is not null) && (creations[position].Id is { } key)) {
+                _ = positions.TryAdd(key: key, value: position);
+            }
+        }
+
+        var built = new CreationIndex(
+            Count: creations.Count,
+            Positions: positions
+        );
+
+        CreationIndices.AddOrUpdate(key: creations, value: built);
+
+        return built;
+    }
+
+    private sealed record CreationIndex(int Count, Dictionary<string, int> Positions);
     /// <summary>Finds a curves row by stable name.</summary>
     /// <param name="curves">The section's curve rows.</param>
     /// <param name="name">The curve row name to find.</param>
