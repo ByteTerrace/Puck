@@ -1,5 +1,6 @@
-// One group per acquired image. Four lanes sum each of the sixteen cells in source-pixel order; a fixed reduction
-// tree publishes the pixel-weighted whole-image mean, in nits. No CPU color or displayed-frame guess is read.
+// One group per acquired image. Four lanes sum each of the sixteen cells over at most a 32 x 32 grid of evenly
+// spaced pixel centres, so the cost is bounded however large the image grows; a fixed reduction tree publishes the
+// whole-image mean, in nits. No CPU color or displayed-frame guess is read.
 #include "../isa/sdf-sky-environment.interface.hlsli"
 #include "../isa/sdf-render.hlsli"
 #include "../frame/sdf-screen-mapping.hlsli"
@@ -18,12 +19,14 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint2 cellXY = uint2(cell % SDF_SCREEN_EMISSION_EDGE, cell / SDF_SCREEN_EMISSION_EDGE);
     uint2 first = cellXY * extent / SDF_SCREEN_EMISSION_EDGE;
     uint2 last = (cellXY + 1u) * extent / SDF_SCREEN_EMISSION_EDGE;
-    uint width = last.x - first.x;
-    uint count = width * (last.y - first.y);
+    uint2 size = last - first;
+    uint2 grid = min(size, uint2(32u, 32u));
+    uint count = grid.x * grid.y;
     float3 sum = 0.0;
     uint samples = 0u;
     [loop] for (uint pixel = lane % 4u; pixel < count; pixel += 4u) {
-        uint2 at = first + uint2(pixel % width, pixel / width);
+        uint2 index = uint2(pixel % grid.x, pixel / grid.x);
+        uint2 at = first + ((((index * 2u) + 1u) * size) / (grid * 2u));
         sum += max(screenSources[screen].Load(int3(at, 0)).rgb, 0.0);
         samples++;
     }
