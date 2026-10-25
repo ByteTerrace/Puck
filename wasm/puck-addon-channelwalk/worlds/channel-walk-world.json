@@ -1858,7 +1858,7 @@
     ],
     "policy": {
       "authoringHeadroomScreens": 4,
-      "authoringHeadroomPlacements": 8,
+      "authoringHeadroomInstances": 2048,
       "minPlacementScale": 0.2,
       "maxPlacementScale": 5,
       "candidateRadius": 32,

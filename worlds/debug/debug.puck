@@ -162,7 +162,7 @@ placements {
   // Twelve derived face screens: the painting wing's six canvases (paintings.puck), the Wonderland doors' two
   // (wonderland.puck), the rate range's three windows (range.puck) and the probe screen (camera-course.puck).
   policy {
-    authoringHeadroomPlacements: 22
+    authoringHeadroomInstances: 4096
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1

@@ -9,7 +9,6 @@ using Puck.Shaders;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
-using Puck.World.Client.Sdf;
 using Puck.World.Server;
 
 namespace Puck.World.Client;
@@ -425,50 +424,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return combined;
     }
-    // THE COMPOSITION-SAFE ADMISSION MEASURE, GENERALIZED to take EITHER side as the candidate (both Configure calls
-    // above reuse this ONE method rather than each hand-rolling their own builder walk):
-    //   - the scene-mutation check passes the candidate WorldDefinition and the CURRENTLY loaded document (read via
-    //     m_sdfDocuments.CurrentProgram);
-    //   - the document-load check passes the CURRENT live WorldDefinition and the CANDIDATE document (not yet
-    //     committed).
-    // WorldRenderEnvelope's ceiling was probed from BOTH composed emitters together (m_composed's construction-time
-    // probe walks [m_emitter, m_sdfDocuments] into ONE program — see SdfCompositionFrameSource.BuildProgram), so
-    // either direction must be measured the same way: composing both sides into one shared builder, then measuring
-    // that ONE composed program. Measuring either side alone would let a mutation on ONE side spend program-word/
-    // instance capacity the OTHER side already holds, since
-    // the packed tables a program carries (the segment directory, world-segment list, rigid plan, part programs) are
-    // computed over the WHOLE composed program and are not additive across emitters — a later commit on the
-    // unchecked side could exceed an engine structural limit at the next rebuild, even with growable buffers.
-    //
-    // Emission order and slot base mirror SdfCompositionFrameSource.BuildProgram exactly: the world side first (its
-    // own material scope, matching ComposeCandidate's internal wrap), then the document side at the slot base the
-    // world emitter's FIXED (candidate-independent) DynamicSlotCount reserves — the document side declares no dynamic
-    // slots of its own (see WorldSdfDocumentEmitter's type remarks), so the base only has to line up for parity with
-    // the live composition, not correctness. A null documentProgram (no document loaded) composes the world side alone.
-    private int MeasureComposed(WorldDefinition worldDefinition, SdfDocumentProgram? documentProgram) => SdfProgramMeasure.Instances(emit: builder => {
-        m_emitter.ComposeCandidate(
-            builder: builder,
-            candidate: worldDefinition
-        );
-
-        if (documentProgram is { } program) {
-            using (builder.BeginMaterialScope()) {
-                SdfDocumentDecoder.Replay(
-                    builder: builder,
-                    program: program
-                );
-            }
-        }
-
-        // The SAME reservation the construction probe froze the envelope with, taken over the CANDIDATE's own
-        // adjacency rows — measuring only the static half would let a mutation spend the room a border's bodies hold,
-        // and the next rebuild could exceed the composed program's structural limits.
-        WorldAdjacencySceneEmitter.EmitReservation(
-            bandCount: WorldAdjacencyBands.ProjectionCapacity(definition: worldDefinition),
-            builder: builder,
-            slotBase: m_emitter.DynamicSlotCount
-        );
-    });
     // Build the presentation query field from the same static scene layers the composed frame renders, and park it on
     // the client so the chase camera's clearance sweep and the stamp pool's limb probes share ONE evaluator. The live
     // program cannot be queried directly because its avatar catalog carries TransformDynamic instructions;
@@ -2185,8 +2140,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <param name="simulation">The host-ticked simulation whose completed tick drives presentation sources.</param>
     /// <param name="settings">The live render settings read every captured frame (console-mutated in real time).</param>
     /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
-    /// <param name="envelope">The render-capacity oracle configured here with the probed floors and the emitter's
-    /// candidate measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
+    /// <param name="envelope">The boot scene's envelope: the headroom the construction probe reserves, and the count a
+    /// <c>puck.sdf.v1</c> document load is admitted against.</param>
     /// <param name="seatBindings">The seat's published mode state — whether <c>views.cameraRig</c> frames it instead
     /// of <c>views.seatRig</c>.</param>
     /// <param name="animator">The animated-placement replay pool.</param>
@@ -2218,7 +2173,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldSceneEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         Editor = (editor ?? new WorldEditorSeats());
@@ -2300,6 +2255,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             audio: audio,
             client: client,
             continuum: continuum,
+            envelope: envelope,
             text: text
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(
@@ -2340,34 +2296,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         InstanceCapacity = m_composed.WorstCaseInstanceCapacity;
         DynamicTransformCapacity = m_composed.WorstCaseDynamicTransformCapacity;
 
-        // Publish the probed envelope + a JOINT candidate measurer so a scene/screen/placement mutation is
-        // capacity-checked at apply time against the SAME worst-case build (avatars and the animated pool are always at
-        // worst case; scene/screens/static placements measure AS AUTHORED). The renderer grows beyond its initial
-        // reserve, while this check enforces engine limits against whatever puck.sdf.v1 document is CURRENTLY
-        // loaded (see MeasureComposed: measuring the world emitter alone would let a mutation spend capacity
-        // the loaded document already holds, since the packed tables the two share are computed over the COMPOSED
-        // program and are not additive).
-        _ = envelope.ConfigureGrowing(
-            measureInstances: candidate => MeasureComposed(
-                worldDefinition: candidate,
-                documentProgram: m_sdfDocuments.CurrentProgram
-            )
-        );
-
-        // THE RECIPROCAL HALF (the asymmetric-join fix): a puck.sdf.v1 document load (world.sdf.load) commits OUTSIDE
-        // WorldRenderEnvelope's queued-mutation path entirely — it is a client-local Immediate door (see
-        // WorldSdfCommandModule), never a WorldMutation the server drains — so it needs its OWN composed-admission
-        // check against the SAME engine limits, reusing the SAME MeasureComposed method with the roles swapped: the
-        // CANDIDATE is the incoming document, the CURRENT side is the live world definition (m_client.Definition, read
-        // fresh at call time so a document loaded after a scene mutation is checked against what that mutation left
-        // behind, never a stale snapshot). Without this, a scene mutation could spend capacity a document isn't
-        // currently using, and a subsequently loaded — individually valid — document would commit unchecked and
-        // overflow the composed program at the next rebuild.
-        m_sdfDocuments.ConfigureGrowing(
-            measureComposedInstances: candidateProgram => MeasureComposed(
-                worldDefinition: m_client.Definition,
-                documentProgram: candidateProgram
-            )
+        // The scene's count adds the loaded document's materials, and a document load is admitted against the scene the
+        // live definition draws: a document declares no instances, so its materials are all it can spend.
+        envelope.DocumentMaterials = () => (m_sdfDocuments.CurrentProgram?.Materials.Count ?? 0);
+        m_sdfDocuments.ConfigureAdmission(
+            refuse: candidateProgram => WorldSceneEnvelope.Of(
+                candidate: m_client.Definition,
+                documentMaterials: candidateProgram.Materials.Count
+            ).Cost.Exceeds()
         );
 
         // NEVER m_client.DefinitionRevision here: the client's primer delivery (LoopbackTransport.Bind, run

@@ -48,12 +48,12 @@ public sealed partial class WorldScreenBinder {
             (destination is not null)
         ) {
             feed.EnvelopeRegistration?.Dispose();
-            feed.EnvelopeRegistration = destination.Server.Envelope.ConfigureGrowing(
+            feed.EnvelopeRegistration = destination.Server.Envelope.Configure(
                 // The envelope sizes the observer's view from what the candidate's admission discloses this viewer,
                 // never the full candidate: what would render nothing measures nothing.
-                measureInstances: candidate => ((feed.Observation?.Disclose(candidate: candidate) is { } disclosed)
+                measure: candidate => ((feed.Observation?.Disclose(candidate: candidate) is { } disclosed)
                     ? emitter.MeasureCandidate(candidate: disclosed)
-                    : 0)
+                    : default)
             );
         }
 

@@ -154,16 +154,11 @@ public enum SdfRefusal {
     [Refusal(door: "sdf.decode", condition: "an internal op-kind switch has no case for a decoded op (defensive; not reachable through this decoder's own op-name table)", kind: RefusalKind.Verdict)]
     UnhandledOpKind,
 
-    /// <summary>The document, composed with the CURRENT live world definition, would exceed the probed render
-    /// envelope's program-word ceiling — the document validates alone but not beside what the scene currently
-    /// spends. See <see cref="Puck.World.Client.WorldSdfDocumentEmitter.Load"/>.</summary>
-    [Refusal(door: "sdf.decode", condition: "the document, composed with the live world scene, would exceed the probed program-word envelope", kind: RefusalKind.Verdict)]
-    ComposedProgramWordsExceeded,
-
-    /// <summary>The document, composed with the CURRENT live world definition, would exceed the probed render
-    /// envelope's instance ceiling. See <see cref="Puck.World.Client.WorldSdfDocumentEmitter.Load"/>.</summary>
-    [Refusal(door: "sdf.decode", condition: "the document, composed with the live world scene, would exceed the probed instance envelope", kind: RefusalKind.Verdict)]
-    ComposedInstancesExceeded,
+    /// <summary>The document, composed with the live world scene, would exceed an engine program ceiling — it
+    /// validates alone but not beside what the scene spends. See
+    /// <see cref="Puck.World.Client.WorldSdfDocumentEmitter.Load"/>.</summary>
+    [Refusal(door: "sdf.decode", condition: "the document, composed with the live world scene, would exceed the engine's instance or material ceiling", kind: RefusalKind.Verdict)]
+    ComposedEnvelopeExceeded,
 
     /// <summary>A field op (<c>noiseDisplace</c>) sits outside a <c>push</c>/<c>pop</c> pair. A field op reads the
     /// running accumulator, so unscoped it would displace every shape the composed world program accumulated before

@@ -827,7 +827,7 @@ internal static partial class Fixtures {
     /// behavior — the engine carries none, and a world of only static placement rows authors none either (its
     /// rows ride the derived policy; see <see cref="WorldPlacementPolicyDefaults.DeriveFrom"/>).</summary>
     public static WorldPlacementPolicyDefaults StandardAuthoring { get; } = new(
-        AuthoringHeadroomPlacements: 8,
+        AuthoringHeadroomInstances: 2048,
         AuthoringHeadroomScreens: 4,
         CandidateCap: 16,
         CandidateRadius: 32f,

@@ -194,10 +194,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         RequireIntRange(
-            value: authoring.AuthoringHeadroomPlacements,
+            value: authoring.AuthoringHeadroomInstances,
             min: 0,
-            max: 256,
-            name: "placements.policy.authoringHeadroomPlacements",
+            max: SdfProgramBuilder.MaxInstances,
+            name: "placements.policy.authoringHeadroomInstances",
             errors: errors
         );
         RequirePositive(

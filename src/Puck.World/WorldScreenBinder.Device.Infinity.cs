@@ -190,9 +190,9 @@ public sealed partial class WorldScreenBinder {
                 () => ((entry.Views.Count == 0) ? null : entry.Views[0].Camera.Position), null, null) { Infinity = entry });
         }
         if (m_instanceHost.TryGet(instance: out var destination, name: instance) && (destination is not null)) {
-            entry.Envelope = destination.Server.Envelope.ConfigureGrowing(
-                measureInstances: candidate => ((hosted is null) ? emitter.MeasureCandidate(candidate: candidate)
-                    : ((hosted.Observation?.Disclose(candidate: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : 0)));
+            entry.Envelope = destination.Server.Envelope.Configure(
+                measure: candidate => ((hosted is null) ? emitter.MeasureCandidate(candidate: candidate)
+                    : ((hosted.Observation?.Disclose(candidate: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : default)));
         }
         m_feedsMoved = true;
         return entry;

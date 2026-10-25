@@ -48,8 +48,8 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// sections for a consumption nuance that consumers already handle honestly):
 /// <list type="bullet">
 /// <item><description><b>Boot-consumed</b> (<see cref="AuthoringHeadroomScreens"/>,
-/// <see cref="AuthoringHeadroomPlacements"/>): read exactly once, at
-/// <c>Client.WorldSceneEmitter</c> construction, into the initial render-capacity reserve. Live edits to these
+/// <see cref="AuthoringHeadroomInstances"/>): read exactly once, at boot
+/// (<c>Client.WorldSceneEnvelope</c>), into the initial render-capacity reserve. Live edits to these
 /// reservation fields apply at the next boot; actual program and instance buffers grow with live content regardless
 /// of the initial headroom. The validator still gates the new values against engine caps immediately.</description></item>
 /// <item><description><b>Live-consumed</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
@@ -61,9 +61,9 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// </summary>
 /// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen slots the probe reserves, bounded by the
 /// engine's <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
-/// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
-/// the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count;
-/// these independent conservative buffer floors are not a strict row quota.</param>
+/// <param name="AuthoringHeadroomInstances">Boot-consumed. The instances the probe reserves beyond the boot scene, so
+/// live editing grows into buffers already sized for it; clamped to what the engine's instance ceiling leaves above the
+/// boot scene. It is no quota: buffers grow past it, and only the engine ceiling refuses a candidate.</param>
 /// <param name="MinPlacementScale">Live-consumed. The placement uniform-scale envelope's floor — a pure validator
 /// bound, revalidated on every placement mutation.</param>
 /// <param name="MaxPlacementScale">Live-consumed. The placement uniform-scale envelope's ceiling — also the worst-case
@@ -81,7 +81,7 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// stays inside the engine screen table.</param>
 public sealed record WorldPlacementPolicyDefaults(
     int AuthoringHeadroomScreens,
-    int AuthoringHeadroomPlacements,
+    int AuthoringHeadroomInstances,
     float MinPlacementScale,
     float MaxPlacementScale,
     float CandidateRadius,
@@ -93,7 +93,7 @@ public sealed record WorldPlacementPolicyDefaults(
     /// deadline, no derived faces. What an unauthored policy resolves to when the world also authors no placement
     /// rows (see <see cref="DeriveFrom"/>); a world reading this cannot author placements or edit.</summary>
     public static WorldPlacementPolicyDefaults Absent { get; } = new WorldPlacementPolicyDefaults(
-        AuthoringHeadroomPlacements: 0,
+        AuthoringHeadroomInstances: 0,
         AuthoringHeadroomScreens: 0,
         CandidateCap: 0,
         CandidateRadius: 0f,
@@ -104,7 +104,7 @@ public sealed record WorldPlacementPolicyDefaults(
     );
 
     /// <summary>Derives what an unauthored <c>placements.policy</c> means: zero initial
-    /// headroom (placements and screens), no derived faces, no candidate ring, no preview deadline — and a scale
+    /// headroom (instances and screens), no derived faces, no candidate ring, no preview deadline — and a scale
     /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
     /// authored (a row's scale is admitted because it is authored, never against a guessed envelope) and the
     /// envelope's ceiling keeps <c>Client.WorldStampPool</c>'s probe bound radius covering the largest authored

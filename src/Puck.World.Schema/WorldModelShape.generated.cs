@@ -4307,7 +4307,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("authoringHeadroomScreens", typeof(global::System.Int32), typeof(global::Puck.World.WorldPlacementPolicyDefaults), "AuthoringHeadroomScreens", Read | Write, static value => ((global::Puck.World.WorldPlacementPolicyDefaults)value).AuthoringHeadroomScreens),
-                M("authoringHeadroomPlacements", typeof(global::System.Int32), typeof(global::Puck.World.WorldPlacementPolicyDefaults), "AuthoringHeadroomPlacements", Read | Write, static value => ((global::Puck.World.WorldPlacementPolicyDefaults)value).AuthoringHeadroomPlacements),
+                M("authoringHeadroomInstances", typeof(global::System.Int32), typeof(global::Puck.World.WorldPlacementPolicyDefaults), "AuthoringHeadroomInstances", Read | Write, static value => ((global::Puck.World.WorldPlacementPolicyDefaults)value).AuthoringHeadroomInstances),
                 M("minPlacementScale", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementPolicyDefaults), "MinPlacementScale", Read | Write, static value => ((global::Puck.World.WorldPlacementPolicyDefaults)value).MinPlacementScale),
                 M("maxPlacementScale", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementPolicyDefaults), "MaxPlacementScale", Read | Write, static value => ((global::Puck.World.WorldPlacementPolicyDefaults)value).MaxPlacementScale),
                 M("candidateRadius", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementPolicyDefaults), "CandidateRadius", Read | Write, static value => ((global::Puck.World.WorldPlacementPolicyDefaults)value).CandidateRadius),

@@ -489,18 +489,32 @@ public static class WorldPostBuildWiring {
         // saying where it got to rather than an empty directory a reader cannot tell from a crash.
         services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: scheduleRunner.Drain);
 
-        // THE RENDER-CAPACITY PRE-FLIGHT. The composed scene's construction-time probe is the first and only point
-        // where the WHOLE worst case exists — the boot document's own rows, the avatar catalog, and one reservation
-        // per adjacency band — and it is pure CPU, so it runs here, before any hosted service starts. A world whose
-        // composed scene cannot fit an engine ceiling refuses BY NAME with the same shape every other refused boot
-        // document takes, instead of tearing the host down from inside a service factory mid-startup. Presentation-
-        // only: a headless boot composes no frame source and this resolves to null.
+        // THE RENDER-CAPACITY PRE-FLIGHT, every boot shape: the boot scene counted on the CPU (WorldSceneEnvelope) — the
+        // boot document's own rows, the stamp pool, the avatar catalog and one reservation per adjacency band — so a
+        // world whose scene cannot fit an engine ceiling refuses by name, headless or windowed, before any hosted
+        // service starts. The same count admits every later render-relevant mutation (WorldRenderEnvelope).
+        var scene = services.GetRequiredService<WorldSceneEnvelope>();
+
+        Console.Error.WriteLine(value: scene.Describe());
+
+        if (scene.Boot.Cost.Exceeds() is { } exceeded) {
+            Console.Error.WriteLine(value: $"[world] definition refused: the composed render scene's {exceeded}. Author fewer placements, screens or adjacency edges.");
+
+            return false;
+        }
+
+        _ = services.GetRequiredService<WorldRenderEnvelope>().Configure(measure: candidate => scene.Measure(candidate: candidate).Cost);
+
+        // A presented boot's construction probe emits the same scene into one program, which sizes the renderer's
+        // buffers; its instances are the envelope's reservation by construction, and a difference names a part the
+        // count and the probe disagree about.
         try {
             if (services.GetService<WorldFramePresenter>() is { } composed) {
-                // The probed envelope's own read-back: the frozen ceilings every live rebuild fits inside, stated
-                // once at boot beside the other origin lines, so the headroom a world is running on is observable
-                // rather than inferred from whether it crashed.
-                Console.Error.WriteLine(value: $"[world.render] envelope: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
+                Console.Error.WriteLine(value: $"[world.render] probe: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
+
+                if (composed.InstanceCapacity != scene.ReservedInstances) {
+                    Console.Error.WriteLine(value: $"[world.render] envelope mismatch: the probe declares {composed.InstanceCapacity} instances, the count reserves {scene.ReservedInstances}");
+                }
             }
 
             // The default render graph plans here too, off the GPU, so a views.post config its package's schema does not

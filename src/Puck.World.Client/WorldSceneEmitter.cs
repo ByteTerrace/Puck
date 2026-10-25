@@ -17,19 +17,10 @@ namespace Puck.World.Client;
 /// <para>
 /// The probe branch (the contract in <see cref="ISdfSceneEmitter"/>): <see cref="Emit"/> under
 /// <see cref="SdfEmitContext.Probe"/> emits the largest rig in every detailed body slot and one coarse capsule in
-/// every remaining crowd slot, plus the worst-case animated pool, reserved placement instances, and authoring
-/// headroom (screens and placement stamps) that reserves live editing
-/// room. The headroom padding lives here, inside the worst case, rather than being applied to the emitter's inputs by
-/// a caller — the capacity-probe doctrine's rule that an emitter's probe branch must dominate its own live branch on
-/// its own.
-/// </para>
-/// <para>
-/// Admission (<see cref="ComposeCandidate"/>) is world policy, not composition-host business: what may enter the
-/// document is the document owner's question, so it is a member on this type rather than a mode on the generic
-/// emitter contract. It composes a candidate through the same emit path into a shared builder — see
-/// <see cref="Puck.World.Client.WorldFramePresenter"/>'s joint measurer, which composes it alongside whatever
-/// <c>puck.sdf.v1</c> document is currently loaded before measuring the counts the render envelope compares, so a
-/// mutation is judged against the same program that would actually be built.
+/// every remaining crowd slot, plus the worst-case animated pool, the boot placements' stamp reservation, and the
+/// authoring headroom <see cref="WorldSceneEnvelope"/> froze (screens and per-shape instances) that sizes the buffers
+/// for live editing. Admission is not this type's: the render-capacity oracle counts a candidate through
+/// <see cref="WorldSceneEnvelope"/>, which counts the same parts this probe emits.
 /// </para>
 /// <para>
 /// The rebuild cadence is a set of numbers, never a time the host queries: <see cref="WriteRevision"/> reports the
@@ -55,10 +46,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     private readonly WorldStampPool m_animator;
     private readonly IWorldAudioCueSink m_audio;
-    private readonly int m_authoringHeadroomPlacements;
-    // BOOT-CONSUMED authoring policy (WorldPlacementPolicyDefaults): captured ONCE at construction from the boot definition's
-    // Authoring row — never re-read live. These feed the initial screen-slot/placement-instance reserve.
-    // Later policy edits change the next boot's reserve; live content can grow the GPU buffers independently.
+    // Boot-consumed authoring policy (WorldPlacementPolicyDefaults), captured once at construction: the initial
+    // screen-slot reserve. Later policy edits change the next boot's reserve; live content grows the GPU buffers.
     private readonly int m_authoringHeadroomScreens;
     private readonly WorldClient m_client;
     private readonly WorldContinuum m_continuum;
@@ -66,8 +55,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // binder registers it at boot from the same field, WorldFramePresenter.m_derivedFaceScreens).
     private readonly int m_derivedFaceScreens;
     private readonly float m_noseFactor;
-    // The placement capacity reservation, in worst-case stamp instances: boot static instances + the authoring
-    // headroom. Frozen at construction; the apply-time measure charges max(candidate instances, this).
+    // The probe's placement reservation, frozen at construction: the boot scoped stamps, and the boot per-shape
+    // instances plus the authoring headroom.
     private readonly int m_placementReservation;
     private readonly int m_placementShapeReservation;
     private readonly WorldTextCatalog m_text;
@@ -84,9 +73,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // cost this band contributes is IDENTICAL between the probe and every live build.
     private IReadOnlyList<WorldScreen> m_derivedFaceRows;
     private float m_pendingDeltaSeconds;
-    // Latched from the ONE construction-time probe: the host assigns SlotBase once and it is stable for this emitter's
-    // lifetime, so the candidate measure composes against the same base a live program does.
-    private int m_slotBase;
 
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
@@ -147,13 +133,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // derives from the program's total declared instance count (SdfProgram.InstanceMaskWordCount), so parked avatar
     // declarations widen every shadow-gather pixel's mask walk. Instead the program is rebuilt on population change
     // (the revision watch), and the hybrid population worst case is held by the probed capacity floors. Every avatar keeps its
-    // own body + accent material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces
-    // the static stamps with the reserved worst case (the construction probe only); the animated pool and the avatars
-    // follow `probeWorstCase` (worst case for both the construction probe AND the apply-time measure).
-    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, bool probeWorstCase, bool placementProbe, float maxPlacementScale, int slotBase) {
+    // own body + accent material (cheap constant words), so a recolor is data, not a resize. `probe` replaces the static
+    // stamps with the reservation, and the animated pool and the avatars with their worst cases.
+    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, bool probe, float maxPlacementScale, int slotBase) {
         var client = m_client;
 
-        if (!probeWorstCase && !placementProbe) {
+        if (!probe) {
             m_picks.Clear();
         }
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
@@ -192,40 +177,18 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // reserved band), so emitting them back-to-back cannot double-declare a screen index.
         WorldStaticSceneEmit.Emit(
             builder: builder,
-            carried: ((probeWorstCase || placementProbe) ? null : CarriedRow),
+            carried: (probe ? null : CarriedRow),
             derivedFaces: derivedFaces,
             screens: screens
         );
 
-        // The placement stamps: the construction probe reserves (boot static instances + the authoring headroom)
-        // worst-case stamps, and the APPLY-TIME MEASURE charges a candidate's static placements at that same
-        // worst-case unit — max(candidate instances, the reservation) — so the placement term stays CONSTANT between
-        // probe and measure while placements are inside their headroom. That constancy is load-bearing: a cheaper
-        // as-authored measure would hand the reservation's word slack to SCENE/SCREEN floods (their ceilings would
-        // silently widen by thousands of words), and a placement flood still rejects exactly one instance past the
-        // headroom. Only the LIVE build emits the rows as authored — static stamps baked into instructions, animated
-        // rows through the replay pool (worst-case under any probe).
-        if (
-            placementProbe ||
-            probeWorstCase
-        ) {
-            var (candidateScoped, candidateShapes) = WorldPlacementStamper.StaticStampReservation(
-                creations: creations,
-                placements: placements,
-                worldSeed: (client.Definition.Generation?.WorldSeed ?? 0UL)
-            );
-
-            // Each reservation class maxes against its construction-time floor independently — conservative in both.
+        // The placement stamps: the probe reserves the boot static stamps and the authoring headroom; a live build emits
+        // the rows as authored, static stamps baked into instructions and animated rows through the replay pool.
+        if (probe) {
             WorldPlacementStamper.EmitProbe(
                 builder: builder,
-                reservedCount: Math.Max(
-                    val1: candidateScoped,
-                    val2: m_placementReservation
-                ),
-                reservedShapeInstances: Math.Max(
-                    val1: candidateShapes,
-                    val2: m_placementShapeReservation
-                )
+                reservedCount: m_placementReservation,
+                reservedShapeInstances: m_placementShapeReservation
             );
         } else {
             var meshDraws = new List<SdfMeshDraw>();
@@ -251,10 +214,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_animator.Emit(
             builder: builder,
             colors: m_bakedColors,
-            probeWorstCase: probeWorstCase,
+            probeWorstCase: probe,
             maxPlacementScale: maxPlacementScale,
             slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
-            picks: ((!probeWorstCase && !placementProbe) ? m_picks : null),
+            picks: (probe ? null : m_picks),
             textCatalog: m_text.Catalog,
             screens: screens
         );
@@ -262,7 +225,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions in
         // the detailed band, one coarse capsule thereafter. The probe emits the largest detailed rigs plus the full
         // coarse band; a live build emits each active body in the representation fixed by its stable body index.
-        if (!probeWorstCase) {
+        if (!probe) {
             for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
                 var hasPresented = TryPresentedAppearance(
                     bodyColor: out _,
@@ -308,15 +271,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             isActive: IsAvatarPresented,
             bodyMaterials: avatarBodyMaterials,
             accentMaterials: avatarAccentMaterials,
-            probeWorstCase: probeWorstCase,
+            probeWorstCase: probe,
             slotBase: slotBase,
-            rigFor: (probeWorstCase
+            rigFor: (probe
             ? null
             : index => m_emittedAvatarRigs[index]),
-            scaleFor: (probeWorstCase
+            scaleFor: (probe
             ? null
             : index => m_emittedAvatarScales[index]),
-            picks: (probeWorstCase ? null : m_picks)
+            picks: (probe ? null : m_picks)
         );
     }
     // A locally followed traveler has exactly one primary avatar for its entire route. While it is in the boot
@@ -472,43 +435,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         return padded;
     }
 
-    /// <summary>Composes a candidate definition's render-relevant sections into <paramref name="builder"/> — World
-    /// admission policy (what may enter the document is the document owner's question, never a mode on the generic
-    /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
-    /// <c>puck.sdf.v1</c> document (see <see cref="WorldSdfDocumentEmitter"/>) is currently loaded — see
-    /// <see cref="Puck.World.Client.WorldFramePresenter"/>'s joint measurer. The packed tables a program carries (the
-    /// segment directory, world-segment list, rigid plan, part programs) are computed over the whole composed
-    /// program and are not additive across emitters, so measuring this emitter alone in a throwaway builder would let
-    /// a mutation spend capacity a loaded document already holds.</summary>
-    /// <param name="builder">The shared program builder under construction. Opens and closes its own material scope
-    /// (this emitter owns its palette; see <see cref="OwnsMaterialScope"/>), so the caller must not already be inside
-    /// one belonging to this emitter.</param>
-    /// <param name="candidate">The composed candidate definition.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/> or <paramref name="candidate"/> is
-    /// <see langword="null"/>.</exception>
-    public void ComposeCandidate(SdfProgramBuilder builder, WorldDefinition candidate) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-        ArgumentNullException.ThrowIfNull(argument: candidate);
-
-        using (var scope = builder.BeginMaterialScope()) {
-            Compose(
-                builder: builder,
-                screens: candidate.Screens,
-                derivedFaces: m_derivedFaceRows,
-                placements: candidate.Placements,
-                creations: candidate.Creations,
-                probeWorstCase: true,
-                placementProbe: false,
-                maxPlacementScale: candidate.Authoring.MaxPlacementScale,
-                slotBase: m_slotBase
-            );
-        }
-    }
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         ArgumentNullException.ThrowIfNull(argument: builder);
-
-        m_slotBase = context.SlotBase;
 
         if (context.Probe) {
             // The ONE construction-time worst case (never rendered): WorldRigCatalog.DetailedAvatarCapacity
@@ -524,8 +453,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 derivedFaces: m_derivedFaceRows,
                 placements: boot.Placements,
                 creations: boot.Creations,
-                probeWorstCase: true,
-                placementProbe: true,
+                probe: true,
                 maxPlacementScale: boot.Authoring.MaxPlacementScale,
                 slotBase: context.SlotBase
             );
@@ -558,8 +486,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             derivedFaces: m_derivedFaceRows,
             placements: definition.Placements,
             creations: definition.Creations,
-            probeWorstCase: false,
-            placementProbe: false,
+            probe: false,
             maxPlacementScale: definition.Authoring.MaxPlacementScale,
             slotBase: context.SlotBase
         );
@@ -849,15 +776,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         : null);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
-    /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
+    /// freezing the screen headroom and the placement reservation the probe branch reserves.</summary>
     /// <param name="client">The snapshot-fed entity view every pose, color, look, and active flag is read from.</param>
     /// <param name="animator">The creation-stamp pool (animated placements, attached placements, body-rooted stamps).</param>
     /// <param name="audio">The narrow cue-submission seam the distance-driven footstep cue fires into while packing.</param>
     /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
     /// their original catalog slot across authority handoffs.</param>
     /// <param name="text">The world-relative font catalog used by creation text runs.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldStampPool animator, IWorldAudioCueSink audio, WorldContinuum continuum, WorldTextCatalog text) {
+    /// <param name="envelope">The boot scene's envelope, whose headroom the probe reserves, or <see langword="null"/>
+    /// for one counted from the client's boot definition.</param>
+    /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
+    public WorldSceneEmitter(WorldClient client, WorldStampPool animator, IWorldAudioCueSink audio, WorldContinuum continuum, WorldTextCatalog text, WorldSceneEnvelope? envelope = null) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: audio);
@@ -874,10 +803,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         var definition = client.Definition;
 
+        envelope ??= new WorldSceneEnvelope(boot: definition);
         m_noseFactor = definition.PlayerDefaults.NoseFactor;
 
-        m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
-        m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
+        m_authoringHeadroomScreens = envelope.HeadroomScreens;
         m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         // Placeholder rows until the first delivery calls ObserveDelivery with the real derived faces — matters only
         // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
@@ -898,15 +827,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             dynamics: definition.Dynamics,
             bodyStamps: m_census.Stamps
         );
-        // A future stamp may use either emission class. Reserve both independent floors: a scoped creation's
-        // single instance does not cover a scope-free creation's per-shape directory entries or probe words.
         (m_placementReservation, m_placementShapeReservation) = WorldPlacementStamper.StaticStampReservation(
             creations: definition.Creations,
             placements: definition.Placements,
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         );
-        m_placementReservation += m_authoringHeadroomPlacements;
-        m_placementShapeReservation = checked((m_placementShapeReservation + (m_authoringHeadroomPlacements * WorldPlacementPolicy.MaxShapesPerStamp)));
+        m_placementShapeReservation = checked((m_placementShapeReservation + envelope.HeadroomInstances));
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
