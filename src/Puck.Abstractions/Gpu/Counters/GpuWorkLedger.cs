@@ -299,10 +299,15 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         while (true) {
             var version = Volatile.Read(location: ref m_version);
 
-            sample.CopyFrom(source: m_snapshots[((int)(version & 1L))]);
+            // A sample that already holds this version's snapshot, copied whole, holds what a copy would write.
+            if (!sample.Holds(ledger: this, version: version)) {
+                sample.CopyFrom(source: m_snapshots[((int)(version & 1L))]);
+            }
             Interlocked.MemoryBarrier();
 
             if (Volatile.Read(location: ref m_version) == version) {
+                sample.Copied(ledger: this, version: version);
+
                 return (sample.Submission != 0L);
             }
         }

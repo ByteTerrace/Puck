@@ -1,6 +1,6 @@
 // A visible point's position in the preceding rendered view, reconstructed from the visibility record: a mesh record
-// names its draw and triangle. The previous compact mesh matrices belong to the residency's last consumed frame, copied
-// by SdfWorldTables.Motion.cs.
+// names its draw and triangle. The previous mesh draw records belong to the residency's last consumed frame, copied by
+// SdfWorldTables.Motion.cs.
 #ifndef SDF_REPROJECTION_HLSLI
 #define SDF_REPROJECTION_HLSLI
 #include "sdf-mesh.hlsli"
@@ -14,10 +14,17 @@ bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previ
         (abs(historyT - previousT) <= (SdfHistoryDepthTolerance * previousT)));
 }
 
+// One row of a draw's matrix in the preceding consumed frame: the previous table holds whole draw records, at the mesh
+// region's stride, so a record's word reads there as in the region (sdfMeshRow).
+float3 sdfMeshPreviousRow(uint record, uint row) {
+    uint word = (record + (4u * row));
+
+    return asfloat(uint3(sdfPreviousMeshTransforms[word], sdfPreviousMeshTransforms[(word + 1u)], sdfPreviousMeshTransforms[(word + 2u)]));
+}
 // Where a draw's index `k` stood in the preceding consumed frame: under the draw's previous matrix, or, for a vertex
 // riding a member, under that member's slot's previous transform; then under the draw's carry, as its current position
 // is (sdfMeshWorldPosition).
-float3 sdfMeshPreviousPosition(uint draw, uint record, uint k) {
+float3 sdfMeshPreviousPosition(uint record, uint k) {
     float3 object = sdfMeshObjectPosition(record, k);
     uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
 
@@ -27,11 +34,8 @@ float3 sdfMeshPreviousPosition(uint draw, uint record, uint k) {
         return sdfMeshCarryPoint(record, (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz));
     }
 
-    uint previousMatrix = (4u * draw);
-
-    return sdfMeshCarryPoint(record, ((object.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
-        (object.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +
-        (object.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz));
+    return sdfMeshCarryPoint(record, ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +
+        (object.z * sdfMeshPreviousRow(record, 2u)) + sdfMeshPreviousRow(record, 3u)));
 }
 // Returns the point carried by the same mesh triangle in the preceding consumed frame.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {
@@ -47,8 +51,8 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
         sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
         return false;
     }
-    previousPoint = (((weights.x * sdfMeshPreviousPosition(draw, mesh, first)) + (weights.y * sdfMeshPreviousPosition(draw, mesh, first + 1u))) +
-        (weights.z * sdfMeshPreviousPosition(draw, mesh, first + 2u)));
+    previousPoint = (((weights.x * sdfMeshPreviousPosition(mesh, first)) + (weights.y * sdfMeshPreviousPosition(mesh, first + 1u))) +
+        (weights.z * sdfMeshPreviousPosition(mesh, first + 2u)));
     return true;
 }
 // A view's camera rows, as SdfFrameBlock.WritePreviousView lays them: position and validity, right and tan(fov / 2),

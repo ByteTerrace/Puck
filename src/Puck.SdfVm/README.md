@@ -177,17 +177,19 @@ that a world document's `views.post` rows name. Each package is declared in
 carries no per-pass C#.
 
 The upload also keeps GPU-only history for motion: a 48-byte rigid row per
-dynamic slot and a compact 64-byte object-to-world matrix per mesh draw.
-Before overwriting the current tables, it copies the rows changed in the
-preceding consumed frame. The initial upload seeds history; after motion stops,
-one last copy settles its changed rows, and later still frames copy nothing.
-These copies add device-local bytes and counted buffer copies, with no second
-host upload. Mesh matrices live separately so the host-written mesh region's
-CPU shadow stays exact.
+dynamic slot and a copy of each mesh draw's record at the mesh region's stride,
+of which reprojection reads the object-to-world matrix. Before overwriting the
+current tables, it copies the rows changed in the preceding consumed frame, the
+changed draws as one range from the first to the last: a draw between them that
+did not change already holds what the copy writes. The initial upload seeds
+history; after motion stops, one last copy settles its changed rows, and later
+still frames copy nothing. These copies add device-local bytes and counted
+buffer copies, with no second host upload. Mesh history is a table of its own so
+the host-written mesh region's CPU shadow stays exact.
 
 Previous-transform transfers contribute their range lengths to `gpu.copies.buffer-bytes`
-in the existing upload pass. A dynamic row contributes 48 bytes and a mesh matrix
-64 bytes; the first still frame settles the preceding change, and later still
+in the existing upload pass. A dynamic row contributes 48 bytes and a mesh draw
+its record's bytes; the first still frame settles the preceding change, and later still
 frames contribute zero. Host-visible upload bytes remain unchanged.
 
 Each view instance retains the camera and sample grid of its last completed

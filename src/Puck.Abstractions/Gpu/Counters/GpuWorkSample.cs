@@ -18,6 +18,9 @@ public sealed class GpuWorkSample {
     private string[] m_labels = [];
     private GpuPassState[] m_states = [];
     private GpuWorkDetail[] m_details = [];
+    // The ledger and version whose snapshot the sample last copied whole (GpuWorkLedger.TryReadCompleted).
+    private GpuWorkLedger? m_copiedLedger;
+    private long m_copiedVersion;
 
     /// <summary>Gets immutable detail identities in row order, including each detailed pass's plain remainder.</summary>
     public ReadOnlySpan<GpuWorkDetail> Details => m_details;
@@ -153,9 +156,18 @@ public sealed class GpuWorkSample {
             submission: source.Submission
         );
     }
+    // Whether the sample holds the snapshot a ledger published at a version, copied whole: a ledger's version moves on
+    // every publication, so the snapshot stands while it does not.
+    internal bool Holds(GpuWorkLedger ledger, long version) => (ReferenceEquals(objA: m_copiedLedger, objB: ledger) && (m_copiedVersion == version));
+    // Notes that the sample holds a ledger's snapshot at a version, once its copy is known not to be torn.
+    internal void Copied(GpuWorkLedger ledger, long version) {
+        m_copiedLedger = ledger;
+        m_copiedVersion = version;
+    }
     // counts holds the outside row, then pass rows and detail rows, or is empty for no submission. Labels, classes
     // and detail identities are immutable and held by reference.
     internal void Load(ReadOnlySpan<long> counts, string[] labels, WorkClass[] classes, long revision, ReadOnlySpan<GpuPassState> states, long submission, GpuWorkDetail[]? details = null) {
+        m_copiedLedger = null;
         var passCount = states.Length;
         var countLength = (((passCount + (details?.Length ?? 0)) + 1) * GpuWork.SubmissionColumnCount);
 

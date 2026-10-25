@@ -120,8 +120,10 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// a window leaves its slot reserved until then, so resolved indices stay valid through the scene's dress.</summary>
     public void EndViews() {
         m_latchedSeatCount = m_views.Count;
+        foreach (var window in m_latchedWindows) { window.LatchedOrder = -1; }
         m_latchedWindows.Clear();
         m_latchedWindows.AddRange(collection: m_windows);
+        for (var order = 0; (order < m_latchedWindows.Count); order++) { m_latchedWindows[order].LatchedOrder = order; }
     }
     /// <inheritdoc/>
     /// <remarks>The session emitter dresses first, so its stamp pool advances and its dressed definition is retained
@@ -263,14 +265,10 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     // Detaches a window from the next latch; the current frame retains its slot.
     internal void Detach(WorldRoutedWindow window) => _ = m_windows.Remove(item: window);
     // A window's index in the scene's frames: after this frame's seats, in the order the windows attached.
-    internal int IndexOf(WorldRoutedWindow window) {
-        var order = m_latchedWindows.IndexOf(item: window);
-
-        return ((order < 0)
-            ? -1
-            : (m_latchedSeatCount + order)
-        );
-    }
+    internal int IndexOf(WorldRoutedWindow window) => ((window.LatchedOrder < 0)
+        ? -1
+        : (m_latchedSeatCount + window.LatchedOrder)
+    );
 }
 /// <summary>
 /// A window onto an endpoint's world, attached to the scene the presentation renders that world with
@@ -282,6 +280,9 @@ public sealed class WorldRoutedWindow : IDisposable {
     private WorldRoutedScene? m_scene;
 
     internal WorldRoutedWindow(WorldRoutedScene scene) => m_scene = scene;
+
+    // The window's place among its scene's latched windows (WorldRoutedScene.EndViews), or -1 while it holds none.
+    internal int LatchedOrder { get; set; } = -1;
 
     /// <summary>Gets the scene the window is a view of.</summary>
     /// <exception cref="ObjectDisposedException">The window is disposed.</exception>

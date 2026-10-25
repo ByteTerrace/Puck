@@ -26,7 +26,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (group.Mesh is null) {
                 replaced.Blocked = true;
-                m_groups[index] = replaced;
+                Replace(group: replaced, index: index);
                 m_drawnMeshes = -1;
                 settles.Count(kind: SdfMeshSettle.Refused);
                 continue;
@@ -116,7 +116,7 @@ public sealed partial class SdfMeshPathBake {
         group.Replaces = old;
         group.DrawnPosition = old.DrawnPosition;
         group.DrawnOrientation = old.DrawnOrientation;
-        m_groups[index] = group;
+        Replace(group: group, index: index);
         m_drawnMeshes = -1;
         if (Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out var baked)) {
             group.Mesh = baked;

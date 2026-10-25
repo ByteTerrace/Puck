@@ -35,6 +35,7 @@ public sealed class HostFrameTimelineLawTests {
 
         Assert.False(condition: reading.IsError);
         Assert.Contains(expectedSubstring: "3 iterations | avg=20.90 p50=21.00 p99=25.00 max=25.00 ms | over 16.7 ms: 2 | busiest 20.00 ms of work | pacer late at most 3.00 ms", actualString: reading.Output);
+        Assert.Contains(expectedSubstring: "\n  produce: avg=11.67 p50=10.00 p99=20.00 max=20.00 ms\n  simulate: avg=0.00 p50=0.00 p99=0.00 max=0.00 ms\n  produce+simulate: avg=11.67 p50=10.00 p99=20.00 max=20.00 ms", actualString: reading.Output);
         Assert.Contains(expectedSubstring: "#2 25.00 ms: input=0.00 commands=0.00 simulate=0.00 (0 steps) begin=0.00 produce=5.00 present=0.00 wait=20.00 (late 3.00)", actualString: reading.Output);
         Assert.Contains(expectedSubstring: "#1 21.00 ms (busiest): input=0.00 commands=0.00 simulate=0.00 (2 steps) begin=0.00 produce=20.00 present=0.00 wait=1.00 (late 1.00)", actualString: reading.Output);
         Assert.DoesNotContain(expectedSubstring: "#0 ", actualString: reading.Output);
