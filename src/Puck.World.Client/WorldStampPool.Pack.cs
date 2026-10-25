@@ -38,6 +38,10 @@ public sealed partial class WorldStampPool {
     public IReadOnlyList<SdfSlotClip> SlotClips { get; private set; } = [];
 
     private readonly List<SdfSlotClip> m_slotClipRun = [];
+    // Each packed run's body, beside m_slotClipRun, for the line a changed run list logs.
+    private readonly List<int> m_slotClipBodies = [];
+    // The spheres holding the registration being tested against the doors, one a shape (PartSpheres).
+    private readonly Vector4[] m_partSpheres = new Vector4[WorldPlacementPolicy.MaxAnimatedStampShapes];
 
     // Whether this pack found exactly the runs the held list names, in order.
     private static bool SameRuns(IReadOnlyList<SdfSlotClip> held, List<SdfSlotClip> packed) {
@@ -60,6 +64,39 @@ public sealed partial class WorldStampPool {
         }
 
         return live.Reach;
+    }
+    // The spheres holding a registration's geometry as posed this frame, one a shape: its slot and its reach about that
+    // slot, in metres. A domain-bearing shape's slot holds only its parent chain's delta and its rest offset is baked
+    // after it, so its whole reach counts. An intersecting or subtracting shape only removes (SdfBoundAlgebra.Compose),
+    // and a cutter is often far larger than what it trims, so it holds nothing. The creation's rest bound (ReachOf) is
+    // one sphere about the root charging every offset and cutter, metres wide on a rigged body: a door straddle tested
+    // against it clips a body standing clear of the glass out of sight.
+    private int PartSpheres(Registration live, ReadOnlySpan<DynamicTransform> transforms, int rootSlot, int shapeCount, float placementScale) {
+        if (live.ShapeReaches is not { } reaches) {
+            var shapes = (live.Creation.EngineDocument.Shapes ?? []);
+
+            reaches = new float[shapes.Count];
+
+            for (var index = 0; (index < shapes.Count); index++) {
+                var shape = shapes[index];
+
+                reaches[index] = (((shape.Blend is { } blend) && (SdfBoundAlgebra.IsIntersection(blend: blend) || SdfBoundAlgebra.IsSubtraction(blend: blend)))
+                    ? -1f
+                    : (CreationStampEmitter.ShapeReach(shape: shape) - ((shape.Domain is { Count: > 0 }) ? 0f : shape.Position.Length())));
+            }
+
+            live.ShapeReaches = reaches;
+        }
+
+        var count = 0;
+
+        for (var index = 0; (index < shapeCount); index++) {
+            if (reaches[index] >= 0f) {
+                m_partSpheres[count++] = new Vector4(value: transforms[((rootSlot + 1) + index)].Position, w: (reaches[index] * placementScale));
+            }
+        }
+
+        return count;
     }
 
     /// <summary>Packs the pool's moved transforms: each live registration's root rides its placement pose (animated),
@@ -86,6 +123,7 @@ public sealed partial class WorldStampPool {
         m_packedSlotBase = slotBase;
         m_volumes.Clear();
         m_slotClipRun.Clear();
+        m_slotClipBodies.Clear();
         BeginRateCodes(slotBase: slotBase);
 
         var doors = WorldPortalStraddle.Doors(definition: client.Definition);
@@ -251,9 +289,10 @@ public sealed partial class WorldStampPool {
                 shapeCount: shapeCount
             );
 
-            // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it.
+            // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest
+            // bound screens out the bodies nowhere near a door; the posed parts decide.
             if (
-                (live.BodyIndex is not null) &&
+                (live.BodyIndex is { } straddler) &&
                 (doors.Count > 0) &&
                 (WorldPortalStraddle.Clip(
                     center: transforms[rootSlot].Position,
@@ -261,9 +300,16 @@ public sealed partial class WorldStampPool {
                     firstSlot: rootSlot,
                     radius: (ReachOf(live: live) * placementScale),
                     slotCount: SlotsPerPlacement
+                ) is not null) &&
+                (WorldPortalStraddle.Clip(
+                    doors: doors,
+                    firstSlot: rootSlot,
+                    slotCount: SlotsPerPlacement,
+                    spheres: m_partSpheres.AsSpan(start: 0, length: PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: shapeCount, transforms: transforms))
                 ) is { } clip)
             ) {
                 m_slotClipRun.Add(item: clip);
+                m_slotClipBodies.Add(item: straddler);
             }
 
             // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
@@ -288,6 +334,11 @@ public sealed partial class WorldStampPool {
         // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
         // sees a new list, so a body holding still across a door keeps the one it was first clipped by.
         if (!SameRuns(held: SlotClips, packed: m_slotClipRun)) {
+            // A body drawn clipped at a door shows only past the glass, so every change is logged: a body that vanishes
+            // away from any door is a straddle test that should not have matched.
+            Console.Error.WriteLine(value: ((m_slotClipBodies.Count == 0)
+                ? "[world.straddle: none]"
+                : $"[world.straddle: {string.Join(separator: ' ', values: m_slotClipRun.Select(selector: (clip, index) => $"body:{m_slotClipBodies[index]} plane=({clip.Plane.X:0.##},{clip.Plane.Y:0.##},{clip.Plane.Z:0.##},{clip.Plane.W:0.##})"))} clipped]"));
             SlotClips = ((m_slotClipRun.Count == 0)
                 ? []
                 : [.. m_slotClipRun]

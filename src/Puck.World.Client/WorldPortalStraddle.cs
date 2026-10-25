@@ -48,7 +48,20 @@ public static class WorldPortalStraddle {
     /// <param name="slotCount">Its slot count.</param>
     /// <returns>The clip, or <see langword="null"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="doors"/> is <see langword="null"/>.</exception>
-    public static SdfSlotClip? Clip(IReadOnlyList<Door> doors, Vector3 center, float radius, int firstSlot, int slotCount) {
+    public static SdfSlotClip? Clip(IReadOnlyList<Door> doors, Vector3 center, float radius, int firstSlot, int slotCount) =>
+        Clip(doors: doors, firstSlot: firstSlot, slotCount: slotCount, spheres: [new Vector4(value: center, w: radius)]);
+    /// <summary>Returns the clip a body whose geometry several spheres hold is drawn with, or <see langword="null"/>
+    /// when it straddles no door: some sphere crosses a door's glass plane within the door's opening, widened by that
+    /// sphere's radius. A body whose parts all stand clear of every glass, however near its whole, is drawn unclipped.
+    /// Of several doors, the one whose glass plane lies nearest a crossing sphere's center wins.</summary>
+    /// <param name="doors">The world's same-world doors (<see cref="Doors"/>).</param>
+    /// <param name="spheres">The spheres holding the body's geometry: each center in <c>XYZ</c> and its radius in
+    /// <c>W</c>, in metres.</param>
+    /// <param name="firstSlot">The body's first dynamic-transform slot, absolute.</param>
+    /// <param name="slotCount">Its slot count.</param>
+    /// <returns>The clip, or <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="doors"/> is <see langword="null"/>.</exception>
+    public static SdfSlotClip? Clip(IReadOnlyList<Door> doors, ReadOnlySpan<Vector4> spheres, int firstSlot, int slotCount) {
         ArgumentNullException.ThrowIfNull(argument: doors);
 
         var nearest = -1;
@@ -56,17 +69,21 @@ public static class WorldPortalStraddle {
 
         for (var index = 0; (index < doors.Count); index++) {
             var glass = doors[index].Glass;
-            var offset = (center - glass.Origin);
-            var distance = MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Normal));
 
-            if (
-                (distance <= radius) &&
-                (distance < nearestDistance) &&
-                (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Right)) <= (glass.HalfWidth + radius)) &&
-                (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Up)) <= (glass.HalfHeight + radius))
-            ) {
-                nearest = index;
-                nearestDistance = distance;
+            foreach (var sphere in spheres) {
+                var radius = sphere.W;
+                var offset = (new Vector3(x: sphere.X, y: sphere.Y, z: sphere.Z) - glass.Origin);
+                var distance = MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Normal));
+
+                if (
+                    (distance <= radius) &&
+                    (distance < nearestDistance) &&
+                    (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Right)) <= (glass.HalfWidth + radius)) &&
+                    (MathF.Abs(x: Vector3.Dot(vector1: offset, vector2: glass.Up)) <= (glass.HalfHeight + radius))
+                ) {
+                    nearest = index;
+                    nearestDistance = distance;
+                }
             }
         }
 
