@@ -125,6 +125,7 @@ public sealed partial class WorldDocument {
             installsArena &&
             !TryValidateMutationCandidate(
             candidate: candidate,
+            current: current,
             compilation: out _,
             mutation: mutation,
             reason: out reason,
@@ -169,7 +170,7 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason, compilation: out var compilation)) {
+        if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out var compilation)) {
             return false;
         }
         if (!TryAdmitPipelineOverrides(
@@ -472,7 +473,7 @@ public sealed partial class WorldDocument {
     // A state-value mutation can reuse every compiled product only while it keeps the catalog identity and does
     // not rebind a population look. All other mutations install a replacement prepared alongside the document.
     private bool RequiresFullInstall(WorldDefinition candidate, WorldMutation mutation, WorldDefinition previous) => !(
-        IsStateMutation(mutation: mutation) &&
+        IsValueMutation(mutation: mutation, candidate: candidate, previous: previous) &&
         ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
         !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
     );

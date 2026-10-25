@@ -1185,10 +1185,38 @@ public sealed partial class WorldDocument {
         }
     }
 
-    internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
+    // A whole-row write that keeps the state catalog identity (the same rows, shapes and kinds) and redeclares the row
+    // exactly as it stood but for its cells' values moves values alone, as a cell write does, so it takes the same
+    // validation and install. A write that also changes a value-over-time trait (a cell's dynamics, clock or advance, the
+    // row's cycle) keeps the catalog but must settle through the full install.
+    private static bool IsValueMutation(WorldMutation mutation, WorldDefinition candidate, WorldDefinition previous) => (
+        IsStateMutation(mutation: mutation) ||
+        ((mutation is WorldMutation.UpsertStateRow upsert) &&
+        ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+        (WorldDefinitionRows.FindStateRow(rows: previous.State, name: upsert.Row.Name.Value) is { } before) &&
+        DiffersInValuesAlone(before: before, row: upsert.Row))
+    );
+    private static bool DiffersInValuesAlone(WorldStateRow row, WorldStateRow before) {
+        var cells = (row.Cells ?? []);
+        var previous = (before.Cells ?? []);
+
+        if (((row with { Cells = null }) != (before with { Cells = null })) || (cells.Count != previous.Count)) {
+            return false;
+        }
+
+        for (var index = 0; (index < cells.Count); index++) {
+            if ((cells[index] with { Value = default }) != (previous[index] with { Value = default })) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldDefinition current, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
         compilation = null;
 
-        if (IsStateMutation(mutation: mutation)) {
+        if (IsValueMutation(mutation: mutation, candidate: candidate, previous: current)) {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
         }
 
@@ -1219,6 +1247,10 @@ public sealed partial class WorldDocument {
         switch (mutation) {
             case WorldMutation.UpsertStateCell upsertCell:
                 names.Add(item: upsertCell.Row);
+
+                return true;
+            case WorldMutation.UpsertStateRow upsertRow:
+                names.Add(item: upsertRow.Row.Name.Value);
 
                 return true;
             case WorldMutation.RemoveStateCell removeCell:

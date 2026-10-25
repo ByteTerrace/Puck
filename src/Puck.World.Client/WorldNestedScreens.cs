@@ -134,6 +134,17 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
     /// <summary>Gets the source instances the screens show.</summary>
     public IReadOnlyList<RenderGraphInstance> Sources => Mappings.Sources.Instances;
 
+    // Whether a definition carries the very lists the rows derive from (screens, placements, creations, authoring,
+    // cameras and machines, which WorldPrototypeFacets and Shown read): a delivery that moved only state shares them.
+    private static bool SharesRowInputs(WorldDefinition? definition, WorldDefinition? previous) => (
+        (definition is not null) && (previous is not null) &&
+        ReferenceEquals(objA: definition.Screens, objB: previous.Screens) &&
+        ReferenceEquals(objA: definition.Placements, objB: previous.Placements) &&
+        ReferenceEquals(objA: definition.Creations, objB: previous.Creations) &&
+        ReferenceEquals(objA: definition.Authoring, objB: previous.Authoring) &&
+        ReferenceEquals(objA: definition.Cameras, objB: previous.Cameras) &&
+        ReferenceEquals(objA: definition.Machines, objB: previous.Machines)
+    );
     // What a screen shows: its disclosed source, except local-device content and a machine the delivery never declares.
     private WorldScreen Shown(WorldScreen row) => ((((row.Source is WorldScreenSource.Producer producer) && !m_shares(arg: producer.Id)) ||
         ((row.Source is WorldScreenSource.Machine machine) && !(m_reconciled?.Machines.Any(predicate: declaration => string.Equals(
@@ -226,7 +237,9 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         // A presented world delivers a new definition whenever its state moves, which a world whose rules run on a
         // timer does every few ticks. Its screens move only when the rows they derive or its cameras do, so only then
         // do the mappings and the views the render graph runs.
-        if (!ReferenceEquals(objA: definition, objB: m_reconciled)) {
+        if (!ReferenceEquals(objA: definition, objB: m_reconciled) && SharesRowInputs(definition: definition, previous: m_reconciled)) {
+            m_reconciled = definition;
+        } else if (!ReferenceEquals(objA: definition, objB: m_reconciled)) {
             var previousCameras = m_reconciled?.Cameras;
 
             m_reconciled = definition;
