@@ -865,7 +865,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
-        // More draws than the region reserves records for, so planning them relocates every mesh.
+        // More draws than the region reserves records for, naming none of the big mesh's words, which outnumber the
+        // retained slack, so planning them relocates every mesh.
         var many = Enumerable.Range(count: (SdfMeshRegionArena.MinimumDrawCapacity + 44), start: 0).Select(selector: index => new SdfMeshDraw(
             Identity: index,
             Material: 1,

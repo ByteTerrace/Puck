@@ -136,16 +136,18 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.Equal(expected: 2f, actual: resized.Spacing);
         var view = frame.Views[0];
-
-        frame = frame with {
+        SdfFrame At(float x) => frame with {
             Views = [view with {
-            Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: 6f, y: 2f, z: 0f),
-                target: new Vector3(x: 7f, y: 2f, z: 0f), viewportHeight: 4u, viewportWidth: 4u),
+            Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: x, y: 2f, z: 0f),
+                target: new Vector3(x: (x + 1f), y: 2f, z: 0f), viewportHeight: 4u, viewportWidth: 4u),
         }],
         };
-        var (moved, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
+        // A camera still in the window's middle keeps it; one past it recentres the window on its cell.
+        var kept = volume.Stage(bakePending: false, frame: At(x: 6f), tier: SdfIndirectTier.Medium, write: static _ => { });
+        var (moved, _) = Trace(frame: At(x: 30f), tier: SdfIndirectTier.Medium, volume: volume);
 
-        Assert.Equal(expected: (resized.Low.X + 3), actual: moved.Low.X);
+        Assert.Equal(expected: resized.Low, actual: kept.Low);
+        Assert.Equal(expected: (resized.Low.X + 15), actual: moved.Low.X);
     }
     // A first view another residency renders (a seat crossed into another world, its camera in that world's coordinates)
     // holds the window where it stood and meters no exposure; the window follows the view again once this residency

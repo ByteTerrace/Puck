@@ -1131,8 +1131,11 @@ Meshes a list newly places land within a frame's share of words
 (`SdfWorldTables.MeshLandingWords`, 2 MB), in the list's order; a draw whose
 mesh is still owed waits out of the staged records until it lands, so a body
 whose meshes all arrive at once, as when it crosses into a world, lands over a
-few frames. Every mesh is written again at once only when the arena outgrows
-its draw reserve or packs; a region that grows, to
+few frames. A list with more draws than the reserve doubles it and moves only the
+meshes whose words the grown reserve takes, writing them in that frame
+(`SdfMeshRegionArena.Moved`); a body that straddles a door draws twice, so a list
+outgrows the reserve wherever bodies stand. Every mesh is written again at once
+only on the first list and when the arena packs; a region that grows, to
 its need plus an eighth, takes the words it held without waiting for the device: the
 next upload clears the new buffer and copies the old one into it on the GPU,
 and the old buffer is disposed once that upload has completed. The bake keys each group by its

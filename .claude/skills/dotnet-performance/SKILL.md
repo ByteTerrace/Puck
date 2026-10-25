@@ -149,7 +149,13 @@ calls in a fresh process can run several times slower than its steady state.
   `[MethodImpl(MethodImplOptions.AggressiveOptimization)]`; the cheap dispatcher
   above several kernels stays tiered, so first use compiles only the path taken.
 - A published World is ReadyToRun-compiled, which moves first-use JIT work out
-  of startup; an ordinary build still produces IL that tiers.
+  of startup; an ordinary build still produces IL that tiers. A rendering World
+  of either build prepares the engine's non-generic methods on a lowest-priority
+  background thread after boot (`WorldCodeWarmer`, `[world.warm]` on stderr),
+  so a first crossing or a first addon write no longer compiles tens of
+  milliseconds of code on the frame thread; a method prepared that way still
+  tiers up. First-use cost left after it is generic instantiations and static
+  constructors.
 - Check each hot method's tier with `DOTNET_JitDisasmSummary` in a scratch
   process pinned to one CPU, and record first-call cost beside the steady state.
   Pinning a harness to one CPU before it warms up starves the background tiering
