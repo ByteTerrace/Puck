@@ -63,6 +63,18 @@ public sealed class SdfMeshStore {
     public long CapacityBytes { get; }
     /// <summary>Gets the absolute directory the entries are kept in.</summary>
     public string Directory { get; }
+    /// <summary>Gets the entry format's eight-byte version tag (<c>PUCKMSH3</c>). A bump already moves the bake identity,
+    /// because the tag is inlined into the entry codec the closure hashes; <see cref="Record"/> writes it beside the
+    /// identity's parts so <see cref="ExplainMisses"/> can name the bump.</summary>
+    public static string EntryVersion { get; } = VersionText(magic: Magic);
+
+    internal static string VersionText(ulong magic) {
+        Span<byte> bytes = stackalloc byte[sizeof(ulong)];
+
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes, value: magic);
+
+        return System.Text.Encoding.ASCII.GetString(bytes: bytes);
+    }
 
     /// <summary>Returns the identity of this process's bake on a kernel set: the code it runs
     /// (<see cref="SdfMeshBakeClosure.Current"/>) and its bake kernels' bytecode.</summary>
@@ -242,6 +254,7 @@ public sealed class SdfMeshStore {
         var text = new System.Text.StringBuilder();
 
         text.Append(value: IdentityFormat).Append(value: '\n');
+        text.Append(value: "version ").Append(value: identity.EntryVersion).Append(value: '\n');
         text.Append(value: "code ").Append(value: identity.Code.ToString(format: "x32", provider: null)).Append(value: '\n');
         text.Append(value: "mask ").Append(value: identity.MaskKernel.ToString(format: "x32", provider: null)).Append(value: '\n');
         text.Append(value: "bake ").Append(value: identity.BakeKernel.ToString(format: "x32", provider: null)).Append(value: '\n');
@@ -260,8 +273,8 @@ public sealed class SdfMeshStore {
     /// identity (<see cref="Record"/>). Under an identity the store recorded before, the groups' geometry is new to it, or
     /// its entries were evicted, and the line says how full the store is. Under a new identity, the line names the parts
     /// that differ from the nearest identity the store recorded (the one with the fewest parts changed, the most recently
-    /// used among them): the mask or bake kernel's bytecode, or the code, with how many of its members changed in each
-    /// assembly and the first of them by name.</summary>
+    /// used among them): the entry version (<see cref="EntryVersion"/>), the mask or bake kernel's bytecode, or the code,
+    /// with how many of its members changed in each assembly and the first of them by name.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <returns>The reason.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="identity"/> is <see langword="null"/>.</exception>
@@ -287,13 +300,20 @@ public sealed class SdfMeshStore {
         } else {
             var parts = new List<string>();
 
+            if (nearest.Version != identity.EntryVersion) { parts.Add(item: $"the entry version ({nearest.Version} -> {identity.EntryVersion})"); }
             if (nearest.Mask != identity.MaskKernel) { parts.Add(item: "the mask kernel's bytecode"); }
             if (nearest.Bake != identity.BakeKernel) { parts.Add(item: "the bake kernel's bytecode"); }
             if (nearest.Code != identity.Code) {
                 var changed = ChangedMembers(identity: identity, path: nearest.Path);
-                var byAssembly = changed.GroupBy(keySelector: static member => member[..Math.Max(0, member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal))], comparer: StringComparer.Ordinal).Select(selector: static group => $"{group.Key} {group.Count()}");
 
-                parts.Add(item: $"the code, {changed.Count} member{((changed.Count == 1) ? string.Empty : "s")} ({string.Join(separator: ", ", values: byAssembly)}: {string.Join(separator: ", ", values: changed.Take(count: 3).Select(selector: static member => member[(member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal) + 1)..].Split(separator: '`')[0]))}{((changed.Count > 3) ? ", ..." : string.Empty)})");
+                if (nearest.Version != identity.EntryVersion) {
+                    changed = [.. changed.Where(predicate: static member => !member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStore.", comparisonType: StringComparison.Ordinal))];
+                }
+                if (changed.Count > 0) {
+                    var byAssembly = changed.GroupBy(keySelector: static member => member[..Math.Max(0, member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal))], comparer: StringComparer.Ordinal).Select(selector: static group => $"{group.Key} {group.Count()}");
+
+                    parts.Add(item: $"the code, {changed.Count} member{((changed.Count == 1) ? string.Empty : "s")} ({string.Join(separator: ", ", values: byAssembly)}: {string.Join(separator: ", ", values: changed.Take(count: 3).Select(selector: static member => member[(member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal) + 1)..].Split(separator: '`')[0]))}{((changed.Count > 3) ? ", ..." : string.Empty)})");
+                }
             }
             reason = $"identity {value} new since {Path.GetFileNameWithoutExtension(path: nearest.Path)}: {string.Join(separator: "; ", values: parts)} changed";
         }
@@ -313,21 +333,21 @@ public sealed class SdfMeshStore {
     private string IdentityPathOf(UInt128 value) => Path.Combine(path1: Directory, path2: (value.ToString(format: "x32", provider: null) + IdentityExtension));
     // The recorded identity other than this one with the fewest parts changed from it, the most recently used among them;
     // null when the store records none.
-    private (string Path, UInt128 Code, UInt128 Mask, UInt128 Bake)? NearestRecorded(SdfMeshBakeIdentity identity) {
+    private (string Path, string Version, UInt128 Code, UInt128 Mask, UInt128 Bake)? NearestRecorded(SdfMeshBakeIdentity identity) {
         if (!System.IO.Directory.Exists(path: Directory)) { return null; }
 
         var own = IdentityPathOf(value: identity.Value);
-        (string Path, UInt128 Code, UInt128 Mask, UInt128 Bake)? nearest = null;
+        (string Path, string Version, UInt128 Code, UInt128 Mask, UInt128 Bake)? nearest = null;
         var nearestChanged = int.MaxValue;
         var nearestUsed = DateTime.MinValue;
 
         foreach (var file in new DirectoryInfo(path: Directory).GetFiles(searchPattern: ("*" + IdentityExtension))) {
             if (string.Equals(a: file.FullName, b: own, comparisonType: StringComparison.OrdinalIgnoreCase) || (ReadParts(path: file.FullName) is not { } parts)) { continue; }
 
-            var changed = (((parts.Code != identity.Code) ? 1 : 0) + ((parts.Mask != identity.MaskKernel) ? 1 : 0) + ((parts.Bake != identity.BakeKernel) ? 1 : 0));
+            var changed = (((parts.Version != identity.EntryVersion) ? 1 : 0) + ((parts.Code != identity.Code) ? 1 : 0) + ((parts.Mask != identity.MaskKernel) ? 1 : 0) + ((parts.Bake != identity.BakeKernel) ? 1 : 0));
 
             if ((changed < nearestChanged) || ((changed == nearestChanged) && (file.LastWriteTimeUtc > nearestUsed))) {
-                nearest = (file.FullName, parts.Code, parts.Mask, parts.Bake);
+                nearest = (file.FullName, parts.Version, parts.Code, parts.Mask, parts.Bake);
                 nearestChanged = changed;
                 nearestUsed = file.LastWriteTimeUtc;
             }
@@ -336,12 +356,12 @@ public sealed class SdfMeshStore {
         return nearest;
     }
     // A recorded identity's parts, from its file's first lines; null for a file of another format or none.
-    private static (UInt128 Code, UInt128 Mask, UInt128 Bake)? ReadParts(string path) {
+    private static (string Version, UInt128 Code, UInt128 Mask, UInt128 Bake)? ReadParts(string path) {
         string[] head = [];
 
-        _ = Quietly(action: () => head = File.ReadLines(path: path).Take(count: 4).ToArray());
+        _ = Quietly(action: () => head = File.ReadLines(path: path).Take(count: 5).ToArray());
 
-        return ((head.Length == 4) && (head[0] == IdentityFormat) && TryPart(line: head[1], name: "code ", value: out var code) && TryPart(line: head[2], name: "mask ", value: out var mask) && TryPart(line: head[3], name: "bake ", value: out var bake)) ? (code, mask, bake) : null;
+        return ((head.Length == 5) && (head[0] == IdentityFormat) && head[1].StartsWith(value: "version ", comparisonType: StringComparison.Ordinal) && (head[1].Length > "version ".Length) && TryPart(line: head[2], name: "code ", value: out var code) && TryPart(line: head[3], name: "mask ", value: out var mask) && TryPart(line: head[4], name: "bake ", value: out var bake)) ? (head[1]["version ".Length..], code, mask, bake) : null;
     }
     private static bool TryPart(string line, string name, out UInt128 value) {
         value = default;
@@ -355,7 +375,7 @@ public sealed class SdfMeshStore {
         string[] lines = [];
 
         _ = Quietly(action: () => lines = File.ReadAllLines(path: path));
-        foreach (var line in lines.Skip(count: 4)) {
+        foreach (var line in lines.Skip(count: 5)) {
             if ((line.Length > 33) && UInt128.TryParse(s: line.AsSpan(length: 32, start: 0), style: System.Globalization.NumberStyles.HexNumber, provider: null, result: out var hash)) { earlier[line[33..]] = hash; }
         }
 
