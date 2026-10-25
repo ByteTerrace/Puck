@@ -135,7 +135,7 @@ public sealed class ArenaJournal {
     }
 
     // What an overwritten reference keeps alive for as long as the record holds it: nothing else refers to a
-    // replaced text or provenance, so its payload is the record's. An object is counted at a header and its fields,
+    // replaced text or so its payload is the record's. An object is counted at a header and its fields,
     // a string at a header and two bytes a UTF-16 code unit.
     private static long RetainedBytes(object? reference) {
         const long ObjectBytes = 32L;

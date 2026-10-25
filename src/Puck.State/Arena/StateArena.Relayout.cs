@@ -184,7 +184,6 @@ public sealed partial class StateArena {
         m_poolAddresses = source.m_poolAddresses;
         m_presence = source.m_presence;
         m_clockSet = source.m_clockSet;
-        m_provenance = source.m_provenance;
         m_reindexRow = source.m_reindexRow;
         m_reindexStamp = source.m_reindexStamp;
         m_rowChangeStamp = source.m_rowChangeStamp;

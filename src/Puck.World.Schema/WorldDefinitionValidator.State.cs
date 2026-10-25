@@ -1665,12 +1665,6 @@ public static partial class WorldDefinitionValidator {
                 );
             }
 
-            if (
-                (cell.Provenance is { } provenance) &&
-                (provenance.Length > StateCapacity.MaxProvenanceLength)
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
-            }
 
             if (row.Kind == CellKind.Vector) {
                 if ((resolvedSpace is not null) && (cell.Value.AsVector.Length != resolvedSpace.Identity.Dimensions)) {

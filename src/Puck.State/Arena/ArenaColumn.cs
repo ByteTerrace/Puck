@@ -40,9 +40,6 @@ public enum ArenaColumn : byte {
     /// still a clock and not an absence of one.</summary>
     ClockSet,
 
-    /// <summary>The identity that minted a cell's current value.</summary>
-    Provenance,
-
     /// <summary>A cell's <see cref="StateCellBehavior"/> override.</summary>
     Behavior,
 
@@ -106,7 +103,6 @@ public static class ArenaColumns {
         ArenaColumn.ClockV0,
         ArenaColumn.ClockSubstepTicks,
         ArenaColumn.ClockSet,
-        ArenaColumn.Provenance,
         ArenaColumn.Behavior,
         ArenaColumn.Visibility,
         ArenaColumn.Observation,
@@ -146,5 +142,5 @@ public static class ArenaColumns {
     /// numbers.</summary>
     /// <param name="column">The column to classify.</param>
     /// <returns><see langword="true"/> for a reference column.</returns>
-    public static bool IsReference(ArenaColumn column) => (column is (ArenaColumn.Text or ArenaColumn.Provenance or ArenaColumn.Visibility or ArenaColumn.Observation));
+    public static bool IsReference(ArenaColumn column) => (column is (ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation));
 }

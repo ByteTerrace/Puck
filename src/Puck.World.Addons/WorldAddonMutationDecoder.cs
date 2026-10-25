@@ -1097,7 +1097,7 @@ public static class WorldAddonMutationDecoder {
     private static bool TryDecodePlainStateCell(JsonElement entry, CellKind kind, out StateCell? cell, StateCell? previous = null) {
         cell = null;
         if (previous is not {
-            Advance: null, Cycle: null, Dynamics: null, Clock: null, Provenance: null,
+            Advance: null, Cycle: null, Dynamics: null, Clock: null,
             Visibility: null, Observation: null, Behavior: StateCellBehavior.Inherit
         }) { previous = null; }
         if (entry.ValueKind != JsonValueKind.Object) { return false; }

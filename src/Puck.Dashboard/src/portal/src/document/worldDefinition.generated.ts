@@ -12212,7 +12212,6 @@ export type WorldStateRow = {
        */
       visible: boolean;
     };
-    provenance?: string;
   }[];
   /**
    * The row-wide declared lower bound every cell's Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max — a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.

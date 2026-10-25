@@ -68,7 +68,6 @@ public sealed partial class StateArena {
     private StateVisibility?[]? m_visibilities;
     private long m_declarationVisibilityBytes;
     private long m_visibilityBytes;
-    private string?[]? m_provenance;
     private string?[]? m_texts;
 
     private bool[] m_changeDiffers = [];

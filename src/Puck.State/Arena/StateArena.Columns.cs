@@ -45,7 +45,6 @@ public sealed partial class StateArena {
         ArenaColumn.DrawnMaskWord => (m_maskWords is not null),
         ArenaColumn.PhaseSequence => (m_phaseSequences is not null),
         ArenaColumn.Text => (m_texts is not null),
-        ArenaColumn.Provenance => (m_provenance is not null),
         ArenaColumn.Visibility => (m_visibilities is not null),
         ArenaColumn.Observation => (m_observations is not null),
         _ => true,
@@ -90,7 +89,6 @@ public sealed partial class StateArena {
     });
     private object? ReadReferenceRaw(ArenaColumn column, int index) => (column switch {
         ArenaColumn.Text => m_texts?[index],
-        ArenaColumn.Provenance => m_provenance?[index],
         ArenaColumn.Visibility => m_visibilities?[index],
         ArenaColumn.Observation => m_observations?[index],
         _ => throw new InvalidOperationException(message: $"Arena column '{column}' stores no reference."),
@@ -217,10 +215,6 @@ public sealed partial class StateArena {
         switch (column) {
             case ArenaColumn.Text:
                 (m_texts ??= new string?[m_layout.CellSlotCount])[index] = ((string?)value);
-
-                break;
-            case ArenaColumn.Provenance:
-                (m_provenance ??= new string?[m_layout.CellSlotCount])[index] = ((string?)value);
 
                 break;
             case ArenaColumn.Visibility:

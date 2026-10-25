@@ -211,13 +211,6 @@ public sealed partial class StateArena {
                 );
 
                 break;
-            case ArenaColumn.Provenance:
-                FoldText(
-                    hash: ref hash,
-                    text: m_provenance?[slot]
-                );
-
-                break;
             case ArenaColumn.Vector:
                 hash.Add(value: ((ulong)layout.Dimensions));
 

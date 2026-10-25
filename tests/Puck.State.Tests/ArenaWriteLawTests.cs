@@ -442,8 +442,8 @@ public sealed class ArenaWriteLawTests {
     }
     [Fact]
     public void ARingPushClearsTheSlotItReuses() {
-        var haunted = PushedOverALoadedRing(provenance: "ghost");
-        var clean = PushedOverALoadedRing(provenance: null);
+        var haunted = PushedOverALoadedRing(clock: new StateCellClock(EpochTick: 5L));
+        var clean = PushedOverALoadedRing(clock: null);
 
         Assert.Equal(
             actual: clean.ComputeHash(),
@@ -460,7 +460,6 @@ public sealed class ArenaWriteLawTests {
             actual: reused.Value.AsInt,
             expected: 1L
         );
-        Assert.Null(@object: reused.Provenance);
         Assert.Null(@object: reused.Clock);
     }
 
@@ -474,7 +473,7 @@ public sealed class ArenaWriteLawTests {
         return value;
     }
     // A ring whose oldest slot carries runtime state, pushed over once so the cursor lands back on that slot.
-    private static StateArena PushedOverALoadedRing(string? provenance) {
+    private static StateArena PushedOverALoadedRing(StateCellClock? clock) {
         var (_, arena) = ArenaFixture.Build();
 
         Assert.True(
@@ -486,11 +485,7 @@ public sealed class ArenaWriteLawTests {
                         Cells: [new StateCell(
                                 Key: ArenaFixture.Name(value: "0"),
                                 Value: CellValue.Int(value: 7L),
-                                Provenance: provenance,
-                                Clock: ((provenance is null)
-                                    ? null
-                                    : new StateCellClock(EpochTick: 5L)
-                                )
+                                Clock: clock
                             )],
                         Domain: new StateDomain.Ring(
                             Capacity: 3,

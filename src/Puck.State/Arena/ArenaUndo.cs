@@ -246,7 +246,7 @@ public sealed partial class StateArena {
                         return false;
                     }
                     var payloadMatches = entry.Column switch {
-                        ArenaColumn.Text or ArenaColumn.Provenance => ((entry.Visibility is null) && (entry.Observation is null)),
+                        ArenaColumn.Text => ((entry.Visibility is null) && (entry.Observation is null)),
                         ArenaColumn.Visibility => ((entry.Text is null) && (entry.Observation is null)),
                         ArenaColumn.Observation => ((entry.Text is null) && (entry.Visibility is null)),
                         _ => ((entry.Text is null) && (entry.Visibility is null) && (entry.Observation is null)),
@@ -386,7 +386,7 @@ public sealed partial class StateArena {
             reason = $"carries column '{entry.Column}' which row '{m_rows[row].Name.Value}' cannot store";
             return false;
         }
-        if (((entry.Column is (ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Provenance or ArenaColumn.Visibility or ArenaColumn.Observation)) && (entry.Number != 0L)) || ((entry.Column == ArenaColumn.MemberKey) && (entry.Number is not (-1L or 0L)))) {
+        if (((entry.Column is (ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation)) && (entry.Number != 0L)) || ((entry.Column == ArenaColumn.MemberKey) && (entry.Number is not (-1L or 0L)))) {
             reason = $"carries a noncanonical number for column '{entry.Column}'";
             return false;
         }
@@ -412,9 +412,6 @@ public sealed partial class StateArena {
             return false;
         } else if ((entry.Column == ArenaColumn.Text) && ((entry.Text?.Length ?? 0) > StateCapacity.MaxTextValueLength)) {
             reason = "carries text past the state text ceiling";
-            return false;
-        } else if ((entry.Column == ArenaColumn.Provenance) && ((entry.Text?.Length ?? 0) > StateCapacity.MaxProvenanceLength)) {
-            reason = "carries provenance past its length ceiling";
             return false;
         } else if ((entry.Column == ArenaColumn.Visibility) && !StateVisibilityStorage.TryMeasure(value: entry.Visibility, bytes: out _, reason: out reason)) {
             return false;
@@ -567,8 +564,6 @@ public sealed partial class StateArena {
 
                 if (column == ArenaColumn.Text) {
                     segmentBytes = checked((segmentBytes + (((long)positions) * (32L + (2L * StateCapacity.MaxTextValueLength)))));
-                } else if (column == ArenaColumn.Provenance) {
-                    segmentBytes = checked((segmentBytes + (((long)positions) * (32L + (2L * StateCapacity.MaxProvenanceLength)))));
                 } else if (column == ArenaColumn.Visibility) {
                     var visibilityBytes = ((((64L + 32L) + (2L * SafeName.MaxLength)) + 64L) + (((long)StateCapacity.MaxVisibilityReaders) * ((sizeof(long) + 32L) + (2L * StateCapacity.MaxVisibilityReaderLength))));
 
@@ -606,12 +601,12 @@ public sealed partial class StateArena {
             // A pool snapshot may carry a persisted clock even when its field declares no advancing trait, and a
             // later load may introduce one without changing the layout. Reserve every pool field's clock columns.
             ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => ((!poolRow || poolFieldRow) ? layout.CellCapacity : 0),
-            // A turn is written by its group's rules, and no rule writes a cell's provenance, behavior, or audience
+            // A turn is written by its group's rules, and no rule writes a cell's behavior, or audience
             // restriction: those arrive only through an import, which never runs inside a pass. Only a knowledge
             // row's observe transform stamps a last-seen observation. Reserving the unreachable columns would price
             // every board cell at kilobytes and keep a board out of any useful depth; a write that does reach one
             // makes its turn unrewindable instead (RetainWrite).
-            ArenaColumn.Provenance or ArenaColumn.Behavior or ArenaColumn.Visibility => 0,
+            ArenaColumn.Behavior or ArenaColumn.Visibility => 0,
             ArenaColumn.Observation => ((!poolRow && (catalog.Rows[row].Knowledge is not null)) ? layout.CellCapacity : 0),
             ArenaColumn.HistoryCursor => ((layout.Shape == RowShape.Ring) ? 1 : 0),
             ArenaColumn.DrawCursor => ((layout.MaskWordStart >= 0) ? 1 : 0),
@@ -873,7 +868,7 @@ public sealed partial class StateArena {
             Reset(rewindable: snapshot.Rewindable);
             foreach (var entry in snapshot.Entries) {
                 object? reference = entry.Column switch {
-                    ArenaColumn.Text or ArenaColumn.Provenance => entry.Text,
+                    ArenaColumn.Text => entry.Text,
                     ArenaColumn.Visibility => entry.Visibility,
                     ArenaColumn.Observation => entry.Observation,
                     _ => null,

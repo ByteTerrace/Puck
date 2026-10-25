@@ -82,11 +82,6 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// <see cref="StateAdvance"/> for the read-side computation and <see cref="StateCellClock"/> for where its epoch
 /// lives. Legitimate only on a cell whose <see cref="Key"/> is not <see cref="StateRow.SlotKey"/> — a slot's one
 /// cell has no separate override to declare; its behavior is entirely its row's.</param>
-/// <param name="Provenance">The identity that minted this cell's current value. A keyed <see cref="CellKind.Int"/>
-/// row addressed by a holder's 0-based entity index is an item or currency fact: <see cref="Value"/> is the
-/// quantity or balance, and this field names who minted it. <see langword="null"/> means locally self-minted, the
-/// only value a single-authority world produces today; a federated authority is expected to populate a real issuer
-/// id.</param>
 /// <param name="Dynamics">This cell's own second-order easing trait, replacing its row's <see cref="StateRow.Dynamics"/>
 /// default wholesale, or <see langword="null"/> to inherit that default. Legitimate only on a cell whose
 /// <see cref="Key"/> is not <see cref="StateRow.SlotKey"/>.</param>
@@ -103,7 +98,7 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// settled anywhere but tick zero. See <see cref="StateCellClock"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
+public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Advance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -671,10 +666,6 @@ public static class StateCapacity {
     /// <summary>The section's family-count ceiling: one member-ordinal table per family in the catalog. A family's
     /// own size is bounded by <see cref="MaxRows"/>, since its members are rows.</summary>
     public const int MaxFamilies = 256;
-    /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
-    /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
-    /// type.</summary>
-    public const int MaxProvenanceLength = 256;
     /// <summary>The most explicit readers one row or cell visibility may retain.</summary>
     public const int MaxVisibilityReaders = 32;
     /// <summary>The most UTF-16 code units one explicit visibility reader token may retain.</summary>

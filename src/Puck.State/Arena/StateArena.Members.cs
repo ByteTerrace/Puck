@@ -14,7 +14,6 @@ public sealed partial class StateArena {
         ArenaColumn.ClockV0,
         ArenaColumn.ClockSubstepTicks,
         ArenaColumn.ClockSet,
-        ArenaColumn.Provenance,
         ArenaColumn.Behavior,
         ArenaColumn.Visibility,
         ArenaColumn.Observation,
@@ -432,7 +431,7 @@ public sealed partial class StateArena {
     /// <remarks>The destination decides every refusal — its kind, its room, its duplicate-key rule, and its
     /// envelope — before the source gives the member up, so a refused transfer leaves both rows as they were.
     /// <para>The member arrives at the destination as a freshly minted cell carrying the value alone: its cell
-    /// clock, provenance, visibility, observation, and behavior override stay behind with the slot it
+    /// clock, visibility, observation, and behavior override stay behind with the slot it
     /// left.</para></remarks>
     public bool TryTransfer(int fromOrdinal, int toOrdinal, CellKey key, bool insertFirst, out string reason) {
         if ((m_poolMutationDepth == 0) && (m_catalog.IsPoolRow(rowOrdinal: fromOrdinal) || m_catalog.IsPoolRow(rowOrdinal: toOrdinal))) {
@@ -737,6 +736,9 @@ public sealed partial class StateArena {
     private void MoveCell(int rowOrdinal, int from, int to) {
         Visit(lanes: (CellColumns.Length + m_layout[rowOrdinal].Dimensions));
         foreach (var column in CellColumns) {
+            if (!IsMaterialized(column: column)) {
+                continue;
+            }
             if (ArenaColumns.IsReference(column: column)) {
                 WriteReference(
                     column: column,

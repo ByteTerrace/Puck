@@ -960,7 +960,6 @@ public static partial class WorldModelShape {
                 M("key", typeof(global::Puck.State.CellName), typeof(global::Puck.State.StateCell), "Key", Read | Write, static value => ((global::Puck.State.StateCell)value).Key),
                 M("value", typeof(global::Puck.State.CellValue), typeof(global::Puck.State.StateCell), "Value", Read | Write, static value => ((global::Puck.State.StateCell)value).Value),
                 M("advance", typeof(global::Puck.State.StateAdvance), typeof(global::Puck.State.StateCell), "Advance", Read | Write, static value => ((global::Puck.State.StateCell)value).Advance),
-                M("provenance", typeof(global::System.String), typeof(global::Puck.State.StateCell), "Provenance", Read | Write, static value => ((global::Puck.State.StateCell)value).Provenance),
                 M("dynamics", typeof(global::Puck.State.StateDynamics), typeof(global::Puck.State.StateCell), "Dynamics", Read | Write, static value => ((global::Puck.State.StateCell)value).Dynamics),
                 M("cycle", typeof(global::Puck.State.StateCycle), typeof(global::Puck.State.StateCell), "Cycle", Read | Write, static value => ((global::Puck.State.StateCell)value).Cycle),
                 M("behavior", typeof(global::Puck.State.StateCellBehavior), typeof(global::Puck.State.StateCell), "Behavior", Read | Write, static value => ((global::Puck.State.StateCell)value).Behavior),

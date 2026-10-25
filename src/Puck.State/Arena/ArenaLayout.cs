@@ -88,10 +88,8 @@ public sealed class ArenaLayout {
     // A row's bookkeeping: its layout record, its versions, generations and stamps, and its key map's slack.
     private const long BytesPerRow = 512L;
     // A string a reference column points at: the object's header, length and terminator, then two bytes a UTF-16
-    // code unit. Every cell slot may carry a provenance, and every slot of a text row a text, each at the length
-    // ceiling its write doors hold it to.
+    // code unit. Every slot of a text row reserves a text at its write door's length ceiling.
     private const long StringOverheadBytes = 32L;
-    private const long ProvenanceBytesPerCellSlot = (StringOverheadBytes + (2L * StateCapacity.MaxProvenanceLength));
     private const long TextBytesPerTextSlot = (StringOverheadBytes + (2L * StateCapacity.MaxTextValueLength));
 
     private readonly int[] m_changeBases;
@@ -176,7 +174,7 @@ public sealed class ArenaLayout {
     }
 
     /// <summary>Gets the bytes an arena over this layout reserves for its columns, indexes, and fixed-ceiling text
-    /// and provenance payloads. <see cref="StateArena.Bytes"/> adds the bounded visibility payload and retained
+    /// payloads. <see cref="StateArena.Bytes"/> adds the bounded visibility payload and retained
     /// key storage currently in use.</summary>
     public long Bytes { get; }
     /// <summary>Gets how many cell slots the layout reserves across every column.</summary>
@@ -270,7 +268,6 @@ public sealed class ArenaLayout {
     private static long Measure(long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
         var bytes = vectorBytes;
 
-        bytes += (cellSlots * ProvenanceBytesPerCellSlot);
         bytes += (textSlots * TextBytesPerTextSlot);
 
         foreach (var column in ArenaColumns.All) {

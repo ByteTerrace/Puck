@@ -223,7 +223,6 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["clock"] = StateCellClockJsonConverter.Schema(),
             ["visibility"] = exportType(typeof(StateVisibility)),
             ["observation"] = exportType(typeof(StateObservation)),
-            ["provenance"] = new JsonObject { ["type"] = "string" },
         },
         ["required"] = new JsonArray(
         "key",

@@ -123,7 +123,6 @@ public sealed class ArenaUndoLawTests {
         Assert.False(condition: arena.ValidateUndoSnapshot(reason: out var reason, snapshot: snapshot));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "noncanonical number");
     }
-    [InlineData(ArenaColumn.Provenance)]
     [InlineData(ArenaColumn.Visibility)]
     [InlineData(ArenaColumn.Behavior)]
     [InlineData(ArenaColumn.Observation)]

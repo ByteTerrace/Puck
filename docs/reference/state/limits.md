@@ -45,7 +45,6 @@ A few rules apply to every limit on this page:
 | Identifier length | 244 characters | `SafeName.MaxLength` | [Rows, cells, and values](data-model.md#names) |
 | Visibility readers per policy | 32 | `StateCapacity.MaxVisibilityReaders` | [Row and cell behavior](traits.md#control-what-observers-learn) |
 | Length of one visibility reader | 256 characters | `StateCapacity.MaxVisibilityReaderLength` | [Row and cell behavior](traits.md#control-what-observers-learn) |
-| Provenance text per cell | 256 characters | `StateCapacity.MaxProvenanceLength` | [The state arena](arena.md#byte-accounting) |
 
 ## Storage
 

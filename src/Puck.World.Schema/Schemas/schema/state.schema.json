@@ -84,9 +84,6 @@
                     "visible"
                   ],
                   "additionalProperties": false
-                },
-                "provenance": {
-                  "type": "string"
                 }
               },
               "required": [

@@ -22,7 +22,7 @@ it. `coins` sits in the Int slot column, `pieceCell` in the Int keyed column,
 `hand` in the Int ordered column, and `board` in the Int lattice column. Beside
 those value columns, the arena keeps a column for every piece of runtime state a
 cell can carry: a presence bit, the key that occupies a slot, clock epochs,
-provenance, a visibility restriction, and so on. `ArenaColumn` names each of
+a visibility restriction, and so on. `ArenaColumn` names each of
 them.
 
 Every row belongs to one of three **lanes**:
@@ -492,8 +492,7 @@ the two side by side.
 - the row, key-to-slot, and pool-occupancy indexes, and a fixed allowance per
   row for its layout record, counters, and key map;
 - vector components;
-- a provenance string for every cell slot at its 256-character ceiling, and a
-  text for every slot of a `Text` row at its 1,024-character ceiling.
+- a text for every slot of a `Text` row at its 1,024-character ceiling.
 
 `StateArena.Bytes` adds what the arena retains beyond the layout:
 
@@ -560,8 +559,6 @@ For the reasoning behind this design, see
   depend on the tick or on a host facet.
 - Exported rows don't carry orphan key names. A checkpoint that omits the key
   ledger restores to a different hash.
-- Every cell slot reserves room for a full-length provenance string, so wide
-  rows spend the byte budget quickly even when they store small numbers.
 
 ## Key types
 

@@ -116,7 +116,7 @@ public sealed partial class StateArena {
         if ((previous is not null) && (previous.Key == name) && (previous.Value == value) &&
             (previous.Advance == authored?.Advance) && (previous.Cycle == authored?.Cycle) && (previous.Dynamics == authored?.Dynamics) &&
             (previous.Behavior == behavior) && (previous.Observation == m_observations?[slot]) &&
-            (previous.Provenance == m_provenance?[slot]) && (previous.Visibility == m_visibilities?[slot]) && sameClock) {
+            (previous.Visibility == m_visibilities?[slot]) && sameClock) {
             return previous;
         }
 
@@ -155,7 +155,6 @@ public sealed partial class StateArena {
             Dynamics: authored?.Dynamics,
             Key: name,
             Observation: m_observations?[slot],
-            Provenance: m_provenance?[slot],
             // An export owns its data, so a vector is copied out of the arena where ValueAt aliases it.
             Value: ((layout.Kind == CellKind.Vector)
                 ? CellValue.Vector(components: VectorSpan(slot: slot).ToArray())
