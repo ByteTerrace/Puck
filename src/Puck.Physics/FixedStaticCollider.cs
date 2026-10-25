@@ -356,6 +356,33 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         }
         return (Center + ((Kind == FixedStaticColliderKind.AxisAlignedBox) ? point : Rotation.Rotate(vector: point)));
     }
+    /// <summary>Returns a finite solid's world-axis half-extent about <see cref="Center"/>, padded past fixed-point
+    /// rounding. A body whose bounds, grown by the contact skin, miss this box needs no push from the solid, so a
+    /// sweep may skip its exact query.</summary>
+    /// <returns>The padded half-extent, in metres; <see langword="null"/> for a half-space, which has no bounds.</returns>
+    public FixedVector3? WorldHalfExtent() {
+        if (Kind == FixedStaticColliderKind.HalfSpace) { return null; }
+        var padding = new FixedVector3(X: BoundsPadding, Y: BoundsPadding, Z: BoundsPadding);
+
+        if (Kind == FixedStaticColliderKind.Sphere) { return (new FixedVector3(X: Extent.X, Y: Extent.X, Z: Extent.X) + padding); }
+        if (Kind == FixedStaticColliderKind.AxisAlignedBox) { return (Extent + padding); }
+        var local = Kind switch {
+            FixedStaticColliderKind.RoundedBox => (Extent + new FixedVector3(X: Radius, Y: Radius, Z: Radius)),
+            // The support along each local axis is the solid's reach on it; both shapes are symmetric about Center.
+            FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => new FixedVector3(
+                X: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitX).X),
+                Y: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitY).Y),
+                Z: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitZ).Z)),
+            _ => Extent,
+        };
+        var axisX = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitX));
+        var axisY = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitY));
+        var axisZ = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitZ));
+
+        return ((((axisX * local.X) + (axisY * local.Y)) + (axisZ * local.Z)) + padding);
+    }
+    // Far wider than any rounding in a rotation or a contact query, and still tight enough to cull at room scale.
+    private static readonly FixedQ4816 BoundsPadding = (FixedQ4816.One / FixedQ4816.FromInteger(value: 64));
     /// <summary>Queries the depenetration required for one body volume.</summary>
     /// <param name="position">The body's world position.</param>
     /// <param name="orientation">The body's world orientation.</param>

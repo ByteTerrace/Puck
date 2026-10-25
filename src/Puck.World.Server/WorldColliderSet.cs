@@ -24,9 +24,9 @@ namespace Puck.World.Server;
 /// use their closest-point geometry; rounded/chamfered circular rims use contained cores with computed error bounds.
 /// Boolean carving, smoothing, and other finite primitive
 /// surfaces are not modelled: those primitives use their oriented bounding box (<see cref="FixedStaticCollider.Box"/>). A
-/// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. No broadphase:
-/// O(bodies × colliders); a Y-sorted array with an AABB reject on the swept bounds is the cheap first cull if profiling
-/// ever demands one, behind this seam with no signature change.</para>
+/// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. A sweep
+/// visits only the colliders a 4 m grid over world X and Z places near its move, and rejects any whose padded world
+/// bounds miss the body's before its exact query; neither cull changes the result.</para>
 /// <para>A placement carrying both a solid and an attach facet compiles no static collider here — its origin/yaw are
 /// not the row's authored transform, they are a live body's resolved pose. <see cref="RefreshAttached"/> recomputes
 /// those colliders once per tick, before any body advances, so every body's <see cref="Resolve"/> call this tick
@@ -56,6 +56,16 @@ public sealed class WorldColliderSet : IContactField {
     // holdable or tetherable today.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
+    // Each m_colliders entry's world bounds, in the same order, so a sweep skips the colliders a body cannot reach.
+    private readonly FixedVector3?[] m_colliderExtents;
+    // A uniform grid over world X and Z of those bounds, so a sweep visits the colliders near its move rather than
+    // all of them. A collider without bounds, or one spanning more than GridCellLimit cells, joins every query.
+    private const int GridCellShift = 18;
+    private const int GridCellLimit = 64;
+    private static readonly FixedQ4816 RegionMargin = FixedQ4816.One;
+    private readonly Dictionary<(int X, int Z), int[]> m_colliderGrid;
+    private readonly int[] m_unboundedColliders;
+    private readonly List<int> m_candidates = [];
 
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private init; } = [];
 
@@ -77,6 +87,8 @@ public sealed class WorldColliderSet : IContactField {
 
     private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
+        m_colliderExtents = Array.ConvertAll(array: colliders, converter: static collider => collider.WorldHalfExtent());
+        (m_colliderGrid, m_unboundedColliders) = BuildGrid(colliders: colliders, extents: m_colliderExtents);
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
@@ -671,6 +683,99 @@ public sealed class WorldColliderSet : IContactField {
         }
         return (found && (displacement != FixedVector3.Zero));
     }
+    // The cells a world-axis box covers, inclusive: GridCellShift makes each cell 4 m of Q48.16 raw units.
+    private static (int X0, int X1, int Z0, int Z1) CellRange(in FixedVector3 center, in FixedVector3 extent) =>
+        ((int)((center.X - extent.X).Value >> GridCellShift), (int)((center.X + extent.X).Value >> GridCellShift),
+         (int)((center.Z - extent.Z).Value >> GridCellShift), (int)((center.Z + extent.Z).Value >> GridCellShift));
+    private static long CellCount((int X0, int X1, int Z0, int Z1) range) =>
+        ((((long)range.X1 - range.X0) + 1L) * (((long)range.Z1 - range.Z0) + 1L));
+    private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(FixedStaticCollider[] colliders, FixedVector3?[] extents) {
+        var cells = new Dictionary<(int X, int Z), List<int>>();
+        var unbounded = new List<int>();
+
+        for (var index = 0; (index < colliders.Length); index++) {
+            if (extents[index] is not { } extent) {
+                unbounded.Add(item: index);
+                continue;
+            }
+            var range = CellRange(center: colliders[index].Center, extent: extent);
+
+            if (CellCount(range: range) > GridCellLimit) {
+                unbounded.Add(item: index);
+                continue;
+            }
+            for (var x = range.X0; (x <= range.X1); x++) {
+                for (var z = range.Z0; (z <= range.Z1); z++) {
+                    if (!cells.TryGetValue(key: (x, z), value: out var list)) {
+                        list = [];
+                        cells.Add(key: (x, z), value: list);
+                    }
+                    list.Add(item: index);
+                }
+            }
+        }
+        var grid = new Dictionary<(int X, int Z), int[]>(capacity: cells.Count);
+
+        foreach (var (cell, list) in cells) {
+            grid.Add(key: cell, value: [.. list]);
+        }
+        return (grid, [.. unbounded]);
+    }
+    // The colliders a move can reach: those near the body's bounds at both ends of the move, grown by a margin for the
+    // pushes it meets on the way. The solver checks every collider once the body's bounds leave that region, so the
+    // margin trades only speed, never the result.
+    private FixedColliderCandidates Candidates(in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        if (volumes.IsEmpty) { return default; }
+        var (firstCenter, firstExtent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volumes[0]);
+        // The least corner is carried negated, so one component-wise maximum grows both corners.
+        var negatedMinimum = -(firstCenter - firstExtent);
+        var maximum = (firstCenter + firstExtent);
+
+        foreach (ref readonly var volume in volumes) {
+            foreach (var at in (ReadOnlySpan<FixedVector3>)[previousPosition, position]) {
+                var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
+
+                negatedMinimum = FixedVector3.Max(left: negatedMinimum, right: -(center - extent));
+                maximum = FixedVector3.Max(left: maximum, right: (center + extent));
+            }
+        }
+        var minimum = -negatedMinimum;
+        var margin = new FixedVector3(X: RegionMargin, Y: RegionMargin, Z: RegionMargin);
+        var two = FixedQ4816.FromInteger(value: 2);
+        var regionCenter = ((minimum + maximum) / two);
+        var regionExtent = (((maximum - minimum) / two) + margin);
+        var skin = new FixedVector3(X: m_solver.ContactSkin, Y: m_solver.ContactSkin, Z: m_solver.ContactSkin);
+        var range = CellRange(center: regionCenter, extent: (regionExtent + skin));
+
+        if (CellCount(range: range) > GridCellLimit) { return default; }
+        m_candidates.Clear();
+        foreach (var index in m_unboundedColliders) {
+            if ((m_colliderExtents[index] is not { } extent) || !m_solver.Misses(bodyCenter: regionCenter, bodyExtent: regionExtent,
+                colliderCenter: m_colliders[index].Center, colliderExtent: extent)) {
+                m_candidates.Add(item: index);
+            }
+        }
+        for (var x = range.X0; (x <= range.X1); x++) {
+            for (var z = range.Z0; (z <= range.Z1); z++) {
+                if (!m_colliderGrid.TryGetValue(key: (x, z), value: out var cell)) { continue; }
+                foreach (var index in cell) {
+                    if (!m_solver.Misses(bodyCenter: regionCenter, bodyExtent: regionExtent,
+                        colliderCenter: m_colliders[index].Center, colliderExtent: m_colliderExtents[index]!.Value)) {
+                        m_candidates.Add(item: index);
+                    }
+                }
+            }
+        }
+        m_candidates.Sort();
+        var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_candidates);
+        var count = 0;
+
+        for (var read = 0; (read < span.Length); read++) {
+            if ((count == 0) || (span[count - 1] != span[read])) { span[count++] = span[read]; }
+        }
+        return new FixedColliderCandidates(indices: span[..count], regionCenter: regionCenter, regionExtent: regionExtent);
+    }
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
@@ -682,7 +787,9 @@ public sealed class WorldColliderSet : IContactField {
             position: ref position,
             up: in up,
             velocity: ref velocity,
-            volumes: volumes
+            volumes: volumes,
+            colliderExtents: m_colliderExtents,
+            candidates: Candidates(previousPosition: position, position: position, orientation: in orientation, volumes: volumes)
         );
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
@@ -690,7 +797,8 @@ public sealed class WorldColliderSet : IContactField {
         m_solver.ResolveSweep(colliders: m_colliders,
             dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
             previousPosition: in previousPosition, position: ref position, velocity: ref velocity,
-            orientation: in orientation, volumes: volumes, up: in up);
+            orientation: in orientation, volumes: volumes, up: in up, colliderExtents: m_colliderExtents,
+            candidates: Candidates(previousPosition: in previousPosition, position: position, orientation: in orientation, volumes: volumes));
     /// <inheritdoc/>
     // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
     // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.
