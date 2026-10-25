@@ -474,7 +474,11 @@ public sealed class ArenaWriteLawTests {
     }
     // A ring whose oldest slot carries runtime state, pushed over once so the cursor lands back on that slot.
     private static StateArena PushedOverALoadedRing(StateCellClock? clock) {
-        var (_, arena) = ArenaFixture.Build();
+        var section = ArenaFixture.Section();
+        section = section with { Rows = section.Rows!.Select((row, ordinal) => ((ordinal == ArenaFixture.History)
+            ? row with { Cells = [new StateCell(Key: ArenaFixture.Name(value: "0"), Value: CellValue.Int(value: 7L), Clock: clock)] }
+            : row)).ToArray() };
+        var arena = new StateArena(catalog: StateCatalog.Compile(section: section), section: section, time: ArenaTime.Origin);
 
         Assert.True(
             condition: arena.TryLoad(

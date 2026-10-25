@@ -26,7 +26,11 @@ public sealed class ArenaByteCeilingLawTests {
             Capacity: capacity,
             Cells: [new StateCell(
                     Key: ArenaFixture.Name(value: "a"),
-                    Value: CellValue.Int(value: 1L)
+                    Value: CellValue.Int(value: 1L),
+                    Clock: new StateCellClock(),
+                    Behavior: StateCellBehavior.None,
+                    Visibility: new StateVisibility(Readers: []),
+                    Observation: new StateObservation(Tick: 0L, Visible: false)
                 )]
         ),
         new StateRow(
@@ -123,9 +127,10 @@ public sealed class ArenaByteCeilingLawTests {
         );
         var catalog = StateCatalog.Compile(section: section);
         var layout = ArenaLayout.Build(catalog: catalog, options: null, section: section);
-        var allocated = AllocationWindow.Measure(window: () => _ = new StateArena(catalog: catalog, layout: layout, section: section, time: ArenaTime.Origin));
+        var measured = 0L;
+        var allocated = AllocationWindow.Measure(window: () => measured = new StateArena(catalog: catalog, layout: layout, section: section, time: ArenaTime.Origin).Bytes);
 
-        return (allocated, layout.Bytes);
+        return (allocated, measured);
     }
 
     [Fact]

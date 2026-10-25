@@ -702,7 +702,7 @@ public sealed partial class StateArena {
 
     private void ClearCell(int rowOrdinal, int slot) {
         foreach (var column in CellColumns) {
-            if (!IsMaterialized(column: column)) {
+            if (!IsMaterialized(column: column, row: rowOrdinal)) {
                 continue;
             }
             if (ArenaColumns.IsReference(column: column)) {
@@ -736,7 +736,7 @@ public sealed partial class StateArena {
     private void MoveCell(int rowOrdinal, int from, int to) {
         Visit(lanes: (CellColumns.Length + m_layout[rowOrdinal].Dimensions));
         foreach (var column in CellColumns) {
-            if (!IsMaterialized(column: column)) {
+            if (!IsMaterialized(column: column, row: rowOrdinal)) {
                 continue;
             }
             if (ArenaColumns.IsReference(column: column)) {
@@ -772,7 +772,7 @@ public sealed partial class StateArena {
     }
     private void SwapCells(int rowOrdinal, int left, int right) {
         foreach (var column in CellColumns) {
-            if (!IsMaterialized(column: column)) {
+            if (!IsMaterialized(column: column, row: rowOrdinal)) {
                 continue;
             }
             Visit(lanes: 2L);

@@ -247,14 +247,14 @@ public sealed partial class StateArena {
             index: rowOrdinal,
             value: 0L
         );
-        if (IsMaterialized(column: ArenaColumn.DrawCursor)) {
+        if (IsMaterialized(column: ArenaColumn.DrawCursor, row: rowOrdinal)) {
             WriteNumber(
                 column: ArenaColumn.DrawCursor,
                 index: rowOrdinal,
                 value: 0L
             );
         }
-        if (IsMaterialized(column: ArenaColumn.PhaseSequence)) {
+        if (IsMaterialized(column: ArenaColumn.PhaseSequence, row: rowOrdinal)) {
             WriteNumber(
                 column: ArenaColumn.PhaseSequence,
                 index: rowOrdinal,
@@ -263,7 +263,7 @@ public sealed partial class StateArena {
         }
         if (
             (layout.MaskWordStart >= 0) &&
-            IsMaterialized(column: ArenaColumn.DrawnMaskWord)
+            IsMaterialized(column: ArenaColumn.DrawnMaskWord, row: rowOrdinal)
         ) {
             for (var word = 0; (word < (layout.MaskCount * 4)); word++) {
                 WriteNumber(
@@ -664,6 +664,12 @@ public sealed partial class StateArena {
             row: row
         )) {
             return false;
+        }
+        foreach (var column in ArenaColumns.All) {
+            if (((ArenaLayout.ColumnsOf(row: row) & (1UL << (int)column)) != 0UL) && !m_layout.HasColumn(row: rowOrdinal, column: column)) {
+                reason = $"row '{row.Name.Value}' declares no '{column}' column; changing its traits requires a relayout";
+                return false;
+            }
         }
         if (!TryAdmitRowState(
             layout: layout,

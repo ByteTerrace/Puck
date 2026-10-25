@@ -7,7 +7,7 @@ public sealed partial class StateArena {
     private long m_windowEpoch;
     private bool m_windowOpen;
     private long[] m_windowOpaqueStamp = [];
-    private long[] m_windowStamp = [];
+    private readonly ArenaColumnBuffer<long>?[] m_windowStamp = new ArenaColumnBuffer<long>?[ArenaColumns.All.Length];
 
     /// <summary>Gets a value indicating whether a change window is open.</summary>
     public bool ChangeWindowOpen => m_windowOpen;
@@ -22,9 +22,6 @@ public sealed partial class StateArena {
     public void BeginChangeWindow() {
         if (m_windowOpen) {
             throw new InvalidOperationException(message: "A change window is already open.");
-        }
-        if (m_windowStamp.Length < m_layout.ChangeSlotCount) {
-            m_windowStamp = new long[m_layout.ChangeSlotCount];
         }
         if (m_windowOpaqueStamp.Length < m_layout.RowCount) {
             m_windowOpaqueStamp = new long[m_layout.RowCount];
@@ -81,13 +78,14 @@ public sealed partial class StateArena {
                 continue;
             }
 
-            var slot = (m_layout.ChangeBase(column: entry.Column) + entry.Index);
+            var stamps = (m_windowStamp[(int)entry.Column] ??= new ArenaColumnBuffer<long>(layout: m_layout, column: entry.Column));
+            var slot = entry.Index;
 
-            if (m_windowStamp[slot] == m_windowEpoch) {
+            if (stamps[slot] == m_windowEpoch) {
                 continue;
             }
 
-            m_windowStamp[slot] = m_windowEpoch;
+            stamps[slot] = m_windowEpoch;
             m_windowEntries.Add(item: entry);
         }
     }

@@ -426,9 +426,8 @@ public sealed partial class StateArena {
         }
         for (var index = mark; (index < m_journal.Length); index++) {
             var entry = m_journal[index];
-            var changeSlot = (m_layout.ChangeBase(column: entry.Column) + entry.Index);
 
-            RetainWrite(entry, ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default), differs: m_changeDiffers[changeSlot]);
+            RetainWrite(entry, ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default), differs: m_changeDiffers[(int)entry.Column]![entry.Index]);
         }
     }
 
@@ -588,6 +587,7 @@ public sealed partial class StateArena {
         return count;
     }
     private static int UndoPositionCount(StateCatalog catalog, ArenaColumn column, ArenaRowLayout layout, int row) {
+        if (!layout.HasColumn(column: column)) { return 0; }
         var poolRow = catalog.IsPoolRow(rowOrdinal: row);
         var poolFieldRow = catalog.IsPoolFieldRow(rowOrdinal: row);
 

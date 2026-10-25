@@ -1091,7 +1091,8 @@ public sealed class StateCatalog {
                 (left.Role != right.Role) ||
                 (left.Generated != right.Generated) ||
                 (left.HostOwned != right.HostOwned) ||
-                (left.LaneOrdinal != right.LaneOrdinal)
+                (left.LaneOrdinal != right.LaneOrdinal) ||
+                ((left.Lane == StateLane.Document) && (ArenaLayout.ColumnsOf(row: m_rows[left.LaneOrdinal]) != ArenaLayout.ColumnsOf(row: other.m_rows[right.LaneOrdinal])))
             ) {
                 return false;
             }
@@ -1174,6 +1175,7 @@ public sealed class StateCatalog {
         for (var index = 0; (index < rows.Count); index++) {
             if (
                 (rows[index] is not { } row) || row.Generated ||
+                (ArenaLayout.ColumnsOf(row: row) != ArenaLayout.ColumnsOf(row: m_rows[index])) ||
                 !Match(
                 name: row.Name,
                 lane: StateLane.Document,

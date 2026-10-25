@@ -48,33 +48,33 @@ public sealed partial class StateArena {
     private ArenaPoolAddress[] m_poolAddresses;
     private long[] m_numbers;
     private ulong[] m_presence;
-    private ulong[] m_clockSet;
+    private ArenaColumnBuffer<bool> m_clockSet;
     private int[] m_memberKeys;
     private long[] m_memberCounts;
     private long[] m_historyCursors;
     private long[] m_laneNumbers;
     private ulong[] m_laneRoster;
     private sbyte[] m_vectors;
-    private long[]? m_clockEpochEngineTicks;
-    private long[]? m_clockEpochTicks;
-    private long[]? m_clockSubstepTicks;
-    private long[]? m_clockV0;
-    private long[]? m_clockY0;
-    private long[]? m_drawCursors;
+    private ArenaColumnBuffer<long>? m_clockEpochEngineTicks;
+    private ArenaColumnBuffer<long>? m_clockEpochTicks;
+    private ArenaColumnBuffer<long>? m_clockSubstepTicks;
+    private ArenaColumnBuffer<long>? m_clockV0;
+    private ArenaColumnBuffer<long>? m_clockY0;
+    private ArenaColumnBuffer<long>? m_drawCursors;
     private long[]? m_maskWords;
-    private long[]? m_phaseSequences;
-    private byte[]? m_behaviors;
-    private StateObservation?[]? m_observations;
-    private StateVisibility?[]? m_visibilities;
+    private ArenaColumnBuffer<long>? m_phaseSequences;
+    private ArenaColumnBuffer<byte>? m_behaviors;
+    private ArenaColumnBuffer<StateObservation?>? m_observations;
+    private ArenaColumnBuffer<StateVisibility?>? m_visibilities;
     private long m_declarationVisibilityBytes;
     private long m_visibilityBytes;
-    private string?[]? m_texts;
+    private ArenaColumnBuffer<string?>? m_texts;
 
-    private bool[] m_changeDiffers = [];
+    private ArenaColumnBuffer<bool>?[] m_changeDiffers = new ArenaColumnBuffer<bool>?[ArenaColumns.All.Length];
 
     private long m_changeEpoch;
 
-    private long[] m_changeStamp = [];
+    private ArenaColumnBuffer<long>?[] m_changeStamp = new ArenaColumnBuffer<long>?[ArenaColumns.All.Length];
 
     private long[] m_rowChangeStamp;
     private int[] m_reindexRow;
@@ -150,7 +150,7 @@ public sealed partial class StateArena {
         m_memberKeys = new int[layout.CellSlotCount];
         m_numbers = new long[layout.CellSlotCount];
         m_presence = new ulong[((layout.CellSlotCount + 63) / 64)];
-        m_clockSet = new ulong[((layout.CellSlotCount + 63) / 64)];
+        m_clockSet = new ArenaColumnBuffer<bool>(layout: layout, column: ArenaColumn.ClockSet);
         m_reindexRow = new int[layout.RowCount];
         m_reindexStamp = new long[layout.RowCount];
         m_rowChangeStamp = new long[layout.RowCount];
@@ -777,10 +777,6 @@ public sealed partial class StateArena {
             return;
         }
 
-        if (m_changeStamp.Length < m_layout.ChangeSlotCount) {
-            m_changeDiffers = new bool[m_layout.ChangeSlotCount];
-            m_changeStamp = new long[m_layout.ChangeSlotCount];
-        }
 
         var epoch = ++m_changeEpoch;
 
@@ -788,10 +784,12 @@ public sealed partial class StateArena {
 
         for (var index = (m_journal.Length - 1); (index >= mark); index--) {
             var entry = m_journal[index];
-            var slot = (m_layout.ChangeBase(column: entry.Column) + entry.Index);
+            var stamps = (m_changeStamp[(int)entry.Column] ??= new ArenaColumnBuffer<long>(layout: m_layout, column: entry.Column));
+            var differs = (m_changeDiffers[(int)entry.Column] ??= new ArenaColumnBuffer<bool>(layout: m_layout, column: entry.Column));
+            var slot = entry.Index;
 
-            if (m_changeStamp[slot] != epoch) {
-                m_changeStamp[slot] = epoch;
+            if (stamps[slot] != epoch) {
+                stamps[slot] = epoch;
 
                 AddTouched(
                     column: entry.Column,
@@ -800,11 +798,11 @@ public sealed partial class StateArena {
                 );
             }
 
-            m_changeDiffers[slot] = Differs(entry: entry);
+            differs[slot] = Differs(entry: entry);
         }
 
         for (var index = 0; (index < m_touchedCount); index++) {
-            if (m_changeDiffers[m_touchedSlot[index]]) {
+            if (m_changeDiffers[m_touchedColumn[index]]![m_touchedIndex[index]]) {
                 MarkVersion(
                     column: ((ArenaColumn)m_touchedColumn[index]),
                     index: m_touchedIndex[index]

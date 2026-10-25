@@ -492,10 +492,7 @@ public sealed class ArenaRedeclareSettleLawTests {
             actual: settled.Value.AsInt,
             expected: 70L
         );
-        Assert.Equal(
-            actual: settled.Clock?.EpochTick,
-            expected: 6L
-        );
+        Assert.Null(@object: settled.Clock);
     }
     // A row redeclared from text hands over a cell that carries no number, so there is nothing to settle from: the
     // cell settles as a new one instead of reading a number the old declaration never stored.

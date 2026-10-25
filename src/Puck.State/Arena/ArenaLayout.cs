@@ -26,6 +26,7 @@ namespace Puck.State;
 /// <param name="LaneSlotStart">A lane slot's first lane-slot index, or <c>-1</c>.</param>
 /// <param name="LaneCapacity">How many lane ordinals a lane slot reserves.</param>
 /// <param name="HasTraits">Whether the row or any of its cells declares a value-over-time trait.</param>
+/// <param name="OptionalColumns">The optional columns this row's declaration reserves.</param>
 public readonly record struct ArenaRowLayout(
     int Ordinal,
     StateLane Lane,
@@ -46,7 +47,8 @@ public readonly record struct ArenaRowLayout(
     int MaskCount,
     int LaneSlotStart,
     int LaneCapacity,
-    bool HasTraits
+    bool HasTraits,
+    ulong OptionalColumns = 0UL
 ) {
     /// <summary>Gets a value indicating whether this board's cells are derived from a token row rather than
     /// written directly.</summary>
@@ -55,6 +57,9 @@ public readonly record struct ArenaRowLayout(
     public bool IsStored => (CellStart >= 0);
     /// <summary>Gets a value indicating whether the row's cell order carries gameplay meaning.</summary>
     public bool IsOrdered => (Shape == RowShape.Ordered);
+    /// <summary>Returns whether this row declares storage for a column.</summary>
+    /// <param name="column">The column.</param>
+    public bool HasColumn(ArenaColumn column) => !ArenaLayout.IsOptional(column: column) || ((OptionalColumns & (1UL << (int)column)) != 0UL);
 }
 /// <summary>One column of a <see cref="StateArena"/>: the contiguous run of cell slots every row sharing a lane, a
 /// shape, and a cell kind occupies.</summary>
@@ -92,7 +97,7 @@ public sealed class ArenaLayout {
     private const long StringOverheadBytes = 32L;
     private const long TextBytesPerTextSlot = (StringOverheadBytes + (2L * StateCapacity.MaxTextValueLength));
 
-    private readonly int[] m_changeBases;
+    private readonly ulong[] m_rowColumns;
     private readonly ArenaColumnRange[] m_columns;
     private readonly int[] m_columnRows;
     private readonly Dictionary<int, int[]> m_codeDependents;
@@ -106,6 +111,7 @@ public sealed class ArenaLayout {
 
     private ArenaLayout(
         ArenaRowLayout[] rows,
+        ulong[] rowColumns,
         ArenaColumnRange[] columns,
         int[] columnRows,
         int[] rowOfCellSlot,
@@ -133,6 +139,7 @@ public sealed class ArenaLayout {
         m_rowOfLaneSlot = rowOfLaneSlot;
         m_rowOfMaskWord = rowOfMaskWord;
         m_rows = rows;
+        m_rowColumns = rowColumns;
 
         CellSlotCount = cellSlotCount;
         LaneRosterCount = laneRosterCount;
@@ -149,7 +156,19 @@ public sealed class ArenaLayout {
             }
         }
 
+        var declaredPositions = new long[ArenaColumns.All.Length];
+        var columnArrayBytes = 0L;
+        foreach (var row in rows) {
+            foreach (var column in ArenaColumns.All) {
+                if (IsOptional(column: column) && HasColumn(row: row.Ordinal, column: column)) {
+                    columnArrayBytes += (3L * ArrayOverheadBytes);
+                    declaredPositions[(int)column] += ((ArenaColumns.Space(column: column) == ArenaIndexSpace.Cell) ? row.CellCapacity : 1);
+                }
+            }
+        }
         Bytes = Measure(
+            declaredPositions: declaredPositions,
+            columnArrayBytes: columnArrayBytes,
             cellSlots: cellSlotCount,
             laneRoster: laneRosterCount,
             laneSlots: laneSlotCount,
@@ -161,16 +180,6 @@ public sealed class ArenaLayout {
             vectorBytes: vectorByteCount
         );
 
-        m_changeBases = new int[ArenaColumns.All.Length];
-
-        var next = 0;
-
-        foreach (var column in ArenaColumns.All) {
-            m_changeBases[((int)column)] = next;
-            next += Size(column: column);
-        }
-
-        ChangeSlotCount = next;
     }
 
     /// <summary>Gets the bytes an arena over this layout reserves for its columns, indexes, and fixed-ceiling text
@@ -179,8 +188,6 @@ public sealed class ArenaLayout {
     public long Bytes { get; }
     /// <summary>Gets how many cell slots the layout reserves across every column.</summary>
     public int CellSlotCount { get; }
-    /// <summary>Gets how many distinct positions a journal entry can name, across every column.</summary>
-    public int ChangeSlotCount { get; }
     /// <summary>Gets the columns in layout order.</summary>
     public IReadOnlyList<ArenaColumnRange> Columns => m_readOnlyColumns;
     /// <summary>Gets the row ordinals the columns carry, each column's run starting at its
@@ -265,19 +272,48 @@ public sealed class ArenaLayout {
         return false;
     }
 
-    private static long Measure(long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
-        var bytes = vectorBytes;
+    /// <summary>Returns whether a column is reserved only by rows declaring its trait.</summary>
+    /// <param name="column">The column.</param>
+    public static bool IsOptional(ArenaColumn column) => column is ArenaColumn.Text or ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence;
+
+    /// <summary>Returns the optional columns declared by a row and its seed cells.</summary>
+    /// <param name="row">The declaration.</param>
+    public static ulong ColumnsOf(StateRow row) {
+        var columns = 0UL;
+        foreach (var column in ArenaColumns.All) {
+            var held = column switch {
+                ArenaColumn.Text => row.Kind == CellKind.Text,
+                ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => (row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null) || (row.Cells ?? []).Any(static cell => (cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)),
+                ArenaColumn.Behavior => HasTraits(row: row),
+                ArenaColumn.Visibility => (row.Visibility is not null) || (row.Cells ?? []).Any(static cell => cell.Visibility is not null),
+                ArenaColumn.Observation => (row.Knowledge is not null) || (row.Cells ?? []).Any(static cell => cell.Observation is not null),
+                ArenaColumn.DrawCursor => row.Draw is not null,
+                ArenaColumn.PhaseSequence => row.Phase is not null,
+                _ => false,
+            };
+            if (held) { columns |= (1UL << (int)column); }
+        }
+        return columns;
+    }
+
+    /// <summary>Returns whether a row holds a column; optional columns require their declared trait.</summary>
+    /// <param name="row">The catalog ordinal.</param>
+    /// <param name="column">The column.</param>
+    public bool HasColumn(int row, ArenaColumn column) => (((uint)row) < ((uint)m_rows.Length)) && (!IsOptional(column: column) || ((m_rowColumns[row] & (1UL << (int)column)) != 0UL));
+
+    private static long Measure(long[] declaredPositions, long columnArrayBytes, long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
+        var bytes = (vectorBytes + columnArrayBytes);
 
         bytes += (textSlots * TextBytesPerTextSlot);
 
         foreach (var column in ArenaColumns.All) {
-            var size = (ArenaColumns.Space(column: column) switch {
+            var size = (IsOptional(column: column) ? declaredPositions[(int)column] : (ArenaColumns.Space(column: column) switch {
                 ArenaIndexSpace.Cell => cellSlots,
                 ArenaIndexSpace.Row => rowCount,
                 ArenaIndexSpace.MaskWord => maskWords,
                 ArenaIndexSpace.LaneSlot => laneSlots,
                 _ => laneRoster,
-            });
+            }));
 
             bytes += (ArenaColumns.StorageBytes(
                 column: column,
@@ -300,8 +336,10 @@ public sealed class ArenaLayout {
 
         return bytes;
     }
-    private static void RequireFits(string what, long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
+    private static void RequireFits(long[] declaredPositions, long columnArrayBytes, string what, long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
         var bytes = Measure(
+            declaredPositions: declaredPositions,
+            columnArrayBytes: columnArrayBytes,
             cellSlots: cellSlots,
             laneRoster: laneRoster,
             laneSlots: laneSlots,
@@ -342,6 +380,9 @@ public sealed class ArenaLayout {
         var built = (options ?? ArenaOptions.Default);
         var rows = StateCatalog.ExpandRows(section: section);
         var layouts = new ArenaRowLayout[catalog.Count];
+        var rowColumns = new ulong[catalog.Count];
+        var declaredPositions = new long[ArenaColumns.All.Length];
+        var columnArrayBytes = 0L;
         var columns = new List<ArenaColumnRange>();
         var columnRows = new List<int>();
         var cellSlots = 0;
@@ -383,6 +424,8 @@ public sealed class ArenaLayout {
             rosterTotal += width;
 
             RequireFits(
+                declaredPositions: declaredPositions,
+            columnArrayBytes: columnArrayBytes,
                 cellSlots: 0L,
                 laneRoster: rosterTotal,
                 laneSlots: 0L,
@@ -462,6 +505,13 @@ public sealed class ArenaLayout {
                                 maskTotal += (maskCount * 4L);
                             }
 
+                            rowColumns[ordinal] = ColumnsOf(row: row);
+                            foreach (var optional in ArenaColumns.All) {
+                                if (IsOptional(column: optional) && ((rowColumns[ordinal] & (1UL << (int)optional)) != 0UL)) {
+                                    columnArrayBytes += (3L * ArrayOverheadBytes);
+                                    declaredPositions[(int)optional] += ((ArenaColumns.Space(column: optional) == ArenaIndexSpace.Cell) ? capacity : 1);
+                                }
+                            }
                             cellTotal += capacity;
                             textTotal += ((row.Kind == CellKind.Text)
                                 ? capacity
@@ -470,6 +520,8 @@ public sealed class ArenaLayout {
                             vectorTotal += (((long)dimensions) * capacity);
 
                             RequireFits(
+                                declaredPositions: declaredPositions,
+            columnArrayBytes: columnArrayBytes,
                                 cellSlots: cellTotal,
                                 laneRoster: laneRosterCount,
                                 laneSlots: laneTotal,
@@ -505,6 +557,7 @@ public sealed class ArenaLayout {
                                     _ => 0L,
                                 }),
                                 HasTraits: HasTraits(row: row),
+                                OptionalColumns: rowColumns[ordinal],
                                 HostOwned: descriptor.HostOwned,
                                 InverseCodesOrdinal: (((row.Inverse is { } codes) && ordinalsByName.TryGetValue(
                                     key: codes.Codes.Value,
@@ -543,6 +596,8 @@ public sealed class ArenaLayout {
                             laneTotal += width;
 
                             RequireFits(
+                                declaredPositions: declaredPositions,
+            columnArrayBytes: columnArrayBytes,
                                 cellSlots: cellTotal,
                                 laneRoster: laneRosterCount,
                                 laneSlots: laneTotal,
@@ -679,6 +734,7 @@ public sealed class ArenaLayout {
             rowOfLaneSlot: rowOfLaneSlot,
             rowOfMaskWord: rowOfMaskWord,
             rows: layouts,
+            rowColumns: rowColumns,
             vectorByteCount: vectorBytes
         );
     }
@@ -708,10 +764,6 @@ public sealed class ArenaLayout {
             return false;
         }
     }
-    /// <summary>Returns the base a column's indices occupy in the change-slot space.</summary>
-    /// <param name="column">The column to place.</param>
-    /// <returns>The column's first change slot.</returns>
-    public int ChangeBase(ArenaColumn column) => m_changeBases[((int)column)];
     /// <summary>Returns the derived boards a codes row feeds, or <see langword="null"/> when it feeds none.</summary>
     /// <param name="codesOrdinal">The codes row's ordinal.</param>
     /// <returns>The dependent board ordinals.</returns>

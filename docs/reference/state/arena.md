@@ -66,7 +66,10 @@ check a write uses. If the document authors a value that no write could store,
 construction fails, and the reason names the row and cell. `ToRows` reads the
 columns back out as the row list a section serializes.
 
-Layout is a function of the catalog and the authored rows alone. Two hosts that
+Layout is a function of the catalog and the authored rows alone. Optional columns
+reserve storage only on rows declaring their trait, including traits on seed
+cells. A metadata write cannot introduce a trait that the row does not hold;
+changing that declaration requires a relayout. Two hosts that
 load the same document lay it out identically, which is what lets a hash folded
 in layout order compare across machines.
 
@@ -487,8 +490,9 @@ the two side by side.
 
 `ArenaLayout.Bytes` is the reservation the layout makes up front:
 
-- every column at its full width, plus an eight-byte change stamp and a flag
-  per position for version settling;
+- each column over the rows that declare it, plus an eight-byte change stamp
+  and a flag per reserved position for version settling; optional columns and
+  their settle arrays allocate separately for each row when first written;
 - the row, key-to-slot, and pool-occupancy indexes, and a fixed allowance per
   row for its layout record, counters, and key map;
 - vector components;

@@ -198,8 +198,9 @@ public sealed partial class StateArena {
         m_visibilityBytes = source.m_visibilityBytes;
         m_keys.SetByteBudget(budget: KeyByteBudget);
 
-        m_changeDiffers = [];
-        m_changeStamp = [];
+        m_changeDiffers = new ArenaColumnBuffer<bool>?[ArenaColumns.All.Length];
+        m_changeStamp = new ArenaColumnBuffer<long>?[ArenaColumns.All.Length];
+        Array.Clear(array: m_windowStamp);
         m_reindexCount = 0;
         m_touchedCount = 0;
 

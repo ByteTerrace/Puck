@@ -187,14 +187,6 @@ public sealed partial class StateArena {
             slot: slot,
             stored: stored
         );
-        WriteClockAt(
-            epochEngineTick: engineEpoch,
-            epochTick: epoch,
-            slot: slot,
-            substepTicks: 0L,
-            v0: 0L,
-            y0: 0L
-        );
     }
     // The write-side counterpart of the read's dynamics sample: the follower keeps chasing from wherever it actually
     // was, so Y0 becomes the sample the OLD behavior would report at `time` and V0 the retarget kick for the

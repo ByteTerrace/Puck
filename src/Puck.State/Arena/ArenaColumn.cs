@@ -132,10 +132,10 @@ public static class ArenaColumns {
     /// <param name="size">How many positions the column addresses.</param>
     /// <returns>The column's bytes.</returns>
     public static long StorageBytes(ArenaColumn column, long size) => (column switch {
-        ArenaColumn.Presence or ArenaColumn.ClockSet or ArenaColumn.LaneRoster => (((size + 63L) / 64L) * sizeof(ulong)),
+        ArenaColumn.Presence or ArenaColumn.LaneRoster => (((size + 63L) / 64L) * sizeof(ulong)),
         ArenaColumn.Vector => 0L,
         ArenaColumn.MemberKey => (size * sizeof(int)),
-        ArenaColumn.Behavior => size,
+        ArenaColumn.Behavior or ArenaColumn.ClockSet => size,
         _ => (size * sizeof(long)),
     });
     /// <summary>Returns a value indicating whether <paramref name="column"/> stores object references rather than
