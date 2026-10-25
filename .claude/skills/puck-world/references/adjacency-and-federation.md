@@ -170,7 +170,11 @@ uses an exact committed outcome, never a scalar inference from later transfer
 IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
 may supersede a lost acknowledgement. The one current credential per mobility
 identity rejects delayed replay. These tables are bounded by active
-transactions/travelers, not lifetime crossing count.
+transactions/travelers, not lifetime crossing count. `WorldTransferLimits` additionally
+caps leases at 120 seconds, retained transactions (reserved, committed and uncertain)
+at 16,384, and mobility admission aliases at 65,536. Reservations hold room for the
+aliases their commits can add. Exhaustion refuses new work without discarding replay
+protection: acknowledgement, lease expiry/abort and traveler retirement recover room.
 The source's reservation reads the traveler's credential and never mints it
 (`WorldPopulation.ReadMobility`, a pure read: the stored credential of the
 occupant's generation, else the one its authority, index and generation

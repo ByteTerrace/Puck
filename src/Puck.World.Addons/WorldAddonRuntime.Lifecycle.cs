@@ -738,8 +738,8 @@ public sealed partial class WorldAddonRuntime {
         ? null
         : row.Hash),
         FuelPerTick: ((row.Fuel == 0UL)
-        ? null
-        : (long)row.Fuel),
+        ? checked((long)WorldAddonLimits.DefaultFuel)
+        : checked((long)row.Fuel)),
         Enabled: true
     );
     // Explicit structural row equality — never generated record equality, whose Requests/MemoryWatches fields are

@@ -50,7 +50,12 @@ precede WAT conversion and compilation. Both the authored integrity pin and comp
 the full SHA-256 identity. One 16 MiB memory and one bounded table are admitted;
 hidden extra resources cannot multiply that budget. The
 [scripting resource contract](../../../../docs/reference/scripting.md#loading-ticking-faulting)
-owns the exact limits and native-compiler limitations. `Revision`
+owns the exact limits and native-compiler limitations. `WorldAddonLimits` bounds the
+document's addon count, individual and total fuel, total manifest requests and total
+memory watches, including disabled rows. A zero fuel declaration is charged at the
+ABI default. `WasmModuleLoader` admits only `AddonModuleLimits.ConcurrentCompilations`
+source loads/conversions/compilations process-wide; capacity refusal can be retried
+after another load finishes, and every failure releases its slot. `Revision`
 (`ulong`, default 0) is the instance-revision token: any change from what a
 currently-mounted guest was prepared under means fresh guest instantiation,
 even when every other field is unchanged — the document-authored equivalent

@@ -302,6 +302,7 @@ var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(m
 // peer's own admission entries pin against; verification reads the CURRENT document's admission rows fresh on
 // every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
 Puck.Networking.IAuthenticator authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator();
+Puck.World.Server.WorldServer? admissionServer = null;
 string? connectionSubject = null;
 // Read before the world so an override it carries reaches the document before its one admission, never after.
 Func<WorldDefinition, WorldDefinition>? bootOverrides = null;
@@ -373,7 +374,7 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
                 subject: federationSubject,
                 validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
             ),
-            trustEntries: () => worldSource.Definition.Admission
+            trustEntries: () => (admissionServer?.Definition ?? worldSource.Definition).Admission
         );
     } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or ArgumentException)) {
         Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
@@ -584,6 +585,9 @@ services.AddSelfUpdate(
     releaseSource: releaseSource
 );
 var host = builder.Build();
+// The signing oracle is configured before DI exists, but every verification after construction must consult
+// the installed server document, including reloads, rather than retaining the source loaded at boot.
+admissionServer = host.Services.GetRequiredService<Puck.World.Server.WorldServer>();
 // The every-shape post-build wiring step: affordance install, the boot document's genuine binding-vocabulary
 // re-validation (WorldAffordances.Installed is only true from here on — see WorldPostBuildWiring.Install's remarks
 // for why the first validation at WorldDefinitionLoader.TryResolve above could not have caught this), the

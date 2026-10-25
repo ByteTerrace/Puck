@@ -1539,6 +1539,19 @@ read directly by their handlers) is re-stamped with the connection's admitted
 `Peer` identity before it becomes an envelope—a handler reads the identity
 the door resolved, never the one the client's bytes claimed.
 
+Admitted connections retain their original proof for credential revalidation
+against the live admission policy and signed time window. A one-second host
+clock sweep evicts idle expired or untrusted sessions, including paused worlds;
+dispatch rechecks under the authority gate before work takes effect. Closing a
+session cancels its observation/intent streams and revokes peer grants through
+the ordinary disconnect lifecycle. Rebuilds disconnect transferred embodiments
+whose admission entry disappeared; socket/control-session owners perform their
+own single disconnect so delayed cleanup cannot revoke a resumed generation.
+Authenticated federation connections have their
+own `WorldPeerHost.MaximumFederationConnections` cap (256), independent of
+unauthenticated handshakes and the population table, bounding socket cost and
+synchronous observation fanout.
+
 v1 is strictly request-then-response per connection, so no correlation id
 travels on the wire; the downstream reply is a small NEW grammar
 (`Puck.World.Protocol.WorldPeerWireFormat`) carrying exactly the Completion lane
