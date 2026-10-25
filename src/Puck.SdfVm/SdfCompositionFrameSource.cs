@@ -556,6 +556,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         var rebuilt = AdoptBuild(moved: ref moved);
 
         if ((m_building is null) && ((m_program is null) || moved)) {
+            var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var builder = EmitProgram(
                 context: new SdfEmitContext(
                     Probe: false,
@@ -567,6 +568,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 ),
                 previous: m_program
             );
+            Console.Error.WriteLine($"[probe.emit] {System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeStart).TotalMilliseconds:0.0}");
 
             Array.Copy(
                 sourceArray: m_pendingRevisions,
@@ -611,9 +613,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             }
         }
 
+        var probeA = System.Diagnostics.Stopwatch.GetTimestamp();
         PackTransforms(rebuilt: rebuilt);
+        var probePack = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeA).TotalMilliseconds;
         ComposeMeshDraws();
-
+        var probeB = System.Diagnostics.Stopwatch.GetTimestamp();
+        try {
         var dressed = m_dresser.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
@@ -631,5 +636,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         Frames++;
         return dressed;
+        } finally {
+            var probeDress = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeB).TotalMilliseconds;
+            if ((probePack + probeDress) > 3.0) { Console.Error.WriteLine($"[probe.cap] rebuilt={rebuilt} pack={probePack:0.0} dress={probeDress:0.0}"); }
+        }
     }
 }

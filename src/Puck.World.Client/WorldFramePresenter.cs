@@ -446,12 +446,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // evaluator it compiles to is built on the thread pool while the field it replaces stays published, and a
     // tick-locked frame waits for it (AdoptStaticField), so a still of one tick reads the field that tick delivered.
     private void RebuildStaticField() {
-        SdfProgram program;
+        SdfProgramBuilder builder;
 
         try {
             var definition = m_client.Definition;
-            var builder = new SdfProgramBuilder();
 
+            builder = new SdfProgramBuilder();
             // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
             // ground texture) has no fixed-point query twin and would refuse the whole field.
             m_queryColors.Begin();
@@ -481,7 +481,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
 
             m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
-            program = builder.Build();
         } catch (ArgumentException exception) {
             m_staticFieldBuild = null;
             m_client.PublishStaticField(field: null);
@@ -490,7 +489,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return;
         }
 
-        m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: program));
+        // The program and its evaluator build off the frame thread; a refusal from either reaches AdoptStaticField.
+        m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: builder.Build()));
         AdoptStaticField(wait: TickLocked);
     }
     // Publishes the presentation field's evaluator once its build has finished, or waits for it.
@@ -1629,6 +1629,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
+        var probeDressStart = System.Diagnostics.Stopwatch.GetTimestamp();
         m_transforms = transforms;
         AdoptStaticField(wait: TickLocked);
 
@@ -1664,6 +1665,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         // The authored `markers` section's candidate instances, resolved once for every seat's own cull below.
         ComposeMarkerCandidates(definition: m_client.Definition);
+        var probeHead = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var quality = ViewQuality();
 
@@ -2059,6 +2061,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
         // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
         m_viewports.PublishFirstView(camera: m_views[0].Camera);
+        var probeFilm = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // The camera views film this frame as views of it after its own, so they render from the world's residency.
         m_frameViews.Clear();
@@ -2094,6 +2097,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             transforms: transforms
         );
 
+        var probeEnv = System.Diagnostics.Stopwatch.GetTimestamp();
+        try {
         var lighting = m_environment.Resolve(
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
@@ -2166,6 +2171,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
 
         return m_dressedFrame;
+        } finally {
+            var probeEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+            var envMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeEnv, endingTimestamp: probeEnd).TotalMilliseconds;
+            var allMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeDressStart, endingTimestamp: probeEnd).TotalMilliseconds;
+            var filmMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeFilm, endingTimestamp: probeEnv).TotalMilliseconds;
+            var headMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeDressStart, endingTimestamp: probeHead).TotalMilliseconds;
+            if (allMs > 4.0) { Console.Error.WriteLine($"[probe.pdress] all={allMs:0.0} head={headMs:0.0} filmToEnv={filmMs:0.0} envAndTail={envMs:0.0}"); }
+        }
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {

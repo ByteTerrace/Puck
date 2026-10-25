@@ -370,7 +370,7 @@ public sealed partial class WorldDocument {
             if (prepared.ResponseSwap) {
                 InstallResponseSwap(
                     definition: candidate,
-                    solid: SwapsSolid(mutation: mutation)
+                    mutation: mutation
                 );
             } else if (prepared.Arena is null) {
                 InstallRuntimeStateValue(definition: candidate, mutation: mutation);

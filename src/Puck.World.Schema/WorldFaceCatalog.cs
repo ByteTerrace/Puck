@@ -611,4 +611,55 @@ public sealed class WorldFaceCatalog {
             PerDefinition.AddOrUpdate(key: target, value: catalog);
         }
     }
+    /// <summary>Hands a definition's derived catalog to another that differs from it only in which creation some
+    /// placements show (a response swap's <see cref="WorldPlacement.Holding"/> bits), when no creation either shows
+    /// carries a face or a camera: such a swap derives the same rows, so the target derives nothing. Any other
+    /// difference leaves the target to derive its own.</summary>
+    /// <param name="source">The definition the target replaced.</param>
+    /// <param name="target">The definition holding the swapped rows.</param>
+    /// <returns><see langword="true"/> when the target took the source's catalog.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="target"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool CarryAcrossHolding(WorldDefinition source, WorldDefinition target) {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (
+            !PerDefinition.TryGetValue(key: source, value: out var catalog) ||
+            !ReferenceEquals(objA: source.Creations, objB: target.Creations) ||
+            !ReferenceEquals(objA: source.Cameras, objB: target.Cameras) ||
+            !ReferenceEquals(objA: source.Authoring, objB: target.Authoring) ||
+            !ReferenceEquals(objA: source.Kits, objB: target.Kits) ||
+            !ReferenceEquals(objA: source.Collision, objB: target.Collision) ||
+            (source.Motion != target.Motion) ||
+            (source.Placements.Count != target.Placements.Count)
+        ) {
+            return false;
+        }
+        for (var index = 0; (index < target.Placements.Count); index++) {
+            var before = source.Placements[index];
+            var after = target.Placements[index];
+
+            if (ReferenceEquals(objA: before, objB: after)) {
+                continue;
+            }
+            if (
+                (before is null) ||
+                (after is null) ||
+                ((before with { Holding = after.Holding }) != after) ||
+                ShowsFacesOrCameras(definition: source, placement: before) ||
+                ShowsFacesOrCameras(definition: target, placement: after)
+            ) {
+                return false;
+            }
+        }
+
+        PerDefinition.AddOrUpdate(key: target, value: catalog);
+
+        return true;
+    }
+    private static bool ShowsFacesOrCameras(WorldDefinition definition, WorldPlacement placement) => (
+        (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId) is { } creation) &&
+        ((creation.Document.Behavior?.Faces is { Count: > 0 }) || (creation.Document.Cameras is { Count: > 0 }))
+    );
 }

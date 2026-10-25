@@ -1226,6 +1226,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         }
     }
 
+    private readonly List<(string Name, double Ms)> m_probe = [];
+    private void ProbeNote(string name, long start) => m_probe.Add((name, System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: start).TotalMilliseconds));
     private Surface ProduceFrameCore(in RenderGraphFrame frame, in FrameContext context) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1236,7 +1238,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         PollOwedReadbacks();
         DisposeDrainedRetiring();
         m_captureFootprints = frame.Footprints;
+        m_probe.Clear();
+        var probeFrame = System.Diagnostics.Stopwatch.GetTimestamp();
+        var probeBegin = System.Diagnostics.Stopwatch.GetTimestamp();
         PackagesBeginFrame(context: in context);
+        ProbeNote(name: "<packages>", start: probeBegin);
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
         RefreshConvergenceDemand(captured: m_captureInstance);
 
@@ -1471,9 +1477,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node.ShownAtItsExtent = (index == m_root);
                 node.UnreadFrames = m_unreadFrames[index];
 
+                var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 try {
                     surface = node.ProduceFrame(context: in context);
                 } finally {
+                    ProbeNote(name: m_set.Instances[index].Name, start: probeStart);
                     if (node.FrameCounter != rendered) {
                         m_historySucceeded[index] = true;
                         RememberOutput(index: index, node: node, schedule: schedule, surface: node.PublishedSurface);
@@ -1543,6 +1551,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         // retire displaced package owners against this actual reader fence, without another producer submission.
         foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
         ArmRetiring(submitter: submitter);
+        var probeTotal = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeFrame).TotalMilliseconds;
+        if (probeTotal > 12.0) {
+            m_probe.Sort(comparison: static (a, b) => b.Ms.CompareTo(a.Ms));
+            Console.Error.WriteLine($"[probe.produce] frame={frame.Index} total={probeTotal:0.0} " + string.Join(" ", m_probe.Take(8).Select(static p => $"{p.Name}={p.Ms:0.0}")));
+        }
 
         return Shown(
             image: RootImage(),

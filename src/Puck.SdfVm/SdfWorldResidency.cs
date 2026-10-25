@@ -499,14 +499,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 // frame it last packed, which the live program's views render, until that kernel is built, as any rebuild
                 // does.
                 m_programPending = false;
+                var probeUpload = System.Diagnostics.Stopwatch.GetTimestamp();
                 UploadProgram(
                     delta: frame.ProgramDelta,
                     program: frame.Program,
                     tables: tables
                 );
+                Probe(what: "upload", start: probeUpload);
             }
 
+            var probePack = System.Diagnostics.Stopwatch.GetTimestamp();
             tables.Pack(frame: frame);
+            Probe(what: "pack", start: probePack);
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
@@ -514,8 +518,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         // The bake takes its batch before the upload, which carries the batch's surface points.
+        var probeStage = System.Diagnostics.Stopwatch.GetTimestamp();
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
+        Probe(what: "bakestage", start: probeStage);
+        var probeIrr = System.Diagnostics.Stopwatch.GetTimestamp();
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
+        Probe(what: "irradiance", start: probeIrr);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if (!m_frame!.TickLocked || !MeshPathBake.Pending) {
             Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
@@ -749,6 +757,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
     // the live tables, whose Ready flip bumps the source's content revision so the capture emits the brick this frame.
+    private void Probe(string what, long start) {
+        var ms = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: start).TotalMilliseconds;
+        if (ms > 1.5) { Console.Error.WriteLine($"[probe.p] {Name} {what} {ms:0.0}"); }
+    }
     private void Capture(in FrameContext context) {
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
@@ -769,12 +781,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 m_frameSource.AdvanceBricks(bakes: tables);
             }
 
+            var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
             frame = m_frameSource.CaptureFrame(
                 width: m_width,
                 height: m_height,
                 deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
                 interpolationAlpha: ((float)context.InterpolationAlpha)
             );
+            Probe(what: "capture", start: probeStart);
             if (converging) {
                 // Freeze the authored frame, while derived meshes can still finish under the capture's hold.
                 m_frozenFrame = frame;
@@ -782,7 +796,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         // Every view draws the program's baked meshes.
+        var probeDress = System.Diagnostics.Stopwatch.GetTimestamp();
         frame = MeshPathBake.Dress(frame: frame);
+        Probe(what: "dress", start: probeDress);
 
         m_frame = frame;
         m_pendingFrame = null;

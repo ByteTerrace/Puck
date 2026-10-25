@@ -353,7 +353,9 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         Assert.Equal(expected: holding, actual: row.Holding);
     }
     /// <summary>Every row a tick's sweep moves lands in one mutation: two rows crossing on the same tick, one of them
-    /// solid, install as one journalled batch of holding-only upserts, and both show their entry after it.</summary>
+    /// solid, install as one journalled batch of holding-only upserts, and both show their entry after it. The solid
+    /// row's colliders follow the creation it shows, and the population revision stands, so a client rebuilds its
+    /// program once, on the delivered document.</summary>
     [Fact]
     public void RowsMovingOnOneTickLandAsOneBatch() {
         var document = CrossingDocument();
@@ -366,14 +368,22 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
 
         fixture.Server.MutationJournalTap = (_, _, mutation) => journal.Add(item: mutation);
 
-        for (var index = 0; (index < 3); index++) {
+        for (var index = 0; (index < 2); index++) {
             fixture.Step();
         }
+
+        var revision = fixture.Server.Population.Revision;
+
+        Assert.All(collection: fixture.Server.Population.DiagnosticColliders, action: static collider => Assert.Equal(expected: BaseCreation, actual: collider.Creation));
+        fixture.Step();
 
         var batch = Assert.IsType<WorldMutation.Batch>(Assert.Single(collection: journal, predicate: static mutation => (mutation is not WorldMutation.UpsertStateCell)));
 
         Assert.Equal(expected: ["grove", "grove-solid"], actual: batch.Mutations.Select(selector: static member => ((WorldMutation.UpsertPlacement)member).Placement.Id));
         Assert.All(collection: fixture.Server.Definition.Placements, action: static row => Assert.Equal(expected: TargetCreation, actual: row.ShownPrototypeId));
+        Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
+        Assert.NotEmpty(collection: fixture.Server.Population.DiagnosticColliders);
+        Assert.All(collection: fixture.Server.Population.DiagnosticColliders, action: static collider => Assert.Equal(expected: TargetCreation, actual: collider.Creation));
     }
     /// <summary>A holding-only upsert validates its bits alone, and refuses a bit past the row's entries by name,
     /// leaving the row as it was.</summary>

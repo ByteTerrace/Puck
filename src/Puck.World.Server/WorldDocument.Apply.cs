@@ -1061,14 +1061,18 @@ public sealed partial class WorldDocument {
 
     // Installs a response swap (IsResponseSwap): the rows show other creations the document was validated with, so the
     // compiled rules, the arena, the grants, the fields and the machines all stand. Only the delivery and, for a solid
-    // row, the contact colliders the population compiles from the shown creation move.
-    private void InstallResponseSwap(WorldDefinition definition, bool solid) {
+    // row, what the population compiles from the solid rows (WorldPopulation.InstallResponseSolids). A response row
+    // never inhabits a body or carries face sources (the validator refuses both), so no body moves.
+    private void InstallResponseSwap(WorldDefinition definition, WorldMutation mutation) {
+        // No frame reads which creation a row shows, and a swap between creations that carry no face derives the faces
+        // the document had, so the frame table and the face catalog carry over.
+        _ = WorldPlacementFrameCompilation.CarryAcrossHolding(source: m_definition.PlacementsRaw, target: definition.PlacementsRaw);
+        _ = WorldFaceCatalog.CarryAcrossHolding(source: m_definition, target: definition);
         MarkDefinitionDeliveryPending();
         AdoptDefinition(definition: definition);
 
-        if (solid) {
-            RebuildPopulation(definition: definition);
-            Host.Population.SyncBodyCells(definition: definition);
+        if (SwapsSolid(mutation: mutation)) {
+            Host.Population.InstallResponseSolids(definition: definition, solids: m_solids);
         }
     }
     // Rebuilds the population's compiled tables and live bodies against a definition, then reconciles the inhabited
