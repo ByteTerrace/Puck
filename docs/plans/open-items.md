@@ -397,7 +397,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] The debug world's chess board reads as a real one from each side. A camera looking toward +Z has -X on its right (`CameraSnapshot.LookAt`: right is forward crossed with up), so the board's files run toward -X (grid column = 7 - file): from White's -Z seat a1 is dark at her left and the queen stands on d1, her colour. The kings start in column 3, the castling rules name kingside by a falling column, and `chess.md`'s square formula and `chess-tests.puck`'s coordinates follow; the seated cursor's steps were already in the seat's own frame.
 - [ ] Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense, Ribbon.
 - [ ] S10 the state review ([S10](state-and-language.md#s10--the-state-review)):
-  - [ ] Addon reads checked against per-recipient disclosure.
+  - [x] Addon reads checked against per-recipient disclosure: `ReadStateCell` and `ReadStateText` read through `WorldStateDisclosure.CanRead` for the addon's own principal on every call, and a withheld cell answers `NoSuchSubject` like an absent one. The addon host delivers no state-cell changes (its observation cells are body, region, seat, collision, application, link and machine-memory events), so there is no change delivery to check.
   - [ ] Charge what is used.
   - [ ] One live store and one write door.
   - [ ] Everything that steers the future hashed and checkpointed, running addons included.

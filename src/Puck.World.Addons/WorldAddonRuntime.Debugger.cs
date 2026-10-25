@@ -64,10 +64,7 @@ public sealed partial class WorldAddonRuntime {
                 case AddonAbi.RequestVerbs.ReadStateText:
                     if ((subject.Kind != GrantSubjectKind.State) || (query.C < 0) || (query.C > 4096) ||
                         !TryReadUtf8(addon, query.A, query.B, 128, out var keyName, out _)) { break; }
-                    var arena = m_server.Arena;
-                    if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) ||
-                        !arena.Keys.TryResolve(CellName.Parse(candidate: keyName), out var key) ||
-                        !arena.TryReadLive(row.Ordinal, key, m_server.DeliveryTime, out var cell)) { break; }
+                    if (!TryReadDisclosed(addon: addon, subject: subject, name: CellName.Parse(candidate: keyName), value: out var cell)) { break; }
                     if (cell.Kind == CellKind.Text) {
                         if ((cell.AsText.Length > 4096) || !ChargeHostFuel(addon: addon, cost: (((ulong)cell.AsText.Length) * 3))) { break; }
                         var text = addon.ReadBuffer(length: Encoding.UTF8.GetByteCount(s: cell.AsText));
