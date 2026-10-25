@@ -175,8 +175,9 @@ public static class WorldWindowFrustumFit {
         ArgumentNullException.ThrowIfNull(argument: destination);
         ArgumentNullException.ThrowIfNull(argument: screen);
 
-        // The apertures the fit last resolved: documents are immutable, so a frame that asks again with the same pair of
-        // documents and screen index (every frame, and several times a frame) fits against them without resolving again.
+        // The apertures the fit last resolved, and what they were resolved from: a document's face catalog carries across
+        // state-only changes, so a frame that asks again with the same catalogs, placements and screen index (every frame,
+        // and several times a frame) fits against them without resolving again.
         ResolvedApertures? last = null;
 
         return () => {
@@ -191,12 +192,7 @@ public static class WorldWindowFrustumFit {
             var target = destination();
             var apertures = Volatile.Read(location: ref last);
 
-            if (
-                (apertures is null) ||
-                !ReferenceEquals(objA: apertures.Local, objB: document) ||
-                !ReferenceEquals(objA: apertures.Destination, objB: target) ||
-                (apertures.ScreenIndex != row.Index)
-            ) {
+            if ((apertures is null) || !apertures.Matches(destination: target, local: document, screenIndex: row.Index)) {
                 apertures = ResolvedApertures.Of(destination: target, local: document, screenIndex: row.Index);
                 Volatile.Write(location: ref last, value: apertures);
             }
@@ -313,8 +309,15 @@ public static class WorldWindowFrustumFit {
     /// <summary>How far past the counterpart's own glass a window's rays start, in world units.</summary>
     public const float GlassClearance = 0.01f;
 
-    // A window screen's two face frames as TryResolveFrames resolves them from one pair of documents and a screen index.
-    private sealed record ResolvedApertures(WorldDefinition Local, WorldDefinition Destination, int ScreenIndex, bool Resolved, WorldFaceFrame Source, WorldFaceFrame Counterpart, WorldScreenSource? CounterpartGlass) {
+    // A window screen's two face frames as TryResolveFrames resolves them, and everything it reads to do so: the local
+    // document's face catalog and placements, the destination's face catalog, and the screen index.
+    private sealed record ResolvedApertures(WorldFaceCatalog LocalCatalog, IReadOnlyList<WorldPlacement> LocalPlacements, WorldFaceCatalog DestinationCatalog, int ScreenIndex, bool Resolved, WorldFaceFrame Source, WorldFaceFrame Counterpart, WorldScreenSource? CounterpartGlass) {
+        public bool Matches(WorldDefinition local, WorldDefinition destination, int screenIndex) => (
+            (ScreenIndex == screenIndex) &&
+            ReferenceEquals(objA: LocalPlacements, objB: local.Placements) &&
+            ReferenceEquals(objA: LocalCatalog, objB: WorldFaceCatalog.For(definition: local)) &&
+            ReferenceEquals(objA: DestinationCatalog, objB: WorldFaceCatalog.For(definition: destination))
+        );
         public static ResolvedApertures Of(WorldDefinition local, WorldDefinition destination, int screenIndex) {
             var resolved = TryResolveFrames(
                 counterpart: out var counterpart,
@@ -328,8 +331,9 @@ public static class WorldWindowFrustumFit {
             return new(
                 Counterpart: counterpart,
                 CounterpartGlass: counterpartGlass,
-                Destination: destination,
-                Local: local,
+                DestinationCatalog: WorldFaceCatalog.For(definition: destination),
+                LocalCatalog: WorldFaceCatalog.For(definition: local),
+                LocalPlacements: local.Placements,
                 Resolved: resolved,
                 ScreenIndex: screenIndex,
                 Source: source

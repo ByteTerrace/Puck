@@ -111,7 +111,11 @@ public sealed partial class WorldStampPool {
     }
     // The frame a carried screen's surface takes this frame; null for a screen no body can carry.
     private SdfScreenSurfaceTransform? SurfaceTransform(IWorldStampSource client, int index) {
-        foreach (var screen in client.Definition.Screens) {
+        var screens = client.Definition.Screens;
+
+        for (var row = 0; (row < screens.Count); row++) {
+            var screen = screens[row];
+
             if ((screen.Index != index) || (screen.Carry is null)) {
                 continue;
             }

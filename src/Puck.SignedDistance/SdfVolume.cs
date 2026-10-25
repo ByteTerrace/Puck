@@ -105,7 +105,9 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
         }
         var previous = -1f;
 
-        foreach (var stop in Ramp) {
+        for (var index = 0; (index < Ramp.Count); index++) {
+            var stop = Ramp[index];
+
             if (
                 !NonNegative(v: stop.Density) ||
                 (stop.Density > 1f) ||

@@ -774,8 +774,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         var glass = 0;
 
-        foreach (var draw in frame.MeshDraws) {
-            if (draw.Glass) { glass++; }
+        for (var index = 0; (index < frame.MeshDraws.Count); index++) {
+            if (frame.MeshDraws[index].Glass) { glass++; }
         }
         Volatile.Write(
             location: ref m_meshDrawCount,

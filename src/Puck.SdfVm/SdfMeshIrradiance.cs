@@ -483,7 +483,11 @@ public sealed class SdfMeshIrradiance {
         var key = 17;
         var draws = 0;
 
-        foreach (var draw in frame.MeshDraws) {
+        var meshDraws = frame.MeshDraws;
+
+        for (var index = 0; (index < meshDraws.Count); index++) {
+            var draw = meshDraws[index];
+
             if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
             key = HashCode.Combine(value1: key, value2: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: draw.Mesh), value3: draw.ObjectToWorld, value4: draw.Material);
             draws++;

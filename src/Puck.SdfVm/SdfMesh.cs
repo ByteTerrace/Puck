@@ -382,7 +382,8 @@ public static class SdfMeshRegion {
         }
 
         for (var draw = 0; (draw < draws.Count); draw++) {
-            var (mesh, matrix, material, _) = draws[draw];
+            var item = draws[draw];
+            var (mesh, matrix, material, _) = item;
             var placement = meshes[mesh];
             var record = destination.Slice(
                 length: SdfMeshRecord.DrawWords,
@@ -415,12 +416,12 @@ public static class SdfMeshRegion {
                 matrix: matrix,
                 record: record[SdfMeshRecord.NormalMatrixWord..]
             );
-            record[SdfMeshRecord.FrameSlotWord] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
+            record[SdfMeshRecord.FrameSlotWord] = unchecked((uint)(item.FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
             record[SdfMeshRecord.SkinWord] = ((uint)placement.SkinWord);
 
-            var carry = draws[draw].CarryRotation;
-            var shift = draws[draw].CarryTranslation;
-            var clip = draws[draw].ClipPlane;
+            var carry = item.CarryRotation;
+            var shift = item.CarryTranslation;
+            var clip = item.ClipPlane;
 
             record[SdfMeshRecord.CarryRotationWord] = BitConverter.SingleToUInt32Bits(value: carry.X);
             record[(SdfMeshRecord.CarryRotationWord + 1)] = BitConverter.SingleToUInt32Bits(value: carry.Y);
@@ -429,7 +430,7 @@ public static class SdfMeshRegion {
             record[SdfMeshRecord.CarryTranslationWord] = BitConverter.SingleToUInt32Bits(value: shift.X);
             record[(SdfMeshRecord.CarryTranslationWord + 1)] = BitConverter.SingleToUInt32Bits(value: shift.Y);
             record[(SdfMeshRecord.CarryTranslationWord + 2)] = BitConverter.SingleToUInt32Bits(value: shift.Z);
-            record[SdfMeshRecord.CarryScaleWord] = BitConverter.SingleToUInt32Bits(value: draws[draw].CarryScale);
+            record[SdfMeshRecord.CarryScaleWord] = BitConverter.SingleToUInt32Bits(value: item.CarryScale);
             record[SdfMeshRecord.ClipPlaneWord] = BitConverter.SingleToUInt32Bits(value: clip.X);
             record[(SdfMeshRecord.ClipPlaneWord + 1)] = BitConverter.SingleToUInt32Bits(value: clip.Y);
             record[(SdfMeshRecord.ClipPlaneWord + 2)] = BitConverter.SingleToUInt32Bits(value: clip.Z);

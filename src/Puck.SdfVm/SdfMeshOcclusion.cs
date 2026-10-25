@@ -86,7 +86,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var candidates = 0u;
 
         for (var draw = 0u; (draw < count); draw++) {
-            if (draws[((int)draw)].Glass) {
+            var item = draws[((int)draw)];
+
+            if (item.Glass) {
                 continue;
             }
 
@@ -100,7 +102,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             var kept = box.GetValueOrDefault();
 
             m_words[word] = draw;
-            m_words[(word + 1)] = ((uint)draws[((int)draw)].Mesh.Indices.Length);
+            m_words[(word + 1)] = ((uint)item.Mesh.Indices.Length);
             Floats(destination: m_words.AsSpan(length: 3, start: (word + 2)), value: kept.Center);
             Floats(destination: m_words.AsSpan(length: 3, start: (word + 5)), value: kept.HalfX);
             Floats(destination: m_words.AsSpan(length: 3, start: (word + 8)), value: kept.HalfY);

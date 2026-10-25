@@ -775,6 +775,18 @@ public static class TopologyCompilation {
         compiled.InstallElementAliases(aliases: elementAliases);
         return compiled;
     }
+    /// <summary>Returns whether a topology validates (<see cref="TryValidate"/>), deciding it once per topology instance:
+    /// topologies are immutable rows, and a rule looks its topology up every tick.</summary>
+    /// <param name="topology">The topology.</param>
+    /// <returns><see langword="true"/> when the topology validates.</returns>
+    public static bool Validates(LatticeTopology topology) => Validity.GetValue(
+        key: topology,
+        createValueCallback: static built => new System.Runtime.CompilerServices.StrongBox<bool>(value: TryValidate(
+            reason: out _,
+            topology: built
+        ))
+    ).Value;
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<LatticeTopology, System.Runtime.CompilerServices.StrongBox<bool>> Validity = new();
     /// <summary>Finds and compiles a discrete topology by name, unanchored: a Grid's <c>origin</c> resolves exactly
     /// as authored. A host that composes a topology's frame over another row's transform compiles through
     /// <see cref="Compile"/> with that offset instead.</summary>
@@ -788,10 +800,7 @@ public static class TopologyCompilation {
             if (
                 (topology is not null) &&
                 (topology.Name == name) &&
-                TryValidate(
-                reason: out _,
-                topology: topology
-            )
+                Validates(topology: topology)
             ) {
                 return Cache.GetValue(
                     key: topology,

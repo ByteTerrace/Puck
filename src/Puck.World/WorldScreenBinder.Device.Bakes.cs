@@ -51,6 +51,18 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
         return $"still baking: {string.Join(separator: ", ", values: names)}";
     }
 
+    // Collects every generation once, on the first frame the bakes settle after boot. Loading leaves gigabytes of young
+    // objects that the first ephemeral collections in play would otherwise promote, pausing a frame 10-25 ms; collected
+    // here, at the end of the load, they are old already and later young collections copy only the frames' own garbage.
+    private void CollectOnceSettled() {
+        if (m_collectedSettled || !IsSettledSince(mark: 0L)) {
+            return;
+        }
+
+        m_collectedSettled = true;
+        GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: false);
+    }
+    private bool m_collectedSettled;
     // Whether a residency besides the world's own still owes its bake; allocates nothing, so a hold polls it every drain.
     private bool ViewsBake() {
         foreach (var residency in m_routedResidencies.Values) {
