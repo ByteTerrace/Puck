@@ -40,6 +40,7 @@ public sealed partial class WorldAddonRuntime {
             Pump = new AddonSimulationPump();
             Requests = requests;
             RegionOrdinals = new Dictionary<GrantSubject, int>();
+            AdjacencyOrdinals = new Dictionary<GrantSubject, int>();
 
             foreach (var request in (requests ?? [])) {
                 if (
@@ -47,6 +48,12 @@ public sealed partial class WorldAddonRuntime {
                     (request.Subject.Kind == GrantSubjectKind.Region)
                 ) {
                     _ = RegionOrdinals.TryAdd(key: request.Subject, value: RegionOrdinals.Count);
+                }
+                if (
+                    (request.Capability == WorldCapability.Observe) &&
+                    (request.Subject.Kind == GrantSubjectKind.Adjacency)
+                ) {
+                    _ = AdjacencyOrdinals.TryAdd(key: request.Subject, value: AdjacencyOrdinals.Count);
                 }
             }
 
@@ -76,6 +83,10 @@ public sealed partial class WorldAddonRuntime {
             public bool MissingBudgetReported;
         }
 
+        /// <summary>Gets each explicitly observed adjacency's ordinal among the manifest's unique
+        /// <c>Observe/adjacency:&lt;name&gt;</c> requests. Link events carry this index in <c>A</c>;
+        /// a wildcard-only observation has no named entry and carries -1.</summary>
+        public Dictionary<GrantSubject, int> AdjacencyOrdinals { get; }
         /// <summary>Gets the body each staged act resolved to, by act index, or <see cref="NoBody"/>.</summary>
         public int[] ActBody { get; }
         public int AnswerCount { get; set; }
@@ -91,8 +102,10 @@ public sealed partial class WorldAddonRuntime {
         public bool Disclosed { get; set; }
         public GrantSubject[] DisclosedDrive { get; set; }
         public GrantSubject[] DisclosedObserve { get; set; }
+
         // -1 so the very first resolve always projects, even against a fresh table whose own Revision starts at 0.
         public int DisclosedRevision { get; set; } = -1;
+
         public bool DisclosureOverflowReported { get; set; }
         public bool DiscrepancyReported { get; set; }
         /// <summary>Gets this tick's per-body Observe query dispatch count, indexed by body index — the meter
@@ -108,7 +121,9 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets this tick's event-cell charge count by Observe subject. Cleared once per tick in
         /// <c>StageBatch</c>.</summary>
         public Dictionary<GrantSubject, int> EventCounts { get; }
+
         public Dictionary<GrantSubject, int> StateReadCounts { get; } = [];
+
         public int LogLinesThisTick { get; set; }
         /// <summary>Gets this tick's lifetime event-gap counter (the overflow doctrine's per-mount summary — see
         /// <c>Scripting.AddonAbi.ObservationVerbs.EventGap</c>'s own doc) — saturating, never reset. Every edge
@@ -156,9 +171,11 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets the host-owned scratch buffer stage 5's pointer-safety copy reads a <c>SubmitMutation</c>
         /// payload into, reused every act and every tick.</summary>
         public byte[] MutationPayloadBuffer { get; }
+
         // The revision an oversized disclosure set overflowed at — re-projection waits for the next grant-table
         // write, the only event that can shrink the set (-1 = never overflowed).
         public int OverflowedAtRevision { get; set; } = -1;
+
         /// <summary>Gets the cells staged for the next tick's batch (disclosures, then answers).</summary>
         public AddonInCell[] Pending { get; }
         public int PendingCount { get; set; }
@@ -203,9 +220,11 @@ public sealed partial class WorldAddonRuntime {
         public ulong TotalFuelConsumed { get; set; }
         public bool UndeliverableReported { get; set; }
         public bool UnrequestedActReported { get; set; }
+
         public Dictionary<(WorldCapability, GrantSubject), int> QueryCounts { get; } = [];
         public byte[] ReadBuffer { get; } = new byte[262144];
-        public byte[] PoseHandles { get; } = new byte[AddonAbi.MaxPoseBatchBodies * 4];
+        public byte[] PoseHandles { get; } = new byte[(AddonAbi.MaxPoseBatchBodies * 4)];
+
         public byte[]? MachineSnapshot { get; set; }
         public Puck.Abstractions.Machines.IMachineRuntime? SnapshotRuntime { get; set; }
 

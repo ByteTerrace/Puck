@@ -388,9 +388,14 @@ Application edges are queued from `WorldGrants`' own set writes, so every
 member added or removed fires one — including the context-button auto-engage
 and a revoke-driven dissolution. Link edges compare a per-adjacency staleness
 count against that row's authored `livenessGraceSeconds` (`0`, the default,
-disables the row's sensing entirely, so an unauthored world emits none); `A`
-is the adjacency row's 0-based document ordinal, `B` the staleness in
-simulation ticks on a drop and `0` on an establish. The sixth,
+disables the row's sensing entirely, so an unauthored world emits none). The
+server feed retains document ordinals internally; at the guest boundary `A`
+is the adjacency's 0-based index among the manifest's unique
+`Observe/adjacency:<name>` requests. Duplicate requests retain their first
+index and ungranted requests still occupy their slot, so a grant change never
+renumbers the guest's table. A wildcard-only observation carries -1 because it
+supplies no named entry. `B` is the staleness in simulation ticks on a drop and
+`0` on an establish. The sixth,
 machine-memory watches, is ADDON-scoped (`WorldAddonRow.MemoryWatches`, each
 a `(screen, address, length)` row) and reads `Server.WorldMachineHost`
 DIRECTLY (`WorldMachineHost` implements `IWorldMachineMemoryPeek` itself,

@@ -30,7 +30,6 @@ public static class AddonAbi {
     /// a guest built against another ABI is refused rather than misread; a stale artifact also fails the export
     /// pre-flight or the content-hash pin regardless of what it reports here.</summary>
     public const int AbiVersion = 1;
-
     /// <summary>The size in bytes of a single channel descriptor table entry (<c>16</c>).</summary>
     public const int ChannelDescriptorBytes = 16;
     /// <summary>The default per-tick fuel budget before a deterministic halt (<c>1_000_000</c>).</summary>
@@ -260,11 +259,12 @@ public static class AddonAbi {
         /// edges are gone, never replayed.</summary>
         public const int EventGap = 10;
         /// <summary>An adjacency row's federation link went its authored grace without a delivered neighbour
-        /// refresh. <c>A</c> = the adjacency row's 0-based ordinal; <c>B</c> = the staleness in simulation ticks at
-        /// the moment the edge fired.</summary>
+        /// refresh. <c>A</c> = its 0-based position among the manifest's unique
+        /// <c>Observe/adjacency:&lt;name&gt;</c> requests, or -1 when observed only through a wildcard;
+        /// <c>B</c> = the staleness in simulation ticks at the moment the edge fired.</summary>
         public const int EventLinkDropped = 12;
-        /// <summary>An adjacency row's federation link came back after being dropped. <c>A</c> = the adjacency row's
-        /// 0-based ordinal (document order among <c>adjacencies</c> rows); <c>B</c> is always zero.</summary>
+        /// <summary>An adjacency row's federation link came back after being dropped. <c>A</c> has the same
+        /// manifest-order index as <see cref="EventLinkDropped"/>; <c>B</c> is always zero.</summary>
         public const int EventLinkEstablished = 11;
         /// <summary>A watched machine-memory byte range changed value. <c>A</c> = <c>(screenIndex &lt;&lt; 32) |
         /// (uint)address</c>; <c>B</c> = the new byte value, zero-extended. Published only when the host composes
