@@ -16,6 +16,7 @@ public sealed partial class WorldDocument {
     /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
     /// <returns>Whether the mutation applied.</returns>
     internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
+        Host.MaterializeArena();
         m_lastMutationFailureDetail = null;
 
         if (!TryPrepareMutation(

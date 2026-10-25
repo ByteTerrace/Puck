@@ -915,7 +915,8 @@ public sealed partial class WorldTick {
     internal void Step(in FixedStepContext context) {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return; }
-            StepCore(context: in context);
+            Host.EnterArenaTick();
+            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
@@ -932,7 +933,8 @@ public sealed partial class WorldTick {
                 Tick: m_lastCompletedTick
             );
 
-            StepCore(context: in context);
+            Host.EnterArenaTick();
+            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind

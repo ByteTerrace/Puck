@@ -18,7 +18,7 @@ public sealed partial class WorldDocument {
                 version: Host.DocumentVersion
             );
         } else if (m_pendingStateDelivery) {
-            var stamp = Host.TakeStateStamp();
+            var stamp = Host.TakeStateStamp() with { ArenaValues = Host.StreamsArenaValues };
 
             Host.Output.DeliverState(
                 definition: m_definition,
@@ -69,6 +69,7 @@ public sealed partial class WorldDocument {
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
     internal IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
         ArgumentNullException.ThrowIfNull(argument: sink);
+        Host.MaterializeArena();
 
         var lease = Host.Output.Subscribe(
             disclosure: in disclosure,

@@ -52,7 +52,8 @@ public sealed partial class WorldAddonRuntime {
             if (cached) {
                 bytes.CopyTo(destination: entry.Bytes);
                 addon.Utf8[address] = new Utf8Entry(Bytes: entry.Bytes, Text: text);
-            } else if (addon.Utf8.Count < 64) {
+            } else {
+                if (addon.Utf8.Count == 64) { addon.Utf8.Clear(); }
                 addon.Utf8.Add(key: address, value: new Utf8Entry(Bytes: bytes.ToArray(), Text: text));
             }
             return true;
@@ -111,11 +112,14 @@ public sealed partial class WorldAddonRuntime {
             QueueAnswer(addon, query.Ordinal, refusal);
             return;
         }
-        if (!WorldStateReader.TryRead(m_server.Definition, subject.Id!, key, m_server.CompletedTick, m_server.CompletedEngineTicks,
-            out var row, out var value, out _) || (value is null)) {
+        var arena = m_server.Arena;
+
+        if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) ||
+            !CellName.TryParse(candidate: key, name: out var name, reason: out _) || !arena.Keys.TryResolve(key: out var address, name: name) ||
+            !arena.TryReadLive(row.Ordinal, address, m_server.DeliveryTime, out var value) || (value.Kind is CellKind.Text or CellKind.Vector)) {
             QueueAnswer(addon, query.Ordinal, AddonVerdict.NoSuchSubject);
             return;
         }
-        QueuePart(addon, query.Ordinal, WorldAddonWire.FromRule(rule: verdict.Rule), 0, value.Value, ((long)row.Kind));
+        QueuePart(addon, query.Ordinal, WorldAddonWire.FromRule(rule: verdict.Rule), 0, value.Raw, ((long)value.Kind));
     }
 }

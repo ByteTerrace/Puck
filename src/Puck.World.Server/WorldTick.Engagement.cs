@@ -181,7 +181,11 @@ public sealed partial class WorldTick {
     private bool HasComposedApplication(Principal principal) {
         var own = GrantSubject.Body(index: principal.Index);
 
-        foreach (var application in Host.GrantTable.Applications(principal: principal)) {
+        var applications = Host.GrantTable.Applications(principal: principal);
+
+        for (var index = 0; (index < applications.Count); index++) {
+            var application = applications[index];
+
             if (application.Target != own) {
                 return true;
             }

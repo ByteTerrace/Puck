@@ -153,7 +153,7 @@ public sealed partial class WorldAddonRuntime {
                     // The Control handle over the screen passed QueryAuthority's grant check, and the manifest check below
                     // narrows to the instance the guest requested. The authority over the machine itself is the Control
                     // grant ApplyMachineOperation checks for the addon's principal.
-                    var screen = m_server.Definition.Screens.FirstOrDefault(predicate: s => (s.Index == subject.Value));
+                    var screen = m_server.Configuration.Screens.FirstOrDefault(predicate: s => (s.Index == subject.Value));
                     if ((screen?.Source is not WorldScreenSource.Machine machine) ||
                         !IsRequested(addon: addon, capability: WorldCapability.Control, subject: GrantSubject.Machine(name: machine.Instance)) ||
                         (m_server.Machines.InstanceState(name: machine.Instance) is not { } state)) { break; }
@@ -165,11 +165,11 @@ public sealed partial class WorldAddonRuntime {
                         var operationId = op.GetString()!;
 
                         if (root.TryGetProperty(propertyName: "contentName", value: out var contentName)) {
-                            var declaration = m_server.Definition.Machines.FirstOrDefault(predicate: item => (item.Name == machine.Instance));
+                            var declaration = m_server.Configuration.Machines.FirstOrDefault(predicate: item => (item.Name == machine.Instance));
 
                             if ((operationId != "content.insert") || (contentName.ValueKind != JsonValueKind.String) ||
                                 (payload.ValueKind != JsonValueKind.Object) || (declaration is null) ||
-                                !WorldMachineContentFolder.TryList(declaration, m_server.Definition.DocumentDirectory,
+                                !WorldMachineContentFolder.TryList(declaration, m_server.Configuration.DocumentDirectory,
                                     m_server.Machines.ValidationCatalog, out _, out var entries, out var reason)) { break; }
                             if (!WorldMachineContentFolder.TryFind(entries, contentName.GetString()!, out var entry, out reason)) {
                                 Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} t={tick} content refused: {reason}]");

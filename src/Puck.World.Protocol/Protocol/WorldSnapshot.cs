@@ -51,7 +51,6 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
         Kind: EntityContinuityKind.Carry,
         Carried: carried
     );
-
     /// <summary>Returns the hint for this pose change followed by <paramref name="later"/> before any client saw
     /// either: two carries compose, a carry keeps an earlier snap or correction, and anything else is
     /// <paramref name="later"/> unless it is <see cref="EntityContinuityKind.Continuous"/>.</summary>
@@ -144,7 +143,9 @@ public readonly record struct WorldSnapshot(
 /// <param name="Cell">The cell index (row-major: z, then layer, then x).</param>
 /// <param name="Field">The field's index in the declared <c>fields.fields</c> list.</param>
 /// <param name="Raw">The cell's value, raw Q48.16 bits.</param>
-public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw);
+/// <param name="Row">A document row ordinal for a typed state cell, or -1 for a field-lattice cell.</param>
+/// <param name="Value">The typed value when <paramref name="Row"/> is nonnegative.</param>
+public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int Row = -1, CellValue Value = default);
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a
 /// connection carries up to four per tick, one per local seat). The server resolves the intent against the body's live
 /// tape and server-side producer in <c>NextIntent</c> precedence; <paramref name="HeldChannels"/> is the always-overlay

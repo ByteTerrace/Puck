@@ -202,6 +202,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     // Forgets every resolved document path, as the documents the host's instances answer for change.
     private void ForgetResolvedDocuments() => m_resolvedDocuments.Clear();
+
     // A references row's locator is relative to the document that AUTHORS it, never to the process's output
     // directory. This is the one host-side fold shared by observed previews and traveler entry; both must name the
     // same physical origin or the resolver can assign two generations to one seamless circuit.
@@ -588,7 +589,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        var rateHz = boot.Server.Definition.SimulationRateHz;
+        var rateHz = boot.Server.Configuration.SimulationRateHz;
 
         return (
             !boot.IsPaused &&
@@ -656,7 +657,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var rateHz = instance.Server.Definition.SimulationRateHz;
+            var rateHz = instance.Server.Configuration.SimulationRateHz;
 
             if (
                 (rateHz <= 0) ||
@@ -724,7 +725,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 // resumes correctly; tick numbering and ElapsedEngineTicks stay contiguous across the
                 // boundary since neither is reset by this break.
                 // Closing an unreachable cycle of screen sessions can reap the instance currently stepping.
-                if (instance.Server.IsRetiring || (instance.Server.Definition.SimulationRateHz != rateHz)) {
+                if (instance.Server.IsRetiring || (instance.Server.Configuration.SimulationRateHz != rateHz)) {
                     break;
                 }
             }
@@ -935,7 +936,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        if (instance.Server.Definition.SimulationRateHz <= 0) {
+        if (instance.Server.Configuration.SimulationRateHz <= 0) {
             reason = $"'{name}' authors simulation.rateHz 0 — it never steps by the document's own durable stop, so the live pause lever exists only for a world that would otherwise be stepping (see world.rate)";
 
             return false;

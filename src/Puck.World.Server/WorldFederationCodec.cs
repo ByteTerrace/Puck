@@ -254,9 +254,9 @@ public static partial class WorldFederationCodec {
             look,
             catalogRig,
             new EntityContinuity(
+                Carried: carried,
                 Kind: continuityKind,
-                Seconds: seconds,
-                Carried: carried
+                Seconds: seconds
             ),
             generation,
             placementId,
@@ -359,6 +359,7 @@ public static partial class WorldFederationCodec {
     /// <returns>The encoded leaf.</returns>
     public static byte[] EncodeAuthentication(ReadOnlySpan<byte> proof, ReadOnlySpan<byte> challenge) {
         var writer = new WireWriter();
+
         writer.WriteBlock(value: challenge);
         writer.WriteBlock(value: proof);
         return writer.ToArray();
@@ -833,6 +834,11 @@ public static partial class WorldFederationCodec {
             writer.WriteInt32(value: delta.Cell);
             writer.WriteByte(value: delta.Field);
             writer.WriteInt64(value: delta.Raw);
+            writer.WriteInt32(value: delta.Row);
+            if (delta.Row >= 0) {
+                writer.WriteByte(value: ((byte)delta.Value.Kind));
+                if (delta.Value.Kind == CellKind.Text) { writer.WriteString(value: delta.Value.AsText); } else { writer.WriteInt64(value: delta.Value.Raw); }
+            }
         }
 
         writer.WriteUInt64(value: snapshot.EngineTick);
@@ -876,7 +882,7 @@ public static partial class WorldFederationCodec {
         WorldFederationRequest.Observe => 0,
         WorldFederationRequest.IntentStream => 0,
         WorldFederationRequest.IntentStreamHandoff => 0,
-        WorldFederationRequest.Authenticate => (MaxProofBytes + MaxChallengeBytes + (2 * sizeof(int))),
+        WorldFederationRequest.Authenticate => ((MaxProofBytes + MaxChallengeBytes) + (2 * sizeof(int))),
         WorldFederationRequest.Abort => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Status => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.AcknowledgeTransfer => (2 * WireLimits.MaxStringBytes),
@@ -895,7 +901,7 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Prototype => WireLimits.MaxDocumentBytes,
         WorldFederationResponse.Ack => 0,
         WorldFederationResponse.ProjectionInvalidated => WireLimits.MaxStringBytes,
-        WorldFederationResponse.Authenticated => ((2 * sizeof(int)) + WireLimits.MaxStringBytes + MaxProofBytes),
+        WorldFederationResponse.Authenticated => (((2 * sizeof(int)) + WireLimits.MaxStringBytes) + MaxProofBytes),
         WorldFederationResponse.Status => sizeof(byte),
         WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
@@ -973,6 +979,7 @@ public static partial class WorldFederationCodec {
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
     public static bool TryDecodeAuthentication(ReadOnlySpan<byte> body, out byte[] proof, out byte[] challenge, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
+
         challenge = reader.ReadBlock(field: "client challenge", maxBytes: MaxChallengeBytes);
         proof = reader.ReadBlock(field: "client proof", maxBytes: MaxProofBytes);
         if (challenge.Length == 0) {
@@ -1524,6 +1531,10 @@ public static partial class WorldFederationCodec {
             minimum: 0
         );
 
+        if (!reader.Failed && (deltaCount > (reader.Remaining / 17))) {
+            reader.Fail(detail: "snapshot cell count exceeds its payload", refusal: WireRefusal.PayloadTruncated);
+        }
+
         if (reader.Failed) {
             snapshot = default;
 
@@ -1539,11 +1550,31 @@ public static partial class WorldFederationCodec {
             var cell = reader.ReadInt32();
             var field = reader.ReadByte();
             var raw = reader.ReadInt64();
+            var row = reader.ReadInt32();
+            var value = default(CellValue);
+
+            if ((row < -1) || (row >= StateCapacity.MaxRows) || (cell < 0) ||
+                ((row >= 0) && (cell >= StateCapacity.MaxCellsPerRow))) {
+                reader.Fail(detail: "snapshot cell address is outside its capacity", refusal: WireRefusal.PayloadMalformed);
+                break;
+            }
+
+            if (row >= 0) {
+                var kind = ((CellKind)reader.ReadByte());
+
+                if (kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool or CellKind.Text)) {
+                    reader.Fail(detail: $"snapshot state kind {((byte)kind)} is not a scalar", refusal: WireRefusal.EnumValueUnknown);
+                    break;
+                }
+                value = ((kind == CellKind.Text) ? CellValue.Text(value: reader.ReadString(field: "snapshot state text", maxBytes: (StateCapacity.MaxTextValueLength * 4))) : CellValue.FromNumber(kind: kind, raw: reader.ReadInt64()));
+            }
 
             deltas[index] = new FieldCellDelta(
                 Cell: cell,
                 Field: field,
-                Raw: raw
+                Raw: raw,
+                Row: row,
+                Value: value
             );
         }
 

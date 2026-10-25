@@ -127,10 +127,10 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     // this world's dynamics and rate.
     /// <inheritdoc/>
     public ArenaTime Time => new(
-        Dynamics: Host.Definition.Dynamics,
+        Dynamics: Host.Configuration.Dynamics,
         EngineTick: m_hostEngineTick,
         Tick: m_hostTick,
-        TicksPerSecond: Host.Definition.SimulationRateHz
+        TicksPerSecond: Host.Configuration.SimulationRateHz
     );
 
     // Moves the tick pair every read answers as of, on this host and on the arena host that shares its arena.

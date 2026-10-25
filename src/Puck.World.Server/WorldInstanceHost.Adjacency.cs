@@ -45,7 +45,7 @@ public sealed partial class WorldInstanceHost {
             : transfer.Border
         );
         var onUnavailable = WorldDefinitionRows.FindAdjacency(
-            adjacencies: instance.Server.Definition.Adjacencies,
+            adjacencies: instance.Server.Configuration.Adjacencies,
             name: adjacencyName
         )?.OnUnavailable;
 
@@ -126,7 +126,7 @@ public sealed partial class WorldInstanceHost {
 
         endpoint = new WorldAuthorityEndpoint(
             identity: instance.Name,
-            definition: () => instance.Server.Definition,
+            definition: () => instance.Server.Configuration,
             submissions: instance.Link,
             observe: instance.Server.AttachSink,
             adjacencies: () => instance.Server.Adjacencies,
@@ -173,7 +173,7 @@ public sealed partial class WorldInstanceHost {
     // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
     private void ScanInstanceAdjacencies(WorldInstance instance) {
-        if (instance.Server.Definition.Adjacencies is not { Count: > 0 }) {
+        if (instance.Server.Configuration.Adjacencies is not { Count: > 0 }) {
             return;
         }
 
@@ -294,7 +294,7 @@ public sealed partial class WorldInstanceHost {
     private void ScanInstancePortals(WorldInstance instance) {
         SeedFederatedArrivalOccupancy(instance: instance);
 
-        var definition = instance.Server.Definition;
+        var definition = instance.Server.Configuration;
         var population = instance.Server.Population;
         var catalog = WorldFaceCatalog.For(definition: definition);
         var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
@@ -464,7 +464,7 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var rateHz = instance.Server.Definition.SimulationRateHz;
+        var rateHz = instance.Server.Configuration.SimulationRateHz;
         var stopped = (rateHz <= 0);
 
         status = new WorldInstanceRateStatus(

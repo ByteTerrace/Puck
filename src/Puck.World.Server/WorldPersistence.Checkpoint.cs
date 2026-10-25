@@ -548,7 +548,6 @@ public sealed partial class WorldPersistence {
     /// <returns><see langword="true"/> when capture succeeded.</returns>
     internal bool TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) =>
         TryCaptureCheckpointCore(hostRow, out checkpoint, out reason, restartingAddons: false);
-
     // A recording restarts guests from their pinned modules instead of claiming to capture their memory. Stage
     // that restart first, but publish it only after every ordinary checkpoint gate succeeds. A refused arm leaves
     // the live stores, their fuel counters and pending answers untouched. Ordinary captures never use this door.
@@ -556,8 +555,9 @@ public sealed partial class WorldPersistence {
         lock (Host.AuthorityGate) {
             IWorldAddonPreparedPlan? plan = null;
             var committed = false;
+
             try {
-                if (Host.Addons is { MountedCount: > 0 } addons && !addons.TryPrepare(
+                if ((Host.Addons is { MountedCount: > 0 } addons) && !addons.TryPrepare(
                     current: null,
                     candidate: Host.Definition,
                     plan: out plan,
@@ -568,13 +568,13 @@ public sealed partial class WorldPersistence {
                     return false;
                 }
                 if (!TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint.Empty, out checkpoint, out reason,
-                    restartingAddons: plan is not null)) {
+                    restartingAddons: (plan is not null))) {
                     return false;
                 }
                 if (plan is not null) {
-                    Host.Addons!.Commit(plan);
+                    Host.Addons!.Commit(plan: plan);
                     committed = true;
-                    Host.Addons.Finish(plan);
+                    Host.Addons.Finish(plan: plan);
                 }
                 return true;
             } finally {
@@ -593,7 +593,7 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
-            if (AnyUncapturableStateEverLatched(restartingAddons)) {
+            if (AnyUncapturableStateEverLatched(restartingAddons: restartingAddons)) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture pumped addon guests or a stepped machine without durable checkpoint support";
 
@@ -685,7 +685,7 @@ public sealed partial class WorldPersistence {
                 );
             }
 
-            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition);
+            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.MaterializeArena());
             var server = new WorldServerCheckpoint(
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
@@ -738,6 +738,7 @@ public sealed partial class WorldPersistence {
             return true;
         }
     }
+
     /// <summary>Restores this server's own fields and every subsystem it owns from a previously captured
     /// checkpoint. Called immediately after construction and before the first <see cref="WorldTick.Step"/> — the definition
     /// this restore installs is the checkpoint's own, never re-composed by replaying the journal.</summary>
@@ -836,7 +837,7 @@ public sealed partial class WorldPersistence {
             } else if (Host.Machines.InstanceNames.Any()) {
                 throw new InvalidOperationException(message: "the checkpoint carries no machine section, and this host runs machines");
             }
-        } else if (checkpoint.Machines is { } machines && ((machines.Instances.Count != 0) || machines.AnyEverPumped)) {
+        } else if ((checkpoint.Machines is { } machines) && ((machines.Instances.Count != 0) || machines.AnyEverPumped)) {
             throw new InvalidOperationException(message: "checkpoint contains machine state that this host cannot restore");
         }
 

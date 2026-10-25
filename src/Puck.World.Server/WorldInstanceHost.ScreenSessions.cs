@@ -163,7 +163,7 @@ public sealed partial class WorldInstanceHost {
         key: BootInstanceName,
         value: out var boot
     )
-        ? boot.Server.Definition.Views.NestingDepth
+        ? boot.Server.Configuration.Views.NestingDepth
         : RenderGraphInstanceSet.DefaultNestingDepth);
 
     // Walks the open sessions from every world a presentation shows directly, the boot world and every world a human
@@ -419,7 +419,7 @@ public sealed partial class WorldInstanceHost {
     // Whether an instance takes the live input it is sent: it steps, rather than holding for a pause, a stop, its
     // mirrors or its retirement, and it is not driving its own tape, whose link drops live input.
     private static bool TakesInput(WorldInstance instance) => (
-        (instance.Server.Definition.SimulationRateHz > 0) &&
+        (instance.Server.Configuration.SimulationRateHz > 0) &&
         !instance.IsPaused &&
         !instance.AwaitingMirrors &&
         !instance.Server.IsRetiring &&
@@ -468,11 +468,11 @@ public sealed partial class WorldInstanceHost {
                     if (
                         (forward.ScreenIndex == physical.Index) &&
                         TryMapForward(
-                        destination: destination.Server.Definition,
+                        destination: destination.Server.Configuration,
                         face: in face,
                         forward: in forward,
                         mapped: out mapped,
-                        source: owner.Server.Definition
+                        source: owner.Server.Configuration
                     )
                     ) {
                         found = true;
@@ -526,7 +526,7 @@ public sealed partial class WorldInstanceHost {
             owned = (null, new SortedDictionary<WorldObservationSite, WorldObservationSession>());
         }
 
-        var definition = instance.Server.Definition;
+        var definition = instance.Server.Configuration;
         var changed = false;
 
         if ((owned.Reconciled is null) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
