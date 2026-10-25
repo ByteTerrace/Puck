@@ -846,8 +846,9 @@ public static partial class WorldDocumentEmitter {
             context: typeof(ActionEffect),
             lower: () => LowerExpression(call, scope)
         )!,
-        CompoundAssignStatementNode compound => RefuseCompoundAssignment(
+        CompoundAssignStatementNode compound => LowerCompoundAssignment(
             compound: compound,
+            ruleObj: ruleObj,
             scope: scope
         ),
         IfStatementNode ifStmt => LowerIf(
@@ -983,21 +984,39 @@ public static partial class WorldDocumentEmitter {
             span: span
         );
     }
-    // puck.world.definition.v1 carries two assignment effects, setState and addState; every other operator belongs in the
-    // expression on the right, where the state engine evaluates it.
-    private static JsonNode? RefuseCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope) {
-        var target = ((compound.Target.Key is null)
-            ? compound.Target.Name
-            : $"{compound.Target.Name}[{compound.Target.Key}]"
-        );
-
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.UnsupportedAssignmentOperator,
-            message: $"puck.world.definition.v1 has no '{compound.Operator}=' effect - write it as '{target} = {target} {compound.Operator} ...'",
-            span: compound.Span
-        );
-
-        return null;
+    private static JsonNode? LowerCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope, JsonObject? ruleObj) {
+        if ((compound.Operator == "-") && (compound.Rhs is RhsSecondsNode seconds)) {
+            return LowerCellEffect(discriminator: "addState", target: compound.Target,
+                rhs: seconds with { Seconds = -seconds.Seconds }, allowText: false, scope: scope, ruleObj: ruleObj);
+        }
+        if (compound.Rhs is not RhsOperandNode operand) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{compound.Operator}=' requires a numeric expression; durations are admitted only with '+=' and '-='",
+                span: compound.Rhs.Span);
+            return null;
+        }
+        var right = BindOperand(operand: operand.Expression, scope: scope);
+        if (compound.Operator == "-") {
+            return LowerCellEffect(discriminator: "addState", target: compound.Target,
+                rhs: operand with { Expression = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
+                    form: DocumentValueForm.Expression, text: $"-({right})") },
+                allowText: false, scope: scope, ruleObj: ruleObj);
+        }
+        var resolved = ResolveEffectTarget(target: compound.Target, scope: scope);
+        var obj = new JsonObject { ["$type"] = "setState", ["state"] = resolved.State };
+        if (resolved.Key is not null) { obj["key"] = resolved.Key; }
+        // The write resolves its key before evaluating this expression. Its read uses that same key,
+        // without hoisting the computation into the rule's pre-gate locals.
+        var left = ExpressionSpelling.PrintName(name: resolved.Row, quoted: false);
+        if (resolved.Key is not null) {
+            left += resolved.Key.StartsWith(value: '$')
+                ? "[$write]"
+                : $"[{ExpressionSpelling.PrintName(name: resolved.Key, quoted: false)}]";
+        }
+        obj["expression"] = DocumentExpression(text: BindOperand(
+            operand: Puck.Transpiler.Parsing.PuckParser.CreateOperand(form: DocumentValueForm.Expression,
+                text: $"{left} {compound.Operator} ({right})"), scope: scope));
+        return obj;
     }
     // `if Gate { ... } [else { ... }]` lowers to ActionEffect.If, reusing the same predicate lowering `when` uses
     // for its own condition. An `else if` chain is already one nested IfStatementNode per level (the parser's own

@@ -253,11 +253,8 @@ public sealed class LiveRow {
     }
 }
 /// <summary>A key computed where it is used: the cell whose name is the integer its expression evaluates to at the
-/// moment the effect or condition holding it reads or writes. A key that reads a binding an effect body opens (a
-/// <c>for each</c> instance, a claimed instance) compiles to this, because that binding's handle exists only while
-/// the body fires, never when the rule's own locals evaluate before its gate.</summary>
-/// <remarks>An expression that faults, or evaluates to an integer no key table interns, names no cell, so the read is
-/// absent and a write through it refuses.</remarks>
+/// moment the effect or condition holding it reads or writes. Preceding effects are visible to the expression.</summary>
+/// <remarks>A fault names no cell. An integer names that key even when no row holds it.</remarks>
 public sealed class EffectKeyFact : RuleKeyFact {
     /// <summary>Initializes the fact.</summary>
     /// <param name="source">The key's compiled Int expression.</param>
@@ -284,10 +281,6 @@ public sealed class EffectKeyFact : RuleKeyFact {
         if (!TryResolveIndex(
             index: out var index,
             reader: reader
-        ) || !RuleReads.TryIndexKey(
-            index: index,
-            key: out var key,
-            keys: reader.Arena.Keys
         )) {
             named = false;
 
@@ -296,7 +289,7 @@ public sealed class EffectKeyFact : RuleKeyFact {
 
         named = true;
 
-        return key;
+        return RuleReads.TryIndexKey(index: index, key: out var key, keys: reader.Arena.Keys) ? key : default;
     }
     /// <inheritdoc/>
     public override bool TryResolveIndex(IStateReader reader, out long index) {
@@ -311,7 +304,7 @@ public sealed class EffectKeyFact : RuleKeyFact {
         );
     }
 }
-/// <summary>The key an implicit local computed: the cell whose name is the local's integer.</summary>
+/// <summary>The key a declared local computed: the cell whose name is the local's integer.</summary>
 public sealed class LocalKeyFact : RuleKeyFact {
     /// <summary>Initializes the fact.</summary>
     /// <param name="ordinal">The local's slot in the rule.</param>

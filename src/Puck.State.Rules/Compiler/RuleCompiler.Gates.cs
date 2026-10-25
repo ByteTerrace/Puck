@@ -31,14 +31,13 @@ public static partial class RuleCompiler {
 
         return [.. gate];
     }
-    /// <summary>Compiles an expression key (<see cref="RuleFacts.ExpressionKeyPrefix"/>) into an implicit int
-    /// binding appended to the rule's bindings and returns the key that reads it back. Repeated spellings in the
-    /// same binding scope reuse that binding.</summary>
+    /// <summary>Compiles an expression key evaluated where it is read or written. Repeated spellings
+    /// in the same binding scope share compiled code, never a pre-gate value.</summary>
     /// <param name="text">The expression's canonical infix spelling.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     /// <param name="where">The field the key was spelled in, for refusal text.</param>
-    /// <returns>The key that reads the binding back.</returns>
+    /// <returns>The key that evaluates the expression.</returns>
     public static CompiledCellRef CompileKeyExpression(string text, string ruleName, RuleCompileContext context, string where) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
@@ -61,8 +60,6 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
-
-        var bindings = (context.RuleLocals ??= []);
         var program = CompileExpression(
             context: context,
             expression: parsed,
@@ -71,76 +68,13 @@ public static partial class RuleCompiler {
             verb: $"{where} key expression"
         );
 
-        // A key reading an instance an effect body binds cannot be a local: locals evaluate before the gate, when that
-        // body's handle does not exist yet. It evaluates where the effect or condition holding it reads or writes.
-        if (ReadsEffectBinding(
-            context: context,
-            tokens: program
-        )) {
-            var effectKey = new CompiledCellRef(
-                Custom: new EffectKeyFact(source: program),
-                Key: default,
-                RowOrdinal: -1
-            );
-
-            context.KeyExpressions.Add(
-                key: cacheKey,
-                value: effectKey
-            );
-
-            return effectKey;
-        }
-
-        // Nested keys append their dependencies while compiling the expression; price the new binding after them.
-        if (bindings.Count >= RuleCapacity.MaxLocalsPerRule) {
-            throw new RuleException(
-                detail: $"{where} key expression '{text}' would be binding {(bindings.Count + 1)}, exceeding the {RuleCapacity.MaxLocalsPerRule}-binding ceiling (declared and implicit key bindings together)",
-                refusal: RuleRefusal.EffectKindInadmissible,
-                ruleName: ruleName
-            );
-        }
-
-        var ordinal = bindings.Count;
-
-        bindings.Add(item: new CompiledRuleLocal(
-            CarrierKind: CellKind.Int,
-            Expression: program,
-            Kind: CellKind.Int,
-            Name: $"$key{ordinal}"
-        ));
-
         var reference = new CompiledCellRef(
-            Custom: new LocalKeyFact(
-                ordinal: ordinal,
-                source: program
-            ),
+            Custom: new EffectKeyFact(source: program),
             Key: default,
             RowOrdinal: -1
         );
-
-        context.KeyExpressions.Add(
-            key: cacheKey,
-            value: reference
-        );
-
+        context.KeyExpressions.Add(key: cacheKey, value: reference);
         return reference;
-    }
-
-    // Whether a compiled program reads an instance an effect body binds, directly or through a nested key, a fold
-    // body, or a called subprogram.
-    private static bool ReadsEffectBinding(ReadOnlySpan<CompiledExpressionToken> tokens, RuleCompileContext context) {
-        foreach (var token in tokens) {
-            if ((token.Operand is InstanceFieldOperand field) && context.IsEffectScopedBinding(slot: field.BindingSlot)) {
-                return true;
-            }
-            if ((token.Operand is IStateAddressedOperand { KeyFrom.Custom: EffectKeyFact }) ||
-                ((token.Fold is { } fold) && ReadsEffectBinding(context: context, tokens: fold.Body)) ||
-                ((token.Call is { } call) && ReadsEffectBinding(context: context, tokens: call.Body))) {
-                return true;
-            }
-        }
-
-        return false;
     }
     // Both sides of a compareValue share one domain. A declared kind is that domain; an undeclared one is inferred
     // the way a local's carrier is: Int, unless both sides are constants alone and one holds a fraction, and the

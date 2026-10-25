@@ -147,9 +147,6 @@ public static class PuckDiagnosticCodes {
     public const string UnresolvedLet = "PUCK015";
     /// <summary>A shape or placement parent that resolves to no sibling row in the same collection.</summary>
     public const string UnresolvedParent = "PUCK034";
-    /// <summary>PUCK039: a compound assignment (<c>-=</c>, <c>*=</c>, <c>&gt;&gt;=</c>, …) in a document whose
-    /// effects carry no such operator.</summary>
-    public const string UnsupportedAssignmentOperator = "PUCK039";
     /// <summary>PUCK038: a call-form gate (<c>key(left, held)</c>) in a document whose gates are comparisons
     /// only.</summary>
     public const string UnsupportedCallGate = "PUCK038";

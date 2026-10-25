@@ -397,11 +397,11 @@ never a second apply path.
 language parses `if`/`else if`/`else`, `repeat`/`break`, call-form gates, and
 compound assignment (`+= -= *= /= %= &= |= ^= <<= >>=`) for every vocabulary,
 but the WORLD vocabulary's rule shape still refuses `repeat`, `break`, a
-call-form gate, and a compound assignment by name: control flow with nothing
+call-form gate by name: control flow with nothing
 to lower onto is PUCK037, a call-form gate where only comparisons are legal is
-PUCK038, and a compound assignment none of the effects above carries an
-operator for is PUCK039
-(`src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`). `if` is the one
+PUCK038. Compound assignment lowers to the existing write effects: `-=` adds
+the negated operand, and the other compounds set the computed value. A computed
+destination key is evaluated once at the effect. `if` is the control-flow
 exception: it lowers to `ActionEffect.If` (`$type: "if"`), branching on a
 `condition` compiled the same way a `when` gate is, firing `then` or the
 optional `else` — an `else if` chain is one nested `if` node per level, so a

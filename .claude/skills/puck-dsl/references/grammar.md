@@ -308,7 +308,6 @@ carry them is that vocabulary's own answer:
 |---|---|
 | PUCK037 | Control flow (`repeat`/`break`, or `if` in a vocabulary whose rule shape has nothing to lower it onto) in a rule shape that can't carry it. |
 | PUCK038 | A call-form gate where the vocabulary admits comparisons only. |
-| PUCK039 | A compound-assignment operator the vocabulary's effects don't carry. |
 
 The world vocabulary's rule body lowers `if`/`else if`/`else` to the state
 engine's conditional effect (`ActionEffect.If`), reusing the `when` gate's own
@@ -316,8 +315,9 @@ predicate lowering for the condition — see the [world transpiler
 guide](../../../../src/Puck.World.Transpiler/README.md#rules). `repeat`/`break`
 have nothing to lower onto there, so PUCK037 fires for them, naming the
 rule's `forEach` as the alternative. Its effects carry `=` (`setState`) and
-`+=` (`addState`); any other compound operator is PUCK039, whose message
-spells the long form (`x = x - …`).
+`+=` and `-=` (`addState`, with a negated operand for subtraction). Other
+compound operators lower to `setState` over the corresponding expression.
+A computed destination key is evaluated once at the effect, after preceding effects.
 Cartridge rules support all three, `if`/`repeat`/`break` (`rom-forge` owns
 that grammar).
 

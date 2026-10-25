@@ -1003,6 +1003,7 @@ One body entry carries `advance`, `behavior`, `key`, `value` and nothing else.
 | `import` | Core grammar: the module surface, described by `Puck.Transpiler`. |
 | `let` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
 | `module` | Core grammar: a typed compile-time module, expanded before this vocabulary sees a statement. |
+| `op=` | Compound assignment: `-=` adds a negated operand; the other operators set an expression, resolving a computed destination key once at the effect. |
 | `schema` | Core grammar: a document header this vocabulary does not interpret. |
 | `template` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
 | `use` | Core grammar: a module instantiation, expanded before this vocabulary sees a statement. |

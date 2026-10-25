@@ -993,6 +993,19 @@ public static partial class WorldDecompiler {
     // fills nothing else), so an object carrying anything more — an explicit `"target": "Self"` the author wrote,
     // or a second RHS key left behind — has no sugar spelling and prints as call form.
     private static string FormatSetOrAddEffect(string discriminator, JsonObject obj) {
+        if ((discriminator == "setState") && CarriesOnly(obj, "$type", "state", "key", "expression") &&
+            IsEffectTargetSafe(obj: obj) && (obj["expression"] is { } expression) &&
+            ExpressionSpelling.TryParseSyntax(text: WorldExpressionJson.SourceText(node: expression), atoms: [],
+                syntax: out var syntax, error: out _) &&
+            (syntax is ExpressionSpelling.Binary {
+                Left: ExpressionSpelling.SourceIndex {
+                    Target: ExpressionSpelling.SourceName row,
+                    Index: ExpressionSpelling.SourceName { Name: "$write" }
+                }
+            } compound) && (compound.Operator is "*" or "/" or "%" or "&" or "|" or "^" or "<<" or ">>" or ">>>") &&
+            (row.Name == FormatStateReference(node: obj["state"]))) {
+            return $"{FormatRowRefTarget(obj: obj)} {compound.Operator}= {ExpressionSpelling.PrintSyntax(syntax: compound.Right, atom: static _ => throw new InvalidOperationException())}";
+        }
         var rhs = (IsEffectTargetSafe(obj: obj)
             ? FormatEffectRhs(
                 obj,

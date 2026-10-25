@@ -82,8 +82,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   alternative: a rule already runs once per matching subject, so iterate with
   the rule's `forEach`; a fixed count unrolls with a compile-time `for`, or
   folds into one effect (`x += 3`). A world rule carries `=` (`setState`) and
-  `+=` (`addState`); any other compound operator is **PUCK039**, written out as
-  `x = x - …`. A call-form gate where only comparisons are legal is
+  `+=` and `-=` (`addState`, negating subtraction's operand). Other compound
+  operators lower to `setState` over an expression; a computed destination key
+  is evaluated once when that effect runs. A call-form gate where only comparisons are legal is
   **PUCK038**. Cartridge rules admit `if`, `repeat`, `break`, `key(...)` gates
   and compound assignment.
 - **A `test`'s `expect` reads one world, or names the document it reads.** A line

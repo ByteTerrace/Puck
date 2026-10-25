@@ -109,6 +109,8 @@ public enum BoundKey : byte {
     /// <summary>The token before <see cref="Token"/> in the word a pattern's value expression walks; on the first token
     /// it names no cell, so a read through it is the absent cell.</summary>
     Previous,
+    /// <summary>The destination key resolved for the current state write.</summary>
+    Write,
 }
 /// <summary>The binding vocabulary: the key token and reference token each <see cref="BoundKey"/> spells, and the
 /// scope it is live in.</summary>
@@ -123,6 +125,7 @@ public static class RuleBindingTokens {
         (BoundKey.Right, "$right", "a Distance interaction or flock-affinity expression"),
         (BoundKey.Token, "$token", "a pattern row's value expression, as the cell key of a row keyed over the zone's token domain"),
         (BoundKey.Previous, "$previous", "a pattern row's value expression, as the key of the token before the current one (the absent cell on the first)"),
+        (BoundKey.Write, "$write", "a state write's value expression"),
     ];
 
     /// <summary>Returns the binding a key token spells, or <see cref="BoundKey.None"/>.</summary>

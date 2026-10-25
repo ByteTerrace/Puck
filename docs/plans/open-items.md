@@ -392,6 +392,9 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense, Ribbon.
 - [ ] S9 the authoring consensus ([S9](state-and-language.md#s9--the-authoring-consensus)), four waves:
   - [ ] Wave 1: compound assignment, one expression language and the locals' order, one bracket rule; `sql { }` deleted, a wrapping printer, saving through the source tree.
+    - [x] World compound assignments preserve additive subtraction and evaluate computed destination keys once at the effect. Six chess self-assignments migrated with identical compiled documents; PUCK039 removed.
+    - [ ] One expression language and explicit local evaluation order.
+    - [ ] One bracket rule and lexical value names.
   - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
   - [ ] Wave 3: names for bodies and identities, one composition construct, typed test steps with `eventually`.
   - [ ] Wave 4: complete state sugar, one rule grammar for cartridges, one authorization declaration, creation axes and rotations.

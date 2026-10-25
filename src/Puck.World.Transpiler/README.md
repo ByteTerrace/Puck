@@ -294,6 +294,11 @@ the `s` unit (`ValueSeconds`), or opaque operand text the lowering stage classif
 
 ### Decisions
 
+Compound assignment is admitted in world rules. `-=` adds the negated operand,
+preserving `+=`'s envelope behavior. `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`
+and `>>=` set the corresponding expression's value. A computed destination key
+is evaluated once when that effect runs, after all preceding effects.
+
 `decision`, `option`, `interrupt` and `onNoChoice` are rows of
 [the construct table](../../docs/reference/world-vocabulary.md). `periodSeconds` and each option's `score` are
 required.
@@ -814,8 +819,7 @@ name or a missing `score`), PUCK014 (`onFailure` used more than once on one `tra
 flag and an explicit `solid { }`), PUCK029 (`decision` missing `periodSeconds`), PUCK035 (basis/import composition
 refused), PUCK036 (a statement inside `prototypes`/`placements` that the section's grammar cannot carry), PUCK037
 (`repeat`/`break`—not `if`, which lowers to the conditional effect above—has nothing to lower onto in this
-vocabulary's straight-line rule body), PUCK039 (a compound-assignment operator; this vocabulary carries only
-`setState`/`addState`), PUCK100 (a rule whose name position is a bound template parameter's own identifier, so
+vocabulary's straight-line rule body), PUCK100 (a rule whose name position is a bound template parameter's own identifier, so
 every instantiation would mint the same name — write `rule $"…{param}"` instead), PUCK103 (a `transform` written
 with a result label; the destination is the call's own argument, so write `transform call(...)`), PUCK104 (a
 `test` declaration's own shape — a body member that is not `given`/`when`/`expect`, one of those twice or out of

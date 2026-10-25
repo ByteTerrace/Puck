@@ -281,7 +281,7 @@ public static class RuleReads {
                 reader: reader
             );
         }
-        if (reference.Binding is BoundKey.Each or BoundKey.Token or BoundKey.Previous) {
+        if (reference.Binding is BoundKey.Each or BoundKey.Token or BoundKey.Previous or BoundKey.Write) {
             // A binding that is not bound for this evaluation falls back to the reference's own key, which is how
             // the first token of a pattern word reads $previous as the cell no row holds rather than as no cell.
             var bound = BoundKeyOf(
@@ -493,6 +493,7 @@ public static class RuleReads {
     }
 
     private static CellKey BoundKeyOf(IStateReader reader, BoundKey binding) => (binding switch {
+        BoundKey.Write => reader.Scratch.WriteKey,
         BoundKey.Each => reader.BoundEachKey,
         BoundKey.Token => reader.BoundTokenKey,
         BoundKey.Previous => reader.BoundPreviousKey,

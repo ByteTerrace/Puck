@@ -524,7 +524,7 @@ rules "" when settleHold == chessSettleTicks {
         shapeLegal = maximum(maximum(maximum(match(chessRayEmpty, lastLegal, N, cell)[move[to]] == move[from], match(chessRayEmpty, lastLegal, S, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, E, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, W, cell)[move[to]] == move[from])
       }
       if piece == PieceKind.Bishop or piece == PieceKind.Queen {
-        shapeLegal = shapeLegal | (maximum(maximum(maximum(match(chessRayEmpty, lastLegal, NE, cell)[move[to]] == move[from], match(chessRayEmpty, lastLegal, SE, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, SW, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, NW, cell)[move[to]] == move[from]))
+        shapeLegal |= (maximum(maximum(maximum((match(chessRayEmpty, lastLegal, NE, cell)[move[to]] == move[from]), (match(chessRayEmpty, lastLegal, SE, cell)[move[to]] == move[from])), (match(chessRayEmpty, lastLegal, SW, cell)[move[to]] == move[from])), (match(chessRayEmpty, lastLegal, NW, cell)[move[to]] == move[from])))
       }
     }
   }
@@ -587,7 +587,7 @@ rules "" when settleHold == chessSettleTicks {
       historyReset = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | ((lostRights & ~castleRights) != 0)
       halfmoveClock = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) ? 0 : halfmoveClock + 1
       historyPending = 1
-      castleRights = castleRights | lostRights
+      castleRights |= lostRights
       transform boardCombine(left: board, operation: Copy, row: lastLegal)
       previousInCheck[0] = inCheck[0]
       previousInCheck[1] = inCheck[1]
@@ -627,11 +627,11 @@ rules "" when settleHold == chessSettleTicks {
       enPassantProbe[enPassantTarget[$value]] = local(sign)
       if turn == TurnColor.White {
         enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, -6, -6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, -2, -2)) != 0)
+        enPassantProbeCheck |= ((((((((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N)) | boardShift(farFiles, chessBoard, S)) | boardShift(farFiles, chessBoard, N))) & board(mask, enPassantProbe, -2, -2))) != 0))
         enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
       } else {
         enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, 6, 6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, 2, 2)) != 0)
+        enPassantProbeCheck |= ((((((((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N)) | boardShift(farFiles, chessBoard, S)) | boardShift(farFiles, chessBoard, N))) & board(mask, enPassantProbe, 2, 2))) != 0))
         enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
       }
       if enPassantProbeCheck == 0 {
@@ -657,11 +657,11 @@ rules "" when settleHold == chessSettleTicks {
       enPassantProbe[enPassantTarget[$value]] = local(sign)
       if turn == TurnColor.White {
         enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, -6, -6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, -2, -2)) != 0)
+        enPassantProbeCheck |= ((((((((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N)) | boardShift(farFiles, chessBoard, S)) | boardShift(farFiles, chessBoard, N))) & board(mask, enPassantProbe, -2, -2))) != 0))
         enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
       } else {
         enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, 6, 6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, 2, 2)) != 0)
+        enPassantProbeCheck |= ((((((((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N)) | boardShift(farFiles, chessBoard, S)) | boardShift(farFiles, chessBoard, N))) & board(mask, enPassantProbe, 2, 2))) != 0))
         enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
       }
       if enPassantProbeCheck == 0 {
