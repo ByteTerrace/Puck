@@ -65,30 +65,6 @@ public sealed class WorldFaceCatalog {
     private const float FallbackHalfWidth = 0.6f;
 
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
-    private readonly Opening[] m_openings;
-
-    private readonly record struct Opening(FixedQ4816 Floor, WorldFaceAperture? Aperture);
-
-    /// <summary>Opens a declared face, reusing its region while its frame and crossing floor stay fixed.</summary>
-    /// <param name="placementId">The owning placement.</param>
-    /// <param name="faceName">The declared face.</param>
-    /// <param name="crossingFloor">The simulation's crossing floor.</param>
-    /// <param name="aperture">The opening, when the face has a recipe.</param>
-    /// <returns>Whether this catalog declares an opening for the face.</returns>
-    public bool TryOpenAperture(string placementId, string faceName, FixedQ4816 crossingFloor, out WorldFaceAperture? aperture) {
-        aperture = null;
-        if (!m_index.TryGetValue(key: (placementId, faceName), value: out var index)) { return false; }
-        lock (m_openings) {
-            ref var opening = ref m_openings[index];
-
-            if ((opening.Aperture is null) || (opening.Floor != crossingFloor)) {
-                if (!WorldFacePortalPolicy.TryAperture(row: Rows[index], crossingFloor: crossingFloor, aperture: out aperture)) { return false; }
-                opening = new Opening(Aperture: aperture, Floor: crossingFloor);
-            }
-            aperture = opening.Aperture;
-            return true;
-        }
-    }
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
     // Puck.World.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
@@ -109,11 +85,11 @@ public sealed class WorldFaceCatalog {
 
     private WorldFaceCatalog(IReadOnlyList<WorldFaceRow> rows, IReadOnlyList<string> notices, int claimingFaceCount, int slotCapacity) {
         Rows = rows;
-        m_openings = new Opening[rows.Count];
         Notices = notices;
         ClaimingFaceCount = claimingFaceCount;
         SlotCapacity = slotCapacity;
         m_index = new Dictionary<(string, string), int>(capacity: rows.Count);
+        m_apertures = new WorldFaceAperture?[rows.Count];
         m_screens = [];
 
         for (var index = 0; (index < rows.Count); index++) {
@@ -126,6 +102,10 @@ public sealed class WorldFaceCatalog {
     }
 
     private readonly Dictionary<int, int> m_screens;
+    // Each row's opening at the crossing floor, built on first ask. The floor reads kits, motion and collision, never a
+    // state row, so it holds for every definition CarryAcrossState shares this catalog with.
+    private readonly WorldFaceAperture?[] m_apertures;
+    private StrongBox<FixedQ4816>? m_crossingFloor;
 
     /// <summary>Gets how many rows resolved to a source that renders something, and so asked for a screen slot.</summary>
     public int ClaimingFaceCount { get; }
@@ -557,6 +537,55 @@ public sealed class WorldFaceCatalog {
 
         return false;
     }
+    /// <summary>Gets a document's crossing floor (<see cref="WorldFacePortalPolicy.CrossingFloor"/>), computed once for
+    /// the catalog.</summary>
+    /// <param name="definition">A definition this catalog was derived for.</param>
+    /// <returns>The crossing floor in world units.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public FixedQ4816 CrossingFloor(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (m_crossingFloor is not { } floor) {
+            floor = new StrongBox<FixedQ4816>(value: WorldFacePortalPolicy.CrossingFloor(definition: definition));
+            m_crossingFloor = floor;
+        }
+
+        return floor.Value;
+    }
+    /// <summary>Finds one derived face's opening at its document's crossing floor
+    /// (<see cref="WorldFacePortalPolicy.TryAperture"/>), built once for the catalog.</summary>
+    /// <param name="definition">A definition this catalog was derived for.</param>
+    /// <param name="placementId">The owning placement's id.</param>
+    /// <param name="faceName">The declared face name.</param>
+    /// <param name="aperture">The opening; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the placement declares that face and its shape kind opens a region.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public bool TryFindAperture(WorldDefinition definition, string placementId, string faceName, out WorldFaceAperture? aperture) {
+        if (!m_index.TryGetValue(
+            key: (placementId, faceName),
+            value: out var index
+        )) {
+            aperture = null;
+
+            return false;
+        }
+        if (m_apertures[index] is { } built) {
+            aperture = built;
+
+            return true;
+        }
+        if (!WorldFacePortalPolicy.TryAperture(
+            aperture: out aperture,
+            crossingFloor: CrossingFloor(definition: definition),
+            row: Rows[index]
+        )) {
+            return false;
+        }
+
+        m_apertures[index] = aperture;
+
+        return true;
+    }
     /// <summary>Finds the first derived face row, in document order, seated at a screen index.</summary>
     /// <param name="screenIndex">The derived-face screen index.</param>
     /// <param name="row">The row when one is seated there; otherwise the default.</param>
@@ -575,7 +604,6 @@ public sealed class WorldFaceCatalog {
 
         return false;
     }
-
     // The catalog reads placements, creations, cameras and the authoring policy, never a state row, so a definition
     // that replaced another's state section alone derives the same catalog.
     internal static void CarryAcrossState(WorldDefinition source, WorldDefinition target) {

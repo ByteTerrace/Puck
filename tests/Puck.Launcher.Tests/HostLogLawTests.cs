@@ -88,11 +88,26 @@ public sealed class HostLogLawTests {
 
         Assert.Equal(expected: ["e", "f", "g"], actual: log.Read(query: new HostLogQuery()).Lines.Select(selector: static line => line.Text));
 
+        // Lines held past the end of the ring's character buffer wrap to its start and read back whole.
+        for (var index = 0; (index < 1000); index++) {
+            log.Append(stream: HostLogStream.Output, text: $"[w] {index:D4}");
+        }
+
+        Assert.Equal(expected: ["[w] 0999"], actual: log.Read(query: new HostLogQuery { Category = "w", Text = "0999" }).Lines.Select(selector: static line => line.Text));
+        Assert.Equal(expected: ["[w] 0999"], actual: log.Read(query: new HostLogQuery()).Lines.Select(selector: static line => line.Text));
+
         var wide = new HostLog();
 
         wide.Append(stream: HostLogStream.Error, text: new string(c: 'x', count: (HostLog.MaxLineCharacters + 5)));
 
         Assert.EndsWith(expectedEndString: $"… [{HostLog.MaxLineCharacters + 5} characters]", actualString: wide.Read(query: new HostLogQuery()).Lines.Single().Text);
+
+        // A teed writer assembles a line longer than its first buffer whole.
+        using (var teed = wide.Tee(inner: TextWriter.Null, stream: HostLogStream.Output)) {
+            teed.WriteLine(value: new string(c: 'y', count: 600));
+        }
+
+        Assert.Equal(expected: new string(c: 'y', count: 600), actual: wide.Read(query: new HostLogQuery()).Lines.Last().Text);
         Assert.Equal(expected: (HostLog.Capacity, HostLog.CharacterBudget), actual: (wide.LineCapacity, wide.CharacterLimit));
     }
     [Fact]

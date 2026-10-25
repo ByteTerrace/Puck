@@ -297,7 +297,6 @@ public sealed partial class WorldInstanceHost {
         var definition = instance.Server.Configuration;
         var population = instance.Server.Population;
         var catalog = WorldFaceCatalog.For(definition: definition);
-        var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
         // Every tick scans every instance, so the per-body winners reuse one buffer; a scan entered from inside
         // another takes a fresh one.
         var winners = (((m_portalWinners is { } held) && (held.Length >= population.Capacity))
@@ -311,10 +310,11 @@ public sealed partial class WorldInstanceHost {
             length: population.Capacity
         );
 
+        // Indexed loops: this runs every tick, and enumerating the lists through their interfaces allocates.
         var placements = definition.Placements;
 
-        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
-            var placement = placements[placementIndex];
+        for (var row = 0; (row < placements.Count); row++) {
+            var placement = placements[row];
 
             if (
                 (placement is null) ||
@@ -323,16 +323,16 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            for (var faceIndex = 0; (faceIndex < faces.Count); faceIndex++) {
-                var face = faces[faceIndex];
+            for (var index = 0; (index < faces.Count); index++) {
+                var face = faces[index];
 
                 if (
                     (face.Portal is not { } portal) ||
-                    !catalog.TryOpenAperture(
-                    placementId: placement.Id,
-                    faceName: face.Face,
+                    !catalog.TryFindAperture(
                     aperture: out var aperture,
-                    crossingFloor: crossingFloor
+                    definition: definition,
+                    faceName: face.Face,
+                    placementId: placement.Id
                 )
                 ) {
                     // A face with no aperture mapping is refused by name at validation, so reaching here means the

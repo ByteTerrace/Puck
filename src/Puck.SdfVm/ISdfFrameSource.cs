@@ -32,6 +32,12 @@ public interface ISdfFrameSource {
     /// <see cref="ScreenDecals"/>) so a host node's type coupling doesn't grow to thread it.</summary>
     /// <param name="bakes">The engine's brick-bake service (poll/request), never null.</param>
     void AdvanceBricks(ISdfBrickBakeService bakes) { }
+    /// <summary>Hands the source what to call with each program a background build of its finishes and the dynamic
+    /// transforms it was emitted under, on the build's thread, before any frame carries it: a residency plans its mesh
+    /// bake there (<see cref="SdfMeshPathBake.PlanAhead"/>). A later call replaces the earlier. The default
+    /// implementation, for a source that builds nothing in the background, ignores it.</summary>
+    /// <param name="built">The callback; the transforms it is handed are the source's to write again once it returns.</param>
+    void ObserveBuilds(Action<SdfProgram, IReadOnlyList<DynamicTransform>> built) { }
 
     /// <summary>Screen-surface TRANSFORM providers keyed by the program-declared screen index (see
     /// <see cref="SdfWorldResidency"/>'s <c>screenSurfaceTransforms</c> constructor parameter): a screen riding a dynamic

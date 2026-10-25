@@ -21,6 +21,12 @@ namespace Puck.World;
 public sealed class WorldIconTable {
     private readonly Dictionary<string, string> m_badgeDefaultIconBySource = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<(string Source, string Family), string> m_badgeOverrideIconBySourceFamily = [];
+    // Each family's member name by value, spelled once: an enum's ToString boxes it, and the binding bar resolves its
+    // badges every frame.
+    private static readonly string[] FamilyNames = Array.ConvertAll(
+        array: Enum.GetValues<GamepadType>(),
+        converter: static family => family.ToString()
+    );
     private readonly Dictionary<string, OverlayResolvedGlyph> m_icons = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Initializes a new instance of the <see cref="WorldIconTable"/> class from the boot document's
@@ -110,7 +116,7 @@ public sealed class WorldIconTable {
     /// row.</returns>
     public OverlayResolvedGlyph ResolveBadge(string source, GamepadType family) {
         if (m_badgeOverrideIconBySourceFamily.TryGetValue(
-            key: (source, family.ToString()),
+            key: (source, (((uint)family < (uint)FamilyNames.Length) ? FamilyNames[(int)family] : family.ToString())),
             value: out var overrideIcon
         )) {
             return ResolveIcon(name: overrideIcon);

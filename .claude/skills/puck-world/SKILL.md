@@ -89,6 +89,26 @@ The World runs from the store's build, which holds it while the World runs and
 leaves your `bin/Release` free to rebuild
 ([references/hosting-and-release.md](references/hosting-and-release.md)).
 
+Codex discovers these tools through the session's tool inventory (search for
+`puck`); its repository MCP configuration uses the same launcher as Claude.
+Use the tools directly before writing a stdin process wrapper. The headless
+start, named `puck_exec`, `world.wait`, headless capture refusal and stop were
+exercised from a Codex lane's actual MCP tools.
+
+`puck_exec.command` also accepts a newline-separated script: at most 64
+nonblank, noncomment lines and 8192 characters total. The entire script reaches
+one text session together. Each line waits for the preceding settlement, so
+successive Simulation lines apply on adjacent ticks; include `world.wait` to
+space them further. Reads see earlier writes. Scripts continue after refusals;
+inspect the per-line `commands` array (one-based source line, command, status,
+output and flags). `timeoutMs` covers the entire script. Cancellation discards
+queued lines but may leave dispatched changes; inspect before retrying.
+Results expose native JSON output as `data`, including each script line's
+`data`; text and truncated output have null data. `world.at --json` returns
+the completed tick and arrays of pending and ran lines with tick, command,
+status and output. Use `world.at` for absolute ticks or several commands at
+the same tick, and a multiline script for an ordered command/wait/read sequence.
+
 ## The model
 
 Everything is data. A versioned JSON document (`puck.world.definition.v1`)

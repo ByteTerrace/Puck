@@ -39,13 +39,31 @@ public sealed partial class WorldScreenBinder : IWorldScreenImages {
         : (0, 0));
 
     // Reconciles the mappings, and the source and view instances they name, with the rows and the live binds over them.
+    // Rows, cameras, live binds and nesting depth equal to the ones they were last reconciled with leave the mappings and
+    // their source instances standing, so a delivery that changed no screen (a placement's response swap) composes no
+    // new render-graph set.
     private void ReconcileMappings() {
+        if (MappingsStand()) {
+            ReconcileViews();
+
+            return;
+        }
+
         Mappings.Reconcile(
             cameras: m_cameras,
             live: m_live,
             screens: m_rows,
             sessionsPastDepth: (m_nestingDepth == 0)
         );
+        m_mappedRows = m_rows;
+        m_mappedCameras = m_cameras;
+        m_mappedDepth = m_nestingDepth;
+        m_mappedLive.Clear();
+
+        foreach (var (index, source) in m_live) {
+            m_mappedLive[index] = source;
+        }
+
         ReconcileViews();
     }
     // Reconciles the mappings with the rows a screen mutation delivered.
@@ -53,6 +71,31 @@ public sealed partial class WorldScreenBinder : IWorldScreenImages {
         m_rows = screens;
         ReconcileMappings();
     }
+    // Whether the mappings were reconciled with the rows, cameras, live binds and nesting depth that stand now.
+    private bool MappingsStand() {
+        if (
+            (m_mappedRows is not { } rows) ||
+            !(m_mappedCameras ?? []).SequenceEqual(second: m_cameras) ||
+            (m_mappedDepth != m_nestingDepth) ||
+            (m_mappedLive.Count != m_live.Count) ||
+            !(ReferenceEquals(objA: rows, objB: m_rows) || rows.SequenceEqual(second: m_rows))
+        ) {
+            return false;
+        }
+
+        foreach (var (index, source) in m_live) {
+            if (!m_mappedLive.TryGetValue(key: index, value: out var mapped) || !Equals(objA: mapped, objB: source)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // The rows, cameras, live binds and nesting depth the mappings were last reconciled with.
+    private IReadOnlyList<WorldScreen>? m_mappedRows;
+    private IReadOnlyList<WorldCamera>? m_mappedCameras;
+    private readonly Dictionary<int, WorldScreenSource> m_mappedLive = [];
+    private int m_mappedDepth = -1;
     // The source a screen shows: the one a live presentation verb bound over its row, or its row's.
     private WorldScreenSource? ShownOf(int screen) {
         if (m_live.TryGetValue(

@@ -118,7 +118,95 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: create);
 
-        return PlanGroups(create: create, farDistance: farDistance, onlySlot: -1, program: program, snap: null, transforms: transforms);
+        return Ordered(
+            create: create,
+            groups: PlanGroups(create: create, farDistance: farDistance, program: program, slots: null, snap: null, transforms: transforms),
+            program: program,
+            reach: Reach(farDistance: farDistance),
+            transforms: transforms
+        );
+    }
+    /// <summary>Plans again, at a frame's transforms, the groups of a plan <see cref="Plan{T}"/> made of the same program
+    /// at other transforms that a caller cannot keep as they stand: each dynamic group the predicate names, whose box,
+    /// poses and geometry read the transforms, and each static or world group it names whose geometry reads a slot
+    /// (<see cref="SdfMeshGeometryBuilder.ReadsSlots"/>). Which groups a program has, the instances each holds and their
+    /// order never read a transform, so each group planned again is the one <see cref="Plan{T}"/> makes at the frame's
+    /// transforms, at its place in the list; every other group stays as it was planned.</summary>
+    /// <typeparam name="T">The group type the caller keeps.</typeparam>
+    /// <param name="groups">The plan, changed in place.</param>
+    /// <param name="program">The program the plan was made of.</param>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
+    /// <param name="farDistance">The far distance the plan was made at.</param>
+    /// <param name="stale">Whether the caller needs a group planned at the frame's transforms.</param>
+    /// <param name="create">Makes a group of a selector and whether it is dynamic.</param>
+    /// <returns>How many groups were planned again.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static int Refresh<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, Func<T, bool> stale, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+        ArgumentNullException.ThrowIfNull(argument: groups);
+        ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentNullException.ThrowIfNull(argument: stale);
+        ArgumentNullException.ThrowIfNull(argument: create);
+
+        var reach = Reach(farDistance: farDistance);
+        var refreshed = 0;
+        HashSet<int>? slots = null;
+
+        for (var index = 0; (index < groups.Count); index++) {
+            var group = groups[index];
+
+            if ((!group.Dynamic && !group.Geometry.ReadsSlots) || !stale(arg: group)) { continue; }
+            if (group.Dynamic) {
+                (slots ??= []).Add(item: group.Slot);
+
+                continue;
+            }
+
+            groups[index] = (group.IsWorld
+                ? WorldGroup(create: create, program: program, reach: reach, transforms: transforms)!
+                : Replanned(create: create, group: group, program: program, reach: reach, transforms: transforms));
+            refreshed++;
+        }
+
+        if (slots is null) { return refreshed; }
+
+        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, slots: slots, snap: null, transforms: transforms);
+        var bySlot = new Dictionary<int, T>(capacity: planned.Count);
+
+        foreach (var group in planned) { bySlot[group.Slot] = group; }
+        for (var index = 0; (index < groups.Count); index++) {
+            if (groups[index].Dynamic && bySlot.TryGetValue(key: groups[index].Slot, value: out var group)) {
+                groups[index] = group;
+                refreshed++;
+            }
+        }
+
+        return refreshed;
+    }
+    // A static group planned again at a frame's transforms: the same instances, members and box, its geometry appended
+    // anew.
+    private static T Replanned<T>(T group, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+        var replanned = create(arg1: group.Selector, arg2: false);
+
+        replanned.Instances = group.Instances;
+        replanned.Low = group.Low;
+        replanned.High = group.High;
+        replanned.Glass = group.Glass;
+        replanned.Clamped = group.Clamped;
+        replanned.Detail = group.Detail;
+        replanned.DetailLow = group.DetailLow;
+        replanned.DetailHigh = group.DetailHigh;
+        replanned.Members.AddRange(collection: group.Members);
+
+        foreach (var index in group.m_instances) {
+            replanned.m_instances.Add(item: index);
+            replanned.Geometry.AppendInstance(instance: index, program: program, transforms: transforms);
+        }
+
+        if (replanned.Clamped) { replanned.Geometry.AppendReach(reach: reach); }
+        replanned.Seal();
+
+        return replanned;
     }
     /// <summary>Plans the group of one dynamic slot of a program as <see cref="Plan{T}"/> plans it, with every other slot
     /// its instances read keyed at its pose rounded to the given steps (<see cref="SdfMeshGeometryBuilder.Snap"/>): the
@@ -144,18 +232,20 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: positionSteps);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: orientationSteps);
 
-        var groups = PlanGroups(create: create, farDistance: farDistance, onlySlot: slot, program: program, snap: (positionSteps, orientationSteps), transforms: transforms);
+        var groups = PlanGroups(create: create, farDistance: farDistance, program: program, slots: new HashSet<int> { slot }, snap: (positionSteps, orientationSteps), transforms: transforms);
 
         return ((groups.Count > 0) ? groups[0] : null);
     }
 
-    // Plans every group, or with a non-negative `onlySlot` that slot's group alone, its other slots' poses snapped to
-    // `snap`'s steps when it is given.
-    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int onlySlot, (float Position, float Orientation)? snap, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    private static float Reach(float farDistance) => MathF.Max(x: 1f, y: farDistance);
+
+    // Plans every group, or with `slots` the groups of those dynamic slots alone, other slots' poses snapped to `snap`'s
+    // steps when it is given, each sealed and listed at its first instance.
+    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, IReadOnlySet<int>? slots, (float Position, float Orientation)? snap, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         var groups = new List<T>();
         var bySlot = new Dictionary<int, T>();
         var instances = program.Instances;
-        var reach = MathF.Max(x: 1f, y: farDistance);
+        var reach = Reach(farDistance: farDistance);
         // The static group the last instance joined, which a following instance that bakes with its previous one extends
         // while the run stays unbroken.
         T? staticRun = null;
@@ -164,7 +254,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             var instance = instances[index];
 
             if (!instance.Active) { continue; }
-            if ((onlySlot >= 0) && (!instance.IsDynamic || (instance.Slot != onlySlot))) { continue; }
+            if ((slots is not null) && (!instance.IsDynamic || !slots.Contains(item: instance.Slot))) { continue; }
 
             var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(x: instance.Radius, y: reach) : reach);
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
@@ -226,8 +316,12 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
             group.Seal();
         }
-        if (onlySlot >= 0) { return groups; }
 
+        return groups;
+    }
+    // Puts a whole plan's groups, listed at their first instances, in the order the bake takes them, and adds the world
+    // group.
+    private static List<T> Ordered<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         // A union of several static shapes bakes the largest lattice and contours longest, so its lattices go first in
         // each frame's round, and its contour overlaps the other groups' sampling rather than running after them.
         var unions = groups.Where(predicate: static group => (group.Members.Count > 1)).ToArray();
@@ -240,8 +334,6 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
         // cube the frame's far distance wide about the origin.
         if (WorldGroup(create: create, program: program, reach: reach, transforms: transforms) is { } world) {
-            world.High = new Vector3(value: reach);
-            world.Low = new Vector3(value: -reach);
             groups.Add(item: world);
         }
 
@@ -277,29 +369,23 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     // Seals the group: its geometry, its materials, and the pose rows its lattices read.
     private void Seal() {
+        Geometry.Seal();
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;
         MaterialOrder = [.. Geometry.Materials];
 
-        var poses = Geometry.Poses;
+        var (first, last) = Geometry.PoseSlots;
 
-        if (poses.Count == 0) { return; }
+        if (first < 0) { return; }
 
-        var first = poses.Keys.First();
-        var rows = new Vector4[(1 + (3 * ((poses.Keys.Last() - first) + 1)))];
+        var rows = new Vector4[(1 + (3 * ((last - first) + 1)))];
         var turn = Geometry.BoundTurn;
 
         rows[0] = new Vector4(w: turn.W, x: turn.X, y: turn.Y, z: turn.Z);
         for (var row = 2; (row < rows.Length); row += 3) {
             rows[row] = new Vector4(w: 1f, x: 0f, y: 0f, z: 0f);
         }
-        foreach (var (slot, pose) in poses) {
-            var row = (1 + (3 * (slot - first)));
-
-            rows[row] = new Vector4(value: pose.Position, w: 0f);
-            rows[(row + 1)] = new Vector4(x: pose.Orientation.X, y: pose.Orientation.Y, z: pose.Orientation.Z, w: pose.Orientation.W);
-            rows[(row + 2)] = pose.Lanes;
-        }
+        Geometry.WritePoseRows(first: first, rows: rows.AsSpan(start: 1));
         PoseFirst = first;
         PoseRows = rows;
     }
@@ -339,6 +425,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         world.Geometry.AppendReach(reach: reach);
         world.Seal();
+        world.High = new Vector3(value: reach);
+        world.Low = new Vector3(value: -reach);
 
         return world;
     }

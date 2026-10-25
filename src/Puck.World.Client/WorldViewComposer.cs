@@ -233,8 +233,11 @@ public sealed class WorldViewComposer {
         m_targetSlots.Clear();
 
         var seatOrder = 0;
+        // Indexed, since the list is an interface and a foreach over it boxes its enumerator every frame.
+        var slots = layout.Slots;
 
-        foreach (var slot in layout.Slots) {
+        for (var slotIndex = 0; (slotIndex < slots.Count); slotIndex++) {
+            var slot = slots[slotIndex];
             var region = new NormalizedRect(
                 X: slot.X,
                 Y: slot.Y,

@@ -50,7 +50,7 @@ public sealed partial class WorldScreenBinder {
     }
     private void FitRoutedSky(WorldRoutedScene scene, List<SdfViewSnapshot> views, SdfSky sky, uint width, uint height) {
         BeginInfinityConsumers(target: scene);
-        var root = InfinityRootOf(scene.Endpoint.Mirror, scene.Endpoint.Identity, 0, RoutedViewName(scene: scene));
+        var root = InfinityRootOf(scene.Endpoint.Mirror, scene.Endpoint.Identity, 0, name: null, routed: scene);
 
         if (Presenter is { } presenter) {
             for (var index = 0; (index < m_hostViewCount); index++) {

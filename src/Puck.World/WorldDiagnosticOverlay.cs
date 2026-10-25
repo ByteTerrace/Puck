@@ -52,6 +52,12 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
             RetainedReport = null;
             return null;
         }
+        // Apart from the check, since the projection's closure is made on entry to the method holding it, and every
+        // frame with the view off returns above.
+        return Snapshot(frame: frame);
+    }
+
+    private DiagnosticOverlayFrame? Snapshot(SdfFrame frame) {
         var view = viewports.Seat(0);
         if (!view.Present) { return null; }
         var report = diagnostics.Latest;
