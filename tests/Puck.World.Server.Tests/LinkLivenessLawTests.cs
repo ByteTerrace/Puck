@@ -1,5 +1,9 @@
+using System.Security.Cryptography;
+using System.Text;
 using Puck.Testing;
 using Puck.Commands;
+using Puck.Scripting;
+using Puck.World.Addons;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -21,6 +25,92 @@ namespace Puck.World.Server.Tests;
 /// </summary>
 public sealed class LinkLivenessLawTests {
     private const string LinkRow = "north";
+
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AGuestResolvesLinkEdgesThroughItsOwnManifest(bool wildcard) {
+        using var directory = new TemporaryDirectory(prefix: "puck-link-events-");
+        var definition = SeamDocument(graceSeconds: 0.2f);
+        var north = definition.Adjacencies!.Single()!;
+        var east = north with { Name = SafeName.Parse(candidate: "east"), LivenessGraceSeconds = 0.3f };
+        var northGrace = definition.AdjacencyLivenessGraceTicks(adjacency: north).Ticks;
+        var eastGrace = definition.AdjacencyLivenessGraceTicks(adjacency: east).Ticks;
+        var northIndex = (wildcard ? -1 : 0);
+        var eastIndex = (wildcard ? -1 : 2);
+        // The real guest traps if any drop names the wrong link or loses its staleness, or if an establish
+        // carries a document ordinal. Interleaved, duplicate and ungranted requests must not renumber its table.
+        var wat = $$"""
+            (module
+              (memory (export "memory") 1)
+              (data (i32.const 256) "\02\00\01\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+              (func (export "puck_abi_version") (result i32) (i32.const 1))
+              (func (export "puck_channels_ptr") (result i32) (i32.const 256))
+              (func (export "puck_channels_count") (result i32) (i32.const 2))
+              (func (export "puck_out_ptr") (result i32) (i32.const 4096))
+              (func (export "puck_out_cap") (result i32) (i32.const 0))
+              (func (export "puck_in_ptr") (result i32) (i32.const 8192))
+              (func (export "puck_in_cap") (result i32) (i32.const 64))
+              (func (export "puck_on_tick") (param $count i32) (result i32)
+                (local $i i32) (local $p i32) (local $a i64) (local $b i64)
+                (block $done (loop $next
+                  (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
+                  (local.set $p (i32.add (i32.const 8192) (i32.mul (local.get $i) (i32.const 32))))
+                  (if (i32.eq (i32.load8_u (local.get $p)) (i32.const 3)) (then
+                    (local.set $a (i64.load offset=16 (local.get $p)))
+                    (local.set $b (i64.load offset=24 (local.get $p)))
+                    (if (i32.eq (i32.load8_u offset=9 (local.get $p)) (i32.const 12)) (then
+                      (if (i64.eq (local.get $b) (i64.const {{northGrace}}))
+                        (then (if (i64.ne (local.get $a) (i64.const {{northIndex}})) (then unreachable)))
+                        (else
+                          (if (i64.ne (local.get $b) (i64.const {{eastGrace}})) (then unreachable))
+                          (if (i64.ne (local.get $a) (i64.const {{eastIndex}})) (then unreachable))))))
+                    (if (i32.eq (i32.load8_u offset=9 (local.get $p)) (i32.const 11)) (then
+                      (if (i64.ne (local.get $b) (i64.const 0)) (then unreachable))
+                      (if (i32.and (i64.ne (local.get $a) (i64.const {{northIndex}}))
+                            (i64.ne (local.get $a) (i64.const {{eastIndex}}))) (then unreachable))))))
+                  (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $next)))
+                (i32.const 0)))
+            """;
+        var bytes = Encoding.UTF8.GetBytes(s: wat);
+        var path = directory.PathOf(name: "links.wat").Replace(newChar: '/', oldChar: '\\');
+
+        File.WriteAllBytes(bytes: bytes, path: path);
+        var principal = Principal.Addon(name: "links");
+        var northSubject = GrantSubject.Adjacency(name: LinkRow);
+        var eastSubject = GrantSubject.Adjacency(name: "east");
+
+        definition = definition with {
+            Adjacencies = [east, north with { Name = SafeName.Parse(candidate: "hidden") }, north],
+            AddonsRaw = [new WorldAddonRow("links", path,
+                ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes))), 1000000UL, true,
+                (wildcard ? [new WorldCapabilityRequest(Capability: WorldCapability.Observe, Subject: GrantSubject.All)] : [
+                    new WorldCapabilityRequest(Capability: WorldCapability.Observe, Subject: northSubject),
+                    new WorldCapabilityRequest(Capability: WorldCapability.Observe, Subject: GrantSubject.Body(index: 0)),
+                    new WorldCapabilityRequest(Capability: WorldCapability.Observe, Subject: GrantSubject.Adjacency(name: "hidden")),
+                    new WorldCapabilityRequest(Capability: WorldCapability.Observe, Subject: eastSubject),
+                    new WorldCapabilityRequest(Capability: WorldCapability.Observe, Subject: northSubject),
+                ]))],
+            GrantsRaw = [
+                new WorldGrant(principal, WorldCapability.Observe, eastSubject, Exclusive: false, Budget: 4, EventBudget: 4),
+                new WorldGrant(principal, WorldCapability.Observe, northSubject, Exclusive: false, Budget: 4, EventBudget: 4),
+            ],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        using var runtime = WorldAddonRuntime.Create(definition: fixture.Server.Definition, server: fixture.Server);
+
+        for (var tick = 0; (tick < (eastGrace + 2)); tick++) { fixture.Step(); }
+        fixture.Server.Events.ObserveLinkDelivery(adjacencyName: LinkRow);
+        fixture.Server.Events.ObserveLinkDelivery(adjacencyName: "east");
+        fixture.Step();
+        fixture.Step();
+        fixture.Step();
+        var cost = Assert.Single(collection: runtime.DescribeCost());
+
+        Assert.Equal(AddonState.Enabled, cost.State);
+        Assert.Equal(4UL, cost.EventCellsDelivered);
+        Assert.Equal(0UL, cost.EventGaps);
+    }
 
     private static long AlarmCell(WorldFixture fixture) =>
         fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value.AsInt;
