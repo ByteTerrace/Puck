@@ -11,7 +11,11 @@ using Puck.Launcher;
 using Puck.World;
 using Puck.World.Machines;
 
-// Every boot's transcripts use the same UTF-8 encoding, without a byte-order mark.
+// Narration, boot lines and every other write through Console.Out and Console.Error carry engine text with non-ASCII
+// characters (the em dash before a transfer's arrival pose, the degree sign in body.where). Without this the host
+// encodes those streams through the machine's console code page, which turns an em dash into '-' and a degree sign into
+// a byte that is not UTF-8, while the command echoes beside them are UTF-8, so the run's output differs by machine.
+// The setter suppresses the byte-order mark. A test batch's boots share it.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 if ((args.Length == 4) && (args[0] == "--devices") && (args[1] == "none") && (args[2] == "--test-batch")) {
     return await WorldTestBatch.RunAsync(path: args[3], boot: RunWorldAsync);
