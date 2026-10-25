@@ -38,8 +38,10 @@ public sealed record UpdateApplyOutcome(bool Applied, string Detail);
 /// <param name="options">The resolved operational configuration.</param>
 public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifier, IUpdateStager stager, IUpdateApplier applier, UpdateOptions options) {
     // This is local authorization state, protected by the same install-root ownership as the replay store.
-    // Store before reserving the sequence; after a process interruption either side of that write can resume.
+    // Only a successfully reserved sequence may create resumable authorization. A crash between reservation
+    // and intent persistence consumes that sequence; it cannot turn a refused reservation into a future install.
     private sealed record InstallIntent(ReleaseManifest Manifest, DateTimeOffset VerifiedAt, string InstalledVersion, string Rid);
+
     private readonly IUpdateApplier m_applier = applier;
     private readonly UpdateOptions m_options = options;
     private readonly IReleaseSource m_source = source;
@@ -137,7 +139,7 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     }
 
     /// <summary>Under an exclusive install-root lease, resumes a pending local install or checks the tracked
-    /// channel. Rollout and staging precede a durable exact-manifest intent and replay reservation; the pointer
+    /// channel. Rollout and staging precede replay reservation, then a durable exact-manifest intent; the pointer
     /// changes only after reservation. Process interruption resumes that intent, even after signature expiry,
     /// using the current trust policy at its original authorization instant. No network response can replace a
     /// pending intent. The filesystem must protect the install root from untrusted local writers.</summary>
@@ -146,12 +148,14 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     public async Task<UpdateApplyOutcome> ApplyAsync(DateTimeOffset now, CancellationToken cancellationToken) {
         try {
             var root = Path.GetFullPath(path: m_options.CacheRoot);
+
             Directory.CreateDirectory(path: root);
             // Never unlink this file: a persistent inode makes process exit release the only writer lease.
             using var lease = new FileStream(path: Path.Combine(path1: root, path2: "update.lock"),
                 mode: FileMode.OpenOrCreate, access: FileAccess.ReadWrite, share: FileShare.None);
-            return await ApplyUnderLeaseAsync(root: root, now: now, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) {
+
+            return await ApplyUnderLeaseAsync(cancellationToken: cancellationToken, now: now, root: root).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException)) {
             return new UpdateApplyOutcome(Applied: false, Detail: $"install is busy or unavailable; any pending intent is retained: {error.Message}");
         }
     }
@@ -163,20 +167,22 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         InstallIntent intent;
 
         if (recovering) {
-            intent = JsonSerializer.Deserialize<InstallIntent>(json: File.ReadAllText(path: intentPath), options: DocumentJsonOptions.Shared)
-                ?? throw new JsonException(message: "install intent deserialized to null");
-            if (intent.Manifest is null || string.IsNullOrWhiteSpace(value: intent.InstalledVersion) ||
-                intent.Rid != rid || intent.Manifest.App != m_options.App || intent.Manifest.Channel != m_options.Channel || intent.VerifiedAt > now) {
+            intent = (JsonSerializer.Deserialize<InstallIntent>(json: File.ReadAllText(path: intentPath), options: DocumentJsonOptions.Shared)
+                ?? throw new JsonException(message: "install intent deserialized to null"));
+            if ((intent.Manifest is null) || string.IsNullOrWhiteSpace(value: intent.InstalledVersion) ||
+                (intent.Rid != rid) || (intent.Manifest.App != m_options.App) || (intent.Manifest.Channel != m_options.Channel) || (intent.VerifiedAt > now)) {
                 return new UpdateApplyOutcome(Applied: false, Detail: "pending install intent does not match this app, channel, runtime or authorization time");
             }
             // A changed current trust policy still refuses the intent. Time alone does not revoke local work
             // already authorized while its signature was valid; no fresh network verification uses this instant.
             var resumed = m_verifier.ReserveInstall(manifest: intent.Manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
+
             if (!resumed.Accepted) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"pending install refused: {resumed.RefusalReason}");
             }
         } else {
             var check = await FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now).ConfigureAwait(continueOnCapturedContext: false);
+
             if (check.Outcome != UpdateCheckOutcome.Available) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"re-verification reported {check.Outcome}: {check.Detail}");
             }
@@ -185,12 +191,13 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
 
         var manifest = intent.Manifest;
         var currentPath = Path.Combine(path1: root, path2: "current");
-        var current = File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null;
+        var current = (File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null);
         var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
-        var lastGood = File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null;
-        var alreadyCurrent = recovering && current == manifest.Version;
+        var lastGood = (File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null);
+        var alreadyCurrent = (recovering && (current == manifest.Version));
+
         if (!alreadyCurrent && !string.IsNullOrEmpty(value: current)) {
-            if (manifest.MinimumSupported is { } minimumSupported &&
+            if ((manifest.MinimumSupported is { } minimumSupported) &&
                 ReleaseVersion.IsStrictlyGreaterThan(left: minimumSupported, right: current)) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"current install '{current}' is below this release's minimumSupported floor '{minimumSupported}'");
             }
@@ -207,22 +214,25 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         // The applier rehashes it below without modifying its files or last-good pointer.
         if (!alreadyCurrent) {
             var staged = await m_stager.StageAsync(cancellationToken: cancellationToken, manifest: manifest, rid: rid).ConfigureAwait(continueOnCapturedContext: false);
+
             if (!staged.Staged) {
-                return new UpdateApplyOutcome(Applied: false, Detail: staged.RefusalReason ?? "staging refused");
+                return new UpdateApplyOutcome(Applied: false, Detail: (staged.RefusalReason ?? "staging refused"));
             }
         }
 
         if (!recovering) {
-            AtomicFile.WriteAllText(path: intentPath, contents: JsonSerializer.Serialize(value: intent, options: DocumentJsonOptions.Shared));
             var reserved = m_verifier.ReserveInstall(manifest: manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
+
             if (!reserved.Accepted) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"install reservation refused: {reserved.RefusalReason}");
             }
+            AtomicFile.WriteAllText(path: intentPath, contents: JsonSerializer.Serialize(value: intent, options: DocumentJsonOptions.Shared));
         }
 
-        var applied = m_applier.Apply(cacheRoot: root, manifest: manifest, rid: rid, recoverInterruptedApply: recovering);
+        var applied = m_applier.Apply(cacheRoot: root, manifest: manifest, recoverInterruptedApply: recovering, rid: rid);
+
         if (!applied.Applied) {
-            return new UpdateApplyOutcome(Applied: false, Detail: applied.RefusalReason ?? "apply refused");
+            return new UpdateApplyOutcome(Applied: false, Detail: (applied.RefusalReason ?? "apply refused"));
         }
 
         // If interrupted before deletion, recovery rehashes the now-current version and completes this cleanup.
@@ -233,6 +243,7 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             Detail: $"version {manifest.Version} applied, replacing {(applied.PreviousVersion ?? "(first install)")} — takes effect at the stub's next launch"
         );
     }
+
     /// <summary>Fetches and verifies the current channel manifest, and evaluates the rollout bucket. Performs no
     /// download or staging, and never commits the manifest's sequence to the durable replay high-water mark — a
     /// read-only inspection that can be repeated without permanently consuming the one sequence number an

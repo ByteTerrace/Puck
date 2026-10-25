@@ -530,7 +530,7 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
 // puck.world.definition.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
 // ReleaseTrustAnchor.Placeholder until a real release-signing chain is minted for this build.
 var updateSection = worldSource.Definition.Update;
-var updateCacheRoot = (updateSection?.CacheRoot ?? stateRoot.PathOf(name: "updates"));
+var updateCacheRoot = Path.Combine(path1: stateRoot.PathOf(name: "updates"), path2: (updateSection?.CacheRoot ?? string.Empty));
 var updateCheckInterval = ((updateSection?.CheckIntervalSeconds is { } updateCheckSeconds)
     ? ((updateCheckSeconds > 0)
         ? TimeSpan.FromSeconds(value: updateCheckSeconds)

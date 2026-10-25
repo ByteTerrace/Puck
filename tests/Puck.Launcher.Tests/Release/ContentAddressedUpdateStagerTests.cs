@@ -139,7 +139,6 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
     }
-
     [Fact]
     public async Task StageAsync_RefusesEscapingPathsBeforeFetchingOrWriting() {
         var content = "untrusted bytes"u8.ToArray();
@@ -153,18 +152,40 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
         var escapedFile = Path.Combine(path1: m_root.RootPath, path2: "escaped.dll");
         var file = new ReleasePayloadFile(Path: "a.dll", Hash: hash, Size: content.Length);
         var candidates = new[] {
-            ManifestFor(version: "2.0.0+/../../escaped", file: file),
+            ManifestFor(file: file, version: "2.0.0+/../../escaped"),
             ManifestFor(version: "2.0.0", file: file with { Path = escapedFile }),
         };
 
         foreach (var manifest in candidates) {
             var result = await stager.StageAsync(manifest: manifest, rid: "win-x64", cancellationToken: TestContext.Current.CancellationToken);
+
             Assert.False(condition: result.Staged);
         }
 
         Assert.Empty(collection: source.Requested);
         Assert.False(condition: File.Exists(path: escapedFile));
         Assert.False(condition: Directory.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "escaped")));
+    }
+    [Fact]
+    public async Task CorruptCachedObjectIsDeletedSoTheNextAttemptCanDownloadIt() {
+        var content = "verified bytes"u8.ToArray();
+        var cache = new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "cache"));
+        var pin = cache.Put(content: content);
+
+        File.WriteAllText(path: ContentAddressedStore.ObjectPath(root: cache.Root, pin: pin), contents: "corrupt");
+        var source = new RecordingReleaseSource(files: new Dictionary<string, byte[]> { [pin.ToString()] = content });
+        var stager = new ContentAddressedUpdateStager(source: source, cache: cache, cacheRoot: m_root.RootPath);
+        var manifest = ManifestFor(version: "1.0.1", file: new ReleasePayloadFile(Path: "app.dll", Hash: pin.ToString(), Size: content.Length));
+        var refused = await stager.StageAsync(manifest: manifest, rid: "win-x64", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(condition: refused.Staged);
+        Assert.False(condition: cache.Contains(pin: pin));
+        Assert.Empty(collection: source.Requested);
+        var repaired = await stager.StageAsync(manifest: manifest, rid: "win-x64", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(condition: repaired.Staged, userMessage: repaired.RefusalReason);
+        Assert.Single(collection: source.Requested);
+        Assert.Equal(expected: content, actual: File.ReadAllBytes(path: Path.Combine(path1: repaired.StagedPath!, path2: "app.dll")));
     }
 
     private sealed class RecordingReleaseSource(IReadOnlyDictionary<string, byte[]> files) : IReleaseSource {

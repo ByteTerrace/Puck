@@ -105,6 +105,7 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             var actualHash = ContentPin.Compute(content: bytes);
 
             if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
+                File.Delete(path: ContentAddressedStore.ObjectPath(root: m_cache.Root, pin: pin));
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
             }
 
