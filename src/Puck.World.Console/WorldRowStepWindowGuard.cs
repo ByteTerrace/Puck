@@ -34,7 +34,7 @@ public readonly record struct WorldRowStepWindow(string Authority, Guid Activati
 /// upsert reverts the earlier's field — both would echo success. The guard keeps one set of claimed rows per world
 /// activation (<see cref="WorldRowStepWindow"/>'s authority and activation) and refuses a second claim on one of them in
 /// that activation's current tick; the set empties when its tick moves on, and is dropped when its activation stops.
-/// Steps in DIFFERENT windows (a held chord repeating once per tick) never collide, and neither do steps in different
+/// Steps in DIFFERENT windows (console edits fenced by a tick) never collide, and neither do steps in different
 /// worlds or activations. Console-side control state off every hashed simulation path; locked, since an activation's
 /// stop drops its set from whichever thread stops it.
 /// </summary>
