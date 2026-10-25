@@ -106,7 +106,7 @@ install lease and exclude the current version, as `UpdateService` does.
 `UpdateService` holds the install root's persistent `update.lock` lease across
 verification, staging and activation. Rollout exclusion and staging failure
 do not consume a sequence. Before activation it reserves the replay mark with
-the full signed-manifest SHA-256 pin, then writes `install-intent.json`. A
+the full signed-manifest SHA-256 pin, then writes `<cacheRoot>/install-intent.json`. A
 refused reservation creates no intent. A crash between reservation and intent
 consumes that sequence without authorizing recovery; a fresh signed release is
 required. An
