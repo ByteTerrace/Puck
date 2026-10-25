@@ -3,9 +3,7 @@
 // piece's body is 39 minus its piece number (the e2 pawn, piece12, is body 27); square (file, rank) from a1 = (0, 0)
 // stands at x = 12.9 - 0.2 * file, z = 19.3 + 0.2 * rank, and its cell is 8 * rank + 7 - file (e2 is 11, e4 27).
 // x = 11.3 is beside the board past the h-file, on the table. Every scenario but the opponent's own leaves both sides to
-// the steps (aiSide -1). State is set through steps and enum members are written as their numbers: `given` lines and
-// enum names resolve against this file's own state section, and the chess rows reach it only through the debug
-// world's import of chess.puck.
+// the steps (aiSide -1).
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -14,8 +12,10 @@ documentId: "chess-tests"
 // Seat 1 stands at White's edge, sits down with the context button and plays e2-e4 with the keys (lift, two steps up
 // the board, put down), then e7-e5 by dragging with the pointer (press over e7, move over e5, release).
 test "a seated player plays e4 with the keys and e5 with a pointer drag" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 12.2 0.25 18.5 0 0 0 0
     ticks 150
     seat1: body.press interact
@@ -40,7 +40,7 @@ test "a seated player plays e4 with the keys and e5 with a pointer drag" {
     pieceCell[piece12] == 27
     pieceCell[piece20] == 35
     verdict == 1
-    turn == 0
+    turn == White
     illegalCount == 0
     play[held] == -1
   }
@@ -51,8 +51,10 @@ test "a seated player plays e4 with the keys and e5 with a pointer drag" {
 // down and plays d2-d4, and the context button stands her up. Had the cancel not put e2 back, the d2 press would take
 // nothing and no legal move would follow.
 test "a seated player cancels a lift, an illegal put-down is put back and the context button stands her up" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 12.2 0.25 18.5 0 0 0 0
     ticks 150
     seat1: body.press interact
@@ -94,28 +96,32 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
     pieceCell[piece12] == 11
     pieceCell[piece11] == 28
     illegalCount == 1
-    turn == 1
+    turn == Black
     play[held] == -1
     board(engaged, board, 1) == 0
   }
 }
 
 test "pieces settle and derive initial board cells" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
   }
   expect {
     pieceCell[piece12] == 11
-    pieceCode[piece12] == 1
+    pieceCode[piece12] == Pawn
     gameStarted == 1
     boardCollisions == 0
   }
 }
 
 test "e2e4 records legal" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 12.1 1.35 19.9 0 0 0 27
     ticks 150
@@ -123,13 +129,15 @@ test "e2e4 records legal" {
   expect {
     verdict == 1
     pieceCell[piece12] == 27
-    turn == 1
+    turn == Black
   }
 }
 
 test "illegal knight move records illegal then legal succeeds" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 11.7 1.35 19.7 0 0 0 33
     ticks 150
@@ -140,13 +148,15 @@ test "illegal knight move records illegal then legal succeeds" {
     verdict == 1
     illegalCount == 1
     pieceCell[piece6] == 18
-    turn == 1
+    turn == Black
   }
 }
 
 test "king step records legal and multi step refused" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 11.3 1.35 19.7 0 0 0 27
     ticks 150
     seat1: body.pose 12.1 1.35 19.7 0 0 0 35
@@ -157,16 +167,18 @@ test "king step records legal and multi step refused" {
   expect {
     verdict == 1
     illegalCount == 1
-    move[kind] == 1
-    move[mover] == 6
+    move[kind] == Quiet
+    move[mover] == King
     pieceCell[piece4] == 11
-    turn == 1
+    turn == Black
   }
 }
 
 test "knight capture records move kind two" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 12.5 1.35 19.7 0 0 0 23
     ticks 150
     seat1: body.pose 11.3 1.35 19.7 0 0 0 23
@@ -175,17 +187,19 @@ test "knight capture records move kind two" {
   }
   expect {
     verdict == 1
-    move[kind] == 2
-    move[captured] == -1
+    move[kind] == Capture
+    move[captured] == -Pawn
     pieceCell[piece1] == 21
     pieceCell[piece16] == -1
-    turn == 1
+    turn == Black
   }
 }
 
 test "pawn diagonal capture records legal" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 12.3 1.35 19.7 0 0 0 20
     ticks 150
     seat1: body.pose 11.3 1.35 19.7 0 0 0 20
@@ -194,18 +208,20 @@ test "pawn diagonal capture records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == 2
-    move[captured] == -1
-    move[mover] == 1
+    move[kind] == Capture
+    move[captured] == -Pawn
+    move[mover] == Pawn
     pieceCell[piece12] == 20
     pieceCell[piece19] == -1
-    turn == 1
+    turn == Black
   }
 }
 
 test "queen diagonal slide records legal" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 11.3 1.35 19.7 0 0 0 27
     ticks 150
     seat1: body.pose 11.5 1.35 20.1 0 0 0 36
@@ -213,16 +229,18 @@ test "queen diagonal slide records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == 1
-    move[mover] == 5
+    move[kind] == Quiet
+    move[mover] == Queen
     pieceCell[piece3] == 32
-    turn == 1
+    turn == Black
   }
 }
 
 test "white kingside castle records legal" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 11.3 1.35 19.3 0 0 0 34
     seat1: body.pose 11.3 1.35 19.5 0 0 0 33
     ticks 150
@@ -236,22 +254,24 @@ test "white kingside castle records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == 4
-    move[mover] == 6
+    move[kind] == Castle
+    move[mover] == King
     move[from] == 3
     move[to] == 1
     pieceCell[piece4] == 1
     pieceCell[piece7] == 2
     castleRights == 3
-    turn == 1
+    turn == Black
   }
 }
 
 // 1. Nc3 a6 2. d3 a5 3. Be3 a4 4. Qd2 h6 5. O-O-O: the king goes from e1 (cell 3) to c1 (cell 5) and the a1 rook
 // (cell 7) to d1 (cell 4), past d1's transit check.
 test "white queenside castle records legal" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 12.5 1.35 19.7 0 0 0 38
     ticks 150
@@ -276,22 +296,24 @@ test "white queenside castle records legal" {
   expect {
     verdict == 1
     illegalCount == 0
-    move[kind] == 4
+    move[kind] == Castle
     move[from] == 3
     move[to] == 5
     pieceCell[piece4] == 5
     pieceCell[piece0] == 4
     castleTransitAttacked[wq] == 0
     castleRights == 3
-    turn == 1
+    turn == Black
   }
 }
 
 // 1. e3 Nf6 2. a3 e6 3. a4 Be7 4. h3 O-O: the black king goes from e8 (cell 59) to g8 (cell 57) and the h8 rook (cell
 // 56) to f8 (cell 58).
 test "black kingside castle records legal" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 12.1 1.35 19.7 0 0 0 27
     ticks 150
@@ -314,20 +336,22 @@ test "black kingside castle records legal" {
   expect {
     verdict == 1
     illegalCount == 0
-    move[kind] == 4
+    move[kind] == Castle
     move[from] == 59
     move[to] == 57
     pieceCell[piece28] == 57
     pieceCell[piece31] == 58
     castleTransitAttacked[bk] == 0
     castleRights == 12
-    turn == 0
+    turn == White
   }
 }
 
 test "castle cannot cross knight attack" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 11.3 1.35 19.3 0 0 0 34
     seat1: body.pose 11.3 1.35 19.5 0 0 0 33
     seat1: body.pose 11.7 1.35 19.7 0 0 0 9
@@ -339,14 +363,16 @@ test "castle cannot cross knight attack" {
   expect {
     castleTransitAttacked[wk] == 1
     verdict == 0
-    turn == 0
+    turn == White
     castleRights == 0
   }
 }
 
 test "castle safe when knight does not attack transit" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     seat1: body.pose 11.3 1.35 19.3 0 0 0 34
     seat1: body.pose 11.3 1.35 19.5 0 0 0 33
     seat1: body.pose 12.7 1.35 19.7 0 0 0 9
@@ -358,14 +384,16 @@ test "castle safe when knight does not attack transit" {
   expect {
     castleTransitAttacked[wk] == 0
     verdict == 1
-    turn == 1
+    turn == Black
     castleRights == 3
   }
 }
 
 test "move leaving king in check is refused" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 11.9 1.35 19.7 0 0 0 9
     ticks 150
@@ -375,13 +403,15 @@ test "move leaving king in check is refused" {
   expect {
     inCheck[0] == 1
     verdict == 0
-    turn == 0
+    turn == White
   }
 }
 
 test "en passant capture records move kind en passant" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 12.1 1.35 19.9 0 0 0 27
     ticks 150
@@ -397,17 +427,19 @@ test "en passant capture records move kind en passant" {
   }
   expect {
     verdict == 1
-    move[kind] == 3
-    move[captured] == -1
+    move[kind] == EnPassant
+    move[captured] == -Pawn
     pieceCell[piece12] == 44
     pieceCell[piece19] == -1
-    turn == 1
+    turn == Black
   }
 }
 
 test "initial position counts in threefold repetition" {
+  given {
+    aiSide = -1
+  }
   when {
-    seat1: world.state.cell.set aiSide $value -1
     ticks 150
     seat1: body.pose 11.9 1.35 19.7 0 0 0 33
     ticks 150
@@ -428,7 +460,7 @@ test "initial position counts in threefold repetition" {
   }
   expect {
     verdict == 1
-    turn == 0
+    turn == White
     repetitionCount == 3
     historyLength == 9
     halfmoveClock == 8
@@ -436,12 +468,14 @@ test "initial position counts in threefold repetition" {
 }
 
 test "AI White makes one legal opening move and waits for Black" {
+  given {
+    aiSide = White
+  }
   when {
-    seat1: world.state.cell.set aiSide $value 0
     ticks 600
   }
   expect {
-    turn == 1
+    turn == Black
     verdict == 1
     ai[pending] == 0
     aiEnabled == 0
@@ -457,8 +491,8 @@ test "AI Black replies after a human opening" {
     ticks 600
   }
   expect {
-    aiSide == 1
-    turn == 0
+    aiSide == Black
+    turn == White
     ai[pending] == 0
     aiEnabled == 0
     aiBest[token] == -1
@@ -467,15 +501,17 @@ test "AI Black replies after a human opening" {
 }
 
 test "a stale AI answer cannot move a piece" {
+  given {
+    aiSide = White
+    aiBest[token] = 12
+    aiBest[to] = 63
+    aiBest[revision] = 0
+  }
   when {
-    seat1: world.state.cell.set aiSide $value 0
-    seat1: world.state.cell.set aiBest token 12
-    seat1: world.state.cell.set aiBest to 63
-    seat1: world.state.cell.set aiBest revision 0
     ticks 600
   }
   expect {
-    turn == 1
+    turn == Black
     pieceCell[piece12] != 63
     boardCollisions == 0
     ai[pending] == 0
