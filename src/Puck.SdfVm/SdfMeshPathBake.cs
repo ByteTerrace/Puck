@@ -204,6 +204,8 @@ public sealed partial class SdfMeshPathBake {
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
+    // How many of the first groups Pending found done; every write of a group lowers it to that group's index (Replace).
+    private int m_doneThrough;
     private readonly List<SdfMeshDraw> m_draws = [];
     private readonly Stopwatch m_clock = new();
 
@@ -242,10 +244,9 @@ public sealed partial class SdfMeshPathBake {
             lock (m_gate) {
                 if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
                 if (m_slice is not null) { return true; }
-                foreach (var group in m_groups) {
-                    if (!group.Done) { return true; }
-                }
-                return false;
+                // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
+                while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
+                return (m_doneThrough < m_groups.Count);
             }
         }
     }
@@ -619,6 +620,11 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    // Puts a group at an index of the list, under the gate.
+    private void Replace(int index, Group group) {
+        m_groups[index] = group;
+        m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
+    }
     // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one
     // rigid copy), each starting at the coarse lattice over its bounding box. The meshes of the previous program keep
     // drawing until their group's new mesh lands.
@@ -627,6 +633,7 @@ public sealed partial class SdfMeshPathBake {
 
         m_program = frame.Program;
         m_groups.Clear();
+        m_doneThrough = 0;
         // A slice samples one program: a new one takes every lattice again.
         m_slice?.Reset();
 
@@ -648,7 +655,7 @@ public sealed partial class SdfMeshPathBake {
             var group = m_groups[index];
 
             if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)) {
-                m_groups[index] = old;
+                Replace(group: old, index: index);
                 continue;
             }
             // A dynamic group whose shapes only took other material ids, because a palette registered before them came
@@ -660,7 +667,7 @@ public sealed partial class SdfMeshPathBake {
                 Library.TryTake(geometry: old.Sealed, materials: group.MaterialOrder, mesh: out var renumber)
             ) {
                 old.Renumber(materials: group.MaterialOrder, mesh: renumber);
-                m_groups[index] = old;
+                Replace(group: old, index: index);
                 renumbered++;
                 continue;
             }

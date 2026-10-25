@@ -359,7 +359,7 @@ public static partial class SdfWorldPackage {
     public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
         .. FieldTables,
         Table(element: ShaderValueType.Float4, name: PreviousDynamicTransforms),
-        Table(element: ShaderValueType.Float4, name: PreviousMeshTransforms),
+        Table(element: ShaderValueType.Uint, name: PreviousMeshTransforms),
         Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
         Table(element: ShaderValueType.Float4, name: ScreenMappings),
         Table(element: ShaderValueType.Float4, name: ScreenLights),

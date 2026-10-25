@@ -1,3 +1,4 @@
+using System.IO.Hashing;
 using System.Runtime.InteropServices;
 using Puck.Maths;
 using Puck.Shaders;
@@ -255,6 +256,14 @@ public sealed partial class SdfWorldTables {
     /// <summary>Folds everything every view reads of the tables besides its pass block into the tables' signature, once
     /// the frame is packed and its screens are bound.</summary>
     public void UpdateTablesSignature() {
+        // Each region's bytes are hashed once, word-wide, and the signatures fold those hashes.
+        var volumes = XxHash3.HashToUInt64(source: m_volumeRegion.Contents);
+        var lights = XxHash3.HashToUInt64(source: m_lightRegion.Contents);
+        var skies = XxHash3.HashToUInt64(source: m_skyRegion.Contents);
+        var skyLayers = XxHash3.HashToUInt64(source: m_skyLayerRegion.Contents);
+        var handoffs = XxHash3.HashToUInt64(source: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
+        var screenSurfaces = XxHash3.HashToUInt64(source: m_screenSurfaceRegion.Contents);
+        var screenMappings = XxHash3.HashToUInt64(source: m_screenMappingRegion.Contents);
         var hash = Fnv1aHash.Create();
 
         Span<ulong> values = [
@@ -264,44 +273,42 @@ public sealed partial class SdfWorldTables {
             unchecked((ulong)m_meshRevision),
             m_meshDrawCount,
             BoundScreenCount(),
+            volumes,
+            lights,
+            skies,
+            skyLayers,
+            handoffs,
+            screenSurfaces,
+            screenMappings,
         ];
 
         hash.Add(values: MemoryMarshal.AsBytes(span: values));
-        hash.Add(values: m_volumeRegion.Contents);
-        hash.Add(values: m_lightRegion.Contents);
-        hash.Add(values: m_skyRegion.Contents);
-        hash.Add(values: m_skyLayerRegion.Contents);
-        hash.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
-        hash.Add(values: m_screenSurfaceRegion.Contents);
-        hash.Add(values: m_screenMappingRegion.Contents);
         m_tablesSignature = hash.Value;
 
         var geometry = Fnv1aHash.Create();
-        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, BoundScreenCount()];
+        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, BoundScreenCount(), screenSurfaces, screenMappings];
 
         geometry.Add(values: MemoryMarshal.AsBytes(span: geometryValues));
-        geometry.Add(values: m_screenSurfaceRegion.Contents);
-        geometry.Add(values: m_screenMappingRegion.Contents);
         m_geometrySignature = geometry.Value;
 
         var lighting = Fnv1aHash.Create();
+        ref var sky = ref m_skyRecord[0];
 
         lighting.Add(value: m_programRevision);
         lighting.Add(value: m_decalRevision);
-        lighting.Add(values: m_lightRegion.Contents);
-        lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
-        ref var sky = ref m_skyRecord[0];
+        lighting.Add(value: lights);
+        lighting.Add(value: handoffs);
         Span<float> hitSky = [sky.Ambient, sky.Reflection];
 
         lighting.Add(values: MemoryMarshal.AsBytes(span: hitSky));
         lighting.Add(value: sky.AirFlags);
-        lighting.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in sky))[AtmosphereOffset..]);
+        lighting.Add(value: XxHash3.HashToUInt64(source: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in sky))[AtmosphereOffset..]));
         // Reflections evaluate panels directly, even when their change is below the map's refresh threshold.
         var panels = false;
 
         foreach (ref readonly var layer in m_skyLayerRecords.AsSpan(length: ((int)sky.LayerCount), start: 0)) {
             if ((layer.Kind != SdfSkyLayerKind.Panel) || ((layer.Visibility & SdfSkyVisibility.Lighting) == 0)) { continue; }
-            lighting.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in layer)));
+            lighting.Add(value: XxHash3.HashToUInt64(source: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in layer))));
             panels = true;
         }
         if (panels) {
@@ -328,9 +335,9 @@ public sealed partial class SdfWorldTables {
 
         var visual = Fnv1aHash.Create();
 
-        visual.Add(values: m_skyRegion.Contents);
-        visual.Add(values: m_skyLayerRegion.Contents);
-        visual.Add(values: m_volumeRegion.Contents);
+        visual.Add(value: skies);
+        visual.Add(value: skyLayers);
+        visual.Add(value: volumes);
         m_visualSignature = visual.Value;
     }
 

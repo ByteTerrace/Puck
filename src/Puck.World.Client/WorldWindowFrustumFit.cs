@@ -175,19 +175,36 @@ public static class WorldWindowFrustumFit {
         ArgumentNullException.ThrowIfNull(argument: destination);
         ArgumentNullException.ThrowIfNull(argument: screen);
 
-        return () => (
-            ((local() is { } document) &&
-            (screen() is { } row) &&
-            (eye() is { } position) &&
-            TryFitFromEye(
-                camera: out var camera,
-                destination: destination(),
-                eye: position,
-                local: document,
-                screen: row
-            ))
+        // The apertures the fit last resolved: documents are immutable, so a frame that asks again with the same pair of
+        // documents and screen index (every frame, and several times a frame) fits against them without resolving again.
+        ResolvedApertures? last = null;
+
+        return () => {
+            if (
+                (local() is not { } document) ||
+                (screen() is not { } row) ||
+                (eye() is not { } position)
+            ) {
+                return null;
+            }
+
+            var target = destination();
+            var apertures = Volatile.Read(location: ref last);
+
+            if (
+                (apertures is null) ||
+                !ReferenceEquals(objA: apertures.Local, objB: document) ||
+                !ReferenceEquals(objA: apertures.Destination, objB: target) ||
+                (apertures.ScreenIndex != row.Index)
+            ) {
+                apertures = ResolvedApertures.Of(destination: target, local: document, screenIndex: row.Index);
+                Volatile.Write(location: ref last, value: apertures);
+            }
+
+            return (TryFitFromApertures(apertures: apertures, camera: out var camera, eye: position, screen: row)
                 ? camera
                 : null);
+        };
     }
     /// <summary>Fits a window screen's camera for the frame being dressed: the local face the screen shows on and its
     /// counterpart in the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>),
@@ -228,20 +245,23 @@ public static class WorldWindowFrustumFit {
     public static bool TryFitFromEye(Vector3 eye, WorldDefinition local, WorldDefinition destination, WorldScreen screen, out CameraSnapshot camera) {
         ArgumentNullException.ThrowIfNull(argument: screen);
 
+        return TryFitFromApertures(
+            apertures: ResolvedApertures.Of(destination: destination, local: local, screenIndex: screen.Index),
+            camera: out camera,
+            eye: eye,
+            screen: screen
+        );
+    }
+    private static bool TryFitFromApertures(ResolvedApertures apertures, Vector3 eye, WorldScreen screen, out CameraSnapshot camera) {
         camera = default;
 
-        if (!TryResolveFrames(
-            counterpart: out var counterpartFrame,
-            counterpartGlass: out var counterpartGlass,
-            destination: destination,
-            local: local,
-            screenIndex: screen.Index,
-            source: out var sourceFrame
-        )) {
+        if (!apertures.Resolved) {
             return false;
         }
 
-        var source = WorldFaceGeometry.FromFrame(frame: sourceFrame);
+        var counterpartFrame = apertures.Counterpart;
+        var counterpartGlass = apertures.CounterpartGlass;
+        var source = WorldFaceGeometry.FromFrame(frame: apertures.Source);
         var counterpart = WorldFaceGeometry.FromFrame(frame: counterpartFrame);
         var glass = Glass(screen: screen);
 
@@ -292,6 +312,30 @@ public static class WorldWindowFrustumFit {
 
     /// <summary>How far past the counterpart's own glass a window's rays start, in world units.</summary>
     public const float GlassClearance = 0.01f;
+
+    // A window screen's two face frames as TryResolveFrames resolves them from one pair of documents and a screen index.
+    private sealed record ResolvedApertures(WorldDefinition Local, WorldDefinition Destination, int ScreenIndex, bool Resolved, WorldFaceFrame Source, WorldFaceFrame Counterpart, WorldScreenSource? CounterpartGlass) {
+        public static ResolvedApertures Of(WorldDefinition local, WorldDefinition destination, int screenIndex) {
+            var resolved = TryResolveFrames(
+                counterpart: out var counterpart,
+                counterpartGlass: out var counterpartGlass,
+                destination: destination,
+                local: local,
+                screenIndex: screenIndex,
+                source: out var source
+            );
+
+            return new(
+                Counterpart: counterpart,
+                CounterpartGlass: counterpartGlass,
+                Destination: destination,
+                Local: local,
+                Resolved: resolved,
+                ScreenIndex: screenIndex,
+                Source: source
+            );
+        }
+    }
 
     /// <summary>Maps the viewer's eye and the glass through the border pair's isometry and fits an off-axis frustum
     /// against the mapped glass from the mapped eye — the one call a window projection needs per produced frame.</summary>

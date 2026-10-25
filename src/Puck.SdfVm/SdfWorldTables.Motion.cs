@@ -7,8 +7,10 @@ namespace Puck.SdfVm;
 // the motion view owes it on until the hold ends (HoldsFrame). A row with no previous pose of its own
 // is seeded from this frame's after the ordinary copies, so it reads as still: every row on the first upload and after
 // a program geometry change or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
-// draw whose identity at its index changed (SdfMeshDraw.Identity). Keeping mesh matrices in a compact table preserves
-// GpuRegion's CPU-shadow contract and sends no second matrix over the host bus.
+// draw whose identity at its index changed (SdfMeshDraw.Identity). The previous mesh table holds whole draw records at the
+// mesh region's stride (SdfMeshRegion.DrawBytes), of which frame/sdf-reprojection.hlsli reads only the matrix, so a run of
+// draws copies as one range; it is a device-side copy, so GpuRegion's CPU-shadow contract holds and no second matrix crosses
+// the host bus.
 public sealed partial class SdfWorldTables {
     private const int MeshMatrixBytes = (16 * sizeof(float));
     private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
@@ -72,6 +74,18 @@ public sealed partial class SdfWorldTables {
             CopyTransformHistory(commandBuffer: commandBuffer, copies: m_previousTransformCopies, slot: previousSlot);
         }
         if (!m_seedMeshHistory && (m_previousMeshCopies.Count > 0)) {
+            // One range over every changed draw: a draw between them that did not change already holds the preceding
+            // frame's record in the previous table, so copying it again from that frame's slot writes what it holds.
+            var first = int.MaxValue;
+            var end = 0;
+
+            for (var run = 0; (run < m_previousMeshCopies.Count); run++) {
+                first = Math.Min(val1: first, val2: m_previousMeshCopies.Start(index: run));
+                end = Math.Max(val1: end, val2: (m_previousMeshCopies.Start(index: run) + m_previousMeshCopies.Length(index: run)));
+            }
+
+            m_previousMeshCopies.Clear();
+            m_previousMeshCopies.Add(length: (end - first), start: first);
             CopyMeshHistory(commandBuffer: commandBuffer, slot: previousSlot, copies: m_previousMeshCopies,
                 limit: Math.Min(val1: m_previousMeshDrawCount, val2: m_meshDrawCount));
         }
@@ -149,11 +163,14 @@ public sealed partial class SdfWorldTables {
 
         BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, initialized: m_meshHistoryWritten, source: source);
         for (var run = 0; (run < copies.Count); run++) {
-            var end = Math.Min(val1: (copies.Start(index: run) + copies.Length(index: run)), val2: ((int)limit));
+            var start = copies.Start(index: run);
+            var end = Math.Min(val1: (start + copies.Length(index: run)), val2: ((int)limit));
 
-            for (var draw = copies.Start(index: run); (draw < end); draw++) {
-                CopyHistoryRange(bytes: MeshMatrixBytes, commandBuffer: commandBuffer, destination: m_previousMeshTransforms,
-                    destinationOffset: (((ulong)draw) * MeshMatrixBytes), source: source, sourceOffset: (((ulong)draw) * SdfMeshRegion.DrawBytes));
+            if (end > start) {
+                var offset = (((ulong)start) * SdfMeshRegion.DrawBytes);
+
+                CopyHistoryRange(bytes: (((ulong)(end - start)) * SdfMeshRegion.DrawBytes), commandBuffer: commandBuffer, destination: m_previousMeshTransforms,
+                    destinationOffset: offset, source: source, sourceOffset: offset);
             }
         }
         FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source);
@@ -215,7 +232,7 @@ public sealed partial class SdfWorldTables {
         Array.Clear(array: m_meshIdentities, index: draws.Count, length: (m_meshIdentityCount - Math.Min(val1: m_meshIdentityCount, val2: draws.Count)));
         m_meshIdentityCount = draws.Count;
 
-        var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * MeshMatrixBytes);
+        var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * SdfMeshRegion.DrawBytes);
 
         if (bytes <= m_previousMeshTransforms.SizeBytes) {
             return;

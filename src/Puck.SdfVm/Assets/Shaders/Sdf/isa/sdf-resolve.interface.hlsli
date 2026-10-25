@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/53430eff899a7641797441492903c2d9885c35a1f07ad654aa31eabfe33f7828). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/6d5a075ec74b3dad3c041ce12a1fe09bdc80e6e084d3dfe13d4c279c6f44890a). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -104,7 +104,7 @@ struct SdfResolveFrame {
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
 [[vk::binding(7, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t7, space1);
-[[vk::binding(8, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t8, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<uint> sdfPreviousMeshTransforms : register(t8, space1);
 [[vk::binding(9, 1)]] StructuredBuffer<float4> screenSurfaces : register(t9, space1);
 [[vk::binding(10, 1)]] StructuredBuffer<float4> screenMappings : register(t10, space1);
 [[vk::binding(11, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t11, space1);

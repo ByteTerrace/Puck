@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/ebebe61dd029074341135dd66d13c772295e9b2f2c42c523c5cbd83cda5f6ec7). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/39b48edfd4c014ff4d68ad08afac15f45bcb38a007ec34f7a7a5e7004347444f). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -104,7 +104,7 @@ struct SdfWorldFrame {
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
 [[vk::binding(7, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t7, space1);
-[[vk::binding(8, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t8, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<uint> sdfPreviousMeshTransforms : register(t8, space1);
 [[vk::binding(9, 1)]] StructuredBuffer<float4> screenSurfaces : register(t9, space1);
 [[vk::binding(10, 1)]] StructuredBuffer<float4> screenMappings : register(t10, space1);
 [[vk::binding(11, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t11, space1);
