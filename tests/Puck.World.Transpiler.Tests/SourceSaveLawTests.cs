@@ -97,7 +97,8 @@ public sealed class SourceSaveLawTests {
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
         var span = compiled.SourceMap.Snapshot()["/placements/rows/0"].Span;
 
-        Assert.Equal(expected: source.Remove(startIndex: span.Offset, count: span.Length), actual: saved);
+        // The removed row stood alone on its line, which goes with it.
+        Assert.Equal(expected: source.Remove(startIndex: span.Offset, count: (span.Length + 1)), actual: saved);
         Assert.True(condition: JsonNode.DeepEquals(node1: target, node2: WorldCompiler.Compile(source: saved, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
     }
     [Fact]

@@ -890,12 +890,19 @@ the root and reports without a span.
 
 `WorldSourceEdits` also uses these spans when a live edit is saved. It prints
 only changed authored values through `WorldDecompiler`, retains neighboring
-expressions and comments, and recompiles the result. Nested values keep their
-final array positions when repeated properties append rows. Structural edits
-fall back to the enclosing authored node, retaining text outside its span. `WorldSourceSave` computes the changed
-document values against the source's composed snapshot and verifies the final
-composition before an atomic write. Generated rows refuse at their owning
-construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes
+expressions and comments, and recompiles the result. A value read bare from a
+top-level `let` is written in the `let` when nothing else reads it, and at its
+own node otherwise; a changed row is edited inside, a removed one leaves with
+its lines, and a new one is printed in the source's layout at the list's end.
+Nested values keep their final array positions when repeated properties append
+rows. Structural edits fall back to the enclosing authored node, retaining text
+outside its span. `WorldSourceSave` composes the source tree with scalar origins
+(`WorldDocumentOrigins`), so each change is made in the document that authors
+it, a basis or an import as readily as the saved root, and a new row joins the
+document that authors the rest of its list, or the root. The simulation's
+`state` and a placement's response mask keep their authored values. The edited
+documents are composed in memory and proved against the snapshot before the
+atomic writes. Generated rows refuse at their owning construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes
 the save workflow.
 
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords (`if`/`else` included), `table`/

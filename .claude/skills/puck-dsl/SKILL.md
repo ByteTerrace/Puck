@@ -176,8 +176,10 @@ twins as derived caches, never committed or byte-compared against a saved copy.
 Compile the authored sources when needed; semantic round trips compare fresh
 compilations. Imported modules contribute templates, not standalone documents.
 A world source also has no committed document: the build compiles it. `--world foo.puck` boots straight from source,
-`world.reload` recompiles it, and `world.save` writes edits back through the
-printer (generated rows refuse by name).
+`world.reload` recompiles it, and `world.save` writes each live edit into the
+source that authors it, an import's row in the import and a value read from a
+`let` in that `let`, keeping everything else as written; generated rows refuse
+by name, and simulation `state` stays as authored.
 
 After editing a world, run it (`dotnet run --project src/Puck.World -c Release
 -- --world worlds/debug --devices none --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).
