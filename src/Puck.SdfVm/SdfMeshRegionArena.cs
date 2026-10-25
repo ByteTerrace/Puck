@@ -33,6 +33,9 @@ public sealed class SdfMeshRegionArena {
     private readonly int m_retainedSlackWords;
     private int m_drawCapacity;
     private int m_end;
+    // The meshes the latest full plan's list named, in its order.
+    private SdfMesh?[] m_latestMeshes = [];
+    private int m_latestMeshCount;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshRegionArena"/> class.</summary>
     /// <param name="retainedSlackWords">The words outside the named meshes the arena keeps before a plan packs it again,
@@ -60,6 +63,9 @@ public sealed class SdfMeshRegionArena {
     public IReadOnlySet<SdfMesh> Moved => m_moved;
     /// <summary>Gets whether the latest plan moved every mesh, so the region owes every word.</summary>
     public bool Relocated { get; private set; }
+    /// <summary>Gets whether the latest plan's list named the meshes the plan before it named, in the same order, so every
+    /// placement and the reserve stand as they were and only the draws' own values can have moved.</summary>
+    public bool Unchanged { get; private set; }
 
     /// <summary>Places the meshes a list of draws names: a mesh already placed keeps its words, and a new one is added at
     /// the arena's end, unless the plan relocates every mesh.</summary>
@@ -73,6 +79,20 @@ public sealed class SdfMeshRegionArena {
         if (draws.Count > SdfMeshRegion.MaxDraws) {
             throw new ArgumentException(message: $"A mesh region holds at most {SdfMeshRegion.MaxDraws} draws; the list holds {draws.Count}.", paramName: nameof(draws));
         }
+
+        // A list naming the meshes the latest plan's list named, in its order, finds every mesh placed and the reserve
+        // large enough, and the words outside the named meshes are those that plan left, so it neither places, moves nor
+        // relocates: the plan of a frame whose draws only moved.
+        if (NamesLatestMeshes(draws: draws)) {
+            m_placed.Clear();
+            m_moved.Clear();
+            Relocated = false;
+            Unchanged = true;
+
+            return;
+        }
+
+        Unchanged = false;
 
         m_named.Clear();
         m_placed.Clear();
@@ -136,6 +156,27 @@ public sealed class SdfMeshRegionArena {
         }
 
         Relocated = relocate;
+        if (m_latestMeshes.Length < draws.Count) {
+            m_latestMeshes = new SdfMesh?[Math.Max(val1: draws.Count, val2: (2 * m_latestMeshes.Length))];
+        }
+        for (var index = 0; (index < draws.Count); index++) {
+            m_latestMeshes[index] = draws[index].Mesh;
+        }
+        Array.Clear(array: m_latestMeshes, index: draws.Count, length: (m_latestMeshCount - Math.Min(val1: m_latestMeshCount, val2: draws.Count)));
+        m_latestMeshCount = draws.Count;
+    }
+    private bool NamesLatestMeshes(IReadOnlyList<SdfMeshDraw> draws) {
+        if ((draws.Count != m_latestMeshCount) || (m_drawCapacity == 0)) {
+            return false;
+        }
+
+        for (var index = 0; (index < draws.Count); index++) {
+            if (!ReferenceEquals(objA: draws[index].Mesh, objB: m_latestMeshes[index])) {
+                return false;
+            }
+        }
+
+        return true;
     }
     // The reserve a list of drawCount draws grows it to: double, at least the list and MinimumDrawCapacity, at most
     // SdfMeshRegion.MaxDraws.

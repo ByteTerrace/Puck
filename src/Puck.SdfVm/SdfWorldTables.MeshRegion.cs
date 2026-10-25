@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 
@@ -29,6 +30,11 @@ public sealed partial class SdfWorldTables {
     private readonly List<SdfMeshDraw> m_meshLanded = [];
     // The draws the latest frame staged, whose meshes are written.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
+    // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
+    // owed mesh): what StageChangedDraws compares a list against.
+    private SdfMeshDraw[] m_stagedDraws = [];
+    private int m_stagedCount;
+    private bool m_stagedWhole;
 
     /// <summary>The words of owed meshes a frame writes into the mesh region at most, past the first mesh it writes: 2 MB,
     /// so a body whose meshes land at once, as when it crosses into a world, lands over a few frames rather than in
@@ -158,6 +164,23 @@ public sealed partial class SdfWorldTables {
             staged = m_meshLanded;
         }
 
+        // A list naming the meshes the last one named, in order, after a staging that staged that whole list, owes only
+        // the draws that changed: every other record, box and motion row stands as it was staged.
+        if (
+            m_meshArena.Unchanged &&
+            m_stagedWhole &&
+            ReferenceEquals(objA: staged, objB: draws) &&
+            (staged.Count == m_stagedCount) &&
+            (m_meshArena.Words > 0)
+        ) {
+            StageChangedDraws(draws: staged);
+            m_meshDraws = staged;
+            m_meshRevision++;
+            m_meshStaged = true;
+
+            return;
+        }
+
         var drawWords = (staged.Count * SdfMeshRecord.DrawWords);
 
         if (drawWords > m_meshDrawWords.Length) {
@@ -192,8 +215,93 @@ public sealed partial class SdfWorldTables {
             if (draw.Glass) { m_glassDrawCount++; }
             m_meshDrawBoxes[index] = (SdfMeshBox.TryOf(box: out var box, draw: in draw) ? box : null);
         }
+        if (m_stagedDraws.Length < staged.Count) {
+            m_stagedDraws = new SdfMeshDraw[Math.Max(val1: staged.Count, val2: (2 * m_stagedDraws.Length))];
+        }
+        for (var index = 0; (index < staged.Count); index++) {
+            m_stagedDraws[index] = staged[index];
+        }
+        Array.Clear(array: m_stagedDraws, index: staged.Count, length: (m_stagedCount - Math.Min(val1: m_stagedCount, val2: staged.Count)));
+        m_stagedCount = staged.Count;
         m_meshRevision++;
         m_meshStaged = ReferenceEquals(objA: staged, objB: draws);
+        m_stagedWhole = m_meshStaged;
+    }
+    // Stages the draws of a list that changed since the draws last staged at their indices, which the list matches in
+    // count and meshes: each changed draw's record, box and motion row, and the region's words for each run of them.
+    private void StageChangedDraws(IReadOnlyList<SdfMeshDraw> draws) {
+        var records = m_meshDrawWords.AsSpan(length: (draws.Count * SdfMeshRecord.DrawWords), start: 0);
+        // The records as the region last held them, which a moved matrix is compared against before it is written.
+        var old = m_meshRegion.ContentsAt(
+            length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
+            offset: 0
+        );
+        var run = -1;
+
+        for (var index = 0; (index <= draws.Count); index++) {
+            if ((index < draws.Count) && (draws[index] is var draw) && !SameDraw(left: in draw, right: in m_stagedDraws[index])) {
+                if (draw.Identity is not { } identity) {
+                    throw new ArgumentException(message: $"Mesh draw {index} names no identity.", paramName: nameof(draws));
+                }
+
+                var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
+                var offset = (index * SdfMeshRegion.DrawBytes);
+
+                SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], record: record);
+                if (!identity.Equals(obj: m_meshIdentities[index])) {
+                    m_seededMeshDraws.Add(length: 1, start: index);
+                } else if ((offset > (old.Length - MeshMatrixBytes)) || !MemoryMarshal.AsBytes(span: record[..16]).SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
+                    m_changedMeshMatrices.Add(length: 1, start: index);
+                }
+                m_meshIdentities[index] = identity;
+                if (draw.Glass != m_stagedDraws[index].Glass) {
+                    m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
+                }
+                m_meshDrawBoxes[index] = (SdfMeshBox.TryOf(box: out var box, draw: in draw) ? box : null);
+                m_stagedDraws[index] = draw;
+                if (run < 0) { run = index; }
+
+                continue;
+            }
+            if (run >= 0) {
+                _ = m_meshRegion.Write(
+                    bytes: MemoryMarshal.AsBytes(span: records.Slice(length: ((index - run) * SdfMeshRecord.DrawWords), start: (run * SdfMeshRecord.DrawWords))),
+                    offset: (((long)run) * SdfMeshRegion.DrawBytes)
+                );
+                run = -1;
+            }
+        }
+    }
+    // Whether two draws stage the same record, box and motion: the same mesh, identity, material and flags, and the same
+    // bits in every float the record carries.
+    private static bool SameDraw(in SdfMeshDraw left, in SdfMeshDraw right) {
+        if (
+            !ReferenceEquals(objA: left.Mesh, objB: right.Mesh) ||
+            (left.Material != right.Material) ||
+            (left.Glass != right.Glass) ||
+            (left.IsDynamic != right.IsDynamic) ||
+            (left.FrameSlot != right.FrameSlot) ||
+            (BitConverter.SingleToInt32Bits(value: left.CarryScale) != BitConverter.SingleToInt32Bits(value: right.CarryScale)) ||
+            !Equals(objA: left.Identity, objB: right.Identity)
+        ) {
+            return false;
+        }
+
+        var leftMatrix = left.ObjectToWorld;
+        var rightMatrix = right.ObjectToWorld;
+        var leftRotation = left.CarryRotation;
+        var rightRotation = right.CarryRotation;
+        var leftShift = left.CarryTranslation;
+        var rightShift = right.CarryTranslation;
+        var leftClip = left.ClipPlane;
+        var rightClip = right.ClipPlane;
+
+        return (
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(in leftMatrix)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(in rightMatrix))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(in leftRotation)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(in rightRotation))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(in leftShift)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(in rightShift))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(in leftClip)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(in rightClip)))
+        );
     }
     // Writes the owed meshes the draw list names, in its order, until the frame's share of words is spent; a frame writes
     // at least one. A placed mesh no draw names stays owed until a list names it again.

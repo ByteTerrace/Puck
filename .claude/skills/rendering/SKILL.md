@@ -478,8 +478,9 @@ Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 boots a workload on both backends and `puck counters compare <before> <after>`
 holds two reports to each other; a deterministic count must agree on both
 backends. `world.debug-view` lists the diagnostic images. For a frame-time bar,
-`host.frames` on the windowed host gives the worst iteration split into its
-phases (simulate, begin, produce, present, wait) with its collections and the
+`host.frames` on the windowed host gives produce, simulate and their sum per
+iteration (avg, p50, p99, max) and the worst iterations split into their
+phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 ## Seeing a change

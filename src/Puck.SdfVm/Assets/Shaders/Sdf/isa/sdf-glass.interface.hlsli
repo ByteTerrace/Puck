@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/a95643586da573df4f7fe3c82ade786db1dcfb70be22cbe1917378e6269fbcc4). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/5139480ca1979c4a324469fa9db1d23f16a40b0b30bc5e17950ba2a0b17378c6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -104,7 +104,7 @@ struct SdfGlassFrame {
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
 [[vk::binding(7, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t7, space1);
-[[vk::binding(8, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t8, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<uint> sdfPreviousMeshTransforms : register(t8, space1);
 [[vk::binding(9, 1)]] StructuredBuffer<float4> screenSurfaces : register(t9, space1);
 [[vk::binding(10, 1)]] StructuredBuffer<float4> screenMappings : register(t10, space1);
 [[vk::binding(11, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t11, space1);

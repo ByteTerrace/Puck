@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh-bake' (sha256/708c80ce557fa13e3cc51923a176afa5b2ae889cdd9f2a448c17d9e6211a9fc7). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh-bake' (sha256/dcf4ff36ccdfb7c5e65e397c5c1b1fa93bf2b53351dfb817772396753dc0df86). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 #define PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 
@@ -104,7 +104,7 @@ struct SdfMeshBakeFrame {
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
 [[vk::binding(7, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t7, space1);
-[[vk::binding(8, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t8, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<uint> sdfPreviousMeshTransforms : register(t8, space1);
 [[vk::binding(9, 1)]] StructuredBuffer<float4> screenSurfaces : register(t9, space1);
 [[vk::binding(10, 1)]] StructuredBuffer<float4> screenMappings : register(t10, space1);
 [[vk::binding(11, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t11, space1);

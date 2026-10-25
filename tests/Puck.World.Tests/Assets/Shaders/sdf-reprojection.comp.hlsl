@@ -1,7 +1,7 @@
 // Runs the production reprojection against explicit visibility records, mesh matrices and camera rows.
 [[vk::binding(0, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t1, space3);
-[[vk::binding(2, 3)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t2, space3);
+[[vk::binding(2, 3)]] StructuredBuffer<uint> sdfPreviousMeshTransforms : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
 [[vk::binding(4, 3)]] StructuredBuffer<float4> motionCases : register(t4, space3);
 [[vk::binding(5, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> motionResults : register(u5, space3);

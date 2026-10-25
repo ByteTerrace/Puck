@@ -119,11 +119,19 @@ public sealed class SdfReprojectionDeviceLawTests {
             MemoryMarshal.Cast<byte, Vector4>(span: block.AsSpan(length: 96, start: offset)).CopyTo(destination: probes.AsSpan(length: 6, start: ((index * 7) + 1)));
         }
         // No draw carries a frame slot or members, so neither frame's dynamic transforms are read; each binding needs a row.
-        var previousMatrices = new[] { PreviousMesh, StillMesh, BehindMesh };
+        // The previous table holds the preceding frame's draw records, at the mesh region's stride.
+        SdfMeshDraw[] previousDraws = [
+            draws[0] with { ObjectToWorld = PreviousMesh },
+            draws[1],
+            draws[2],
+        ];
+        var previousRecords = new uint[(previousDraws.Length * SdfMeshRecord.DrawWords)];
+
+        SdfMeshRegion.WriteDraws(destination: previousRecords, draws: previousDraws, meshes: meshes);
         byte[][] contents = [
             MemoryMarshal.AsBytes(span: meshWords.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: new Vector4[3].AsSpan()).ToArray(),
-            MemoryMarshal.AsBytes(span: previousMatrices.AsSpan()).ToArray(),
+            MemoryMarshal.AsBytes(span: previousRecords.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: records.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: probes.AsSpan()).ToArray(),
         ];
@@ -152,7 +160,7 @@ public sealed class SdfReprojectionDeviceLawTests {
                 buffers.Add(item: buffer);
                 buffer.Write<byte>(data: contents[index]);
                 services.Bindings.WriteBuffer(binding: ((uint)index), bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes,
-                    descriptorSetHandle: set, elementStride: ((index is 0 or 3) ? 4u : 16u), kind: GpuBindingKind.ReadOnlyBuffer);
+                    descriptorSetHandle: set, elementStride: ((index is 0 or 2 or 3) ? 4u : 16u), kind: GpuBindingKind.ReadOnlyBuffer);
             }
             services.Bindings.WriteStorageImage(arrayElement: 0, binding: 5, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
 

@@ -13,6 +13,9 @@ namespace Puck.World;
 public sealed partial class WorldScreenBinder {
     private readonly Dictionary<(WorldSessionMirror Mirror, int Depth), InfinityRoot> m_infinityRoots = [];
     private readonly Dictionary<string, InfinityOutput> m_infinityOutputs = new(comparer: StringComparer.Ordinal);
+    // Scratch for the roots and consumers one reconcile retires; the binder runs on the presentation thread alone.
+    private readonly List<(WorldSessionMirror Mirror, int Depth)> m_staleInfinityRoots = [];
+    private readonly List<string> m_deadInfinityConsumers = [];
 
     private int m_infinityEpoch;
 
@@ -43,14 +46,20 @@ public sealed partial class WorldScreenBinder {
         foreach (var feed in m_feeds) {
             _ = InfinityRootOf(feed.Mirror, feed.InstanceName, feed.Depth, feed.RegistrationName);
         }
-        foreach (var (key, root) in m_infinityRoots.ToArray()) {
-            if (root.Epoch != m_infinityEpoch) {
-                foreach (var entry in root.Entries.Values) { ReleaseInfinity(entry: entry); }
-                m_renderProbe?.UnregisterInfinityPlan(owner: root);
-                _ = m_infinityRoots.Remove(key: key);
-                continue;
-            }
-            foreach (var (name, consumer) in root.Consumers.ToArray()) {
+        m_staleInfinityRoots.Clear();
+        foreach (var (key, root) in m_infinityRoots) {
+            if (root.Epoch != m_infinityEpoch) { m_staleInfinityRoots.Add(item: key); }
+        }
+        foreach (var key in m_staleInfinityRoots) {
+            var root = m_infinityRoots[key];
+
+            foreach (var entry in root.Entries.Values) { ReleaseInfinity(entry: entry); }
+            m_renderProbe?.UnregisterInfinityPlan(owner: root);
+            _ = m_infinityRoots.Remove(key: key);
+        }
+        foreach (var root in m_infinityRoots.Values) {
+            m_deadInfinityConsumers.Clear();
+            foreach (var (name, consumer) in root.Consumers) {
                 var alive = consumer.Target switch {
                     WorldFramePresenter retainedPresenter => ReferenceEquals(objA: retainedPresenter, objB: Presenter),
                     WorldRoutedScene scene => (Presenter?.Presents(scene: scene) == true),
@@ -61,8 +70,9 @@ public sealed partial class WorldScreenBinder {
                     _ => false,
                 };
 
-                if (!alive) { _ = root.Consumers.Remove(key: name); }
+                if (!alive) { m_deadInfinityConsumers.Add(item: name); }
             }
+            foreach (var name in m_deadInfinityConsumers) { _ = root.Consumers.Remove(key: name); }
             PruneInfinityIndices(root: root);
         }
         RebuildInfinityOutputs();

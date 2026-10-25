@@ -112,6 +112,17 @@ outside this contract and takes the references as written.
   server construction and tick workloads; `puck bench startup` for fresh-process
   readiness. The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
   owns options, report fields and measurement hygiene.
+- Profile a running World's frame thread with `dotnet-trace collect -p <pid>
+  --profile dotnet-sampled-thread-time` (frame cost) or `--profile gc-verbose`
+  (allocation ticks with stacks, GC heap stats), then `dotnet-trace convert
+  --format speedscope` and aggregate the frame thread's stacks yourself; read
+  `host.frames` beside it for produce and simulate per iteration. The sampler
+  suspends threads at safe points, so samples pile onto `Thread.PollGC` under
+  `Buffer.BulkMoveWithWriteBarrier` and other poll sites: charge that time to
+  the caller's loop, not to the copy. Per-frame costs that matter here come in
+  0.1-0.5 ms pieces; a scan of thousands of objects per call (a cache miss
+  each) and a closure a method allocates on entry because one of its lambdas
+  captures a parameter are the usual shapes.
 - Check the folklore section of the core guidance before preserving an old
   hand-optimization, and confirm specialization and call boundaries in optimized
   assembly. Prefer idiomatic code the .NET 11 JIT and libraries recognize.

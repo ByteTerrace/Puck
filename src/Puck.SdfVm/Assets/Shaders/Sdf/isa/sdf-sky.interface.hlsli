@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/262c60c9eadc9bf82dbe96be04a0e92c4026b119c85251a4fa11128fb180eee6). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/8ffde9023e4e114ad24030f92843189c7dfd88c98af933483b1c1de544843f09). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -104,7 +104,7 @@ struct SdfSkyFrame {
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
 [[vk::binding(7, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t7, space1);
-[[vk::binding(8, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t8, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<uint> sdfPreviousMeshTransforms : register(t8, space1);
 [[vk::binding(9, 1)]] StructuredBuffer<float4> screenSurfaces : register(t9, space1);
 [[vk::binding(10, 1)]] StructuredBuffer<float4> screenMappings : register(t10, space1);
 [[vk::binding(11, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t11, space1);

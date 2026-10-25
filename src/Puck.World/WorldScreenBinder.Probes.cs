@@ -37,9 +37,12 @@ public sealed partial class WorldScreenBinder {
     // Whether a screen source or a HUD frame's source shows external content. A probe is external until its row is declared
     // otherwise, so an undeclared one is withheld rather than shown.
     private bool ShowsExternal(WorldScreenSource? source) => WorldCaptureFills.IsExternal(
-        probeIsExternal: id => (!m_probeFeeds.TryGetValue(key: id, value: out var feed) || feed.External),
+        probeIsExternal: (m_probeIsExternal ??= ProbeIsExternal),
         source: source
     );
+    // Whether a probe's feed is external or not yet known; held as one delegate, since every frame asks it per screen.
+    private bool ProbeIsExternal(string id) => (!m_probeFeeds.TryGetValue(key: id, value: out var feed) || feed.External);
+    private Func<string, bool>? m_probeIsExternal;
     /// <summary>Records the kernel run that writes a probe's output ring, whose order <c>world.screens</c> reports for a
     /// screen showing the probe.</summary>
     /// <param name="id">The <c>probes[].id</c> the output ring is keyed by.</param>

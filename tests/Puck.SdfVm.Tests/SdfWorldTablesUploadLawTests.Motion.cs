@@ -98,22 +98,21 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         SdfMeshDraw[] Draws(Matrix4x4 a, Matrix4x4 b) => [
             new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: a), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: b),
         ];
-        Matrix4x4[] Previous() => MemoryMarshal.Cast<byte, Matrix4x4>(
-            span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: 256))[..2].ToArray();
         rig.Render(time: 0f, meshDraws: Draws(a: first, b: second));
-        Assert.Equal(expected: new[] { first, second }, actual: Previous());
+        Assert.Equal(expected: new[] { first, second }, actual: PreviousMatrices(rig: rig, draws: 2));
         var movedFirst = (first * Matrix4x4.CreateRotationY(radians: 0.3f));
 
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: second));
-        Assert.Equal(expected: new[] { first, second }, actual: Previous());
+        Assert.Equal(expected: new[] { first, second }, actual: PreviousMatrices(rig: rig, draws: 2));
         var movedSecond = (second * Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 5f, zPosition: 6f));
 
+        // The previous table holds whole draw records, so a moved draw copies its record.
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
-        Assert.Equal(expected: new[] { movedFirst, second }, actual: Previous());
-        Assert.Equal(expected: 64UL, actual: rig.Gpu.BufferCopyBytes);
+        Assert.Equal(expected: new[] { movedFirst, second }, actual: PreviousMatrices(rig: rig, draws: 2));
+        Assert.Equal(expected: ((ulong)SdfMeshRegion.DrawBytes), actual: rig.Gpu.BufferCopyBytes);
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
-        Assert.Equal(expected: new[] { movedFirst, movedSecond }, actual: Previous());
-        Assert.Equal(expected: 64UL, actual: rig.Gpu.BufferCopyBytes);
+        Assert.Equal(expected: new[] { movedFirst, movedSecond }, actual: PreviousMatrices(rig: rig, draws: 2));
+        Assert.Equal(expected: ((ulong)SdfMeshRegion.DrawBytes), actual: rig.Gpu.BufferCopyBytes);
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
@@ -172,20 +171,25 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var second = Matrix4x4.CreateScale(xScale: 2f, yScale: 3f, zScale: 4f);
         var third = Matrix4x4.CreateTranslation(xPosition: -4f, yPosition: 0f, zPosition: 1f);
 
-        Matrix4x4[] Previous() => MemoryMarshal.Cast<byte, Matrix4x4>(
-            span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: 256))[..2].ToArray();
-
         rig.Render(time: 0f, meshDraws: [
             new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: first), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second),
         ]);
         rig.Render(time: 0f, meshDraws: [
             new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second), new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: first),
         ]);
-        Assert.Equal(expected: new[] { second, first }, actual: Previous());
+        Assert.Equal(expected: new[] { second, first }, actual: PreviousMatrices(rig: rig, draws: 2));
         rig.Render(time: 0f, meshDraws: [
             new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second), new(Identity: "c", Material: 0, Mesh: mesh, ObjectToWorld: third),
         ]);
-        Assert.Equal(expected: new[] { second, third }, actual: Previous());
+        Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
         Assert.Empty(collection: rig.Gpu.StateConflicts);
+    }
+    // The matrices of the first draws the previous mesh table holds: whole draw records at the mesh region's stride, each
+    // opening with its matrix. The table is twice the draws' records, as the tables size it.
+    private static Matrix4x4[] PreviousMatrices(Rig rig, int draws) {
+        var records = rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(2 * draws * SdfMeshRegion.DrawBytes)));
+
+        return [.. Enumerable.Range(count: draws, start: 0).Select(selector: draw =>
+            MemoryMarshal.Read<Matrix4x4>(source: records.AsSpan(length: 64, start: (draw * SdfMeshRegion.DrawBytes))))];
     }
 }

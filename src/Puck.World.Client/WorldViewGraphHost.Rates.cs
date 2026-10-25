@@ -252,7 +252,11 @@ public sealed partial class WorldViewGraphHost {
         var shown = false;
         var largest = 0d;
 
-        foreach (var screen in screens.Screens) {
+        var rows = screens.Screens;
+
+        for (var row = 0; (row < rows.Count); row++) {
+            var screen = rows[row];
+
             if (
                 !string.Equals(a: screens.InstanceOf(screen: screen.Index), b: footprint.Producer, comparisonType: StringComparison.Ordinal) ||
                 !screens.TryGet(mapping: out var mapping, screen: screen.Index)
