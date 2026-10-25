@@ -164,6 +164,16 @@ internal static class FixedRoundedBoxContact {
         return true;
     }
 
+    // A bound on how far any point of a capsule or box volume lies from the body's origin along any axis, at any
+    // orientation: a component of a rotated vector is at most the vector's L1 norm, a capsule's segment ends at its centre
+    // and endpoint, and a box's corners are its centre plus its half extents.
+    private static FixedQ4816 Reach(in FixedBodyColliderVolume volume) => ((volume.Kind == FixedBodyColliderKind.Capsule)
+        ? (FixedQ4816.Max(x: L1(vector: volume.Center), y: L1(vector: volume.Endpoint)) + volume.Radius)
+        : (L1(vector: volume.Center) + L1(vector: volume.HalfExtents)));
+    private static FixedQ4816 L1(FixedVector3 vector) => ((FixedQ4816.Abs(value: vector.X) + FixedQ4816.Abs(value: vector.Y)) + FixedQ4816.Abs(value: vector.Z));
+    // Far past the oriented test's rounding, a few units of the last place.
+    private static readonly FixedQ4816 ReachMargin = FixedQ4816.FromDouble(value: (1.0 / 256.0));
+
     internal static bool TryPush(in FixedStaticCollider box, FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) {
         if (volume.Kind == FixedBodyColliderKind.Sphere) {
@@ -172,6 +182,16 @@ internal static class FixedRoundedBoxContact {
                 boxRotation: box.Rotation, halfExtents: box.Extent, push: out push);
         }
         var localPosition = box.Rotation.RotateInverse(vector: (position - box.Center));
+        // A body whose whole volume, at any orientation, lies outside the box's padded slab on an axis is refused before
+        // its orientation is composed: the reach bounds every point of the volume from the body's origin on each axis,
+        // so the oriented test below would refuse it too, and the margin covers that test's rounding.
+        var reach = ((Reach(volume: in volume) + ReachMargin) + ((box.Radius + skin)));
+
+        if ((FixedQ4816.Abs(value: localPosition.X) > (box.Extent.X + reach)) || (FixedQ4816.Abs(value: localPosition.Y) > (box.Extent.Y + reach)) ||
+            (FixedQ4816.Abs(value: localPosition.Z) > (box.Extent.Z + reach))) {
+            push = default;
+            return false;
+        }
         var localOrientation = (box.Rotation.Conjugate() * orientation).Normalize();
 
         var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in localOrientation, position: localPosition, volume: in volume);

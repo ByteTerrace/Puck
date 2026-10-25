@@ -488,7 +488,10 @@ public sealed class WorldReplayInspector {
             ? "on"
             : "off")}]");
 
-        var channels = WorldChannelTable.Compile(channels: WorldDefinitionSerialization.Deserialize(utf8Json: recording.DefinitionJson).Channels);
+        var channels = WorldChannelTable.Compile(channels: WorldDefinitionSerialization.Deserialize(
+            documentDirectory: recording.DocumentDirectory,
+            utf8Json: recording.DefinitionJson
+        ).Channels);
         string[]?[]? drivenPoses = null;
         ulong[]? trace = null;
         var divergedAt = -1;

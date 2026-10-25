@@ -641,8 +641,9 @@ public sealed partial class WorldReplayTape {
     /// image, the tape starts from its definition's boot image with the active seats joined and the live sessions
     /// re-admitted at its first tick. Afterwards the tape starts from an authority checkpoint of the live state,
     /// captured now without the owned-world catalog (<see cref="WorldReplaySnapshot.ForTape"/>), which holds the
-    /// sessions, the screen selectors and links, and the machine cores; a state no checkpoint captures — a mounted or
-    /// pumped addon guest, a stepped machine without checkpoint support, a coupled link or rewind history, an engagement
+    /// sessions, the screen selectors and links, and the machine cores. Mounted addon guests restart from their pinned
+    /// modules at the arm, matching the re-drive's fresh guests; their old memory is discarded only after capture succeeds.
+    /// A state no checkpoint captures — a stepped machine without checkpoint support, a coupled link or rewind history, an engagement
     /// in flight, or an edit not yet applied — refuses by name (<see cref="ReplayRefusal.StartNotCheckpointable"/>).
     /// <see cref="Protocol.WorldGrant.KindMask"/> (and its <see cref="Protocol.WorldGrant.WriteMask"/> sibling) ride the
     /// shared grant/revoke leaf on tape.
@@ -661,6 +662,15 @@ public sealed partial class WorldReplayTape {
     /// <param name="refusal">The refusal reason, on failure; empty on success.</param>
     /// <returns><see langword="true"/> when recording armed.</returns>
     public bool TryBeginRecording(string name, out string refusal) {
+        var result = m_liveServer.ExecuteAuthorityOperation(operation: () => {
+            var armed = TryBeginRecordingUnderAuthority(name, out var reason);
+            return (Armed: armed, Reason: reason);
+        });
+        refusal = result.Reason;
+        return result.Armed;
+    }
+
+    private bool TryBeginRecordingUnderAuthority(string name, out string refusal) {
         if (m_mode != WorldReplayMode.Idle) {
             refusal = ((m_mode == WorldReplayMode.Replaying)
                 ? $"a replay drive of '{m_drive?.SourceName}' is in progress — replay.cancel ends it, or replay.fork records from a drive"

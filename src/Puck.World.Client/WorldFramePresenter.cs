@@ -164,15 +164,17 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Each seat's reads of its routed authority's state mirror that are not rig operands: the perceived body's live
     // scale the chase framing follows.
     private readonly WorldStateLease[] m_seatReads = NewSeatReads();
-    // Every kit's compiled collider, indexed by kit row, for the definition it was compiled from: the volume a chase
-    // eye keeps out of when it frames a body of that kit.
+    // Every kit's compiled collider, indexed by kit row, for the kits and creations it was compiled from: the volume a
+    // chase eye keeps out of when it frames a body of that kit. A definition derived for a state change carries both
+    // lists, so the colliders compile again only when a kit or creation row moves.
     private FixedWorldCollider?[] m_subjectColliders = [];
+    private IReadOnlyList<WorldPrototype>? m_subjectCollidersCreations;
     // The drawn volumes of the creation and stamp scale a chase eye last framed (WorldChaseBody.DrawnVolumes).
     private Vector4[] m_subjectDrawn = [];
 
     private WorldPrototype? m_subjectDrawnCreation;
     private float m_subjectDrawnScale;
-    private WorldDefinition? m_subjectCollidersFor;
+    private IReadOnlyList<WorldKit>? m_subjectCollidersFor;
 
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot).
@@ -950,10 +952,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private FixedWorldCollider? SubjectCollider(int body) {
         var definition = m_client.Definition;
 
-        if (!ReferenceEquals(
-            objA: definition,
-            objB: m_subjectCollidersFor
-        )) {
+        if (
+            !ReferenceEquals(objA: definition.Kits, objB: m_subjectCollidersFor) ||
+            !ReferenceEquals(objA: definition.Creations, objB: m_subjectCollidersCreations)
+        ) {
             var kits = definition.Kits;
             var colliders = new FixedWorldCollider?[kits.Count];
 
@@ -965,7 +967,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             m_subjectColliders = colliders;
-            m_subjectCollidersFor = definition;
+            m_subjectCollidersFor = kits;
+            m_subjectCollidersCreations = definition.Creations;
         }
 
         var kit = m_client.Kit(index: body);

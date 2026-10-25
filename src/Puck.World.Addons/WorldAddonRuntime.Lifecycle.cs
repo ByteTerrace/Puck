@@ -414,9 +414,13 @@ public sealed partial class WorldAddonRuntime {
         // see PreparedAddonInstall.Narration — so a capability disclosure reads whatever grant table is live at
         // THIS instant, never the one that was live when TryPrepare ran.
         try {
-            foreach (var line in install.Narration) {
-                if (line() is { } text) {
-                    Console.Error.WriteLine(value: text);
+            // The shadow reconstructs the recorded mounts, including mounts reached by a taped reload.
+            // Their confirmations repeat the live boot; failed preparation and receipt drift report separately.
+            if (!m_server.Extensions.IsReplaying) {
+                foreach (var line in install.Narration) {
+                    if (line() is { } text) {
+                        Console.Error.WriteLine(value: text);
+                    }
                 }
             }
         } finally {

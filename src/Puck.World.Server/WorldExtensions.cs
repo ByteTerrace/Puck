@@ -26,6 +26,10 @@ public sealed class WorldExtensions {
     private long m_sequence;
     private bool m_suppressed;
 
+    /// <summary>Gets whether this authority is re-driving a recorded timeline. Successful addon mounts during
+    /// a re-drive need no second boot narration; refusals and replay differences still report normally.</summary>
+    public bool IsReplaying => m_replayActive;
+
     private sealed record RecordedContribution(WorldRecordedExtension Owner, WorldMutation Mutation, long Sequence, Guid OperationId);
 
     /// <summary>Gets the live integration epoch. Every attached extension carries the epoch it was admitted under;

@@ -64,7 +64,10 @@ beyond its own downcast, or fallible call—and a separate `Finish` call,
 made only after the caller's own document/journal publication is durable,
 prints the deferred capability-disclosure/mount narration and disposes
 every superseded guest (or the whole superseded host, when the channel
-table moved). `WorldServer.TryApplyMutation` calls the pair as the LAST
+table moved). During replay (`WorldExtensions.IsReplaying`), `Finish` skips
+those successful confirmations, so an offline re-drive narrates no second
+boot; preparation refusals and receipt/trajectory differences still report.
+`WorldServer.TryApplyMutation` calls the pair as the LAST
 fallible gate for an `UpsertAddon`/`RemoveAddon` mutation (refusing by name
 first when no addon host is attached at all), after every cheaper refusal;
 `WorldAddonRuntime.TryCreate` calls it at boot (against no prior state, and

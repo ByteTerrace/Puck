@@ -31,9 +31,46 @@ public static class WorldPortalStraddle {
     public static IReadOnlyList<Door> Doors(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return PerDefinition.GetValue(
+        // A definition derived for a state change alone carries every row the doors read, so the doors one of the worlds
+        // a frame presents last derived stand for it without deriving or allocating again; any other is derived once and
+        // remembered by definition.
+        var derived = LatestDerived;
+
+        for (var index = 0; (index < derived.Length); index++) {
+            if ((Volatile.Read(location: ref derived[index]) is { } latest) && latest.Reads(definition: definition)) {
+                return latest.Doors;
+            }
+        }
+
+        var doors = PerDefinition.GetValue(
             createValueCallback: Derive,
             key: definition
+        );
+        var slot = ((Interlocked.Increment(location: ref NextDerived) & int.MaxValue) % derived.Length);
+
+        Volatile.Write(location: ref derived[slot], value: new DerivedDoors(
+            Catalog: WorldFaceCatalog.For(definition: definition),
+            Destinations: definition.Destinations,
+            DocumentId: definition.DocumentId,
+            Doors: doors,
+            Placements: definition.Placements,
+            References: definition.References
+        ));
+
+        return doors;
+    }
+    // The doors the worlds a frame presents (the boot world and each session's mirror) last derived, one entry each.
+    private static readonly DerivedDoors?[] LatestDerived = new DerivedDoors?[16];
+    private static int NextDerived;
+
+    // The doors a definition derived and every input Derive read to derive them.
+    private sealed record DerivedDoors(WorldFaceCatalog Catalog, IReadOnlyList<WorldPlacement> Placements, object? Destinations, object? References, string? DocumentId, Door[] Doors) {
+        public bool Reads(WorldDefinition definition) => (
+            ReferenceEquals(objA: Placements, objB: definition.Placements) &&
+            ReferenceEquals(objA: Destinations, objB: definition.Destinations) &&
+            ReferenceEquals(objA: References, objB: definition.References) &&
+            string.Equals(a: DocumentId, b: definition.DocumentId, comparisonType: StringComparison.Ordinal) &&
+            ReferenceEquals(objA: Catalog, objB: WorldFaceCatalog.For(definition: definition))
         );
     }
     /// <summary>Returns the clip a body straddling one of a world's same-world doors is drawn with, or
