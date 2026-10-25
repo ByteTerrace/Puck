@@ -202,9 +202,9 @@ placements {
 
 // Rules: an infix `when` gate, effect statements, and a decision with one scored option.
 rule "advance-round" {
+  local remainingRounds = 8 - tableState[activeRound]
   when tableState[activeRound] < 8 and not tableState[locked] == 1
   mode: Edge
-  local remainingRounds = 8 - tableState[activeRound]
   tableState[activeRound] += 1
   schedule tableState[settle] in 0.25s
   transaction {

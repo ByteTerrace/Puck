@@ -18,6 +18,7 @@ public static partial class WorldDocumentEmitter {
         DocumentScope scope,
         RuleScopeContext? parentContext = null
     ) {
+        RefuseLateLocals(statements: scopeNode.Statements, scope: scope, afterGate: scopeNode.HeaderWhen is not null);
         RefuseReservedScopedName(
             name: scopeNode.Name,
             prefix: parentContext?.Prefix,

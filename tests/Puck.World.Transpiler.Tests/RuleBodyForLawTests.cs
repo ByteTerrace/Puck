@@ -47,18 +47,18 @@ public class RuleBodyForLawTests {
         ["locals named per iteration"] = (
             Looped: """
                 rule "read" {
-                  when total == 0
                   for (cell, i) in [3, 1] {
                     local $"at{i}" = board[(cell)] ?? 7
                   }
+                  when total == 0
                   seen = at0 * 10 + at1
                 }
                 """,
             Written: """
                 rule "read" {
-                  when total == 0
                   local at0 = board[(3)] ?? 7
                   local at1 = board[(1)] ?? 7
+                  when total == 0
                   seen = at0 * 10 + at1
                 }
                 """
@@ -150,6 +150,8 @@ public class RuleBodyForLawTests {
                   step fill {
                     for i in range(0, 2) {
                       local $"was{i}" = board[(i)] ?? 0
+                    }
+                    for i in range(0, 2) {
                       board[(i)] = 4
                     }
                     seen = was0 + was1
@@ -160,8 +162,8 @@ public class RuleBodyForLawTests {
                 workflow turn {
                   step fill {
                     local was0 = board[(0)] ?? 0
-                    board[(0)] = 4
                     local was1 = board[(1)] ?? 0
+                    board[(0)] = 4
                     board[(1)] = 4
                     seen = was0 + was1
                   }

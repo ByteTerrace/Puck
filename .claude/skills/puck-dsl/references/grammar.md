@@ -202,8 +202,9 @@ once per element in place — the document carries the statements produced,
 never the loop. A `for` in a `stabilize` body stamps one member rule per
 element, and so does a template called there. A `for` inside a rule body, a
 workflow step's body, or an effect list (`if` branch, `transaction`,
-`onFailure`, `claim`, `for each`) repeats locals and effects in place, in both
-vocabularies; `local $"name{i}"` names each iteration's local, and a `when`,
+`onFailure`, `claim`, `for each`) repeats statements in place. World locals
+must precede the first gate or effect: use a local-only loop followed by an
+effect-only loop when both are needed. `local $"name{i}"` names each iteration's local, and a `when`,
 `decision` or nested `rule` inside it is **PUCK114**. `Item`/`Index` are bound
 as locals for one iteration and never leak. The sequence must be an array known
 at compile time or the `for` is **PUCK044**; a body that assigns a field

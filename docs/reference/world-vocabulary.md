@@ -65,7 +65,7 @@ kind.
 | `draw` | `rule` | statement | `rules[].effects[][transformState]` | Moves one token from the front of an ordered zone to another. |
 | `for each` | `rule` | block | `rules[].effects[][forEachPool]` | Visits every live instance in ascending slot order. |
 | `if` | `rule` | block | `rules[].effects[][if]` | A conditional effect. |
-| `local` | `rule` | statement | `rules[].locals[]` | One working value the rule computes before its effects. |
+| `local` | `rule` | statement | `rules[].locals[]` | One working value declared before the rule's gate and effects; later declarations are refused. |
 | `push` | `rule` | statement | `rules[].effects[][pushState]` | Appends a value to a history ring, overwriting the oldest slot when the ring is full. |
 | `release` | `rule` | statement | `rules[].effects[][release]` | Releases the instance named by a lexical pool binding. |
 | `remove` | `rule` | statement | `rules[].effects[][removeStateCell]` | Drops a cell from its row; a later read of that key reads zero. |
@@ -312,7 +312,7 @@ Never printed back; the printer produces the statements its expansion produced i
 ### `rule`
 
 ```puck
-rule "name" { [when Gate] [mode: …] [forEach: …] [local …] [decision { … }] <effect>* }
+rule "name" { [local …]* [when Gate] [mode: …] [forEach: …] [decision { … }] <effect>* }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
@@ -682,7 +682,7 @@ local name = <operand>
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The local's name, read bare in every operand after it. |
-| `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, once per firing, before any effect runs. |
+| `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, in declaration order before the gate and effects. |
 
 Printed back as `local` when the node carries `expression`, `name`; otherwise the explicit `locals` array. Every field of the node the description does not name prints as an ordinary property.
 

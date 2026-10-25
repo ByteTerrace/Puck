@@ -176,6 +176,7 @@ public static partial class WorldDocumentEmitter {
         DocumentScope scope,
         RuleScopeContext? parentContext
     ) {
+        RefuseLateLocals(statements: statements, scope: scope, afterGate: headerWhen is not null);
         var locals = new List<JsonObject>();
         var gate = (parentContext?.Gate?.DeepClone() as JsonObject);
         var properties = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);

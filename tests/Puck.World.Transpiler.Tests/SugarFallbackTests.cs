@@ -127,7 +127,7 @@ public class SugarFallbackTests {
         );
     }
     [InlineData("    when hp > 0 // a trailing comment on the gate line\n    hp = 1")]
-    [InlineData("    when hp > 0\n    local tmp = hp + 1 // after a local\n    hp = 1")]
+    [InlineData("    local tmp = hp + 1 // after a local\n    when hp > 0\n    hp = 1")]
     [Theory]
     public void ATrailingCommentEndsAGateOrLocalOperandRatherThanJoiningIt(string body) {
         var lowered = Recompile(puck: $"schema: \"puck.world.definition.v1\"\nrule \"r\" {{\n{body}\n}}\n");

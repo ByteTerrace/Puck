@@ -62,6 +62,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   statements read each local by its resolved name, and each is priced like a
   hand-written local. A `for` reads any compile-time array: a `let`, a
   literal, or a builtin's result.
+  World locals precede every gate and effect and evaluate in declaration
+  order. A late declaration is refused; move it before the first gate or
+  effect to make its pre-effect read explicit.
   A rule has one gate and one decision, so a `when`, `decision` or nested
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.

@@ -578,10 +578,10 @@ rules "" when settleHold == chessSettleTicks {
   }
 
   rule "tabletop-advance-turn" {
-    when verdict == 1 and move[kind] != MoveKind.Illegal
     local lostRooks = ((board(mask, lastLegal, 4, 4) & ~board(mask, board, 4, 4)) & 0x81) | ((board(mask, lastLegal, -4, -4) & ~board(mask, board, -4, -4)) & (0x81 << 56))
     local lostKings = ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 3)) | ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 59))
     local lostRights = parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 3) | (1 << 59)), 5) * 3)
+    when verdict == 1 and move[kind] != MoveKind.Illegal
     transaction {
       // A pawn move, capture or lost castling right makes every earlier position unreachable.
       historyReset = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | ((lostRights & ~castleRights) != 0)
@@ -611,7 +611,6 @@ rules "" when settleHold == chessSettleTicks {
   }
 
   rule "tabletop-history-en-passant-west" {
-    when historyPending == 1 and enPassantTarget >= 0
     local sign = 1 - 2 * turn
     local source = enPassantTarget - 8 * local(sign) + (-1)
     local victim = enPassantTarget - 8 * local(sign)
@@ -620,6 +619,7 @@ rules "" when settleHold == chessSettleTicks {
     local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
     local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~kingMask
     local kingBand = kingMask | nearFiles
+    when historyPending == 1 and enPassantTarget >= 0
     if (((source >= 0) & (source < 64) & (source / 8 == victim / 8) & (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) & (board[(source)] == local(sign)) & (board[(victim)] == -local(sign)) & (board[enPassantTarget[$value]] == 0) & (setBitCount(kingMask) == 1)) == 1 : Int) {
       transform boardCombine(left: board, operation: Copy, row: enPassantProbe)
       enPassantProbe[(source)] = 0
@@ -641,7 +641,6 @@ rules "" when settleHold == chessSettleTicks {
   }
 
   rule "tabletop-history-en-passant-east" {
-    when historyPending == 1 and enPassantTarget >= 0
     local sign = 1 - 2 * turn
     local source = enPassantTarget - 8 * local(sign) + (1)
     local victim = enPassantTarget - 8 * local(sign)
@@ -650,6 +649,7 @@ rules "" when settleHold == chessSettleTicks {
     local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
     local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~kingMask
     local kingBand = kingMask | nearFiles
+    when historyPending == 1 and enPassantTarget >= 0
     if (((source >= 0) & (source < 64) & (source / 8 == victim / 8) & (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) & (board[(source)] == local(sign)) & (board[(victim)] == -local(sign)) & (board[enPassantTarget[$value]] == 0) & (setBitCount(kingMask) == 1)) == 1 : Int) {
       transform boardCombine(left: board, operation: Copy, row: enPassantProbe)
       enPassantProbe[(source)] = 0
@@ -827,13 +827,13 @@ rule "chess-play-buttons" {
 
 // The press images: each binary is this tick's press on a rising edge, and each step is +1 or -1 on a rising edge.
 rule "chess-play-edges" {
-  mode: Level
   local pick = play[pickNow]
   local cancel = play[cancelNow]
   local ahead = play[aheadNow]
   local behind = play[behindNow]
   local rightward = play[rightNow]
   local leftward = play[leftNow]
+  mode: Level
   play[pickEdge] = pick & (play[pickDown] == 0)
   play[releaseEdge] = (pick == 0) & (play[pickDown] == 1)
   play[cancelEdge] = cancel & (play[cancelDown] == 0)
@@ -862,11 +862,11 @@ rule "chess-play-point" {
 // -column, toward the h-file (the camera's right is its forward crossed with up), and each other side turns both a
 // quarter.
 rule "chess-play-step" {
-  when play[stepAhead] != 0 or play[stepRight] != 0
-  mode: Level
   local seatSide = board(side, board, 1)
   local cursorColumn = play[cursor] % 8 + play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
   local cursorRow = play[cursor] / 8 + play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  when play[stepAhead] != 0 or play[stepRight] != 0
+  mode: Level
   play[cursor] = clamp(cursorRow, 0, 7) * 8 + clamp(cursorColumn, 0, 7)
 }
 

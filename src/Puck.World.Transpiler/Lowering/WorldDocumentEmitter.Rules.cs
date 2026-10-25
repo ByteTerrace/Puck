@@ -76,6 +76,8 @@ public static partial class WorldDocumentEmitter {
             statements: rule.Statements
         ).ToList();
 
+        RefuseLateLocals(statements: body.Select(selector: static item => item.Statement), scope: scope);
+
         foreach (var (statement, statementScope) in body) {
             if (statement is LocalStatementNode declared) {
                 _ = localNames.Add(item: DocumentLowering.ResolveLocalName(local: declared, scope: statementScope));
@@ -227,6 +229,21 @@ public static partial class WorldDocumentEmitter {
             ["name"] = DocumentLowering.ResolveLocalName(local: local, scope: scope),
             ["expression"] = DocumentExpression(text: text),
         };
+    }
+
+    private static void RefuseLateLocals(IEnumerable<StatementNode> statements, DocumentScope scope, bool afterGate = false) {
+        foreach (var statement in statements) {
+            if (statement is LocalStatementNode local && afterGate) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.InvalidValue,
+                    message: $"local '{local.Name}' after a gate or effect would read before that statement. Move the local declaration before the first gate or effect.",
+                    span: local.Span
+                );
+            }
+            afterGate |= statement is WhenStatementNode or EffectStatementNode or ExpressionStatementNode or
+                DecisionBlockNode or RuleBlockNode or RuleScopeNode or StabilizeGroupNode or WorkflowNode ||
+                statement is PropertyNode { Name: "gate" or "effects" or "decision" };
+        }
     }
 
     // The text a document holds names a reserved channel and a rule local in full. An expression that reads one is

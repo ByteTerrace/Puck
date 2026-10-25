@@ -279,8 +279,10 @@ decompiles the same way a single branch does, with no separate case anywhere. A 
 
 A compile-time `for` inside a rule or step body, or inside any effect list, is unrolled before the body lowers
 (`DocumentLowering.ExpandBody`): the rule carries the locals and effects each iteration produced, lowered under that
-iteration's bindings, so the rule compiler and the work sheet see only ordinary statements. A local declared in a
-loop takes an interpolated name (`local $"fit{t}"`) and is read by its resolved name anywhere in the rule. A
+iteration's bindings, so the rule compiler and the work sheet see only ordinary statements. Locals evaluate in
+declaration order before the gate and effects. A local after a gate or effect is refused; move the declaration
+before the first gate or effect. A local declared in a loop takes an interpolated name (`local $"fit{t}"`) and
+later statements read its resolved name. A
 `when`, a `decision` or a nested `rule` inside such a loop is PUCK114.
 
 `row[key]` (a *row reference*) is read as one span—a name plus zero or more adjacent `[...]` groups—and

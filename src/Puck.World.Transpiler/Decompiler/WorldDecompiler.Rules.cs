@@ -153,13 +153,6 @@ public static partial class WorldDecompiler {
             count: (indentLevel * 4)
         );
 
-        if (rule["gate"] is JsonObject gate) {
-            AppendGateProperty(
-                gate: gate,
-                indentLevel: indentLevel,
-                sb: sb
-            );
-        }
         if (rule["locals"] is JsonArray locals) {
             if (CanSugarLocals(locals: locals)) {
                 foreach (var l in locals) {
@@ -177,6 +170,9 @@ public static partial class WorldDecompiler {
                     $"{inner}locals{FieldSeparator(value: locals)}{FormatModelField(holder: typeof(WorldRule), indentLevel: indentLevel, key: "locals", node: locals)}"
                 );
             }
+        }
+        if (rule["gate"] is JsonObject gate) {
+            AppendGateProperty(gate: gate, indentLevel: indentLevel, sb: sb);
         }
         if (rule["mode"] is { } mode) {
             sb.AppendLine(
