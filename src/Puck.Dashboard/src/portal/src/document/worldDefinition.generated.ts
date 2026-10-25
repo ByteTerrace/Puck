@@ -12911,7 +12911,7 @@ export type WorldUpdateDefaults = {
    */
   channel?: string | null;
   /**
-   * The on-disk root staged versions and update state live under. Null = the app's own default.
+   * A portable relative subdirectory under the host's updates directory. Null uses that directory itself. An absolute install root belongs in trusted local update configuration, never in a world document.
    */
   cacheRoot?: string | null;
   /**

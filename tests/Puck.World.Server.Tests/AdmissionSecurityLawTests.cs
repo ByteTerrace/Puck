@@ -743,7 +743,8 @@ public sealed class AdmissionSecurityLawTests {
                 var admitted = await ConnectAndAdmitAsync(
                     ct: testCt,
                     host: host,
-                    identity: identity
+                    identity: identity,
+                    claimValidity: TimeSpan.FromMinutes(value: 1)
                 );
 
                 using var admittedClient = admitted.Client;

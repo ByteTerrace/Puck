@@ -364,7 +364,7 @@ public sealed partial class WorldGrants {
     //     TryAdmitRemotePeer, never recomputed here — against the CANDIDATE document's OWN admission entries,
     //     through WorldAdmissionDoor.TryMatchEntry: the SAME (domain, subject, mode) rule a fresh connection would
     //     be judged by. No match at all (the identity's entry was removed, or never existed in this candidate)
-    //     mints nothing — "an identity no longer trusted... gets the current verdict, not the boot-time one".
+    //     ends transferred embodiments; connection owners evict their own live sessions and disconnect once.
     //  2. A match's CURRENT Grants list governs, not the stored connection-time templates — narrower or wider than
     //     what was minted at connection, exactly as if this peer connected fresh right now.
     //  3. Any row that WAS successfully installed in the peer's prior authorization, but is missing from the caller's preRebuildPeerRows
@@ -423,10 +423,15 @@ public sealed partial class WorldGrants {
             ));
 
             if (stillTrusted is not { } current) {
-                Host.Population.SetPeerAdmissionInstalledGrantTemplates(
-                    bodyIndex: index,
-                    grantTemplates: []
-                );
+                if (Host.Population.PeerAuthorityTransferred(bodyIndex: index) &&
+                    Host.Population.TryCaptureTransferredEntity(index: index, peer: out var peer)) {
+                    ApplyLifecycleEvents(admitted: [], disconnected: [peer], ordered: false);
+                } else {
+                    // The socket/control-session owner still owes its one cleanup. Disconnecting here too could
+                    // park this body, let a fresh credential resume its generation, then revoke that fresh session
+                    // when the old owner's delayed cleanup arrives. Its owner rechecks the live admission policy.
+                    Host.Population.SetPeerAdmissionInstalledGrantTemplates(bodyIndex: index, grantTemplates: []);
+                }
 
                 continue;
             }

@@ -78,6 +78,64 @@ public sealed class WorldDecisionLawTests {
     ));
 
     [Fact]
+    public void DecisionLocalsPopulateBeforeTheRuleInterruptAndOptionGatesAndScores() {
+        static ExpressionProgram Local(string name) => new(Instructions: [Instruction.Operand(name: $"$local:{name}")]);
+        var rule = Rule(new WorldDecision(PeriodSeconds: 10, ScoreKind: CellKind.Int,
+            Interrupt: Gate("$local:interrupt"),
+            Options: [Option("constant", 5), new WorldDecisionOption(Name(value: "bound"), Local(name: "score"), [], Gate(row: "$local:score", value: 10))]),
+            gate: new ActionPredicate.CompareState("$local:score", ExpressionOp.Greater, 0)) with {
+            Locals = [
+                new RuleLocal(Name: Name(value: "score"), Kind: CellKind.Int, Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "score")])),
+                new RuleLocal(Name: Name(value: "interrupt"), Kind: CellKind.Int, Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "interrupt")])),
+            ],
+        };
+        using var fixture = Fixtures.FreshServer(Document(rule, Slot(name: "score", value: 1), Slot("interrupt")));
+
+        fixture.Step();
+        Assert.Equal(0, State(fixture).Selected);
+        Assert.Equal(5, State(fixture).LastScore);
+        Set(fixture: fixture, row: "score", value: 10);
+        Set(fixture: fixture, row: "interrupt", value: 1);
+        fixture.Step();
+        Assert.Equal(1, State(fixture).Selected);
+        Assert.Equal(10, State(fixture).LastScore);
+        Assert.Equal(2UL, State(fixture).Reconsiderations);
+        Assert.True(condition: State(fixture).InterruptHeld);
+    }
+    [Fact]
+    public void ADecisionScoreSelectsTheZoneNamedByItsDeclaredLocal() {
+        var tokens = new WorldStateRow(Name(value: "tokens"), CellKind.Int, Capacity: 2,
+            Cells: [new StateCell(Name(value: "a"), CellValue.Int(value: 1)), new StateCell(Name(value: "b"), CellValue.Int(value: 2))]);
+        var empty = new WorldStateRow(Name(value: "empty"), CellKind.Bool, Capacity: 2,
+            Domain: new StateDomain.KeysOf(Row: Name(value: "tokens"), Ordered: true), Cells: []);
+        var full = empty with { Name = Name(value: "full"), Cells = [new StateCell(Name(value: "a"), CellValue.Bool(value: true)), new StateCell(Name(value: "b"), CellValue.Bool(value: true))] };
+        var rule = Rule(Policy(Option("constant", 1), new WorldDecisionOption(Name(value: "zone"),
+            new ExpressionProgram(Instructions: [Instruction.Operand(name: "$reduce:count:$zones[($local:pile)]")]), []))) with {
+            Locals = [new RuleLocal(Name(value: "pile"), new ExpressionProgram(Instructions: [Instruction.Operand(name: "selected")]), CellKind.Int)],
+            Zones = ["empty", "full"],
+        };
+        using var fixture = Fixtures.FreshServer(Document(rule, tokens, empty, full, Slot(name: "selected", value: 1)));
+
+        fixture.Step();
+        Assert.Equal(1, State(fixture).Selected);
+        Assert.Equal(2, State(fixture).LastScore);
+    }
+    [Fact]
+    public void AFaultingDecisionLocalClosesEvaluationAndReportsItsBinding() {
+        var rule = Rule(Policy(Option("a", 1))) with {
+            Locals = [new RuleLocal(Name: Name(value: "quotient"), Kind: CellKind.Int,
+                Expression: new ExpressionProgram(Instructions: [Instruction.Constant(value: 1), Instruction.Operand(name: "zero"), Instruction.Of(operation: ExpressionOp.Divide)]))],
+        };
+        using var fixture = Fixtures.FreshServer(Document(rule, Slot("zero")));
+
+        fixture.Step();
+        Assert.False(condition: State(fixture).Evaluated);
+        var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
+
+        Assert.Equal(RuleEffectRefusal.Arithmetic, diagnostic.Refusal);
+        Assert.Contains("binding 'quotient'", diagnostic.Effect);
+    }
+    [Fact]
     public void HighestScoreFiltersBeforeScoringAndUsesDocumentOrderForNegativeTies() {
         using var fixture = Fixtures.FreshServer(Document(
             Rule(Policy(

@@ -64,6 +64,41 @@ public static partial class WorldDefinitionValidator {
     private static HashSet<string> ValidateAddons(IReadOnlyList<WorldAddonRow> addons, int populationCapacity, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
+        if (addons.Count > WorldAddonLimits.Addons) {
+            errors.Add(item: $"document addon count {addons.Count} exceeds the maximum of {WorldAddonLimits.Addons}.");
+            return names;
+        }
+        UInt128 totalFuel = 0;
+        var totalRequests = 0L;
+        var totalWatches = 0L;
+        // Count before touching manifest/watch elements: even an invalid document must not create an unbounded
+        // validation walk or diagnostic list. The outer pass itself has already been bounded above.
+        foreach (var addon in addons) {
+            if (addon is null) {
+                continue;
+            }
+            totalFuel += ((addon.Fuel == 0) ? WorldAddonLimits.DefaultFuel : addon.Fuel);
+            totalRequests += (addon.Requests?.Count ?? 0);
+            totalWatches += (addon.MemoryWatches?.Count ?? 0);
+        }
+        var overBudget = false;
+
+        if (totalFuel > WorldAddonLimits.FuelPerDocument) {
+            errors.Add(item: $"document addon fuel {totalFuel} exceeds the maximum of {WorldAddonLimits.FuelPerDocument} per tick.");
+            overBudget = true;
+        }
+        if (totalRequests > WorldAddonLimits.RequestsPerDocument) {
+            errors.Add(item: $"document addon requests {totalRequests} exceeds the maximum of {WorldAddonLimits.RequestsPerDocument}.");
+            overBudget = true;
+        }
+        if (totalWatches > WorldAddonLimits.MemoryWatchesPerDocument) {
+            errors.Add(item: $"document addon memory watches {totalWatches} exceeds the maximum of {WorldAddonLimits.MemoryWatchesPerDocument}.");
+            overBudget = true;
+        }
+        if (overBudget) {
+            return names;
+        }
+
         foreach (var addon in addons) {
             if (
                 (addon is null) ||
@@ -90,11 +125,8 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"addon '{addon.Name}' hash '{addon.Hash}' must match sha256/{{64 lowercase hex}}.");
             }
 
-            // WorldAddonRuntime narrows this ulong to a long FuelPerTick (0 means "use the host default", mirrored
-            // as null there); an unbounded value silently wraps negative on that cast, handing the guest an effectively
-            // infinite budget that never traps OutOfFuel and hangs the sim-tick thread. Reject it here instead.
-            if (addon.Fuel > long.MaxValue) {
-                errors.Add(item: $"addon '{addon.Name}' fuel {addon.Fuel} exceeds the maximum of {long.MaxValue}.");
+            if (addon.Fuel > WorldAddonLimits.FuelPerAddon) {
+                errors.Add(item: $"addon '{addon.Name}' fuel {addon.Fuel} exceeds the maximum of {WorldAddonLimits.FuelPerAddon}.");
             }
 
             // The manifest — what this addon ASKS for (WorldCapabilityRequest). A request is a designation only (see

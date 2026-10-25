@@ -99,13 +99,17 @@ workflow and its environment requirements.
 
 Staging rebuilds the inactive version directory from the manifest's complete
 file set, so a retry cannot inherit files omitted by a replacement manifest.
-Cached objects are still reused and rehashed. Direct stager callers hold the
+Cached objects are still reused and rehashed; a corrupt object is deleted so a
+later attempt can download it again. Direct stager callers hold the
 install lease and exclude the current version, as `UpdateService` does.
 
 `UpdateService` holds the install root's persistent `update.lock` lease across
 verification, staging and activation. Rollout exclusion and staging failure
-do not consume a sequence. Before activation it writes `install-intent.json`
-and reserves the replay mark with the full signed-manifest SHA-256 pin. An
+do not consume a sequence. Before activation it reserves the replay mark with
+the full signed-manifest SHA-256 pin, then writes `<cacheRoot>/install-intent.json`. A
+refused reservation creates no intent. A crash between reservation and intent
+consumes that sequence without authorizing recovery; a fresh signed release is
+required. An
 interrupted install resumes that exact local intent; a network response cannot
 replace it, and a different manifest at the same sequence or a newer replay
 mark/current pointer refuses recovery. Recovery rehashes active content without
@@ -119,6 +123,17 @@ closed and may require operator inspection before further updates. Protect the
 install root from untrusted local writers. Flushed atomic file replacement and
 process-interruption recovery do not establish power-loss durability across
 filesystems.
+
+`last-good` advances from `current` only while `state/health.json` is absent.
+Activation writes pending health before changing current, so successive updates
+cannot bless a version that has never started.
+The selected executable clears that marker after startup, under `update.lock`,
+only when both its version and actual executable directory match `current`.
+An old or concurrently replaced process leaves it intact. The stub refuses
+missing or corrupt state generations rather than guessing rollback compatibility.
+Document-authored `update.cacheRoot` is a relative subdirectory of the host's
+updates directory; only trusted local update configuration may choose an
+absolute install root.
 
 ## Verification
 

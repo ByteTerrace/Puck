@@ -1284,6 +1284,15 @@ public sealed partial class WorldTransferEscrow {
         if (request.Members.Count == 0) {
             return WorldTransferReservationReply.Refused(reason: "reservation carries no travelers");
         }
+        if (((m_leases.Count + m_committed.Count) + m_uncertain.Count) >= WorldTransferLimits.Transactions) {
+            return WorldTransferReservationReply.Refused(reason: $"transfer history capacity is full ({WorldTransferLimits.Transactions}); acknowledge commits or retire travelers before reserving again");
+        }
+        var additionalAdmissions = request.Members.Count(predicate: member => ((member.Mobility is { } mobility) &&
+            !m_mobilityAdmissions.ContainsKey(key: (request.SourceAuthority, mobility.Incarnation))));
+        // Each live lease holds space for every alias its commit may add. Failed and aborted leases release it.
+        if (((((long)m_mobilityAdmissions.Count) + m_mobilityLeases.Count) + additionalAdmissions) > WorldTransferLimits.MobilityAdmissions) {
+            return WorldTransferReservationReply.Refused(reason: $"transfer mobility admission capacity is full ({WorldTransferLimits.MobilityAdmissions}); retire travelers before reserving again");
+        }
 
         if (TravelerRefusal(request: request) is { } travelerRefusal) {
             return WorldTransferReservationReply.Refused(reason: travelerRefusal);
@@ -1473,8 +1482,12 @@ public sealed partial class WorldTransferEscrow {
         var remainingEngineTicks = (((UInt128)remainingSourceSteps) * sourceStepTicks);
         var destinationSteps = (((remainingEngineTicks + destinationStepTicks) - 1UL) / destinationStepTicks);
         var destinationDeadline = (((UInt128)(m_server.NextInputTick - 1UL)) + destinationSteps);
+
         if (destinationDeadline > ulong.MaxValue) {
             return "source lease deadline exceeds the destination tick range";
+        }
+        if (remainingEngineTicks > (((UInt128)WorldTransferLimits.LeaseSeconds) * FixedTickConversion.TicksPerSecond)) {
+            return $"source lease duration exceeds the maximum of {WorldTransferLimits.LeaseSeconds} seconds";
         }
         deadline = ((ulong)destinationDeadline);
         return null;
@@ -1769,7 +1782,7 @@ public sealed partial class WorldTransferEscrow {
     }
 
     public WorldTransferTableCounts Counts => new(
-        ActiveTransactions: (m_leases.Count + m_committed.Count),
+        ActiveTransactions: ((m_leases.Count + m_committed.Count) + m_uncertain.Count),
         MobilityCredentials: m_mobilityAdmissions.Count,
         MobilityLeases: m_mobilityLeases.Count
     );

@@ -1,6 +1,13 @@
 namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
+    /// <summary>Adds every state-row ordinal read by a declared set, including family members and their token
+    /// domains, using the same source walk as transform compilation.</summary>
+    /// <param name="context">The validated document's compile context.</param>
+    /// <param name="set">The declared set.</param>
+    /// <param name="reads">The list receiving read ordinals.</param>
+    public static void CollectCellSetReads(RuleCompileContext context, CellSetRow set, List<int> reads) =>
+        _ = CellSetReads(cells: 0, context: context, reads: reads, ruleName: string.Empty, set: set);
     /// <summary>Resolves an authored transform into the form the arena applies: every row, cell key, board cell,
     /// direction, pattern and admitted value addressed by ordinal rather than by name.</summary>
     /// <param name="transform">The authored transform.</param>
@@ -102,20 +109,24 @@ public static partial class RuleCompiler {
         transform: transform
     );
     private static IRuleEffect ResolveStateTransform(StateTransform transform, string ruleName, RuleCompileContext context, out ArenaTransform? resolved) {
-        var effect = ResolveStateTransformCore(transform: transform, ruleName: ruleName, context: context, resolved: out resolved);
+        var effect = ResolveStateTransformCore(context: context, resolved: out resolved, ruleName: ruleName, transform: transform);
+
         if (transform is StateTransform.Observe) { return effect; }
         var readAccesses = new List<CellAccess>();
         var writeAccesses = new List<CellAccess>();
+
         effect.CollectReads(into: readAccesses);
         effect.CollectWrites(into: writeAccesses);
-        var reads = readAccesses.Select(static access => access.RowOrdinal).Distinct().ToList();
-        var writes = writeAccesses.Select(static access => access.RowOrdinal).Distinct().ToList();
+        var reads = readAccesses.Select(selector: static access => access.RowOrdinal).Distinct().ToList();
+        var writes = writeAccesses.Select(selector: static access => access.RowOrdinal).Distinct().ToList();
+
         if (resolved is not null) {
             resolved.DisclosureReads = reads.ToArray();
             ArenaTransforms.CollectAccesses(transform: resolved, catalog: context.Catalog, binding: ArenaTransformBinding.None, reads: reads, writes: writes);
         }
-        RequireEnclosedAudience(reads: reads, writes: writes, ruleName: ruleName, context: context);
-        var disclosureCost = DisclosureCost(reads: reads, writes: writes, context: context);
+        RequireEnclosedAudience(context: context, reads: reads, ruleName: ruleName, writes: writes);
+        var disclosureCost = DisclosureCost(context: context, reads: reads, writes: writes);
+
         if (effect is TransformStateEffect scalar) { scalar.DisclosureCost = disclosureCost; }
         if (effect is VectorEffect vector) { vector.DisclosureCost = disclosureCost; }
         return effect;

@@ -14,7 +14,7 @@ public sealed class FileUpdateApplier : IUpdateApplier {
     /// <inheritdoc/>
     public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot, bool recoverInterruptedApply = false) {
         lock (m_gate) {
-            return ApplyCore(manifest: manifest, rid: rid, cacheRoot: cacheRoot, recoverInterruptedApply: recoverInterruptedApply);
+            return ApplyCore(cacheRoot: cacheRoot, manifest: manifest, recoverInterruptedApply: recoverInterruptedApply, rid: rid);
         }
     }
 
@@ -82,10 +82,12 @@ public sealed class FileUpdateApplier : IUpdateApplier {
 
         if (previousVersion is { Length: > 0 }) {
             var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
-            var lastGoodVersion = File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null;
-            if (recoverInterruptedApply && previousVersion == manifest.Version) {
+            var lastGoodVersion = (File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null);
+
+            if (recoverInterruptedApply && (previousVersion == manifest.Version)) {
                 var generationPath = Path.Combine(path1: versionDirectory, path2: "state-generation");
-                if (!File.Exists(path: generationPath) || File.ReadAllText(path: generationPath) != manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)) {
+
+                if (!File.Exists(path: generationPath) || (File.ReadAllText(path: generationPath) != manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture))) {
                     return UpdateApplyResult.Refuse(reason: "the current install's state generation does not match its pending intent");
                 }
                 return new UpdateApplyResult(Applied: true, PreviousVersion: lastGoodVersion, RefusalReason: null);
@@ -100,13 +102,17 @@ public sealed class FileUpdateApplier : IUpdateApplier {
                 return UpdateApplyResult.Refuse(reason: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
             }
 
-            AtomicFile.WriteAllText(
+            // The stub leaves this marker until the selected process reports healthy. A newer apply must
+            // preserve the last proven version while the previous install has not completed startup.
+            if (!File.Exists(path: Path.Combine(path1: root, path2: "state", path3: "health.json"))) {
+                AtomicFile.WriteAllText(
                 path: Path.Combine(
                     path1: root,
                     path2: "last-good"
                 ),
                 contents: previousVersion
-            );
+                );
+            }
         }
 
         AtomicFile.WriteAllText(
@@ -114,6 +120,8 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             contents: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
         );
 
+        // Publish pending health first: two updates before a stub launch must not promote an unstarted version.
+        HealthGateFile.MarkPending(cacheRoot: root, version: manifest.Version);
         AtomicFile.WriteAllText(
             path: currentPath,
             contents: manifest.Version

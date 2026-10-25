@@ -1108,11 +1108,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: "update.channel must be non-whitespace when authored.");
         }
 
-        if (
-            (update.CacheRoot is not null) &&
-            string.IsNullOrWhiteSpace(value: update.CacheRoot)
-        ) {
-            errors.Add(item: "update.cacheRoot must be non-whitespace when authored.");
+        if (!WorldUpdateDefaults.IsConfinedCachePath(path: update.CacheRoot)) {
+            errors.Add(item: "update.cacheRoot must be a portable relative subdirectory without parent or dot segments; absolute install roots belong in trusted local update configuration.");
         }
 
         if (

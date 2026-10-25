@@ -15,6 +15,9 @@ namespace Puck.Scripting;
 public sealed class WasmModuleLoader {
     private const int DefaultMaxCachedModules = 64;
 
+    private static readonly SemaphoreSlim CompilationSlots = new(initialCount: AddonModuleLimits.ConcurrentCompilations);
+
+    private readonly Lock m_cacheGate = new();
     private readonly IAssetSource m_assetSource;
     private readonly ScriptingEngine m_engine;
     private readonly ContentAddressedLruCache<ContentPin, CompiledModule> m_moduleCache;
@@ -79,6 +82,7 @@ public sealed class WasmModuleLoader {
 
         if (declarations.Imports.Count != 0) {
             var import = declarations.Imports[0];
+
             throw new InvalidDataException(message: $"The addon module {name} declares import '{import.Module}::{import.Name}'; addons may import nothing.");
         }
 
@@ -92,8 +96,8 @@ public sealed class WasmModuleLoader {
                     $"MemoryLimit — memory declares {memory.MinimumPages} pages of 2^{memory.PageSizeLog2} bytes, past the {AddonModuleLimits.MemoryBytes}-byte ceiling");
             }
         }
-        if (declarations.Tables.Count > AddonModuleLimits.Tables ||
-            declarations.Tables.Any(table => table.MinimumElements > AddonModuleLimits.TableElements)) {
+        if ((declarations.Tables.Count > AddonModuleLimits.Tables) ||
+            declarations.Tables.Any(predicate: table => (table.MinimumElements > AddonModuleLimits.TableElements))) {
             throw new InvalidDataException(message: $"The addon module {name} exceeds the table limit: at most {AddonModuleLimits.Tables} table of {AddonModuleLimits.TableElements} elements, exported or not.");
         }
 
@@ -115,10 +119,22 @@ public sealed class WasmModuleLoader {
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty, or whitespace.</exception>
     /// <exception cref="FileNotFoundException">No module exists at <paramref name="path"/>.</exception>
     /// <exception cref="InvalidDataException">The module is empty, or its binary is malformed in a section the host reads
-    /// before compiling (its imports, memories, tables or exports), or exceeds a source/binary/table limit.</exception>
+    /// before compiling (its imports, memories, tables or exports), exceeds a source/binary/table limit, or the
+    /// process-wide concurrent module-load capacity is occupied. A capacity refusal may be retried.</exception>
     /// <exception cref="AddonModuleLoadException">The source hash or declared memory resources are refused before compilation.</exception>
     /// <exception cref="Wasmtime.WasmtimeException">The bytes are not valid wasm/WAT.</exception>
     public ScriptingModuleInfo Load(string path, string? expectedHash = null) {
+        if (!CompilationSlots.Wait(millisecondsTimeout: 0)) {
+            throw new InvalidDataException(message: $"Addon compilation capacity is full ({AddonModuleLimits.ConcurrentCompilations} concurrent loads); retry after a load completes.");
+        }
+        try {
+            return LoadAdmitted(expectedHash: expectedHash, path: path);
+        } finally {
+            CompilationSlots.Release();
+        }
+    }
+
+    private ScriptingModuleInfo LoadAdmitted(string path, string? expectedHash) {
         if (string.IsNullOrWhiteSpace(value: path)) {
             throw new ArgumentException(
                 message: "Addon module path must be provided.",
@@ -135,7 +151,7 @@ public sealed class WasmModuleLoader {
             );
         }
 
-        var content = m_assetSource.Read(path: fullPath, maximumBytes: AddonModuleLimits.SourceBytes);
+        var content = m_assetSource.Read(maximumBytes: AddonModuleLimits.SourceBytes, path: fullPath);
         var byteLength = content.Length;
 
         // Also check the return value, so an incorrect custom source cannot pass oversized bytes to native code.
@@ -149,19 +165,23 @@ public sealed class WasmModuleLoader {
 
         var contentHash = ContentPin.Compute(content: content.Span);
 
-        if (expectedHash is not null && !string.Equals(contentHash.ToString(), expectedHash, StringComparison.Ordinal)) {
-            throw new AddonModuleLoadException(AddonFaultKind.HashMismatch, contentHash,
-                $"HashMismatch — content {contentHash} does not match the declared moduleHash pin {expectedHash}");
+        if ((expectedHash is not null) && !string.Equals(a: contentHash.ToString(), b: expectedHash, comparisonType: StringComparison.Ordinal)) {
+            throw new AddonModuleLoadException(hash: contentHash, kind: AddonFaultKind.HashMismatch,
+                message: $"HashMismatch — content {contentHash} does not match the declared moduleHash pin {expectedHash}");
         }
         var moduleName = Path.GetFileNameWithoutExtension(path: fullPath);
-        var compiled = m_moduleCache.GetOrAdd(
-            hash: contentHash,
-            valueFactory: () => Compile(
-                content: content,
-                name: moduleName,
-                hash: contentHash
-            )
-        );
+        CompiledModule compiled;
+
+        lock (m_cacheGate) {
+            compiled = m_moduleCache.GetOrAdd(
+                hash: contentHash,
+                valueFactory: () => Compile(
+                    content: content,
+                    hash: contentHash,
+                    name: moduleName
+                )
+            );
+        }
 
         return new ScriptingModuleInfo(
             ByteLength: byteLength,

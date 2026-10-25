@@ -9,33 +9,35 @@ namespace Puck.Launcher.Tests.Release;
 public sealed class FileUpdateApplierTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void Apply_RefusesCaseAliasOfAnActiveDirectory(bool lastGood) {
         var content = "verified bytes"u8.ToArray();
         var file = new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+
         StageFile(version: "1.0.1-alpha", relativePath: file.Path, content: content);
-        File.WriteAllText(path: Path.Combine(m_root.RootPath, "current"), contents: lastGood ? "1.0.0" : "1.0.1-Alpha");
+        File.WriteAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current"), contents: (lastGood ? "1.0.0" : "1.0.1-Alpha"));
         if (lastGood) {
-            File.WriteAllText(path: Path.Combine(m_root.RootPath, "last-good"), contents: "1.0.1-Alpha");
+            File.WriteAllText(path: Path.Combine(path1: m_root.RootPath, path2: "last-good"), contents: "1.0.1-Alpha");
         }
-        var result = new FileUpdateApplier().Apply(manifest: ManifestFor(version: "1.0.1-alpha", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath);
+        var result = new FileUpdateApplier().Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.1-alpha"), rid: "win-x64", cacheRoot: m_root.RootPath);
+
         Assert.False(condition: result.Applied);
         Assert.Contains(expectedSubstring: "collides", actualString: result.RefusalReason!);
     }
-
     [Fact]
     public void Apply_RefusesDowngradeAndReapplyAgainstTheCurrentPointer() {
         var content = "verified bytes"u8.ToArray();
         var file = new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+
         StageFile(version: "1.0.2", relativePath: file.Path, content: content);
         StageFile(version: "1.0.3", relativePath: file.Path, content: content);
         var applier = new FileUpdateApplier();
 
-        Assert.True(condition: applier.Apply(manifest: ManifestFor(version: "1.0.3", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
-        Assert.False(condition: applier.Apply(manifest: ManifestFor(version: "1.0.2", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
-        Assert.False(condition: applier.Apply(manifest: ManifestFor(version: "1.0.3", stateGeneration: 1, file: file), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
+        Assert.True(condition: applier.Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.3"), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
+        Assert.False(condition: applier.Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.2"), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
+        Assert.False(condition: applier.Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.3"), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
         Assert.Equal(expected: "1.0.3", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current")));
         Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")));
     }
@@ -177,6 +179,8 @@ public sealed class FileUpdateApplierTests : IDisposable {
             condition: first.Applied,
             userMessage: first.RefusalReason
         );
+        HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, version: "1.0.0",
+            runningDirectory: Path.Combine(path1: m_root.RootPath, path2: "versions", path3: "1.0.0"));
 
         var second = applier.Apply(
             cacheRoot: m_root.RootPath,
