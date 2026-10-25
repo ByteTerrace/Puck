@@ -1,6 +1,6 @@
-// Optional development route runner, body 43. One traversal[run] write runs a pass; all goals are authored here.
+// Optional development route runner, body 43. The sealed studio and gallery are independent passes.
 // Route coordinates are WORLD coordinates. The studio course is offset (48, 0, -48).
-let traversalGoals = [
+let traversalStudioGoals = [
   { x: 60.0, y: 0.01, z: -30.0 } // approach
   { x: 60.0, y: 0.16, z: -34.5 } // 15 cm step
   { x: 60.0, y: 0.01, z: -37.0 }
@@ -16,8 +16,9 @@ let traversalGoals = [
   { x: 54.0, y: 0.01, z: -48.0 }
   { x: 48.0, y: 0.31, z: -48.0 } // round studio dais
   { x: 48.0, y: 0.01, z: -30.0 }
-  { x: 48.0, y: 0.01, z: -23.0 }
-  { x: 20.0, y: 0.05, z: 10.0 }
+]
+// The host places the idle stand-in at this pass's first goal before selecting start=15, count=23.
+let traversalGalleryGoals = [
   { x: 11.2, y: 0.05, z: 32.5 } // gallery stairwell approach
   { x: 11.2, y: 2.3, z: 38.5 } // flight A and half landing
   { x: 13.2, y: 2.3, z: 38.5 } // cross landing around divider
@@ -27,13 +28,14 @@ let traversalGoals = [
   { x: 15.9, y: 0.05, z: 38.05 } // ride down
   { x: 15.9, y: 0.05, z: 34.0 } // leave car
 ]
+let traversalGoals = concat(traversalStudioGoals, traversalGalleryGoals)
 
 state {
   world {
     table traversal {
       run = 0
       start = 0
-      count = length(traversalGoals)
+      count = length(traversalStudioGoals)
       timeout = 600
       tolerance = 32768 // raw Q16: half a metre
       waypoint = 0

@@ -213,13 +213,14 @@
         (global.set $liftStage (i32.const 0))
         (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49324)) (i64.const 22) (i64.const 0)))))
       (if (i32.and (i32.eq (global.get $poseParts) (i32.const 15)) (i32.eq (global.get $kinParts) (i32.const 3))) (then
-        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 21)) (i32.eqz (global.get $liftStage))) (then
+        ;; Gallery route entries: 19 calls level one, 20 boards, 21 rides down.
+        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 19)) (i32.eqz (global.get $liftStage))) (then
           (call $beginPayload)
         (call $puts (i32.const 49356)) (call $puts (i32.const 49347))
         (call $puts (i32.const 49381))
         (call $putInt (i64.const 1)) (call $put (i32.const 125))
         (call $mutate (i32.const 2) (i64.const 47)) (global.set $liftStage (i32.const 1))))
-        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 23)) (i32.eq (global.get $liftStage) (i32.const 1))) (then
+        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 21)) (i32.eq (global.get $liftStage) (i32.const 1))) (then
           (call $beginPayload)
         (call $puts (i32.const 49356)) (call $puts (i32.const 49347))
         (call $puts (i32.const 49381))
@@ -270,7 +271,7 @@
             (global.set $waypoint (i64.add (global.get $waypoint) (i64.const 1))) (global.set $age (i64.const 0)))
           (else
             ;; Wait on the landing until the authored car state reaches level one (72 sixteenths).
-            (if (i32.or (i64.ne (global.get $waypoint) (i64.const 22)) (i64.eq (i64.load (i32.const 17448)) (i64.const 72))) (then
+            (if (i32.or (i64.ne (global.get $waypoint) (i64.const 20)) (i64.eq (i64.load (i32.const 17448)) (i64.const 72))) (then
               (call $act (i32.const 43) (i32.const 1) (call $clamp (local.get $dx)))
               (call $act (i32.const 43) (i32.const 0) (call $clamp (i64.sub (i64.const 0) (local.get $dz))))))))))
         (call $beginPayload)
