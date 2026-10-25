@@ -357,7 +357,12 @@ laws exercise that boundary.
   move against one another later keep the mesh of that pose until they settle
   and the group bakes again (the settle rebake above). A geometry whose bake
   found no surface is held as empty (`SdfMeshLibrary.StoreEmpty`), so a group
-  of it at another selector finishes at once instead of baking again.
+  of it at another selector finishes at once instead of baking again. A dynamic
+  group whose geometry the library lacks but whose form it holds (a body
+  crossing into another world mid-stride, or wearing a creation another body
+  wears) takes that form's latest skinned mesh (`SdfMeshLibrary.TryTakeForm`)
+  and watches its members against the poses the mesh's skin records
+  (`SdfMesh.Members`), so it bakes only once it settles away from them.
 - **A material id shift renumbers every later mesh.** A group whose material
   ids moved takes its mesh renumbered (`SdfMeshLibrary.TryTake`), a new
   `SdfMesh` the mesh region lands again word for word, 2 MB a frame, with its
