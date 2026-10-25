@@ -60,7 +60,7 @@ public static partial class WorldDefinitionFileSource {
     // return, so the next reader of the same path meets an image recorded together with the chain it was composed
     // from. A composition over a source whose names are not files beside their referrers is never held: nothing
     // could prove its image still stands.
-    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach, IReadOnlyList<CompileInput>? inputs) {
+    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach, IReadOnlyList<CompileInput>? inputs, WorldDocumentOrigins? origins) {
         if (!source.ResolvesFiles) {
             return;
         }
@@ -84,7 +84,7 @@ public static partial class WorldDefinitionFileSource {
             ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
             Reach: reach,
             Inputs: inputs
-        );
+        ) { Origins = origins?.Snapshot(node: composed) };
 
         ComposedDocuments[key] = image;
         if (inputs is not null) { source.Compositions?.WriteComposition(image: image, key: key); }

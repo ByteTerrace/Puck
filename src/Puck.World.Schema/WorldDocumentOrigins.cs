@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json.Nodes;
 
 namespace Puck.World;
@@ -9,7 +10,7 @@ namespace Puck.World;
 public readonly record struct WorldDocumentValueOrigin(string DocumentPath, string JsonPointer, string Json);
 /// <summary>Opt-in scalar provenance for one composition. The existing merge carries origins alongside the values
 /// it retains, so removed or overridden values cannot become effective origins. Nothing is serialized into the world.
-/// Compositions requesting origins bypass the unannotated composed-image cache; ordinary loads keep that cache.</summary>
+/// Composed images retain effective scalar origins in memory and attach them to each reader's fresh tree.</summary>
 public sealed class WorldDocumentOrigins {
     private readonly Dictionary<JsonNode, WorldDocumentValueOrigin> m_values = new(comparer: ReferenceEqualityComparer.Instance);
 
@@ -22,19 +23,40 @@ public sealed class WorldDocumentOrigins {
         return ((value is not null) && m_values.TryGetValue(key: value, value: out origin));
     }
 
-    internal void Capture(JsonNode? node, string documentPath, string pointer = "") {
+    internal IReadOnlyDictionary<string, WorldDocumentValueOrigin> Snapshot(JsonNode node) {
+        var snapshot = new Dictionary<string, WorldDocumentValueOrigin>(comparer: StringComparer.Ordinal);
+
+        Walk(node: node, pointer: "", visit: (value, pointer) => {
+            if (m_values.TryGetValue(key: value, value: out var origin)) {
+                snapshot.Add(key: pointer, value: origin);
+            }
+        });
+        return snapshot.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+    }
+    internal void Restore(JsonNode node, IReadOnlyDictionary<string, WorldDocumentValueOrigin> snapshot) =>
+        Walk(node: node, pointer: "", visit: (value, pointer) => {
+            if (snapshot.TryGetValue(key: pointer, value: out var origin)) {
+                m_values[value] = origin;
+            }
+        });
+
+    private static void Walk(JsonNode? node, string pointer, Action<JsonValue, string> visit) {
         if (node is JsonValue value) {
-            m_values[value] = new WorldDocumentValueOrigin(DocumentPath: documentPath, JsonPointer: pointer, Json: value.ToJsonString());
+            visit(value, pointer);
         } else if (node is JsonObject obj) {
             foreach (var (name, child) in obj) {
-                Capture(node: child, documentPath: documentPath, pointer: $"{pointer}/{name.Replace(comparisonType: StringComparison.Ordinal, newValue: "~0", oldValue: "~").Replace(comparisonType: StringComparison.Ordinal, newValue: "~1", oldValue: "/")}");
+                Walk(node: child, pointer: $"{pointer}/{name.Replace(comparisonType: StringComparison.Ordinal, newValue: "~0", oldValue: "~").Replace(comparisonType: StringComparison.Ordinal, newValue: "~1", oldValue: "/")}", visit: visit);
             }
         } else if (node is JsonArray array) {
             for (var index = 0; (index < array.Count); index++) {
-                Capture(node: array[index], documentPath: documentPath, pointer: $"{pointer}/{index}");
+                Walk(node: array[index], pointer: $"{pointer}/{index}", visit: visit);
             }
         }
     }
+
+    internal void Capture(JsonNode? node, string documentPath, string pointer = "") =>
+        Walk(node: node, pointer: pointer, visit: (value, path) =>
+            m_values[value] = new WorldDocumentValueOrigin(DocumentPath: documentPath, JsonPointer: path, Json: value.ToJsonString()));
     internal static JsonNode? Clone(JsonNode? node, WorldDocumentOrigins? origins) {
         var clone = node?.DeepClone();
 

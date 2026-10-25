@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Shaders;
 using Xunit;
 
@@ -11,15 +12,6 @@ namespace Puck.SdfVm.Tests;
 /// views alone, and the environment map its radiance readers), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
-    // The pass block's bytes: the extent and the world values, the view, the levers, the light count, the view's light mask,
-    // exposure and air light, the shadow slots, the curvature shading, temporal history, indirect controls, the
-    // light-camera flag, twelve cascade rows, shadow parameters and the irradiance volume, 16-aligned. The bake's lattice
-    // rows are its own block's (BakeBlockBytes).
-    private const uint PassBlockBytes = 944;
-    // The bake's pass block's bytes: the extent, the instance-mask width, the lattice count, 64 lattice rows and the two
-    // work-counter rows, 16-aligned.
-    private const uint BakeBlockBytes = 1056;
-
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.
     // The glass shading pass lights its highlights from the lights table, reflects the environment map and reads the
@@ -34,14 +26,46 @@ public sealed class SdfPassBindingLawTests {
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>
         layout.Groups.Single(predicate: candidate => (candidate.Group == group));
+    // The 16-aligned byte length of a pass block holding the extent and the package's pass-block values in ordinal name
+    // order, with each member aligned by the interface layout rule.
+    private static uint PassBlockBytes(IReadOnlyList<ShaderInterfaceMember> values) {
+        const uint RowBytes = 16;
+        var cursor = ShaderValueType.Uint2.SizeBytes();
+
+        foreach (var member in values.OrderBy(comparer: StringComparer.Ordinal, keySelector: static member => member.Name)) {
+            var type = member.Type!.Value;
+            var length = (member.Length ?? 0u);
+            var alignment = ((length != 0u)
+                ? RowBytes
+                : type.ComponentCount() switch {
+                    1 => 4u,
+                    2 => 8u,
+                    _ => RowBytes,
+                });
+            var offset = cursor.AlignUp(alignment: alignment);
+
+            cursor = (offset + ((length != 0u)
+                ? (length * RowBytes)
+                : type.SizeBytes()));
+        }
+
+        return cursor.AlignUp(alignment: RowBytes);
+    }
 
     [Fact]
     public void ThePassBlockIsTheGeneratedBlockAndCarriesNoLightOrSkyTable() {
         var pass = Group(group: ShaderInterfaceGroup.Pass, layout: SdfWorldInterfaces.WorldLayout);
+        var passBlockBytes = PassBlockBytes(values: SdfWorldPackage.Values);
         var tables = SdfKernelInterfaces.LightAndSkyTables.Select(selector: static member => member.Name).ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Equal(expected: PassBlockBytes, actual: pass.BlockSizeBytes);
-        Assert.Equal(expected: ((int)PassBlockBytes), actual: SdfFrameBlock.SizeBytes);
+        Assert.Equal(expected: passBlockBytes, actual: pass.BlockSizeBytes);
+        Assert.Equal(expected: ((int)passBlockBytes), actual: SdfFrameBlock.SizeBytes);
+        Assert.Equal(
+            actual: pass.BlockMembers
+                .Where(predicate: static member => !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))
+                .Select(selector: static member => member.Name),
+            expected: [ShaderFrameInterface.Extent, .. SdfWorldPackage.Values.Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal)]
+        );
         Assert.DoesNotContain(collection: pass.BlockMembers, filter: member => tables.Contains(item: member.Name));
         // The tables are World-group records, written once a frame into regions, never a pass's constant data.
         Assert.All(
@@ -55,9 +79,10 @@ public sealed class SdfPassBindingLawTests {
     [Fact]
     public void TheBakePassBlockHoldsTheBatchAlone() {
         var pass = Group(group: ShaderInterfaceGroup.Pass, layout: SdfWorldInterfaces.MeshBakeLayout);
+        var bakeBlockBytes = PassBlockBytes(values: SdfWorldPackage.BakeValues);
 
-        Assert.Equal(expected: BakeBlockBytes, actual: pass.BlockSizeBytes);
-        Assert.Equal(expected: ((int)BakeBlockBytes), actual: SdfFrameBlock.BakeSizeBytes);
+        Assert.Equal(expected: bakeBlockBytes, actual: pass.BlockSizeBytes);
+        Assert.Equal(expected: ((int)bakeBlockBytes), actual: SdfFrameBlock.BakeSizeBytes);
         Assert.Equal(
             actual: pass.BlockMembers.Select(selector: static member => member.Name),
             expected: [ShaderFrameInterface.Extent, SdfWorldPackage.InstanceMaskWordCount, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshBakeLattices, ShaderWorkCounters.Row, ShaderWorkCounters.DetailRow]

@@ -29,12 +29,21 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
 
         var count = draws.Count;
 
+        if (clips.Count == 0) {
+            return;
+        }
+
         for (var index = 0; (index < count); index++) {
             var draw = draws[index];
 
-            foreach (var clip in clips) {
+            if (draw.FrameSlot is not { } slot) {
+                continue;
+            }
+
+            for (var clipIndex = 0; (clipIndex < clips.Count); clipIndex++) {
+                var clip = clips[clipIndex];
+
                 if (
-                    (draw.FrameSlot is not { } slot) ||
                     (slot < clip.FirstSlot) ||
                     (slot >= (clip.FirstSlot + clip.SlotCount))
                 ) {

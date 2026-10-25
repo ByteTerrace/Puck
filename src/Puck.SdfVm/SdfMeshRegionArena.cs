@@ -6,11 +6,16 @@ namespace Puck.SdfVm;
 /// was given when a draw list first named it. A mesh keeps that place for as long as the arena keeps it, so a list that
 /// adds a mesh owes only the draw records and the new mesh's words, and a list that drops one leaves the mesh where it
 /// lies: a list that names it again, as when a body that left the world returns, owes nothing for it.
+/// <para>A list holding more draws than the reserve doubles it, and only the meshes lying in the words the reserve takes
+/// move: each one the list names is placed again at the arena's end (<see cref="Moved"/>), and the rest are forgotten.
+/// A body straddling a door draws twice, so a list can outgrow the reserve wherever a body stands; growing it once
+/// moves a mesh or two, never every mesh the region holds.</para>
 /// <para>A plan relocates every mesh a list names, packing the arena from the start in the list's order and forgetting
-/// every mesh the list does not name, only when the list holds more draws than the reserve, which then doubles, or when
-/// the arena's words outside the named meshes exceed both the named meshes' words and <see cref="RetainedSlackWords"/>,
-/// or keeping those words would append past <see cref="SdfWorldTables.MostMeshRegionBytes"/>.
-/// The plan states what it owes: <see cref="Relocated"/>, or the meshes it placed (<see cref="Placed"/>).</para>
+/// every mesh the list does not name, only on the first plan, or when the arena's words outside the named meshes exceed
+/// both the named meshes' words and <see cref="RetainedSlackWords"/>, or keeping those words would append past
+/// <see cref="SdfWorldTables.MostMeshRegionBytes"/>.
+/// The plan states what it owes: <see cref="Relocated"/>, or the meshes it placed (<see cref="Placed"/>), of which the
+/// <see cref="Moved"/> ones held words a draw read until this plan.</para>
 /// </summary>
 public sealed class SdfMeshRegionArena {
     /// <summary>The fewest draw records the region reserves.</summary>
@@ -23,6 +28,8 @@ public sealed class SdfMeshRegionArena {
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly HashSet<SdfMesh> m_named = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMesh> m_placed = [];
+    private readonly HashSet<SdfMesh> m_moved = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly List<SdfMesh> m_reserved = [];
     private readonly int m_retainedSlackWords;
     private int m_drawCapacity;
     private int m_end;
@@ -47,6 +54,10 @@ public sealed class SdfMeshRegionArena {
     /// <summary>Gets the meshes the latest plan placed, whose words it owes; every placed mesh when it
     /// <see cref="Relocated"/>.</summary>
     public IReadOnlyList<SdfMesh> Placed => m_placed;
+    /// <summary>Gets the meshes among <see cref="Placed"/> that the latest plan moved out of the words a grown reserve
+    /// took: the region drew them from their old words until this plan, so it writes them before the draws read them
+    /// again rather than letting them land over later frames.</summary>
+    public IReadOnlySet<SdfMesh> Moved => m_moved;
     /// <summary>Gets whether the latest plan moved every mesh, so the region owes every word.</summary>
     public bool Relocated { get; private set; }
 
@@ -65,21 +76,28 @@ public sealed class SdfMeshRegionArena {
 
         m_named.Clear();
         m_placed.Clear();
+        m_moved.Clear();
 
         var namedWords = 0L;
-        var placedNamedWords = 0L;
 
         foreach (var draw in draws) {
-            if (!m_named.Add(item: draw.Mesh)) {
-                continue;
+            if (m_named.Add(item: draw.Mesh)) {
+                namedWords += SdfMeshRegion.WordsOf(mesh: draw.Mesh);
             }
+        }
 
-            var words = SdfMeshRegion.WordsOf(mesh: draw.Mesh);
+        // A first plan has no reserve to grow, and relocates.
+        var grown = ((m_drawCapacity > 0) && (draws.Count > m_drawCapacity));
 
-            namedWords += words;
+        if (grown) {
+            GrowReserve(drawCount: draws.Count);
+        }
 
-            if (m_placements.ContainsKey(key: draw.Mesh)) {
-                placedNamedWords += words;
+        var placedNamedWords = 0L;
+
+        foreach (var mesh in m_named) {
+            if (m_placements.ContainsKey(key: mesh)) {
+                placedNamedWords += SdfMeshRegion.WordsOf(mesh: mesh);
             }
         }
 
@@ -87,15 +105,19 @@ public sealed class SdfMeshRegionArena {
         var unnamed = ((m_end - (((long)m_drawCapacity) * SdfMeshRecord.DrawWords)) - placedNamedWords);
         var appendedWords = (m_end + (namedWords - placedNamedWords));
         var relocate = (
-            (draws.Count > m_drawCapacity) ||
+            ((m_drawCapacity == 0) && (draws.Count > 0)) ||
             ((unnamed > namedWords) && (unnamed > m_retainedSlackWords)) ||
             ((unnamed > 0) && (((ulong)appendedWords) > (SdfWorldTables.MostMeshRegionBytes / sizeof(uint))))
         );
 
         if (relocate) {
-            m_drawCapacity = Math.Min(val1: SdfMeshRegion.MaxDraws, val2: Math.Max(val1: draws.Count, val2: Math.Max(val1: MinimumDrawCapacity, val2: (2 * m_drawCapacity))));
+            if (!grown) {
+                m_drawCapacity = GrownCapacity(drawCount: draws.Count);
+            }
+
             m_end = checked(m_drawCapacity * SdfMeshRecord.DrawWords);
             m_placements.Clear();
+            m_moved.Clear();
         }
 
         foreach (var draw in draws) {
@@ -114,5 +136,34 @@ public sealed class SdfMeshRegionArena {
         }
 
         Relocated = relocate;
+    }
+    // The reserve a list of drawCount draws grows it to: double, at least the list and MinimumDrawCapacity, at most
+    // SdfMeshRegion.MaxDraws.
+    private int GrownCapacity(int drawCount) => Math.Min(
+        val1: SdfMeshRegion.MaxDraws,
+        val2: Math.Max(val1: drawCount, val2: Math.Max(val1: MinimumDrawCapacity, val2: (2 * m_drawCapacity)))
+    );
+    // Grows the reserve for a list of drawCount draws: every mesh whose words begin inside the grown reserve leaves its
+    // placement, a named one to be placed again at the arena's end (Moved), and the arena ends no earlier than the reserve.
+    private void GrowReserve(int drawCount) {
+        m_drawCapacity = GrownCapacity(drawCount: drawCount);
+
+        var reserveEnd = checked(m_drawCapacity * SdfMeshRecord.DrawWords);
+
+        m_reserved.Clear();
+        foreach (var (mesh, placement) in m_placements) {
+            if (placement.VertexWord < reserveEnd) {
+                m_reserved.Add(item: mesh);
+            }
+        }
+        foreach (var mesh in m_reserved) {
+            _ = m_placements.Remove(key: mesh);
+
+            if (m_named.Contains(item: mesh)) {
+                _ = m_moved.Add(item: mesh);
+            }
+        }
+        m_reserved.Clear();
+        m_end = Math.Max(val1: m_end, val2: reserveEnd);
     }
 }

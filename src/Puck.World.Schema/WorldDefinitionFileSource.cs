@@ -139,12 +139,13 @@ public static partial class WorldDefinitionFileSource {
         // caller that wants this document's own pre-own-body layer, which an image does not carry; its children
         // are still served, so that caller pays for one merge rather than a whole graph.
         if (
-            serveHeldImage && (origins is null) &&
+            serveHeldImage &&
             TryServeComposedImage(
             ancestors: ancestors,
             bytes: bytes,
             catalogFingerprint: catalogFingerprint,
             composed: out var held,
+            origins: origins,
             reach: out var heldReach,
             resolvedPath: resolvedPath,
             source: source,
@@ -194,6 +195,7 @@ public static partial class WorldDefinitionFileSource {
             reason = string.Empty;
             WorldBootWork.Count(kind: WorldBootWork.Compositions);
             HoldComposedImage(
+                origins: origins,
                 inputs: (recordsInputs ? reads.Inputs : null),
                 catalogFingerprint: catalogFingerprint,
                 composed: composed,
@@ -475,6 +477,7 @@ public static partial class WorldDefinitionFileSource {
         reason = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Compositions);
         HoldComposedImage(
+            origins: origins,
             inputs: (recordsInputs ? reads.Inputs : null),
             catalogFingerprint: catalogFingerprint,
             composed: composed!,
@@ -902,7 +905,7 @@ public static partial class WorldDefinitionFileSource {
     // stay usable for the next reader. Only a directory composition is answered, matching what HoldComposedImage
     // records: every other source names its documents in a space of its own (an in-memory pair calls them "host"
     // and "fragment"), and nothing else may resolve one of those names onto a file image.
-    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach) {
+    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, WorldDocumentOrigins? origins) {
         composed = null;
         touched = [];
         touchedPaths = [];
@@ -923,6 +926,7 @@ public static partial class WorldDefinitionFileSource {
         }
 
         if (
+            ((origins is not null) && (image.Origins is null)) ||
             ((ancestors.Count + image.Reach) >= WorldDocumentBasis.MaxChainDepth) ||
             !ImageStillStands(
             image: image,
@@ -959,6 +963,9 @@ public static partial class WorldDefinitionFileSource {
             touchedPaths.Add(item: link.Path);
         }
 
+        if ((origins is not null) && (image.Origins is { } snapshot)) {
+            origins.Restore(node: tree, snapshot: snapshot);
+        }
         composed = tree;
         reach = image.Reach;
         WorldBootWork.Count(kind: WorldBootWork.CompositionsShared);

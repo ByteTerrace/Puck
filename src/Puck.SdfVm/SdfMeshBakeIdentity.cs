@@ -16,12 +16,14 @@ public sealed class SdfMeshBakeIdentity {
     /// a report prints it: its parts are unknown, so a miss under it names none.</summary>
     /// <param name="value">The identity's value.</param>
     public SdfMeshBakeIdentity(UInt128 value) {
+        EntryVersion = string.Empty;
         Value = value;
         Members = NoMembers;
     }
     private SdfMeshBakeIdentity(SdfMeshBakeClosure code, UInt128 maskKernel, UInt128 bakeKernel) {
         BakeKernel = bakeKernel;
         Code = code.Hash;
+        EntryVersion = code.EntryVersion;
         MaskKernel = maskKernel;
         Members = code.Members;
         Value = SdfMeshStore.BuildIdentityOf(bakeKernel: bakeKernel, code: code.Hash, maskKernel: maskKernel);
@@ -32,6 +34,9 @@ public sealed class SdfMeshBakeIdentity {
     public UInt128 Value { get; }
     /// <summary>Gets whether the identity carries its parts, or its value alone.</summary>
     public bool HasParts { get; }
+    /// <summary>Gets the store's entry format version (<see cref="SdfMeshStore.EntryVersion"/>), or empty for a value
+    /// alone.</summary>
+    public string EntryVersion { get; }
     /// <summary>Gets the code identity (<see cref="SdfMeshBakeClosure.Hash"/>), or zero for a value alone.</summary>
     public UInt128 Code { get; }
     /// <summary>Gets the hash of the mask kernel's bytecode, or zero for a value alone.</summary>
