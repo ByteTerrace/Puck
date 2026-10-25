@@ -1309,6 +1309,7 @@ public sealed partial class WorldDocument {
                     // A redeclaration that keeps the catalog moves this row alone; any other one seeds every row.
                     if (!TryOpenComposeArena(
                         arena: out var arena,
+                        mark: out var mark,
                         definition: declared,
                         reason: out reason,
                         row: (ReferenceEquals(objA: declared.StateCatalog, objB: current.StateCatalog)
@@ -1320,8 +1321,6 @@ public sealed partial class WorldDocument {
 
                         return false;
                     }
-
-                    var mark = arena.BeginScope();
 
                     try {
                         var declaredOrdinal = -1;
@@ -1347,7 +1346,7 @@ public sealed partial class WorldDocument {
 
                         return true;
                     } finally {
-                        arena.Rewind(mark: mark);
+                        CloseComposeArena(arena: arena, mark: mark);
                     }
                 }
             case WorldMutation.RemoveStateRow m:
@@ -1378,6 +1377,7 @@ public sealed partial class WorldDocument {
 
                     if (!TryOpenComposeArena(
                         arena: out var arena,
+                        mark: out var mark,
                         definition: current,
                         reason: out reason,
                         row: m.Row,
@@ -1387,8 +1387,6 @@ public sealed partial class WorldDocument {
 
                         return false;
                     }
-
-                    var mark = arena.BeginScope();
 
                     try {
                         if (!TryApplyCellUpsert(
@@ -1411,7 +1409,7 @@ public sealed partial class WorldDocument {
 
                         return true;
                     } finally {
-                        arena.Rewind(mark: mark);
+                        CloseComposeArena(arena: arena, mark: mark);
                     }
                 }
             case WorldMutation.RemoveStateCell m: {
@@ -1423,6 +1421,7 @@ public sealed partial class WorldDocument {
 
                     if (!TryOpenComposeArena(
                         arena: out var arena,
+                        mark: out var mark,
                         definition: current,
                         reason: out reason,
                         row: m.Row,
@@ -1432,8 +1431,6 @@ public sealed partial class WorldDocument {
 
                         return false;
                     }
-
-                    var mark = arena.BeginScope();
 
                     try {
                         if (!TryApplyCellRemove(
@@ -1454,7 +1451,7 @@ public sealed partial class WorldDocument {
 
                         return true;
                     } finally {
-                        arena.Rewind(mark: mark);
+                        CloseComposeArena(arena: arena, mark: mark);
                     }
                 }
             case WorldMutation.SetInputHold m:

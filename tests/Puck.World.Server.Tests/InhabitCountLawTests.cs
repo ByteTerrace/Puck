@@ -166,6 +166,20 @@ public sealed class InhabitCountLawTests {
     });
 
     [Fact]
+    public void AGuestCountPulseKeepsItsIntermediateAdmissionAndRetirement() {
+        using var fixture = Fixtures.FreshServer(definition: Document(initial: 0));
+        var populations = new List<int>();
+
+        fixture.Server.MutationJournalTap = (_, _, _) => populations.Add(item: Inhabitants(fixture: fixture).Length);
+        foreach (var count in new[] { 3, 0 }) {
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Puck.Commands.Principal.Console,
+                CountRow, WorldStateRow.SlotKey.Value, count, WorldDocumentWriteKind.Set), sourceAddonInstanceId: 7);
+        }
+        fixture.Step();
+        Assert.Equal(actual: populations, expected: new[] { 3, 0 });
+        Assert.Empty(collection: Inhabitants(fixture: fixture));
+    }
+    [Fact]
     public void ANewWorldAdmitsACellDrivenPlacementFromItsCellAtBoot() {
         using var fixture = Fixtures.FreshServer(definition: Document(initial: 3));
 

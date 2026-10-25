@@ -121,77 +121,27 @@ public sealed partial class WorldTick {
         var applied = false;
 
         while (Host.Document.Pending.TryDequeue(result: out var op)) {
-            var ok = op switch {
-                // An addon-sourced op was already metered at the seam's pre-flight (before decode, deliberately), so
-                // re-entering the budget gate here would charge one guest dispatch twice against the same tick's
-                // allowance. Every other source — console, loopback, a peer's submission — is metered right here.
-                WorldPendingOp.Mutate mutate => Host.TryApplyMutation(
-                mutation: mutate.Mutation,
-                tick: tick,
-                engineTick: CompletedEngineTicks,
-                connectionId: mutate.ConnectionId,
-                correlationId: mutate.CorrelationId,
-                preMetered: (mutate.SourceAddonInstanceId >= 0L)
-            ),
-                WorldPendingOp.Rebuild rebuild => Host.Document.ApplyRebuild(
-                request: rebuild.Request,
-                principal: rebuild.Principal,
-                connectionId: rebuild.ConnectionId,
-                correlationId: rebuild.CorrelationId,
-                expectedContentHash: rebuild.ExpectedContentHash,
-                preparationFailure: rebuild.PreparationFailure
-            ),
-                WorldPendingOp.Undo undo => Host.Persistence.ApplyUndo(
-                count: undo.Count,
-                principal: undo.Principal,
-                connectionId: undo.ConnectionId,
-                correlationId: undo.CorrelationId
-            ),
-                _ => false,
-            };
-
-            // The tape's own completion field: fires exactly once, for exactly the ops ApplyEnvelope's own dispatch
-            // threaded one onto — see EnqueueMutation's own remarks.
-            if (op is WorldPendingOp.Mutate { OutcomeObserved: { } outcomeObserved }) {
-                outcomeObserved(obj: ok);
+            if (op is WorldPendingOp.Mutate { SourceAddonInstanceId: >= 0, Mutation: WorldMutation.UpsertStateCell } first) {
+                m_cellBurst.Clear();
+                m_cellBurst.Add(item: first);
+                while (Host.Document.Pending.TryPeek(result: out var next) &&
+                    (next is WorldPendingOp.Mutate { Mutation: WorldMutation.UpsertStateCell } member) &&
+                    (member.SourceAddonInstanceId == first.SourceAddonInstanceId) &&
+                    (member.Mutation.Principal == first.Mutation.Principal)) {
+                    Host.Document.Pending.Dequeue();
+                    m_cellBurst.Add(item: member);
+                }
+                if ((m_cellBurst.Count > 1) && Host.Document.TryApplyCellBurst(m_cellBurst, tick, CompletedEngineTicks)) {
+                    foreach (var member in m_cellBurst) { CompletePendingOp(ok: true, op: member); }
+                    applied = true;
+                } else {
+                    foreach (var member in m_cellBurst) { applied |= ApplyPendingOp(op: member, tick: tick); }
+                }
+                m_cellBurst.Clear();
+                continue;
             }
+            applied |= ApplyPendingOp(op: op, tick: tick);
 
-            if (op is WorldPendingOp.Mutate { Binding: { } binding, Completion: { } completion }) {
-                // The live document's version right after this op: the install it produced, or the document it was
-                // refused against. A later op of this drain installs past it, never below it.
-                var outcome = (ok
-                    ? WorldMutationOutcome.AppliedOutcome(
-                        binding: binding,
-                        code: "world.mutation.applied",
-                        version: Host.DocumentVersion
-                    )
-                    : WorldMutationOutcome.RefusedOutcome(
-                        binding: binding,
-                        code: "world.mutation.refused",
-                        detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
-                        version: Host.DocumentVersion
-                    )
-                );
-
-                completion(new WorldSubmissionResult.Mutation(Outcome: outcome));
-            }
-
-            // The addon mutation seam's I2: an addon-sourced Mutate op's OUTCOME — never its application, which
-            // just ran above through the identical machinery a console mutation runs through — routes back to the
-            // originating guest's RESERVED answer cell here, at drain time (same Step, before intents). The cell
-            // itself is not delivered until ResolveReads(T) stages it into the guest's batch T+1; this only records
-            // which verdict that staging will use. A well-formed mutation the document-apply pipeline itself
-            // refused (a validation/capacity/cross-row failure — TryApplyMutation already printed the loud reason)
-            // answers Rejected, distinct from every dispatch-door refusal the seam's earlier stages produce.
-            if ((op is WorldPendingOp.Mutate { SourceAddonInstanceId: >= 0L } addonMutate)) {
-                Host.Addons?.CompleteMutation(
-                    addonInstanceId: addonMutate.SourceAddonInstanceId,
-                    actOrdinal: addonMutate.ActOrdinal,
-                    applied: ok
-                );
-            }
-
-            applied |= ok;
         }
 
         if (applied) {
@@ -200,6 +150,86 @@ public sealed partial class WorldTick {
 
         return applied;
     }
+
+    private readonly List<WorldPendingOp.Mutate> m_cellBurst = [];
+
+    private bool ApplyPendingOp(WorldPendingOp op, ulong tick) {
+        var ok = op switch {
+            // An addon-sourced op was already metered at the seam's pre-flight (before decode, deliberately), so
+            // re-entering the budget gate here would charge one guest dispatch twice against the same tick's
+            // allowance. Every other source — console, loopback, a peer's submission — is metered right here.
+            WorldPendingOp.Mutate mutate => Host.TryApplyMutation(
+            mutation: mutate.Mutation,
+            tick: tick,
+            engineTick: CompletedEngineTicks,
+            connectionId: mutate.ConnectionId,
+            correlationId: mutate.CorrelationId,
+            preMetered: (mutate.SourceAddonInstanceId >= 0L)
+        ),
+            WorldPendingOp.Rebuild rebuild => Host.Document.ApplyRebuild(
+            request: rebuild.Request,
+            principal: rebuild.Principal,
+            connectionId: rebuild.ConnectionId,
+            correlationId: rebuild.CorrelationId,
+            expectedContentHash: rebuild.ExpectedContentHash,
+            preparationFailure: rebuild.PreparationFailure
+        ),
+            WorldPendingOp.Undo undo => Host.Persistence.ApplyUndo(
+            count: undo.Count,
+            principal: undo.Principal,
+            connectionId: undo.ConnectionId,
+            correlationId: undo.CorrelationId
+        ),
+            _ => false,
+        };
+
+        CompletePendingOp(ok: ok, op: op);
+        return ok;
+    }
+    private void CompletePendingOp(WorldPendingOp op, bool ok) {
+        // The tape's own completion field: fires exactly once, for exactly the ops ApplyEnvelope's own dispatch
+        // threaded one onto — see EnqueueMutation's own remarks.
+        if (op is WorldPendingOp.Mutate { OutcomeObserved: { } outcomeObserved }) {
+            outcomeObserved(obj: ok);
+        }
+
+        if (op is WorldPendingOp.Mutate { Binding: { } binding, Completion: { } completion }) {
+            // The live document's version right after this op: the install it produced, or the document it was
+            // refused against. A later op of this drain installs past it, never below it.
+            var outcome = (ok
+                ? WorldMutationOutcome.AppliedOutcome(
+                    binding: binding,
+                    code: "world.mutation.applied",
+                    version: Host.DocumentVersion
+                )
+                : WorldMutationOutcome.RefusedOutcome(
+                    binding: binding,
+                    code: "world.mutation.refused",
+                    detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
+                    version: Host.DocumentVersion
+                )
+            );
+
+            completion(new WorldSubmissionResult.Mutation(Outcome: outcome));
+        }
+
+        // The addon mutation seam's I2: an addon-sourced Mutate op's OUTCOME — never its application, which
+        // just ran above through the identical machinery a console mutation runs through — routes back to the
+        // originating guest's RESERVED answer cell here, at drain time (same Step, before intents). The cell
+        // itself is not delivered until ResolveReads(T) stages it into the guest's batch T+1; this only records
+        // which verdict that staging will use. A well-formed mutation the document-apply pipeline itself
+        // refused (a validation/capacity/cross-row failure — TryApplyMutation already printed the loud reason)
+        // answers Rejected, distinct from every dispatch-door refusal the seam's earlier stages produce.
+        if ((op is WorldPendingOp.Mutate { SourceAddonInstanceId: >= 0L } addonMutate)) {
+            Host.Addons?.CompleteMutation(
+                addonInstanceId: addonMutate.SourceAddonInstanceId,
+                actOrdinal: addonMutate.ActOrdinal,
+                applied: ok
+            );
+        }
+
+    }
+
     /// <summary>Delivers a timeline a history seek moved: the whole definition, then the completed tick's snapshot, so
     /// a paused world shows the state it was moved to. The seek withholds every delivery of its span
     /// (<see cref="WorldOutputHub.WithholdsTimeline"/>), so this is the one delivery a viewer observes per seek.</summary>

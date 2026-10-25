@@ -125,8 +125,8 @@ public sealed partial class WorldDocument {
             installsArena &&
             !TryValidateMutationCandidate(
             candidate: candidate,
-            current: current,
             compilation: out _,
+            current: current,
             mutation: mutation,
             reason: out reason,
             retainCompilation: false
@@ -334,7 +334,8 @@ public sealed partial class WorldDocument {
     /// now.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    internal void InstallPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId) {
+    /// <param name="record">Whether to journal and echo here; a coalesced cell run records each original act.</param>
+    internal void InstallPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, bool record = true) {
         var mutation = prepared.Mutation;
         var candidate = prepared.Candidate;
         var engineTick = prepared.EngineTick;
@@ -406,6 +407,15 @@ public sealed partial class WorldDocument {
             prepared.Dispose();
         }
 
+        if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, mutation: mutation, prepared: prepared); }
+    }
+
+    private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation) {
+        var tick = prepared.Tick;
+        var engineTick = prepared.EngineTick;
+        var addonPlan = prepared.AddonPlan;
+        var machinePlan = prepared.MachinePlan;
+
         m_journal.Add(item: new WorldJournalEntry(
             EngineTick: engineTick,
             Mutation: mutation,
@@ -465,7 +475,6 @@ public sealed partial class WorldDocument {
         ));
 
     }
-
     // A mutation the World makes itself — a per-tick sweep's, a rule's document-row effect — was submitted by no
     // session, so it is narrated on the transcript and echoed to none: an echo is a submitter's verdict, and one
     // raised here would reach the toast, the console tape and the edit cue lane as if a seat had typed it.
@@ -473,7 +482,7 @@ public sealed partial class WorldDocument {
     // A state-value mutation can reuse every compiled product only while it keeps the catalog identity and does
     // not rebind a population look. All other mutations install a replacement prepared alongside the document.
     private bool RequiresFullInstall(WorldDefinition candidate, WorldMutation mutation, WorldDefinition previous) => !(
-        IsValueMutation(mutation: mutation, candidate: candidate, previous: previous) &&
+        IsValueMutation(candidate: candidate, mutation: mutation, previous: previous) &&
         ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
         !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
     );
