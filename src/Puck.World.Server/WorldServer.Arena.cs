@@ -249,6 +249,7 @@ public sealed partial class WorldServer {
 
         return rows;
     }
+
     // Reloads the named rows into the live columns and marks the document and the arena agreed. A refusal is a door
     // that did not validate the load first, or a validator hole.
     private void LoadInPlace(IReadOnlyList<StateRow> rows) {
@@ -267,7 +268,6 @@ public sealed partial class WorldServer {
 
         MarkPublished();
     }
-
     // The document and the arena agree on every row as they stand.
     private void MarkPublished() {
         var rows = m_arena.Layout.RowCount;
@@ -367,7 +367,7 @@ public sealed partial class WorldServer {
 
             var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal, previous: installed[ordinal]));
 
-            rows = rows.SetItem(ordinal, published);
+            rows = rows.SetItem(index: ordinal, value: published);
 
             if (!moved) {
                 continue;

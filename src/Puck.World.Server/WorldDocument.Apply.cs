@@ -1058,6 +1058,7 @@ public sealed partial class WorldDocument {
         // default until the next Install happens to touch state again.
         Host.Population.SyncBodyCells(definition: definition);
     }
+
     // Installs a response swap (IsResponseSwap): the rows show other creations the document was validated with, so the
     // compiled rules, the arena, the grants, the fields and the machines all stand. Only the delivery and, for a solid
     // row, the contact colliders the population compiles from the shown creation move.
@@ -1203,7 +1204,6 @@ public sealed partial class WorldDocument {
                 return false;
         }
     }
-
     // A whole-row write that keeps the state catalog identity (the same rows, shapes and kinds) and redeclares the row
     // exactly as it stood but for its cells' values moves values alone, as a cell write does, so it takes the same
     // validation and install. A write that also changes a value-over-time trait (a cell's dynamics, clock or advance, the
@@ -1219,15 +1219,16 @@ public sealed partial class WorldDocument {
         var cells = (row.Cells ?? []);
         var previous = (before.Cells ?? []);
 
-        if (!SameComposeDeclaration(row, before) || row.DrawCursor != before.DrawCursor ||
-            row.HistoryCursor != before.HistoryCursor || !ReferenceEquals(row.DrawnMasks, before.DrawnMasks) ||
-            cells.Count != previous.Count) {
+        if (!SameComposeDeclaration(previous: before, row: row) || (row.DrawCursor != before.DrawCursor) ||
+            (row.HistoryCursor != before.HistoryCursor) || !ReferenceEquals(objA: row.DrawnMasks, objB: before.DrawnMasks) ||
+            (cells.Count != previous.Count)) {
             return false;
         }
 
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
             var old = previous[index];
+
             if ((cell.Key != old.Key) || (cell.Advance != old.Advance) || (cell.Provenance != old.Provenance) ||
                 (cell.Dynamics != old.Dynamics) || (cell.Cycle != old.Cycle) || (cell.Behavior != old.Behavior) ||
                 (cell.Clock != old.Clock) || (cell.Visibility != old.Visibility) || (cell.Observation != old.Observation)) {
@@ -1244,7 +1245,7 @@ public sealed partial class WorldDocument {
         if (IsResponseSwap(mutation: mutation, previous: current)) {
             return TryValidateResponseSwap(mutation: mutation, reason: out reason);
         }
-        if (IsValueMutation(mutation: mutation, candidate: candidate, previous: current)) {
+        if (IsValueMutation(candidate: candidate, mutation: mutation, previous: current)) {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
         }
 
@@ -1252,7 +1253,6 @@ public sealed partial class WorldDocument {
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
-
     /// <summary>Returns whether a mutation is a response swap: one placement upsert, or a batch of them, each moving
     /// nothing of an existing responding row but its <see cref="WorldPlacement.Holding"/> bits, which name the creation
     /// it shows among those the document was validated with (every alternative, its colliders and its faces were
@@ -1276,6 +1276,7 @@ public sealed partial class WorldDocument {
                 return false;
         }
     }
+
     private static bool SwapsHolding(WorldPlacement placement, WorldDefinition previous) => (
         (placement.Respond is { Count: > 0 }) &&
         (WorldDefinitionRows.FindPlacement(placements: previous.Placements, id: placement.Id) is { } before) &&
@@ -1302,7 +1303,6 @@ public sealed partial class WorldDocument {
 
         return true;
     }
-
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
     // over them, with nothing compiled.
     private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {

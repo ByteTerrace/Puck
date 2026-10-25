@@ -54,7 +54,7 @@ internal static class WorldBenchmarks {
         constructionTimer.Stop();
         rows.Add(item: ("world: server construction", $"{constructionTimer.Elapsed.TotalSeconds:F1} s"));
 
-        MeasureGallery(definition!, catalog, rows);
+        MeasureGallery(catalog: catalog, definition: definition!, rows: rows);
 
         var server = bench.Server;
         var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition!.SimulationRateHz));
@@ -106,46 +106,53 @@ internal static class WorldBenchmarks {
     // The live simulation workload, including the guests and the console's edit echoes. The other rows isolate
     // server operations without guests; these rows keep the debug guide/watchdog/companion running throughout.
     private static void MeasureGallery(WorldDefinition definition, Puck.World.Machines.WorldMachineCatalog catalog, List<(string Name, string Value)> rows) {
-        using var bench = WorldBenchServer.Boot(definition, catalog);
+        using var bench = WorldBenchServer.Boot(catalog: catalog, definition: definition);
         var server = bench.Server;
-        server.Population.ActivateSeat(slot: 0, profile: null);
-        using var addons = Puck.World.Addons.WorldAddonRuntime.Create(server.Definition, server);
-        var tape = new Puck.Hosting.ConsoleTape(new Puck.Hosting.ConsoleTapeStore());
-        server.EchoTap = echo => tape.RecordEcho(echo.Message, echo.Rejected);
-        var step = FixedTickConversion.PerRate((uint)definition.SimulationRateHz);
-        Action advance = () => server.Advance(step);
-        var period = (long)((ulong)Stopwatch.Frequency * step / FixedTickConversion.TicksPerSecond);
+
+        server.Population.ActivateSeat(profile: null, slot: 0);
+        using var addons = Puck.World.Addons.WorldAddonRuntime.Create(definition: server.Definition, server: server);
+        var tape = new Puck.Hosting.ConsoleTape(store: new Puck.Hosting.ConsoleTapeStore());
+
+        server.EchoTap = echo => tape.RecordEcho(message: echo.Message, refused: echo.Rejected);
+        var step = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
+        Action advance = () => server.Advance(stepTicks: step);
+        var period = ((long)((((ulong)Stopwatch.Frequency) * step) / FixedTickConversion.TicksPerSecond));
         var due = Stopwatch.GetTimestamp();
+
         void Pace() {
-            while (Stopwatch.GetTimestamp() < due) { Thread.Sleep(1); }
+            while (Stopwatch.GetTimestamp() < due) { Thread.Sleep(millisecondsTimeout: 1); }
             due += period;
         }
-        for (var tick = 0; tick < WarmupTicks; tick++) { Pace(); advance(); }
+        for (var tick = 0; (tick < WarmupTicks); tick++) { Pace(); advance(); }
         var standing = new long[SampleTicks];
-        for (var tick = 0; tick < standing.Length; tick++) {
+
+        for (var tick = 0; (tick < standing.Length); tick++) {
             Pace();
-            standing[tick] = AllocationWindow.Total(advance);
+            standing[tick] = AllocationWindow.Total(window: advance);
         }
-        Array.Sort(standing);
-        rows.Add(("world: addons standing tick allocation (median / mean)", $"{standing[standing.Length / 2]:N0} / {standing.Average():N0} bytes"));
+        Array.Sort(array: standing);
+        rows.Add(item: ("world: addons standing tick allocation (median / mean)", $"{standing[(standing.Length / 2)]:N0} / {standing.Average():N0} bytes"));
         // player.move 1 0 is camera-relative in the live host. With the recipe's 90-degree heading and the
         // chase camera's zero orbit, right is world -Z: the wire carries forward=1 and faceZ=-1.
         var roles = server.Population.Channels.RoleOrdinals;
-        var intent = default(Puck.World.Protocol.PlayerIntent).WithChannel(roles.MoveAdvance, FixedQ4816.One).WithChannel(roles.FaceZ, -FixedQ4816.One);
-        for (var walk = 0; walk < 3; walk++) {
-            var body = server.Body(0)!;
+        var intent = default(Puck.World.Protocol.PlayerIntent).WithChannel(ordinal: roles.MoveAdvance, value: FixedQ4816.One).WithChannel(ordinal: roles.FaceZ, value: -FixedQ4816.One);
+
+        for (var walk = 0; (walk < 3); walk++) {
+            var body = server.Body(index: 0)!;
+
             server.ApplyCommand(new Puck.World.Protocol.WorldCommand.SnapPose(Puck.Commands.Principal.Console, 0,
-                new System.Numerics.Vector3(30, body.FixedPosition.ToVector3().Y, 22), MathF.PI / 2, 0, 0, Puck.World.Protocol.SnapPoseMode.Pose));
+                new System.Numerics.Vector3(x: 30, y: body.FixedPosition.ToVector3().Y, z: 22), (MathF.PI / 2), 0, 0, Puck.World.Protocol.SnapPoseMode.Pose));
             var samples = new long[60];
-            for (var tick = 0; tick < samples.Length; tick++) {
+
+            for (var tick = 0; (tick < samples.Length); tick++) {
                 Pace();
-                server.EnqueueIntent(new Puck.World.Protocol.IntentSubmission(server.NextInputTick, 0, intent, Puck.Commands.Principal.Console));
-                samples[tick] = AllocationWindow.Total(advance);
+                server.EnqueueIntent(submission: new Puck.World.Protocol.IntentSubmission(server.NextInputTick, 0, intent, Puck.Commands.Principal.Console));
+                samples[tick] = AllocationWindow.Total(window: advance);
             }
-            Array.Sort(samples);
-            rows.Add(($"world: addons gallery walk {walk + 1} tick allocation (median / mean)", $"{samples[samples.Length / 2]:N0} / {samples.Average():N0} bytes"));
+            Array.Sort(array: samples);
+            rows.Add(item: ($"world: addons gallery walk {(walk + 1)} tick allocation (median / mean)", $"{samples[(samples.Length / 2)]:N0} / {samples.Average():N0} bytes"));
         }
-        rows.Add(("world: measured addons", string.Join(", ", addons.Receipts.Select(receipt => receipt.Name))));
+        rows.Add(item: ("world: measured addons", string.Join(separator: ", ", values: addons.Receipts.Select(selector: receipt => receipt.Name))));
     }
     private static void MeasureCellBurst(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
         // The debug scope's thirteen writes, using its real actor and row grants. Decode/fuel is outside this

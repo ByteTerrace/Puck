@@ -207,7 +207,8 @@ public sealed partial class WorldDocument {
         var installed = definition.AuthoredState;
         var descriptors = arena.Catalog.Descriptors;
         var count = arena.Layout.RowCount;
-        var open = count <= 512 ? (Span<bool>)stackalloc bool[count] : new bool[count];
+        var open = ((count <= 512) ? (Span<bool>)stackalloc bool[count] : new bool[count]);
+
         open.Clear();
 
         arena.FlagOpenRows(rows: open);
@@ -221,7 +222,7 @@ public sealed partial class WorldDocument {
             }
             if (open[ordinal] || (ordinal == declaredOrdinal)) {
                 rows ??= installed.ToImmutableList();
-                rows = rows.SetItem(index, (WorldStateRow)arena.ToRow(rowOrdinal: ordinal, previous: installed[index]));
+                rows = rows.SetItem(index: index, value: ((WorldStateRow)arena.ToRow(rowOrdinal: ordinal, previous: installed[index])));
             }
 
             index++;

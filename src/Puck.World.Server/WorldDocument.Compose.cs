@@ -2032,12 +2032,13 @@ public sealed partial class WorldDocument {
     private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) {
         var key = keyOf(arg: item);
         var result = list.ToImmutableList();
-        for (var index = 0; index < list.Count; index++) {
-            if (EqualityComparer<TKey>.Default.Equals(keyOf(list[index]), key)) {
-                return result.SetItem(index, item);
+
+        for (var index = 0; (index < list.Count); index++) {
+            if (EqualityComparer<TKey>.Default.Equals(x: keyOf(list[index]), y: key)) {
+                return result.SetItem(index: index, value: item);
             }
         }
-        return result.Add(item);
+        return result.Add(value: item);
     }
     // The token after the one <paramref name="matches"/> accepts, wrapping; the first when none matches.
     private static string NextInCycle(IReadOnlyList<string> tokens, Func<string, bool> matches) {

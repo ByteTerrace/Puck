@@ -2867,6 +2867,14 @@ the contact work behind each sampled tick as deterministic counts (certified
 sweeps and the bounds queries they charge, interval walks with their
 instructions and full rotation expansions, and point evaluations with their
 instructions, read from `physics.sweep`, `sdf.bounds` and `sdf.point`). It
+also boots a separate server with the world's addons and console edit echoes,
+activates seat zero, and measures standing plus three 60-tick gallery walks
+from `body.pose 30 - 22 90 - -` with the intent corresponding to
+`player.move 1 0`. These rows report median and mean tick allocation, including
+guest decoding and mutation construction, and name the mounted addons. They
+measure the calling simulation thread, not the machine workers or presentation.
+The gallery coordinates are the debug world's workload; other worlds must
+provide a seat zero to run it. The isolated server
 then times a paced tick that drains a whole-row value write to the first plain
 integer slot (the shape of the gallery guide's addon writes), with its
 allocation and the arena row versions and installed rows the tick moved. The

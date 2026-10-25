@@ -27,8 +27,10 @@ capability authentication.
   revocable ownership chains.
 - *The terminal's console tape:* `ConsoleTape` records the console exchange
   (submitted lines, result echoes, panel visibility) into a bounded scrollback
-  ring and publishes immutable `ConsoleTapeFrame` snapshots through
-  `ConsoleTapeStore`; `ConsoleLineEditor` owns the prompt row's caret-addressed
+  ring. `ConsoleTapeStore` stages edits under a short lock and materializes an
+  immutable `ConsoleTapeFrame` history when a reader requests it. Hidden panel
+  rendering skips history; diagnostic reads still receive it, and older
+  snapshots remain unchanged. `ConsoleLineEditor` owns the prompt row's caret-addressed
   buffer and command history. Renderers read `IConsoleTapeSource`; the window
   host bridges keystrokes in (`ConsoleInputSink` in `Puck.Launcher`).
 - *The host's output log:* `HostLog` keeps the newest lines the process wrote

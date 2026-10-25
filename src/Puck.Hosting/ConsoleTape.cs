@@ -59,7 +59,7 @@ public sealed class ConsoleTape : ICommandObserver {
     }
     // The store owns a bounded staging copy. Only a reader requesting history materializes an immutable snapshot;
     // headless and hidden consoles still retain every echo without allocating a 64-line array for each edit.
-    private void Publish() => m_store.Publish(m_ring, m_head, m_count, m_input, m_selected, m_visible);
+    private void Publish() => m_store.Publish(count: m_count, head: m_head, input: m_input, ring: m_ring, selected: m_selected, visible: m_visible);
 
     /// <summary>Records the deferred verdict of a Simulation-routed console line — <see cref="Record"/> only ever saw
     /// the <see cref="CommandResult.None"/> the submit returned when the line entered the tick queue, so without this

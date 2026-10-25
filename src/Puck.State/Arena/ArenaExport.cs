@@ -94,9 +94,9 @@ public sealed partial class StateArena {
         return (layout.IsStored
             ? ExportRow(
                 layout: layout,
+                previous: previous,
                 row: row,
-                rowOrdinal: rowOrdinal,
-                previous: previous
+                rowOrdinal: rowOrdinal
             )
             : row
         );
@@ -105,17 +105,18 @@ public sealed partial class StateArena {
     private StateCell ExportCell(in ArenaRowLayout layout, Dictionary<CellName, StateCell>? traits, CellName name, int slot, StateCell? previous = null) {
         var authored = traits?.GetValueOrDefault(key: name);
         var behavior = ((m_behaviors is null) ? StateCellBehavior.Inherit : (StateCellBehavior)m_behaviors[slot]);
-        var value = ValueAt(in layout, slot);
-        var sameClock = HasClock(slot) ? previous?.Clock is { } clock &&
-            clock.EpochEngineTick == ReadNumberRaw(ArenaColumn.ClockEpochEngineTick, slot) &&
-            clock.EpochTick == ReadNumberRaw(ArenaColumn.ClockEpochTick, slot) &&
-            clock.SubstepTicks == ReadNumberRaw(ArenaColumn.ClockSubstepTicks, slot) &&
-            clock.V0 == ReadNumberRaw(ArenaColumn.ClockV0, slot) && clock.Y0 == ReadNumberRaw(ArenaColumn.ClockY0, slot)
-            : previous?.Clock is null;
-        if (previous is not null && previous.Key == name && previous.Value == value &&
-            previous.Advance == authored?.Advance && previous.Cycle == authored?.Cycle && previous.Dynamics == authored?.Dynamics &&
-            previous.Behavior == behavior && previous.Observation == m_observations?[slot] &&
-            previous.Provenance == m_provenance?[slot] && previous.Visibility == m_visibilities?[slot] && sameClock) {
+        var value = ValueAt(layout: in layout, slot: slot);
+        var sameClock = (HasClock(slot: slot) ? ((previous?.Clock is { } clock) &&
+            (clock.EpochEngineTick == ReadNumberRaw(column: ArenaColumn.ClockEpochEngineTick, index: slot)) &&
+            (clock.EpochTick == ReadNumberRaw(column: ArenaColumn.ClockEpochTick, index: slot)) &&
+            (clock.SubstepTicks == ReadNumberRaw(column: ArenaColumn.ClockSubstepTicks, index: slot)) &&
+            (clock.V0 == ReadNumberRaw(column: ArenaColumn.ClockV0, index: slot)) && (clock.Y0 == ReadNumberRaw(column: ArenaColumn.ClockY0, index: slot)))
+            : (previous?.Clock is null));
+
+        if ((previous is not null) && (previous.Key == name) && (previous.Value == value) &&
+            (previous.Advance == authored?.Advance) && (previous.Cycle == authored?.Cycle) && (previous.Dynamics == authored?.Dynamics) &&
+            (previous.Behavior == behavior) && (previous.Observation == m_observations?[slot]) &&
+            (previous.Provenance == m_provenance?[slot]) && (previous.Visibility == m_visibilities?[slot]) && sameClock) {
             return previous;
         }
 
@@ -178,21 +179,22 @@ public sealed partial class StateArena {
         var index = 0;
 
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
-            var old = ((prior is not null && index < prior.Count) ? prior[index] : null);
+            var old = (((prior is not null) && (index < prior.Count)) ? prior[index] : null);
             var cell = ExportCell(layout: in layout, name: m_keys[key],
                 slot: ((layout.CellStart + cursor) - 1), traits: traits, previous: old);
-            if (cells is null && !ReferenceEquals(cell, old)) {
+
+            if ((cells is null) && !ReferenceEquals(objA: cell, objB: old)) {
                 cells = ImmutableArray.CreateBuilder<StateCell>();
-                for (var copied = 0; copied < index; copied++) { cells.Add(prior![copied]); }
+                for (var copied = 0; (copied < index); copied++) { cells.Add(item: prior![copied]); }
             }
-            cells?.Add(cell);
+            cells?.Add(item: cell);
             index++;
         }
         if (index == 0) { return null; }
-        if (cells is null && prior is not null && index == prior.Count) { return prior; }
+        if ((cells is null) && (prior is not null) && (index == prior.Count)) { return prior; }
         if (cells is null) {
-            cells = ImmutableArray.CreateBuilder<StateCell>(index);
-            for (var copied = 0; copied < index; copied++) { cells.Add(prior![copied]); }
+            cells = ImmutableArray.CreateBuilder<StateCell>(initialCapacity: index);
+            for (var copied = 0; (copied < index); copied++) { cells.Add(item: prior![copied]); }
         }
         return cells.ToImmutable();
     }
@@ -248,9 +250,9 @@ public sealed partial class StateArena {
     private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) => (row with {
         Cells = ExportCells(
         layout: layout,
+        previous: previous,
         row: row,
-        rowOrdinal: rowOrdinal,
-        previous: previous
+        rowOrdinal: rowOrdinal
     ),
         DrawCursor = ReadNumberRaw(
         column: ArenaColumn.DrawCursor,

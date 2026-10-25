@@ -37,8 +37,11 @@ public interface IConsoleTapeSource {
 /// </summary>
 public sealed class ConsoleTapeStore : IConsoleTapeSource {
     private readonly Lock m_gate = new();
+
     private ConsoleTapeFrame m_frame;
+
     private ConsoleTapeLine[] m_pending = [];
+
     private int m_count;
     private bool m_dirty;
     private bool m_published;
@@ -52,21 +55,23 @@ public sealed class ConsoleTapeStore : IConsoleTapeSource {
             m_published = true;
         }
     }
+
     internal void Publish(ConsoleTapeLine[] ring, int head, int count, string input, bool selected, bool visible) {
         lock (m_gate) {
             if (m_pending.Length < ring.Length) { m_pending = new ConsoleTapeLine[ring.Length]; }
-            for (var index = 0; index < count; index++) { m_pending[index] = ring[(head + index) % ring.Length]; }
+            for (var index = 0; (index < count); index++) { m_pending[index] = ring[((head + index) % ring.Length)]; }
             m_count = count;
-            m_frame = new ConsoleTapeFrame(visible, m_frame.Lines ?? [], input, selected);
+            m_frame = new ConsoleTapeFrame(visible, (m_frame.Lines ?? []), input, selected);
             m_dirty = true;
             m_published = true;
         }
     }
+
     /// <inheritdoc/>
     public bool TrySnapshot(out ConsoleTapeFrame frame, bool includeHiddenHistory = true) {
         lock (m_gate) {
             if (m_dirty && (m_frame.Visible || includeHiddenHistory)) {
-                m_frame = m_frame with { Lines = m_pending.AsSpan(0, m_count).ToArray() };
+                m_frame = m_frame with { Lines = m_pending.AsSpan(length: m_count, start: 0).ToArray() };
                 m_dirty = false;
             }
             frame = m_frame;
