@@ -117,6 +117,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly Dictionary<string, WorldRemoteAuthority> m_remoteAuthorities = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<(string Source, string Destination, string Endpoint), WorldRemoteAuthority> m_recoveredRemoteAuthorities = new();
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<WorldAuthorityEndpoint> m_submittedEndpoints = [];
     // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
@@ -201,7 +202,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         return resolves;
     }
     // Forgets every resolved document path, as the documents the host's instances answer for change.
-    private void ForgetResolvedDocuments() => m_resolvedDocuments.Clear();
+    private void ForgetResolvedDocuments() {
+        m_resolvedDocuments.Clear();
+        m_names = null;
+    }
 
     // A references row's locator is relative to the document that AUTHORS it, never to the process's output
     // directory. This is the one host-side fold shared by observed previews and traveler entry; both must name the
@@ -216,7 +220,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // decides a same-world door (WorldPortalStraddle).
         if (
             (source.SourcePath is { Length: > 0 } ownPath) &&
-            (source.Server.Definition.DocumentId is { Length: > 0 } ownId) &&
+            (source.Server.Configuration.DocumentId is { Length: > 0 } ownId) &&
             string.Equals(
             a: neighbourKey,
             b: ownId,
@@ -629,7 +633,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // Ordinal name order, so the step sequence is a property of the names rather than of insertion history.
         // Rows never observe one another, so the order carries no cross-row meaning — only each one's own
         // trajectory matters, and that is what makes iterating a hash map by sorted key honest here.
-        foreach (var name in Names) {
+        var names = Names;
+
+        for (var nameIndex = 0; (nameIndex < names.Count); nameIndex++) {
+            var name = names[nameIndex];
+
             if (string.Equals(
                 a: name,
                 b: BootInstanceName,
@@ -741,7 +749,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return;
         }
 
-        var submitted = new HashSet<WorldAuthorityEndpoint>();
+        var submitted = m_submittedEndpoints;
+
+        submitted.Clear();
 
         for (var slot = 0; (slot < m_seats.SeatCount); slot++) {
             if (m_seats.RoutedEndpoint(slot: slot) is not { } endpoint) {
@@ -758,6 +768,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 );
             }
         }
+        submitted.Clear();
     }
     /// <summary>Looks up the endpoint a running local instance is observed and driven through: the one every seat routed to
     /// it and every view presented in it shares, whose mirror follows the instance's whole replica.</summary>
@@ -1313,7 +1324,17 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see langword="null"/>.</summary>
     public WorldInstance? Boot => m_instances.GetValueOrDefault(key: BootInstanceName);
     /// <summary>Every admitted row's name, ordinal-sorted.</summary>
-    public IReadOnlyList<string> Names => [.. m_instances.Keys.Order(comparer: StringComparer.Ordinal)];
+    public IReadOnlyList<string> Names {
+        get {
+            if (m_names is not null) { return m_names; }
+            var names = m_instances.Keys.ToArray();
+
+            Array.Sort(array: names, comparer: StringComparer.Ordinal);
+            return m_names = Array.AsReadOnly(array: names);
+        }
+    }
+
+    private IReadOnlyList<string>? m_names;
 
     /// <summary>Initializes an empty registry — no row is admitted by construction. <see cref="AdmitBoot"/> admits a
     /// desktop's one boot row; <see cref="Admit"/> is the general door every other row (a desktop's own spawn/resolve

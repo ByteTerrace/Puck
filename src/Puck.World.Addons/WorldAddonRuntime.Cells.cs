@@ -10,7 +10,7 @@ public sealed partial class WorldAddonRuntime {
         public GrantSubject Subject = subject;
         public CellName Name = name;
 
-        public StateArena? Arena;
+        public bool Resolved;
         public StateHandle Row;
         public CellKey Key;
     }
@@ -87,12 +87,23 @@ public sealed partial class WorldAddonRuntime {
         }
         var arena = m_server.Arena;
 
-        if (!ReferenceEquals(objA: arena, objB: cell.Arena)) {
+        if (addon.CellsArena is not { } cachedArena) {
+            addon.CellsArena = new WeakReference<StateArena>(target: arena);
+        } else if (!cachedArena.TryGetTarget(target: out var previousArena) || !ReferenceEquals(objA: arena, objB: previousArena)) {
+            cachedArena.SetTarget(target: arena);
+            foreach (ref var bound in addon.Cells.AsSpan()) {
+                bound.Resolved = false;
+                bound.Row = default;
+                bound.Key = default;
+            }
+        }
+
+        if (!cell.Resolved) {
             if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out cell.Row) ||
                 !arena.Keys.TryResolve(key: out cell.Key, name: cell.Name) || !arena.TryRead(cell.Row.Ordinal, cell.Key, out _)) {
                 return AddonVerdict.NoSuchSubject;
             }
-            cell.Arena = arena;
+            cell.Resolved = true;
         }
         var value = "";
 

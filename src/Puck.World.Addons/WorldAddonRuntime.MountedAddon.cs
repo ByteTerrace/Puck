@@ -220,6 +220,7 @@ public sealed partial class WorldAddonRuntime {
         public ulong TotalAnswersDropped { get; set; }
         public ushort CellGeneration { get; set; }
         public BoundCell[] Cells { get; set; } = [];
+        public WeakReference<StateArena>? CellsArena { get; set; }
         public Dictionary<(WorldCapability, GrantSubject), int> QueryCounts { get; } = [];
         public ulong TotalFuelConsumed { get; set; }
         public bool UndeliverableReported { get; set; }

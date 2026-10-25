@@ -65,6 +65,30 @@ public sealed class WorldFaceCatalog {
     private const float FallbackHalfWidth = 0.6f;
 
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
+    private readonly Opening[] m_openings;
+
+    private readonly record struct Opening(FixedQ4816 Floor, WorldFaceAperture? Aperture);
+
+    /// <summary>Opens a declared face, reusing its region while its frame and crossing floor stay fixed.</summary>
+    /// <param name="placementId">The owning placement.</param>
+    /// <param name="faceName">The declared face.</param>
+    /// <param name="crossingFloor">The simulation's crossing floor.</param>
+    /// <param name="aperture">The opening, when the face has a recipe.</param>
+    /// <returns>Whether this catalog declares an opening for the face.</returns>
+    public bool TryOpenAperture(string placementId, string faceName, FixedQ4816 crossingFloor, out WorldFaceAperture? aperture) {
+        aperture = null;
+        if (!m_index.TryGetValue(key: (placementId, faceName), value: out var index)) { return false; }
+        lock (m_openings) {
+            ref var opening = ref m_openings[index];
+
+            if ((opening.Aperture is null) || (opening.Floor != crossingFloor)) {
+                if (!WorldFacePortalPolicy.TryAperture(row: Rows[index], crossingFloor: crossingFloor, aperture: out aperture)) { return false; }
+                opening = new Opening(Aperture: aperture, Floor: crossingFloor);
+            }
+            aperture = opening.Aperture;
+            return true;
+        }
+    }
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
     // Puck.World.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
@@ -85,6 +109,7 @@ public sealed class WorldFaceCatalog {
 
     private WorldFaceCatalog(IReadOnlyList<WorldFaceRow> rows, IReadOnlyList<string> notices, int claimingFaceCount, int slotCapacity) {
         Rows = rows;
+        m_openings = new Opening[rows.Count];
         Notices = notices;
         ClaimingFaceCount = claimingFaceCount;
         SlotCapacity = slotCapacity;
@@ -550,6 +575,7 @@ public sealed class WorldFaceCatalog {
 
         return false;
     }
+
     // The catalog reads placements, creations, cameras and the authoring policy, never a state row, so a definition
     // that replaced another's state section alone derives the same catalog.
     internal static void CarryAcrossState(WorldDefinition source, WorldDefinition target) {

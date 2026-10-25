@@ -205,9 +205,8 @@ internal static class WorldBenchmarks {
         rows.Add(item: ("world: 13-cell guest burst tick (median)", $"{MedianMilliseconds(samples: samples):F3} ms"));
         rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{allocations[(SampleTicks / 2)]:N0} bytes"));
     }
-    // A whole-row write that moves one cell's value and nothing else, as an addon's UpsertStateRow does (the gallery
-    // guide's): the tick that drains it, timed and metered, beside the arena rows whose version it moved and the
-    // installed rows it replaced, which a quiet tick's own rule writes add to.
+    // An authored whole-row edit that moves one cell's value: the tick that drains it, timed and metered beside
+    // the arena versions and installed rows it replaces. Bound addon writes use the separate typed burst above.
     private static void MeasureValueWrite(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
         var row = server.Definition.State.FirstOrDefault(predicate: candidate => (
             (candidate.Shape == Puck.State.RowShape.Slot) &&

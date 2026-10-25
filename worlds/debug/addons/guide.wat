@@ -113,7 +113,7 @@
           (i64.extend_i32_u (local.get $key)) (i64.extend_i32_u (call $length (local.get $key)))
           (i64.extend_i32_u (i32.load offset=4 (local.get $reader))))))))
 
-  ;; Submits a payload as one UpsertStateRow (mutation kind 44) through the Mutate handle.
+  ;; Binds the existing output cells once, then publishes through their edit handles.
 
   ;; Writes both whole rows: `guide`, the shown exhibit's title and note or two empty cells, and `guideAt`, its
   ;; position in the table or -1.

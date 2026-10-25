@@ -311,7 +311,11 @@ public sealed partial class WorldInstanceHost {
             length: population.Capacity
         );
 
-        foreach (var placement in definition.Placements) {
+        var placements = definition.Placements;
+
+        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
+            var placement = placements[placementIndex];
+
             if (
                 (placement is null) ||
                 (placement.FaceSources is not { Count: > 0 } faces)
@@ -319,18 +323,16 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            foreach (var face in faces) {
+            for (var faceIndex = 0; (faceIndex < faces.Count); faceIndex++) {
+                var face = faces[faceIndex];
+
                 if (
                     (face.Portal is not { } portal) ||
-                    !catalog.TryFind(
+                    !catalog.TryOpenAperture(
                     placementId: placement.Id,
                     faceName: face.Face,
-                    out var row
-                ) ||
-                    !WorldFacePortalPolicy.TryAperture(
                     aperture: out var aperture,
-                    crossingFloor: crossingFloor,
-                    row: in row
+                    crossingFloor: crossingFloor
                 )
                 ) {
                     // A face with no aperture mapping is refused by name at validation, so reaching here means the

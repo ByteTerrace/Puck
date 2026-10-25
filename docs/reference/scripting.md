@@ -505,6 +505,13 @@ old handles refuse. The first table has generation 1. A guest can bind and write
 Writes run before rules, directly in the arena under a journal scope. They require the manifest's
 `Edit/state:<name>` request, the live grant, its `writes:Set|Add` mask and an explicit edit dispatch budget.
 Each write costs 64 host fuel; text also pays the ordinary UTF-8 charge and the arena's text limit.
+Binding costs 128 host fuel per declaration plus the UTF-8 reads. Names resolve on first use and after an arena
+replacement; every write still checks the live grant. Handles name existing cells. Adding rows or changing their
+shape uses `SubmitMutation`.
+
+Plain cell values travel to local mirrors in snapshots, without replacing the authored document each tick.
+Rules read the arena immediately. Console reads, exports, checkpoints and document edits materialize immutable
+rows when needed. A row consumed by a document value keeps its validation and full publication path.
 An absent mask admits Set and Add. Missing cells, generated or host-owned rows and rule-owned verdict rows refuse.
 Names resolve again after an arena replacement. The published state, exports and checkpoints include these values;
 receipt-pinned replay derives the writes again. They submit no document mutation or narration.

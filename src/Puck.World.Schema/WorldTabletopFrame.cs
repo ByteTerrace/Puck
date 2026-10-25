@@ -41,8 +41,10 @@ public static class WorldTabletopFrame {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var placements = definition.Placements;
-        for (var index = 0; index < placements.Count; index++) {
+
+        for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
+
             if (
                 string.Equals(
                 a: placement.Id,
@@ -67,7 +69,6 @@ public static class WorldTabletopFrame {
 
         return false;
     }
-
     /// <summary>Returns the board's footprint on the ground plane: the smallest box holding every cell's centre, grown
     /// by half a cell on X and Z, at the topology origin's height.</summary>
     /// <param name="topology">The anchored topology.</param>
@@ -85,7 +86,6 @@ public static class WorldTabletopFrame {
         minimum = footprint.Minimum;
         maximum = footprint.Maximum;
     }
-
     /// <summary>Returns the centre of the board's footprint (<see cref="Bounds"/>), at the topology origin's height.</summary>
     /// <param name="topology">The anchored topology.</param>
     /// <returns>The centre, in world units.</returns>
@@ -102,7 +102,6 @@ public static class WorldTabletopFrame {
             Z: ((minimum.Z + maximum.Z) * Half)
         );
     }
-
     /// <summary>Returns the side of the board a position stands on: the board edge, of the four the world's axes
     /// give it, facing the position from the board's centre (<see cref="SideNegativeZ"/>, <see cref="SidePositiveX"/>,
     /// <see cref="SidePositiveZ"/>, <see cref="SideNegativeX"/>). A position exactly on a diagonal takes the Z side.</summary>
@@ -124,7 +123,6 @@ public static class WorldTabletopFrame {
             ? SidePositiveZ
             : SideNegativeZ);
     }
-
     /// <summary>Resolves the cell a pointer ray meets on the board's playing surface: the horizontal plane
     /// <paramref name="surface"/> above the topology's origin, met travelling down from above it, then resolved like a
     /// body standing there (<see cref="CompiledTopology.TryCellOf"/>).</summary>

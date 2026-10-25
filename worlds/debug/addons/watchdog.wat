@@ -202,7 +202,7 @@
       (else (local.set $flags (i32.and (local.get $flags) (i32.const -3)))))
     (i32.store offset=12 (local.get $at) (local.get $flags)))
 
-  ;; Submits a payload as one UpsertStateRow (mutation kind 44) through the Mutate handle.
+  ;; Binds the existing output cells once, then publishes through their edit handles.
 
   ;; Writes both whole rows.
   (func $publish
