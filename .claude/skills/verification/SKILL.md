@@ -51,7 +51,11 @@ that session.
 Gates, parity, canaries, counters, baselines, `puck laws prove` and review
 passes are tools to use when they pay for themselves, never preconditions. A
 change to simulation state stays deterministic; `puck test --reproduce` shows
-two runs agree.
+two independent process runs agree, including their per-tick authoritative
+replay hashes and byte-identical exports and manifests. A differing trace names
+its first sampled tick and instance. Use the test preparation/work counts beside
+wall time when measuring it on a shared machine; build-lease waits are contention,
+and exported authority ticks exclude the extra shutdown ticks.
 
 ### Coverage
 

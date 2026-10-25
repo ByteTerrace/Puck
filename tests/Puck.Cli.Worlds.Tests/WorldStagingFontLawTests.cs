@@ -10,6 +10,41 @@ namespace Puck.Cli.Worlds.Tests;
 /// <summary>Staged fonts preserve portable references, distinct bytes and authored pins across drive boundaries.</summary>
 public sealed class WorldStagingFontLawTests {
     [Fact]
+    public void Tracked_composition_reuses_origins_without_sharing_mutable_nodes_and_invalidates_changed_inputs() {
+        using var files = new TemporaryDirectory(prefix: "puck-tracked-compose-");
+
+        files.WriteText(name: "base.world.json", text: """{"title":"inherited"}""");
+        var path = files.WriteText(name: "entry.world.json", text: """{"basis":"base"}""");
+        var bytes = File.ReadAllBytes(path: path);
+        var firstOrigins = new WorldDocumentOrigins();
+
+        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+            composed: out var first, chainBytes: out _, reason: out var reason, origins: firstOrigins), userMessage: reason);
+        Assert.True(condition: firstOrigins.TryGetOrigin(value: first!["title"], origin: out var original));
+        first!["title"] = "mutated by caller";
+
+        var work = new WorldBootWork();
+        using var attribution = WorldBootWork.Attribute(work: work);
+        var secondOrigins = new WorldDocumentOrigins();
+
+        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+            composed: out var second, chainBytes: out _, reason: out reason, origins: secondOrigins), userMessage: reason);
+        Assert.Equal(expected: "inherited", actual: second!["title"]!.GetValue<string>());
+        Assert.True(condition: secondOrigins.TryGetOrigin(value: second!["title"], origin: out var held));
+        Assert.Equal(actual: held, expected: original);
+        Assert.Equal(expected: 0L, actual: work.Read(kind: WorldBootWork.Compositions));
+        Assert.Equal(expected: 1L, actual: work.Read(kind: WorldBootWork.CompositionsShared));
+
+        files.WriteText(name: "base.world.json", text: """{"title":"edited source"}""");
+        var changedOrigins = new WorldDocumentOrigins();
+
+        Assert.True(condition: PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+            composed: out var changed, chainBytes: out _, reason: out reason, origins: changedOrigins), userMessage: reason);
+        Assert.Equal(expected: "edited source", actual: changed!["title"]!.GetValue<string>());
+        Assert.True(condition: changedOrigins.TryGetOrigin(value: changed!["title"], origin: out var edited));
+        Assert.Equal(expected: "\"edited source\"", actual: edited.Json);
+    }
+    [Fact]
     public void A_staged_world_may_share_its_name_with_a_source_relative_basis() {
         using var files = new TemporaryDirectory(prefix: "puck-staging-identity-");
 
