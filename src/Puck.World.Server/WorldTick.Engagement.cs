@@ -50,26 +50,29 @@ public sealed partial class WorldTick {
         return false;
     }
 
-    private bool CheckScreenEngagePolicy(int entityIndex, WorldScreen screen, out string reason) {
+    // The reason names a refusal only when describe is set: the engage probe asks every screen every tick and reads none.
+    private bool CheckScreenEngagePolicy(int entityIndex, WorldScreen screen, out string reason, bool describe = true) {
+        reason = string.Empty;
+
         if (!screen.Route.Engageable) {
-            reason = $"screen {screen.Index} is not engageable";
+            if (describe) { reason = $"screen {screen.Index} is not engageable"; }
             return false;
         }
 
         if (!ShowsEngageTarget(hasMachine: Host.Machines.HasMachine(index: screen.Index), screen: screen)) {
-            reason = $"screen {screen.Index} has no machine to control and shows no producer";
+            if (describe) { reason = $"screen {screen.Index} has no machine to control and shows no producer"; }
             return false;
         }
 
         if (Host.Body(index: entityIndex) is not { } body) {
-            reason = $"body {entityIndex} is not live";
+            if (describe) { reason = $"body {entityIndex} is not live"; }
             return false;
         }
 
         var radius = body.EngageReach(radius: screen.Route.EngageRadius);
 
         if (PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) {
-            reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)";
+            if (describe) { reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)"; }
             return false;
         }
 
@@ -328,6 +331,7 @@ public sealed partial class WorldTick {
                 if (
                     (screen.Route.EngageChannel is not { Length: > 0 } channelName) ||
                     !CheckScreenEngagePolicy(
+                    describe: false,
                     entityIndex: slot,
                     reason: out _,
                     screen: screen

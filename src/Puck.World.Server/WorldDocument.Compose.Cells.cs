@@ -60,20 +60,29 @@ public sealed partial class WorldDocument {
             (row.Space != previous.Space) || (row.Enum != previous.Enum) || (row.HostOwned != previous.HostOwned) ||
             (row.Generated != previous.Generated) || (row.Verdict != previous.Verdict) || (row.Witness != previous.Witness)) { return false; }
         // Only explicit per-cell time traits are declaration. All other cell fields live in columns.
-        foreach (var cell in (row.Cells ?? [])) {
+        var cells = (row.Cells ?? Array.Empty<StateCell>());
+        var previousCells = (previous.Cells ?? Array.Empty<StateCell>());
+
+        for (var index = 0; (index < cells.Count); index++) {
+            var cell = cells[index];
+
             if ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null)) { continue; }
             StateCell? before = null;
 
-            foreach (var candidate in (previous.Cells ?? [])) {
-                if (candidate.Key == cell.Key) { before = candidate; break; }
+            for (var other = 0; (other < previousCells.Count); other++) {
+                if (previousCells[other].Key == cell.Key) { before = previousCells[other]; break; }
             }
             if ((before is null) || (cell.Advance != before.Advance) || (cell.Cycle != before.Cycle) || (cell.Dynamics != before.Dynamics)) { return false; }
         }
-        foreach (var cell in (previous.Cells ?? [])) {
+        for (var index = 0; (index < previousCells.Count); index++) {
+            var cell = previousCells[index];
+
             if ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null)) { continue; }
             var found = false;
 
-            foreach (var candidate in (row.Cells ?? [])) {
+            for (var other = 0; (other < cells.Count); other++) {
+                var candidate = cells[other];
+
                 if (candidate.Key == cell.Key) {
                     found = ((candidate.Advance == cell.Advance) && (candidate.Cycle == cell.Cycle) && (candidate.Dynamics == cell.Dynamics));
                     break;

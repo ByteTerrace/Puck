@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -104,7 +103,10 @@ public sealed class SdfMeshIrradiance {
     // offset 25 - n, so a probe's visibility of a neighbour and the neighbour's of it are read from one mask each.
     private static readonly (int X, int Y, int Z)[] NeighbourOffsets = BuildNeighbourOffsets();
     private readonly Lock m_gate = new();
-    private readonly ConcurrentDictionary<(int X, int Y, int Z), Probe> m_cache = new();
+    private readonly ProbeCache m_cache = new();
+    // The trace's candidates and a batch's results, kept across batches and traces: one trace runs at a time.
+    private readonly List<((int X, int Y, int Z) Cell, int Sweeps, float Distance)> m_candidates = [];
+    private ProbeData[] m_results = [];
     // The trace's store of a batch's landed probes (StoreLanded): the cells that landed, the window cells they restore,
     // and the slot words composed for those.
     private readonly List<(int X, int Y, int Z)> m_landed = [];
@@ -713,7 +715,7 @@ public sealed class SdfMeshIrradiance {
     // every axis than the probe's depth that way, each axis fading to nothing over DepthFade metres past its depth,
     // where the wall or slab the probe's rays stop at along that axis stands between them. KEEP IN SYNC with
     // sdfMeshProbeDepthVisibility.
-    private static float DepthVisibility(Probe probe, Vector3 toward) {
+    private static float DepthVisibility(ProbeData probe, Vector3 toward) {
         var visibility = 1f;
 
         for (var axis = 0; (axis < 3); axis++) {
@@ -749,7 +751,7 @@ public sealed class SdfMeshIrradiance {
 
     // A probe's cubes averaged with those of the cached, valid neighbours it and they see each other across, by the
     // filter weights; an invalid probe keeps its own.
-    private void Filter((int X, int Y, int Z) cell, Probe probe, Span<float> sky, Span<Vector3> radiance) {
+    private void Filter((int X, int Y, int Z) cell, ProbeData probe, Span<float> sky, Span<Vector3> radiance) {
         var total = 1f;
 
         for (var axis = 0; (axis < 6); axis++) {
@@ -812,8 +814,8 @@ public sealed class SdfMeshIrradiance {
     // its probes' feedback does not depend on the order the pool runs them in.
     private void Trace(int workers) {
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = workers };
-        var candidates = new List<((int X, int Y, int Z) Cell, int Sweeps, float Distance)>();
-        var results = Array.Empty<Probe>();
+        var candidates = m_candidates;
+        var results = m_results;
 
         while (true) {
             SdfMeshIrradianceScene scene;
@@ -837,7 +839,7 @@ public sealed class SdfMeshIrradiance {
             for (var z = low.Z; (z < (low.Z + layout.Dims.Z)); z++) {
                 for (var y = low.Y; (y < (low.Y + layout.Dims.Y)); y++) {
                     for (var x = low.X; (x < (low.X + layout.Dims.X)); x++) {
-                        var sweeps = ((m_cache.TryGetValue(key: (x, y, z), value: out var cached) && (cached.Generation == generation)) ? cached.Sweeps : 0);
+                        var sweeps = ((m_cache.TryGetValue(key: (x, y, z), value: out var cached) && (cached.Current.Generation == generation)) ? cached.Current.Sweeps : 0);
 
                         if (sweeps >= layout.Sweeps) { continue; }
 
@@ -866,7 +868,8 @@ public sealed class SdfMeshIrradiance {
             var block = new ProbeBlock(count: BatchProbes);
 
             if (results.Length < count) {
-                results = new Probe[BatchProbes];
+                results = new ProbeData[BatchProbes];
+                m_results = results;
             }
 
             _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
@@ -881,14 +884,17 @@ public sealed class SdfMeshIrradiance {
                 for (var index = 0; (index < count); index++) {
                     var cell = candidates[index].Cell;
                     var result = results[index];
+                    var entry = new Probe(Current: result, HasPrevious: false, Previous: default);
 
                     // Bounce sweeps read the new generation, but viewers keep the previous complete measurement
                     // until this cell's replacement converges. Flatten the link if another edit interrupts it.
                     if (!result.Invalid && (result.Sweeps < layout.Sweeps) && m_cache.TryGetValue(key: cell, value: out var previous)) {
-                        result = result with { Previous = ((previous.Generation == generation) ? previous.Previous : Readable(probe: previous)) };
+                        entry = ((previous.Current.Generation == generation)
+                            ? (entry with { HasPrevious = previous.HasPrevious, Previous = previous.Previous })
+                            : (entry with { HasPrevious = true, Previous = Readable(probe: previous) }));
                     }
-                    m_cache[cell] = result;
-                    if (result.Previous is null) { m_landed.Add(item: cell); }
+                    m_cache[cell] = entry;
+                    if (!entry.HasPrevious) { m_landed.Add(item: cell); }
                 }
                 m_traced += count;
                 m_rays += (((long)count) * layout.Rays);
@@ -958,7 +964,7 @@ public sealed class SdfMeshIrradiance {
     // One sweep of one probe: its rays against the scene, each hit shaded under the captured lighting, the sweeps after
     // the first adding the light the hit reflects from the cached probes about it; then which traced lights and which
     // neighbouring probes its centre sees.
-    private Probe TraceProbe((int X, int Y, int Z) cell, int generation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep, ProbeBlock block, int index) {
+    private ProbeData TraceProbe((int X, int Y, int Z) cell, int generation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep, ProbeBlock block, int index) {
         var origin = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
         var rotation = RotationOf(cell: cell);
         var valid = TraceRadiance(layout: layout, lighting: lighting, low: low, origin: origin, radiance: block.Radiance(index: index),
@@ -1000,7 +1006,7 @@ public sealed class SdfMeshIrradiance {
             }
         }
 
-        return new Probe(Block: block, Index: index, Neighbours: neighbours, Sweeps: (sweep + 1), Generation: generation, Invalid: !valid);
+        return new ProbeData(Block: block, Index: index, Neighbours: neighbours, Sweeps: (sweep + 1), Generation: generation, Invalid: !valid);
     }
     // The same hemispherical radiance measurement serves lattice probes and a camera in a gap between them. This
     // reads the existing scene and bounce cache; a camera sample is never written back into the irradiance volume.
@@ -1109,6 +1115,7 @@ public sealed class SdfMeshIrradiance {
         Span<bool> cornerFront = stackalloc bool[8];
         Span<uint> cornerNeighbours = stackalloc uint[8];
         var cornerProbes = new Corners();
+        Span<bool> cornerHas = stackalloc bool[8];
         var anyFront = false;
 
         for (var corner = 0; (corner < 8); corner++) {
@@ -1119,10 +1126,12 @@ public sealed class SdfMeshIrradiance {
                 (cell.Item1 < low.X) || (cell.Item1 >= (low.X + layout.Dims.X)) ||
                 (cell.Item2 < low.Y) || (cell.Item2 >= (low.Y + layout.Dims.Y)) ||
                 (cell.Item3 < low.Z) || (cell.Item3 >= (low.Z + layout.Dims.Z)) ||
-                !m_cache.TryGetValue(key: cell, value: out var probe) || probe.Invalid
+                !m_cache.TryGetValue(key: cell, value: out var entry) || entry.Current.Invalid
             ) {
                 continue;
             }
+
+            var probe = entry.Current;
 
             var weights = new Vector3(
                 x: ((offset.X > 0f) ? fraction.X : (1f - fraction.X)),
@@ -1138,6 +1147,7 @@ public sealed class SdfMeshIrradiance {
             if (weight <= 0f) { continue; }
 
             cornerProbes[corner] = probe;
+            cornerHas[corner] = true;
             cornerNeighbours[corner] = probe.Neighbours;
             cornerWeights[corner] = weight;
             cornerFront[corner] = (Vector3.Dot(vector1: toward, vector2: normal) >= (-SdfMeshIrradianceProbe.Behind * layout.Spacing));
@@ -1147,7 +1157,7 @@ public sealed class SdfMeshIrradiance {
         // The probes in front of the surface answer, and apart those behind it, which answer only where none lies in
         // front; each by the share of the others' weight it sees (MutualShares).
         for (var corner = 0; (corner < 8); corner++) {
-            if ((cornerProbes[corner] is null) || (cornerFront[corner] != anyFront)) { cornerWeights[corner] = 0f; }
+            if (!cornerHas[corner] || (cornerFront[corner] != anyFront)) { cornerWeights[corner] = 0f; }
         }
         MutualShares(neighbours: cornerNeighbours, weights: cornerWeights);
 
@@ -1156,7 +1166,9 @@ public sealed class SdfMeshIrradiance {
         var total = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
-            if ((cornerWeights[corner] <= 0f) || (cornerProbes[corner] is not { } probe)) { continue; }
+            if ((cornerWeights[corner] <= 0f) || !cornerHas[corner]) { continue; }
+
+            var probe = cornerProbes[corner];
 
             sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * cornerWeights[corner]);
             bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * cornerWeights[corner]);
@@ -1280,9 +1292,7 @@ public sealed class SdfMeshIrradiance {
     // sweeps it holds and whether it lies inside geometry. Its cubes and planes are a slice of the floats of the batch it was
     // traced in (ProbeBlock), its lights among them, so a batch allocates one block rather than five arrays a probe, in the
     // large object heap, where a collection of the young generations never copies it.
-    private sealed record Probe(ProbeBlock Block, int Index, uint Neighbours, int Sweeps, int Generation, bool Invalid) {
-        public Probe? Previous { get; init; }
-
+    private readonly record struct ProbeData(ProbeBlock Block, int Index, uint Neighbours, int Sweeps, int Generation, bool Invalid) {
         public Span<float> Sky => Block.Sky(index: Index);
         public Span<Vector3> Radiance => Block.Radiance(index: Index);
         public Span<float> Depth => Block.Depth(index: Index);
@@ -1303,14 +1313,137 @@ public sealed class SdfMeshIrradiance {
         public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 134)));
     }
 
-    private static Probe Readable(Probe probe) => (probe.Previous ?? probe);
+    // A cell's entry in the cache: the probe the trace last landed and, while bounce sweeps of a new generation converge,
+    // the previous complete measurement viewers keep reading (HasPrevious).
+    private readonly record struct Probe(ProbeData Current, ProbeData Previous, bool HasPrevious);
+
+    private static ProbeData Readable(Probe probe) => (probe.HasPrevious ? probe.Previous : probe.Current);
+
+    // The probes by cell: an open-addressed table of entries, so a probe the trace lands costs no allocation and the walk
+    // into an untraced area promotes no small objects. The trace writes it under the volume's gate, one writer at a time;
+    // the frame, the refill and the trace's workers read it without the gate, each entry under a sequence lock (its version
+    // is odd while a write is in progress), and a grown table is published whole, so a reader holding the old one reads a
+    // consistent, slightly earlier cache.
+    private sealed class ProbeCache {
+        private const int InitialCapacity = (1 << 16);
+
+        private Table? m_table;
+        private int m_capacity = InitialCapacity;
+
+        // The probes cached.
+        public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
+
+        // Forgets every probe; the next write starts a table of the capacity the cache last reached.
+        public void Clear() {
+            if (m_table is { } table) { m_capacity = table.Keys.Length; }
+            Volatile.Write(location: ref m_table, value: null);
+        }
+        public bool ContainsKey((int X, int Y, int Z) key) => ((Volatile.Read(location: ref m_table) is { } table) && (Find(key: key, table: table) >= 0));
+        public bool TryGetValue((int X, int Y, int Z) key, out Probe value) {
+            var table = Volatile.Read(location: ref m_table);
+            var slot = ((table is null) ? -1 : Find(key: key, table: table));
+
+            if ((table is null) || (slot < 0)) {
+                value = default;
+
+                return false;
+            }
+
+            ref var version = ref table.Versions[slot];
+
+            while (true) {
+                var before = Volatile.Read(location: ref version);
+
+                if ((before & 1) != 0) {
+                    Thread.SpinWait(iterations: 1);
+                    continue;
+                }
+
+                value = table.Entries[slot];
+                Interlocked.MemoryBarrier();
+                if (Volatile.Read(location: ref version) == before) { return true; }
+            }
+        }
+        // Writes a cell's entry; the volume's gate is held.
+        public Probe this[(int X, int Y, int Z) key] {
+            set {
+                var table = m_table;
+
+                if (table is null) {
+                    table = new Table(capacity: m_capacity);
+                    Volatile.Write(location: ref m_table, value: table);
+                }
+
+                var slot = Find(key: key, table: table);
+
+                if (slot >= 0) {
+                    ref var version = ref table.Versions[slot];
+
+                    _ = Interlocked.Increment(location: ref version);
+                    table.Entries[slot] = value;
+                    Volatile.Write(location: ref version, value: (version + 1));
+
+                    return;
+                }
+                if (((table.Count + 1) * 2) > table.Keys.Length) {
+                    table = Grow(table: table);
+                    slot = Find(key: key, table: table);
+                }
+
+                slot = ~slot;
+                table.Entries[slot] = value;
+                table.Keys[slot] = key;
+                Volatile.Write(location: ref table.Used[slot], value: 1);
+                table.Count++;
+            }
+        }
+
+        // A table of twice the capacity holding every entry, published before the write that needed it.
+        private Table Grow(Table table) {
+            var grown = new Table(capacity: (table.Keys.Length * 2));
+
+            for (var slot = 0; (slot < table.Keys.Length); slot++) {
+                if (table.Used[slot] == 0) { continue; }
+
+                var free = ~Find(key: table.Keys[slot], table: grown);
+
+                grown.Entries[free] = table.Entries[slot];
+                grown.Keys[free] = table.Keys[slot];
+                grown.Used[free] = 1;
+            }
+
+            grown.Count = table.Count;
+            Volatile.Write(location: ref m_table, value: grown);
+
+            return grown;
+        }
+        // The slot holding a key, or the complement of the free slot it would take: linear probing from the key's hash,
+        // over a table never more than half full.
+        private static int Find((int X, int Y, int Z) key, Table table) {
+            var mask = (table.Keys.Length - 1);
+
+            for (var slot = (Hash(key: key) & mask); ; slot = ((slot + 1) & mask)) {
+                if (Volatile.Read(location: ref table.Used[slot]) == 0) { return ~slot; }
+                if (table.Keys[slot] == key) { return slot; }
+            }
+        }
+        private static int Hash((int X, int Y, int Z) key) => unchecked(((key.X * 73856093) ^ (key.Y * 19349663)) ^ (key.Z * 83492791));
+
+        private sealed class Table(int capacity) {
+            public readonly (int X, int Y, int Z)[] Keys = new (int X, int Y, int Z)[capacity];
+            public readonly int[] Used = new int[capacity];
+            public readonly int[] Versions = new int[capacity];
+            public readonly Probe[] Entries = new Probe[capacity];
+            public int Count;
+        }
+    }
 
     // Bounded by the frame's view count, not by how far the camera has travelled.
     private sealed record CameraSample((int X, int Y, int Z) Cell, int Generation, Vector3 Position, float[] Sky, Vector3[] Radiance, bool Settled, bool Invalid);
     // The eight probes about a point a read gathers, held without an allocation on the trace's hot path.
     [System.Runtime.CompilerServices.InlineArray(8)]
     private struct Corners {
-        private Probe? m_first;
+        private ProbeData m_first;
     }
     // A static point or spot light the probes trace: its index in the lights table, and its record's position, colour,
     // intensity over pi, range, cone and bounce gain.
