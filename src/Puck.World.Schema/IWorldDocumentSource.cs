@@ -5,7 +5,11 @@ namespace Puck.World;
 /// <summary>One document's bytes in the order a composition read them.</summary>
 public sealed record WorldComposedLink(string Path, byte[] Bytes);
 /// <summary>A composed image and the filesystem facts that justify it. The original chain preserves content hashes.</summary>
-public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chain, byte[] ComposedJson, int Reach, IReadOnlyList<CompileInput>? Inputs);
+public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chain, byte[] ComposedJson, int Reach, IReadOnlyList<CompileInput>? Inputs) {
+    // Effective scalar provenance is process-local. Older/persisted images without it still serve ordinary reads;
+    // a provenance read recomposes once and holds a new image. No mutable JSON node is shared with a caller.
+    internal IReadOnlyDictionary<string, WorldDocumentValueOrigin>? Origins { get; init; }
+}
 /// <summary>The persistent composition entries of the compile cache.</summary>
 public interface IWorldCompositionStore {
     /// <summary>Reads an image for this source, path and catalog identity.</summary>
