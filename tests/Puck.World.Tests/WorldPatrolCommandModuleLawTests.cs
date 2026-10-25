@@ -127,7 +127,7 @@ public sealed class WorldPatrolCommandModuleLawTests {
 
         Assert.Contains(expectedSubstring: "points=4 read=4 off-body=3 occluded=1 stalled-points=0", actualString: summary);
         Assert.Contains(expectedSubstring: "#0 (0, 0)", actualString: summary);
-        Assert.Contains(expectedSubstring: "flagged points only", actualString: summary);
+        Assert.Contains(expectedSubstring: "lists points off the body", actualString: summary);
         Assert.Contains(expectedSubstring: "#3 (3, 0)", actualString: Run(registry: registry, line: "world.patrol all"));
     }
     [Fact]
@@ -138,9 +138,9 @@ public sealed class WorldPatrolCommandModuleLawTests {
 
         _ = Run(registry: registry, line: "world.patrol 0 0 1 0 1");
 
-        // Two iterations closed since the patrol armed: one of 30 ms work, one of 5 ms work and a long wait.
+        // Two iterations closed since the patrol armed: one of 40 ms work, one of 5 ms work and a long wait.
         timeline.BeginIteration();
-        clock.Advance(microseconds: 30_000L);
+        clock.Advance(microseconds: 40_000L);
         timeline.Mark(phase: HostFramePhase.Produce);
         timeline.BeginIteration();
         clock.Advance(microseconds: 5_000L);
@@ -149,9 +149,13 @@ public sealed class WorldPatrolCommandModuleLawTests {
         timeline.Mark(phase: HostFramePhase.Wait);
         timeline.BeginIteration();
 
-        Assert.Contains(expectedSubstring: "on screen (centre on body) STALL 1/2 frames, worst work 30.0 ms", actualString: Visit(registry: registry, point: 0));
-        Assert.Contains(expectedSubstring: "stalled-points=1 worst-work=30.0 ms", actualString: Run(registry: registry, line: "world.patrol"));
-        Assert.Equal(expected: (2, 1, 30.0, 30.0), actual: timeline.Scan(from: 0L, to: timeline.Recorded, budgetMilliseconds: 16.7));
+        Assert.Contains(expectedSubstring: "on screen (centre on body) STALL 1/2 frames, worst work 40.0 ms", actualString: Visit(registry: registry, point: 0));
+
+        var summary = Run(registry: registry, line: "world.patrol");
+
+        Assert.Contains(expectedSubstring: "stalled-points=1 hitched-points=1 worst-work=40.0 ms", actualString: summary);
+        Assert.Contains(expectedSubstring: "#0 (0, 0)", actualString: summary);
+        Assert.Equal(expected: (2, 1, 40.0, 40.0), actual: timeline.Scan(from: 0L, to: timeline.Recorded, budgetMilliseconds: 16.7));
         Assert.Equal(expected: (0, 0, 0.0, 0.0), actual: timeline.Scan(from: 5L, to: 9L, budgetMilliseconds: 16.7));
     }
     [Fact]

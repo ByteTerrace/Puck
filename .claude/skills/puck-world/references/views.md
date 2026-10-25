@@ -575,7 +575,8 @@ Free Cam do not alter the logical movement basis.
   misses the body) and reads it back with `world.patrol` / `world.patrol all`:
   `OFF BODY` where no pick names `body:0`, `OCCLUDED` where only the centre misses
   (an exhibit stands between the camera and the body), `NO ANSWER` where no pick
-  completed, `STALL` where a host iteration's work passed 16.7 ms.
+  completed, `STALL` where a host iteration's work passed 16.7 ms (listed without
+  `all` only when it passed 33.4 ms, a hitch).
 - `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
   draw, in drawing order, each as its published `SourceMapping`
   (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the

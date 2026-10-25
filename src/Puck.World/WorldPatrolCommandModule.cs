@@ -22,6 +22,9 @@ namespace Puck.World;
 public sealed partial class WorldPatrolCommandModule(WorldTickScript script, Func<IWorldPatrolView?> view, HostFrameTimeline? timeline = null) : ICommandModule {
     /// <summary>The host work, in milliseconds, past which an iteration is a stall: one 60 Hz period.</summary>
     public const double BudgetMilliseconds = 16.7;
+    /// <summary>The host work, in milliseconds, past which a stall is a hitch the default read-back lists: two budgets, a
+    /// dropped frame rather than a frame over.</summary>
+    public const double HitchMilliseconds = (2 * BudgetMilliseconds);
     /// <summary>The most points one patrol visits, which keeps its lines within what <c>world.at</c> holds armed.</summary>
     public const int MaxPoints = 200;
     /// <summary>The pixels a point picks: the view's centre, then a ring about it.</summary>
@@ -157,6 +160,7 @@ public sealed partial class WorldPatrolCommandModule(WorldTickScript script, Fun
     }
     private static bool IsBody(SdfPickResult? answer) => (answer?.Target is WorldPickTarget { BodyIndex: 0 });
     private static int BodySamples(Point point) => point.Answers.Count(predicate: static answer => IsBody(answer: answer));
+    private static bool Hitched(Point point) => (point.Frames.WorstWork >= HitchMilliseconds);
     private static bool Flagged(Point point) => (point.Read && (BodySamples(point: point) == 0));
     private static string Named(SdfPickResult? answer) {
         if (answer is not { } picked) { return "no answer"; }
@@ -195,14 +199,15 @@ public sealed partial class WorldPatrolCommandModule(WorldTickScript script, Fun
         var off = m_points.Count(predicate: static point => Flagged(point: point));
         var occluded = m_points.Count(predicate: static point => (point.Read && !Flagged(point: point) && !IsBody(answer: point.Answers[0])));
         var stalled = m_points.Count(predicate: static point => (point.Frames.Over > 0));
+        var hitched = m_points.Count(predicate: static point => Hitched(point: point));
         var worst = m_points.Max(selector: static point => point.Frames.WorstWork);
         var pending = (m_points.Count - read);
 
-        _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.patrol: instance={m_instance} points={m_points.Count} read={read}{((pending > 0) ? $" (running to tick {m_lastTick}, now {script.CompletedTick})" : string.Empty)} off-body={off} occluded={occluded} stalled-points={stalled} worst-work={worst:0.0} ms budget={BudgetMilliseconds} ms{(all ? string.Empty : "; flagged points only, world.patrol all lists every point")}]");
+        _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.patrol: instance={m_instance} points={m_points.Count} read={read}{((pending > 0) ? $" (running to tick {m_lastTick}, now {script.CompletedTick})" : string.Empty)} off-body={off} occluded={occluded} stalled-points={stalled} hitched-points={hitched} worst-work={worst:0.0} ms budget={BudgetMilliseconds} ms{(all ? string.Empty : "; lists points off the body, occluded or hitched, world.patrol all lists every point")}]");
         for (var index = 0; (index < m_points.Count); index++) {
             var point = m_points[index];
 
-            if (all || Flagged(point: point) || (point.Read && (!IsBody(answer: point.Answers[0]) || (point.Frames.Over > 0)))) {
+            if (all || (point.Read && (!IsBody(answer: point.Answers[0]) || Hitched(point: point)))) {
                 _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  #{index} ({F(point.X)}, {F(point.Z)}) yaw={m_yaw}: {Verdict(point: point)}");
             }
         }
@@ -216,7 +221,7 @@ public sealed partial class WorldPatrolCommandModule(WorldTickScript script, Fun
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.patrol",
-            description: $"Walks body 0 across a grid of its current level and reports, per point, whether the seat's rendered third-person view draws the body and whether the host kept its frame budget: world.patrol <x0> <z0> <x1> <z1> <step> [yawDegrees|-] [settleTicks] [y|-] arms one world.at script and answers with the tick it ends at. Each point is a body.pose of body 0 to (x, y, z), y held at the body's own by default (a grounded body re-pins to the floor under it; name y to patrol another level), a settle of settleTicks ticks (default {DefaultSettle}), then a pick of the centre of the first seat's rendered view (world.view.pick primary 0.5 0.5) and, only where the centre does not name the body, {Samples - 1} more at pixels about it, each read {GapTicks} ticks after it is asked (a clear point costs one pick); rows alternate direction, at most {MaxPoints} points. world.wait until <tick> holds a session until the patrol ends, and world.patrol alone reads it back: a summary line (points read, points off the body, points the centre pick shows an occluder in front of the body, points whose frames stalled, the worst host work in one iteration against {BudgetMilliseconds} ms) and a line for each point that is not plainly on screen or that stalled; world.patrol all lists every point. A point reads OFF BODY when no pick names body:0, the failure (the centre's pick says what is drawn there, sky included); OCCLUDED when the centre names something else but another pick names the body (an exhibit between the camera and the body); NO ANSWER when no pick completed. A stall is a host iteration whose work (its interval less the pacer's wait) passed {BudgetMilliseconds} ms during the point; a World without a windowed host records none. world.patrol stop drops every armed line, the patrol's and any other world.at line, and keeps what was read. world.patrol ask <point> <sample> and world.patrol read <point> <sample> are the script's own lines. Refused without a rendered seat view, while a patrol runs, past {MaxPoints} points, or when the script would exceed what world.at holds armed.",
+            description: $"Walks body 0 across a grid of its current level and reports, per point, whether the seat's rendered third-person view draws the body and whether the host kept its frame budget: world.patrol <x0> <z0> <x1> <z1> <step> [yawDegrees|-] [settleTicks] [y|-] arms one world.at script and answers with the tick it ends at. Each point is a body.pose of body 0 to (x, y, z), y held at the body's own by default (a grounded body re-pins to the floor under it; name y to patrol another level), a settle of settleTicks ticks (default {DefaultSettle}), then a pick of the centre of the first seat's rendered view (world.view.pick primary 0.5 0.5) and, only where the centre does not name the body, {Samples - 1} more at pixels about it, each read {GapTicks} ticks after it is asked (a clear point costs one pick); rows alternate direction, at most {MaxPoints} points. world.wait until <tick> holds a session until the patrol ends, and world.patrol alone reads it back: a summary line (points read, points off the body, points the centre pick shows an occluder in front of the body, points whose frames stalled, points that hitched, the worst host work in one iteration against {BudgetMilliseconds} ms) and a line for each point that is not plainly on screen or that hitched (host work past {HitchMilliseconds} ms); world.patrol all lists every point, the points that merely stalled included. A point reads OFF BODY when no pick names body:0, the failure (the centre's pick says what is drawn there, sky included); OCCLUDED when the centre names something else but another pick names the body (an exhibit between the camera and the body); NO ANSWER when no pick completed. A stall is a host iteration whose work (its interval less the pacer's wait) passed {BudgetMilliseconds} ms during the point; a World without a windowed host records none. world.patrol stop drops every armed line, the patrol's and any other world.at line, and keeps what was read. world.patrol ask <point> <sample> and world.patrol read <point> <sample> are the script's own lines. Refused without a rendered seat view, while a patrol runs, past {MaxPoints} points, or when the script would exceed what world.at holds armed.",
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return Describe(all: false);
