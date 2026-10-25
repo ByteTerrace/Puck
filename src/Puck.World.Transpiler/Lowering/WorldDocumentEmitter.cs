@@ -118,6 +118,7 @@ public static partial class WorldDocumentEmitter {
         List<WorldOutput>? worldOutputs = null,
         Assets.AssetCompilationContext? assets = null,
         IReadOnlyList<EnumDefinition>? inheritedEnums = null,
+        JsonObject? inheritedState = null,
         bool includeTests = true
     ) {
         ArgumentNullException.ThrowIfNull(document);
@@ -163,6 +164,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Annotations["WorldDocumentRoot"] = root;
         scope.Annotations["IncludeTests"] = includeTests;
+        if (inheritedState is not null) { scope.Annotations[InheritedStateAnnotation] = inheritedState; }
         if (assets is not null) { scope.Annotations["AssetContext"] = assets; }
         if (basePath is not null) { scope.Annotations[WorldDocumentVocabulary.DocumentDirectoryAnnotation] = WorldDocumentPaths.FullDirectory(directory: basePath); }
         var composition = new Composition(statements: document.Statements);
@@ -200,7 +202,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         discoveredEmbeddings = textsMap;
-        if ((document.Schema is not null) || (document.Basis is not null)) {
+        if ((composition.Worlds.Count == 0) && WorldSourceDeclaration.Of(document: document).EmitsDocument) {
             MaterializeDeclaredEnums(root: root, scope: scope);
         }
         EmitStateFamilies(

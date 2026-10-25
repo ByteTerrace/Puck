@@ -235,6 +235,8 @@ public static class WorldCompiler {
             : imports
         );
 
+        var walkedImports = false;
+
         if (effectiveImports == ImportHandling.Validate) {
             var withModules = ModuleResolver.ImportModules(
                 cancellationToken: cancellationToken,
@@ -246,8 +248,20 @@ public static class WorldCompiler {
 
             if (withModules is not null) {
                 document = withModules;
+                walkedImports = true;
             }
         }
+
+        var (inheritedEnums, inheritedState) = ((effectiveImports == ImportHandling.Ignore)
+            ? (Enums: [], State: null)
+            : InheritedState(
+                basis: document.Basis,
+                imports: (walkedImports
+                    ? [.. document.Statements.OfType<ImportNode>().Where(predicate: static import => !import.NamesFile)]
+                    : []),
+                reads: basisReads,
+                sourcePath: sourcePath
+            ));
 
         using var rootOrigin = sourceMap.PushOrigin(sourcePath: sourcePath);
         var worlds = new List<WorldOutput>();
@@ -270,11 +284,8 @@ public static class WorldCompiler {
             vocabulary: vocabulary,
             worldOutputs: worlds,
             assets: assets,
-            inheritedEnums: InheritedEnums(
-                basis: ((effectiveImports == ImportHandling.Ignore) ? null : document.Basis),
-                reads: basisReads,
-                sourcePath: sourcePath
-            )
+            inheritedEnums: inheritedEnums,
+            inheritedState: inheritedState
         );
 
         if (!allowMultiple && (worlds.Count > 1)) {
@@ -337,13 +348,19 @@ public static class WorldCompiler {
         return result with { Inputs = reads.Inputs };
     }
 
-    // The enums a source's basis declares, read from the basis's composed document through the one composer, so the
-    // source lowers an enum member it writes as the basis reads it. A basis that does not resolve or compose leaves
-    // the source to lower alone: the source's own composition reports why (PUCK035). A basis cycle stops at the
-    // source already being read, whose composition refuses the cycle by name.
-    private static IReadOnlyList<WorldDocumentEmitter.EnumDefinition> InheritedEnums(string? basis, string? sourcePath, CompileInputLog reads) {
-        if ((basis is null) || (sourcePath is null)) {
-            return [];
+    // The state section and enums a source's basis and document imports declare, read from their composed documents
+    // through the one composer, so the source lowers an enum member it writes and a test's given lines and witness
+    // rows as the composed world reads them. A basis or import that does not resolve or compose leaves the source to
+    // lower alone: the source's own composition reports why (PUCK035). A cycle stops at the source already being
+    // read, whose composition refuses the cycle by name.
+    private static (IReadOnlyList<WorldDocumentEmitter.EnumDefinition> Enums, JsonObject? State) InheritedState(
+        string? basis,
+        IReadOnlyList<ImportNode> imports,
+        string? sourcePath,
+        CompileInputLog reads
+    ) {
+        if (((basis is null) && (imports.Count == 0)) || (sourcePath is null)) {
+            return ([], null);
         }
 
         using var recording = CompileInputs.Record(log: reads);
@@ -352,7 +369,7 @@ public static class WorldCompiler {
         var reading = (ReadingBasisOf.Value ?? []);
 
         if (reading.Contains(item: referrer)) {
-            return [];
+            return ([], null);
         }
 
         var previous = ReadingBasisOf.Value;
@@ -360,42 +377,79 @@ public static class WorldCompiler {
         ReadingBasisOf.Value = reading.Add(item: referrer);
 
         try {
-            if (
-                !PuckDocumentComposer.Instance.TryRead(
-                    content: out var content,
-                    name: basis,
-                    reason: out _,
-                    referrerName: referrer,
-                    resolvedName: out var resolved
-                ) ||
-                (content is null) ||
-                !PuckDocumentComposer.TryComposeWorldDocument(
-                    chainBytes: out _,
-                    composed: out var composed,
-                    reason: out _,
-                    rootBytes: content,
-                    rootResolvedPath: resolved
-                ) ||
-                ((composed ?? (JsonNode.Parse(utf8Json: content) as JsonObject))?["state"]?["enums"] is not JsonArray enums)
-            ) {
-                return [];
+            JsonObject? state = null;
+
+            if ((basis is not null) && (TryReadComposed(name: basis, referrer: referrer) is { } basisDoc)) {
+                state = ((basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject);
             }
 
-            return [
-                .. enums.OfType<JsonObject>()
+            foreach (var import in imports) {
+                if (TryReadComposed(name: import.Path, referrer: referrer) is not { } importedDoc) {
+                    continue;
+                }
+                if (!string.IsNullOrEmpty(value: import.Alias)) {
+                    importedDoc = ((JsonObject)importedDoc.DeepClone());
+
+                    if (!WorldModuleNamespace.TryApply(alias: import.Alias, module: importedDoc, reason: out _)) {
+                        continue;
+                    }
+                }
+                if (importedDoc["state"] is not JsonObject importedState) {
+                    continue;
+                }
+
+                state = ((state is null)
+                    ? ((JsonObject)importedState.DeepClone())
+                    : (WorldDocumentBasis.TryMerge(
+                        basis: new JsonObject { ["state"] = state },
+                        composed: out var merged,
+                        overlay: new JsonObject { ["state"] = importedState.DeepClone() },
+                        reason: out _
+                    )
+                        ? (((JsonObject?)merged?["state"]?.DeepClone()) ?? state)
+                        : state));
+            }
+
+            var enums = ((state?["enums"] is JsonArray enumArray)
+                ? enumArray.OfType<JsonObject>()
                     .Where(predicate: static entry => ((entry["name"] is JsonValue name) && name.TryGetValue<string>(value: out _) && (entry["members"] is JsonArray)))
                     .Select(selector: static entry => new WorldDocumentEmitter.EnumDefinition(
                         Inherited: true,
                         Members: [.. entry["members"]!.AsArray().Select(selector: static member => (member?.ToString() ?? string.Empty))],
                         Name: entry["name"]!.GetValue<string>()
-                    )),
-            ];
+                    ))
+                    .ToArray()
+                : []);
+
+            return (enums, state);
         } catch (System.Text.Json.JsonException) {
-            return [];
+            return ([], null);
         } finally {
             ReadingBasisOf.Value = previous;
         }
     }
+
+    private static JsonObject? TryReadComposed(string name, string referrer) => (
+        (
+            PuckDocumentComposer.Instance.TryRead(
+                content: out var content,
+                name: name,
+                reason: out _,
+                referrerName: referrer,
+                resolvedName: out var resolved
+            ) &&
+            (content is not null) &&
+            PuckDocumentComposer.TryComposeWorldDocument(
+                chainBytes: out _,
+                composed: out var composed,
+                reason: out _,
+                rootBytes: content,
+                rootResolvedPath: resolved
+            )
+        )
+            ? (composed ?? (JsonNode.Parse(utf8Json: content) as JsonObject))
+            : null
+    );
 
     private static readonly AsyncLocal<System.Collections.Immutable.ImmutableHashSet<string>?> ReadingBasisOf = new();
 

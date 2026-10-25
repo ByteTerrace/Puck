@@ -196,4 +196,130 @@ public sealed class BasisCompositionLawTests {
             source: source
         );
     }
+    /// <summary>A test in a source that inherits state from a basis or an import resolves enum member names, given
+    /// lines (both slot and keyed rows) and verdict witness rows (Int, Fixed, Bool and Text) against the composed
+    /// inherited state, and refuses a keyed given line against an inherited slot row.</summary>
+    [InlineData("basis: \"base\"")]
+    [InlineData("import \"addon\"")]
+    [Theory]
+    public void ATestResolvesGivenLinesEnumsAndWitnessesFromInheritedState(string header) {
+        using var files = new TemporaryDirectory();
+
+        _ = files.WriteText(
+            name: "addon.puck",
+            text: """
+                state {
+                  enum Phase {
+                    Idle
+                    Active
+                  }
+
+                  world {
+                    slot phase = 0
+                    table telemetry {
+                      count = 0
+                    }
+                    slot ratio: Fixed = 1.5
+                    slot ready: Bool = true
+                    table guide {
+                      title = "Welcome"
+                    }
+                  }
+                }
+                """
+        );
+        _ = files.WriteText(
+            name: "base.puck",
+            text: """
+                schema: "puck.world.definition.v1"
+                documentId: "base"
+                import "addon"
+                """
+        );
+
+        var childPath = files.WriteText(
+            name: "child-tests.puck",
+            text: $$"""
+                schema: "puck.world.definition.v1"
+                {{header}}
+                documentId: "child-tests"
+
+                test "inherited state" {
+                  given {
+                    phase = Active
+                    telemetry[count] = 7
+                  }
+                  expect {
+                    phase == Active and telemetry[count] == 7 and ratio == 1.5 and ready == true and guide[title] == "Welcome"
+                  }
+                }
+                """
+        );
+
+        var compiled = WorldCompiler.CompileFile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            path: childPath
+        );
+
+        Assert.False(condition: compiled.Diagnostics.HasErrors, userMessage: compiled.Diagnostics.FormatReport());
+        var generated = Assert.Single(collection: compiled.TestWorlds).Json;
+        var rows = Assert.IsType<JsonArray>(@object: generated["state"]!["world"]);
+
+        Assert.Equal(
+            actual: rows.Select(selector: static row => $"{row!["name"]}:{row["kind"]}"),
+            expected: [
+                "phase:Int",
+                "telemetry:Int",
+                "expect$1:Int",
+                "expect$1$fixed:Fixed",
+                "expect$1$bool:Bool",
+                "expect$1$text:Text",
+            ]
+        );
+        Assert.Equal(actual: rows[0]!["value"]!.GetValue<long>(), expected: 1L);
+        Assert.Equal(actual: rows[1]!["cells"]![0]!["value"]!.GetValue<long>(), expected: 7L);
+
+        var effects = Assert.IsType<JsonArray>(@object: generated["rules"]![0]!["effects"]);
+
+        Assert.Equal(
+            actual: effects.Skip(count: 1).Select(selector: static effect => $"{effect!["fromState"]}:{effect["fromKey"]}->{effect["state"]}:{effect["key"]}"),
+            expected: [
+                "phase:->expect$1:phase",
+                "telemetry:count->expect$1:telemetry$count",
+                "ratio:->expect$1$fixed:ratio",
+                "ready:->expect$1$bool:ready",
+                "guide:title->expect$1$text:guide$title",
+            ]
+        );
+
+        var badSlotKeyPath = files.WriteText(
+            name: "bad-slot.puck",
+            text: $$"""
+                schema: "puck.world.definition.v1"
+                {{header}}
+                documentId: "bad-slot"
+
+                test "bad slot key" {
+                  given {
+                    phase[wrong] = Active
+                  }
+                  expect {
+                    phase == Active
+                  }
+                }
+                """
+        );
+        var refused = WorldCompiler.CompileFile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            path: badSlotKeyPath
+        );
+
+        Assert.Contains(
+            collection: refused.Diagnostics,
+            filter: static diagnostic => (
+                (diagnostic.Code == PuckDiagnosticCodes.TestStepInadmissible) &&
+                diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "slot-shaped")
+            )
+        );
+    }
 }
