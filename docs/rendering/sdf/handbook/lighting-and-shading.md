@@ -3,7 +3,7 @@
 After the mesh pass rasterizes a surface hit, the shading epilogue turns its
 position, material id and normal into a lit pixel. Puck interpolates the baked
 mesh's normal, estimates soft shadow penumbrae from cascades, and treats
-diegetic CRT screens as both pictures and lights.
+diegetic screens as both pictures and lights.
 Runtime switches let a user isolate these terms for measurement or restyle the
 frame.
 
@@ -407,28 +407,30 @@ cascade, no irradiance volume, no paint and no weathering. A glass shape in an
 opaque group (a pooled creation's mixed `group`, which the document validator
 refuses) shades as an opaque surface with the tint as its albedo.
 
-## Screen lights and the CRT treatment
+## Screen lights and the CRT material
 
-The reference scene's diegetic screens—the console cabinets' CRTs—are the most
-distinctive light source in the engine, because each screen is *both a picture
-and a light*.
+A diegetic screen is the most distinctive light source in the engine, because
+each screen is *both a picture and a light*.
 
 As a **picture**, a bound screen is emissive: it is its own light source, like a
 real display, so no scene lighting dims or tints it. A picture value of one
 shows at the screen's peak luminance (`WorldScreen.Luminance`, nits; a window
 onto another world shows that world's own luminance), and the view's screen
 fidelity eases that to the value the exposure leaves as the picture itself. Its pixels are the
-emulator's framebuffer, drawn from the screen's published mapping (the glass's
-bezel inset, the layout, any letterbox and the crop) through a CRT glass-face
-model—a soft bezel edge, soft cosine scanlines between the source's rows, an
-aperture-grille phosphor-stripe tint one triad a source column, optional bloom
-on the bright regions, and (both off by default) a vignette and a fresnel rim
-glint. The scanlines and the grille fade out as a source row or column shrinks
-toward two pixels, so they never alias against the pixel grid. The tuned look is a flat square tube: a hint
-of CRT, not a heavy filter. A view's screen fidelity (`SdfViewSnapshot.ScreenFidelity`, 0 to 1) scales every
-term of that treatment away and turns the soft bezel into a hard picture edge, and clears the atmosphere and
-the tone map from the view, so a seat that has framed the screen it engaged sees its pixels exactly as the
-source holds them; every other view carries 0.
+source's image, drawn from the screen's published mapping (the layout, any letterbox and the crop) and,
+by default, shown untreated, filling the screen's authored face. A screen whose row opts into the CRT
+material (`WorldScreen.Material`, `Crt`; a placement face's `material` the same) draws its picture
+inset in a bezel three hundredths of the face wide (`WorldScreenMappings.CrtGlass`, a warp whose
+inverse maps a hit) through a CRT glass-face model—a soft bezel edge, soft cosine scanlines between the
+source's rows, an aperture-grille stripe tint one triad a source column, optional bloom on the bright
+regions, and (both off by default) a vignette and a fresnel rim glint. The scanlines and the grille fade
+out as a source row or column shrinks toward two pixels, so they never alias against the pixel grid; the
+tuned look is a flat square tube, a hint of CRT, not a heavy filter. The face kind reaches the kernels in
+the mapping record's state row (`SdfScreenFace`: an opening, a display or a CRT). A view's screen fidelity
+(`SdfViewSnapshot.ScreenFidelity`, 0 to 1) scales every term of the CRT treatment away and turns its soft
+bezel into a hard picture edge, and clears the atmosphere and the tone map from the view, so a seat that
+has framed the screen it engaged sees its pixels exactly as the source holds them; every other view
+carries 0.
 
 As a **light**, every bound screen is a colored area light illuminating the
 room, one of the lights the views pass walks. Its position and orientation come from the screen-surface table; its

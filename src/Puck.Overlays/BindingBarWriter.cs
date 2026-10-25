@@ -19,8 +19,6 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     public const int MaxHintMembers = 4;
     /// <summary>The character clamp on every text run the bar writes (the page label and a hint's label alike).</summary>
     public const int MaxLineChars = 46;
-    /// <summary>One full march of the latched-toggle border, seconds.</summary>
-    public const float TogglePeriodSeconds = 1.6f;
 
     private readonly IBindingBarSource m_source;
     private readonly OverlayThemeStore m_theme;
@@ -59,10 +57,15 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         }
 
         var layout = seat.Layout;
-        var chrome = m_theme.Current.Chrome;
-        // The latched-toggle border's phase: one march per TogglePeriodSeconds on the presentation clock — never
-        // simulation time; every latched plate in the frame shares it so they march together.
-        var togglePhase = ((float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % TogglePeriodSeconds) / TogglePeriodSeconds));
+        var styles = m_theme.Current.Styles;
+        var bar = styles.Bar;
+        // The latched-toggle border's phase: one march per the keycap style's ToggleMarch seconds on the presentation
+        // clock — never simulation time; every latched plate in the frame shares it so they march together. A style
+        // that marches nothing draws the border still (a negative phase).
+        var march = styles.Keycap.ToggleMarch;
+        var togglePhase = ((march > 0f)
+            ? ((float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % march) / march))
+            : -1f);
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
         var regionOriginX = (region.X * builder.Width);
@@ -127,10 +130,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 // held tier fills solid where a rest plate fills at the chip rest opacity, so scaling a wing's latch
                 // by that same opacity makes it fade with its neighbours instead of standing at full strength.
                 alpha: (slot.Latched
-                ? (slot.Alpha * m_theme.Current.Elevation.ChipRestOpacity)
+                ? (slot.Alpha * styles.Keycap.RestOpacity)
                 : (slot.Bound
                     ? slot.Alpha
-                    : (slot.Alpha * chrome.DimQuietAlpha))),
+                    : (slot.Alpha * bar.QuietAlpha))),
                 badgeGlyph0: slot.BadgeGlyph0,
                 badgeGlyph1: slot.BadgeGlyph1,
                 bound: slot.Bound,
@@ -169,7 +172,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
 
             builder.WriteText(
-                alpha: chrome.BarLabelAlpha,
+                alpha: bar.LabelAlpha,
                 cellHeight: labelCell,
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextPrimary,
@@ -195,7 +198,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 accent: false,
                 alpha: (modifier.Held
                 ? 1f
-                : chrome.DimQuietAlpha),
+                : bar.QuietAlpha),
                 badgeGlyph0: modifier.BadgeGlyph0,
                 badgeGlyph1: modifier.BadgeGlyph1,
                 bound: true,
@@ -298,7 +301,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
                 builder.WriteIcon(
                     accent: false,
-                    alpha: chrome.BarHintAlpha,
+                    alpha: bar.HintAlpha,
                     badgeGlyph0: badge.Glyph0,
                     badgeGlyph1: badge.Glyph1,
                     bound: true,
@@ -316,7 +319,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
             if (labelWidth > 0f) {
                 builder.WriteText(
-                    alpha: chrome.BarHintAlpha,
+                    alpha: bar.HintAlpha,
                     cellHeight: hintCell,
                     maxChars: MaxLineChars,
                     role: OverlayColorRole.TextDim,

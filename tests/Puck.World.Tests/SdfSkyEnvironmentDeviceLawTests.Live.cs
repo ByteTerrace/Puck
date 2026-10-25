@@ -26,6 +26,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
 
         VerifyLivePanorama(device: device, extension: ".dxil");
     }
+
     // The sky definition, mapping and dimensions are held while successful conversion publications change and the
     // source ring rotates. The production environment factory must refresh both retained buffers and their identity.
     private static void VerifyLivePanorama(IGpuDeviceContext device, string extension) {
@@ -290,6 +291,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         public IReadOnlyList<int> Screens => [0];
 
         public bool Emits(int screen) => false;
+        public SdfScreenFace FaceOf(int screen) => SdfScreenFace.Opening;
         public SourceMapping? MappingOf(int screen) => m_mapping;
         public string? ReadOf(int view, int screen) => "feed";
     }

@@ -4,17 +4,17 @@ using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>A toast is chrome: a world with no theme composes none of it, and a themed one draws its chip.</summary>
+/// <summary>A toast is chrome its style sizes: a style with no height composes none of it, and the engine's default
+/// theme, which a world that authors none draws, draws its chip.</summary>
 public sealed class OverlayToastThemeLawTests {
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
     private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, float advance, uint[] words, int glyphCount);
-
     private static OverlayFrameBuilder Compose(OverlayThemeValues theme) {
         var toasts = new OverlayToastStore();
         var composer = new OverlayFrameComposer(
             sources: new UnifiedOverlaySources(Console: null, BindingBar: null, Toast: toasts, FeedTick: null),
             capacity: WorldOverlayCapacity.FromSchema(),
-            glyphs: CreateGlyphs(atlasCellHeight: 1, atlasCellWidth: 1, distanceRange: 1, glyphCount: 1, advance: 1f, words: [0u, 0u, 0x3F800000u]),
+            glyphs: CreateGlyphs(advance: 1f, atlasCellHeight: 1, atlasCellWidth: 1, distanceRange: 1, glyphCount: 1, words: [0u, 0u, 0x3F800000u]),
             frameSources: new EmptyFrames(), width: 1280, height: 900, theme: theme);
 
         toasts.Publish(isError: false, message: "[world.debug-view: ao]");
@@ -24,21 +24,21 @@ public sealed class OverlayToastThemeLawTests {
     }
 
     [Fact]
-    public void UnthemedWorldDrawsNoToast() {
+    public void AToastStyleWithNoHeightDrawsNoToast() {
         var builder = Compose(theme: OverlayThemeValues.Zero);
 
         Assert.Equal(expected: 0, actual: builder.PanelCount);
         Assert.Equal(expected: 0, actual: builder.ElementCount);
         Assert.Equal(expected: 0, actual: builder.TextWordCount);
     }
-
     [Fact]
-    public void ThemedWorldDrawsTheToastChip() {
-        var zero = OverlayThemeValues.Zero;
-        var builder = Compose(theme: (zero with {
-            Space = (zero.Space with { HeightChip = 28f, HeightBadge = 16f, Space2 = 8f, Space3 = 12f, Space8 = 32f }),
-            Type = (zero.Type with { MonoSize = 13f, MicroSize = 10f }),
-        }));
+    public void TheDefaultThemeDrawsTheToastChip() {
+        var definition = Fixtures.BuildDocument();
+        var builder = Compose(theme: new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
+            definition: definition,
+            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition)),
+            revision: 1
+        ));
 
         Assert.Equal(expected: 1, actual: builder.PanelCount);
         Assert.True(condition: (builder.ElementCount > 0));

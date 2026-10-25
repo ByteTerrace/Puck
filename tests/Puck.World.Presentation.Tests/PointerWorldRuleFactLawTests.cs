@@ -38,13 +38,14 @@ public sealed class PointerWorldRuleFactLawTests {
                 : CellValue.Int(value: 0L))
             )]
     );
-    // The fixture document with its screen taking the simulation destination and one ungated rule copying the
+    // The fixture document with its screen, a CRT, taking the simulation destination and one ungated rule copying the
     // three pointer facets of seat 1 on that screen into state every tick.
     private static WorldDefinition PointerDocument(string seat = "1", string screen = "0", SourceDestination? input = SourceDestination.Simulation, string facet = "x") {
         var document = Fixtures.BuildDocument();
 
         return document with {
             ScreensRaw = [.. document.Screens.Select(selector: row => row with {
+                Material = WorldScreenMaterial.Crt,
                 Route = (row.Route with { Input = input }),
             })],
             StateRaw = new WorldStateSection(World: [
@@ -158,7 +159,7 @@ public sealed class PointerWorldRuleFactLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: $"screen:0=on({FixedQ4816.FromRawBits(value: x)}, {FixedQ4816.FromRawBits(value: y)})"
         );
-        // The glass bezel insets the image, so face point (1/4, 3/4) is source fraction ((1/4 − b) / (1 − 2b), (3/4 − b) / (1 − 2b)).
+        // The CRT glass's bezel insets the image, so face point (1/4, 3/4) is source fraction ((1/4 − b) / (1 − 2b), (3/4 − b) / (1 − 2b)).
         Assert.InRange(
             actual: ((double)FixedQ4816.FromRawBits(value: x)),
             high: 0.235,

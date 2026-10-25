@@ -1,9 +1,9 @@
 // The on-screen controls of the worlds the Moth walks: the drawn cursor, the icons every badge and action draws, the
 // standard controller bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), its five pages, and the
-// play wheel with its rings. The debug world, the garden and the night field import it beside the theme, so a seat keeps
+// play wheel with its rings. The debug world, the garden and the night field import it beside the skin, so a seat keeps
 // its bar and wheel through the portal:
 //
-//   import "theme"
+//   import "skin"
 //   import "controls"
 //
 // The bar shows the page the seat holds. Nothing held is the Moth's own controls (Move); holding the left trigger (Z) is

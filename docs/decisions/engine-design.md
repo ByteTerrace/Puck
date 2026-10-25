@@ -267,6 +267,34 @@ rather than rescaling the object.
 Why: the owner's ruling. The debug world's sizing follows the owner's choices
 for the Moth, which are an author's choices and not the engine's.
 
+## The engine is generic
+
+No one feature's, world's or game's look or vocabulary enters an engine
+contract: core design tokens, enums, schema names and defaults, default shader
+paths, or engine prose (the owner's ruling). A feature's look is that feature's
+material, style or skin, opted into where it is used, and the engine's own
+default is neutral and complete:
+
+- **The overlay theme.** The core tokens of the `theme` section name purposes
+  (surfaces, scrims, rules, text, accent, status; spacing, radii, type sizes,
+  stroke, motion), never a component or a look. Each component's geometry,
+  opacities and recipe (the keycap's badge and its latched toggle's march, the
+  glow, the console's echo color, the bar, cursor, wheel, toast and HUD chrome)
+  is its style under `theme.styles`, which takes a core role by name or its own
+  color. A document that authors no theme draws the engine's neutral
+  `WorldThemeSection.Default`; the debug world's look is its own skin
+  (`worlds/debug/skin.puck`). The scrim opacity floor is a player's high-contrast
+  preference (`world.theme contrast high`), not a document refusal.
+- **Screens.** A screen shows its picture as its source made it, filling its
+  authored face; a CRT's bezel, scanlines, grille and bloom are the `Crt` screen
+  material a row opts into, and a pointer hit maps through that bezel only on
+  such a screen. The owner approved the change of look this made to every
+  screen that is not a tube.
+
+Why: a default that carries one game's look is a cost every other game pays to
+undo, and a token named after a feature cannot be retuned without that
+feature's vocabulary.
+
 ## A collider follows the drawn solid
 
 A placement collides as the solid it draws, not as a bound around it. A
