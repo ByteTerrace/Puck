@@ -57,100 +57,13 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
-        if (volume.Kind == FixedBodyColliderKind.Capsule) {
-            var box = RoundedBox(center: Center, rotation: FixedQuaternion.Identity, innerHalfExtents: Extent, radius: FixedQ4816.Zero);
+        // A sharp box is the same closest-feature query with no spherical offset.
+        var box = RoundedBox(center: Center,
+            rotation: ((Kind == FixedStaticColliderKind.AxisAlignedBox) ? FixedQuaternion.Identity : Rotation),
+            innerHalfExtents: Extent, radius: FixedQ4816.Zero);
 
-            return FixedRoundedBoxContact.TryPush(box: in box, orientation: in orientation, position: position,
-                push: out push, skin: skin, volume: in volume);
-        }
-        if (volume.Kind == FixedBodyColliderKind.Sphere) {
-            return FixedSphereBoxContact.TryPush(
-                sphereCenter: (position + orientation.Rotate(vector: volume.Center)),
-                radius: (volume.Radius + skin),
-                boxCenter: Center,
-                boxRotation: FixedQuaternion.Identity,
-                halfExtents: Extent,
-                push: out push
-            );
-        }
-
-        var (bodyCenter, bodyExtent) = FixedColliderBounds.WorldBounds(
-            orientation: in orientation,
-            position: position,
-            volume: in volume
-        );
-        var delta = (bodyCenter - Center);
-        var overlapX = (((Extent.X + bodyExtent.X) + skin) - FixedQ4816.Abs(value: delta.X));
-        var overlapY = (((Extent.Y + bodyExtent.Y) + skin) - FixedQ4816.Abs(value: delta.Y));
-        var overlapZ = (((Extent.Z + bodyExtent.Z) + skin) - FixedQ4816.Abs(value: delta.Z));
-
-        if (
-            (overlapX <= FixedQ4816.Zero) ||
-            (overlapY <= FixedQ4816.Zero) ||
-            (overlapZ <= FixedQ4816.Zero)
-        ) {
-            push = default;
-            return false;
-        }
-
-        if (
-            (overlapX <= overlapY) &&
-            (overlapX <= overlapZ)
-        ) {
-            push = new FixedContactPush(
-                Normal: (FixedVector3.UnitX * FixedQ4816.CopySign(
-                    sign: delta.X,
-                    value: FixedQ4816.One
-                )),
-                Penetration: overlapX
-            );
-        } else if (overlapY <= overlapZ) {
-            push = new FixedContactPush(
-                Normal: (FixedVector3.UnitY * FixedQ4816.CopySign(
-                    sign: delta.Y,
-                    value: FixedQ4816.One
-                )),
-                Penetration: overlapY
-            );
-        } else {
-            push = new FixedContactPush(
-                Normal: (FixedVector3.UnitZ * FixedQ4816.CopySign(
-                    sign: delta.Z,
-                    value: FixedQ4816.One
-                )),
-                Penetration: overlapZ
-            );
-        }
-        return true;
-    }
-    // An oriented box is the axis-aligned box at the origin seen from the box's own frame: carry the body into that
-    // frame, push there, and turn the push back. Every volume kind then meets the box's true faces, and a face push
-    // points along the face's own normal.
-    private bool TryOrientedBoxPush(
-        FixedVector3 position,
-        in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume,
-        FixedQ4816 skin,
-        out FixedContactPush push
-    ) {
-        var local = AxisAlignedBox(
-            center: FixedVector3.Zero,
-            halfExtents: Extent
-        );
-
-        if (!local.TryBoxPush(
-            orientation: (Rotation.Conjugate() * orientation).Normalize(),
-            position: Rotation.RotateInverse(vector: (position - Center)),
-            push: out var localPush,
-            skin: skin,
-            volume: in volume
-        )) {
-            push = default;
-            return false;
-        }
-
-        push = localPush with { Normal = Rotation.Rotate(vector: localPush.Normal) };
-        return true;
+        return FixedRoundedBoxContact.TryPush(box: in box, orientation: in orientation, position: position,
+            push: out push, skin: skin, volume: in volume);
     }
     private bool TryHalfSpacePush(
         FixedVector3 position,
@@ -381,8 +294,10 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         return ((((axisX * local.X) + (axisY * local.Y)) + (axisZ * local.Z)) + padding);
     }
+
     // Far wider than any rounding in a rotation or a contact query, and still tight enough to cull at room scale.
     private static readonly FixedQ4816 BoundsPadding = (FixedQ4816.One / FixedQ4816.FromInteger(value: 64));
+
     /// <summary>Queries the depenetration required for one body volume.</summary>
     /// <param name="position">The body's world position.</param>
     /// <param name="orientation">The body's world orientation.</param>
@@ -417,7 +332,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         skin: skin,
         volume: in volume
     ),
-        FixedStaticColliderKind.OrientedBox => TryOrientedBoxPush(
+        FixedStaticColliderKind.OrientedBox => TryBoxPush(
         orientation: in orientation,
         position: position,
         push: out push,

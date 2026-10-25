@@ -91,100 +91,26 @@ public static class FixedDynamicBodyContacts {
             );
         }
 
-        if ((left.Kind == FixedBodyColliderKind.Sphere) || (right.Kind == FixedBodyColliderKind.Sphere)) {
-            var sphereIsLeft = (left.Kind == FixedBodyColliderKind.Sphere);
-            var sphere = (sphereIsLeft ? left : right);
-            var box = (sphereIsLeft ? right : left);
-            var spherePosition = (sphereIsLeft ? leftPosition : rightPosition);
-            var sphereOrientation = (sphereIsLeft ? leftOrientation : rightOrientation);
-            var boxPosition = (sphereIsLeft ? rightPosition : leftPosition);
-            var boxOrientation = (sphereIsLeft ? rightOrientation : leftOrientation);
+        // Exactly one side is a box. Share its closest features with static sharp/rounded boxes;
+        // the other side is a sphere or capsule, and reversing the moving side reverses the push.
+        var roundIsLeft = (left.Kind != FixedBodyColliderKind.Box);
+        var round = (roundIsLeft ? left : right);
+        var box = (roundIsLeft ? right : left);
+        var roundPosition = (roundIsLeft ? leftPosition : rightPosition);
+        var roundOrientation = (roundIsLeft ? leftOrientation : rightOrientation);
+        var boxPosition = (roundIsLeft ? rightPosition : leftPosition);
+        var boxOrientation = (roundIsLeft ? rightOrientation : leftOrientation);
+        var collider = FixedStaticCollider.RoundedBox(
+            center: (boxPosition + boxOrientation.Rotate(vector: box.Center)),
+            rotation: (boxOrientation * box.Rotation).Normalize(),
+            innerHalfExtents: box.HalfExtents, radius: FixedQ4816.Zero);
 
-            if (FixedSphereBoxContact.TryPush(
-                sphereCenter: (spherePosition + sphereOrientation.Rotate(vector: sphere.Center)),
-                radius: sphere.Radius,
-                boxCenter: (boxPosition + boxOrientation.Rotate(vector: box.Center)),
-                boxRotation: (boxOrientation * box.Rotation).Normalize(),
-                halfExtents: box.HalfExtents,
-                push: out var push
-            )) {
-                correction = (push.Normal * (sphereIsLeft ? push.Penetration : -push.Penetration));
-                return true;
-            }
-            correction = default;
-            return false;
+        if (FixedRoundedBoxContact.TryPush(collider, roundPosition, roundOrientation, round, FixedQ4816.Zero, out var push)) {
+            correction = (push.Normal * (roundIsLeft ? push.Penetration : -push.Penetration));
+            return true;
         }
-
-        var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
-            orientation: leftOrientation,
-            position: leftPosition,
-            volume: in left
-        );
-        var (rightCenter, rightExtent) = FixedColliderBounds.WorldBounds(
-            orientation: rightOrientation,
-            position: rightPosition,
-            volume: in right
-        );
-        var deltaCenter = (leftCenter - rightCenter);
-        var overlapX = ((leftExtent.X + rightExtent.X) - FixedQ4816.Abs(value: deltaCenter.X));
-        var overlapY = ((leftExtent.Y + rightExtent.Y) - FixedQ4816.Abs(value: deltaCenter.Y));
-        var overlapZ = ((leftExtent.Z + rightExtent.Z) - FixedQ4816.Abs(value: deltaCenter.Z));
-
-        if (
-            (overlapX <= FixedQ4816.Zero) ||
-            (overlapY <= FixedQ4816.Zero) ||
-            (overlapZ <= FixedQ4816.Zero)
-        ) {
-            correction = default;
-            return false;
-        }
-
-        if (
-            (overlapX <= overlapY) &&
-            (overlapX <= overlapZ)
-        ) {
-            var sign = ((deltaCenter.X == FixedQ4816.Zero)
-                ? (((tieBreaker & 1) == 0)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One)
-                : ((deltaCenter.X > FixedQ4816.Zero)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One
-            ));
-
-            correction = new FixedVector3(
-                X: (overlapX * sign),
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.Zero
-            );
-        } else if (overlapY <= overlapZ) {
-            var sign = ((deltaCenter.Y >= FixedQ4816.Zero)
-                ? FixedQ4816.One
-                : -FixedQ4816.One
-            );
-
-            correction = new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: (overlapY * sign),
-                Z: FixedQ4816.Zero
-            );
-        } else {
-            var sign = ((deltaCenter.Z == FixedQ4816.Zero)
-                ? (((tieBreaker & 1) == 0)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One)
-                : ((deltaCenter.Z > FixedQ4816.Zero)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One
-            ));
-
-            correction = new FixedVector3(
-                X: FixedQ4816.Zero,
-                Y: FixedQ4816.Zero,
-                Z: (overlapZ * sign)
-            );
-        }
-        return true;
+        correction = default;
+        return false;
     }
 
     /// <summary>Returns a rotation-independent sphere enclosing every supplied local volume.</summary>

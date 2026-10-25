@@ -11,6 +11,23 @@ public static class FixedConvexContact {
     }
     private readonly record struct Face(int A, int B, int C, FixedVector3 Normal, FixedQ4816 Distance);
     private readonly record struct Edge(int A, int B);
+    // Keep the closest point and its direction on the Q32 grid until after normalization. Rounding
+    // a shallow residual to Q16 first can aim the next support query back at a discarded vertex.
+    private readonly record struct Projection(FixedQ3232 X, FixedQ3232 Y, FixedQ3232 Z) {
+        // Both length ordering and normalization are homogeneous. Reinterpret all Q32 raws at the
+        // same scale so the shared vector kernels compare exact squares, without a Q32 rounding tie.
+        private FixedVector3 Scaled => new(X: FixedQ4816.FromRawBits(value: X.Value), Y: FixedQ4816.FromRawBits(value: Y.Value), Z: FixedQ4816.FromRawBits(value: Z.Value));
+
+        internal bool IsCloserThan(Projection other) => (Scaled.CompareLengthTo(other: other.Scaled) < 0);
+
+        internal FixedVector3 Point => new(X: X.ToFixedQ4816(), Y: Y.ToFixedQ4816(), Z: Z.ToFixedQ4816());
+        internal FixedVector3 Direction => Scaled.Normalize();
+    }
+
+    private static Projection Project(FixedVector3 a, FixedVector3 ab, FixedQ3232 u, FixedVector3 ac, FixedQ3232 v) => new(
+        X: ((FixedQ3232.FromFixedQ4816(value: a.X) + (FixedQ3232.FromFixedQ4816(value: ab.X) * u)) + (FixedQ3232.FromFixedQ4816(value: ac.X) * v)),
+        Y: ((FixedQ3232.FromFixedQ4816(value: a.Y) + (FixedQ3232.FromFixedQ4816(value: ab.Y) * u)) + (FixedQ3232.FromFixedQ4816(value: ac.Y) * v)),
+        Z: ((FixedQ3232.FromFixedQ4816(value: a.Z) + (FixedQ3232.FromFixedQ4816(value: ab.Z) * u)) + (FixedQ3232.FromFixedQ4816(value: ac.Z) * v)));
 
     private static readonly FixedQ4816 Tolerance = (FixedQ4816.Epsilon * FixedQ4816.FromInteger(value: 4));
 
@@ -28,47 +45,51 @@ public static class FixedConvexContact {
         return new Vertex(A: a, B: b);
     }
     // Closest point of every proper simplex feature; a tetrahedron containing the origin is the sole interior case.
-    private static FixedVector3 Reduce(Span<Vertex> simplex, ref int count, out FixedVector3 witness, out bool inside) {
+    private static FixedVector3 Reduce(Span<Vertex> simplex, ref int count, out FixedVector3 witness, out bool inside, out FixedVector3 direction) {
+        direction = FixedVector3.Zero;
         inside = ((count == 4) && Contains(a: simplex[0].Delta, b: simplex[1].Delta, c: simplex[2].Delta, d: simplex[3].Delta));
         if (inside) { witness = FixedVector3.Zero; return FixedVector3.Zero; }
-        var best = simplex[0].Delta;
+        var best = Project(simplex[0].Delta, default, default, default, default);
 
         witness = simplex[0].A;
-        var distance = best.Length;
         var mask = 1;
 
         for (var i = 0; (i < count); i++) {
             var a = simplex[i].Delta;
 
-            if (a.Length < distance) { best = a; distance = a.Length; mask = (1 << i); witness = simplex[i].A; }
+            var vertex = Project(a: a, ab: default, ac: default, u: default, v: default);
+
+            if (vertex.IsCloserThan(other: best)) { best = vertex; mask = (1 << i); witness = simplex[i].A; }
             for (var j = (i + 1); (j < count); j++) {
                 var b = simplex[j].Delta;
                 var ab = (b - a);
                 var denominator = Dot(a: ab, b: ab);
 
                 if (denominator <= FixedQ3232.Zero) { continue; }
-                var t = FixedQ4816.Clamp((-Dot(a: a, b: ab) / denominator).ToFixedQ4816(), FixedQ4816.Zero, FixedQ4816.One);
-                var point = FixedVector3.Lerp(amount: t, from: a, to: b);
+                var t = FixedQ3232.Clamp((-Dot(a: a, b: ab) / denominator), FixedQ3232.Zero, FixedQ3232.One);
+                var point = Project(a: a, ab: ab, ac: default, u: t, v: default);
 
-                if (point.Length < distance) {
-                    best = point; distance = point.Length; mask = (1 << i) | (1 << j);
-                    witness = FixedVector3.Lerp(simplex[i].A, simplex[j].A, t);
+                if (point.IsCloserThan(other: best)) {
+                    best = point; mask = (1 << i) | (1 << j);
+                    witness = Project(simplex[i].A, (simplex[j].A - simplex[i].A), t, default, default).Point;
                 }
                 for (var k = (j + 1); (k < count); k++) {
                     var ac = (simplex[k].Delta - a);
-                    var aa = Dot(a: ab, b: ab); var bb = Dot(a: ab, b: ac); var cc = Dot(a: ac, b: ac);
-                    var da = -Dot(a: a, b: ab); var db = -Dot(a: a, b: ac);
-                    var determinant = ((aa * cc) - (bb * bb));
+                    var normal = Normal(a: a, b: simplex[j].Delta, c: simplex[k].Delta);
+                    // Oriented areas give the projected barycentrics without squaring the triangle's
+                    // area. The Gram determinant subtracts nearly equal fourth-order products; on a
+                    // shallow contact it can round a valid interior projection back outside the face.
+                    var area = Area(a: ab, b: ac, normal: normal);
 
-                    if (determinant <= FixedQ3232.Zero) { continue; }
-                    var u = (((da * cc) - (db * bb)) / determinant).ToFixedQ4816();
-                    var v = (((db * aa) - (da * bb)) / determinant).ToFixedQ4816();
+                    if (area <= FixedQ3232.Zero) { continue; }
+                    var u = (Area(a: ac, b: a, normal: normal) / area);
+                    var v = (Area(a: a, b: ab, normal: normal) / area);
 
-                    if ((u < FixedQ4816.Zero) || (v < FixedQ4816.Zero) || ((u + v) > FixedQ4816.One)) { continue; }
-                    point = ((a + (ab * u)) + (ac * v));
-                    if (point.Length < distance) {
-                        best = point; distance = point.Length; mask = (1 << i) | (1 << j) | (1 << k);
-                        witness = ((simplex[i].A + ((simplex[j].A - simplex[i].A) * u)) + ((simplex[k].A - simplex[i].A) * v));
+                    if ((u < FixedQ3232.Zero) || (v < FixedQ3232.Zero) || ((u + v) > FixedQ3232.One)) { continue; }
+                    point = Project(a: a, ab: ab, ac: ac, u: u, v: v);
+                    if (point.IsCloserThan(other: best)) {
+                        best = point; mask = (1 << i) | (1 << j) | (1 << k);
+                        witness = Project(simplex[i].A, (simplex[j].A - simplex[i].A), u, (simplex[k].A - simplex[i].A), v).Point;
                     }
                 }
             }
@@ -77,14 +98,23 @@ public static class FixedConvexContact {
 
         for (var i = 0; (i < count); i++) { if ((mask & (1 << i)) != 0) { simplex[next++] = simplex[i]; } }
         count = next;
-        return best;
+        direction = -best.Direction;
+        return best.Point;
     }
-    private static FixedVector3 Normal(FixedVector3 a, FixedVector3 b, FixedVector3 c) {
-        var ab = (b - a);
-        var ac = (c - a);
+    private static (FixedQ3232 X, FixedQ3232 Y, FixedQ3232 Z) Cross(FixedVector3 ab, FixedVector3 ac) {
         var x = ((FixedQ3232.FromFixedQ4816(value: ab.Y) * FixedQ3232.FromFixedQ4816(value: ac.Z)) - (FixedQ3232.FromFixedQ4816(value: ab.Z) * FixedQ3232.FromFixedQ4816(value: ac.Y)));
         var y = ((FixedQ3232.FromFixedQ4816(value: ab.Z) * FixedQ3232.FromFixedQ4816(value: ac.X)) - (FixedQ3232.FromFixedQ4816(value: ab.X) * FixedQ3232.FromFixedQ4816(value: ac.Z)));
         var z = ((FixedQ3232.FromFixedQ4816(value: ab.X) * FixedQ3232.FromFixedQ4816(value: ac.Y)) - (FixedQ3232.FromFixedQ4816(value: ab.Y) * FixedQ3232.FromFixedQ4816(value: ac.X)));
+
+        return (x, y, z);
+    }
+    private static FixedQ3232 Area(FixedVector3 a, FixedVector3 b, FixedVector3 normal) {
+        var (x, y, z) = Cross(ab: a, ac: b);
+        return (((x * FixedQ3232.FromFixedQ4816(value: normal.X)) + (y * FixedQ3232.FromFixedQ4816(value: normal.Y))) +
+            (z * FixedQ3232.FromFixedQ4816(value: normal.Z)));
+    }
+    private static FixedVector3 Normal(FixedVector3 a, FixedVector3 b, FixedVector3 c) {
+        var (x, y, z) = Cross(ab: (b - a), ac: (c - a));
         // Normalization is homogeneous: the shared kernel accepts the Q32 cross product's raw direction,
         // retaining sliver-face orientation that a Q16 cross product would round away before normalization.
         var (nx, ny, nz) = FixedVectorMath.Normalize(x: x.Value, y: y.Value, z: z.Value);
@@ -109,10 +139,10 @@ public static class FixedConvexContact {
 
         simplex[0] = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
         delta = simplex[0].Delta;
+        direction = -delta.Normalize();
         witness = simplex[0].A;
         for (var iteration = 0; (iteration < 64); iteration++) {
             if (delta.Length <= Tolerance) { return true; }
-            direction = -delta.Normalize();
             var next = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
             var advance = FixedVector3.Dot(left: (next.Delta - delta), right: direction);
 
@@ -122,7 +152,7 @@ public static class FixedConvexContact {
             for (var i = 0; (i < count); i++) { duplicate |= (simplex[i].Delta == next.Delta); }
             if (duplicate) { return false; }
             simplex[count++] = next;
-            delta = Reduce(count: ref count, inside: out var inside, simplex: simplex, witness: out witness);
+            delta = Reduce(count: ref count, direction: out direction, inside: out var inside, simplex: simplex, witness: out witness);
             if (inside) { return true; }
         }
         return (delta.Length <= Tolerance);
