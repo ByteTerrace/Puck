@@ -634,6 +634,14 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return open;
     }
+    /// <summary>Populates locals for a host-owned evaluation under its current binding before any gate or score
+    /// reads them. Each value is evaluated afresh so timers cannot retain another binding's locals.</summary>
+    /// <param name="rule">The compiled rule whose locals are evaluated in declaration order.</param>
+    /// <param name="latch">The owning family's latch.</param>
+    /// <param name="binding">The current lexical binding.</param>
+    /// <returns>Whether every binding evaluated; a fault is reported and closes this evaluation.</returns>
+    public bool EvaluateBindings(CompiledRule rule, RuleLatch latch, LatchKey binding) =>
+        EvaluateBindings(rule: rule, latch: latch, binding: binding, schedule: null, tick: m_host.Tick, trace: null);
 
     // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
     // binding that cannot evaluate closes the gate for this evaluation and is reported once per category like any

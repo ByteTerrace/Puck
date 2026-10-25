@@ -35,7 +35,7 @@ public enum WorldMutationAdmissionRule : byte {
     MissingBudget,
     /// <summary>Denied — the untrusted principal's per-tick dispatch budget for this section is spent.</summary>
     BudgetExhausted,
-    /// <summary>Denied — a guarded batch would observe a state row the principal cannot read.</summary>
+    /// <summary>Denied — a guard, declared set or bound document value reads a state row the principal cannot observe.</summary>
     ObservationDenied,
     /// <summary>Denied — a batch has malformed guards, no members, or a member claiming another actor.</summary>
     MalformedBatch,
