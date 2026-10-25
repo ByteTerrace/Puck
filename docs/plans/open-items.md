@@ -402,6 +402,7 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] One live store and one write door.
   - [ ] Everything that steers the future hashed and checkpointed, running addons included.
   - [ ] Rewind as a complete continuation.
+    - [ ] Chess allows undo (the owner's ruling): a player takes back a move through gameplay rewind over the complete continuation, the first consumer of this step.
   - [ ] Entities as records in pools; seats as entities.
   - [ ] Edges as values, versioned facets, explicit order, key reclamation, facets, one work allowance.
 - [ ] S9 the authoring consensus ([S9](state-and-language.md#s9--the-authoring-consensus)), four waves:
@@ -725,6 +726,8 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] Vulkan records per-pass breadcrumbs for a device loss: device creation enables `VK_NV_device_diagnostic_checkpoints` where offered, every pass's debug label records a `vkCmdSetCheckpointNV` marker naming it, and `VK_ERROR_DEVICE_LOST` reads `vkGetQueueCheckpointDataNV` on the graphics queue into the fault report after `VK_EXT_device_fault`'s (`VulkanDeviceCheckpoints`), the peer of Direct3D 12's DRED breadcrumbs. On the RTX 4070 both extensions enable and a debug-world boot under `--debug-layers full` raises nothing new. Vulkan cannot remove a healthy device, so the read is proven against a CPU driver only; a real hang has not been provoked.
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
+
+- [ ] A board game room in the gallery (the owner's request, being considered): a room that hosts the landed board games (chess, Go, Reversi and the others in the state programme) on real tables, each playable by seats and addons. The room, which games and how it looks are open with the owner.
 
 ## [UI](ui.md)
 
