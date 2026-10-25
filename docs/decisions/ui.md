@@ -98,6 +98,10 @@ ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
   patch interface, per-mod and global budgets with atomic refusal that keeps
   the last good tree, and a generated Rust SDK. UI grants are separate from
   observing or changing state.
+- **A host menu is always reachable** from a reserved input and from the bar:
+  it holds escape, the Mods surface, settings and focus recovery, draws only
+  while open, and no world or mod can cover, restyle or intercept it (the lead's
+  call, which the owner deferred).
 - **The player sees what each mod does**: a Mods surface lists each mod's
   permissions and use with per-mod show-UI, input and sound toggles, and a held
   key shows who drew anything on screen.
