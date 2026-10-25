@@ -574,9 +574,12 @@ of source nesting or active evaluation, and four million work units across evalu
 copies. Copied strings charge their length. These bounds are checked before bulk allocation; `PUCK047` asks the
 author to split excessive generated data. Both vocabulary emitters accept a cancellation token. Raw and
 interpolated string contents survive formatting unchanged, including indentation and blank lines. A source has one
-layout, printed by `PuckPrinter`: `PuckPrinter.IndentWidth` (two) spaces per level, every block body on its own lines, and
-every array or object keeping the line breaks its author wrote. `puck format`, the language server's formatting request, and
-the decompiler all print it; no option or editor setting changes it.
+layout, printed by `PuckPrinter`: `PuckPrinter.IndentWidth` (two) spaces per level, every block body on its own lines,
+every array or object keeping the line breaks its author wrote, and a line that would pass `PuckPrinter.LineWidth` (120)
+broken where the reader takes a line break as white space: inside a call's, array's or object's brackets, after an
+operator, and after a gate's `and` or `or`. A rule operand breaks only inside its parentheses, since a line break outside
+them ends it, so a local's or an effect's long chain is first wrapped in parentheses. `puck format`, the language
+server's formatting request, and the decompiler all print it; no option or editor setting changes it.
 
 There is no test project of this project's own: `tests/Puck.World.Transpiler.Tests` (parser, formatter, linter,
 emitter, decompiler and LSP against `puck.world.definition.v1`) and `tests/Puck.GamingBricks.Transpiler.Tests` (compile and

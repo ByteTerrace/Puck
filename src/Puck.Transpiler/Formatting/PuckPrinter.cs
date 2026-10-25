@@ -18,6 +18,11 @@ public static partial class PuckPrinter {
     /// <summary>The spaces one indentation level costs. A <c>.puck</c> source has exactly one layout, so no caller,
     /// editor setting, or command-line option changes it.</summary>
     public const int IndentWidth = 2;
+    /// <summary>The column a printed line stays within where the printer can break it: past it, a call's arguments,
+    /// an array's elements and an object's properties take a line each, an operator or conditional chain breaks
+    /// after its operators, and a gate after its <c>and</c> or <c>or</c>. A comment, a string and a key never break,
+    /// so a line holding a long one passes it. Like <see cref="IndentWidth"/>, no caller or option changes it.</summary>
+    public const int LineWidth = 120;
 
     /// <summary>Returns <paramref name="document"/> printed as source text.</summary>
     /// <param name="document">The tree to print.</param>
@@ -25,7 +30,7 @@ public static partial class PuckPrinter {
     public static string Print(DocumentNode document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var writer = new Writer();
+        var writer = new Writer(wraps: true);
 
         writer.Document(document: document);
 
@@ -38,7 +43,7 @@ public static partial class PuckPrinter {
     public static string? TryPrint(DocumentNode document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var writer = new Writer();
+        var writer = new Writer(wraps: true);
 
         writer.Document(document: document);
 
@@ -55,7 +60,7 @@ public static partial class PuckPrinter {
     public static string PrintGate(PredicateNode predicate) {
         ArgumentNullException.ThrowIfNull(argument: predicate);
 
-        var writer = new Writer();
+        var writer = new Writer(wraps: false);
 
         writer.Gate(predicate: predicate);
 
@@ -67,7 +72,7 @@ public static partial class PuckPrinter {
     public static string PrintExpression(ExpressionNode expression) {
         ArgumentNullException.ThrowIfNull(argument: expression);
 
-        var writer = new Writer();
+        var writer = new Writer(wraps: false);
 
         writer.Value(expression: expression);
 
@@ -378,6 +383,15 @@ public static partial class PuckPrinter {
             m_builder.Append(value: '}');
         }
         private void Statement(StatementNode statement, int level) {
+            // A test's given, when and expect blocks hold one cell, step or expectation a line.
+            if (statement is TestDeclarationNode) {
+                Flat(print: () => StatementCore(level: level, statement: statement));
+
+                return;
+            }
+            StatementCore(level: level, statement: statement);
+        }
+        private void StatementCore(StatementNode statement, int level) {
             // A failed statement has no spelling to print, so printing the tree would drop the text it stands for.
             if (statement is ErrorStatementNode) {
                 Incomplete = true;
@@ -534,10 +548,7 @@ public static partial class PuckPrinter {
                         if (expression.IsUse && (expression.Expression is CallExpressionNode use)) {
                             m_builder.Append(value: "use ").Append(value: use.Name);
                             if (expression.UseAlias is { } alias) { m_builder.Append(value: " as ").Append(value: alias); }
-                            m_builder.Append(value: '(');
-                            Arguments(arguments: use.Arguments, level: level, multiLine: use.Trivia.MultiLine);
-                            if (use.Trivia.MultiLine) { EndLine(); Indent(level: level); }
-                            m_builder.Append(value: ')');
+                            ArgumentList(arguments: use.Arguments, level: level, multiLine: use.Trivia.MultiLine);
                         } else {
                             Expression(expression: expression.Expression, level: level);
                         }
@@ -560,6 +571,7 @@ public static partial class PuckPrinter {
                 case WhenStatementNode gate: {
                         m_builder.Append(value: "when ");
                         Predicate(
+                            level: level,
                             parenthesize: false,
                             predicate: gate.Predicate
                         );
@@ -569,6 +581,7 @@ public static partial class PuckPrinter {
                 case InterruptStatementNode interrupt: {
                         m_builder.Append(value: "interrupt ");
                         Predicate(
+                            level: level,
                             parenthesize: false,
                             predicate: interrupt.Predicate
                         );
@@ -603,7 +616,8 @@ public static partial class PuckPrinter {
                         } else {
                             m_builder.Append(value: local.Name);
                         }
-                        m_builder.Append(value: " = ").Append(value: OperandKeys(text: local.Expression.Text));
+                        m_builder.Append(value: " = ");
+                        OperandText(enclose: true, level: level, text: local.Expression.Text);
 
                         break;
                     }
@@ -638,6 +652,7 @@ public static partial class PuckPrinter {
                         if (scope.HeaderWhen is not null) {
                             m_builder.Append(value: " when ");
                             Predicate(
+                                level: level,
                                 parenthesize: false,
                                 predicate: scope.HeaderWhen.Predicate
                             );
@@ -671,6 +686,7 @@ public static partial class PuckPrinter {
                         if (group.UntilCondition is { } until) {
                             m_builder.Append(value: " until ");
                             Predicate(
+                                level: level,
                                 parenthesize: false,
                                 predicate: until
                             );
@@ -709,6 +725,7 @@ public static partial class PuckPrinter {
                                     if (step.UntilCondition is { } until) {
                                         m_builder.Append(value: " until ");
                                         Predicate(
+                                            level: level,
                                             parenthesize: false,
                                             predicate: until
                                         );
@@ -880,13 +897,8 @@ public static partial class PuckPrinter {
                         InlineHeader(trivia: declaration.Trivia);
                         m_builder.Append(value: ' ').Append(value: Quote(text: declaration.Name));
                         if (declaration.Subject is { } subject) {
-                            m_builder.Append(value: " with ").Append(value: subject.Name).Append(value: '(');
-                            Arguments(arguments: subject.Arguments, level: level, multiLine: subject.Trivia.MultiLine);
-                            if (subject.Trivia.MultiLine) {
-                                EndLine();
-                                Indent(level: level);
-                            }
-                            m_builder.Append(value: ')');
+                            m_builder.Append(value: " with ").Append(value: subject.Name);
+                            ArgumentList(arguments: subject.Arguments, level: level, multiLine: subject.Trivia.MultiLine);
                         }
                         m_builder.Append(value: " {");
                         EndLine();
@@ -1234,6 +1246,7 @@ public static partial class PuckPrinter {
                         InlineHeader(trivia: branch.Trivia);
                         m_builder.Append(value: ' ');
                         Predicate(
+                            level: level,
                             parenthesize: false,
                             predicate: branch.Condition
                         );
@@ -1401,7 +1414,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case RhsOperandNode operand: {
-                        m_builder.Append(value: OperandKeys(text: operand.Expression.Text));
+                        OperandText(enclose: (operand.Expression.Form == DocumentValueForm.Expression), level: level, text: operand.Expression.Text);
 
                         break;
                     }
@@ -1460,12 +1473,10 @@ public static partial class PuckPrinter {
 
                     continue;
                 }
-                m_builder.Append(value: '(');
-                Arguments(
+                ArgumentList(
                     arguments: modifier.Arguments,
                     level: level
                 );
-                m_builder.Append(value: ')');
             }
         }
         private void Cells(IReadOnlyList<StateCellEntryNode> cells, SyntaxTrivia trivia, int level) {
@@ -1539,13 +1550,16 @@ public static partial class PuckPrinter {
             Indent(level: level);
             m_builder.Append(value: '}');
         }
-        private void Predicate(PredicateNode predicate, bool parenthesize) {
+        // `level` is the line's own, which a broken `and`/`or` chain continues one level in from.
+        private void Predicate(PredicateNode predicate, bool parenthesize, int level = 0) {
             switch (predicate) {
                 case ComparisonPredicateNode comparison: {
                         var annotated = (comparison.Kind is not null);
 
                         if (annotated) { m_builder.Append(value: '('); }
-                        m_builder.Append(value: OperandKeys(text: comparison.Left.Text)).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: OperandKeys(text: comparison.Right.Text));
+                        OperandText(enclose: false, level: level, text: comparison.Left.Text);
+                        m_builder.Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ');
+                        OperandText(enclose: false, level: level, text: comparison.Right.Text);
                         if (annotated) { m_builder.Append(value: " : ").Append(value: comparison.Kind).Append(value: ')'); }
 
                         break;
@@ -1553,7 +1567,7 @@ public static partial class PuckPrinter {
                 case CallPredicateNode call: {
                         Expression(
                             expression: call.Call,
-                            level: 0
+                            level: level
                         );
 
                         break;
@@ -1561,6 +1575,7 @@ public static partial class PuckPrinter {
                 case NotPredicateNode negation: {
                         m_builder.Append(value: "not ");
                         Predicate(
+                            level: level,
                             parenthesize: (negation.Operand is AndPredicateNode or OrPredicateNode),
                             predicate: negation.Operand
                         );
@@ -1570,6 +1585,7 @@ public static partial class PuckPrinter {
                 case AndPredicateNode conjunction: {
                         Chain(
                             keyword: " and ",
+                            level: level,
                             operands: conjunction.Operands,
                             parenthesize: parenthesize
                         );
@@ -1579,6 +1595,7 @@ public static partial class PuckPrinter {
                 case OrPredicateNode disjunction: {
                         Chain(
                             keyword: " or ",
+                            level: level,
                             operands: disjunction.Operands,
                             parenthesize: parenthesize
                         );
@@ -1590,11 +1607,23 @@ public static partial class PuckPrinter {
                     }
             }
         }
-        private void Chain(IReadOnlyList<PredicateNode> operands, string keyword, bool parenthesize) {
+        // An `and`/`or` chain on one line, or one operand a line with the keyword ending the line before the
+        // operand it joins.
+        private void Chain(IReadOnlyList<PredicateNode> operands, string keyword, bool parenthesize, int level) {
+            var broken = !Fits(node: operands, print: () => Chain(keyword: keyword, level: level, operands: operands, parenthesize: parenthesize));
+
             if (parenthesize) { m_builder.Append(value: '('); }
             for (var index = 0; (index < operands.Count); index++) {
-                if (index > 0) { m_builder.Append(value: keyword); }
+                if (index > 0) {
+                    if (broken) {
+                        m_builder.Append(value: keyword.TrimEnd());
+                        Break(level: (level + 1));
+                    } else {
+                        m_builder.Append(value: keyword);
+                    }
+                }
                 Predicate(
+                    level: (level + 1),
                     parenthesize: (operands[index] is AndPredicateNode or OrPredicateNode),
                     predicate: operands[index]
                 );

@@ -935,7 +935,8 @@ server's formatting request and `puck format` are the same pass and write the sa
 (`Parsing/PuckStrings.cs`) - a backslash, a quote, `n`, `r`, `t`, `0`, a `uXXXX` code unit, and a backslash in
 front of anything else refused - so the printer writes only what the reader reads back and a formatted source
 cannot mean something else. A raw fence carries no escapes and is printed back as a fence whenever it reads
-back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) spaces, Egyptian braces, one statement per line — except for what the parse
+back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) spaces, Egyptian braces, one statement per line, and a
+line that would pass `PuckPrinter.LineWidth` (120) broken after its operators or inside its brackets — except for what the parse
 carries in as trivia: every comment keeps its line, a run of blank lines keeps its length, an array, object or
 argument list keeps the line breaks and the line-end commas its author wrote, a numeric literal keeps its base, and
 a name keeps its bare-or-quoted spelling. A cell key prints through `Puck.State`'s own fold, so an effect target
