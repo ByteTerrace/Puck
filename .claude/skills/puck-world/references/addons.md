@@ -73,6 +73,20 @@ and a text guest's exports and imports are checked when it mounts. A guest's
 grants are authored rows like any other: each imported module may author its
 own, since grant rows compose by their `(grantee, capability, subject)` triple.
 
+The guide's exhibit copy is authored in `worlds/debug/guide.puck`, not in its
+WAT: `guideCopy` lowers to `guideExhibits`, whose `<ordinal>-title` and
+`<ordinal>-note` cells follow the manifest's region order. `ReadStateText`
+completions carry `Applied` (10), unlike an Ask's allowed-hold verdict (1–3).
+Assemble chunks before decoding or JSON-escaping: a multi-byte UTF-8 scalar
+can cross a 16-byte chunk boundary. A scratch source edit and a headless
+`world.state guide` read show changes without editing or rebuilding the guest.
+
+The addon finish phase suppresses successful mount/disclosure confirmations
+while `WorldExtensions.IsReplaying`; it still retires superseded instances.
+An offline verification reports refusal or drift instead of narrating a
+second boot. Do not suppress stderr globally: preparation faults and replay
+diagnostics must remain visible.
+
 **The doors are `world.row.set addons <row-json>` / `world.row.remove addons
 <name>`** — the ordinary document-mutation pipeline (`WorldMutation.UpsertAddon`/
 `RemoveAddon`), nothing else. There is no separate runtime-facing lifecycle

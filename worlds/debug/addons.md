@@ -19,8 +19,9 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 
 `world.addons` lists all seven with their fuel. Measured on a headless run, each
 spends a small part of the default budget of 1,000,000 a tick: the watchdog
-about 8,000, the companion 1,200 to 2,500, and the guide about 60, rising to
-about 30,000 on the tick it writes an exhibit near the end of its table.
+about 8,000, the companion 1,200 to 2,500, and the guide about 70 while idle.
+The guide reads two 16-byte text chunks per tick on entry, then publishes both
+fields together; a headless visit to SHEAR peaks at about 4,000 fuel.
 
 ## Development tools
 
@@ -186,10 +187,25 @@ region; when the Moth enters one it writes the exhibit's name and a one-line
 note into the `guide` row (and its walking-order position into `guideAt`), and
 when she leaves it clears them and the panel hides. A region event names its
 region by its position in the guide's own requests, which list the exhibits in
-the gallery's walking order; the guest's table of names and notes follows the
-same order, so an exhibit added to, moved in or removed from the gallery moves
-its line in [addons/guide.wat](addons/guide.wat) too. `gallery.go <exhibit>`
+the gallery's walking order. The `guideCopy` list in [guide.puck](guide.puck)
+authors each title and note in that order and lowers them into the Text row
+`guideExhibits`, with keys `<ordinal>-title` and `<ordinal>-note`. Keep that
+list in step when adding, moving or removing an exhibit. `gallery.go <exhibit>`
 stands her at one.
+
+The guest asks for Observe over that row and uses `ReadStateText` to assemble
+each field, 16 UTF-8 bytes at a time, under a shared two-read budget. It has no
+exhibit strings: editing a title or note and reloading the world changes what
+the next visit shows without changing the guest or its hash. Entering another
+region discards any unfinished read; an exit clears the panel. Quotes,
+backslashes, control characters and multi-byte UTF-8 survive the JSON write.
+Each field is bounded to 4096 UTF-8 bytes and the encoded `guide` row to the
+mutation ABI's 8 KiB payload ceiling; exceeding either faults the guest rather
+than truncating text.
+
+Offline verification (`replay.stop` and `replay.verify`) reconstructs guests
+without repeating successful mount and capability-disclosure narration.
+Mount refusals, receipt differences and replay failures still report normally.
 
 ## The companion
 
