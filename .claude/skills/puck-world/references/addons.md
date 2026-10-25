@@ -151,13 +151,12 @@ constructed lazily on the first prepare pass that actually needs one (an
 addon-free world pays nothing); a discarded plan disposes only the host IT
 itself constructed, never one it merely reused.
 
-**Narration is staged, not printed, until commit.** The mount/disclosure lines
-below are built during prepare (against the settled grant table, which cannot
-move before the caller's own synchronous commit) but held on the plan and
-printed only once `Commit` actually publishes it — a refused mutation must
-never have printed a mount claim that never became true.
+**Narration waits for committed state.** Mount/disclosure thunks are staged
+during prepare. `Finish` evaluates and prints them after `Commit` and the
+caller's document/grant publication, so capability disclosure reads the
+installed grants. A refused prepare prints no mount claim.
 
-The disclosure line prints for EVERY freshly-prepared row: requested vs
+When a narrated mount has requests or holds, its disclosure reports requested vs
 granted vs withheld vs `holds beyond its manifest (inert — never
 materialized)`. **Requesting is not receiving** (deny-by-default regardless of
 manifest), and **a hold outside the manifest mints no handle** — authority
