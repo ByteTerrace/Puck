@@ -29,13 +29,15 @@ public sealed partial class WorldAddonRuntime {
         if (capability != WorldCapability.Control) {
             var key = (capability, subject);
             var bodyDrive = capability == WorldCapability.Drive && subject.Kind == GrantSubjectKind.Body;
+            var bodyRead = capability == WorldCapability.Observe && subject.Kind == GrantSubjectKind.Body;
             var stateRead = capability == WorldCapability.Observe && subject.Kind == GrantSubjectKind.State;
-            var count = bodyDrive ? addon.DriveDispatchCounts[subject.Value] : stateRead ? addon.StateReadCounts.GetValueOrDefault(subject) : addon.QueryCounts.GetValueOrDefault(key);
+            var count = bodyDrive ? addon.DriveDispatchCounts[subject.Value] : bodyRead ? addon.DispatchCounts[subject.Value] : stateRead ? addon.StateReadCounts.GetValueOrDefault(subject) : addon.QueryCounts.GetValueOrDefault(key);
             if (!grants.TryGetBudget(addon.Principal, capability, subject, out var budget) || count >= budget) {
                 verdict = AddonVerdict.QuotaExhausted;
                 return false;
             }
             if (bodyDrive) { addon.DriveDispatchCounts[subject.Value] = count + 1; }
+            else if (bodyRead) { addon.DispatchCounts[subject.Value] = count + 1; }
             else if (stateRead) { addon.StateReadCounts[subject] = count + 1; }
             else { addon.QueryCounts[key] = count + 1; }
         }

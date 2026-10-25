@@ -205,6 +205,7 @@ public sealed partial class WorldAddonRuntime {
         public bool UnrequestedActReported { get; set; }
         public Dictionary<(WorldCapability, GrantSubject), int> QueryCounts { get; } = [];
         public byte[] ReadBuffer { get; } = new byte[262144];
+        public byte[] PoseHandles { get; } = new byte[AddonAbi.MaxPoseBatchBodies * 4];
         public byte[]? MachineSnapshot { get; set; }
         public Puck.Abstractions.Machines.IMachineRuntime? SnapshotRuntime { get; set; }
 

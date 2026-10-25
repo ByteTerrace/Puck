@@ -138,6 +138,8 @@ pub const CAP_OBSERVE: u64 = 2;
 // `Puck.Scripting.AddonAbi` constants (`src/Puck.Scripting/AddonAbi.cs`).
 /// `AddonAbi.AbiVersion` (`1`).
 pub const ABI_VERSION: i32 = 1;
+/// `AddonAbi.BodyPoseRecordBytes` (`64`).
+pub const BODY_POSE_RECORD_BYTES: usize = 64;
 /// `AddonAbi.ChannelDescriptorBytes` (`16`).
 pub const CHANNEL_DESCRIPTOR_BYTES: usize = 16;
 /// `AddonAbi.DefaultFuelPerTick` (`1000000`).
@@ -164,6 +166,8 @@ pub const MAX_MUTATION_BYTES_PER_TICK_PER_ADDON: usize = 16384;
 pub const MAX_MUTATION_PAYLOAD_BYTES: usize = 8192;
 /// `AddonAbi.MaxOutCells` (`63`).
 pub const MAX_OUT_CELLS: usize = 63;
+/// `AddonAbi.MaxPoseBatchBodies` (`4096`).
+pub const MAX_POSE_BATCH_BODIES: usize = 4096;
 /// `AddonAbi.MaxSectionNameBytes` (`32`).
 pub const MAX_SECTION_NAME_BYTES: usize = 32;
 /// `AddonAbi.MaxStackBytes` (`524288`).
@@ -236,8 +240,10 @@ pub const REQUEST_VERB_BODY_KINEMATICS_ANSWER_PARTS: usize = 2;
 pub const REQUEST_VERB_BODY_POSE: usize = 0;
 /// `AddonAbi.RequestVerbs.BodyPoseAnswerParts` (`4`).
 pub const REQUEST_VERB_BODY_POSE_ANSWER_PARTS: usize = 4;
-/// `AddonAbi.RequestVerbs.Count` (`13`).
-pub const REQUEST_VERB_COUNT: usize = 13;
+/// `AddonAbi.RequestVerbs.BodyPoses` (`13`).
+pub const REQUEST_VERB_BODY_POSES: usize = 13;
+/// `AddonAbi.RequestVerbs.Count` (`14`).
+pub const REQUEST_VERB_COUNT: usize = 14;
 /// `AddonAbi.RequestVerbs.Designate` (`2`).
 pub const REQUEST_VERB_DESIGNATE: usize = 2;
 /// `AddonAbi.RequestVerbs.DesignateAnswerParts` (`1`).

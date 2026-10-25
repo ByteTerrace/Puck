@@ -18,7 +18,8 @@ Project references: `Puck.World.Server`, `Puck.Scripting` (the WASM guest
 ABI `AddonSimulationPump` validates against), `Puck.Maths`, and `Puck.Assets`
 (the module bytes a mount reads).
 
-Development guests can query a body's settled kinematics and numeric authored
+Development guests can bulk-read an observed set's poses into guest memory with one
+completion cell (`BodyPoses`), query a body's settled kinematics and numeric authored
 state cells or bounded text chunks, read/hash machine memory, capture/restore one bounded
 checkpoint, engage a driven body and submit generic provider operations. They write
 individual state cells through the ordinary mutation door,

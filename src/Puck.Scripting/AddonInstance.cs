@@ -777,4 +777,21 @@ public sealed class AddonInstance : IDisposable {
         error = "";
         return true;
     }
+    /// <summary>Copies a complete bulk result into guest linear memory after checking the unsigned wire pointer
+    /// and the whole range. No guest span survives this call and a refused write changes no bytes.</summary>
+    /// <param name="pointer">Unsigned guest byte offset carried in an i64 wire lane.</param>
+    /// <param name="source">Host-owned result bytes.</param>
+    /// <param name="error">Refusal reason, or empty on success.</param>
+    /// <returns>Whether the entire result was written.</returns>
+    public bool TryWriteMemory(long pointer, ReadOnlySpan<byte> source, out string error) {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (pointer < 0 || pointer > uint.MaxValue || m_memory is not { } memory ||
+            pointer + source.Length > memory.GetLength()) {
+            error = "bulk result range is outside guest memory";
+            return false;
+        }
+        source.CopyTo(memory.GetSpan((int)pointer, source.Length));
+        error = "";
+        return true;
+    }
 }
