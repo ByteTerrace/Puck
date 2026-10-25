@@ -125,20 +125,23 @@ public sealed partial class WorldAddonRuntime {
     // reads exactly as an absent one does and a mod cannot probe for hidden values.
     private bool TryReadDisclosed(MountedAddon addon, GrantSubject subject, CellName name, out CellValue value) {
         var arena = m_server.Arena;
+
+        value = default;
+        return (IsDisclosed(addon: addon, subject: subject, name: name) &&
+            arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) &&
+            arena.Keys.TryResolve(key: out var address, name: name) &&
+            arena.TryReadLive(row.Ordinal, address, m_server.DeliveryTime, out value));
+    }
+    // Whether the addon's principal may read the cell now; false for a row the document does not declare. A write door
+    // asks this before it looks for the cell, so a hidden cell is refused as an absent one is.
+    private bool IsDisclosed(MountedAddon addon, GrantSubject subject, CellName name) {
         var definition = m_server.Definition;
-        WorldStateRow? declared = null;
 
         foreach (var candidate in definition.State) {
             if (string.Equals(a: candidate.Name.Value, b: subject.Id, comparisonType: StringComparison.Ordinal)) {
-                declared = candidate;
-                break;
+                return WorldStateDisclosure.CanRead(arena: m_server.Arena, definition: definition, key: name, row: candidate, recipient: addon.Principal);
             }
         }
-        value = default;
-        return ((declared is not null) &&
-            arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) &&
-            arena.Keys.TryResolve(key: out var address, name: name) &&
-            WorldStateDisclosure.CanRead(arena: arena, definition: definition, key: name, row: declared, recipient: addon.Principal) &&
-            arena.TryReadLive(row.Ordinal, address, m_server.DeliveryTime, out value));
+        return false;
     }
 }
