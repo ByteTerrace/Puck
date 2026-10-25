@@ -13,6 +13,9 @@ src/Puck.World/WorldSliceCommandModule.Device.
 # world.flag's device work: whether the live render root can capture, arming the capture there, and the record's capture
 # fields. WorldFlagCommandModuleLawTests covers the token, the near resolution, the record and the refusals.
 src/Puck.World/WorldFlagCommandModule.Device.
+# world.patrol's device work: resolving the first seat's rendered view to its live picker. WorldPatrolCommandModuleLawTests
+# covers the grid, the script, the reads, the verdicts and the refusals over a fake view.
+src/Puck.World/WorldPatrolCommandModule.Device.
 # The GPU capture tools' native bindings and their loading, which only an installed PIX or RenderDoc answers, beside
 # a GPU device. GpuFrameCaptureLawTests and GpuCaptureToolsLawTests cover the frame bracketing and the refusals.
 src/Puck.Launcher/GpuCapture/GpuCaptureTools.Load.

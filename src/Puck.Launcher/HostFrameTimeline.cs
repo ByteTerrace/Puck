@@ -116,6 +116,53 @@ public sealed class HostFrameTimeline {
     /// <summary>Records how far past its deadline the pacer's wait returned, for an iteration whose wait slept.</summary>
     /// <param name="ticks">The overshoot, in the clock's timestamp ticks.</param>
     public void NoteLate(long ticks) => m_openLate = ticks;
+    /// <summary>Gets the iterations recorded since the last <see cref="Reset"/>: a coordinate <see cref="Scan"/> reads
+    /// a span of.</summary>
+    public long Recorded => m_count;
+    /// <summary>Reads the iterations from one coordinate to another: how many did more work than a budget, and the
+    /// slowest. Work is an iteration's interval less the pacer's wait, so a late wake of the pacer is not a stall.</summary>
+    /// <param name="from">The first iteration, a value of <see cref="Recorded"/> taken earlier; one the ring has since
+    /// overwritten reads from the oldest it holds.</param>
+    /// <param name="to">The end of the span, exclusive: a value of <see cref="Recorded"/>.</param>
+    /// <param name="budgetMilliseconds">The work, in milliseconds, past which an iteration is over.</param>
+    /// <returns>The iterations read, how many were over, and the most work and the longest interval among them, in
+    /// milliseconds.</returns>
+    public (int Iterations, int Over, double WorstWork, double WorstInterval) Scan(long from, long to, double budgetMilliseconds) {
+        var first = Math.Max(
+            val1: from,
+            val2: Math.Max(
+                val1: (m_count - Capacity),
+                val2: 0L
+            )
+        );
+        var last = Math.Min(
+            val1: to,
+            val2: m_count
+        );
+        var iterations = 0;
+        var over = 0;
+        var worstWork = 0.0;
+        var worstInterval = 0.0;
+
+        for (var index = first; (index < last); index++) {
+            var slot = ((int)(index % Capacity));
+            var interval = Milliseconds(ticks: m_intervals[slot]);
+            var work = (interval - Milliseconds(ticks: m_phases[((slot * PhaseCount) + ((int)HostFramePhase.Wait))]));
+
+            iterations++;
+            over += ((work > budgetMilliseconds) ? 1 : 0);
+            worstWork = Math.Max(
+                val1: worstWork,
+                val2: work
+            );
+            worstInterval = Math.Max(
+                val1: worstInterval,
+                val2: interval
+            );
+        }
+
+        return (iterations, over, worstWork, worstInterval);
+    }
     /// <summary>Forgets every recorded iteration.</summary>
     public void Reset() {
         m_count = 0L;

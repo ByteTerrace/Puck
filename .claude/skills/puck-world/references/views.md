@@ -564,7 +564,18 @@ Free Cam do not alter the logical movement basis.
   `pending`; without them it echoes the latest result (`request`, `pixel`,
   `kind`, `source`, `material`, and the hit's `placement`, `body` and `slot`,
   each `none` when absent) or `pending`. It refuses an instance that is not a
-  rendered SDF view.
+  rendered SDF view. A mesh pixel's source indexes the dressed draw list
+  (`SdfMeshPathBake.Dress`: the host's draws, one draw per baked group, then the
+  portal-straddle copies), which `SdfDressedPickMap` resolves: a baked group's draw
+  names its first instance's placement or body, a copy names what it was copied from.
+- `world.patrol <x0> <z0> <x1> <z1> <step> [yawDegrees|-] [settleTicks] [y|-]` — walks body 0
+  over a grid (`WorldPatrolCommandModule`, a `world.at` script of `body.pose`,
+  a settle, `world.patrol ask <i>` and `world.patrol read <i>`), picks the centre of
+  the first seat's view at each point (five more pixels, its head, feet and shoulders, about it where the centre
+  misses the body) and reads it back with `world.patrol` / `world.patrol all`:
+  `OFF BODY` where no pick names `body:0`, `OCCLUDED` where only the centre misses
+  (an exhibit stands between the camera and the body), `NO ANSWER` where no pick
+  completed, `STALL` where a host iteration's work passed 16.7 ms.
 - `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
   draw, in drawing order, each as its published `SourceMapping`
   (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the

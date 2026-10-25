@@ -830,7 +830,20 @@ Run `world.debug-view report` first if no findings have been collected.
 `primary` resolves to the first seat's current rendered instance (`world`
 before presentation); an explicit render instance name is also accepted.
 The coordinate form is `world.view.pick <view-or-instance> <x> <y>`,
-with normalized coordinates. `world.debug-view goto <id>` moves the operator
+with normalized coordinates. The answer names what the pixel's mesh or program
+instance draws: `body=<index>` for a body's stamp and `placement=<id>` for a
+placement, whether the pixel is a baked mesh the frame drew from a group or a
+portal-straddle copy, or a mesh the host drew itself.
+`world.patrol <x0> <z0> <x1> <z1> <step> [yawDegrees|-] [settleTicks] [y|-]` walks
+body 0 over a grid of its current level (or of the level whose floor `y` names) and picks the centre of the first seat's rendered
+view at each point (and five pixels about it where the centre misses the body): it
+arms one `world.at` script (pose, settle, pick, read), answers with the tick it ends
+at, and `world.patrol` alone then reads back a summary (points where no pick names
+`body:0`, points whose centre an exhibit occludes, points whose frames stalled, the
+worst host work in one iteration against 16.7 ms) and a line per flagged point;
+`world.patrol all` lists every point. It needs a rendered seat view;
+`world.patrol stop` drops every armed line.
+`world.debug-view goto <id>` moves the operator
 camera toward the witness; it never moves the body. Changed structured reports
 are debounced under `world.debug-view.colliders` and
 `world.debug-view.contacts` in `host.log`.
