@@ -362,6 +362,7 @@
     { "name": "world.ownership.offer", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.ownership.reclaim", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.parked", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
+    { "name": "world.patrol", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.patterns", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.peers", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "world.place", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
