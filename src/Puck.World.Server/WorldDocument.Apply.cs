@@ -1050,39 +1050,56 @@ public sealed partial class WorldDocument {
         Host.Machines.ReconcileLinks(links: definition.MachineCableGroups());
 
         if (rebuildPopulation) {
-            Host.Population.Rebuild(
-                definition: definition,
-                solids: m_solids
-            );
-            Host.InputHold.Reset();
-            // Reconcile inhabited placements AFTER the census rebuild (a placement/creation/kit edit can add, retire, or
-            // re-kit a driven body). Idempotent — a no-op when the inhabited set is unchanged.
-            var admitted = new List<WorldPeerEventEntry>();
-            var disconnected = new List<WorldPeerEventEntry>();
-
-            Host.Population.ReconcileInhabitants(
-                admitted: admitted,
-                definition: definition,
-                disconnected: disconnected
-            );
-            // The rebuild re-seeds every cell-driven count to zero; resolve them from their cells before anything reads.
-            Host.Population.ReconcileInhabitCounts(
-                admitted: admitted,
-                definition: definition,
-                disconnected: disconnected,
-                tick: Host.NextInputTick
-            );
-            Host.GrantTable.ApplyLifecycleEvents(
-                admitted: admitted,
-                disconnected: disconnected,
-                ordered: true
-            );
+            RebuildPopulation(definition: definition);
         }
 
         // AFTER the population branch above: a rebuild replaces every WorldBody, so resyncing scale before it would
         // read the registers into instances Rebuild is about to discard, leaving the fresh ones at their constructed
         // default until the next Install happens to touch state again.
         Host.Population.SyncBodyCells(definition: definition);
+    }
+    // Installs a response swap (IsResponseSwap): the rows show other creations the document was validated with, so the
+    // compiled rules, the arena, the grants, the fields and the machines all stand. Only the delivery and, for a solid
+    // row, the contact colliders the population compiles from the shown creation move.
+    private void InstallResponseSwap(WorldDefinition definition, bool solid) {
+        MarkDefinitionDeliveryPending();
+        AdoptDefinition(definition: definition);
+
+        if (solid) {
+            RebuildPopulation(definition: definition);
+            Host.Population.SyncBodyCells(definition: definition);
+        }
+    }
+    // Rebuilds the population's compiled tables and live bodies against a definition, then reconciles the inhabited
+    // placements and their cell-driven counts the rebuild re-seeded.
+    private void RebuildPopulation(WorldDefinition definition) {
+        Host.Population.Rebuild(
+            definition: definition,
+            solids: m_solids
+        );
+        Host.InputHold.Reset();
+        // Reconcile inhabited placements AFTER the census rebuild (a placement/creation/kit edit can add, retire, or
+        // re-kit a driven body). Idempotent — a no-op when the inhabited set is unchanged.
+        var admitted = new List<WorldPeerEventEntry>();
+        var disconnected = new List<WorldPeerEventEntry>();
+
+        Host.Population.ReconcileInhabitants(
+            admitted: admitted,
+            definition: definition,
+            disconnected: disconnected
+        );
+        // The rebuild re-seeds every cell-driven count to zero; resolve them from their cells before anything reads.
+        Host.Population.ReconcileInhabitCounts(
+            admitted: admitted,
+            definition: definition,
+            disconnected: disconnected,
+            tick: Host.NextInputTick
+        );
+        Host.GrantTable.ApplyLifecycleEvents(
+            admitted: admitted,
+            disconnected: disconnected,
+            ordered: true
+        );
     }
 
     // A state mutation changes runtime values, not declaration shape. Keep the authoritative document as the
@@ -1218,6 +1235,9 @@ public sealed partial class WorldDocument {
     internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldDefinition current, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
         compilation = null;
 
+        if (IsResponseSwap(mutation: mutation, previous: current)) {
+            return TryValidateResponseSwap(mutation: mutation, reason: out reason);
+        }
         if (IsValueMutation(mutation: mutation, candidate: candidate, previous: current)) {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
         }
@@ -1225,6 +1245,56 @@ public sealed partial class WorldDocument {
         return (retainCompilation
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
+    }
+
+    /// <summary>Returns whether a mutation is a response swap: one placement upsert, or a batch of them, each moving
+    /// nothing of an existing responding row but its <see cref="WorldPlacement.Holding"/> bits, which name the creation
+    /// it shows among those the document was validated with (every alternative, its colliders and its faces were
+    /// admitted with the row). Such a mutation validates its bits alone and keeps the live arena.</summary>
+    /// <param name="mutation">The mutation.</param>
+    /// <param name="previous">The document it composes against.</param>
+    /// <returns><see langword="true"/> for a response swap.</returns>
+    internal static bool IsResponseSwap(WorldMutation mutation, WorldDefinition previous) {
+        switch (mutation) {
+            case WorldMutation.UpsertPlacement upsert:
+                return SwapsHolding(placement: upsert.Placement, previous: previous);
+            case WorldMutation.Batch { Mutations.Count: > 0, ExpectedDefinition: null, ExpectedInputs: null, ExpectedSpatialReads: null, ExpectedCells: null } batch:
+                foreach (var member in batch.Mutations) {
+                    if ((member is not WorldMutation.UpsertPlacement upsert) || !SwapsHolding(placement: upsert.Placement, previous: previous)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
+    private static bool SwapsHolding(WorldPlacement placement, WorldDefinition previous) => (
+        (placement.Respond is { Count: > 0 }) &&
+        (WorldDefinitionRows.FindPlacement(placements: previous.Placements, id: placement.Id) is { } before) &&
+        ((before with { Holding = placement.Holding }) == placement)
+    );
+    // Whether a response swap moves a solid row, whose shown creation's colliders the contact field holds.
+    private static bool SwapsSolid(WorldMutation mutation) => (mutation switch {
+        WorldMutation.UpsertPlacement upsert => (upsert.Placement.Solid is not null),
+        WorldMutation.Batch batch => batch.Mutations.Any(predicate: static member => (member is WorldMutation.UpsertPlacement { Placement.Solid: not null })),
+        _ => false,
+    });
+    private static bool TryValidateResponseSwap(WorldMutation mutation, out string reason) {
+        if (mutation is WorldMutation.UpsertPlacement single) {
+            return WorldDefinitionValidator.TryValidateResponseHolding(placement: single.Placement, reason: out reason);
+        }
+
+        foreach (var member in ((WorldMutation.Batch)mutation).Mutations) {
+            if (!WorldDefinitionValidator.TryValidateResponseHolding(placement: ((WorldMutation.UpsertPlacement)member).Placement, reason: out reason)) {
+                return false;
+            }
+        }
+
+        reason = string.Empty;
+
+        return true;
     }
 
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed

@@ -104,17 +104,22 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        var installsArena = RequiresFullInstall(
-            candidate: candidate,
+        // A response swap moves no state and no declaration, so it keeps the live arena whole.
+        var responseSwap = IsResponseSwap(
             mutation: mutation,
             previous: current
         );
+        var installsArena = (!responseSwap && RequiresFullInstall(
+            candidate: candidate,
+            mutation: mutation,
+            previous: current
+        ));
         // Pool snapshots include generated storage rows that cannot be admitted through the ordinary row-import
         // door. Prepare their replacement arena before commit even when the mutation keeps every compiled product.
         var replacesArena = (
             installsArena ||
-            (candidate.StateRaw?.Pools is { Count: > 0 }) ||
-            (candidate.StateRaw?.PairPools is { Count: > 0 })
+            (!responseSwap && (candidate.StateRaw?.Pools is { Count: > 0 })) ||
+            (!responseSwap && (candidate.StateRaw?.PairPools is { Count: > 0 }))
         );
         StateArena? arena = null;
 
@@ -309,6 +314,7 @@ public sealed partial class WorldDocument {
                 evictedKey: evictedKey,
                 machinePlan: machinePlan,
                 mutation: mutation,
+                responseSwap: responseSwap,
                 solidAffecting: solidAffecting,
                 solids: solids,
                 tick: tick,
@@ -360,7 +366,12 @@ public sealed partial class WorldDocument {
             // still carries the state catalog identity the rules were compiled against. A document-value refresh or
             // a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild,
             // so those take the full install like every other mutation.
-            if (prepared.Arena is null) {
+            if (prepared.ResponseSwap) {
+                InstallResponseSwap(
+                    definition: candidate,
+                    solid: SwapsSolid(mutation: mutation)
+                );
+            } else if (prepared.Arena is null) {
                 InstallRuntimeStateValue(definition: candidate, mutation: mutation);
             } else if (!RequiresFullInstall(candidate: candidate, mutation: mutation, previous: previous)) {
                 InstallRuntimeStateValue(definition: candidate, mutation: mutation, arena: prepared.Arena);

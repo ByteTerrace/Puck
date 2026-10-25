@@ -352,6 +352,48 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         Assert.Equal(expected: shown, actual: row.ShownPrototypeId);
         Assert.Equal(expected: holding, actual: row.Holding);
     }
+    /// <summary>Every row a tick's sweep moves lands in one mutation: two rows crossing on the same tick, one of them
+    /// solid, install as one journalled batch of holding-only upserts, and both show their entry after it.</summary>
+    [Fact]
+    public void RowsMovingOnOneTickLandAsOneBatch() {
+        var document = CrossingDocument();
+        var placement = document.Placements[0];
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            PlacementRowsRaw = [placement, (placement with { Id = "grove-solid", Solid = new WorldSolid(Margin: 0f) })],
+        }));
+        var journal = new List<WorldMutation>();
+
+        fixture.Server.MutationJournalTap = (_, _, mutation) => journal.Add(item: mutation);
+
+        for (var index = 0; (index < 3); index++) {
+            fixture.Step();
+        }
+
+        var batch = Assert.IsType<WorldMutation.Batch>(Assert.Single(collection: journal, predicate: static mutation => (mutation is not WorldMutation.UpsertStateCell)));
+
+        Assert.Equal(expected: ["grove", "grove-solid"], actual: batch.Mutations.Select(selector: static member => ((WorldMutation.UpsertPlacement)member).Placement.Id));
+        Assert.All(collection: fixture.Server.Definition.Placements, action: static row => Assert.Equal(expected: TargetCreation, actual: row.ShownPrototypeId));
+    }
+    /// <summary>A holding-only upsert validates its bits alone, and refuses a bit past the row's entries by name,
+    /// leaving the row as it was.</summary>
+    [Fact]
+    public void AHoldingBitPastTheEntriesIsRefused() {
+        var document = CrossingDocument();
+
+        using var fixture = Fixtures.FreshServer(definition: document with { Rules = [] });
+        var echoes = new List<WorldEditEcho>();
+
+        fixture.Server.EchoTap = echoes.Add;
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
+            Placement: (fixture.Server.Definition.Placements[0] with { Holding = 2 }),
+            Principal: Principal.Console
+        ));
+        fixture.Step();
+
+        Assert.Equal(expected: 0, actual: fixture.Server.Definition.Placements[0].Holding);
+        Assert.Contains(collection: echoes, filter: static echo => (echo.Rejected && echo.Message.Contains(value: "holding 2 marks an entry past the 1 response entries", comparisonType: StringComparison.Ordinal)));
+    }
     /// <summary>A response lasts exactly as long as its condition: the row shows the entry while the slot holds and
     /// its authored prototype once it stops, and the authored prototype itself is never overwritten.</summary>
     [Fact]
