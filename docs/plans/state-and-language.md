@@ -509,8 +509,7 @@ Parser, decompiler guards, completion, hover, and the manual read that
 description. Every construct this programme adds (`module`, `use`, `record`,
 `pool`, `claim`, `release`, `function`, `select`, `world`, `border`, `test`)
 is on the table from its first commit; older constructs move over afterward,
-and a construct is off the hand-wired path when its old code is deleted. The
-`sql { }` dialect is one row, the `sql` keyword delegating to the SQL parser.
+and a construct is off the hand-wired path when its old code is deleted.
 
 **Check:** adding a member to a described construct is one edit and the law,
 completion, and manual follow, shown by a law that adds one in a test

@@ -75,7 +75,7 @@ public static partial class PuckPrinter {
     }
     /// <summary>Parses <paramref name="source"/> and prints it back.</summary>
     /// <param name="source">The source text to format.</param>
-    /// <param name="vocabulary">The vocabulary whose embedded languages the parse must recognize, or
+    /// <param name="vocabulary">The vocabulary whose argument forms and bare modifiers the parse reads, or
     /// <see langword="null"/>.</param>
     /// <returns>The formatted source, or a null value with the diagnostics that stopped the parse.</returns>
     public static CompilationResult<string> Format(string source, IDocumentVocabulary? vocabulary = null) {
@@ -486,11 +486,6 @@ public static partial class PuckPrinter {
                             opening: loop.Trivia.Opening,
                             statements: loop.Body
                         );
-
-                        break;
-                    }
-                case EmbeddedBlockNode embedded: {
-                        m_builder.Append(value: embedded.Language).Append(value: " {").Append(value: embedded.Body).Append(value: '}');
 
                         break;
                     }

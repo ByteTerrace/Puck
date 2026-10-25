@@ -5,7 +5,7 @@ using Puck.World.Transpiler.Vocabulary;
 namespace Puck.Cli.Vocabulary;
 
 // The `puck vocabulary` verb: writes docs/reference/world-vocabulary.md from the one construct table the parser's
-// embedded-language test, the printer's sugar guards, and the language server's completion and hover already read,
+// bare-modifier test, the printer's sugar guards, and the language server's completion and hover already read,
 // or under --check regenerates it in memory and compares — the same drift-detection shape `puck schema --check`,
 // `puck registry --check` and `puck architecture --map` establish.
 // Exit 0 wrote or matched, 1 check found drift, 2 usage error or missing repository root.
@@ -40,7 +40,7 @@ public static class VocabularyCommand {
         Generated from Puck.World.Transpiler.Vocabulary.WorldConstructs.Table: every construct
         of puck.world.definition.v1's surface, its members with their kinds and defaults, the
         document member it lowers to, and what the printer requires before it may print a
-        document node back as that construct. The parser's embedded-language test, the
+        document node back as that construct. The parser's bare-modifier test, the
         decompiler's sugar guards, and the language server's completion and hover read the same
         table, so this file cannot describe a construct the code spells differently.
 

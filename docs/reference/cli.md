@@ -3028,7 +3028,7 @@ Writes `docs/reference/world-vocabulary.md` from
 `puck.world.definition.v1`'s surface—its keyword, the members it carries with
 their kinds and defaults, the document member it lowers to, and what the printer
 requires before it may print a document node back as that construct. The
-parser's embedded-language test, the decompiler's sugar guards, and the language
+parser's bare-modifier test, the decompiler's sugar guards, and the language
 server's completion and hover read the same table, so the file cannot describe a
 construct the code spells differently.
 
@@ -3346,7 +3346,7 @@ formatter for every source kind.
 
 ```text
 puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--strict] [--watch] [--update-assets]
-puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
+puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
 puck lint <path> [--strict]

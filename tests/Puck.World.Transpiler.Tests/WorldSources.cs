@@ -128,15 +128,13 @@ internal static class WorldSources {
     /// <summary>Decompiles <paramref name="original"/>, compiles the print, and asserts the result equals the
     /// original.</summary>
     /// <param name="original">A canonical document.</param>
-    /// <param name="sql">Whether the decompiler projects state and rules into a <c>sql</c> block.</param>
     /// <param name="embeddings">The embedding lock both directions resolve authored text against; none when
     /// omitted.</param>
     /// <returns>The printed source.</returns>
-    public static string AssertRoundTrips(JsonObject original, bool sql = false, EmbeddingLock? embeddings = null) {
+    public static string AssertRoundTrips(JsonObject original, EmbeddingLock? embeddings = null) {
         var printed = WorldDecompiler.Decompile(
             embeddings: embeddings,
-            root: original,
-            sql: sql
+            root: original
         );
         var recompiled = Compile(
             embeddings: embeddings,
