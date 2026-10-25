@@ -119,13 +119,18 @@ public sealed partial class SdfWorldTables {
                 }
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
                 // Every mesh is written again at once when the arena moved them or none was written yet, since no mesh's
-                // words stand where its draw reads them; otherwise only the meshes this list placed are owed, and land over
-                // the next frames.
+                // words stand where its draw reads them. Otherwise the meshes a grown draw reserve moved are written now,
+                // since their draws were drawn from the words the reserve took, and the rest this list placed are owed and
+                // land over the next frames.
                 if (m_meshArena.Relocated || !m_meshSectionWritten) {
                     m_meshesOwed.Clear();
                     foreach (var (mesh, placement) in m_meshArena.Placements) { WriteMeshWords(mesh: mesh, placement: placement); }
                 } else {
                     m_meshesOwed.UnionWith(other: m_meshArena.Placed);
+                    foreach (var mesh in m_meshArena.Moved) {
+                        _ = m_meshesOwed.Remove(item: mesh);
+                        WriteMeshWords(mesh: mesh, placement: m_meshArena.Placements[mesh]);
+                    }
                 }
                 m_meshSectionWritten = true;
             }

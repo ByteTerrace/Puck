@@ -625,6 +625,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script) {
             actingPrincipal: Principal.Console
         );
     }
+    // A rendering World compiles its own code in the background, so a first crossing or a first addon write runs compiled
+    // code rather than stalling a frame on the JIT; a headless World has no frame to stall.
+    if (hostSettings.Presentation != WorldHostPresentation.None) {
+        _ = WorldCodeWarmer.Start(entry: typeof(WorldCodeWarmer).Assembly, error: Console.Error);
+    }
     if (script is not null) {
         var commands = host.Services.GetRequiredService<TextCommandSource>();
         using var lines = new StringReader(s: script);
