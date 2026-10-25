@@ -43,7 +43,10 @@ When you delegate, inventory the work first, assign each agent explicit file
 ownership and its skills, and sequence edits to shared files. Each brief holds
 the whole task, the integration branch, a finish line (the command that must
 pass or the state that must hold), a stopping condition, and whether it grants
-the GPU. The integrator inspects the combined result and runs its checks; a
+the GPU. A stopping condition is for a look call or an owner-only action; it
+never protects a file format, replay, checkpoint, ABI or recorded hash, since
+the owner rules those change freely (AGENTS.md). The integrator inspects the
+combined result and runs its checks; a
 worker's report is evidence to check, not a substitute. Check a reported defect
 against the current files before acting on it. Delegating to subagents needs no
 one's permission; choose each one's model by fit
