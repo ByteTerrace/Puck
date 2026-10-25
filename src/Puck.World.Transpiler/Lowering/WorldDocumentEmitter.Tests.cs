@@ -102,8 +102,10 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
     /// <param name="world">The sibling document as it compiles, which this call adds rows and a rule to.</param>
     /// <param name="reason">The refusal when the document already carries the verdict's name, otherwise
     /// <see langword="null"/>.</param>
+    /// <param name="inheritedState">The composed state section the sibling document inherits through its
+    /// <c>basis</c> and <c>imports</c>, when it has any.</param>
     /// <returns><see langword="true"/> when the expectation was added.</returns>
-    public bool TryApply(JsonObject world, out string? reason) {
+    public bool TryApply(JsonObject world, out string? reason, JsonObject? inheritedState = null) {
         ArgumentNullException.ThrowIfNull(argument: world);
 
         if (world["state"] is not JsonObject state) {
@@ -137,6 +139,7 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
         WorldDocumentEmitter.AddVerdictRows(
             effects: rule["effects"]!.AsArray(),
             gate: Gate,
+            inheritedState: inheritedState,
             reads: Reads,
             row: row,
             rows: rows,
@@ -178,8 +181,11 @@ public static partial class WorldDocumentEmitter {
     /// <param name="Document">The generated document's own name.</param>
     /// <param name="Json">The document being built.</param>
     /// <param name="Scope">The scope this document's own rows and constants resolve in.</param>
-    private sealed record TestTarget(string? World, string Document, JsonObject Json, DocumentScope Scope);
+    /// <param name="InheritedState">The composed state section the document inherits through its <c>basis</c> and
+    /// <c>imports</c>, when it has any.</param>
+    private sealed record TestTarget(string? World, string Document, JsonObject Json, DocumentScope Scope, JsonObject? InheritedState = null);
 
+    private const string InheritedStateAnnotation = "WorldInheritedState";
     private const string TestsAnnotation = "WorldTests";
 
     // The status cell of a generated verdict row: a reserved key the verdict row mints, so no value the expectation
@@ -542,6 +548,7 @@ public static partial class WorldDocumentEmitter {
             targets = [
                 new TestTarget(
                 Document: name,
+                InheritedState: (scope.Annotations.GetValueOrDefault(key: InheritedStateAnnotation) as JsonObject),
                 Json: ((JsonObject)enclosing.DeepClone()),
                 Scope: scope,
                 World: null
@@ -790,8 +797,13 @@ public static partial class WorldDocumentEmitter {
             var row = rows?
                 .OfType<JsonObject>()
                 .FirstOrDefault(predicate: candidate => (candidate["name"]?.GetValue<string>() == cell.Target.Name));
+            var inheritedRow = ((row is null)
+                ? (target.InheritedState?["world"] as JsonArray)?
+                    .OfType<JsonObject>()
+                    .FirstOrDefault(predicate: candidate => (candidate["name"]?.GetValue<string>() == cell.Target.Name))
+                : null);
 
-            if (row is null) {
+            if ((row is null) && (inheritedRow is null)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.TestStepInadmissible,
                     message: $"a given line writes '{cell.Target.Name}', which this world's state section does not declare",
@@ -801,12 +813,13 @@ public static partial class WorldDocumentEmitter {
                 continue;
             }
 
+            var kind = ((row ?? inheritedRow)!["kind"]?.GetValue<string>() ?? nameof(CellKind.Int));
             var key = (cell.Target.Key ?? StateRow.SlotKey.Value);
             var value = (cell.Value switch {
                 RhsSecondsNode seconds => JsonValue.Create(value: seconds.Seconds),
                 RhsTextNode or RhsOperandNode => GivenLiteral(
                     cell: cell,
-                    kind: (row["kind"]?.GetValue<string>() ?? nameof(CellKind.Int)),
+                    kind: kind,
                     scope: cellScope
                 ),
                 _ => null,
@@ -820,6 +833,49 @@ public static partial class WorldDocumentEmitter {
                 );
 
                 continue;
+            }
+
+            if (row is null) {
+                var slotShaped = (
+                    (inheritedRow!["cells"] is not JsonArray) &&
+                    ((inheritedRow["domain"] as JsonObject)?["$type"]?.GetValue<string>() is null or "slot")
+                );
+
+                if (slotShaped && (key != StateRow.SlotKey.Value)) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.TestStepInadmissible,
+                        message: $"a given line writes '{cell.Target.Name}['{key}']', but that row is slot-shaped — its one cell is addressed by the row's own name",
+                        span: cell.Span
+                    );
+
+                    continue;
+                }
+
+                if (world["state"] is not JsonObject state) {
+                    state = [];
+                    world["state"] = state;
+                }
+                if (state["world"] is not JsonArray stateRows) {
+                    stateRows = [];
+                    state["world"] = stateRows;
+                }
+
+                row = (slotShaped
+                    ? new JsonObject {
+                        ["kind"] = kind,
+                        ["name"] = cell.Target.Name,
+                        ["value"] = value,
+                    }
+                    : new JsonObject {
+                        ["cells"] = new JsonArray(),
+                        ["kind"] = kind,
+                        ["name"] = cell.Target.Name,
+                    });
+                stateRows.AppendNode(item: row);
+
+                if (slotShaped) {
+                    continue;
+                }
             }
 
             // `value` IS the one-cell spelling of `cells` on a slot-shaped row, and a document authoring both is
@@ -1098,6 +1154,7 @@ public static partial class WorldDocumentEmitter {
             AddVerdictRows(
                 effects: effects,
                 gate: gate,
+                inheritedState: target.InheritedState,
                 reads: reads,
                 row: row,
                 rows: rows,
@@ -1170,7 +1227,7 @@ public static partial class WorldDocumentEmitter {
     // The verdict row for one expectation, and one witness row for each kind other than Int its gate read, appended to
     // `rows`; the effects that copy what the gate read into them are appended to `effects`, after the one that decides
     // the verdict.
-    internal static void AddVerdictRows(JsonObject state, JsonArray rows, JsonArray effects, string row, string gate, IReadOnlyList<(string State, string? Key)> reads) {
+    internal static void AddVerdictRows(JsonObject state, JsonArray rows, JsonArray effects, string row, string gate, IReadOnlyList<(string State, string? Key)> reads, JsonObject? inheritedState = null) {
         var cells = new JsonArray();
 
         cells.AppendNode(item: new JsonObject { ["key"] = VerdictStatusKey, ["value"] = WorldVerdict.NotEvaluated });
@@ -1182,10 +1239,15 @@ public static partial class WorldDocumentEmitter {
             // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
             // read of a Fixed, Bool or Text row is a cell of that kind's witness.
             if (
-                (KindOfRow(
+                ((KindOfRow(
                     name: readState,
                     state: state
-                ) is not { } kind) ||
+                ) ?? ((inheritedState is null)
+                    ? null
+                    : KindOfRow(
+                        name: readState,
+                        state: inheritedState
+                    ))) is not { } kind) ||
                 ((kind != CellKind.Int) && (UnseenValue(kind: kind) is null))
             ) {
                 continue;

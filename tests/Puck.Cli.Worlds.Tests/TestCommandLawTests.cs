@@ -90,15 +90,20 @@ public sealed class TestCommandLawTests {
               }
             }
             """);
-        directory.WriteText(name: "worlds/away.puck", text: """
+        directory.WriteText(name: "worlds/away-base.puck", text: """
             schema: "puck.world.definition.v1"
-            documentId: "away"
+            documentId: "away-base"
 
             state {
               world {
                 table probe { "0" = 1 }
               }
             }
+            """);
+        directory.WriteText(name: "worlds/away.puck", text: """
+            schema: "puck.world.definition.v1"
+            basis: "away-base"
+            documentId: "away"
             """);
 
         var (notCrossed, notCrossedOutput) = RunTest(directory.PathOf(name: "worlds/home.puck"));

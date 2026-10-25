@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
@@ -396,14 +397,32 @@ public static partial class TestCommand {
             );
 
             if (found is not null) {
-                foreach (var expectation in foreign.Where(predicate: expectation => string.Equals(a: expectation.Document, b: document, comparisonType: StringComparison.Ordinal))) {
-                    if (!expectation.TryApply(reason: out var applyReason, world: found)) {
-                        reason = applyReason;
+                var matched = foreign
+                    .Where(predicate: expectation => string.Equals(a: expectation.Document, b: document, comparisonType: StringComparison.Ordinal))
+                    .ToArray();
 
-                        return false;
+                if (matched.Length > 0) {
+                    var inheritedState = (((found["basis"] is not null) || (found["imports"] is not null)) &&
+                        PuckDocumentComposer.TryComposeWorldDocument(
+                            chainBytes: out _,
+                            composed: out var composedFound,
+                            reason: out _,
+                            rootBytes: Encoding.UTF8.GetBytes(s: found.ToJsonString()),
+                            rootResolvedPath: (File.Exists(path: source) ? source : json)
+                        )
+                            ? (composedFound?["state"] as JsonObject)
+                            : null
+                    );
+
+                    foreach (var expectation in matched) {
+                        if (!expectation.TryApply(inheritedState: inheritedState, reason: out var applyReason, world: found)) {
+                            reason = applyReason;
+
+                            return false;
+                        }
+
+                        _ = judged.Add(item: document);
                     }
-
-                    _ = judged.Add(item: document);
                 }
 
                 pending.Enqueue(item: (document, found, sourceDirectory));

@@ -124,7 +124,9 @@ public static partial class WorldDocumentEmitter {
 
         CollectEnumNames(declared: declared, statements: document.Statements);
 
-        var span = document.BasisSpan;
+        var span = ((document.BasisSpan.Length > 0)
+            ? document.BasisSpan
+            : (document.Statements.OfType<ImportNode>().FirstOrDefault()?.Span ?? document.Span));
 
         foreach (var inherited in enums) {
             if (declared.Contains(item: inherited.Name)) {
