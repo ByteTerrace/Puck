@@ -718,6 +718,16 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
 
+## [UI](ui.md)
+
+- [ ] Step 1: the leaks out and a neutral default theme.
+- [ ] Step 2: text, scale and the renderer.
+- [ ] Step 3: the tree, with a headless-driven settings panel.
+- [ ] Step 4: interaction everywhere; each overlay writer deleted as its surface lands.
+- [ ] Step 5: mods' UI.
+- [ ] Step 6: diegetic surfaces.
+- [ ] Text shaping, bidirectional text, fallback, input composition and localization.
+
 ## [Editor](editor.md)
 
 Every package below carries its own check on the programme page; tick it there and here in the same change.
