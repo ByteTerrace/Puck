@@ -73,6 +73,12 @@ public sealed partial class WorldRenderEnvelopeLawTests {
 
         Assert.Equal(expected: headroom, actual: envelope.HeadroomInstances);
         Assert.Equal(expected: envelope.ReservedInstances, actual: probe.InstanceCount);
+        Assert.Contains(expectedSubstring: $"reserves {envelope.ReservedInstances} instances ({headroom} headroom", actualString: envelope.Describe(), comparisonType: StringComparison.Ordinal);
+
+        // A composed document adds its materials and no instances.
+        envelope.DocumentMaterials = static () => 3;
+
+        Assert.Equal(expected: (envelope.Boot.Cost with { Materials = (envelope.Boot.Cost.Materials + 3) }), actual: envelope.Measure(candidate: definition).Cost);
     }
     /// <summary>The headroom a document asks for is clamped to what the instance ceiling leaves above its boot scene,
     /// so asking for more reserves the ceiling and refuses nothing.</summary>
