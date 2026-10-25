@@ -171,6 +171,9 @@ public sealed partial class WorldAddonRuntime {
         /// payload into, reused every act and every tick.</summary>
         public byte[] MutationPayloadBuffer { get; }
 
+        // One previous immutable decode per reservation slot, bounded by the guest's whole output batch. Only
+        // decoding shares these records: every act is still admitted, metered, queued and journaled normally.
+        public WorldMutation?[] DecodedMutations { get; } = new WorldMutation?[AddonAbi.MaxOutCells];
         // The revision an oversized disclosure set overflowed at — re-projection waits for the next grant-table
         // write, the only event that can shrink the set (-1 = never overflowed).
         public int OverflowedAtRevision { get; set; } = -1;

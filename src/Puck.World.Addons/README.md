@@ -112,6 +112,12 @@ what keeps guest driving reproducible under replay without recording it.
 
 ## The `addon.mutate` door
 
+Mount preparation initializes the decoder's vocabulary and JSON contracts before any guest tick. Successful
+decoding reads property names directly from the JSON document and shares unchanged immutable cells with the
+previous decode in that guest's bounded reservation slot. The cached decode is only a storage hint: every act
+still crosses admission, byte metering, the pending queue, validation, journaling, narration and echoes. Later
+decodes never mutate cells retained by an earlier journal entry.
+
 `AddonMutateRefusal` catalogs the six-stage dispatch gate's refusal reasons
 for a guest-submitted `SubmitMutation` act (stale handle, unrequested
 capability, masked mutation kind, budget exhaustion at three granularities,

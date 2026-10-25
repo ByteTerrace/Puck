@@ -178,8 +178,8 @@ public sealed partial class WorldAddonRuntime {
                 var length = ((int)lengthUnsigned);
 
                 // Cell writes are new host work: meter the bounded copy and decode against remaining guest fuel.
-                if ((kindOrdinal == 47 || kindOrdinal == 48) && !ChargeHostFuel(addon, (ulong)length + 64)) {
-                    SetReservedVerdict(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
+                if (((kindOrdinal == 47) || (kindOrdinal == 48)) && !ChargeHostFuel(addon: addon, cost: (((ulong)length) + 64))) {
+                    SetReservedVerdict(addon: addon, ordinal: query.Ordinal, verdict: AddonVerdict.QuotaExhausted);
                     continue;
                 }
 
@@ -247,6 +247,7 @@ public sealed partial class WorldAddonRuntime {
                 // occupies the old position.
                 if (
                     !WorldAddonMutationDecoder.TryDecode(
+                    previous: addon.DecodedMutations[slot],
                     kindOrdinal: kindOrdinal,
                     section: section,
                     payload: payload,
@@ -266,6 +267,7 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
+                addon.DecodedMutations[slot] = mutation;
                 m_server.EnqueueMutation(
                     mutation: mutation,
                     connectionId: SubmissionEnvelope.LocalConnectionId,

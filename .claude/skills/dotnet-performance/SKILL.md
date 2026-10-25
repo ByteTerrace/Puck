@@ -123,6 +123,9 @@ outside this contract and takes the references as written.
   0.1-0.5 ms pieces; a scan of thousands of objects per call (a cache miss
   each) and a closure a method allocates on entry because one of its lambdas
   captures a parameter are the usual shapes.
+- Attribute a trace to the workload's outer frame or thread, including its tiered and inlined stacks. Filtering
+  only for an inner `WorldTick.Advance` frame drops steady samples after that method inlines; a short trace can
+  then make first-use workspace growth look like the dominant steady allocation. Separate warmup from the measured window.
 - Check the folklore section of the core guidance before preserving an old
   hand-optimization, and confirm specialization and call boundaries in optimized
   assembly. Prefer idiomatic code the .NET 11 JIT and libraries recognize.
@@ -166,7 +169,8 @@ calls in a fresh process can run several times slower than its steady state.
   so a first crossing or a first addon write no longer compiles tens of
   milliseconds of code on the frame thread; a method prepared that way still
   tiers up. First-use cost left after it is generic instantiations and static
-  constructors.
+  constructors. Addon mounting initializes `WorldAddonMutationDecoder`'s vocabulary and JSON contracts before
+  its first submitted write; this runs no guest and submits no mutation.
 - Check each hot method's tier with `DOTNET_JitDisasmSummary` in a scratch
   process pinned to one CPU, and record first-call cost beside the steady state.
   Pinning a harness to one CPU before it warms up starves the background tiering

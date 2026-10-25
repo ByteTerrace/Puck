@@ -1,4 +1,5 @@
 using Puck.Maths;
+using System.Runtime.CompilerServices;
 
 namespace Puck.World.Server;
 
@@ -16,6 +17,10 @@ namespace Puck.World.Server;
 /// inactive-body verdict (the row contributes nothing); they differ only where every avatar pose already differs, in
 /// the interpolation between ticks.</remarks>
 public static class WorldPlacementAttachment {
+    private sealed record LocalFrame(FixedVector3 Offset, FixedQ4816 Yaw);
+
+    private static readonly ConditionalWeakTable<WorldPlacementAttach, LocalFrame> LocalFrames = new();
+
     /// <summary>Attempts to resolve an attached placement's world transform for the CURRENT tick.</summary>
     /// <param name="attach">The placement's attach facet.</param>
     /// <param name="population">The live entity table.</param>
@@ -50,11 +55,11 @@ public static class WorldPlacementAttachment {
             return false;
         }
 
-        var localOffset = FixedVector3.FromVector3(value: attach.LocalOffset);
-        var localYaw = FixedQ4816.FromDegrees(degrees: attach.LocalYawDegrees);
+        var local = LocalFrames.GetValue(attach, static value => new LocalFrame(
+            Offset: FixedVector3.FromVector3(value: value.LocalOffset), Yaw: FixedQ4816.FromDegrees(degrees: value.LocalYawDegrees)));
 
-        position = (body.FixedPosition + body.FixedOrientation.Rotate(vector: localOffset));
-        yawRadians = (body.FixedYaw + localYaw);
+        position = (body.FixedPosition + body.FixedOrientation.Rotate(vector: local.Offset));
+        yawRadians = (body.FixedYaw + local.Yaw);
         reason = string.Empty;
 
         return true;

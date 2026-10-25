@@ -274,6 +274,8 @@ public static class LauncherServiceRegistration {
     /// own stdin reader instead — the command pump and terminal baton are still wired identically either way.</param>
     public static IServiceCollection AddLauncherHeadlessTerminal(this IServiceCollection services, bool readStandardInput = true) {
         AddLauncherTerminalShared(services: services);
+        services.TryAddSingleton(implementationFactory: static sp => new HostFrameTimeline(time: sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<ICommandModule, HostFrameCommandModule>();
         services.AddSingleton(implementationInstance: HostPacing.WallClock);
         services.AddHostedService<HeadlessTickHostedService>();
 

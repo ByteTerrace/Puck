@@ -1471,7 +1471,11 @@ public static class CreationStampEmitter {
         var stampScale = stampFrame.Scale;
         var reflectionNormal = stampFrame.ReflectionNormal;
 
-        foreach (var shape in (document.Shapes ?? [])) {
+        ReadOnlySpan<SdfRigidFrame> identity = [SdfRigidFrame.Identity];
+        var shapes = (document.Shapes ?? []);
+
+        for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
+            var shape = shapes[shapeIndex];
             // A detail shape never reaches this contact compiler at all, so it neither carves
             // nor pads the collider it would otherwise emit.
             if (shape.Detail == true) {
@@ -1485,10 +1489,13 @@ public static class CreationStampEmitter {
                 continue;
             }
 
-            if (!ShapeDomainOps.TryExpand(
+            var frames = identity;
+            var expanded = Array.Empty<SdfRigidFrame>();
+
+            if ((shape.Domain is { Count: > 0 }) && !ShapeDomainOps.TryExpand(
                 domain: shape.Domain,
                 subject: shape.Position,
-                frames: out var frames,
+                frames: out expanded,
                 refusal: out var refusal
             )) {
                 throw new ArgumentException(
@@ -1496,6 +1503,7 @@ public static class CreationStampEmitter {
                     paramName: nameof(document)
                 );
             }
+            if (shape.Domain is { Count: > 0 }) { frames = expanded; }
 
             var bounds = SdfSolidGeometry.GetLocalBounds(type: shape.Type);
             var boundsCenter = FixedVector3.FromVector3(value: bounds.Center);

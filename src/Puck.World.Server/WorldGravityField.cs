@@ -49,7 +49,9 @@ public sealed class WorldGravityField {
             }
         }
 
-        foreach (var target in targets) {
+        for (var targetIndex = 0; (targetIndex < targets.Count); targetIndex++) {
+            var target = targets[targetIndex];
+
             if (((uint)target.EntityIndex) >= ((uint)m_slotByEntity.Length)) {
                 continue;
             }
@@ -171,7 +173,9 @@ public sealed class WorldGravityField {
             // zero Replace remains authored zero gravity rather than falling back to kit gravity.
             m_bodyCount = 0;
 
-            foreach (var target in targets) {
+            for (var targetIndex = 0; (targetIndex < targets.Count); targetIndex++) {
+                var target = targets[targetIndex];
+
                 if (((uint)target.EntityIndex) < ((uint)m_slotByEntity.Length)) {
                     m_slotByEntity[target.EntityIndex] = 0;
                     m_accelerations[target.EntityIndex] = m_compiled.Uniform;
@@ -196,7 +200,9 @@ public sealed class WorldGravityField {
 
         var count = attractorCount;
 
-        foreach (var target in targets) {
+        for (var targetIndex = 0; (targetIndex < targets.Count); targetIndex++) {
+            var target = targets[targetIndex];
+
             if (
                 (((uint)target.EntityIndex) >= ((uint)m_slotByEntity.Length)) ||
                 (count >= m_bodies.Length)

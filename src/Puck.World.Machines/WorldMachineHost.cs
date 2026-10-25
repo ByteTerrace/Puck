@@ -349,8 +349,13 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             : (null, null)
         );
     }
+
+    private readonly HashSet<string> m_linkedInstances = new(comparer: StringComparer.Ordinal);
+
     private HashSet<string> LinkedInstances() {
-        var result = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var result = m_linkedInstances;
+
+        result.Clear();
 
         foreach (var entry in m_links.Values) {
             if (entry.Link is null) {

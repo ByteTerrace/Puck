@@ -287,7 +287,10 @@ public sealed partial class WorldRuleHost {
             case BoardSeatFacet.Engaged:
                 var table = GrantSubject.Placement(id: operand.PlacementId);
 
-                foreach (var application in Host.GrantTable.Applications(principal: Principal.Seat(slot: operand.Seat))) {
+                var applications = Host.GrantTable.Applications(principal: Principal.Seat(slot: operand.Seat));
+                for (var index = 0; (index < applications.Count); index++) {
+                    var application = applications[index];
+
                     if (application.Target == table) {
                         return 1L;
                     }

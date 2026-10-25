@@ -285,6 +285,11 @@ public sealed class WorldInputHoldRuntime {
             }
         }
         public WorldSubmittedInput PushAndSelect(WorldSubmittedInput current, int ticksAgo, int ceilingTicks) {
+            // Keep the same checkpoint history and compaction positions. A short history reserves its largest
+            // extent before the first append; large authored holds still grow on demand instead of at admission.
+            if (((uint)ceilingTicks) < 256U) {
+                m_history.EnsureCapacity(capacity: (ceilingTicks + 257));
+            }
             m_history.Add(item: current);
 
             while ((((long)m_history.Count) - m_historyStart) > (((long)ceilingTicks) + 1L)) {

@@ -1337,7 +1337,8 @@ public static partial class WorldDefinitionValidator {
     // either door reaches, in exactly one place. Cross-row invariants (a keysOf zone's domain, a cellsOf board's
     // topology, a knowledge board's source/mask, an inverse board's derivation) are NOT here — see
     // <see cref="ValidateTokenAndPhaseRow"/>, <see cref="ValidateBoardRow"/> and <see cref="ValidateDisclosureRow"/>.
-    private static void ValidateStateRow(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, string path, List<string> errors, IReadOnlyDictionary<string, StateSpace>? spaces = null, IReadOnlyDictionary<string, StateEnum>? enums = null) {
+    private static string StateCellPath(string path, int index) => $"{path}.cells[{index}]";
+    private static void ValidateStateRow(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, string path, List<string> errors, IReadOnlyDictionary<string, StateSpace>? spaces = null, IReadOnlyDictionary<string, StateEnum>? enums = null, HashSet<string>? cellKeys = null) {
         // A field-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
         // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
         // door so the shape cannot be held by convention.
@@ -1532,16 +1533,17 @@ public static partial class WorldDefinitionValidator {
         // the same cell two ways and disagree about which shape they named.
         var reservesSlotKey = ((row.Capacity is not null) || (cells.Count != 1));
 
-        var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var keys = (cellKeys ?? new HashSet<string>(comparer: StringComparer.Ordinal));
+
+        keys.Clear();
         var minDeclared = (numeric ? row.Min : null);
         var maxDeclared = (numeric ? row.Max : null);
 
         for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
             var cell = cells[cellIndex];
-            var cellPath = $"{path}.cells[{cellIndex}]";
 
             if (cell is null) {
-                errors.Add(item: $"{cellPath} is required.");
+                errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} is required.");
 
                 continue;
             }
@@ -1552,7 +1554,7 @@ public static partial class WorldDefinitionValidator {
                 reason: out var kindReason,
                 value: cell.Value
             )) {
-                errors.Add(item: $"{cellPath} {kindReason}.");
+                errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} {kindReason}.");
 
                 continue;
             }
@@ -1589,48 +1591,50 @@ public static partial class WorldDefinitionValidator {
                 (cell.Advance is not null) &&
                 (cell.Dynamics is not null)
             ) {
-                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
+                errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
             }
 
             if (
                 (cell.Cycle is not null) &&
                 ((cell.Advance is not null) || (cell.Dynamics is not null))
             ) {
-                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
+                errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
             }
 
             if (
                 (cell.Behavior == StateCellBehavior.None) &&
                 ((cell.Advance is not null) || (cell.Dynamics is not null) || (cell.Cycle is not null))
             ) {
-                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares behavior 'none' beside its own advance/dynamics/cycle — a cell that opts out declares no trait of its own either.");
+                errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares behavior 'none' beside its own advance/dynamics/cycle — a cell that opts out declares no trait of its own either.");
             }
 
             if (
                 (cell.Behavior == StateCellBehavior.None) &&
                 (cell.Key == WorldStateRow.SlotKey)
             ) {
-                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares behavior 'none' on the reserved slot key — a slot's one cell has no separate default of its own to opt out of.");
+                errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares behavior 'none' on the reserved slot key — a slot's one cell has no separate default of its own to opt out of.");
             }
 
             // The effective behavior's own trait shape (declared parameters, an unresolvable dynamics reference,
             // a lattice node past the cycle's range) is validated wherever it is authored — its own cell or its
             // row's default; only the CLOCK is validated here, uniformly, since it lives on the cell regardless of
             // which side declared the trait.
-            ValidateClock(
+            if (cell.Clock is not null) {
+                ValidateClock(
                 clock: cell.Clock,
                 effectiveCycle: EffectiveBehavior.Resolve(
                 cell: cell,
                 row: row
             ).Cycle,
                 errors: errors,
-                path: cellPath
+                path: StateCellPath(index: cellIndex, path: path)
             );
+            }
 
             if (cell.Cycle is { } cellCycle) {
                 ValidateCellCycle(
                     cell: cell,
-                    cellPath: cellPath,
+                    cellPath: StateCellPath(index: cellIndex, path: path),
                     cycle: cellCycle,
                     errors: errors,
                     numeric: numeric,
@@ -1642,7 +1646,7 @@ public static partial class WorldDefinitionValidator {
                 ValidateCellAdvance(
                     advance: cellAdvance,
                     cell: cell,
-                    cellPath: cellPath,
+                    cellPath: StateCellPath(index: cellIndex, path: path),
                     errors: errors,
                     numeric: numeric,
                     row: row
@@ -1652,7 +1656,7 @@ public static partial class WorldDefinitionValidator {
             if (cell.Dynamics is { } cellDynamics) {
                 ValidateCellDynamics(
                     cell: cell,
-                    cellPath: cellPath,
+                    cellPath: StateCellPath(index: cellIndex, path: path),
                     dynamics: cellDynamics,
                     dynamicsNames: dynamicsNames,
                     errors: errors,
@@ -1670,19 +1674,19 @@ public static partial class WorldDefinitionValidator {
 
             if (row.Kind == CellKind.Vector) {
                 if ((resolvedSpace is not null) && (cell.Value.AsVector.Length != resolvedSpace.Identity.Dimensions)) {
-                    errors.Add(item: $"{cellPath}.vector dimensions {cell.Value.AsVector.Length} must match space '{resolvedSpace.Name}' dimensions {resolvedSpace.Identity.Dimensions}.");
+                    errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)}.vector dimensions {cell.Value.AsVector.Length} must match space '{resolvedSpace.Name}' dimensions {resolvedSpace.Identity.Dimensions}.");
                 }
 
                 if (cell.Advance is not null) {
-                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a vector cell — vector cells do not accumulate.");
+                    errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares advance on a vector cell — vector cells do not accumulate.");
                 }
 
                 if (cell.Dynamics is not null) {
-                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a vector cell — vector cells do not ease.");
+                    errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares dynamics on a vector cell — vector cells do not ease.");
                 }
 
                 if (cell.Cycle is not null) {
-                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle on a vector cell — vector cells do not turn.");
+                    errors.Add(item: $"{StateCellPath(index: cellIndex, path: path)} ('{row.Name}'.'{cell.Key}') declares cycle on a vector cell — vector cells do not turn.");
                 }
 
                 continue;

@@ -16,6 +16,11 @@ agent works in that mode by default, without asking:
 - Breaking something and then fixing it is normal work, not a risk to
   escalate. A red gate or CI run in the middle of a campaign is information,
   not a stop.
+- No file format, schema, replay tape, checkpoint, addon ABI or recorded hash
+  is a constraint (the owner's ruling: protecting them "limits our greenfield
+  development"). Change one whenever the design is better for it, migrate every
+  caller, and re-record what it invalidates in the same change; a brief never
+  makes one a stopping condition. Determinism itself stays (rule 4).
 - The owner decides only what the engine should do, how it should look, and
   the owner-only actions (pushing `main`, deploying, anything outside the
   repository). Everything else is yours: decide it, do it, and report what you
