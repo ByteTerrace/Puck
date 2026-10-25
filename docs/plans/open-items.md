@@ -396,6 +396,14 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] A `test` block in a source that takes its state from a `basis` or an import resolves its `given` lines and enum member names against the composed document, and a schema-less imported document publishes its enums. `worlds/debug/chess-tests.puck` (on the debug world as basis) uses `given` lines and the chess enums.
 - [x] The debug world's chess board reads as a real one from each side. A camera looking toward +Z has -X on its right (`CameraSnapshot.LookAt`: right is forward crossed with up), so the board's files run toward -X (grid column = 7 - file): from White's -Z seat a1 is dark at her left and the queen stands on d1, her colour. The kings start in column 3, the castling rules name kingside by a falling column, and `chess.md`'s square formula and `chess-tests.puck`'s coordinates follow; the seated cursor's steps were already in the seat's own frame.
 - [ ] Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense, Ribbon.
+- [ ] S10 the state review ([S10](state-and-language.md#s10--the-state-review)):
+  - [ ] Addon reads checked against per-recipient disclosure.
+  - [ ] Charge what is used.
+  - [ ] One live store and one write door.
+  - [ ] Everything that steers the future hashed and checkpointed, running addons included.
+  - [ ] Rewind as a complete continuation.
+  - [ ] Entities as records in pools; seats as entities.
+  - [ ] Edges as values, versioned facets, explicit order, key reclamation, facets, one work allowance.
 - [ ] S9 the authoring consensus ([S9](state-and-language.md#s9--the-authoring-consensus)), four waves:
   - [ ] Wave 1: compound assignment, one expression language and the locals' order, one bracket rule; `sql { }` deleted, a wrapping printer, saving through the source tree.
   - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
