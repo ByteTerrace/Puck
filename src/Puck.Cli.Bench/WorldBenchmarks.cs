@@ -207,13 +207,13 @@ internal static class WorldBenchmarks {
         rows.Add(item: ("world: 13-cell guest burst tick (median)", $"{MedianMilliseconds(samples: samples):F3} ms"));
         rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{allocations[(SampleTicks / 2)]:N0} bytes"));
     }
-    // gallery.lights.all: every hall light cell written in one tick, which swaps the hall's responding rows (floors,
+    // gallery.lights.all: every hall light cell written in one tick, which moves the hall's responding rows (floors,
     // roof, switches) to their lit or dark creations in that tick. The tick is timed and metered beside the population
-    // revisions it moved: a swap that moves no body leaves the revision, so a client rebuilds its program once, on the
-    // definition the swap delivers.
+    // revisions it moved: a response change moves no body and leaves the revision, so a client composes its program
+    // once, on the values the change delivers.
     private static void MeasureResponseSwap(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
         if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
-            rows.Add(item: ("world: response swap", "no hallLights row"));
+            rows.Add(item: ("world: response change", "no hallLights row"));
 
             return;
         }
@@ -222,13 +222,6 @@ internal static class WorldBenchmarks {
         var samples = new long[Changes];
         var allocations = new long[Changes];
         var revisions = new long[Changes];
-        var swaps = 0;
-
-        server.MutationJournalTap += (_, _, mutation) => {
-            if (mutation is Puck.World.Protocol.WorldMutation.Batch { Mutations: [Puck.World.Protocol.WorldMutation.UpsertPlacement, ..] }) {
-                swaps++;
-            }
-        };
 
         // Paced like the game, so a screen machine's full window does not stand in for the swap's own cost.
         var period = ((long)((((ulong)Stopwatch.Frequency) * stepTicks) / FixedTickConversion.TicksPerSecond));
@@ -249,7 +242,7 @@ internal static class WorldBenchmarks {
                 server.EnqueueMutation(mutation: new Puck.World.Protocol.WorldMutation.UpsertStateCell(Puck.Commands.Principal.World, "hallLights", cell.Key.Value, value, Puck.World.Protocol.WorldDocumentWriteKind.Set));
             }
 
-            var before = swaps;
+            var before = server.Definition;
             var revision = server.Population.Revision;
 
             while (Stopwatch.GetTimestamp() < due) {
@@ -261,7 +254,7 @@ internal static class WorldBenchmarks {
             var bytes = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
             var elapsed = (Stopwatch.GetTimestamp() - start);
 
-            if (swaps == before) { throw new InvalidOperationException(message: "a hall light change swapped no responding row"); }
+            if (WorldPlacementResponse.CompareHoldings(after: server.Definition, before: before) == WorldHoldingChange.None) { throw new InvalidOperationException(message: "a hall light change moved no responding row"); }
             for (var tick = 0; (tick < 4); tick++) {
                 Advance();
             }
@@ -273,13 +266,13 @@ internal static class WorldBenchmarks {
         }
         Array.Sort(array: allocations);
         Array.Sort(array: revisions);
-        rows.Add(item: ("world: response swap tick (median, gallery.lights.all)", $"{MedianMilliseconds(samples: samples):F3} ms"));
-        rows.Add(item: ("world: response swap tick allocation (median)", $"{allocations[(Changes / 2)]:N0} bytes"));
-        rows.Add(item: ("world: response swap population revisions moved (median)", $"{revisions[(Changes / 2)]}"));
+        rows.Add(item: ("world: response change tick (median, gallery.lights.all)", $"{MedianMilliseconds(samples: samples):F3} ms"));
+        rows.Add(item: ("world: response change tick allocation (median)", $"{allocations[(Changes / 2)]:N0} bytes"));
+        rows.Add(item: ("world: response change population revisions moved (median)", $"{revisions[(Changes / 2)]}"));
     }
     // The program a client composes on the frame thread (WorldSceneEmitter.Emit, the work SdfCompositionFrameSource
     // hands its background build): composed again with nothing changed, and after each hall light change delivers the
-    // document holding its swapped rows.
+    // rows holding their new masks.
     private static void MeasureSceneEmission(string path, Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
         if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
             rows.Add(item: ("world: scene emission", "no hallLights row"));
@@ -330,7 +323,7 @@ internal static class WorldBenchmarks {
             }
 
             server.Advance(stepTicks: stepTicks);
-            client.DeliverDefinition(definition: server.Definition, version: server.DocumentVersion);
+            client.DeliverState(definition: server.Definition, stamp: new Puck.World.Protocol.WorldStateStamp(Tick: 0UL, EngineTick: 0UL, MovedRows: default, Everything: false), version: server.DocumentVersion);
             Emit(times: changed, bytes: changedBytes, sample: Math.Max(val1: 0, val2: (change - 4)));
         }
         Array.Sort(array: steadyBytes);

@@ -871,11 +871,11 @@ public sealed class WorldFaceCatalogLawTests {
         ));
         Assert.Null(@object: unmapped);
     }
-    // THE LAW: a document that differs from another only in which creation a face-free row shows takes that document's
-    // derived faces and frames whole; a row that moves otherwise, or a swap whose creation carries a face, derives its
-    // own; and a document whose faces were never derived hands nothing on.
+    // THE LAW: a holding projection over face-free rows takes the document's derived faces, frames and spatial index
+    // whole and reads as an appearance change; one over a row whose creation carries a face derives its own faces and
+    // reads as a facet change; and an empty projection is the document itself.
     [Fact]
-    public void AHoldingSwapBetweenFaceFreeCreationsCarriesTheCatalogAndTheFrames() {
+    public void AHoldingProjectionOverFaceFreeRowsCarriesTheCatalogAndTheFrames() {
         var door = BuildDoorDocument();
         var crate = new WorldPlacement(
             Id: "crate",
@@ -888,27 +888,27 @@ public sealed class WorldFaceCatalogLawTests {
             CreationsRaw = [.. door.Creations, CreationFixtures.UnitSphere(id: "crate")],
             PlacementRowsRaw = [.. door.Placements, crate],
         });
-        WorldDefinition Swapped(WorldPlacement row) => (before with { PlacementRowsRaw = [before.Placements[0], row] });
-
-        Assert.False(condition: WorldFaceCatalog.CarryAcrossHolding(source: before, target: Swapped(row: (crate with { Holding = 1 }))));
-        Assert.False(condition: WorldPlacementFrameCompilation.CarryAcrossHolding(source: before.PlacementsRaw, target: Swapped(row: (crate with { Holding = 1 })).PlacementsRaw));
-
         var catalog = WorldFaceCatalog.For(definition: before);
         var frames = WorldPlacementFrameCompilation.Resolve(section: before.PlacementsRaw);
-        var swapped = Swapped(row: (crate with { Holding = 1 }));
+        var spatial = WorldSpatialQueryCompilation.Resolve(section: before.PlacementsRaw);
+        var swapped = before.WithPlacementHoldings(holdings: [(1, 1)]);
 
-        Assert.True(condition: WorldFaceCatalog.CarryAcrossHolding(source: before, target: swapped));
+        Assert.Same(expected: before, actual: before.WithPlacementHoldings(holdings: []));
+        Assert.Equal(expected: 1, actual: swapped.Placements[1].Holding);
+        Assert.Same(expected: before.Placements[0], actual: swapped.Placements[0]);
         Assert.Same(expected: catalog, actual: WorldFaceCatalog.For(definition: swapped));
-        Assert.True(condition: WorldPlacementFrameCompilation.CarryAcrossHolding(source: before.PlacementsRaw, target: swapped.PlacementsRaw));
         Assert.Same(expected: frames, actual: WorldPlacementFrameCompilation.Resolve(section: swapped.PlacementsRaw));
+        Assert.Same(expected: spatial, actual: WorldSpatialQueryCompilation.Resolve(section: swapped.PlacementsRaw));
+        Assert.Equal(expected: WorldHoldingChange.Appearance, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: before));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: swapped));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: null));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: (before with { PlacementRowsRaw = [before.Placements[0]] }), before: before));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: (before with { PlacementRowsRaw = [before.Placements[0], (crate with { Scale = 2f })] }), before: before));
 
-        var moved = Swapped(row: (crate with { Scale = 2f }));
+        var faced = before.WithPlacementHoldings(holdings: [(0, 1)]);
 
-        Assert.False(condition: WorldFaceCatalog.CarryAcrossHolding(source: before, target: moved));
-        Assert.False(condition: WorldPlacementFrameCompilation.CarryAcrossHolding(source: before.PlacementsRaw, target: moved.PlacementsRaw));
-        Assert.False(condition: WorldFaceCatalog.CarryAcrossHolding(source: before, target: (before with { PlacementRowsRaw = [before.Placements[0]] })));
-        Assert.False(condition: WorldPlacementFrameCompilation.CarryAcrossHolding(source: before.PlacementsRaw, target: (before with { PlacementRowsRaw = [before.Placements[0]] }).PlacementsRaw));
-        Assert.False(condition: WorldPlacementFrameCompilation.CarryAcrossHolding(source: null, target: swapped.PlacementsRaw));
-        Assert.False(condition: WorldFaceCatalog.CarryAcrossHolding(source: before, target: (before with { PlacementRowsRaw = [(before.Placements[0] with { Holding = 1 }), crate] })));
+        Assert.NotSame(expected: catalog, actual: WorldFaceCatalog.For(definition: faced));
+        Assert.Equal(expected: WorldHoldingChange.Facets, actual: WorldPlacementResponse.CompareHoldings(after: faced, before: before));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => before.WithPlacementHoldings(holdings: [(2, 1)]));
     }
 }
