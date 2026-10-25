@@ -248,7 +248,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // row — the cross-document durable-state write-back channel Server.WorldOwnedWorlds.Decide gates, the one door
     // whose vocabulary is Set/Add rather than mutation kinds.
     private static bool CarriesWriteMask(WorldCapability capability, GrantSubject subject) =>
-        ((capability == WorldCapability.Mutate) && (subject.Kind == GrantSubjectKind.State));
+        ((capability is WorldCapability.Mutate or WorldCapability.Edit) && (subject.Kind == GrantSubjectKind.State));
     // Whether an incoming grant conflicts with an existing hold under the exclusivity rule. Grant/revoke is a
     // human-cadence op (never the tick path), so the two scans are affordable; both are skipped entirely for the common
     // idempotent re-grant (a matching holder is the incoming principal itself).
@@ -313,7 +313,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // rather than a budget, so a budget there is refused by name.
         var untrustedPrincipal = !IsTrusted(principal: grant.Grantee.Principal);
         var meteredMutate = ((grant.Capability == WorldCapability.Mutate) && IsMutateDispatchSubject(subject: grant.Subject));
-        var metered = ((grant.Capability is WorldCapability.Observe or WorldCapability.Drive) || meteredMutate);
+        var metered = ((grant.Capability is WorldCapability.Observe or WorldCapability.Drive or WorldCapability.Edit) || meteredMutate);
 
         if (grant.Budget == 0) {
             reason = "budget:0 is refused — a granted-but-never-dispatched row is accepted-and-inert; grant nothing instead";
@@ -322,7 +322,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         if (
-            metered &&
+            (metered && (grant.Capability != WorldCapability.Edit)) &&
             untrustedPrincipal &&
             (grant.Budget is null)
         ) {
@@ -1468,7 +1468,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return false;
     }
-
     /// <summary>Determines whether a principal sits inside the local trust boundary for administration and metering — the
     /// boundary the grant door's budget/mask requirements and <see cref="WorldServer.TryAdmitMutation"/>'s budget gate
     /// both read.</summary>
@@ -1480,7 +1479,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// notes name explicitly — they diverge on <see cref="PrincipalKind.Addon"/>.</remarks>
     /// <param name="principal">The principal to classify.</param>
     /// <returns><see langword="true"/> for <see cref="PrincipalKind.Console"/> and <see cref="PrincipalKind.Seat"/>.</returns>
-    private static bool IsTrusted(Principal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
+    internal static bool IsTrusted(Principal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
 
     /// <inheritdoc/>
     public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) =>

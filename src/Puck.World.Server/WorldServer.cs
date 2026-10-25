@@ -445,6 +445,13 @@ public sealed partial class WorldServer : IWorldServerHost {
         try { ThrowIfAuthorityRetiring(); operation(); } finally { m_authorityGate.Exit(); }
     }
 
+    /// <summary>Runs a stateful operation under the authority gate without a boundary closure.</summary>
+    internal void ExecuteAuthorityAction<T>(T state, Action<T> operation) {
+        ArgumentNullException.ThrowIfNull(operation);
+        EnterAuthorityGate();
+        try { ThrowIfAuthorityRetiring(); operation(state); } finally { m_authorityGate.Exit(); }
+    }
+
     /// <summary>Gets or sets a callback invoked on a thread whose <see cref="ExecuteAuthorityOperation{T}"/> finds the
     /// authority gate held by another thread, immediately before that thread blocks on it. It makes an authority
     /// operation's arrival at a held gate observable, so a caller can order a race by event instead of by elapsed

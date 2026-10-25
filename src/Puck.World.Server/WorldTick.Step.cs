@@ -319,6 +319,7 @@ public sealed partial class WorldTick {
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
+        Host.BeginCellWriteTick();
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));

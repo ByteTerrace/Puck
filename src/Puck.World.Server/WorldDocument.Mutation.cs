@@ -78,7 +78,7 @@ public sealed partial class WorldDocument {
     /// <returns>Whether the mutation can be installed.</returns>
     internal bool TryPrepareMutation(WorldMutation mutation, WorldDefinition current, ulong tick, ulong engineTick, bool preMetered, out WorldPreparedMutation prepared, out string reason, out bool denied) {
         denied = false;
-        prepared = null!;
+        prepared = default;
 
         // The one admission predicate decides the whole authority question: section hold, the Mutate/section kind
         // mask, the row-scoped Edit hold and its mask, and the untrusted per-tick dispatch budget. Every

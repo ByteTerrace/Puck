@@ -52,6 +52,10 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         }
 
         var definition = source.Server.Definition;
+
+        if (definition.Adjacencies is not { Count: > 0 }) {
+            return [];
+        }
         var rows = (definition.Adjacencies ?? []).Where(predicate: static row => (row is not null)).ToArray();
         var visuals = new List<WorldAdjacencyProjection>(capacity: (rows.Length + ((rows.Length * (rows.Length - 1)) / 2)));
         var direct = new Dictionary<string, IWorldAdjacencyNeighbour>(comparer: StringComparer.Ordinal);

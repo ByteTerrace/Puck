@@ -3,21 +3,14 @@
 ;; Both texts finish before publishing guide/guideAt; an exit clears them, and a crossing discards old chunks.
 ;; Memory: descriptors 0x100, rings 0x1000/0x2000, literals 0x6000, keys 0x6480/0x6500,
 ;; readers 0x7000/0x7010, text buffers 0x8000/0xa000 (4096 bytes plus one chunk),
-;; JSON payloads 0x10000 and 0x5400. Text over 4096 UTF-8 bytes or an encoded row over 8 KiB faults loudly.
+;; Cell declarations at 0x10000, names at 0x11000. Text over 4096 UTF-8 bytes faults loudly.
 (module
   (memory (export "memory") 2)
 
-  ;; Request through ReadStateText (verb 6), Response.
+  ;; Request through WriteStateText (verb 16), Response.
   (data (i32.const 0x0100)
-    "\02\00\07\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\02\00\11\00\00\00\00\00\00\00\00\00\00\00\00\00"
     "\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
-
-  (data (i32.const 0x6000) "State\00")
-  (data (i32.const 0x6080) "{\"name\":\"guide\",\"kind\":\"text\",\"cells\":[{\"key\":\"title\",\"value\":\"\00")
-  (data (i32.const 0x6100) "\"},{\"key\":\"note\",\"value\":\"\00")
-  (data (i32.const 0x6180) "\"}]}\00")
-  (data (i32.const 0x6200) "{\"name\":\"guideAt\",\"kind\":\"int\",\"value\":\00")
-  (data (i32.const 0x6280) "}\00")
 
   (data (i32.const 0x6300) "guideExhibits\00")
   (data (i32.const 0x6380) "-title\00")
@@ -30,11 +23,9 @@
   (global $observeGeneration (mut i32) (i32.const 0))
   (global $askedObserve (mut i32) (i32.const -1))
   (global $loading (mut i32) (i32.const 0))
+  (global $bound (mut i32) (i32.const 0))
   (global $out (mut i32) (i32.const 0))
-  (global $mutate (mut i32) (i32.const 0))
-  (global $mutateIndex (mut i32) (i32.const 0))
-  (global $mutateGeneration (mut i32) (i32.const 0))
-  (global $askedMutate (mut i32) (i32.const -1))
+
   ;; The exhibit the Moth stands at, -1 for none, and whether the row still has to be written.
   (global $shown (mut i64) (i64.const -1))
   (global $dirty (mut i32) (i32.const 0))
@@ -42,7 +33,7 @@
 
   (func (export "puck_abi_version") (result i32) (i32.const 1))
   (func (export "puck_out_ptr") (result i32) (i32.const 0x1000))
-  (func (export "puck_out_cap") (result i32) (i32.const 4))
+  (func (export "puck_out_cap") (result i32) (i32.const 8))
   (func (export "puck_in_ptr") (result i32) (i32.const 0x2000))
   (func (export "puck_in_cap") (result i32) (i32.const 32))
   (func (export "puck_channels_ptr") (result i32) (i32.const 0x0100))
@@ -74,30 +65,11 @@
         (br $next)))
     (i32.add (local.get $at) (i32.const 1)))
 
-
   ;; JSON-escape UTF-8 bytes without decoding them. Control bytes use \u00xx; multi-byte scalars stay intact.
   (func $byte (param $value i32)
     (i32.store8 (global.get $cursor) (local.get $value))
     (global.set $cursor (i32.add (global.get $cursor) (i32.const 1))))
-  (func $hex (param $value i32) (result i32)
-    (i32.add (local.get $value) (select (i32.const 48) (i32.const 87) (i32.lt_u (local.get $value) (i32.const 10)))))
-  (func $quoted (param $at i32)
-    (local $v i32)
-    (block $end (loop $next
-      (local.set $v (i32.load8_u (local.get $at)))
-      (br_if $end (i32.eqz (local.get $v)))
-      (if (i32.lt_u (local.get $v) (i32.const 32))
-        (then
-          (call $byte (i32.const 92)) (call $byte (i32.const 117))
-          (call $byte (i32.const 48)) (call $byte (i32.const 48))
-          (call $byte (call $hex (i32.shr_u (local.get $v) (i32.const 4))))
-          (call $byte (call $hex (i32.and (local.get $v) (i32.const 15)))))
-        (else
-          (if (i32.or (i32.eq (local.get $v) (i32.const 34)) (i32.eq (local.get $v) (i32.const 92)))
-            (then (call $byte (i32.const 92))))
-          (call $byte (local.get $v))))
-      (local.set $at (i32.add (local.get $at) (i32.const 1)))
-      (br $next))))
+
   (func $length (param $at i32) (result i32)
     (local $n i32)
     (block $end (loop $next
@@ -142,38 +114,22 @@
           (i64.extend_i32_u (i32.load offset=4 (local.get $reader))))))))
 
   ;; Submits a payload as one UpsertStateRow (mutation kind 44) through the Mutate handle.
-  (func $upsert (param $at i32)
-    (if (i32.gt_u (i32.sub (global.get $cursor) (local.get $at)) (i32.const 8192)) (then unreachable))
-    (drop (call $emit (i32.const 1) (global.get $mutateIndex) (global.get $mutateGeneration) (i32.const 1)
-      (i64.const 44) (i64.extend_i32_u (local.get $at)) (i64.extend_i32_u (i32.sub (global.get $cursor) (local.get $at))))))
+
   ;; Writes both whole rows: `guide`, the shown exhibit's title and note or two empty cells, and `guideAt`, its
   ;; position in the table or -1.
   (func $publish
-    (global.set $cursor (i32.const 0x10000))
-    (drop (call $puts (i32.const 0x6080)))
-    (if (i64.ge_s (global.get $shown) (i64.const 0))
-      (then
-        (call $quoted (i32.const 0x8000))
-        (drop (call $puts (i32.const 0x6100)))
-        (call $quoted (i32.const 0xa000)))
-      (else (drop (call $puts (i32.const 0x6100)))))
-    (drop (call $puts (i32.const 0x6180)))
-    (call $upsert (i32.const 0x10000))
-    (global.set $cursor (i32.const 0x5400))
-    (drop (call $puts (i32.const 0x6200)))
-    (if (i64.lt_s (global.get $shown) (i64.const 0))
-      (then
-        (i32.store8 (global.get $cursor) (i32.const 45))
-        (i32.store8 offset=1 (global.get $cursor) (i32.const 49))
-        (global.set $cursor (i32.add (global.get $cursor) (i32.const 2))))
-      (else (call $number (global.get $shown))))
-    (drop (call $puts (i32.const 0x6280)))
-    (call $upsert (i32.const 0x5400))
+    (call $text (i32.const 0) (i32.const 0x8000) (call $length (i32.const 0x8000)))
+    (call $text (i32.const 1) (i32.const 0xa000) (call $length (i32.const 0xa000)))
+    (call $write (i32.const 2) (global.get $shown))
     (global.set $loading (i32.const 0)))
 
   (func (export "puck_on_tick") (param $count i32) (result i32)
     (local $i i32) (local $cell i32) (local $kind i32) (local $verb i32) (local $verdict i32)
     (global.set $out (i32.const 0))
+    (if (i32.eqz (global.get $bound)) (then
+      (drop (call $emit (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 14)
+        (i64.const 65536) (i64.const 3) (i64.const 0)))
+      (global.set $bound (i32.const 1))))
     (local.set $i (i32.const 0))
     (block $drained
       (loop $read
@@ -209,23 +165,9 @@
                     (global.set $observe (i32.const 1))
                     (global.set $observeIndex (i32.load16_u offset=4 (local.get $cell)))
                     (global.set $observeGeneration (i32.load16_u offset=6 (local.get $cell)))))))))
-        (if (i32.and (i32.eq (local.get $kind) (i32.const 2))
-              (i32.eq (i32.load16_u offset=2 (local.get $cell)) (global.get $askedMutate)))
-          (then
-            (global.set $askedMutate (i32.const -1))
-            (local.set $verdict (i32.load8_u offset=8 (local.get $cell)))
-            (if (i32.and (i32.ge_u (local.get $verdict) (i32.const 1)) (i32.le_u (local.get $verdict) (i32.const 3)))
-              (then
-                (global.set $mutate (i32.const 1))
-                (global.set $mutateIndex (i32.load16_u offset=4 (local.get $cell)))
-                (global.set $mutateGeneration (i32.load16_u offset=6 (local.get $cell)))))))
+
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $read)))
-    (if (i32.and (i32.eqz (global.get $mutate)) (i32.lt_s (global.get $askedMutate) (i32.const 0)))
-      (then
-        ;; Ask for Mutate over the State section, named by text: the name is 5 bytes at 0x6000.
-        (global.set $askedMutate (call $emit (i32.const 2) (i32.const 0) (i32.const 0) (i32.const 3)
-          (i64.const 0x6000) (i64.const 8) (i64.const 5)))))
 
     (if (i32.and (i32.eqz (global.get $observe)) (i32.lt_s (global.get $askedObserve) (i32.const 0)))
       (then
@@ -250,9 +192,20 @@
     (if (global.get $loading)
       (then
         (if (i32.and (i32.load offset=8 (i32.const 0x7000)) (i32.load offset=8 (i32.const 0x7010)))
-          (then (if (global.get $mutate) (then (call $publish))))
+          (then (call $publish))
           (else (if (global.get $observe)
             (then (call $read (i32.const 0x7000) (i32.const 0x6480))
                   (call $read (i32.const 0x7010) (i32.const 0x6500))))))))
     (global.get $out))
+
+  (func $write (param $slot i32) (param $value i64)
+    (drop (call $emit (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 15)
+      (local.get $value) (i64.const 0) (i64.const 0))))
+  (func $text (param $slot i32) (param $ptr i32) (param $length i32)
+    (drop (call $emit (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 16)
+      (i64.extend_i32_u (local.get $ptr)) (i64.extend_i32_u (local.get $length)) (i64.const 0))))
+
+  ;; Cell declarations: row pointer, key pointer, UTF-8 lengths, reserved zero.
+  (data (i32.const 65536) "\00\10\01\00\06\10\01\00\05\00\05\00\00\00\00\00\00\10\01\00\0c\10\01\00\05\00\04\00\00\00\00\00\11\10\01\00\19\10\01\00\07\00\06\00\00\00\00\00")
+  (data (i32.const 69632) "\67\75\69\64\65\00\74\69\74\6c\65\00\6e\6f\74\65\00\67\75\69\64\65\41\74\00\24\76\61\6c\75\65\00")
 )

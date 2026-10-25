@@ -184,7 +184,13 @@ public static class AddonAbi {
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
         /// fewer verbs.</summary>
-        public const int Count = 14;
+        public const int Count = 17;
+        /// <summary>Registers a cell table once: A is its pointer, B its entry count, C zero. Entries name row and key; writes use table ordinals.</summary>
+        public const int BindStateCell = 14;
+        /// <summary>Writes a bound numeric cell. A is the raw operand, B is 0 (Set) or 1 (Add), C is zero.</summary>
+        public const int WriteStateCell = 15;
+        /// <summary>Sets a bound text cell. A/B name strict UTF-8 bytes, C is zero.</summary>
+        public const int WriteStateText = 16;
         /// <summary>Reads an ordered set of Observe/body handles into guest memory. Zero handle fields;
         /// A points to packed (index u16, generation u16) pairs, B is their count, C points to B pose records.
         /// One completion cell carries the record count and settled tick; each record carries its own verdict.</summary>

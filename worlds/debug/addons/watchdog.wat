@@ -20,24 +20,16 @@
 ;; Memory: channel descriptors at 0x0100, the output ring (21 cells) at 0x1000, the input ring (64 cells) at 0x2000,
 ;; the watch table (body, handle index, handle generation, latches; 16 bytes an entry, 64 entries) at 0x3000, the
 ;; packed Observe handles at 0x3400 and bulk pose records at 0x7000, the first and last lines at 0x4000 and 0x4100, the line
-;; being built at 0x4200, the two mutation payloads at 0x5000 and 0x5400, and NUL-terminated literals from 0x6000, 128
+;; being built at 0x4200, cell declarations at 0x8000, names at 0x9000, and NUL-terminated literals from 0x6000, 128
 ;; bytes apart.
 (module
   (memory (export "memory") 1)
 
-  ;; Request (through BodyPoses, verb 13), Response.
+  ;; Request (through WriteStateText, verb 16), Response.
   (data (i32.const 0x0100)
-    "\02\00\0e\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\02\00\11\00\00\00\00\00\00\00\00\00\00\00\00\00"
     "\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
 
-  (data (i32.const 0x6000) "State\00")
-  (data (i32.const 0x6080) "{\"name\":\"watchdog\",\"kind\":\"int\",\"cells\":[{\"key\":\"count\",\"value\":\00")
-  (data (i32.const 0x6100) "},{\"key\":\"tick\",\"value\":\00")
-  (data (i32.const 0x6180) "},{\"key\":\"first\",\"value\":\00")
-  (data (i32.const 0x6200) "}]}\00")
-  (data (i32.const 0x6280) "{\"name\":\"watchdogLog\",\"kind\":\"text\",\"cells\":[{\"key\":\"first\",\"value\":\"\00")
-  (data (i32.const 0x6300) "\"},{\"key\":\"last\",\"value\":\"\00")
-  (data (i32.const 0x6380) "\"}]}\00")
   (data (i32.const 0x6400) "t=\00")
   (data (i32.const 0x6480) " below-floor body=\00")
   (data (i32.const 0x6500) " y=\00")
@@ -46,11 +38,8 @@
   (data (i32.const 0x6680) " piece-overlap bodies=\00")
   (data (i32.const 0x6700) " companion-overlap bodies=\00")
   (data (i32.const 0x6780) "+\00")
-  (data (i32.const 0x6800) "},{\"key\":\"checked\",\"value\":\00")
-  (data (i32.const 0x6880) "},{\"key\":\"observed\",\"value\":\00")
-  (data (i32.const 0x6900) "},{\"key\":\"checkedTick\",\"value\":\00")
-  (data (i32.const 0x6980) "},{\"key\":\"absent\",\"value\":\00")
 
+  (global $bound (mut i32) (i32.const 0))
   (global $out (mut i32) (i32.const 0))
   (global $tick (mut i64) (i64.const 0))
   (global $watched (mut i32) (i32.const 0))
@@ -59,11 +48,6 @@
   (global $checked (mut i32) (i32.const 0))
   (global $absent (mut i32) (i32.const 0))
   (global $checkedTick (mut i64) (i64.const -1))
-
-  (global $mutate (mut i32) (i32.const 0))
-  (global $mutateIndex (mut i32) (i32.const 0))
-  (global $mutateGeneration (mut i32) (i32.const 0))
-  (global $askedMutate (mut i32) (i32.const -1))
 
   (global $count (mut i64) (i64.const 0))
   (global $lastTick (mut i64) (i64.const -1))
@@ -219,43 +203,30 @@
     (i32.store offset=12 (local.get $at) (local.get $flags)))
 
   ;; Submits a payload as one UpsertStateRow (mutation kind 44) through the Mutate handle.
-  (func $upsert (param $at i32)
-    (drop (call $emit (i32.const 1) (global.get $mutateIndex) (global.get $mutateGeneration) (i32.const 1)
-      (i64.const 44) (i64.extend_i32_u (local.get $at)) (i64.extend_i32_u (i32.sub (global.get $cursor) (local.get $at))))))
+
   ;; Writes both whole rows.
   (func $publish
-    (global.set $cursor (i32.const 0x5000))
-    (call $puts (i32.const 0x6080))
-    (call $putInt (global.get $count))
-    (call $puts (i32.const 0x6100))
-    (call $putInt (global.get $lastTick))
-    (call $puts (i32.const 0x6180))
-    (call $putInt (global.get $firstTick))
-    (call $puts (i32.const 0x6800))
-    (call $putInt (i64.extend_i32_u (global.get $checked)))
-    (call $puts (i32.const 0x6880))
-    (call $putInt (i64.extend_i32_u (global.get $watched)))
-    (call $puts (i32.const 0x6900))
-    (call $putInt (global.get $checkedTick))
-    (call $puts (i32.const 0x6980))
-    (call $putInt (i64.extend_i32_u (global.get $absent)))
-    (call $puts (i32.const 0x6200))
-    (call $upsert (i32.const 0x5000))
-    (if (i32.eqz (global.get $dirty)) (then (return)))
-    (global.set $cursor (i32.const 0x5400))
-    (call $puts (i32.const 0x6280))
-    (call $putBytes (i32.const 0x4000) (global.get $firstLength))
-    (call $puts (i32.const 0x6300))
-    (call $putBytes (i32.const 0x4100) (global.get $lastLength))
-    (call $puts (i32.const 0x6380))
-    (call $upsert (i32.const 0x5400))
-    (global.set $dirty (i32.const 0)))
+    (call $write (i32.const 0) (global.get $count))
+    (call $write (i32.const 1) (global.get $lastTick))
+    (call $write (i32.const 2) (global.get $firstTick))
+    (call $write (i32.const 3) (i64.extend_i32_u (global.get $checked)))
+    (call $write (i32.const 4) (i64.extend_i32_u (global.get $watched)))
+    (call $write (i32.const 5) (global.get $checkedTick))
+    (call $write (i32.const 6) (i64.extend_i32_u (global.get $absent)))
+    (if (global.get $dirty) (then
+      (call $text (i32.const 7) (i32.const 0x4000) (global.get $firstLength))
+      (call $text (i32.const 8) (i32.const 0x4100) (global.get $lastLength))
+      (global.set $dirty (i32.const 0)))))
 
   (func (export "puck_on_tick") (param $count i32) (result i32)
     (local $i i32) (local $cell i32) (local $kind i32) (local $verb i32) (local $disclosed i32)
     (local $ordinal i32) (local $verdict i32) (local $entry i32) (local $slot i32)
     (local $at i32)
     (global.set $out (i32.const 0))
+    (if (i32.eqz (global.get $bound)) (then
+      (drop (call $emit (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 14)
+        (i64.const 32768) (i64.const 9) (i64.const 0)))
+      (global.set $bound (i32.const 1))))
     (global.set $checked (i32.const 0))
     (global.set $absent (i32.const 0))
     (local.set $i (i32.const 0))
@@ -292,14 +263,7 @@
           (then
             (local.set $ordinal (i32.load16_u offset=2 (local.get $cell)))
             (local.set $verdict (i32.load8_u offset=8 (local.get $cell)))
-            (if (i32.eq (local.get $ordinal) (global.get $askedMutate))
-              (then
-                (global.set $askedMutate (i32.const -1))
-                (if (i32.and (i32.ge_u (local.get $verdict) (i32.const 1)) (i32.le_u (local.get $verdict) (i32.const 3)))
-                  (then
-                    (global.set $mutate (i32.const 1))
-                    (global.set $mutateIndex (i32.load16_u offset=4 (local.get $cell)))
-                    (global.set $mutateGeneration (i32.load16_u offset=6 (local.get $cell)))))))
+
             ;; One completion covers the ordered bulk records written after last tick settled.
             (if (i32.and (i32.eq (local.get $ordinal) (global.get $askedPoses))
                   (i32.eq (local.get $verdict) (i32.const 10)))
@@ -327,11 +291,7 @@
                     (br $pose)))))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $read)))
-    (if (i32.and (i32.eqz (global.get $mutate)) (i32.lt_s (global.get $askedMutate) (i32.const 0)))
-      (then
-        ;; Ask for Mutate over the State section, named by text: the name is 5 bytes at 0x6000.
-        (global.set $askedMutate (call $emit (i32.const 2) (i32.const 0) (i32.const 0) (i32.const 3)
-          (i64.const 0x6000) (i64.const 8) (i64.const 5)))))
+
     ;; Copy the observed set's handles into one bulk request. Results do not consume ring cells.
     (global.set $askedPoses (i32.const -1))
     (if (global.get $watched)
@@ -347,6 +307,17 @@
         (global.set $poseCount (global.get $watched))
         (global.set $askedPoses (call $emit (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 13)
           (i64.const 0x3400) (i64.extend_i32_u (global.get $watched)) (i64.const 0x7000)))))
-    (if (global.get $mutate) (then (call $publish)))
+    (call $publish)
     (global.get $out))
+
+  (func $write (param $slot i32) (param $value i64)
+    (drop (call $emit (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 15)
+      (local.get $value) (i64.const 0) (i64.const 0))))
+  (func $text (param $slot i32) (param $ptr i32) (param $length i32)
+    (drop (call $emit (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 16)
+      (i64.extend_i32_u (local.get $ptr)) (i64.extend_i32_u (local.get $length)) (i64.const 0))))
+
+  ;; Cell declarations: row pointer, key pointer, UTF-8 lengths, reserved zero.
+  (data (i32.const 32768) "\00\90\00\00\09\90\00\00\08\00\05\00\00\00\00\00\00\90\00\00\0f\90\00\00\08\00\04\00\00\00\00\00\00\90\00\00\14\90\00\00\08\00\05\00\00\00\00\00\00\90\00\00\1a\90\00\00\08\00\07\00\00\00\00\00\00\90\00\00\22\90\00\00\08\00\08\00\00\00\00\00\00\90\00\00\2b\90\00\00\08\00\0b\00\00\00\00\00\00\90\00\00\37\90\00\00\08\00\06\00\00\00\00\00\3e\90\00\00\14\90\00\00\0b\00\05\00\00\00\00\00\3e\90\00\00\4a\90\00\00\0b\00\04\00\00\00\00\00")
+  (data (i32.const 36864) "\77\61\74\63\68\64\6f\67\00\63\6f\75\6e\74\00\74\69\63\6b\00\66\69\72\73\74\00\63\68\65\63\6b\65\64\00\6f\62\73\65\72\76\65\64\00\63\68\65\63\6b\65\64\54\69\63\6b\00\61\62\73\65\6e\74\00\77\61\74\63\68\64\6f\67\4c\6f\67\00\6c\61\73\74\00")
 )

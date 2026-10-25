@@ -267,12 +267,14 @@ public sealed partial class WorldInstanceHost {
         }
     }
     private void ScanInstanceBoundaries(WorldInstance instance) {
-        instance.Server.ExecuteAuthorityOperation(operation: () => ScanInstanceBoundariesCore(instance: instance));
+        instance.Server.ExecuteAuthorityAction(state: (Host: this, Instance: instance),
+            operation: static state => state.Host.ScanInstanceBoundariesCore(instance: state.Instance));
     }
     private void ScanInstanceBoundariesCore(WorldInstance instance) {
         ScanInstanceAdjacencies(instance: instance);
         ScanInstancePortals(instance: instance);
     }
+
     // One instance's own portal scan: every placement's every portal-carrying face, against every body that can
     // travel (TryTraveller, the set the seam scan reads). Placement/face iteration order is the document's own declared
     // order; body order is ascending 0..Capacity-1 — deterministic within one process run, though this scan's queue
@@ -298,9 +300,9 @@ public sealed partial class WorldInstanceHost {
         var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
         // Every tick scans every instance, so the per-body winners reuse one buffer; a scan entered from inside
         // another takes a fresh one.
-        var winners = ((m_portalWinners is { } held) && (held.Length >= population.Capacity))
+        var winners = (((m_portalWinners is { } held) && (held.Length >= population.Capacity))
             ? held
-            : new PortalEdgeHit?[population.Capacity];
+            : new PortalEdgeHit?[population.Capacity]);
 
         m_portalWinners = null;
         Array.Clear(

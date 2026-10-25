@@ -91,13 +91,12 @@ from consecutive solver witnesses, not the proximity collision-event feed.
 `scopeTrace` keeps 128 characters: `_` grounded, `^` rising, `v` falling,
 `+` a contact edge. Changing the body discards the in-flight old body's
 sample and restarts the contact edge witness. Turn sampling off when done;
-it submits thirteen state mutations per tick through full document validation.
+it writes its bound cells directly into the state arena, without document mutation or narration.
 
-The tools exercise four addon additions: numeric authored reads, settled
-kinematics, strict per-cell mutation decoding and bounded guest logs. The
+The tools use numeric authored reads, settled kinematics, bound cell writes and bounded guest logs. The
 [ABI](../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
-owns their layouts and fuel charges. Text/vector authored reads and a cheaper
-transactional cell-write path are recorded in [open items](../../docs/plans/open-items.md#addon-system).
+owns their layouts and fuel charges. The watchdog, scope and guide bind row/key names once and publish
+through their live edit grants, Set/Add masks and dispatch budgets. Document edits still use JSON mutations.
 
 Measured headlessly over MCP: fuzzer 10,062 fuel/tick while driving, traversal
 7,074 on a route tick, and scope 22,588 while sampling. The one-million budget was ample; no answers

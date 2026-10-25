@@ -257,7 +257,6 @@ addon "guide" {
   enabled: true
   requests: concat(
     [
-      { capability: Mutate, subject: "section:State" }
       { capability: Observe, subject: "state:guideExhibits" }
       { capability: Edit, subject: "state:guide" }
       { capability: Edit, subject: "state:guideAt" }
@@ -266,13 +265,12 @@ addon "guide" {
   )
 }
 
-// Each region's enter and exit edges, and a whole-row write a tick to each of its own rows.
+// Region edges and bounded Set writes to the guide cells.
 grants: concat(
   [
     { grantee: "addon:guide", capability: Observe, subject: "state:guideExhibits", budget: 2 }
-    { grantee: "addon:guide", capability: Mutate, subject: "section:State", kindMask: "UpsertStateRow", budget: 2 }
-    { grantee: "addon:guide", capability: Edit, subject: "state:guide" }
-    { grantee: "addon:guide", capability: Edit, subject: "state:guideAt" }
+    { grantee: "addon:guide", capability: Edit, subject: "state:guide", budget: 16, writeMask: "Set" }
+    { grantee: "addon:guide", capability: Edit, subject: "state:guideAt", budget: 16, writeMask: "Set" }
   ],
   map(guideExhibits, exhibit => { grantee: "addon:guide", capability: Observe, subject: $"region:guide-{exhibit.name}", budget: 1, eventBudget: 4 })
 )

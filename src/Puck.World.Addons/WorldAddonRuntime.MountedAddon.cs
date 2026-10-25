@@ -29,7 +29,6 @@ public sealed partial class WorldAddonRuntime {
             InstanceId = instanceId;
             // The host-owned copy destination for stage 5's pointer-safety read — sized to the payload ceiling so
             // one buffer serves every act this guest ever submits, reused tick to tick, never per-act allocated.
-            MutationPayloadBuffer = new byte[AddonAbi.MaxMutationPayloadBytes];
             // The RESERVATION buffer: one slot per SubmitMutation act decoded THIS tick, reserved at whole-batch
             // decode time (TickAddons -> ResolveMutations) before EmitDisclosures/MergeAnswers ever see the
             // remaining budget. Sized to MaxOutCells, the same worst case Answers uses, because the ABI handshake
@@ -102,10 +101,8 @@ public sealed partial class WorldAddonRuntime {
         public bool Disclosed { get; set; }
         public GrantSubject[] DisclosedDrive { get; set; }
         public GrantSubject[] DisclosedObserve { get; set; }
-
         // -1 so the very first resolve always projects, even against a fresh table whose own Revision starts at 0.
         public int DisclosedRevision { get; set; } = -1;
-
         public bool DisclosureOverflowReported { get; set; }
         public bool DiscrepancyReported { get; set; }
         /// <summary>Gets this tick's per-body Observe query dispatch count, indexed by body index — the meter
@@ -121,10 +118,8 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets this tick's event-cell charge count by Observe subject. Cleared once per tick in
         /// <c>StageBatch</c>.</summary>
         public Dictionary<GrantSubject, int> EventCounts { get; }
-
-        public Dictionary<GrantSubject, int> StateReadCounts { get; } = [];
-
         public int LogLinesThisTick { get; set; }
+        public Dictionary<GrantSubject, int> StateReadCounts { get; } = [];
         /// <summary>Gets this tick's lifetime event-gap counter (the overflow doctrine's per-mount summary — see
         /// <c>Scripting.AddonAbi.ObservationVerbs.EventGap</c>'s own doc) — saturating, never reset. Every edge
         /// dropped because its per-row event budget or the ring ran out of room (world events or a memory-watch change
@@ -167,17 +162,21 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets this tick's running mutation-payload byte total for this addon, metered against
         /// <see cref="AddonAbi.MaxMutationBytesPerTickPerAddon"/>.</summary>
         public int MutateBytesThisTick { get; set; }
+
         /// <summary>Gets the host-owned scratch buffer stage 5's pointer-safety copy reads a <c>SubmitMutation</c>
         /// payload into, reused every act and every tick.</summary>
-        public byte[] MutationPayloadBuffer { get; }
+        private byte[]? m_mutationPayloadBuffer;
+
+        public byte[] MutationPayloadBuffer => m_mutationPayloadBuffer ??= new byte[AddonAbi.MaxMutationPayloadBytes];
 
         // One previous immutable decode per reservation slot, bounded by the guest's whole output batch. Only
         // decoding shares these records: every act is still admitted, metered, queued and journaled normally.
-        public WorldMutation?[] DecodedMutations { get; } = new WorldMutation?[AddonAbi.MaxOutCells];
+        private WorldMutation?[]? m_decodedMutations;
+
+        public WorldMutation?[] DecodedMutations => m_decodedMutations ??= new WorldMutation?[AddonAbi.MaxOutCells];
         // The revision an oversized disclosure set overflowed at — re-projection waits for the next grant-table
         // write, the only event that can shrink the set (-1 = never overflowed).
         public int OverflowedAtRevision { get; set; } = -1;
-
         /// <summary>Gets the cells staged for the next tick's batch (disclosures, then answers).</summary>
         public AddonInCell[] Pending { get; }
         public int PendingCount { get; set; }
@@ -219,13 +218,25 @@ public sealed partial class WorldAddonRuntime {
         // durable counter an operator who was not watching the console at that instant has no way to learn this ever
         // happened. DIAGNOSTIC ONLY, read by world.addons — never simulation state, never on a hashed path.
         public ulong TotalAnswersDropped { get; set; }
+        public ushort CellGeneration { get; set; }
+        public BoundCell[] Cells { get; set; } = [];
+        public Dictionary<(WorldCapability, GrantSubject), int> QueryCounts { get; } = [];
         public ulong TotalFuelConsumed { get; set; }
         public bool UndeliverableReported { get; set; }
         public bool UnrequestedActReported { get; set; }
+        public Dictionary<(long Pointer, int Length), Utf8Entry> Utf8 { get; } = [];
 
-        public Dictionary<(WorldCapability, GrantSubject), int> QueryCounts { get; } = [];
-        public byte[] ReadBuffer { get; } = new byte[262144];
-        public byte[] PoseHandles { get; } = new byte[(AddonAbi.MaxPoseBatchBodies * 4)];
+        private byte[] m_readBuffer = [];
+        private byte[] m_poseHandles = [];
+
+        public Span<byte> ReadBuffer(int length) {
+            if (m_readBuffer.Length < length) { Array.Resize(array: ref m_readBuffer, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)length)))); }
+            return m_readBuffer.AsSpan(length: length, start: 0);
+        }
+        public Span<byte> PoseHandles(int length) {
+            if (m_poseHandles.Length < length) { Array.Resize(array: ref m_poseHandles, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)length)))); }
+            return m_poseHandles.AsSpan(length: length, start: 0);
+        }
 
         public byte[]? MachineSnapshot { get; set; }
         public Puck.Abstractions.Machines.IMachineRuntime? SnapshotRuntime { get; set; }
