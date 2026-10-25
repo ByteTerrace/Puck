@@ -151,6 +151,13 @@ materializes only at `requested ∧ granted`. See [authority.md](authority.md)
 for the untrusted class rules (budgets required, handles, reach masks, no
 wildcards).
 
+`Observe/all` in a manifest covers concrete Observe holds; it grants nothing by itself.
+The mount report and event dispatch share `WorldAddonRuntime.CanReach`: granted lists
+the concrete held subjects within manifest reach, withheld lists requests reaching no
+held subject, and inert lists holds outside manifest reach. Region and link events use
+-1 when admitted through the wildcard without a named manifest entry; named indices
+still follow unique manifest requests, including ungranted requests.
+
 ## The three pump points
 
 Guests are pumped ONLY from inside `WorldServer.Step`, at three pinned

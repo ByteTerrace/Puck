@@ -613,7 +613,7 @@ tick budget. `world.addons` includes those charges in its last-tick and lifetime
 | Verb | Name | Fields |
 |---|---|---|
 | 0 | `GrantedBody` | `HandleIndex`/`HandleGeneration` = a minted handle; `A` = the capability mask (exactly one bit); `B` = the body index |
-| 1, 2 | `EventRegionEnter`, `EventRegionExit` | `A` = the body index; `B` = the region's position among the guest's own `Observe/region:<name>` requests, in manifest order |
+| 1, 2 | `EventRegionEnter`, `EventRegionExit` | `A` = the body index; `B` = the region's position among the guest's unique `Observe/region:<name>` requests in manifest order, or -1 for a wildcard-only observation |
 | 3, 4 | `EventSeatJoin`, `EventSeatLeave` | `A` = the seat index |
 | 5, 6 | `EventCollisionBegin`, `EventCollisionEnd` | `A`, `B` = the two body indices, ascending |
 | 7, 8 | `EventRouteEngaged`, `EventRouteDisengaged` | `A` = the source body; `B` = the screen index, or `-(body + 1)` for a body target |
@@ -626,8 +626,14 @@ handle. `AddonAbi.ObservationVerbs` is the authoritative list.
 
 Named event indices follow the first request for each distinct subject, including
 requests that currently have no grant. Grant order and document row order do not
-renumber them. A link observed through `Observe/all` without a named request has
+renumber them. A region or link observed through `Observe/all` without a named request has
 no manifest name to resolve; its index is -1.
+
+The mount report lists concrete granted reach through the same manifest and live-grant
+check as event dispatch. A wildcard request is withheld only when it reaches no held
+subject; a concrete hold covered by that wildcard is granted reach. Only holds outside
+the manifest's reach are reported inert. Dispatch budgets and event budgets still apply
+to each delivered act or event.
 
 The host writes one `GrantedBody` cell per `(capability, body)` the addon's principal holds, in
 projection order, in the first batch after mount and in the first batch after any grant change that
