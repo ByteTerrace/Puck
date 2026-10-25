@@ -775,52 +775,53 @@ public sealed class SdfMeshIrradiance {
         var valid = TraceRadiance(layout: layout, lighting: lighting, low: low, origin: origin, radiance: radiance,
             rotation: rotation, scene: scene, sky: sky, sweep: sweep);
 
-        var probe = new Probe(
-            Depth: new float[6],
+        var depths = new float[6];
+        var lights = new uint[SdfMeshIrradianceProbe.LightWords];
+        var planes = new Vector4[26];
+        var neighbours = 0u;
+
+        // Visibility stores the first blocker. An open ray beside a wall cannot extend its blocking depth.
+        for (var axis = 0; (axis < 6); axis++) {
+            depths[axis] = (scene.Intersect(origin: origin, direction: Axes[axis], maximum: lighting.Reach, distance: out var axisDistance, material: out _, normal: out _) ? axisDistance : lighting.Reach);
+        }
+        if (valid) {
+            // A light past its range lights nothing here and stays unseen; one at the probe's centre is seen.
+            foreach (var point in lighting.Points) {
+                var toward = (point.Position - origin);
+                var distance = toward.Length();
+
+                if ((distance >= point.Range) || ((distance > LightBias) && !scene.Unblocked(direction: (toward / distance), maximum: (distance - LightBias), origin: origin))) { continue; }
+                lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
+            }
+            for (var index = 0; (index < NeighbourOffsets.Length); index++) {
+                var offset = NeighbourOffsets[index];
+                var toward = (new Vector3(x: offset.X, y: offset.Y, z: offset.Z) * layout.Spacing);
+                var distance = toward.Length();
+
+                var direction = (toward / distance);
+                var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var depth, material: out _, normal: out var normal);
+
+                if (hit) {
+                    if (Vector3.Dot(vector1: normal, vector2: direction) < 0f) { normal = -normal; }
+                    planes[index] = new Vector4(value: normal, w: (Vector3.Dot(vector1: normal, vector2: direction) * depth));
+                }
+                if (!hit || (depth >= distance)) {
+                    neighbours |= (1u << index);
+                }
+            }
+        }
+
+        return new Probe(
+            Depth: depths,
             Generation: generation,
             Invalid: !valid,
-            Lights: new uint[SdfMeshIrradianceProbe.LightWords],
-            Neighbours: 0u,
-            Planes: new Vector4[26],
+            Lights: lights,
+            Neighbours: neighbours,
+            Planes: planes,
             Radiance: radiance,
             Sky: sky,
             Sweeps: (sweep + 1)
         );
-
-        // Visibility stores the first blocker. An open ray beside a wall cannot extend its blocking depth.
-        for (var axis = 0; (axis < 6); axis++) {
-            var along = (scene.Intersect(origin: origin, direction: Axes[axis], maximum: lighting.Reach, distance: out var axisDistance, material: out _, normal: out _) ? axisDistance : lighting.Reach);
-
-            probe.Depth[axis] = along;
-        }
-        if (probe.Invalid) { return probe; }
-
-        // A light past its range lights nothing here and stays unseen; one at the probe's centre is seen.
-        foreach (var point in lighting.Points) {
-            var toward = (point.Position - origin);
-            var distance = toward.Length();
-
-            if ((distance >= point.Range) || ((distance > LightBias) && !scene.Unblocked(direction: (toward / distance), maximum: (distance - LightBias), origin: origin))) { continue; }
-            probe.Lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
-        }
-        for (var index = 0; (index < NeighbourOffsets.Length); index++) {
-            var offset = NeighbourOffsets[index];
-            var toward = (new Vector3(x: offset.X, y: offset.Y, z: offset.Z) * layout.Spacing);
-            var distance = toward.Length();
-
-            var direction = (toward / distance);
-            var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var depth, material: out _, normal: out var normal);
-
-            if (hit) {
-                if (Vector3.Dot(vector1: normal, vector2: direction) < 0f) { normal = -normal; }
-                probe.Planes[index] = new Vector4(value: normal, w: (Vector3.Dot(vector1: normal, vector2: direction) * depth));
-            }
-            if (!hit || (depth >= distance)) {
-                probe = (probe with { Neighbours = probe.Neighbours | (1u << index) });
-            }
-        }
-
-        return probe;
     }
     // The same hemispherical radiance measurement serves lattice probes and a camera in a gap between them. This
     // reads the existing scene and bounce cache; a camera sample is never written back into the irradiance volume.

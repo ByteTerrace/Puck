@@ -132,9 +132,9 @@ public sealed partial class WorldScreenBinder {
         }
         consumer.Views.Begin();
         fit.Update(consumer.Viewer.Camera, consumer.Width, consumer.Height, consumer.Tier, consumer.Views,
-            available: root.Entries.ContainsKey,
-            readsOf: name => root.Entries.GetValueOrDefault(key: name)?.Screens?.Reads,
-            tierOf: name => (root.Entries.GetValueOrDefault(key: name)?.Tier ?? consumer.Tier));
+            available: root.Available,
+            readsOf: root.ReadsOf,
+            tierOf: (consumer.TierOf ??= name => (root.Entries.GetValueOrDefault(key: name)?.Tier ?? consumer.Tier)));
         _ = consumer.Views.TryPublish(instances: out _);
         foreach (var view in consumer.Views.Instances.Views) {
             var planned = fit.Plan.Views.First(predicate: layer => (fit.ProducerOf(name: layer.Name) == view.Name));
@@ -158,6 +158,9 @@ public sealed partial class WorldScreenBinder {
             m_infinityOutputs[view.Name] = new InfinityOutput(Entry: entry, Index: index);
         }
     }
+    // Scratch for the consumers one end retires; the binder runs on the presentation thread alone.
+    private readonly List<string> m_retiredConsumers = [];
+
     private void BeginInfinityConsumers(object target) {
         foreach (var root in m_infinityRoots.Values) {
             foreach (var consumer in root.Consumers.Values) {
@@ -167,9 +170,11 @@ public sealed partial class WorldScreenBinder {
     }
     private void EndInfinityConsumers(object target) {
         foreach (var root in m_infinityRoots.Values) {
-            foreach (var (name, consumer) in root.Consumers.ToArray()) {
-                if (ReferenceEquals(objA: consumer.Target, objB: target) && !consumer.Seen) { _ = root.Consumers.Remove(key: name); }
+            m_retiredConsumers.Clear();
+            foreach (var (name, consumer) in root.Consumers) {
+                if (ReferenceEquals(objA: consumer.Target, objB: target) && !consumer.Seen) { m_retiredConsumers.Add(item: name); }
             }
+            foreach (var name in m_retiredConsumers) { _ = root.Consumers.Remove(key: name); }
             PruneInfinityIndices(root: root);
         }
         RebuildInfinityOutputs();
@@ -180,14 +185,19 @@ public sealed partial class WorldScreenBinder {
         foreach (var root in m_infinityRoots.Values) {
             foreach (var consumer in root.Consumers.Values) {
                 foreach (var view in consumer.Views.Instances.Views) {
-                    var planned = consumer.Fit.Plan.Views.FirstOrDefault(predicate: layer => (consumer.Fit.ProducerOf(name: layer.Name) == view.Name));
-
-                    if ((planned is not null) && root.Entries.TryGetValue(key: planned.Name, value: out var entry) && entry.Indices.TryGetValue(key: consumer.Fit.Consumer, value: out var index)) {
+                    if ((PlannedOf(fit: consumer.Fit, view: view.Name) is { } planned) && root.Entries.TryGetValue(key: planned.Name, value: out var entry) && entry.Indices.TryGetValue(key: consumer.Fit.Consumer, value: out var index)) {
                         m_infinityOutputs[view.Name] = new InfinityOutput(Entry: entry, Index: index);
                     }
                 }
             }
         }
+    }
+    // The planned layer a fit's produced view renders, or null.
+    private static WorldInfinityView? PlannedOf(WorldInfinityViews fit, string view) {
+        foreach (var layer in fit.Plan.Views) {
+            if (fit.ProducerOf(name: layer.Name) == view) { return layer; }
+        }
+        return null;
     }
     private static void PruneInfinityIndices(InfinityRoot root) {
         foreach (var entry in root.Entries.Values) {

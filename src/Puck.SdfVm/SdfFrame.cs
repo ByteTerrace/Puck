@@ -189,11 +189,21 @@ public sealed record SdfFrame(
 
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
-    public SdfLights Lights { get; init; } = SdfLights.Default();
+    public SdfLights Lights {
+        get => (m_lights ??= SdfLights.Default());
+        init => m_lights = value;
+    }
     /// <summary>The sky: its open layer stack, fog and environment gains.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>
-    public SdfSky Sky { get; init; } = new();
+    public SdfSky Sky {
+        get => (m_sky ??= new SdfSky());
+        init => m_sky = value;
+    }
+
+    // Each default is built on its first read, so a producer that supplies its own allocates none.
+    private SdfLights? m_lights;
+    private SdfSky? m_sky;
     /// <summary>The far distance, in world units: the depth past which a view draws nothing, which bounds its surfaces,
     /// its far shadow cascade and the depth debug ramp. Authored as world data (<c>render.farDistance</c>). Must be
     /// finite and positive — the render frame throws otherwise (a document validator already refuses it by name

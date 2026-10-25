@@ -287,6 +287,8 @@ public sealed partial class WorldInstanceHost {
     // independent body-travel doors resolving the same destination/scope key) must land as one transfer
     // with one merged cohort. ResolveAndEnqueueCoalescedTransfers does the grouping once the whole scan is
     // in hand.
+    private PortalEdgeHit?[]? m_portalWinners;
+
     private void ScanInstancePortals(WorldInstance instance) {
         SeedFederatedArrivalOccupancy(instance: instance);
 
@@ -294,7 +296,18 @@ public sealed partial class WorldInstanceHost {
         var population = instance.Server.Population;
         var catalog = WorldFaceCatalog.For(definition: definition);
         var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
-        var winners = new PortalEdgeHit?[population.Capacity];
+        // Every tick scans every instance, so the per-body winners reuse one buffer; a scan entered from inside
+        // another takes a fresh one.
+        var winners = ((m_portalWinners is { } held) && (held.Length >= population.Capacity))
+            ? held
+            : new PortalEdgeHit?[population.Capacity];
+
+        m_portalWinners = null;
+        Array.Clear(
+            array: winners,
+            index: 0,
+            length: population.Capacity
+        );
 
         foreach (var placement in definition.Placements) {
             if (
@@ -335,15 +348,17 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
-        var hits = new List<PortalEdgeHit>();
+        List<PortalEdgeHit>? hits = null;
 
-        foreach (var winner in winners) {
-            if (winner is { } hit) {
-                hits.Add(item: hit);
+        for (var seat = 0; (seat < population.Capacity); seat++) {
+            if (winners[seat] is { } hit) {
+                (hits ??= []).Add(item: hit);
             }
         }
 
-        if (hits.Count > 0) {
+        m_portalWinners = winners;
+
+        if (hits is not null) {
             ResolveAndEnqueueCoalescedTransfers(
                 hits: hits,
                 instance: instance
