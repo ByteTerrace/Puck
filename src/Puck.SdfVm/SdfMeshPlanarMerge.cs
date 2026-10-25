@@ -13,9 +13,9 @@ namespace Puck.SdfVm;
 /// and whose triangles close a ring about it, is removed, and the hole its ring leaves is triangulated again from the
 /// vertices about it. Every other vertex stays: one an unmerged neighbour names, one two regions share, one on the mesh's
 /// open edge. So every region keeps its outline edge for edge, no T-junction opens a crack, and the rasterizer covers each
-/// polygon's outline as it did. A straight run between two merged faces keeps its vertices too: dropping one from both sides
-/// moves where the rasterizer snaps the shared edge by a fraction of a subpixel, which turned a pixel at a glyph's foot, for
-/// one part in a hundred of the triangles left.</para>
+/// polygon's outline as it did. A straight run between two merged faces keeps its vertices too: dropped from both sides, the
+/// geometry holds but the rasterizer snaps the shared edge from other vertices, for one part in a hundred of the triangles
+/// left.</para>
 /// <para>A removal is taken only where exact orientation tests on the vertices' own float coordinates certify it: each new
 /// triangle faces as its region does and holds no other vertex of the hole, so together they cover the hole exactly. Each
 /// is then improved by flipping edges toward the Delaunay triangulation of the region's remaining vertices where the circle
