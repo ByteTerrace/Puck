@@ -73,6 +73,20 @@ and a text guest's exports and imports are checked when it mounts. A guest's
 grants are authored rows like any other: each imported module may author its
 own, since grant rows compose by their `(grantee, capability, subject)` triple.
 
+The guide's exhibit copy is authored in `worlds/debug/guide.puck`, not in its
+WAT: `guideCopy` lowers to `guideExhibits`, whose `<ordinal>-title` and
+`<ordinal>-note` cells follow the manifest's region order. `ReadStateText`
+completions carry `Applied` (10), unlike an Ask's allowed-hold verdict (1–3).
+Assemble chunks before decoding or JSON-escaping: a multi-byte UTF-8 scalar
+can cross a 16-byte chunk boundary. A scratch source edit and a headless
+`world.state guide` read show changes without editing or rebuilding the guest.
+
+The addon finish phase suppresses successful mount/disclosure confirmations
+while `WorldExtensions.IsReplaying`; it still retires superseded instances.
+An offline verification reports refusal or drift instead of narrating a
+second boot. Do not suppress stderr globally: preparation faults and replay
+diagnostics must remain visible.
+
 **The doors are `world.row.set addons <row-json>` / `world.row.remove addons
 <name>`** — the ordinary document-mutation pipeline (`WorldMutation.UpsertAddon`/
 `RemoveAddon`), nothing else. There is no separate runtime-facing lifecycle
@@ -334,13 +348,16 @@ is captured and re-executed on replay through the ordinary tape-covered
 mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
 no separate lifecycle leaf left to reason about arming against.
 
-No checkpoint holds a guest's memory, so a recording in a world with mounted
-addons starts from the boot image: `replay.record` before the world's first
-step (the first line of the World's stdin; an MCP attachment arrives after
-that step), or it refuses as
-`StartNotCheckpointable`. `replay.drive` then works in the same session: its
-boot-image reset prepares every guest fresh, so the guests re-run from their
-modules' initial state and reproduce the recording tick for tick.
+No checkpoint holds a guest's memory. A post-boot `replay.record`, including
+one sent over MCP, prepares every mounted guest fresh and captures the
+surrounding authority state at the arm under one authority operation. It
+commits the restart only after capture succeeds, so refusal leaves every live
+store untouched. The recording and its re-drive both start those pinned guests
+from module initialization; guest-private trails, counters and pending answers
+restart, while poses, authored state, grants, sessions and machine cores remain.
+Ordinary checkpoints still refuse pumped guests. Arming before the first step
+uses the boot image as before. `replay.drive` prepares fresh guests for either
+kind of recorded start.
 
 When piping the startup script, close stdin after the replay arm. Headless
 startup drains that script before stepping; leaving the pipe open waiting for

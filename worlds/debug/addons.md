@@ -19,8 +19,9 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 
 `world.addons` lists all seven with their fuel. Measured on a headless run, each
 spends a small part of the default budget of 1,000,000 a tick: the watchdog
-about 8,000, the companion 1,200 to 2,500, and the guide about 60, rising to
-about 30,000 on the tick it writes an exhibit near the end of its table.
+about 8,000, the companion 1,200 to 2,500, and the guide about 70 while idle.
+The guide reads two 16-byte text chunks per tick on entry, then publishes both
+fields together; a headless visit to SHEAR peaks at about 4,000 fuel.
 
 ## Development tools
 
@@ -151,20 +152,23 @@ the rows are readable with `world.state` either way.
 
 ### Finding a transient and replaying to its tick
 
-No checkpoint holds a guest's memory, so a recording in this world starts at
-boot: `replay.record <name>` must arrive before the world steps, as the first
-line of the stdin the World starts with. An MCP attachment arrives after the
-first step, too late to arm one, so start the World with that line on stdin and
-`--control`, and drive it over MCP from there.
+`replay.record <name>` works over an attached World's MCP console after boot.
+It takes an authority checkpoint and restarts every mounted guest from its
+pinned module, so the live capture and the re-drive begin with identical guest
+memory. The surrounding world stays where it stood: poses, authored state,
+grants, sessions and checkpointable machine cores are retained. Guest-private
+trails, counters and unfinished reads restart. A refused arm changes no guest.
 
-Close the startup stdin pipe after writing the arm: headless startup drains
-that script before stepping. An open pipe can leave mutations waiting at tick
-zero while MCP read commands already answer. Then:
+To capture the boot itself, send `replay.record <name>` as the first stdin
+line and close that pipe: headless startup drains it before stepping. An open
+pipe can leave mutations waiting at tick zero while MCP reads already answer.
+After either kind of arm:
 
 1. Play or script until the watchdog fires, and read `world.state watchdog`
    for the tick.
 2. `replay.stop` persists the tape (MATCH proves the guests replayed with it).
-3. `replay.drive <name> to <tick + 2>` resets the world to its boot image,
+3. `replay.inspect <name>` shows the starting tick. `replay.drive <name> to
+   <violation tick - starting tick + 2>` resets the world to its recorded start,
    prepares every guest fresh and re-runs the recording, stopping just after
    the violation. The watchdog writes its rows during tick + 1, so they show
    the violation at the same tick from then on. A drive works in the session
@@ -202,10 +206,25 @@ region; when the Moth enters one it writes the exhibit's name and a one-line
 note into the `guide` row (and its walking-order position into `guideAt`), and
 when she leaves it clears them and the panel hides. A region event names its
 region by its position in the guide's own requests, which list the exhibits in
-the gallery's walking order; the guest's table of names and notes follows the
-same order, so an exhibit added to, moved in or removed from the gallery moves
-its line in [addons/guide.wat](addons/guide.wat) too. `gallery.go <exhibit>`
+the gallery's walking order. The `guideCopy` list in [guide.puck](guide.puck)
+authors each title and note in that order and lowers them into the Text row
+`guideExhibits`, with keys `<ordinal>-title` and `<ordinal>-note`. Keep that
+list in step when adding, moving or removing an exhibit. `gallery.go <exhibit>`
 stands her at one.
+
+The guest asks for Observe over that row and uses `ReadStateText` to assemble
+each field, 16 UTF-8 bytes at a time, under a shared two-read budget. It has no
+exhibit strings: editing a title or note and reloading the world changes what
+the next visit shows without changing the guest or its hash. Entering another
+region discards any unfinished read; an exit clears the panel. Quotes,
+backslashes, line breaks and multi-byte UTF-8 survive the JSON write.
+Each field is bounded to 4096 UTF-8 bytes and the encoded `guide` row to the
+mutation ABI's 8 KiB payload ceiling; exceeding either faults the guest rather
+than truncating text.
+
+Offline verification (`replay.stop` and `replay.verify`) reconstructs guests
+without repeating successful mount and capability-disclosure narration.
+Mount refusals, receipt differences and replay failures still report normally.
 
 ## The companion
 
@@ -312,11 +331,11 @@ Run `puck test worlds/debug/machine-debugger-tests.puck --reproduce --jobs 1`
 for diagnostic cartridges, withheld input, segmented input, seeded fuzzing,
 unknown verdicts and cancellation.
 The ordinary `addons-tests.puck` also asserts an idle debugger at boot.
-For replay, arm `replay.record <name>` on stdin before the first World step,
-then drive the rows or run the generated scenario; after `replay.stop`,
-`replay.drive <name> to <violation tick + 2>` recreates the guest and its
-machine operations under pinned receipts. An MCP-only recording cannot arm
-after the mounted guests have already stepped; see the open addon item.
+For replay, arm `replay.record <name>` over MCP (restarting guest-private state)
+or on stdin before the first World step, then drive the rows or run the
+generated scenario; after `replay.stop`,
+`replay.drive <name> to <violation tick - starting tick + 2>` recreates the guest and its
+machine operations under pinned receipts.
 
 Measured headlessly with the default cartridges and 60 samples per leg, all six
 checks passed on each device. HGB advanced 119 native frames; AGB and Deck 120.

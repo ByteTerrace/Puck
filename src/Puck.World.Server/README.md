@@ -2434,6 +2434,14 @@ therefore indicts the checkpoint, never a boot image. Input the history's captur
 already held for the open tick when the recording armed has reached the server,
 and the checkpoint holds it, so the recording's first tick leaves it out.
 
+A post-boot arm with mounted addons prepares every guest fresh, captures the
+surrounding authority state, then commits the restart under the same authority
+operation (`WorldPersistence.TryCaptureReplayStart`). The checkpoint never
+claims to hold guest memory: both live capture and re-drive initialize the
+pinned modules at that boundary. Refusal disposes the staged stores and leaves
+the running guests intact. This makes recording over MCP possible after boot;
+ordinary checkpoint capture continues to refuse pumped guests.
+
 Each authority tapes its own half of a crossing: a source its departure
 (`Transfer`, naming the target authority and the slots that left), a
 destination its arrival (`Arrival`, landed again through the shadow's own

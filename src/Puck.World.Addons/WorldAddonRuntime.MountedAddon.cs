@@ -133,9 +133,8 @@ public sealed partial class WorldAddonRuntime {
         public bool FaultReported { get; set; }
         /// <summary>Gets a value indicating whether an admitted execution of this guest has ever been attempted — set unconditionally the
         /// first time <see cref="TickAddons"/> reaches the point of driving it (regardless of whether the tick
-        /// traps), never cleared. The boot-anchored replay arm predicate: offline replay
-        /// creates fresh guests at sim-counter zero, so a guest's accumulated memory/tick state before this latch
-        /// was set is exactly what a recording begun after it cannot re-establish.</summary>
+        /// traps), never cleared on this entry. Ordinary checkpoints cannot capture that private state. A recording
+        /// arm replaces the entry with a fresh guest only after its authority checkpoint succeeds.</summary>
         public bool HasEverPumped { get; set; }
         /// <summary>Gets the guest instance.</summary>
         public AddonInstance Instance { get; }

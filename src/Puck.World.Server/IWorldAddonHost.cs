@@ -13,8 +13,8 @@ namespace Puck.World.Server;
 public interface IWorldAddonHost : IWorldExtensionRuntime {
     /// <summary>WASM guests are reproduced by executing their pinned modules at the same tick boundaries.</summary>
     WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
-    /// <summary>Whether any mounted guest has ever had an admitted <c>TickAddons</c> pump — the boot-anchored replay
-    /// arm predicate.</summary>
+    /// <summary>Whether any currently mounted guest has had an admitted <c>TickAddons</c> pump. Ordinary checkpoints
+    /// refuse that private state; recording instead prepares fresh guests at its captured start.</summary>
     bool AnyEverPumped { get; }
     /// <summary>The number of guests currently mounted — the sizing bound
     /// <see cref="WorldServer.AttachAddons"/> reads for its per-tick contention tracking.</summary>
@@ -70,8 +70,8 @@ public interface IWorldAddonHost : IWorldExtensionRuntime {
     /// reuses its guest only when it is STRUCTURALLY equal (every field, including <c>Requests</c>/<c>MemoryWatches</c>
     /// content) to the row that guest was last prepared under AND every other preparation dependency (the channel
     /// table content) is unchanged; <see langword="null"/> to reuse nothing, so every enabled row prepares a fresh
-    /// guest and every mounted one is superseded (a boot install, or a replay drive resetting to its tape's boot
-    /// image).</param>
+    /// guest and every mounted one is superseded (a boot install, a recording arm, or a replay drive resetting to its
+    /// recorded start).</param>
     /// <param name="candidate">The candidate definition being considered for install.</param>
     /// <param name="plan">The disposable prepared plan, on success; the caller commits it or disposes it — never
     /// both, and never neither.</param>

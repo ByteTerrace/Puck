@@ -482,8 +482,9 @@ public sealed partial class WorldPersistence {
     }
     /// <summary>Whether this server's live state is outside what a checkpoint can capture: a pumped addon guest, or a
     /// stepped machine on a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
+    /// <param name="restartingAddons">Whether a prepared restart replaces the guests at this recording boundary.</param>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
-    private bool AnyUncapturableStateEverLatched() => (Host.AnyAddonEverPumped ||
+    private bool AnyUncapturableStateEverLatched(bool restartingAddons) => ((!restartingAddons && Host.AnyAddonEverPumped) ||
         (Host.AnyMachineEverPumped && (Host.Machines is not IWorldMachineCheckpointHost)));
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
@@ -545,7 +546,44 @@ public sealed partial class WorldPersistence {
     /// <param name="checkpoint">The captured image, on success.</param>
     /// <param name="reason">Why capture was refused, on failure.</param>
     /// <returns><see langword="true"/> when capture succeeded.</returns>
-    internal bool TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
+    internal bool TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) =>
+        TryCaptureCheckpointCore(hostRow, out checkpoint, out reason, restartingAddons: false);
+
+    // A recording restarts guests from their pinned modules instead of claiming to capture their memory. Stage
+    // that restart first, but publish it only after every ordinary checkpoint gate succeeds. A refused arm leaves
+    // the live stores, their fuel counters and pending answers untouched. Ordinary captures never use this door.
+    internal bool TryCaptureReplayStart(out WorldAuthorityCheckpoint? checkpoint, out string reason) {
+        lock (Host.AuthorityGate) {
+            IWorldAddonPreparedPlan? plan = null;
+            var committed = false;
+            try {
+                if (Host.Addons is { MountedCount: > 0 } addons && !addons.TryPrepare(
+                    current: null,
+                    candidate: Host.Definition,
+                    plan: out plan,
+                    reason: out var addonReason
+                )) {
+                    checkpoint = null;
+                    reason = $"the recording's addon restart refused: {addonReason}";
+                    return false;
+                }
+                if (!TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint.Empty, out checkpoint, out reason,
+                    restartingAddons: plan is not null)) {
+                    return false;
+                }
+                if (plan is not null) {
+                    Host.Addons!.Commit(plan);
+                    committed = true;
+                    Host.Addons.Finish(plan);
+                }
+                return true;
+            } finally {
+                if (!committed) { plan?.Dispose(); }
+            }
+        }
+    }
+
+    private bool TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason, bool restartingAddons) {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
         lock (Host.AuthorityGate) {
@@ -555,7 +593,7 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
-            if (AnyUncapturableStateEverLatched()) {
+            if (AnyUncapturableStateEverLatched(restartingAddons)) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture pumped addon guests or a stepped machine without durable checkpoint support";
 
