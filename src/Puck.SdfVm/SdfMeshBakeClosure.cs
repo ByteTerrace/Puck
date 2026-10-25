@@ -59,7 +59,7 @@ public sealed partial class SdfMeshBakeClosure {
     ], comparer: StringComparer.Ordinal);
     private static readonly Lazy<SdfMeshBakeClosure> Running = new(valueFactory: static () => Of(directory: AppContext.BaseDirectory));
 
-    private SdfMeshBakeClosure(SortedDictionary<string, UInt128> members, SortedDictionary<string, string> reasons) {
+    private SdfMeshBakeClosure(SortedDictionary<string, UInt128> members, SortedDictionary<string, string> reasons, string entryVersion) {
         var hash = new XxHash128();
         Span<byte> value = stackalloc byte[16];
 
@@ -69,6 +69,7 @@ public sealed partial class SdfMeshBakeClosure {
             hash.Append(source: value);
         }
 
+        EntryVersion = entryVersion;
         Hash = hash.GetCurrentHashAsUInt128();
         Members = members;
         Reasons = reasons;
@@ -77,6 +78,9 @@ public sealed partial class SdfMeshBakeClosure {
     /// <summary>Gets the bake's closure in the build this process runs, read from its application directory
     /// (<see cref="AppContext.BaseDirectory"/>) once.</summary>
     public static SdfMeshBakeClosure Current => Running.Value;
+    /// <summary>Gets the entry format's eight-byte version tag (<see cref="SdfMeshStore.EntryVersion"/>) in the build this
+    /// closure was read from.</summary>
+    public string EntryVersion { get; }
     /// <summary>Gets the hash of every member: the code half of the bake's identity.</summary>
     public UInt128 Hash { get; }
     /// <summary>Gets each member of the closure (a method, or a type's layout, as
@@ -112,7 +116,7 @@ public sealed partial class SdfMeshBakeClosure {
 
         var walk = new Walk(directory: Path.GetFullPath(path: directory));
 
-        return new SdfMeshBakeClosure(members: walk.Run(roots: roots), reasons: walk.Reasons);
+        return new SdfMeshBakeClosure(entryVersion: walk.EntryVersion, members: walk.Run(roots: roots), reasons: walk.Reasons);
     }
     /// <summary>Returns the members whose hash differs between two closures' members, with those only one holds, in
     /// ordinal order.</summary>
@@ -198,6 +202,7 @@ public sealed partial class SdfMeshBakeClosure {
         // While a layout or a signature is named, the types it names join nothing.
         private bool m_quiet;
 
+        public string EntryVersion { get; private set; } = SdfMeshStore.EntryVersion;
         public SortedDictionary<string, string> Reasons { get; } = new(comparer: StringComparer.Ordinal);
 
         public SortedDictionary<string, UInt128> Run(IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
@@ -206,6 +211,15 @@ public sealed partial class SdfMeshBakeClosure {
 
                 Index(root: module);
                 Root(method: method, module: module, type: module.Types[type]);
+            }
+            if (m_modules.TryGetValue(key: "Puck.SdfVm", value: out var sdfVm) && (sdfVm is not null) && sdfVm.Types.TryGetValue(key: "Puck.SdfVm.SdfMeshStore", value: out var storeType)) {
+                foreach (var handle in sdfVm.Metadata.GetTypeDefinition(handle: storeType).GetFields()) {
+                    var field = sdfVm.Metadata.GetFieldDefinition(handle: handle);
+
+                    if (sdfVm.Metadata.StringComparer.Equals(handle: field.Name, value: "Magic") && (field.GetDefaultValue() is { IsNil: false } constant)) {
+                        EntryVersion = SdfMeshStore.VersionText(magic: sdfVm.Metadata.GetBlobReader(handle: sdfVm.Metadata.GetConstant(handle: constant).Value).ReadUInt64());
+                    }
+                }
             }
             while ((m_methods.Count > 0) || (m_types.Count > 0)) {
                 if (m_types.TryDequeue(result: out var type)) {
