@@ -169,8 +169,10 @@ Sphere/box pairs instead use the closest point on the oriented box, including
 its faces, edges, and corners. A sphere center inside the box exits through the
 nearest face, with ties resolved X, Y, then Z. Static and dynamic sphere/box
 queries share this geometry; reversing the moving side reverses the push.
-Dynamic capsule/box pairs still use conservative world bounds. Compound correction
-selection compares full-width squared magnitudes so a shallow overlap is not
+Dynamic capsule/box pairs use the same closest segment/box features as static
+capsules, including edge and corner normals; reversing body order reverses
+the correction. Compound correction selection compares full-width squared
+magnitudes so a shallow overlap is not
 lost by rounding its square to the scalar precision.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
 axis-aligned boxes, oriented boxes, rounded boxes, chamfered boxes, superellipsoids, cylinders, and half-spaces, returning only a
@@ -180,9 +182,9 @@ axis-aligned query there, and turns the push back, so a capsule, sphere, or
 box meets the box's true faces and a face push points along that face's
 normal. `FixedStaticCollider.Box` builds one from a center, rotation and
 half-extents, and keeps the axis-aligned collider whenever the rotation
-carries every box axis exactly onto a world axis. Sphere and capsule queries
-use closest features on sharp boxes too (the rounded-box kernel with zero
-static radius). Box bodies retain their bounds in the sharp box's frame.
+carries every box axis exactly onto a world axis. Every body volume uses
+closest features on sharp boxes too (the rounded-box kernel with zero static
+radius), including the complete separating axes when box cores intersect.
 
 Box placements use `FixedStaticCollider.RoundedBox`: an oriented inner box
 offset by a sphere. `Extent` carries the inner half-extents and `Radius` the
@@ -338,8 +340,14 @@ than the step height above the start and higher than the blocked step. A wall co
 two sweeps; an accepted step costs `LandingProbes` plus four. The World calls
 it from the kit's `motion.stepHeight`, zero by default.
 
-Exact chamfered-box and superellipsoid contacts use GJK followed by EPA. The
-EPA bootstrap expands the GJK simplex along its edge/face normals into one
+Exact chamfered-box and superellipsoid contacts use GJK followed by EPA. GJK
+reduction computes triangle barycentrics from oriented areas, avoiding the
+cancellation in a squared-area Gram determinant. Closest points and their
+barycentric weights stay in Q32 through exact squared-length comparison and
+search-direction normalization; rounding a shallow residual to Q16 first can
+aim the next support query back at a discarded vertex. The contact tolerance and iteration
+budget do not compensate for that precision loss.
+The EPA bootstrap expands the GJK simplex along its edge/face normals into one
 tetrahedron, then expands its boundary faces. A support plane at zero depth
 ends a touching query; no search through support-point subsets is needed.
 Faces are oriented from a known interior point even when the origin lies on
