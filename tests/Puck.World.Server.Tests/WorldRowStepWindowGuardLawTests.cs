@@ -6,7 +6,7 @@ namespace Puck.World.Server.Tests;
 /// Laws for <see cref="WorldRowStepWindowGuard"/> — the read-your-writes guard behind <c>world.row.step</c>. A step
 /// composes a WHOLE-ROW upsert from the pre-drain definition, so two steps to the SAME row inside one tick window of one
 /// world (before the buffered mutations drain) collide and the later reverts the earlier. The guard refuses the second
-/// by name; steps to DIFFERENT rows, repeats of one row across DIFFERENT windows (a held chord once per tick), and
+/// by name; steps to DIFFERENT rows, repeats of one row across DIFFERENT windows (console edits fenced by a tick), and
 /// steps in different worlds or in a world recreated under the same name never collide. Every claim law pairs the
 /// collision with a one-input-different passing control.
 /// </summary>
@@ -20,11 +20,11 @@ public sealed class WorldRowStepWindowGuardLawTests {
     );
 
     [Fact]
-    public void SameRow_AcrossWindows_NeverCollides_HeldChordKeepsStepping() {
+    public void SameRow_AcrossWindows_NeverCollides_FencedEditsKeepStepping() {
         var guard = new WorldRowStepWindowGuard();
 
-        // A held chord fires world.row.step once per tick — each fire lands in a new window (NextInputTick advances as
-        // the prior step's mutation drains), so none is ever refused.
+        // Console edits fenced by a tick land in new windows (NextInputTick advances as the prior step's mutation
+        // drains), so none is ever refused.
         for (var tick = 1UL; (tick <= 8UL); tick++) {
             Assert.False(condition: guard.IsClaimed(
                 rowIdentity: "render",

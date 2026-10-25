@@ -1,6 +1,6 @@
-using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Puck.Assets;
+using System.Text.Json;
 
 namespace Puck.Launcher.Release;
 
@@ -22,7 +22,8 @@ internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime
     public Task StartAsync(CancellationToken cancellationToken) {
         m_applicationLifetime.ApplicationStarted.Register(callback: () => HealthGateFile.ClearHealthy(
             cacheRoot: m_options.CacheRoot,
-            version: m_options.InstalledVersion
+            version: m_options.InstalledVersion,
+            runningDirectory: AppContext.BaseDirectory
         ));
 
         return Task.CompletedTask;
@@ -30,24 +31,43 @@ internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime
     /// <inheritdoc/>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
+
 /// <summary>The health attempt counter's clearing half — see <see cref="SelfUpdateHealthGateHostedService"/>.</summary>
-internal static class HealthGateFile {
+public static class HealthGateFile {
     private sealed record HealthRecord(string Version, int Attempts);
 
-    /// <summary>Resets the recorded attempt count for <paramref name="version"/> to zero.</summary>
+    /// <summary>Marks a selected install unproven before the current pointer changes. The caller holds update.lock.
+    /// Zero attempts is pending startup; only deletion proves startup.</summary>
+    /// <param name="cacheRoot">The install root.</param>
+    /// <param name="version">The version about to become current.</param>
+    public static void MarkPending(string cacheRoot, string version) => AtomicFile.WriteAllText(
+        path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"),
+        contents: JsonSerializer.Serialize(value: new HealthRecord(Attempts: 0, Version: version)));
+    /// <summary>Deletes the health marker only for the process still selected by current, under the install lease.
+    /// A busy install leaves the marker intact; an older process cannot bless a newer selected install.</summary>
     /// <param name="cacheRoot">The install root (the same directory the stub reads <c>state/health.json</c> under).</param>
     /// <param name="version">The version to clear.</param>
-    public static void ClearHealthy(string cacheRoot, string version) {
-        AtomicFile.WriteAllText(
-            contents: JsonSerializer.Serialize(value: new HealthRecord(
-                Attempts: 0,
-                Version: version
-            )),
-            path: Path.Combine(
-                path1: cacheRoot,
-                path2: "state",
-                path3: "health.json"
-            )
-        );
+    /// <param name="runningDirectory">The actual executable directory, independent of the mutable current pointer.</param>
+    public static void ClearHealthy(string cacheRoot, string version, string runningDirectory) {
+        try {
+            Directory.CreateDirectory(path: cacheRoot);
+            using var lease = new FileStream(path: Path.Combine(path1: cacheRoot, path2: "update.lock"), mode: FileMode.OpenOrCreate,
+                access: FileAccess.ReadWrite, share: FileShare.None);
+            var currentPath = Path.Combine(path1: cacheRoot, path2: "current");
+
+            if (!File.Exists(path: currentPath) || (File.ReadAllText(path: currentPath).Trim() != version)) {
+                return;
+            }
+            var expected = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: Path.Combine(path1: cacheRoot, path2: "versions", path3: version)));
+            var actual = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: runningDirectory));
+
+            if (!string.Equals(a: expected, b: actual,
+                comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))) {
+                return;
+            }
+            File.Delete(path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"));
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+            // Startup remains unproven if a concurrent update or unavailable install prevents clearing.
+        }
     }
 }

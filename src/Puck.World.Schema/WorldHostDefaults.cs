@@ -356,7 +356,8 @@ public sealed record WorldHostDefaults(
 /// anchor; the composition root compiles the anchor in as a constant.
 /// </summary>
 /// <param name="Channel">The release channel this install tracks (e.g. <c>stable</c>, <c>beta</c>). Null = the app's own default channel.</param>
-/// <param name="CacheRoot">The on-disk root staged versions and update state live under. Null = the app's own default.</param>
+/// <param name="CacheRoot">A portable relative subdirectory under the host's updates directory. Null uses that directory itself.
+/// An absolute install root belongs in trusted local update configuration, never in a world document.</param>
 /// <param name="CheckIntervalSeconds">Seconds between automatic <c>update.check</c> attempts. Null = the app's own
 /// default; <c>0</c> disables automatic checking (a manual <c>update.check</c> still works).</param>
 /// <param name="KeepVersions">The number of most-recent staged versions to retain beyond the current one. Null = the app's own default.</param>
@@ -368,4 +369,11 @@ public sealed record WorldUpdateDefaults(
 ) {
     /// <summary>Gets the built-in update defaults — every field unauthored, so a world declaring no update section runs its app's own hardcoded defaults.</summary>
     public static WorldUpdateDefaults Default { get; } = new WorldUpdateDefaults();
+
+    /// <summary>Whether an authored update cache stays below the host's updates directory on every platform.</summary>
+    /// <param name="path">The authored path, or null for the host default.</param>
+    public static bool IsConfinedCachePath(string? path) => ((path is null) ||
+        (WorldDocumentPaths.IsPortableRelativeFilePath(path: path) &&
+         !path.Any(predicate: static c => ((c < ' ') || "<>\"|?*".Contains(value: c))) &&
+         !path.Split(separator: '/').Any(predicate: static part => ((part == "..") || part.EndsWith(value: '.') || part.EndsWith(value: ' ')))));
 }

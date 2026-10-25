@@ -528,7 +528,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             info: WorldJsonContext.Default.WorldInputHoldAuthoring,
             toMutation: static (server, principal, authoring) => new WorldMutation.SetInputHold(
                 Principal: principal,
-                Settings: authoring.Compile(ratePerSecond: ((uint)server.Definition.SimulationRateHz))
+                Settings: authoring.Compile(ratePerSecond: ((uint)WorldStateReadView.Of(reader: principal, server: server).Definition.SimulationRateHz))
             )
         ),
         Remove: null,
@@ -821,7 +821,31 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             _ = obj.Remove(propertyName: property);
         }
     }
-    private CommandResult HandleAdd(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
+    private static bool TryReadMutationRow(WorldServer server, WorldStateReadView view, Principal principal, string path, RowSection section, string key, string verb, out RowReadOutcome read, out CommandResult error) {
+        read = default;
+        if ((section.RowType == typeof(WorldStateRow)) && (view.Withheld(row: key) is not null)) {
+            error = CommandResult.Error(output: view.Refusal(key: null, row: key, verb: verb));
+            return false;
+        }
+        read = section.Read(view.Definition, key);
+        if (read.Error is { } readError) {
+            error = CommandResult.Error(output: $"[{verb}: {path}: {readError}]");
+            return false;
+        }
+        var outcome = section.Upsert(server, principal, read.Row!.ToJsonString());
+
+        if (outcome.Error is { } parseError) {
+            error = CommandResult.Error(output: $"[{verb}: {path}: {parseError}]");
+            return false;
+        }
+        if (!server.TryAdmitCompleteMutation(mutation: outcome.Mutation!, admission: out var admission)) {
+            error = CommandResult.Error(output: $"[{verb}: refused ({admission.Describe()})]");
+            return false;
+        }
+        error = default;
+        return true;
+    }
+    private CommandResult HandleAdd(WorldServer server, IServerLink link, WorldStateReadView view, CommandContext context, WireArgs args) {
         if (args.Count < 3) {
             return CommandResult.Usage(
                 form: "<path> [<key>] <listPath> <json> [after=<selector>]",
@@ -909,13 +933,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return CommandResult.Error(output: $"[world.row.add: {path}: row '{rowIdentity}' already has an edit buffered this tick — fence with world.wait]");
         }
 
-        var read = section.Read(
-            server.Definition,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.add: {path}: {readError}]");
+        if (!TryReadMutationRow(server, view, context.Principal, path, section, key, "world.row.add", out var read, out var readError)) {
+            return readError;
         }
 
         if (!TryResolveListContainer(
@@ -1005,7 +1024,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     // world.row.remove's list-element form: locates the named list field (a plain dotted/bracketed path, resolving
     // through any intermediate selector — "document.shapes[name=forearmL].swings"), removes the ONE element
     // <selector> names, and submits the whole modified row through the SAME section Upsert the whole-row form uses.
-    private CommandResult HandleListRemove(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
+    private CommandResult HandleListRemove(WorldServer server, IServerLink link, WorldStateReadView view, CommandContext context, WireArgs args) {
         var path = args[0].ToString();
 
         if (!Sections.TryGetValue(
@@ -1057,13 +1076,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return CommandResult.Error(output: $"[world.row.remove: {path}: row '{rowIdentity}' already has an edit buffered this tick — fence with world.wait]");
         }
 
-        var read = section.Read(
-            server.Definition,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.remove: {path}: {readError}]");
+        if (!TryReadMutationRow(server, view, context.Principal, path, section, key, "world.row.remove", out var read, out var readError)) {
+            return readError;
         }
 
         if (!TryResolveListContainer(
@@ -1133,7 +1147,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     // the whole modified row through the SAME section Upsert the whole-row form uses — so the spliced field crosses
     // the row's own JsonTypeInfo exactly once, at reparse, which is where its declared shape (including a bindable
     // field's "state.row.key" string arm) is actually validated.
-    private CommandResult HandleLiteralSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args, string path, RowSection section) {
+    private CommandResult HandleLiteralSet(WorldServer server, IServerLink link, WorldStateReadView view, CommandContext context, WireArgs args, string path, RowSection section) {
         var keyed = (section.Remove is not null);
 
         if (
@@ -1193,13 +1207,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 : string.Empty)}]");
         }
 
-        var read = section.Read(
-            server.Definition,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.set: {path}: {readError}]");
+        if (!TryReadMutationRow(server, view, context.Principal, path, section, key, "world.row.set", out var read, out var readError)) {
+            return readError;
         }
 
         JsonNode? replacement;
@@ -1395,7 +1404,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         return new CommandResult(Output: $"[world.row: {path}{keySuffix}{fieldSuffix} = {node.ToJsonString()}]");
     }
-    private CommandResult HandleRemove(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
+    private CommandResult HandleRemove(WorldServer server, IServerLink link, WorldStateReadView view, CommandContext context, WireArgs args) {
         // The list-element form (world.row.remove <path> [<key>] <listPath> <selector>) is 3 tokens for a keyless
         // section, 4 for a keyed one — neither collides with the whole-row form's fixed 2, so the dispatch is by
         // count alone, no JSON-shape heuristic needed (every token here is a plain address, never a payload).
@@ -1404,7 +1413,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 args: args,
                 context: context,
                 link: link,
-                server: server
+                server: server,
+                view: view
             );
         }
 
@@ -1464,7 +1474,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             )
         );
     }
-    private CommandResult HandleSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
+    private CommandResult HandleSet(WorldServer server, IServerLink link, WorldStateReadView view, CommandContext context, WireArgs args) {
         if (args.Count < 1) {
             return CommandResult.Usage(
                 form: "<path> <json>",
@@ -1523,7 +1533,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                 link: link,
                 path: path,
                 section: section,
-                server: server
+                server: server,
+                view: view
             );
         }
 
@@ -1555,8 +1566,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             )
         );
     }
-    private CommandResult HandleStep(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
-        if (args.Count is (< 1 or > 2)) {
+    private CommandResult HandleStep(WorldServer server, IServerLink link, WorldStateReadView view, CommandContext context, WireArgs args) {
+        if (args.Count != 2) {
             return CommandResult.Usage(
                 form: "<path> <delta>",
                 verb: "world.row.step"
@@ -1564,22 +1575,9 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         }
 
         var path = args[0].ToString();
-        float delta;
 
-        if (args.Count == 2) {
-            if (!args.TryFloat(
-                index: 1,
-                value: out delta
-            )) {
-                return CommandResult.Error(output: $"[world.row.step: could not parse delta '{args[1].ToString()}' as a finite number]");
-            }
-        } else if (context.Origin == CommandOrigin.Binding) {
-            delta = context.Value.AsAxis1D;
-        } else {
-            return CommandResult.Usage(
-                form: "<path> <delta>",
-                verb: "world.row.step"
-            );
+        if (!args.TryFloat(index: 1, value: out var delta)) {
+            return CommandResult.Error(output: $"[world.row.step: could not parse delta '{args[1].ToString()}' as a finite number]");
         }
 
         if (!TryResolveStepTarget(
@@ -1605,13 +1603,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return CommandResult.Error(output: $"[world.row.step: {path}: row '{rowIdentity}' already has a step buffered this tick — a second step composes from the same pre-drain base and would revert the first; fence with world.wait, or use world.row.set for the final value]");
         }
 
-        var read = section.Read(
-            server.Definition,
-            key
-        );
-
-        if (read.Error is { } readError) {
-            return CommandResult.Error(output: $"[world.row.step: {path}: {readError}]");
+        if (!TryReadMutationRow(server, view, context.Principal, path, section, key, "world.row.step", out var read, out var readError)) {
+            return readError;
         }
 
         if (!WorldRowFieldStepper.TryStep(
@@ -2014,6 +2007,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     args: args,
                     context: context,
                     link: instance.SubmissionLink,
+                    view: authority.ReadView(context: context, instance: instance),
                     server: instance.Server
                 );
             },
@@ -2037,6 +2031,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     args: args,
                     context: context,
                     link: instance.SubmissionLink,
+                    view: authority.ReadView(context: context, instance: instance),
                     server: instance.Server
                 );
             },
@@ -2074,9 +2069,9 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Bindable,
+            bindability: CommandBindability.Unbindable,
             name: "world.row.step",
-            description: "Steps ONE FIELD inside a document row or section by a delta — world.row.step <path> <delta>, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material, creations.myrow.document.shapes[name=forearmL].rounding) — the same section table world.row.set resolves against, and the same [n]/[field=value] list-selector grammar world.row.set's literal form and world.row read (a selector refused by name when it matches none or more than one element, listing the candidates). Field-type semantics: a number adds delta, typed by the field's real CLR type (an integer field steps in exact integer arithmetic, a float/double field in floating point — a fractional step on a whole-numbered float lands, and an out-of-range integer step refuses by name rather than throwing); a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. Bindable: a chord row carries the delta as a constant Axis1D value in place of the argument; the typed form takes an explicit numeric token. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result, and the accept/reject narration arrives there (no synchronous applied-result echo; a drain rejection additionally prints a per-verb [world.row.step: …] line). A second step against the same row in one tick window is refused by name — both would compose from the same pre-drain base and the later would revert the earlier; fence with world.wait between steps.",
+            description: "Steps ONE FIELD inside a document row or section by a delta — world.row.step <path> <delta>, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material, creations.myrow.document.shapes[name=forearmL].rounding) — the same section table world.row.set resolves against, and the same [n]/[field=value] list-selector grammar world.row.set's literal form and world.row read (a selector refused by name when it matches none or more than one element, listing the candidates). Field-type semantics: a number adds delta, typed by the field's real CLR type (an integer field steps in exact integer arithmetic, a float/double field in floating point — a fractional step on a whole-numbered float lands, and an out-of-range integer step refuses by name rather than throwing); a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. The delta is an explicit numeric token; this row-edit verb is unbindable. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result, and the accept/reject narration arrives there (no synchronous applied-result echo; a drain rejection additionally prints a per-verb [world.row.step: …] line). A second step against the same row in one tick window is refused by name — both would compose from the same pre-drain base and the later would revert the earlier; fence with world.wait between steps.",
             handler: (context, args) => {
                 if (!authority.TryResolveInstance(
                     context: context,
@@ -2091,6 +2086,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     args: args,
                     context: context,
                     link: instance.SubmissionLink,
+                    view: authority.ReadView(context: context, instance: instance),
                     server: instance.Server
                 );
             },
@@ -2115,6 +2111,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     args: args,
                     context: context,
                     link: instance.SubmissionLink,
+                    view: authority.ReadView(context: context, instance: instance),
                     server: instance.Server
                 );
             },

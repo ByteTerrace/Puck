@@ -11,7 +11,7 @@ var installRoot = AppContext.BaseDirectory.TrimEnd(
 FileStream updateLease;
 try {
     updateLease = StubInstall.AcquireUpdateLease(installRoot: installRoot);
-} catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
     Console.Error.WriteLine(value: $"[stub: install is busy or unavailable — {exception.Message}]");
     return 2;
 }
@@ -41,28 +41,34 @@ var attempts = StubHealth.AttemptsFor(
     record: StubHealth.Read(installRoot: installRoot),
     version: current
 );
-var decision = StubDecisionTable.Decide(
-    attempts: attempts,
-    currentGeneration: StubInstall.ReadGeneration(
-        installRoot: installRoot,
-        version: current
-    ),
-    hasLastGood: (lastGood is not null),
-    lastGoodGeneration: ((lastGood is null)
-    ? 0
-    : StubInstall.ReadGeneration(
+StubAction decision;
+try {
+    decision = StubDecisionTable.Decide(
+        attempts: attempts,
+        currentGeneration: StubInstall.ReadGeneration(
             installRoot: installRoot,
-            version: lastGood
-        )),
-    maxAttempts: configuration.MaxAttempts
-);
+            version: current
+        ),
+        hasLastGood: (lastGood is not null),
+        lastGoodGeneration: ((lastGood is null)
+        ? 0
+        : StubInstall.ReadGeneration(
+                installRoot: installRoot,
+                version: lastGood
+            )),
+        maxAttempts: configuration.MaxAttempts
+    );
+} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+    Console.Error.WriteLine(value: $"[stub: state generation is unavailable — {exception.Message}]");
+    return 2;
+}
 var launchVersion = current;
 switch (decision) {
     case StubAction.RevertToLastGood:
         Console.Error.WriteLine(value: $"[stub: version {current} reached {attempts}/{configuration.MaxAttempts} attempts — reverting to last-good {lastGood}]");
         try {
-            StubInstall.RevertToLastGood(installRoot: installRoot, failedVersion: current, lastGoodVersion: lastGood!);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) {
+            StubInstall.RevertToLastGood(failedVersion: current, installRoot: installRoot, lastGoodVersion: lastGood!);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)) {
             Console.Error.WriteLine(value: $"[stub: could not cancel pending install and roll back — {exception.Message}]");
             return 2;
         }

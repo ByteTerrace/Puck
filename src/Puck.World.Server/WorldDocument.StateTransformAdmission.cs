@@ -4,6 +4,9 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
+    private readonly HashSet<string> m_mutationReferencedRows = new(comparer: StringComparer.Ordinal);
+    private readonly List<int> m_setReadOrdinals = [];
+
     internal bool TryAdmitCompleteMutation(WorldMutation mutation, bool preMetered, out WorldMutationAdmission admission) {
         // A batch is admitted member by member, each on its own subject; the first member meters the dispatch budget.
         if (mutation is WorldMutation.Batch batch) {
@@ -70,9 +73,27 @@ public sealed partial class WorldDocument {
         var ordinal = WorldMutationKindCatalog.OrdinalOf(mutation: mutation);
         var section = SectionOf(mutation: mutation);
 
+        // A bound document value reads the live state before composition canonicalizes its submitted row.
+        m_mutationReferencedRows.Clear();
+        WorldStateDocumentValues.CollectReferencedRows(graph: mutation, rows: m_mutationReferencedRows);
+        foreach (var row in m_mutationReferencedRows) {
+            if (!TryAdmitGuardObservation(mutation.Principal, row, out admission)) { return false; }
+        }
+
         // A transform needs edit over every row it writes and observe over every row it only reads.
         if (mutation is WorldMutation.TransformState transform) {
             foreach (var subject in transform.Transform.Subjects()) {
+                // A declared set is an expression over state rows, not a grant subject of its own.
+                if ((subject.Access == StateAccess.Read) &&
+                    (m_definition.Sets.FirstOrDefault(predicate: set => (set.Name.Value == subject.Name)) is { } declared)) {
+                    m_setReadOrdinals.Clear();
+                    RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(definition: m_definition), declared, m_setReadOrdinals);
+                    foreach (var read in m_setReadOrdinals) {
+                        if (!TryAdmitGuardObservation(mutation.Principal,
+                            m_definition.StateCatalog.Descriptors[read].Name, out admission)) { return false; }
+                    }
+                    continue;
+                }
                 if (!((subject.Access == StateAccess.Read)
                     ? TryAdmitGuardObservation(
                         mutation.Principal,

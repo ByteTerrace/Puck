@@ -394,7 +394,7 @@
     { "name": "world.row.add", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.row.remove", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.row.set", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
-    { "name": "world.row.step", "bindable": true, "audience": "anyone", "valueKind": "axis1d", "wireArgs": true },
+    { "name": "world.row.step", "bindable": false, "audience": "anyone", "valueKind": "axis1d", "wireArgs": true },
     { "name": "world.rule.failures", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.rule.hazards", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.rule.trace", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },

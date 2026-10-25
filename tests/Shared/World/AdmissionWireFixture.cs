@@ -68,7 +68,7 @@ internal static class AdmissionWireFixture {
     /// signed by <paramref name="identity"/>'s own key, and returns the admitted peer's body index and generation.
     /// Throws <see cref="InvalidOperationException"/> naming the refusal on anything other than a clean admit — this
     /// helper is the "ordinary positive outcome" path, never itself a refusal probe.</summary>
-    public static async Task<AdmittedPeer> ConnectAndAdmitAsync(WorldPeerHost host, TestIdentity identity, CancellationToken ct) {
+    public static async Task<AdmittedPeer> ConnectAndAdmitAsync(WorldPeerHost host, TestIdentity identity, CancellationToken ct, TimeSpan? claimValidity = null) {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var client = new PeerTestClient();
 
@@ -103,7 +103,8 @@ internal static class AdmissionWireFixture {
                 challenge: challenge,
                 ct: ct,
                 identity: identity,
-                stream: stream
+                stream: stream,
+                validity: claimValidity
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             var acceptedFrame = ((await WorldPeerWireFormat.TryReadDownstreamAsync(
@@ -298,7 +299,7 @@ internal static class AdmissionWireFixture {
             return true;
         }
     }
-    public static Task WriteIdentityResponseAsync(Stream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct) {
+    public static Task WriteIdentityResponseAsync(Stream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct, TimeSpan? validity = null) {
         var codec = new CborAttestationCodec();
         var now = ClaimInstant.ToUnixTimeSeconds();
         var claim = AttestationSigner.SignClaim(
@@ -309,7 +310,7 @@ internal static class AdmissionWireFixture {
             signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
             purpose: WorldAdmissionDoor.Purpose,
             notBefore: (now - 1L),
-            notAfter: (now + 1L),
+            notAfter: (now + checked((long)(validity?.TotalSeconds ?? 1))),
             audience: WorldAdmissionDoor.Audience,
             sequence: null,
             claimBytes: challenge

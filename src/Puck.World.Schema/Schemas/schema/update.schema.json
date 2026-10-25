@@ -13,7 +13,7 @@
       "default": null
     },
     "cacheRoot": {
-      "description": "The on-disk root staged versions and update state live under. Null = the app\u0027s own default.",
+      "description": "A portable relative subdirectory under the host\u0027s updates directory. Null uses that directory itself. An absolute install root belongs in trusted local update configuration, never in a world document.",
       "type": [
         "string",
         "null"

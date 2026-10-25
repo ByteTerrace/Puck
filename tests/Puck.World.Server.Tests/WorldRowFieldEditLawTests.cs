@@ -98,6 +98,72 @@ public sealed class WorldRowFieldEditLawTests {
             echoes: new WorldDeferredVerbEchoes()
         ),
     ]);
+    private static CommandResult SubmitAs(CommandRegistry registry, Principal principal, string line) {
+        var results = new List<CommandResult>();
+        var source = new TextCommandSource(registry: registry);
+        using var session = source.CreateSession(principal: principal, onResult: (_, result) => results.Add(item: result));
+
+        session.Enqueue(line: line);
+        source.Collect();
+        return Assert.Single(collection: results);
+    }
+
+    [InlineData("world.row.step state.secret.cells[key=missing].value 1")]
+    [InlineData("world.row.set state secret cells[key=missing].value 1")]
+    [InlineData("world.row.add state secret cells {\"key\":\"new\",\"value\":0} after=key=missing")]
+    [InlineData("world.row.remove state secret cells key=missing")]
+    [Theory]
+    public void MutationSelectorsNeverDiscloseWithheldStateCells(string line) {
+        var secret = new WorldStateRow(
+            Name: CellName.Parse(candidate: "secret"),
+            Kind: CellKind.Int,
+            Visibility: new StateVisibility(Readers: ["seat2"]),
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "privateCard"), Value: CellValue.Int(value: 37))]
+        );
+        using var row = Build(state: [secret]);
+        var registry = BuildRegistry(row: row);
+        var denied = SubmitAs(registry, Principal.Seat(slot: 0), line);
+
+        Assert.True(condition: denied.IsError);
+        Assert.Contains("not disclosed", denied.Output);
+        Assert.DoesNotContain("privateCard", denied.Output);
+
+        var control = registry.Submit(line: line);
+
+        Assert.True(condition: control.IsError);
+        Assert.Contains("privateCard", control.Output);
+        Assert.Equal(37L, row.Server.Definition.State.Single().Cells!.Single().Value.AsInt);
+    }
+    [InlineData("world.row.step creations.moth.document.shapes[name=missing].rounding 1")]
+    [InlineData("world.row.set creations moth document.shapes[name=missing].rounding 1")]
+    [InlineData("world.row.add creations moth document.shapes {} after=name=missing")]
+    [InlineData("world.row.remove creations moth document.shapes name=missing")]
+    [Theory]
+    public void MutationAdmissionPrecedesSelectorCandidateErrors(string line) {
+        using var row = Build();
+        var registry = BuildRegistry(row: row);
+        var denied = SubmitAs(registry, Principal.Peer(generation: 1, index: 99), line);
+
+        Assert.True(condition: denied.IsError);
+        Assert.Contains("refused", denied.Output);
+        Assert.DoesNotContain("forearmL", denied.Output);
+
+        var control = registry.Submit(line: line);
+
+        Assert.True(condition: control.IsError);
+        Assert.Contains("forearmL", control.Output);
+    }
+    [Fact]
+    public void RowStepCannotBeNamedByABinding() {
+        using var row = Build();
+        var module = new WorldRowCommandModule(
+            authority: new FakeConsoleAuthority(instance: row.Instance),
+            echoes: new WorldDeferredVerbEchoes()
+        );
+
+        Assert.Equal(CommandBindability.Unbindable, module.GetCommands().Single(predicate: command => (command.Name == "world.row.step")).Bindability);
+    }
+
     private static ShapeDocument FindShape(HostRow row, string name) => MothDocument(row: row).Shapes!.Single(predicate: shape => string.Equals(
         a: shape.Name?.Value,
         b: name,

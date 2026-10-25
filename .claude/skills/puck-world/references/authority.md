@@ -23,6 +23,17 @@ ONE server-side table authorizes every write: `WorldGrants`
 Trace the acting principal stamped at ingress when debugging a refusal;
 constructing a `Principal` in a test bypasses that ingress path.
 
+The `world.row.step`, literal `world.row.set`, `world.row.add` and list-element
+`world.row.remove` handlers read through `IWorldConsoleAuthority.ReadView`.
+They refuse a state row with any withheld cells, because resubmitting a
+partially disclosed whole row would discard the cells the caller cannot read.
+Before evaluating a field or list selector, they preflight the original row's
+upsert through `WorldServer.TryAdmitCompleteMutation`. That check consumes no
+dispatch budget; the ordered mutation drain repeats admission and meters the
+submitted edit. Selector failures therefore never enumerate candidates for a
+caller who cannot mutate the row. All four mutation verbs are unbindable, and
+`world.row.step` takes its delta as an explicit numeric argument.
+
 ## Vocabulary
 
 - `WorldCapability` (5 members): `Drive`, `Observe`, `Control`, `Mutate`,
@@ -159,6 +170,13 @@ subject; `Addon`/`Peer` only what they themselves hold (ignoring
 exclusivity, so an actor can always revoke an exclusive hold it authorized).
 
 ## ONE admission predicate decides a mutation
+
+`WorldDocument.TryAdmitCompleteMutation` composes this predicate with every
+indirect state read: guards, submitted `IDocumentStateValue` references and
+the actual source rows of declared `CellSetRow` expressions require `Observe`.
+`WriteSet` and `BoardCombine` expand declared sets through the compiler's source
+walk, including family members and token domains; granting a set's name never
+grants its sources. Batches apply the same checks recursively to each member.
 
 `WorldServer.TryAdmitMutation(principal, section, kindOrdinal,
 rowScopedEditSubject, rowScopedMutateSubject, meter, out admission)` owns the WHOLE authority decision
@@ -298,6 +316,21 @@ raw `WorldGrant` rows. Only `Protocol.WorldAdmissionDoor` mints a verdict:
 already-verified identity re-matched against a rebuild candidate), and
 `TryAdmitArrival` (an authenticated federation authority's namespace). No
 verdict means a named refusal, never a default seed.
+
+`WorldPeerHost` retains each interactive and federation session's proof and
+rechecks its signed validity and the live `server.Definition.Admission`.
+Requests are checked again at authority dispatch; an idle host-clock sweep
+closes invalid sessions within `CredentialSweepInterval` (one second), even
+when simulation is paused. Eviction cancels observation and intent streams,
+and peer disconnects revoke the generation's grants while preserving the
+document's reconnect grace. A rebuild immediately disconnects transferred
+embodiments whose admission entry disappeared; socket and control-session
+owners retain their one cleanup, preventing a stale second disconnect from
+revoking a newly resumed generation. Desktop federation verification reads
+the installed server definition after boot, never the boot source snapshot.
+`MaximumFederationConnections` bounds authenticated sockets and their
+synchronous observer fanout independently of the pre-admission handshake cap;
+a full host refuses with the existing `LaneUnavailable` response.
 
 The `admission` section therefore governs transfers too. A row in
 `WorldAdmissionTrustMode.FederatedAuthority` mode carries no key: its `domain`

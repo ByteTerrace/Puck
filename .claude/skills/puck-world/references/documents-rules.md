@@ -5,6 +5,12 @@ Part of [`puck.world.definition.v1`](documents.md). Field names, defaults, and t
 (`puck schema`, or `src/Puck.World.Schema/Schemas/schema/rules.schema.json`); this file is the
 decision/derivation prose the schema cannot state.
 
+Decision evaluations populate compiled rule locals in declaration order for
+each binding before the rule gate, interrupt gate, option gates and scores.
+This includes locals selecting `$zones[...]`; an unpopulated local is never a
+valid zero-valued selection. A binding fault reports the ordinary arithmetic
+refusal and closes that evaluation, leaving its previous choice unchanged.
+
 `rules` (`WorldRule`, `Puck.World.Schema/WorldRules.cs`) is the OPTIONAL
 world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
 `ActionTriggerMode` primitive a kit's per-body actions use, one level up.

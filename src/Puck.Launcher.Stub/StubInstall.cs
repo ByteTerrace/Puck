@@ -18,25 +18,26 @@ public static class StubInstall {
         return new FileStream(path: Path.Combine(path1: installRoot, path2: "update.lock"), mode: FileMode.OpenOrCreate,
             access: FileAccess.ReadWrite, share: FileShare.None);
     }
-
     /// <summary>Under the caller's update lease, cancels a matching interrupted install before rolling back its
     /// pointer. A crash between cancellation and rollback cannot leave a resumable rejected version. A pending
     /// newer version is preserved. The local intent's camel-case manifest/version fields are written by
     /// UpdateService with DocumentJsonOptions; malformed intent state refuses rollback rather than guessing.</summary>
     public static void RevertToLastGood(string installRoot, string failedVersion, string lastGoodVersion) {
         var intentPath = Path.Combine(path1: installRoot, path2: "install-intent.json");
+
         if (File.Exists(path: intentPath)) {
             using var intent = JsonDocument.Parse(json: File.ReadAllText(path: intentPath));
-            if (intent.RootElement.ValueKind != JsonValueKind.Object ||
-                !intent.RootElement.TryGetProperty(propertyName: "manifest", value: out var manifest) || manifest.ValueKind != JsonValueKind.Object ||
-                !manifest.TryGetProperty(propertyName: "version", value: out var version) || version.ValueKind != JsonValueKind.String) {
+
+            if ((intent.RootElement.ValueKind != JsonValueKind.Object) ||
+                !intent.RootElement.TryGetProperty(propertyName: "manifest", value: out var manifest) || (manifest.ValueKind != JsonValueKind.Object) ||
+                !manifest.TryGetProperty(propertyName: "version", value: out var version) || (version.ValueKind != JsonValueKind.String)) {
                 throw new JsonException(message: "pending install intent has no manifest version");
             }
             if (string.Equals(a: version.GetString(), b: failedVersion, comparisonType: StringComparison.Ordinal)) {
                 File.Delete(path: intentPath);
             }
         }
-        WritePointerAtomic(installRoot: installRoot, fileName: CurrentFileName, value: lastGoodVersion);
+        WritePointerAtomic(fileName: CurrentFileName, installRoot: installRoot, value: lastGoodVersion);
     }
 
     /// <summary>The current-version pointer file name, directly under the install root.</summary>
@@ -57,7 +58,8 @@ public static class StubInstall {
     /// <summary>Reads a version's <c>state-generation</c> file.</summary>
     /// <param name="installRoot">The install root.</param>
     /// <param name="version">The version directory name.</param>
-    /// <returns>The parsed generation, or <c>0</c> when the file is absent or unparseable.</returns>
+    /// <returns>The parsed nonnegative generation.</returns>
+    /// <exception cref="IOException">The file is absent, corrupt or negative. Unknown generations cannot authorize rollback.</exception>
     public static int ReadGeneration(string installRoot, string version) {
         var path = Path.Combine(
             path1: VersionDirectory(
@@ -67,17 +69,11 @@ public static class StubInstall {
             path2: StateGenerationFileName
         );
 
-        if (!File.Exists(path: path)) {
-            return 0;
+        if (!int.TryParse(s: File.ReadAllText(path: path), style: System.Globalization.NumberStyles.None,
+            provider: System.Globalization.CultureInfo.InvariantCulture, result: out var value) || (value < 0)) {
+            throw new IOException(message: $"Invalid state generation for '{version}'.");
         }
-
-        return (int.TryParse(
-            s: File.ReadAllText(path: path).Trim(),
-            result: out var value
-        )
-            ? value
-            : 0
-        );
+        return value;
     }
     /// <summary>Reads a plain-text pointer file's trimmed contents.</summary>
     /// <param name="path">The pointer file's full path.</param>

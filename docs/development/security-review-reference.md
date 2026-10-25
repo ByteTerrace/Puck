@@ -79,7 +79,8 @@ the receiving effect must commit durably.
    expansion, WASM compilation, aggregate guest resources, and guest lifetime.
    Per-message or per-memory caps do not establish an aggregate process budget.
    World pre-admission has a 64-slot limit and a deadline; authenticated
-   federation connections have no equivalent active-connection ceiling.
+   federation sessions now have a 256-connection ceiling per host, also bounding
+   remote snapshot fanout. Aggregate retained bytes across hosts remain open.
 6. **Cryptographic composition and portability.** Review exact signed bytes,
    purpose/role separation, curve import behavior across platforms, key rotation,
    replay-horizon changes, and the custom sealing construction. Puck uses
@@ -165,6 +166,16 @@ resources refuse before native compilation. One guest store admits one instance,
 one 32-bit memory up to 16 MiB, and one table up to 65,536 elements, including
 growth. GC heaps, typed function references and multiple memories are disabled.
 The [scripting reference](../reference/scripting.md) owns these limits.
+
+Document admission also caps addon count, total per-tick fuel, capability
+requests and memory watches (`WorldAddonLimits`). Native source loading, WAT
+conversion and compilation share four process-wide slots; a full loader refuses
+with a retryable capacity error and releases its slot on every exit. Transfer
+escrow caps lease duration at 120 seconds, retained transactions at 16,384 and
+mobility admissions at 65,536 (`WorldTransferLimits`). Full history refuses new
+work while preserving exact commit retries and consumed epochs; acknowledgement
+and traveler retirement release capacity. The resource tests exercise these
+boundaries and recovery; these counts do not establish a native CPU deadline.
 
 The remaining resource questions have specific entry points:
 

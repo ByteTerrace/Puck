@@ -10,7 +10,7 @@ namespace Puck.World.Server.Tests;
 /// materializes authority only through <see cref="WorldAdmissionDoor.TryAdmitArrival"/>'s verdict, and only what the
 /// destination document itself authored.
 /// </summary>
-public sealed class AdmissionArrivalLawTests {
+public sealed partial class AdmissionArrivalLawTests {
     private const string SourceAuthority = "machine-a/plaza";
 
     /// <summary>Remote arithmetic is checked before a reservation can consume capacity or a commit can admit a
@@ -20,7 +20,8 @@ public sealed class AdmissionArrivalLawTests {
     [InlineData(false)]
     public void HostileReservationArithmetic_RefusesWithoutConsumingCapacity(bool exhaustedEpoch) {
         using var fixture = Fixtures.FreshServer(definition: Document(admission: [Arrivals(domain: SourceAuthority)]));
-        var request = Request(transferId: 17, identity: null);
+        var request = Request(identity: null, transferId: 17);
+
         request = (exhaustedEpoch
             ? request with {
                 Members = [request.Members[0] with {

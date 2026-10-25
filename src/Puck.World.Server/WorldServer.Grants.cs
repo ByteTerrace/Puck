@@ -49,6 +49,13 @@ public sealed partial class WorldServer {
             correlationId: correlationId,
             grant: grant
         );
+    /// <summary>Preflights every authority dependency of a mutation without consuming its dispatch budget.
+    /// The ordered drain repeats admission and meters the actual submission.</summary>
+    /// <param name="mutation">The mutation being composed by the caller.</param>
+    /// <param name="admission">The complete authority verdict.</param>
+    /// <returns>Whether the caller may compose this mutation.</returns>
+    public bool TryAdmitCompleteMutation(WorldMutation mutation, out WorldMutationAdmission admission) =>
+        m_document.TryAdmitCompleteMutation(admission: out admission, mutation: mutation, preMetered: true);
     /// <inheritdoc cref="WorldGrants.TryAdmitMutation"/>
     public bool TryAdmitMutation(Principal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) =>
         m_grants.TryAdmitMutation(

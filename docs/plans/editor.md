@@ -34,7 +34,7 @@ down, nudge and turn placements by whole grid and angle steps from bound keys
 (`world.grid`, `world.snap`, `world.place`, `world.nudge`, `world.turn`). The
 World guide's *Build mode* section describes them. The other verbs that change
 a world are `world.row.set`, `world.row.add`, `world.row.remove` and
-`world.row.step` (the last is bindable and steps one scalar field; it refuses a
+`world.row.step` (these row-edit verbs are unbindable; the last steps one scalar field and refuses a
 vector field such as a position), `world.reflow.preview`/`status`/`commit`/`cancel`,
 `world.undo`, `world.reload`, `world.save`, the `pipeline.*` verbs for shader
 pipelines, and the `forge.*` verbs for cartridges. `world.undo` replays the

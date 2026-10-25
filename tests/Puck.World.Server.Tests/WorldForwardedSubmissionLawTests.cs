@@ -11,6 +11,43 @@ namespace Puck.World.Server.Tests;
 /// the destination ticks nothing is answered at all, never a refusal standing in for an edit the tick then applies.
 /// </summary>
 public sealed class WorldForwardedSubmissionLawTests {
+    [Fact]
+    public void ARemappedForwardedBatchStampsEveryDescendantAndAppliesAtTheDestination() {
+        var original = Principal.Peer(generation: 7, index: 4);
+        var destination = Principal.Console;
+        var row = new WorldStateRow(Name: CellName.Parse(candidate: "counter"), Kind: CellKind.Int,
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0))]);
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [row]),
+        });
+        var submitted = new WorldMutation.Batch(Principal: original, Mutations: [
+            new WorldMutation.UpsertStateCell(Principal: original, Row: "counter", Key: WorldStateRow.SlotKey.Value, Value: 1, Kind: WorldDocumentWriteKind.Set),
+            new WorldMutation.Batch(Principal: original, Mutations: [
+                new WorldMutation.UpsertStateCell(Principal: original, Row: "counter", Key: WorldStateRow.SlotKey.Value, Value: 2, Kind: WorldDocumentWriteKind.Add),
+            ]),
+        ]);
+
+        Assert.True(condition: submitted.TryValidateShape(reason: out var reason), userMessage: reason);
+        var stamped = Assert.IsType<WorldSubmissionPayload.Mutation>(@object: WorldLocalForwardedAuthority.StampPrincipal(
+            payload: new WorldSubmissionPayload.Mutation(Value: submitted), principal: destination));
+        var batch = Assert.IsType<WorldMutation.Batch>(@object: stamped.Value);
+
+        Assert.True(condition: batch.TryValidateShape(reason: out reason), userMessage: reason);
+        Assert.True(condition: Assert.IsType<WorldMutation.Batch>(@object: batch.Mutations[1]).TryValidateShape(reason: out reason), userMessage: reason);
+        // Stamping must leave the caller's payload intact, including nested members.
+        Assert.Equal(original, submitted.Mutations[0].Principal);
+        var answers = new List<WorldSubmissionResult>();
+
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: destination, Payload: stamped,
+            OperationId: Guid.NewGuid()), answers.Add);
+        fixture.Step();
+        var verdict = Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: answers));
+
+        Assert.True(condition: verdict.Outcome.Applied, userMessage: verdict.Outcome.Detail);
+        Assert.Equal(3, WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "counter")!.Cells![0].Value.AsInt);
+    }
+
     private const string Source = "origin/world";
 
     private static readonly WorldMobilityIdentity Traveler = new(

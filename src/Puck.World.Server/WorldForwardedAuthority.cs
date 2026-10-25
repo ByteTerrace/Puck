@@ -296,9 +296,18 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     public static WorldSubmissionPayload StampPrincipal(WorldSubmissionPayload payload, Principal principal) => payload switch {
         WorldSubmissionPayload.Command command => new WorldSubmissionPayload.Command(Value: (command.Value with { Principal = principal })),
         WorldSubmissionPayload.Session session => new WorldSubmissionPayload.Session(Value: (session.Value with { Principal = principal })),
-        WorldSubmissionPayload.Mutation mutation => (mutation with { Value = (mutation.Value with { Principal = principal }) }),
+        WorldSubmissionPayload.Mutation mutation => (mutation with { Value = StampMutationPrincipal(mutation: mutation.Value, principal: principal) }),
         _ => payload,
     };
+
+    private static WorldMutation StampMutationPrincipal(WorldMutation mutation, Principal principal) => mutation switch {
+        WorldMutation.Batch batch => batch with {
+            Principal = principal,
+            Mutations = batch.Mutations.Select(selector: member => StampMutationPrincipal(mutation: member, principal: principal)).ToArray(),
+        },
+        _ => mutation with { Principal = principal },
+    };
+
     /// <inheritdoc/>
     public byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
         WorldProjectionPrototypeFetch.Fetch(server: m_server, pin: pin, sourceAuthority: m_sourceAuthority, ceiling: ceiling,

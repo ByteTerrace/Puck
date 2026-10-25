@@ -679,7 +679,16 @@ imports, memories and tables: imports, extra memories/tables and oversized minim
 The ABI uses one 32-bit memory and at most one ordinary reference table. Explicit table
 initializers are not admitted by the declaration reader. The engine disables multi-memory,
 memory64, GC heaps and typed function references. These are source and guest-resource limits,
-not a proven CPU deadline or workspace bound for the native WAT converter or compiler.
+not a proven CPU deadline or workspace bound for one native WAT conversion or compilation.
+`AddonModuleLimits.ConcurrentCompilations` admits at most four simultaneous module loads
+process-wide, including source reading and conversion; a load over that count refuses
+without queueing, and completion or failure releases its slot. Each loader also serializes
+its compile-cache access.
+
+World documents additionally admit at most 64 addon rows, 10,000,000 fuel per addon,
+100,000,000 fuel per document per tick, 4,096 capability requests and 4,096 memory watches
+across all addon rows (`WorldAddonLimits`). Disabled rows count, and a zero fuel declaration
+counts as the ABI's 1,000,000 default, so toggling a row cannot bypass admission.
 
 `AddonInstance` never allocates per tick and never desyncs. It zeroes the output ring, writes the
 input batch, sets the per-tick fuel budget, calls `puck_on_tick` once with the batch length, derives
