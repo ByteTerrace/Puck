@@ -128,7 +128,7 @@ internal sealed class WorldTestRun {
         m_worldDirectory = WorldDocumentPaths.DirectoryOf(documentPath: definitionSource.SourcePath);
         m_worldFile = Path.GetFileName(path: definitionSource.SourcePath);
 
-        var schedule = server.Definition.Schedule;
+        var schedule = server.Configuration.Schedule;
 
         m_directory = (((schedule is not null) && m_armed)
             ? scheduleRoot.Directory
@@ -172,7 +172,7 @@ internal sealed class WorldTestRun {
     public ulong ExportTick => m_exportTick;
     /// <summary>Gets a value indicating whether this run submits the document's schedule: the document authors one
     /// and the boot armed it with <c>--schedule-dir</c>.</summary>
-    public bool IsArmed => ((m_server.Definition.Schedule is not null) && m_armed);
+    public bool IsArmed => (m_armed && (m_server.Configuration.Schedule is not null));
 
     private void Export(ulong tick, bool truncated) {
         m_exported = true;
@@ -230,7 +230,7 @@ internal sealed class WorldTestRun {
                     !m_instances.TryGet(instance: out var started, name: name) ||
                     (started is not { } running) ||
                     string.Equals(a: name, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) ||
-                    !running.Server.Definition.State.Any(predicate: static row => (row?.Verdict is not null))
+                    !running.Server.Configuration.State.Any(predicate: static row => (row?.Verdict is not null))
                 ) {
                     continue;
                 }
@@ -282,7 +282,7 @@ internal sealed class WorldTestRun {
     }
     // The id the instance's document authors, which is the name a test addresses it by; the instance's own name for a
     // document that authors none.
-    private static string DocumentOf(WorldInstance instance) => ((instance.Server.Definition.DocumentId is { Length: > 0 } id)
+    private static string DocumentOf(WorldInstance instance) => ((instance.Server.Configuration.DocumentId is { Length: > 0 } id)
         ? id
         : instance.Name);
     private WorldTestRunManifestWorld ExportInstance(WorldInstance instance, WorldTestRunManifestWorld sibling, ulong tick) {
@@ -310,7 +310,7 @@ internal sealed class WorldTestRun {
         if (
             m_armedInstances ||
             !IsArmed ||
-            (m_server.Definition.Schedule?.Instances is not { Count: > 0 } declared)
+            (m_server.Configuration.Schedule?.Instances is not { Count: > 0 } declared)
         ) {
             return;
         }
@@ -340,10 +340,10 @@ internal sealed class WorldTestRun {
             if (
                 started &&
                 (row is { } admitted) &&
-                (admitted.Server.Definition.SimulationRateHz != m_server.Definition.SimulationRateHz)
+                (admitted.Server.Configuration.SimulationRateHz != m_server.Configuration.SimulationRateHz)
             ) {
                 started = false;
-                reason = $"its simulation.rateHz {admitted.Server.Definition.SimulationRateHz} differs from the booted world's {m_server.Definition.SimulationRateHz} — an armed run exports every world at one host step, which is a coordinate only worlds sharing a rate reach together";
+                reason = $"its simulation.rateHz {admitted.Server.Configuration.SimulationRateHz} differs from the booted world's {m_server.Configuration.SimulationRateHz} — an armed run exports every world at one host step, which is a coordinate only worlds sharing a rate reach together";
 
                 _ = m_instances.TryStop(
                     name: instance.Name,

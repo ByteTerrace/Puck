@@ -19,9 +19,9 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 
 `world.addons` lists all seven with their fuel. Measured on a headless run, each
 spends a small part of the default budget of 1,000,000 a tick: the watchdog
-about 8,000, the companion 1,200 to 2,500, and the guide about 70 while idle.
+13,849, the companion about 1,200, and the guide 57 while idle.
 The guide reads two 16-byte text chunks per tick on entry, then publishes both
-fields together; a headless visit to SHEAR peaks at about 4,000 fuel.
+fields together.
 
 ## Development tools
 
@@ -29,7 +29,7 @@ All four tool guests stay mounted but start idle. Set cells with
 `world.state.cell.set <row> <key> <value>` over MCP, naming your own World on
 every call. An agent's headless World uses `--devices none`. The scope panel
 also requires `world.state.cell.set addonHud $value 1`; sampling can run with
-the addon HUD hidden, and normal play shows only the controller bar.
+the addon HUD hidden.
 
 **Fuzzer.** Set `fuzzer[seed]` (default 12345), `fuzzer[limit]` (default 300),
 then `fuzzer[enabled]` to 1. It drives movement, strafe, turn, jump, flight,
@@ -91,22 +91,33 @@ from consecutive solver witnesses, not the proximity collision-event feed.
 `scopeTrace` keeps 128 characters: `_` grounded, `^` rising, `v` falling,
 `+` a contact edge. Changing the body discards the in-flight old body's
 sample and restarts the contact edge witness. Turn sampling off when done;
-it submits thirteen state mutations per tick through full document validation.
+it writes its bound cells directly into the state arena, without document mutation or narration.
 
-The tools exercise four addon additions: numeric authored reads, settled
-kinematics, strict per-cell mutation decoding and bounded guest logs. The
+The tools use numeric authored reads, settled kinematics, bound cell writes and bounded guest logs. The
 [ABI](../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
-owns their layouts and fuel charges. Text/vector authored reads and a cheaper
-transactional cell-write path are recorded in [open items](../../docs/plans/open-items.md#addon-system).
+owns their layouts and fuel charges. The watchdog, scope and guide bind row/key names once and publish
+through their live edit grants, Set/Add masks and dispatch budgets. Document edits still use JSON mutations.
 
-Measured headlessly over MCP: fuzzer 10,062 fuel/tick while driving, traversal
-7,074 on a route tick, and scope 22,588 while sampling. The one-million budget was ample; no answers
-or events dropped and no mutation budget exhausted. The scope used thirteen
-of its sixteen cell mutations per tick; full document validation and narration
-were the limiting host work. A 300-step seeded fuzz pass was clean under the
+The watchdog, scope and guide no longer serialize state rows or run document validation and narration each tick.
+Their plain cell values travel in snapshots; explicit document reads, exports and checkpoints materialize rows.
+Release `puck bench world` measures these simulation-thread allocation medians with all seven addons mounted:
+
+| Workload | Before | After |
+|---|---:|---:|
+| Standing | 3,496 B/tick | 0 B/tick |
+| Three 60-tick walks | 3,448 B/tick each | 0 B/tick each |
+| Authored value edit | 2,512 B | 2,376 B |
+| 13-cell burst | 13,608 B | 0 B |
+| Quiet tick | 0 B | 0 B |
+
+Headless fuel/tick falls from 17,875 to 13,849 for the watchdog and from 21,816 to 3,987 for the sampling scope.
+Binding is a one-time charge: the scope's 774 declarations peak at 159,312 fuel, below its one-million budget.
+The scope histories are declared at their full 128-cell size; writes change existing values.
+These are medians; occasional event ticks still allocate. They are not whole-process GC or presented frame times.
+
+A 300-step seeded fuzz pass was clean under the
 watchdog on the merged head, ending at (53.75, 0.03, -34.04), inside its bounds;
-its 373-tick delivery recording verified `MATCH`. A longer scope run filled the 4,096-line
-host log ring and evicted 1,547 old lines, while state history remained bounded
+its 373-tick delivery recording verified `MATCH`. State history remains bounded
 at 128 samples. The gallery stairwell leg (`start=15`, `count=23`, body 43 posed at
 (11.2, 0.05, 32.5)) reaches all eight goals with no falls or timeouts, riding the lift car.
 Its first run missed the car entry and fell because the lift attached to the

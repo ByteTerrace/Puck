@@ -198,6 +198,51 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         Assert.Null(@object: SdfMeshIrradianceScene.Build(draws: [Draw(dynamic: true, material: 0, matrix: Matrix4x4.Identity, mesh: cube)]));
         Assert.Null(@object: SdfMeshIrradianceScene.Build(draws: [Draw(material: 0, matrix: Matrix4x4.CreateScale(scale: 0f), mesh: cube)]));
     }
+    // A long thin triangle across a face (what a merged polygon leaves) enters the hierarchy as pieces, each boxed tight,
+    // and is still answered as one triangle: counted once, met wherever a ray crosses it, its longest edge first, second
+    // or third.
+    [Fact]
+    public void ALooseTriangleEntersInPiecesAndAnswersAsItself() {
+        var sheet = Sheet(materials: 3, quads: 96);
+        var cube = Cube();
+        var slivers = Slivers();
+        SdfMeshDraw[] draws = [.. Draws(cube: cube, sheet: sheet), Draw(material: 60, matrix: Matrix4x4.Identity, mesh: slivers)];
+        var scene = SdfMeshIrradianceScene.Build(draws: draws)!;
+
+        Assert.Equal(expected: ((2L * sheet.TriangleCount) + (2L * cube.TriangleCount) + slivers.TriangleCount), actual: scene.TriangleCount);
+        AnswersAsTheSearch(draws: draws, scene: scene);
+
+        var alone = SdfMeshIrradianceScene.Build(draws: [Draw(material: 60, matrix: Matrix4x4.Identity, mesh: slivers)])!;
+        var positions = slivers.Positions.Span;
+        var indices = slivers.Indices.Span;
+
+        Assert.Equal(expected: (long)slivers.TriangleCount, actual: alone.TriangleCount);
+        for (var triangle = 0; (triangle < slivers.TriangleCount); triangle++) {
+            var (a, b, c) = (positions[(int)indices[3 * triangle]], positions[(int)indices[(3 * triangle) + 1]], positions[(int)indices[(3 * triangle) + 2]]);
+            var normal = Vector3.Normalize(value: Vector3.Cross(vector1: (b - a), vector2: (c - a)));
+
+            // A point a tenth of the way from each far end toward the triangle's middle, where the others pass far off.
+            foreach (var corner in new[] { a, b, c }.Where(predicate: static corner => (corner.Length() > 2f))) {
+                var point = Vector3.Lerp(value1: corner, value2: ((a + b + c) / 3f), amount: 0.1f);
+
+                Assert.True(condition: alone.Intersect(direction: -normal, distance: out var distance, material: out var material, maximum: 1f, normal: out _, origin: (point + (normal * 0.5f))));
+                Assert.Equal(expected: 0.5f, actual: distance, tolerance: 1.0e-3f);
+                Assert.Equal(expected: 60, actual: material);
+            }
+        }
+    }
+    // Three long thin triangles along diagonals of the scene, apart from one another, their longest edges first, second and
+    // third in their corners' order.
+    private static SdfMesh Slivers() {
+        Vector3[] positions = [
+            new(-2.5f, -2.5f, -2f), new(2.5f, 2.5f, 2f), new(0.1f, -0.1f, 0f),
+            new(-2f, 2.5f, -2.5f), new(2.6f, -2.5f, 2.5f), new(0.3f, 0.1f, 0.2f),
+            new(2.5f, -2f, -2.4f), new(-2.4f, 2f, 2.5f), new(-0.1f, 0.2f, -0.2f),
+        ];
+        uint[] indices = [0, 1, 2, 5, 3, 4, 7, 8, 6];
+
+        return new SdfMesh(indices: indices, positions: positions);
+    }
     [Fact]
     public void ASceneBuiltFromAnotherBuildsOnlyTheGeometryNewToIt() {
         var sheet = Sheet(materials: 3, quads: 96);

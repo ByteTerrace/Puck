@@ -319,6 +319,7 @@ public sealed partial class WorldTick {
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
+        Host.BeginCellWriteTick();
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
@@ -914,7 +915,8 @@ public sealed partial class WorldTick {
     internal void Step(in FixedStepContext context) {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return; }
-            StepCore(context: in context);
+            Host.EnterArenaTick();
+            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
@@ -931,7 +933,8 @@ public sealed partial class WorldTick {
                 Tick: m_lastCompletedTick
             );
 
-            StepCore(context: in context);
+            Host.EnterArenaTick();
+            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind

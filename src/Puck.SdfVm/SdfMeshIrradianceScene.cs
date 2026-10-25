@@ -500,14 +500,16 @@ public sealed partial class SdfMeshIrradianceScene {
 
     // One geometry's triangles in its mesh's frame, in leaf order under its own hierarchy: the mesh triangle each leaf
     // position holds, read through the mesh's own positions and indices rather than a copy of them, and the hierarchy's
-    // braid subtrees: the widest nodes at most BraidTriangles wide, which together hold every triangle once.
+    // braid subtrees: the widest nodes at most BraidTriangles wide, which together hold every leaf position once. A
+    // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
+    // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
     private sealed class Geometry {
         public required ReadOnlyMemory<Vector3> Positions { get; init; }
         public required ReadOnlyMemory<uint> Indices { get; init; }
         public required int[] Triangles { get; init; }
         public required Node[] Nodes { get; init; }
         public required int[] Braids { get; init; }
-        public int Count => Triangles.Length;
+        public int Count => (Indices.Length / 3);
 
         // The leaf position's triangle as its first corner and its two edges from it, the terms the ray test reads.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -523,26 +525,40 @@ public sealed partial class SdfMeshIrradianceScene {
 
         public static Geometry Build(SdfMesh mesh) {
             var count = mesh.TriangleCount;
-            var lows = new Vector3[count];
-            var highs = new Vector3[count];
+            var chunks = (((count + ParallelPrimitives) - 1) / ParallelPrimitives);
+            var pieces = new Pieces[chunks];
 
+            // Each chunk's pieces in triangle order, joined in chunk order, so a geometry builds alike on every run.
             Chunked(count: count, body: (start, end) => {
                 var positions = mesh.Positions.Span;
                 var indices = mesh.Indices.Span;
+                var own = new Pieces(capacity: (end - start));
 
                 for (var index = start; (index < end); index++) {
-                    var a = positions[(int)indices[(3 * index)]];
-                    var b = positions[(int)indices[((3 * index) + 1)]];
-                    var c = positions[(int)indices[((3 * index) + 2)]];
-
-                    lows[index] = Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c));
-                    highs[index] = Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c));
+                    own.Add(a: positions[(int)indices[(3 * index)]], b: positions[(int)indices[((3 * index) + 1)]], c: positions[(int)indices[((3 * index) + 2)]], depth: 0, triangle: index);
                 }
+                pieces[(start / ParallelPrimitives)] = own;
             });
 
-            var (nodes, order, braids) = Hierarchy.Build(braid: BraidTriangles, highs: highs, leaf: LeafTriangles, lows: lows);
+            var total = pieces.Sum(selector: static piece => piece.Count);
+            var lows = new Vector3[total];
+            var highs = new Vector3[total];
+            var owners = new int[total];
+            var at = 0;
 
-            return new Geometry { Braids = braids, Indices = mesh.Indices, Nodes = nodes, Positions = mesh.Positions, Triangles = order };
+            foreach (var piece in pieces) {
+                piece.CopyTo(at: at, highs: highs, lows: lows, owners: owners);
+                at += piece.Count;
+            }
+
+            var (nodes, order, braids) = Hierarchy.Build(braid: BraidTriangles, highs: highs, leaf: LeafTriangles, lows: lows);
+            var triangles = new int[order.Length];
+
+            for (var index = 0; (index < order.Length); index++) {
+                triangles[index] = owners[order[index]];
+            }
+
+            return new Geometry { Braids = braids, Indices = mesh.Indices, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles };
         }
         private static void Chunked(int count, Action<int, int> body) {
             if (count < ParallelPrimitives) {
@@ -550,6 +566,60 @@ public sealed partial class SdfMeshIrradianceScene {
                 return;
             }
             _ = Parallel.For(fromInclusive: 0, toExclusive: (((count + ParallelPrimitives) - 1) / ParallelPrimitives), body: chunk => body(arg1: (chunk * ParallelPrimitives), arg2: Math.Min(val1: count, val2: ((chunk + 1) * ParallelPrimitives))));
+        }
+
+        // The boxes a run of triangles enters the hierarchy as, each with the triangle it bounds a piece of: a triangle
+        // whose box's surface is more than LooseBox times its own area halves across its longest edge, down to MaxSplits
+        // halvings, and a piece is boxed as its own triangle is. A flat right triangle along two axes, the tightest a box
+        // holds, reads 4; a long thin triangle across a face reads its length over its width.
+        private sealed class Pieces(int capacity) {
+            private const float LooseBox = 64f;
+            private const int MaxSplits = 6;
+
+            private readonly List<Vector3> m_lows = new(capacity: capacity);
+            private readonly List<Vector3> m_highs = new(capacity: capacity);
+            private readonly List<int> m_owners = new(capacity: capacity);
+
+            public int Count => m_owners.Count;
+
+            public void Add(Vector3 a, Vector3 b, Vector3 c, int triangle, int depth) {
+                var low = Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c));
+                var high = Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c));
+                var area = (0.5f * Vector3.Cross(vector1: (b - a), vector2: (c - a)).Length());
+                var size = (high - low);
+                var surface = (2f * (((size.X * size.Y) + (size.Y * size.Z)) + (size.Z * size.X)));
+
+                if ((depth >= MaxSplits) || !(area > 0f) || (surface <= (LooseBox * area))) {
+                    m_lows.Add(item: low);
+                    m_highs.Add(item: high);
+                    m_owners.Add(item: triangle);
+                    return;
+                }
+
+                var (ab, bc, ca) = (Vector3.DistanceSquared(value1: a, value2: b), Vector3.DistanceSquared(value1: b, value2: c), Vector3.DistanceSquared(value1: c, value2: a));
+
+                if ((ab >= bc) && (ab >= ca)) {
+                    var middle = ((a + b) * 0.5f);
+
+                    Add(a: a, b: middle, c: c, depth: (depth + 1), triangle: triangle);
+                    Add(a: middle, b: b, c: c, depth: (depth + 1), triangle: triangle);
+                } else if (bc >= ca) {
+                    var middle = ((b + c) * 0.5f);
+
+                    Add(a: a, b: b, c: middle, depth: (depth + 1), triangle: triangle);
+                    Add(a: a, b: middle, c: c, depth: (depth + 1), triangle: triangle);
+                } else {
+                    var middle = ((c + a) * 0.5f);
+
+                    Add(a: a, b: b, c: middle, depth: (depth + 1), triangle: triangle);
+                    Add(a: middle, b: b, c: c, depth: (depth + 1), triangle: triangle);
+                }
+            }
+            public void CopyTo(Vector3[] lows, Vector3[] highs, int[] owners, int at) {
+                m_lows.CopyTo(array: lows, arrayIndex: at);
+                m_highs.CopyTo(array: highs, arrayIndex: at);
+                m_owners.CopyTo(array: owners, arrayIndex: at);
+            }
         }
     }
 

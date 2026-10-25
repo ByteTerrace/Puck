@@ -106,6 +106,7 @@ public sealed partial class WorldDocument {
         m_definition = definition;
         m_sequence++;
     }
+    internal void CacheArenaExport(WorldDefinition definition) => m_definition = definition;
 
     /// <summary>Adopts a rebuilt solid field and bumps its revision.</summary>
     /// <param name="solids">The new field, or <see langword="null"/> under the analytic provider.</param>
@@ -116,6 +117,7 @@ public sealed partial class WorldDocument {
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared.</summary>
     internal void Compact() {
+        Host.MaterializeArena();
         m_base = m_definition;
         m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Save);
         m_journal.Clear();

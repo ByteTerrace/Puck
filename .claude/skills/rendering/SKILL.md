@@ -413,7 +413,7 @@ compares and fails naming the file that drifted, it writes nothing.
   `IGpuRegionSource`). The irradiance scene likewise reads its triangles through
   each mesh's positions and indices, never a copy. A new consumer of baked
   triangles reads the `SdfMesh` arrays rather than copying them: the debug
-  world's meshes are about 1.8 GB of managed arrays, and every copy costs that
+  world's meshes are about 1.1 GB of managed arrays, and every copy costs that
   much again in working set.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
@@ -428,6 +428,10 @@ wrong. The contracts that bite most often:
 
 - **One contouring:** `SdfSampledLattice` through `SdfDualContouring`; never
   write a second mesher.
+- **A landed mesh is its planar polygons** (`SdfMeshPlanarMerge`, in
+  `SdfMeshPathBake.Land`): a flat face's interior vertices go and every outline
+  vertex stays, so no pixel changes. A change that moves or renormals a vertex
+  there, or drops an outline vertex, does change pixels.
 - **A field diagnostic is a bake lattice, never a pixel-kernel walk.**
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.
@@ -479,7 +483,11 @@ drops the lifetime, owned-bytes and outside lines) and `counter vertices` (a
 count-name prefix). They combine, and `--json` takes them too. A text reading
 past `WorldCountersCommandModule.GpuTextBudget` characters prints the summary
 under a note. A pass label is not a node name: `node sdf.world$mesh` is refused
-with a hint to use `pass`.
+with a hint to use `pass`. The counts are read back a few frames late: the first
+reading after a camera pose or a lever change can still show the previous
+frames' work, so read twice and keep the second. A settled capture's held frame
+culls by box alone, so a reading taken just after one shows the mesh pass
+without the occlusion test.
 
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 `world.indirect`, `world.render-scale`) and isolate the raster with

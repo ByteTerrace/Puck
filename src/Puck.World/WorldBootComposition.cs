@@ -1124,6 +1124,7 @@ public static class WorldBootComposition {
         ArgumentNullException.ThrowIfNull(argument: seatBindings);
 
         if (hostSettings.Headless) {
+            services.AddSingleton<ICommandModule, HostMemoryCommandModule>();
             // No window, GPU device, swapchain, allocator, backend presenter, or audio device (command pump + tick
             // host). Nothing under AddWorldPresentation is ever called on this path.
             services.AddLauncherHeadlessTerminal();

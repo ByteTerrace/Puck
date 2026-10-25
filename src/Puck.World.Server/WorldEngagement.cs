@@ -437,14 +437,15 @@ public sealed partial class WorldEngagement {
     /// <param name="actor">The authenticated driver; requires Drive/body and Control over affected targets.</param>
     /// <returns>Whether the application changed or was already dissolved.</returns>
     public bool EngageDrivenBody(int bodyIndex, int screenIndex, Principal actor) {
-        if (Body(bodyIndex) is null || !m_grants.Allows(actor, WorldCapability.Drive, GrantSubject.Body(bodyIndex)).IsAllowed) {
+        if ((Body(index: bodyIndex) is null) || !m_grants.Allows(actor, WorldCapability.Drive, GrantSubject.Body(index: bodyIndex)).IsAllowed) {
             return false;
         }
-        var principal = PrincipalOf(bodyIndex);
+        var principal = PrincipalOf(index: bodyIndex);
+
         if (screenIndex < 0) {
-            return Dissolve(bodyIndex, actor, principal) != ControlOutcome.Denied;
+            return (Dissolve(actingPrincipal: actor, entityIndex: bodyIndex, targetPrincipal: principal) != ControlOutcome.Denied);
         }
-        return Compose(bodyIndex, GrantSubject.Screen(screenIndex), true, actor, principal);
+        return Compose(bodyIndex, GrantSubject.Screen(index: screenIndex), true, actor, principal);
     }
     /// <summary>Dissolves every non-own-body application in <paramref name="targetPrincipal"/>'s set, restoring the
     /// own-body default — the mutating half of <see cref="PeekDissolve"/>'s decision. Requires
@@ -734,18 +735,28 @@ public sealed partial class WorldEngagement {
     /// <param name="screenIndex">The engine screen index.</param>
     /// <returns>The applied entities' display indices and capture policy.</returns>
     public IReadOnlyList<(int Display, bool Capture)> PlayersOn(int screenIndex) {
+        var players = new List<(int Display, bool Capture)>();
+
+        CollectPlayersOn(players: players, screenIndex: screenIndex);
+        players.Sort(comparison: static (a, b) => a.Display.CompareTo(value: b.Display));
+        return players;
+    }
+
+    internal bool HasPlayersOn(int screenIndex) => (CollectPlayersOn(players: null, screenIndex: screenIndex) != 0);
+
+    private int CollectPlayersOn(int screenIndex, List<(int Display, bool Capture)>? players) {
         m_grants.CollectApplicationHolders(
             into: m_holderScratch,
             target: GrantSubject.Screen(index: screenIndex)
         );
 
-        var players = new List<(int Display, bool Capture)>(capacity: m_holderScratch.Count);
-
         m_staleScratch.Clear();
+        var count = 0;
 
         foreach (var principal in m_holderScratch) {
             if (Body(index: principal.Index) is not null) {
-                players.Add(item: ((principal.Index + 1), !HoldsOwnBody(
+                count++;
+                players?.Add(item: ((principal.Index + 1), !HoldsOwnBody(
                     applications: m_grants.Applications(principal: principal),
                     bodyIndex: principal.Index
                 )));
@@ -755,10 +766,9 @@ public sealed partial class WorldEngagement {
         }
 
         PruneStale();
-        players.Sort(comparison: static (a, b) => a.Display.CompareTo(value: b.Display));
-
-        return players;
+        return count;
     }
+
     /// <summary>Translates a resolved <see cref="PlayerIntent"/> to a neutral standard-controller image through
     /// <paramref name="kit"/>'s compiled pad map — an authored <see cref="WorldKit.Pad"/> when the application names
     /// a kit, otherwise the engine's baked default (the two movement roles to the left stick only; an application

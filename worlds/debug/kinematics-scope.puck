@@ -11,23 +11,35 @@ state {
       contacts = 0
     }
     slot scopeTrace = ""
-    table scopeHeight {
-      "0" = 0.0
+    row {
+      name: "scopeHeight"
+      kind: "Fixed"
+      cells: map(range(0, 128), i => { key: $"{i}", value: "0" })
     }
-    table scopeVelocity {
-      "0" = 0.0
+    row {
+      name: "scopeVelocity"
+      kind: "Fixed"
+      cells: map(range(0, 128), i => { key: $"{i}", value: "0" })
     }
-    table scopeFacts {
-      "0" = 0
+    row {
+      name: "scopeFacts"
+      kind: "Int"
+      cells: map(range(0, 128), i => { key: $"{i}", value: 0 })
     }
-    table scopeContacts {
-      "0" = 0
+    row {
+      name: "scopeContacts"
+      kind: "Int"
+      cells: map(range(0, 128), i => { key: $"{i}", value: 0 })
     }
-    table scopeTicks {
-      "0" = 0
+    row {
+      name: "scopeTicks"
+      kind: "Int"
+      cells: map(range(0, 128), i => { key: $"{i}", value: 0 })
     }
-    table scopeEvents {
-      "0" = 0
+    row {
+      name: "scopeEvents"
+      kind: "Int"
+      cells: map(range(0, 128), i => { key: $"{i}", value: 0 })
     }
   }
 }
@@ -61,7 +73,7 @@ addon "kinematics-scope" {
   fuel: 0
   enabled: true
   requests: concat(
-    [{ capability: Observe, subject: "state:scope" }, { capability: Mutate, subject: "section:State" }],
+    [{ capability: Observe, subject: "state:scope" }],
     map(scopeRows, row => { capability: Edit, subject: $"state:{row}" }),
     map(range(0, 45), body => { capability: Observe, subject: $"body:{body}" })
   )
@@ -70,8 +82,8 @@ addon "kinematics-scope" {
 grants: concat(
   [
     { grantee: "addon:kinematics-scope", capability: Observe, subject: "state:scope", budget: 2 }
-    { grantee: "addon:kinematics-scope", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 16 }
+
   ],
-  map(scopeRows, row => { grantee: "addon:kinematics-scope", capability: Edit, subject: $"state:{row}", kindMask: "UpsertStateCell" }),
+  map(scopeRows, row => { grantee: "addon:kinematics-scope", capability: Edit, subject: $"state:{row}", budget: 16, writeMask: "Set" }),
   map(range(0, 45), body => { grantee: "addon:kinematics-scope", capability: Observe, subject: $"body:{body}", budget: 2 })
 )

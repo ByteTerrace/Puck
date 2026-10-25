@@ -92,6 +92,18 @@ The owner's rulings for levels of detail:
 - On-screen sizes for levels of detail and update rates are measured in display
   pixels, after upscaling, never in render-grid pixels.
 
+The first level is part of the bake (`SdfMeshPlanarMerge`): the store keeps it,
+every pass draws it and the irradiance trace reads it. It keeps every vertex on a
+merged region's outline, a straight run two merged faces share included, and
+removes only vertices inside a region, so every outline edge and every vertex
+normal is the contour's own and the rasterizer covers each polygon as it covered
+the lattice's quads. Dropping the shared run's vertices from both faces would keep
+the geometry but have the rasterizer snap the shared edge from other vertices; on
+the debug world it would save one part in a hundred of the triangles left, too
+little to give up an exact outline for. The one pixel change a merged face can
+make is where it meets a separately baked mesh, whose depth test the face's new
+rounding can turn, as two coincident meshes' pixels turn.
+
 The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
 `CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.
