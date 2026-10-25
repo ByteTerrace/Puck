@@ -29,7 +29,7 @@ All four tool guests stay mounted but start idle. Set cells with
 `world.state.cell.set <row> <key> <value>` over MCP, naming your own World on
 every call. An agent's headless World uses `--devices none`. The scope panel
 also requires `world.state.cell.set addonHud $value 1`; sampling can run with
-the addon HUD hidden, and normal play shows only the controller bar.
+the addon HUD hidden.
 
 **Fuzzer.** Set `fuzzer[seed]` (default 12345), `fuzzer[limit]` (default 300),
 then `fuzzer[enabled]` to 1. It drives movement, strafe, turn, jump, flight,
