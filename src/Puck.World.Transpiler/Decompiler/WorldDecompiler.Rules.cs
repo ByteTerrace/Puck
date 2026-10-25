@@ -554,6 +554,18 @@ public static partial class WorldDecompiler {
             name: name
         );
 
+        if (ExpressionSpelling.TryParseSyntax(text: printed, atoms: [], syntax: out var syntax, error: out _)) {
+            if (syntax is ExpressionSpelling.SourceAccess { Target: ExpressionSpelling.SourceName row } access &&
+                row.Name == name && access.Member == key) {
+                return true;
+            }
+            if (syntax is ExpressionSpelling.SourceIndex { Target: ExpressionSpelling.SourceName indexed } index &&
+                indexed.Name == name && key?.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal) == true &&
+                index.Index is not (ExpressionSpelling.Literal or ExpressionSpelling.SourceString or ExpressionSpelling.SourceName { Name: ['$', ..] })) {
+                return true;
+            }
+        }
+
         return (
             ExpressionSpelling.TryParse(
             error: out _,

@@ -32,7 +32,7 @@ public class OperandAtomLawTests {
     [InlineData("$\"deck[a{i}]\"", "deck[$\"a{i}\"]")]
     [InlineData("$\"deck[{name}]\"", "deck[$\"{name}\"]")]
     [InlineData("$\"deck[({i})] + {i}\"", "deck[(i)] + i")]
-    [InlineData("$\"a{i}[x] + {i + 1} + {2}\"", "$\"a{i}\"[x] + $\"{i + 1}\" + 2")]
+    [InlineData("$\"a{i}.x + {i + 1} + {2}\"", "$\"a{i}\".x + $\"{i + 1}\" + 2")]
     [InlineData("$\"$reduce:count:a{i}\"", "count($\"a{i}\")")]
     [Theory]
     public void AnExpressionBuiltAsTextIsRefusedWithItsBareSpelling(string written, string bare) {
@@ -48,11 +48,11 @@ public class OperandAtomLawTests {
     private static readonly Dictionary<string, (string Computed, string Written)> Atoms = new(comparer: StringComparer.Ordinal) {
         ["an atom lowers to the token it computes"] = (
             Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"] + $\"{i + 1}\")\n}",
-            Written: "rule \"r\" {\n    setState(state: hp, expression: deck[a1] + 2)\n}"
+            Written: "rule \"r\" {\n    setState(state: hp, expression: deck.a1 + 2)\n}"
         ),
         ["an atom may open an operand"] = (
-            Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: $\"a{i}\"[x] + 1)\n}",
-            Written: "rule \"r\" {\n    setState(state: hp, expression: a1[x] + 1)\n}"
+            Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: $\"a{i}\".x + 1)\n}",
+            Written: "rule \"r\" {\n    setState(state: hp, expression: a1.x + 1)\n}"
         ),
         ["an atom computing more than a bare name is read as one name"] = (
             Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"b:{i}\"])\n}",
@@ -64,11 +64,11 @@ public class OperandAtomLawTests {
         ),
         ["an assignment target's key computes as the same key read does"] = (
             Computed: "let i = 1\n\nrule \"r\" {\n    deck[$\"a{i}\"] = 4\n}",
-            Written: "rule \"r\" {\n    deck[a1] = 4\n}"
+            Written: "rule \"r\" {\n    deck.a1 = 4\n}"
         ),
         ["an addition target's key computes as the same key read does"] = (
             Computed: "let i = 1\n\nrule \"r\" {\n    deck[$\"a{i}\"] += deck[$\"a{i}\"]\n}",
-            Written: "rule \"r\" {\n    deck[a1] += deck[a1]\n}"
+            Written: "rule \"r\" {\n    deck.a1 += deck.a1\n}"
         ),
         ["a target's atom computing more than a bare name is one key"] = (
             Computed: "let i = 1\n\nrule \"r\" {\n    deck[$\"b:{i}\"] = 4\n}",
@@ -76,11 +76,11 @@ public class OperandAtomLawTests {
         ),
         ["an atom naming one of the rule's locals reads the local"] = (
             Computed: "rule \"r\" {\n    for i in range(0, 2) {\n        local $\"at{i}\" = deck[$\"a{i}\"]\n    }\n    hp = $\"at{1}\" - $\"at{0}\"\n}",
-            Written: "rule \"r\" {\n    local at0 = deck[a0]\n    local at1 = deck[a1]\n    hp = at1 - at0\n}"
+            Written: "rule \"r\" {\n    local at0 = deck.a0\n    local at1 = deck.a1\n    hp = at1 - at0\n}"
         ),
         ["an atom naming no local is a row even beside locals"] = (
-            Computed: "let i = 1\n\nrule \"r\" {\n    local at0 = 1\n    hp = $\"a{i}\"[x] + at0\n}",
-            Written: "rule \"r\" {\n    local at0 = 1\n    hp = a1[x] + at0\n}"
+            Computed: "let i = 1\n\nrule \"r\" {\n    local at0 = 1\n    hp = $\"a{i}\".x + at0\n}",
+            Written: "rule \"r\" {\n    local at0 = 1\n    hp = a1.x + at0\n}"
         ),
     };
 
@@ -100,8 +100,8 @@ public class OperandAtomLawTests {
         Assert.DoesNotContain(expectedSubstring: "99", actualString: computed.ToJsonString(), comparisonType: StringComparison.Ordinal);
     }
     [Fact]
-    public void OneBareWordInAKeysPositionIsThatKeyAsItIsInsideABracket() {
-        var effect = Effect(body: "let a0 = \"a1\"\n\nrule \"r\" {\n    setState(state: deck, key: a0, expression: deck[a0])\n}");
+    public void AKeyMemberAndADotAccessBothNameALiteralKey() {
+        var effect = Effect(body: "let a0 = \"a1\"\n\nrule \"r\" {\n    setState(state: deck, key: a0, expression: deck.a0)\n}");
 
         Assert.Equal(expected: "a0", actual: effect["key"]!.GetValue<string>());
         Assert.DoesNotContain(expectedSubstring: "a1", actualString: effect.ToJsonString(), comparisonType: StringComparison.Ordinal);
@@ -165,7 +165,7 @@ public class OperandAtomLawTests {
         Assert.True(condition: JsonNode.DeepEquals(node1: computed, node2: written), userMessage: computed.ToJsonString());
 
         computed = Effect(body: "rule \"r\" { setState(state: hp, expression: deck[$\"__atom1__\"] + deck[$\"a1\"]) }");
-        written = Effect(body: "rule \"r\" { setState(state: hp, expression: deck[__atom1__] + deck[a1]) }");
+        written = Effect(body: "rule \"r\" { setState(state: hp, expression: deck.__atom1__ + deck.a1) }");
         Assert.True(condition: JsonNode.DeepEquals(node1: computed, node2: written), userMessage: computed.ToJsonString());
     }
 

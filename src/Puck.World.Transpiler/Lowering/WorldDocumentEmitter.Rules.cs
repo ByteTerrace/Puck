@@ -1012,11 +1012,10 @@ public static partial class WorldDocumentEmitter {
                 span: compound.Rhs.Span);
             return null;
         }
-        var right = BindOperand(operand: operand.Expression, scope: scope);
         if (compound.Operator == "-") {
             return LowerCellEffect(discriminator: "addState", target: compound.Target,
                 rhs: operand with { Expression = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
-                    form: DocumentValueForm.Expression, text: $"-({right})") },
+                    form: DocumentValueForm.Expression, text: $"-({operand.Expression.Text})") },
                 allowText: false, scope: scope, ruleObj: ruleObj);
         }
         var resolved = ResolveEffectTarget(target: compound.Target, scope: scope);
@@ -1024,15 +1023,12 @@ public static partial class WorldDocumentEmitter {
         if (resolved.Key is not null) { obj["key"] = resolved.Key; }
         // The write resolves its key before evaluating this expression. Its read uses that same key,
         // without hoisting the computation into the rule's pre-gate locals.
-        var left = ExpressionSpelling.PrintName(name: resolved.Row, quoted: false);
-        if (resolved.Key is not null) {
-            left += resolved.Key.StartsWith(value: '$')
-                ? "[$write]"
-                : $"[{ExpressionSpelling.PrintName(name: resolved.Key, quoted: false)}]";
-        }
-        obj["expression"] = DocumentExpression(text: BindOperand(
-            operand: Puck.Transpiler.Parsing.PuckParser.CreateOperand(form: DocumentValueForm.Expression,
-                text: $"{left} {compound.Operator} ({right})"), scope: scope));
+        var key = (resolved.Key?.StartsWith(value: '$') == true) ? "$write" : resolved.Key;
+        var left = ExpressionSpelling.Print(program: new ExpressionProgram(Instructions: [Instruction.Operand(
+            name: StateChannelRefJsonConverter.FromNode(node: resolved.State), key: StateChannelRef.OfNullable(spelling: key)
+        )]));
+        var right = BindOperand(operand: operand.Expression, scope: scope);
+        obj["expression"] = DocumentExpression(text: $"{left} {compound.Operator} ({right})");
         return obj;
     }
     // `if Gate { ... } [else { ... }]` lowers to ActionEffect.If, reusing the same predicate lowering `when` uses
@@ -1398,6 +1394,21 @@ public static partial class WorldDocumentEmitter {
     // Every effect that addresses one cell resolves its target here, so an assignment, a removal and a schedule
     // agree on what a target spelling means and refuse the same targets.
     private static EffectTarget ResolveEffectTarget(RowRefNode target, DocumentScope scope) {
+        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
+        }
+        if (target.Operand is { } operand && !GetOrCreateStateFamilies(scope: scope).ContainsKey(key: target.Name)) {
+            var bound = BindOperand(operand: operand, scope: scope);
+            if (ExpressionSpelling.TryParse(text: bound, program: out var program, error: out _) &&
+                program.Instructions is [{ Payload: InstructionPayload.State state }]) {
+                return new EffectTarget(
+                    Key: state.Key?.Spelling,
+                    Row: state.Name.Spelling,
+                    State: StateChannelRefJsonConverter.ToNode(value: state.Name)
+                );
+            }
+        }
         // A computed key is spelled first, exactly as the same atom in a read is, and the target is that key: a name
         // the bare form cannot carry comes back backquoted, and the key is the name inside the quotes.
         if (target.KeyAtom is { } atom) {
@@ -1420,10 +1431,6 @@ public static partial class WorldDocumentEmitter {
 
         var written = ((target.Key is null) ? target.Name : $"{target.Name}[{target.Key}]");
 
-        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
-            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
-                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
-        }
         if ((target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: target.Name)) {
             return new EffectTarget(
                 Key: null,

@@ -581,7 +581,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case ScoreStatementNode score: {
-                        m_builder.Append(value: "score: ").Append(value: OperandKeys(text: score.Expression.Text));
+                        m_builder.Append(value: "score: ").Append(value: score.Expression.Text);
 
                         break;
                     }
@@ -608,7 +608,7 @@ public static partial class PuckPrinter {
                         } else {
                             m_builder.Append(value: local.Name);
                         }
-                        m_builder.Append(value: " = ").Append(value: OperandKeys(text: local.Expression.Text));
+                        m_builder.Append(value: " = ").Append(value: local.Expression.Text);
 
                         break;
                     }
@@ -1372,6 +1372,10 @@ public static partial class PuckPrinter {
             }
         }
         private void Row(RowRefNode row) {
+            if (row.Operand is { } operand) {
+                m_builder.Append(value: operand.Text);
+                return;
+            }
             m_builder.Append(value: row.Name);
             if (row.Key is null) {
                 return;
@@ -1389,7 +1393,8 @@ public static partial class PuckPrinter {
             m_builder.Append(value: '[');
             ExpressionSpelling.AppendSourceKey(
                 into: m_builder,
-                key: row.Key
+                key: row.Key,
+                brackets: true
             );
             m_builder.Append(value: ']');
         }
@@ -1406,7 +1411,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case RhsOperandNode operand: {
-                        m_builder.Append(value: OperandKeys(text: operand.Expression.Text));
+                        m_builder.Append(value: operand.Expression.Text);
 
                         break;
                     }
@@ -1550,7 +1555,7 @@ public static partial class PuckPrinter {
                         var annotated = (comparison.Kind is not null);
 
                         if (annotated) { m_builder.Append(value: '('); }
-                        m_builder.Append(value: OperandKeys(text: comparison.Left.Text)).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: OperandKeys(text: comparison.Right.Text));
+                        m_builder.Append(value: comparison.Left.Text).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: comparison.Right.Text);
                         if (annotated) { m_builder.Append(value: " : ").Append(value: comparison.Kind).Append(value: ')'); }
 
                         break;

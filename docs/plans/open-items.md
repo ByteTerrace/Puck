@@ -395,7 +395,7 @@ Every package below carries its own check on the programme page; tick it there a
     - [x] World compound assignments preserve additive subtraction and evaluate computed destination keys once at the effect. Six chess self-assignments migrated with identical compiled documents; PUCK039 removed.
     - [x] Local declarations precede the gate and effects and evaluate in declaration order; late declarations are refused. The source migration preserves compiled documents.
     - [ ] One expression language.
-    - [ ] One bracket rule and lexical value names.
+    - [x] One bracket rule and lexical value names. Literal keys use dots; indices evaluate lexical values, including locals named like functions. Shipped sources migrated with compiled-document comparisons.
   - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
   - [ ] Wave 3: names for bodies and identities, one composition construct, typed test steps with `eventually`.
   - [ ] Wave 4: complete state sugar, one rule grammar for cartridges, one authorization declaration, creation axes and rotations.

@@ -215,9 +215,12 @@ grammar's own quoting, which has no escape: a state row or cell key cannot hold 
 holding one is written as an interpolated string instead.
 
 A bare expression or a computed key resolves compile-time bindings before it names rows, so a `let` that
-shares a row's name shadows the row: give the binding another name. One bare word that is a key, as a member's
-whole value or as the whole of a bracket, is that key and reads no binding; a key a binding computes is an atom,
-`deck[$"{card}"]`, and an index a binding computes is an expression, `deck[(card)]`. One bare word in a name's
+shares a row's name shadows the row: give the binding another name. `row.key` names a literal cell key;
+`row[expression]` evaluates its expression. Thus `deck[card]` reads the lexical value `card`, and an unknown
+bare name is an error. A string names a literal key: `deck["card"]`. Read a local by its name, including
+inside brackets; a function name denotes a function only when followed by a call. The old `local(name)`,
+`row[(expression)]` wrapper and `row[slot[$value]]` workaround are refused with their replacements.
+One bare word in a name's
 position reads a binding only where
 the binding holds a name or a list of names, and a word an enumeration member admits is that word even where a
 binding shares it. `d["name"]` over a compile-time binding is a compile-time read whose value is the operand.
@@ -1034,8 +1037,8 @@ cannot mean something else. A raw fence carries no escapes and is printed back a
 back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) spaces, Egyptian braces, one statement per line — except for what the parse
 carries in as trivia: every comment keeps its line, a run of blank lines keeps its length, an array, object or
 argument list keeps the line breaks and the line-end commas its author wrote, a numeric literal keeps its base, and
-a name keeps its bare-or-quoted spelling. A cell key prints through `Puck.State`'s own fold, so an effect target
-reads the way the gate above it does. One comment moves: one written inside a construct's header, between its
+a name keeps its bare-or-quoted spelling. Indexed targets retain their parsed operands, so printing never
+reinterprets a bracket expression as a literal key. One comment moves: one written inside a construct's header, between its
 first word and its `{`, since a `//` left in place would swallow the brace — it prints above the statement, and a
 `/* */` written after the header's name prints right after the first word. A document that does not parse has no tree to
 print, so the editor keeps what is being typed and `puck format` reports the failure rather than writing a file.

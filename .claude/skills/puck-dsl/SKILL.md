@@ -99,6 +99,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
 - A `: Kind`/`as Kind` comparison-kind suffix binds only to the one comparison
   it follows; wrap it in parentheses beside `and`/`or`.
+- **One bracket rule.** `row.key` names a literal key; `row[expression]`
+  evaluates. Names in brackets resolve lexically, so an unknown bare word is
+  an error. Use `row["key"]` for a quoted literal key. Read a local as `name`,
+  never `local(name)`; use `row[x]`, never `row[(x)]` or `row[slot[$value]]`.
+  Functions are recognized only in call position, so a local may be named `sign`.
 
 [references/grammar.md](references/grammar.md) has the full grammar with
 examples; [references/diagnostics.md](references/diagnostics.md) the codes

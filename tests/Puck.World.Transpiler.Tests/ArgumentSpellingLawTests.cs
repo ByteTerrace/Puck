@@ -92,7 +92,7 @@ public class ArgumentSpellingLawTests {
     }
     [Fact]
     public void ABareReservedReferenceLowersToTheNodeTheDocumentHolds() {
-        var effect = Effect(effect: "transform transfer(from: deck, to: bag, selector: Key, key: deck[a])");
+        var effect = Effect(effect: "transform transfer(from: deck, to: bag, selector: Key, key: deck.a)");
         var key = effect["transform"]!["key"]!;
 
         Assert.Equal(expected: "cell", actual: key["channel"]!.GetValue<string>());

@@ -21,6 +21,7 @@ public static partial class WorldDocumentEmitter {
 
         private HashSet<string>? m_derived;
         private string? m_binder;
+        private int m_keyDepth;
 
         internal string Bind(OperandExpressionNode operand) {
             WriteOperand(operand: operand);
@@ -33,7 +34,7 @@ public static partial class WorldDocumentEmitter {
                 if (Syntax.TryParse(error: out var error, program: out var program, text: text)) {
                     var resolved = ResolveEmbeddedOperands(program: program, expectedSpace: null, scope: scope, span: operand.Span);
 
-                    if (Syntax.TryPrintSource(program: resolved, text: out var canonical)) { return canonical; }
+                    if (Syntax.TryPrint(program: resolved, text: out var canonical)) { return canonical; }
                 } else if (operand.Syntax is not Syntax.SourceCall { Name: "embed" or "vector" }) {
                     // Refused here, at its span, and written as a value the document's own pass reads without
                     // refusing it a second time (WorldExpressionJson.Lower).
@@ -190,13 +191,18 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: '0');
                 return;
             }
-            if ((form == DocumentValueForm.Expression) && (access.Target is Syntax.SourceName row) &&
+            if ((form is DocumentValueForm.Expression or DocumentValueForm.Key) && (access.Target is Syntax.SourceName row) &&
                 !GetPoolBindings(scope: scope).Contains(item: row.Name)) {
                 Write(form: DocumentValueForm.Name, node: row, operand: operand);
                 m_text.Append(value: '[').Append(value: access.Member).Append(value: ']');
                 return;
             }
             // A keyed read of a row a module instance declares: `alias.name.key`.
+            if ((form is DocumentValueForm.Expression or DocumentValueForm.Key) && (access.Target is Syntax.SourceAtom)) {
+                Write(access.Target, DocumentValueForm.Name, operand);
+                m_text.Append(value: '[').Append(value: access.Member).Append(value: ']');
+                return;
+            }
             if ((form == DocumentValueForm.Expression) && (InstanceName(node: access.Target) is { } instanceRow)) {
                 WriteValue(form: DocumentValueForm.Name, value: JsonValue.Create(value: instanceRow), span: operand.Span);
                 m_text.Append(value: '[').Append(value: access.Member).Append(value: ']');
@@ -206,9 +212,19 @@ public static partial class WorldDocumentEmitter {
             m_text.Append(value: '.').Append(value: access.Member);
         }
         private void WriteIndex(Syntax.SourceIndex index, OperandExpressionNode operand) {
+            var key = index.Index;
+            if (key is Syntax.SourceGroup) {
+                Refuse(message: "row[(expression)] is retired; use row[expression]. Brackets already evaluate their contents.", span: operand.Span);
+            }
+            while (key is Syntax.SourceGroup group) { key = group.Value; }
+            if ((m_keyDepth > 0) && key is Syntax.SourceName { Name: "$value" }) {
+                Refuse(message: "slot[$value] inside brackets is retired; use the slot name directly: row[slot].", span: operand.Span);
+                Write(index.Target, DocumentValueForm.Expression, operand);
+                return;
+            }
             if ((index.Target is Syntax.SourceName { Quoted: false } name) &&
                 GetOrCreateStateFamilies(scope: scope).TryGetValue(key: name.Name, value: out var family) &&
-                (index.Index is Syntax.Literal literal) && (decimal.Truncate(d: literal.Value) == literal.Value)) {
+                (key is Syntax.Literal literal) && (decimal.Truncate(d: literal.Value) == literal.Value)) {
                 for (var i = 0; (i < family.Indices.Count); i++) {
                     if (family.Indices[i] == literal.Value) {
                         m_text.Append(value: Syntax.PrintName(
@@ -224,18 +240,29 @@ public static partial class WorldDocumentEmitter {
             }
             Write(index.Target, DocumentValueForm.Name, operand);
             m_text.Append(value: '[');
-            // A key never holds a dot, so a dotted key over a pool binding can only be the field it reads: the index
-            // that field computes.
-            if ((index.Index is Syntax.SourceAccess) && HasRuntimeRoot(node: index.Index)) {
+            m_keyDepth++;
+            // Brackets evaluate their contents. Literal and reserved keys already have a document spelling;
+            // all other values go through the expression binder, including bare lexical names.
+            if (key is Syntax.SourceName { Quoted: false } boundName && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
+                WriteValue(boundKey, DocumentValueForm.Key, operand.Span);
+            } else if (key is Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) {
+                Write(key, DocumentValueForm.Expression, operand);
+            } else if (key is not (Syntax.Literal or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceName { Quoted: true } or Syntax.SourceName { Name: ['$', ..] })) {
                 m_text.Append(value: '(');
-                Write(index.Index, DocumentValueForm.Expression, operand);
+                Write(key, DocumentValueForm.Expression, operand);
                 m_text.Append(value: ')');
             } else {
-                Write(index.Index, DocumentValueForm.Key, operand);
+                Write(key, DocumentValueForm.Key, operand);
             }
+            m_keyDepth--;
             m_text.Append(value: ']');
         }
         private void WriteCall(Syntax.SourceCall call, OperandExpressionNode operand) {
+            if (call.Name == "local") {
+                Refuse(message: "local(name) is retired; read the local by its bare name: name.", span: operand.Span);
+                m_text.Append(value: '0');
+                return;
+            }
             m_text.Append(value: call.Name).Append(value: '(');
             for (var index = 0; (index < call.Arguments.Count); index++) {
                 if (index > 0) { m_text.Append(value: ", "); }

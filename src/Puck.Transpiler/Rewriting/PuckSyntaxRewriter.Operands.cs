@@ -5,7 +5,7 @@ using Operand = Puck.State.ExpressionSpelling;
 namespace Puck.Transpiler.Rewriting;
 
 public abstract partial class PuckSyntaxRewriter {
-    /// <summary>Rewrites a parsed operand tree. A bare key remains literal; a grouped key is an expression.</summary>
+    /// <summary>Rewrites a parsed operand tree. Bracket contents evaluate; dot members name literal keys.</summary>
     /// <param name="node">The operand syntax.</param>
     /// <param name="form">The position occupied by the syntax.</param>
     /// <returns>The rewritten syntax. The default implementation descends into its children.</returns>
@@ -14,7 +14,7 @@ public abstract partial class PuckSyntaxRewriter {
             Operand.SourceGroup group => group with { Value = RewriteOperandSyntax(group.Value, DocumentValueForm.Expression) },
             Operand.SourceIndex index => index with {
                 Target = RewriteOperandSyntax(index.Target, DocumentValueForm.Name),
-                Index = RewriteOperandSyntax(index.Index, DocumentValueForm.Key),
+                Index = RewriteOperandSyntax(index.Index, DocumentValueForm.Expression),
             },
             Operand.SourceAccess access => access with { Target = RewriteOperandSyntax(access.Target, DocumentValueForm.Name) },
             Operand.Unary unary => unary with { Operand = RewriteOperandSyntax(unary.Operand, DocumentValueForm.Expression) },

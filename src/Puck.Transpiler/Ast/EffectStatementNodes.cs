@@ -16,6 +16,7 @@ namespace Puck.Transpiler.Ast;
 /// <param name="KeyAtom">The interpolated string a key written <c>name[$"…"]</c> computes, which lowering evaluates
 /// to the one key it spells, as it does the same atom in a read; <paramref name="Key"/> then holds the atom as
 /// written.</param>
+/// <param name="Operand">The authored indexed target, retained until lexical binding resolves its key.</param>
 public sealed record RowRefNode(
     string Name,
     string? Key,
@@ -24,7 +25,8 @@ public sealed record RowRefNode(
     int Line = 1,
     int Column = 1,
     bool FieldAccess = false,
-    InterpolatedStringNode? KeyAtom = null
+    InterpolatedStringNode? KeyAtom = null,
+    OperandExpressionNode? Operand = null
 ) : SyntaxNode(
     Offset,
     Length,

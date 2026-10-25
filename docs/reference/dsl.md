@@ -143,7 +143,10 @@ lowering does not print and reparse that AST or rewrite identifiers in source te
 
 Binding distinguishes expression names, row names, literal keys and quoted names. An interpolation atom is
 resolved once, so its value cannot inject an operator or become another compile-time binding. Parentheses in
-key position remain significant: `row[key]` names a literal key, while `row[(key)]` reads the key expression.
+key position remain significant: `row.key` names a literal key, while `row[key]` evaluates the lexical value
+`key`. An unknown bare word is an error. `row["key"]` spells a string key. Read a local by its name;
+`local(name)`, the `row[(key)]` wrapper and `row[slot[$value]]` are retired. Functions are recognized only
+in call position, so a local named `sign` reads as `sign`, while `sign(value)` calls the function.
 Family folds retain their runtime subprograms. Embedded vector literals resolve in the instruction program,
 including its subprograms. A vocabulary that classifies nothing leaves values to the compile-time grammar.
 The world vocabulary's [README](../../src/Puck.World.Transpiler/README.md) describes its member positions.
@@ -171,8 +174,7 @@ A few invariants hold across every declaration form the world vocabulary lowers:
   per-player storage.
 - **One trait has one spelling.** Accumulation is `advance`, with the sign carrying direction; there is no
   separate `regen` and `decay`.
-- **Dot access belongs to the state engine's grammar.** `row.key` is an `ExpressionSpelling` spelling of
-  `row[key]`, so the DSL, JSON documents, and every other expression consumer agree on what it means. Row and
+- **Dot access names a literal key.** `row.key` reads the same cell as `row["key"]`. Row and
   cell names themselves forbid dots, so the HUD binding `state.<row>.<key>` stays unambiguous.
 - **Equivalence is classified per form.** A concise declaration must compile byte-identically to its explicit
   JSON equivalent. Dot access keeps the authored operand text, so it is judged by semantic equivalence instead:
@@ -564,7 +566,7 @@ of one the author commented is the case to watch — carry the old node's
 Every syntax-node child reaches a rewrite hook. Operand-bearing sugar nodes descend through
 `OperandExpressionNode`; `RewriteOperandSyntax` reaches parsed names, accesses, calls and operators, and the
 ordinary expression hook still reaches interpolation holes. The operand hook receives the position's form:
-a bare key is literal, while a grouped key is an expression. A changed tree is printed with its rewritten atoms;
+bracket contents are expressions and dot members are literal keys. A changed tree is printed with its rewritten atoms;
 an unchanged tree keeps the author's spelling. A rewrite must keep `Syntax` and `Text` consistent.
 
 The following members still carry their own text grammar and are handed over whole:

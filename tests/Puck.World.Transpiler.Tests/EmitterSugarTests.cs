@@ -354,7 +354,7 @@ public class EmitterSugarTests {
     public void ExplicitKindSuffixForcesCompareValueEvenForTwoSimpleStateReads() {
         var rule = FirstRule(body: """
             rule "r" {
-                when solitaireFreecell[from] != solitaireFreecell[to] : Int
+                when solitaireFreecell.from != solitaireFreecell.to : Int
                 effectRow = 1
             }
             """);
@@ -402,7 +402,7 @@ public class EmitterSugarTests {
     public void LiveZoneBracketSelectorPassesThroughAsOneOpaqueOperand() {
         var rule = FirstRule(body: """
             rule "r" {
-                when $zones[solitaireFreecell[from]][solitaireFreecell[card]] == 1
+                when $zones[solitaireFreecell.from][solitaireFreecell.card] == 1
                 effectRow = 1
             }
             """);

@@ -2,6 +2,7 @@ using Parlot.Fluent;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Lowering;
 
 namespace Puck.Transpiler.Parsing;
 
@@ -370,7 +371,10 @@ public static partial class PuckParser {
             span.Offset,
             span.Length,
             span.Line,
-            span.Column
+            span.Column,
+            Operand: (text.Contains(value: '[') ? CreateOperand(text: text, form: DocumentValueForm.Expression) with {
+                Offset = span.Offset, Length = span.Length, Line = span.Line, Column = span.Column,
+            } : null)
         );
     }
     // A key that does not read as one interpolated string falls back to the ordinary resolution, which reports it.

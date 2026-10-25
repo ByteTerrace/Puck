@@ -235,7 +235,7 @@ public static partial class WorldConstructs {
             Grammar: "local name = <operand>",
             Keyword: "local",
             Members: [
-                RowName(summary: "The local's name, read bare in every operand after it."),
+                RowName(summary: "The local's lexical name, read bare in later expressions and bracket indices. Function names are functions only in calls."),
                 new(
                     DocumentKeys: ["expression"],
                     Kind: WorldMemberKind.Operand,

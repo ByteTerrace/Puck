@@ -43,7 +43,7 @@ public static class SyntaxWalk {
             InterpolatedStringNode interpolated => [.. interpolated.Segments.OfType<InterpolationSegment.Hole>().Select(selector: static hole => hole.Expression)],
             WorldDeclarationNode world => [world.Name, world.Module],
             WorldLinkNode link => [link.Left, link.Right, .. link.Properties],
-            RowRefNode row => Present(row.KeyAtom),
+            RowRefNode row => Present(row.KeyAtom, row.Operand),
             RhsOperandNode rhs => [rhs.Expression],
             SetCellStatementNode set => [set.Target, set.Rhs],
             AddCellStatementNode add => [add.Target, add.Rhs],

@@ -7740,7 +7740,7 @@ template tetromino() {
       si += tr
       si *= 4
       si += k
-      s = shapes[si]
+      s = shapes.si
       cr = s
       cr >>= 2
       cc = s
@@ -7760,7 +7760,7 @@ template tetromino() {
       fi = cr
       fi *= 10
       fi += cc
-      if field[fi] != 0 {
+      if field.fi != 0 {
         ok = 0
         break
       }
@@ -7791,7 +7791,7 @@ template tetromino() {
         si += tr
         si *= 4
         si += k
-        s = shapes[si]
+        s = shapes.si
         cr = s
         cr >>= 2
         cc = s
@@ -7811,7 +7811,7 @@ template tetromino() {
         fi = cr
         fi *= 10
         fi += cc
-        if field[fi] != 0 {
+        if field.fi != 0 {
           ok = 0
           break
         }
@@ -7834,7 +7834,7 @@ template tetromino() {
       si += pr
       si *= 4
       si += k
-      s = shapes[si]
+      s = shapes.si
       cr = s
       cr >>= 2
       cc = s
@@ -7846,7 +7846,7 @@ template tetromino() {
       fi = cr
       fi *= 10
       fi += cc
-      field[fi] = pcol
+      field.fi = pcol
       r2 = cr
       r2 += 0
       c2 = cc
@@ -7872,14 +7872,14 @@ template tetromino() {
       repeat 10 as cc {
         fi = base
         fi += cc
-        if field[fi] == 0 {
+        if field.fi == 0 {
           full = 0
           break
         }
       }
-      rowfull[cr] = full
+      rowfull.cr = full
       if full != 0 {
-        fullrows[nfull] = cr
+        fullrows.nfull = cr
         nfull += 1
       }
       rcur += 1
@@ -7907,7 +7907,7 @@ template tetromino() {
         if k >= nfull {
           break
         }
-        cr = fullrows[k]
+        cr = fullrows.k
         cr += 0
         cc = 4
         cc -= fcol
@@ -7934,7 +7934,7 @@ template tetromino() {
       cr = 17
       cr -= rcur
       rcur += 1
-      if rowfull[cr] == 0 {
+      if rowfull.cr == 0 {
         base = cr
         base *= 10
         wbase = w
@@ -7944,7 +7944,7 @@ template tetromino() {
           fi += cc
           r2 = wbase
           r2 += cc
-          field[r2] = field[fi]
+          field.r2 = field.fi
         }
         w -= 1
       }
@@ -7953,7 +7953,7 @@ template tetromino() {
       rcur = 0
       lines += nfull
       play(sound: "sweepaway")
-      awardv = award[nfull]
+      awardv = award.nfull
       awardn = level
       awardn += 1
       nph = 7
@@ -7976,12 +7976,12 @@ template tetromino() {
         dv = carryv
         dv %= 10
         carryv /= 10
-        dv += score[di]
+        dv += score.di
         if dv >= 10 {
           dv -= 10
           carryv += 1
         }
-        score[di] = dv
+        score.di = dv
       }
     }
   }
@@ -7997,7 +7997,7 @@ template tetromino() {
       repeat 10 as cc {
         fi = base
         fi += cc
-        field[fi] = 0
+        field.fi = 0
       }
       rcur += 1
     }
@@ -8021,7 +8021,7 @@ template tetromino() {
       r2 += 0
       c2 = cc
       c2 += 8
-      dv = field[rcur]
+      dv = field.rcur
       if dv == 0 {
         map(column: "c2", palette: "0", row: "r2", tile: "0")
       } else {
@@ -8063,7 +8063,7 @@ template tetromino() {
       si += tr
       si *= 4
       si += k
-      s = shapes[si]
+      s = shapes.si
       cr = s
       cr >>= 2
       cc = s
@@ -8083,7 +8083,7 @@ template tetromino() {
       fi = cr
       fi *= 10
       fi += cc
-      if field[fi] != 0 {
+      if field.fi != 0 {
         ok = 0
         break
       }
@@ -8113,7 +8113,7 @@ template tetromino() {
     if level > 20 {
       level = 20
     }
-    ds = speeds[level]
+    ds = speeds.level
   }
 
   rule "carry" {
@@ -8127,7 +8127,7 @@ template tetromino() {
       si += pr
       si *= 4
       si += k
-      s = shapes[si]
+      s = shapes.si
       cr = s
       cr >>= 2
       cc = s
@@ -8138,10 +8138,10 @@ template tetromino() {
       cc -= 4
       cr += 0
       cr *= 8
-      sy[k] = cr
+      sy.k = cr
       cc += 8
       cc *= 8
-      sx[k] = cc
+      sx.k = cc
     }
   }
 
@@ -8152,7 +8152,7 @@ template tetromino() {
     }
     if ph < 8 {
       if pcur < 5 {
-        dv = score[pcur]
+        dv = score.pcur
         c2 = pcur
         c2 += 1
         dv += 4
@@ -8207,14 +8207,14 @@ template tetromino() {
         if tcur >= 117 {
           break
         }
-        cr = title1[tcur]
+        cr = title1.tcur
         si = cr
         si >>= 5
         cr &= 31
         tcur += 1
-        cc = title1[tcur]
+        cc = title1.tcur
         tcur += 1
-        dv = title1[tcur]
+        dv = title1.tcur
         tcur += 1
         map(column: "cc", palette: "si", row: "cr", tile: "dv")
       }
@@ -8239,14 +8239,14 @@ template tetromino() {
         if tcur >= 156 {
           break
         }
-        cr = title2[tcur]
+        cr = title2.tcur
         si = cr
         si >>= 5
         cr &= 31
         tcur += 1
-        cc = title2[tcur]
+        cc = title2.tcur
         tcur += 1
-        dv = title2[tcur]
+        dv = title2.tcur
         tcur += 1
         map(column: "cc", palette: "si", row: "cr", tile: "dv")
       }
@@ -8271,14 +8271,14 @@ template tetromino() {
         if tcur >= 147 {
           break
         }
-        cr = title3[tcur]
+        cr = title3.tcur
         si = cr
         si >>= 5
         cr &= 31
         tcur += 1
-        cc = title3[tcur]
+        cc = title3.tcur
         tcur += 1
-        dv = title3[tcur]
+        dv = title3.tcur
         tcur += 1
         map(column: "cc", palette: "si", row: "cr", tile: "dv")
       }
@@ -8307,7 +8307,7 @@ template tetromino() {
     si += cc
     si %= 7
     si += 1
-    dv = presstext[cc]
+    dv = presstext.cc
     cc += 4
     map(column: "cc", palette: "si", row: "14", tile: "dv")
     if key(start, pressed) {
@@ -8327,14 +8327,14 @@ template tetromino() {
         if tcur >= 237 {
           break
         }
-        cr = menutext[tcur]
+        cr = menutext.tcur
         si = cr
         si >>= 5
         cr &= 31
         tcur += 1
-        cc = menutext[tcur]
+        cc = menutext.tcur
         tcur += 1
-        dv = menutext[tcur]
+        dv = menutext.tcur
         tcur += 1
         map(column: "cc", palette: "si", row: "cr", tile: "dv")
       }
@@ -8407,14 +8407,14 @@ template tetromino() {
       repeat 10 as cc {
         fi = base
         fi += cc
-        field[fi] = 0
+        field.fi = 0
       }
     }
     lines = 0
     level = startlevel
     over = 0
     repeat 5 as k {
-      score[k] = 0
+      score.k = 0
     }
     if gtype != 0 {
       repeat 5 as k {
@@ -8434,7 +8434,7 @@ template tetromino() {
           si %= 7
           si += 1
           if cc != dv {
-            field[fi] = si
+            field.fi = si
           }
         }
       }
@@ -8461,14 +8461,14 @@ template tetromino() {
       if tcur >= 165 {
         break
       }
-      cr = paneltext[tcur]
+      cr = paneltext.tcur
       si = cr
       si >>= 5
       cr &= 31
       tcur += 1
-      cc = paneltext[tcur]
+      cc = paneltext.tcur
       tcur += 1
-      dv = paneltext[tcur]
+      dv = paneltext.tcur
       tcur += 1
       map(column: "cc", palette: "si", row: "cr", tile: "dv")
     }
@@ -8486,17 +8486,17 @@ template tetromino() {
       beat = 1
       cmpd = 0
       repeat 5 as k {
-        if score[k] > best[k] {
+        if score.k > best.k {
           cmpd = 1
           break
         }
-        if score[k] < best[k] {
+        if score.k < best.k {
           break
         }
       }
       if cmpd != 0 {
         repeat 5 as k {
-          best[k] = score[k]
+          best.k = score.k
         }
         save()
       }
@@ -8506,14 +8506,14 @@ template tetromino() {
         if tcur >= 204 {
           break
         }
-        cr = overtext[tcur]
+        cr = overtext.tcur
         si = cr
         si >>= 5
         cr &= 31
         tcur += 1
-        cc = overtext[tcur]
+        cc = overtext.tcur
         tcur += 1
-        dv = overtext[tcur]
+        dv = overtext.tcur
         tcur += 1
         map(column: "cc", palette: "si", row: "cr", tile: "dv")
       }
@@ -8575,7 +8575,7 @@ template tetromino() {
       cc = dcur
       cc += 7
       if dcur < 5 {
-        dv = score[dcur]
+        dv = score.dcur
         dv += 4
       } else {
         dv = 4
@@ -8607,7 +8607,7 @@ template tetromino() {
     cc = dcur
     cc += 10
     if dcur < 5 {
-      dv = best[dcur]
+      dv = best.dcur
       dv += 4
     } else {
       dv = 4
@@ -8626,17 +8626,17 @@ template tetromino() {
       si = nt
       si *= 16
       si += k
-      s = shapes[si]
+      s = shapes.si
       cr = s
       cr >>= 2
       cc = s
       cc &= 3
       cr += 14
       cr *= 8
-      ny[k] = cr
+      ny.k = cr
       cc += 1
       cc *= 8
-      nx[k] = cc
+      nx.k = cc
     }
   }
 

@@ -1131,8 +1131,8 @@ for pad in filter(carPads, p => p.slot == 4) {
   rule "lift-car-pad-open" {
     when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
     mode: Edge
-    liftLamp[open] = 1
-    schedule liftClock[pulse] in 0.4s
+    liftLamp.open = 1
+    schedule liftClock.pulse in 0.4s
     liftOpenReq = 1
   }
 }
@@ -1140,8 +1140,8 @@ for pad in filter(carPads, p => p.slot == 5) {
   rule "lift-car-pad-close" {
     when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
     mode: Edge
-    liftLamp[close] = 1
-    schedule liftClock[pulse] in 0.4s
+    liftLamp.close = 1
+    schedule liftClock.pulse in 0.4s
     liftCloseReq = 1
   }
 }
@@ -1163,9 +1163,9 @@ for k in range(0, 4) {
     when liftAt == (k * liftCells) and liftTarget == liftAt and liftOpenReq == 1
     mode: Level
     liftLevel = k
-    liftDoors[car] = 1
+    liftDoors.car = 1
     liftDoors[$"level{k}"] = 1
-    schedule liftClock[dwell] in 4s
+    schedule liftClock.dwell in 4s
     liftOpenReq = 0
   }
 }
@@ -1179,11 +1179,11 @@ rule "lift-open-moving" {
 rule "lift-shut" {
   when liftCloseReq == 1 and liftTarget == liftAt
   mode: Level
-  liftDoors[car] = 0
+  liftDoors.car = 0
   for k in range(0, 4) {
     liftDoors[$"level{k}"] = 0
   }
-  liftClock[dwell] = $tick
+  liftClock.dwell = $tick
   liftCloseReq = 0
 }
 rule "lift-shut-moving" {
@@ -1196,7 +1196,7 @@ rule "lift-shut-moving" {
 // and then, if none, the nearest below, turning round; going down it does the reverse.
 template liftPick(f, k, dir, lo, hi) {
   rule $"lift-pick-{lo}-{dir}-{f}-{k}" {
-    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock[dwell] and liftOpenReq == 0 and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0 and liftDir >= lo and liftDir <= hi
+    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0 and liftDir >= lo and liftDir <= hi
     mode: Level
     liftDir = dir
     liftTarget = k * liftCells
@@ -1226,7 +1226,7 @@ for f in range(0, 4) {
 
 // A stopped car with its dwell over and nothing to serve has no direction.
 rule "lift-idle" {
-  when liftTarget == liftAt and $tick >= liftClock[dwell] and liftOpenReq == 0 and liftDir != 0
+  when liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and liftDir != 0
   mode: Level
   liftDir = 0
 }
@@ -1248,13 +1248,13 @@ for k in map(range(0, 4), i => 3 - i) {
 }
 
 rule "lift-rise" {
-  when liftTarget > liftAt and liftDoors[car] == 0
+  when liftTarget > liftAt and liftDoors.car == 0
   mode: Level
   liftAt += 1
 }
 
 rule "lift-fall" {
-  when liftTarget < liftAt and liftDoors[car] == 0
+  when liftTarget < liftAt and liftDoors.car == 0
   mode: Level
   liftAt = liftAt - 1
 }
@@ -1269,7 +1269,7 @@ rule "lift-ride" {
 rule "lift-close" {
   when liftTarget != liftAt
   mode: Level
-  liftDoors[car] = 0
+  liftDoors.car = 0
   for k in range(0, 4) {
     liftDoors[$"level{k}"] = 0
   }
@@ -1277,10 +1277,10 @@ rule "lift-close" {
 
 // The door buttons' lamps go out after a moment.
 rule "lift-lamps-out" {
-  when $tick >= liftClock[pulse] and liftLamp[open] + liftLamp[close] > 0
+  when $tick >= liftClock.pulse and (liftLamp.open + liftLamp.close) > 0
   mode: Level
-  liftLamp[open] = 0
-  liftLamp[close] = 0
+  liftLamp.open = 0
+  liftLamp.close = 0
 }
 
 // The displays show the level the car is at or last passed (going down, the level it has not yet reached below), and

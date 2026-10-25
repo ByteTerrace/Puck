@@ -220,6 +220,7 @@ public abstract partial class PuckSyntaxRewriter {
             Default = this.RewrittenOrNull(node: field.Default),
             Modifiers = this.RewrittenNodes(nodes: field.Modifiers),
         }),
+        RowRefNode { Operand: { } operand } row => row with { Operand = this.Rewritten(node: operand), KeyAtom = this.RewrittenOrNull(node: row.KeyAtom) },
         RowRefNode row => ((row.KeyAtom is { } atom)
             ? this.RewrittenKeyAtom(atom: atom, row: row)
             : row

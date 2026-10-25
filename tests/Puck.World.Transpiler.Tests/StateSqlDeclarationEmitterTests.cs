@@ -213,8 +213,8 @@ public class StateSqlDeclarationEmitterTests {
                 rule "heal" {
                     mode: Level
                     transaction {
-                        fightersHp[hero] = 100
-                        fightersHp[hero] += 10
+                        fightersHp.hero = 100
+                        fightersHp.hero += 10
                     }
                 }
                 """

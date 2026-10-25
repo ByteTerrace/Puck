@@ -300,7 +300,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case OperandExpressionNode operand: {
-                        m_builder.Append(value: OperandKeys(text: operand.Text));
+                        m_builder.Append(value: operand.Text);
 
                         break;
                     }
