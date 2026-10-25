@@ -1250,6 +1250,140 @@ public sealed class GpuResidencyLawTests {
         carried.Dispose();
         replaced.Dispose();
     }
+    // A region whose source holds the words past its host copy keeps only that copy, stages every owed word past it from
+    // the source and reads back exact; a host copy that grows owes its new bytes until written, whatever they compare to.
+    // The copy stays put as the region grows, and shrinks with a region shrunk below it.
+    [Fact]
+    public void ASourcedRegionStagesTheWordsPastItsHostCopyFromItsSource() {
+        const int Bytes = 4096;
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: Bytes,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        var truth = new uint[Bytes / sizeof(uint)];
+        var source = new ArraySource(words: truth);
+
+        for (var index = 0; (index < truth.Length); index++) { truth[index] = ((uint)((index * 2654435761U) | 1U)); }
+        region.Shadow(shadowBytes: 128, source: source);
+        Assert.Equal(expected: 128L, actual: region.ShadowBytes);
+        Assert.Equal(expected: 128UL, actual: region.CpuShadowBytes);
+        Assert.Equal(expected: 128, actual: region.Contents.Length);
+        _ = region.Write(bytes: MemoryMarshal.AsBytes(span: truth.AsSpan(length: 32, start: 0)), offset: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
+        Assert.Equal(expected: MemoryMarshal.AsBytes(span: truth.AsSpan()).ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle));
+        Assert.Equal(expected: ((Bytes - 128) / sizeof(uint)), actual: source.Words);
+
+        // Changed source words reach the destination once owed, and only those.
+        truth[300] = 7U;
+        truth[301] = 8U;
+        source.Words = 0;
+        region.OweSourced(length: 8, offset: (300 * sizeof(uint)));
+        Copy(gpu: gpu, region: region, slot: 1);
+        Assert.Equal(expected: 2, actual: source.Words);
+        Assert.Equal(expected: MemoryMarshal.AsBytes(span: truth.AsSpan()).ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
+
+        // The grown copy's new bytes start unknown: zeros the destination does not hold are owed and land.
+        region.Shadow(shadowBytes: 256, source: source);
+        Assert.True(condition: region.Write(bytes: new byte[128], offset: 128));
+        Copy(gpu: gpu, region: region, slot: 0);
+        Assert.All(collection: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle)[128..256], action: static value => Assert.Equal(expected: 0, actual: value));
+        region.Shadow(shadowBytes: 256, source: source);
+        Assert.False(condition: region.Write(bytes: new byte[128], offset: 128));
+
+        var grown = region.Grow(byteCount: (2 * Bytes));
+
+        Assert.Equal(expected: 256L, actual: region.ShadowBytes);
+
+        var shrunk = region.Shrink(byteCount: Bytes);
+
+        Assert.Equal(expected: 256L, actual: region.ShadowBytes);
+
+        var below = region.Shrink(byteCount: 128);
+
+        Assert.Equal(expected: 128L, actual: region.ShadowBytes);
+        Assert.True(condition: region.Contents.SequenceEqual(other: MemoryMarshal.AsBytes(span: truth.AsSpan(length: 32, start: 0))));
+        region.Shadow(shadowBytes: 64, source: source);
+        Assert.Equal(expected: 64, actual: region.Contents.Length);
+        grown.Dispose();
+        shrunk.Dispose();
+        below.Dispose();
+    }
+    [Fact]
+    public void OnlyAStagedRegionOwningItsDestinationTakesASource() {
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        var source = new ArraySource(words: new uint[16]);
+        using var ring = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Ring,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        using var destination = gpu.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 64, usage: GpuBufferUsage.Storage);
+        using var external = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            destination: destination,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        var staged = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => ring.Shadow(shadowBytes: 32, source: source));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => external.Shadow(shadowBytes: 32, source: source));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => staged.Shadow(shadowBytes: 32, source: null!));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: 0, source: source));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: 68, source: source));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: 30, source: source));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => staged.OweSourced(length: 4, offset: 32));
+        staged.Shadow(shadowBytes: 32, source: source);
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.OweSourced(length: 4, offset: 28));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.OweSourced(length: 0, offset: 32));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.OweSourced(length: 8, offset: 60));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.OweSourced(length: 4, offset: 34));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.OweSourced(length: 2, offset: 32));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Write(bytes: [1, 2, 3, 4], offset: 32));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.ContentsAt(length: 4, offset: 32));
+        staged.Dispose();
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.Shadow(shadowBytes: 32, source: source));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.OweSourced(length: 4, offset: 32));
+    }
+    // A source over an array of the region's words, counting the words it is asked for.
+    private sealed class ArraySource(uint[] words) : IGpuRegionSource {
+        public int Words { get; set; }
+
+        public void WriteWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) {
+            Words += count;
+            buffer.Write<uint>(data: words.AsSpan(length: count, start: word), destinationOffsetBytes: destinationOffsetBytes);
+        }
+    }
     [Fact]
     public void OnlyAStagedRegionOwningItsDestinationGrows() {
         var gpu = new UploadModelGpu();

@@ -64,6 +64,9 @@ public static class MeshSceneCommand {
 
         var fullPath = Path.GetFullPath(path: world);
 
+        // A world's document parses masks and bindings through the Schema hooks, which the CLI installs per invocation.
+        _ = CliWorldVocabulary.EnsureInstalled();
+
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: fullPath, proveNeighbours: false, reason: out var reason)) {
             Console.Error.WriteLine(value: $"{Verb}: '{fullPath}' failed to load — {reason}");
             return 1;

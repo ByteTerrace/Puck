@@ -288,8 +288,11 @@ laws exercise that boundary.
   list past the draw reserve doubles it and moves only the meshes the grown
   reserve takes (`SdfMeshRegionArena.Moved`), written that frame: relocating
   every mesh for it wrote and compared the debug world's 1.78 GB region in one
-  970 ms frame the first time a body fell through a floor painting. A
-  placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
+  970 ms frame the first time a body fell through a floor painting. The
+  region's host copy holds the draw reserve alone: a placed mesh's words are
+  owed and the flush writes them from the mesh's own arrays
+  (`SdfWorldTables.WriteSourcedMeshWords`), zeros in words no placed mesh holds.
+  A placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
   ([sync pairs](sync-pairs.md#engine-buffers-groups-and-bindings)).
@@ -472,7 +475,9 @@ laws exercise that boundary.
   read included) and `shade/sdf-mesh-irradiance.hlsli`, which only the views
   kernel compiles. The trace reads static mesh draws through
   `SdfMeshIrradianceScene`; never route it through the field interpreter. The
-  scene is two-level and keyed by each mesh's position and index buffers, so a
+  scene is two-level and keyed by each mesh's position and index buffers, which
+  its triangle tests read in place (a geometry holds only its hierarchy and the
+  leaf order of its triangles), so a
   static-draw change builds only geometry new to the previous scene: a slow
   `[sdf.mesh-gi] scene` line with a large `built-triangles=` means new geometry,
   not the trace. `puck mesh scene --world <file>` times a build and a one-draw

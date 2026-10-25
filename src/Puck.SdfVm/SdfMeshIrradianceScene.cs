@@ -376,8 +376,13 @@ public sealed partial class SdfMeshIrradianceScene {
         public int Hit = -1;
 
         public bool Visit(int first, int count, ref float distance) {
+            var positions = geometry.Positions.Span;
+            var indices = geometry.Indices.Span;
+            var triangles = geometry.Triangles;
+
             for (var index = first; (index < (first + count)); index++) {
-                if (HitTriangle(distance: out var t, index: index, maximum: distance)) {
+                Geometry.Corner(e1: out var e1, e2: out var e2, indices: indices, positions: positions, triangle: triangles[index], v0: out var v0);
+                if (HitTriangle(distance: out var t, e1: e1, e2: e2, maximum: distance, v0: v0)) {
                     distance = t;
                     Hit = index;
                     if (any) { return true; }
@@ -387,18 +392,16 @@ public sealed partial class SdfMeshIrradianceScene {
             return false;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private readonly bool HitTriangle(int index, float maximum, out float distance) {
+        private readonly bool HitTriangle(Vector3 v0, Vector3 e1, Vector3 e2, float maximum, out float distance) {
             distance = 0f;
 
-            var e1 = geometry.E1[index];
-            var e2 = geometry.E2[index];
             var p = Vector3.Cross(vector1: Direction, vector2: e2);
             var determinant = Vector3.Dot(vector1: e1, vector2: p);
 
             if (MathF.Abs(determinant) < 1.0e-12f) { return false; }
 
             var inverse = (1f / determinant);
-            var s = (Origin - geometry.V0[index]);
+            var s = (Origin - v0);
             var u = (Vector3.Dot(vector1: s, vector2: p) * inverse);
 
             if ((u < 0f) || (u > 1f)) { return false; }
@@ -481,7 +484,9 @@ public sealed partial class SdfMeshIrradianceScene {
             return true;
         }
         public Vector3 NormalOf(int triangle) {
-            var normal = Vector3.Cross(vector1: Geometry.E1[triangle], vector2: Geometry.E2[triangle]);
+            Geometry.Corner(e1: out var e1, e2: out var e2, index: triangle, v0: out _);
+
+            var normal = Vector3.Cross(vector1: e1, vector2: e2);
 
             if (!Identity) { normal = Vector3.TransformNormal(matrix: NormalToWorld, normal: normal); }
 
@@ -493,17 +498,28 @@ public sealed partial class SdfMeshIrradianceScene {
             (Material + (TriangleMaterials.IsEmpty ? 0 : (int)TriangleMaterials.Span[Geometry.Triangles[triangle]]));
     }
 
-    // One geometry's triangles in its mesh's frame, in leaf order under its own hierarchy, with the mesh triangle each
-    // came from (for its material) and the hierarchy's braid subtrees: the widest nodes at most BraidTriangles wide, which
-    // together hold every triangle once.
+    // One geometry's triangles in its mesh's frame, in leaf order under its own hierarchy: the mesh triangle each leaf
+    // position holds, read through the mesh's own positions and indices rather than a copy of them, and the hierarchy's
+    // braid subtrees: the widest nodes at most BraidTriangles wide, which together hold every triangle once.
     private sealed class Geometry {
-        public required Vector3[] V0 { get; init; }
-        public required Vector3[] E1 { get; init; }
-        public required Vector3[] E2 { get; init; }
+        public required ReadOnlyMemory<Vector3> Positions { get; init; }
+        public required ReadOnlyMemory<uint> Indices { get; init; }
         public required int[] Triangles { get; init; }
         public required Node[] Nodes { get; init; }
         public required int[] Braids { get; init; }
-        public int Count => V0.Length;
+        public int Count => Triangles.Length;
+
+        // The leaf position's triangle as its first corner and its two edges from it, the terms the ray test reads.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Corner(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, int triangle, out Vector3 v0, out Vector3 e1, out Vector3 e2) {
+            var first = (3 * triangle);
+
+            v0 = positions[(int)indices[first]];
+            e1 = (positions[(int)indices[(first + 1)]] - v0);
+            e2 = (positions[(int)indices[(first + 2)]] - v0);
+        }
+        public void Corner(int index, out Vector3 v0, out Vector3 e1, out Vector3 e2) =>
+            Corner(e1: out e1, e2: out e2, indices: Indices.Span, positions: Positions.Span, triangle: Triangles[index], v0: out v0);
 
         public static Geometry Build(SdfMesh mesh) {
             var count = mesh.TriangleCount;
@@ -525,26 +541,8 @@ public sealed partial class SdfMeshIrradianceScene {
             });
 
             var (nodes, order, braids) = Hierarchy.Build(braid: BraidTriangles, highs: highs, leaf: LeafTriangles, lows: lows);
-            var v0 = new Vector3[count];
-            var e1 = new Vector3[count];
-            var e2 = new Vector3[count];
 
-            // The triangles in leaf order, so a leaf reads its triangles contiguously.
-            Chunked(count: count, body: (start, end) => {
-                var positions = mesh.Positions.Span;
-                var indices = mesh.Indices.Span;
-
-                for (var index = start; (index < end); index++) {
-                    var source = order[index];
-                    var a = positions[(int)indices[(3 * source)]];
-
-                    v0[index] = a;
-                    e1[index] = (positions[(int)indices[((3 * source) + 1)]] - a);
-                    e2[index] = (positions[(int)indices[((3 * source) + 2)]] - a);
-                }
-            });
-
-            return new Geometry { Braids = braids, E1 = e1, E2 = e2, Nodes = nodes, Triangles = order, V0 = v0 };
+            return new Geometry { Braids = braids, Indices = mesh.Indices, Nodes = nodes, Positions = mesh.Positions, Triangles = order };
         }
         private static void Chunked(int count, Action<int, int> body) {
             if (count < ParallelPrimitives) {

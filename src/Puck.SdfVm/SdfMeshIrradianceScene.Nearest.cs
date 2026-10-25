@@ -58,9 +58,10 @@ public sealed partial class SdfMeshIrradianceScene {
             }
             ref readonly var instance = ref m_instances[instanceIndex];
             var geometry = instance.Geometry;
-            var a = Vector3.Transform(geometry.V0[i], instance.ObjectToWorld);
-            var b = Vector3.Transform(geometry.V0[i] + geometry.E1[i], instance.ObjectToWorld);
-            var c = Vector3.Transform(geometry.V0[i] + geometry.E2[i], instance.ObjectToWorld);
+            geometry.Corner(e1: out var e1, e2: out var e2, index: i, v0: out var v0);
+            var a = Vector3.Transform(v0, instance.ObjectToWorld);
+            var b = Vector3.Transform(v0 + e1, instance.ObjectToWorld);
+            var c = Vector3.Transform(v0 + e2, instance.ObjectToWorld);
             if (Vector3.Cross(b - a, c - a).LengthSquared() == 0) { continue; }
             var closest = SdfMeshTriangle.Closest(point, a, b, c);
             var squared = Vector3.DistanceSquared(point, closest);

@@ -52,9 +52,16 @@ public sealed partial class SdfWorldTables {
     private uint m_glassDrawCount;
     private SdfMeshBox?[] m_meshDrawBoxes = [];
 
-    // The draw records, and one mesh's words, as the next write sends them.
+    // The draw records as the next write sends them, and one mesh's words as a flush stages them.
     private uint[] m_meshDrawWords = [];
     private uint[] m_meshWords = [];
+    // The region's source for its mesh section, and the placed meshes by their first word, sorted again after a plan
+    // places or forgets one.
+    private MeshSection? m_meshSection;
+    private readonly List<(int Word, SdfMesh Mesh)> m_meshOrder = [];
+    private bool m_meshOrderStale = true;
+    // The zeros a flush stages into words no placed mesh holds.
+    private static readonly uint[] ZeroWords = new uint[1 << 16];
 
     /// <summary>Gets the words the mesh region's draw records and meshes take for the draws the latest frame staged; zero
     /// before a frame draws a mesh.</summary>
@@ -114,6 +121,7 @@ public sealed partial class SdfWorldTables {
             (revision != m_meshSourceRevision)
         ) {
             m_meshArena.Plan(draws: draws);
+            m_meshOrderStale |= !m_meshArena.Unchanged;
             Volatile.Write(
                 location: ref m_meshRegionUsedBytes,
                 value: (((ulong)m_meshArena.Words) * sizeof(uint))
@@ -124,6 +132,7 @@ public sealed partial class SdfWorldTables {
                     FitMeshRegion(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
                 }
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
+                ShadowMeshRecords();
                 // Every mesh is written again at once when the arena moved them or none was written yet, since no mesh's
                 // words stand where its draw reads them. Otherwise the meshes a grown draw reserve moved are written now,
                 // since their draws were drawn from the words the reserve took, and the rest this list placed are owed and
@@ -316,8 +325,16 @@ public sealed partial class SdfWorldTables {
             }
         }
     }
-    // Writes one placed mesh's words into the region.
-    private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) {
+    // Owes one placed mesh's words: the region keeps no copy of the mesh section, and the upload's flush stages the words
+    // from the mesh itself (WriteSourcedMeshWords). The byte offset is a long: a mesh placed past 512 M words starts past
+    // 2 GiB.
+    private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) =>
+        m_meshRegion.OweSourced(
+            length: (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)),
+            offset: (((long)placement.VertexWord) * sizeof(uint))
+        );
+    // One placed mesh's words, from its first vertex word, in the mesh scratch.
+    private Span<uint> MeshWordsOf(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
 
         if (words > m_meshWords.Length) {
@@ -337,8 +354,74 @@ public sealed partial class SdfWorldTables {
                 SkinWord: ((placement.SkinWord == 0) ? 0 : (placement.SkinWord - placement.VertexWord))
             )
         );
-        // The byte offset is a long: a mesh placed past 512 M words starts past 2 GiB.
-        _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (((long)placement.VertexWord) * sizeof(uint)));
+
+        return destination;
+    }
+    // Hands the mesh region's words past the draw reserve to the meshes the arena places there, once the region holds the
+    // planned words: the host copy keeps the draw records alone.
+    private void ShadowMeshRecords() =>
+        m_meshRegion.Shadow(
+            shadowBytes: Math.Clamp(
+                max: m_meshRegion.ByteCount,
+                min: SdfMeshRegion.DrawBytes,
+                value: (((long)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes)
+            ),
+            source: (m_meshSection ??= new MeshSection(tables: this))
+        );
+    // Writes the mesh region's words [word, word + count), past the draw reserve, into a staging buffer: each placed mesh's
+    // words where the arena placed it, and zeros in the words no placed mesh holds, which no draw reads.
+    private void WriteSourcedMeshWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) {
+        if (m_meshOrderStale) {
+            m_meshOrder.Clear();
+            foreach (var (mesh, placement) in m_meshArena.Placements) { m_meshOrder.Add(item: (placement.VertexWord, mesh)); }
+            m_meshOrder.Sort(comparison: static (left, right) => left.Word.CompareTo(value: right.Word));
+            m_meshOrderStale = false;
+        }
+
+        var end = (((long)word) + count);
+        var cursor = (long)word;
+        var low = 0;
+        var high = m_meshOrder.Count;
+
+        // The first placed mesh that ends past word.
+        while (low < high) {
+            var middle = ((low + high) >>> 1);
+            var (start, mesh) = m_meshOrder[middle];
+
+            if ((((long)start) + SdfMeshRegion.WordsOf(mesh: mesh)) <= word) {
+                low = (middle + 1);
+            } else {
+                high = middle;
+            }
+        }
+        for (var index = low; (index < m_meshOrder.Count) && (m_meshOrder[index].Word < end); index++) {
+            var (start, mesh) = m_meshOrder[index];
+            var words = MeshWordsOf(mesh: mesh, placement: m_meshArena.Placements[mesh]);
+            var first = Math.Max(val1: cursor, val2: start);
+            var last = Math.Min(val1: end, val2: (((long)start) + words.Length));
+
+            WriteZeroWords(buffer: buffer, count: (first - cursor), destination: (destinationOffsetBytes + ((ulong)((cursor - word) * sizeof(uint)))));
+            buffer.Write<uint>(
+                data: words.Slice(length: ((int)(last - first)), start: ((int)(first - start))),
+                destinationOffsetBytes: (destinationOffsetBytes + ((ulong)((first - word) * sizeof(uint))))
+            );
+            cursor = last;
+        }
+        WriteZeroWords(buffer: buffer, count: (end - cursor), destination: (destinationOffsetBytes + ((ulong)((cursor - word) * sizeof(uint)))));
+    }
+    private static void WriteZeroWords(IGpuStorageBuffer buffer, long count, ulong destination) {
+        while (count > 0) {
+            var piece = ((int)Math.Min(val1: count, val2: ZeroWords.Length));
+
+            buffer.Write<uint>(data: ZeroWords.AsSpan(length: piece, start: 0), destinationOffsetBytes: destination);
+            destination += (((ulong)piece) * sizeof(uint));
+            count -= piece;
+        }
+    }
+    // The mesh section's words as the region's source sees them.
+    private sealed class MeshSection(SdfWorldTables tables) : IGpuRegionSource {
+        public void WriteWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) =>
+            tables.WriteSourcedMeshWords(buffer: buffer, count: count, destinationOffsetBytes: destinationOffsetBytes, word: word);
     }
     // Grows the region to MeshRegionGrownBytes of the need, refusing by name past what a region holds, without waiting for
     // the device (GpuRegion.Grow): the next upload clears the new buffer and copies the words the old one held into it on

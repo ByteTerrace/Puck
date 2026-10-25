@@ -32,6 +32,12 @@ namespace Puck.Abstractions.Gpu;
 /// in native memory, so a large region costs the managed heap nothing and growing it allocates no managed array.
 /// </para>
 /// <para>
+/// Such a region can keep a host copy of its leading bytes alone and take the rest from an owner that already holds those
+/// words in arrays of its own (<see cref="Shadow"/>, <see cref="IGpuRegionSource"/>): a write there owes its words
+/// without comparing them (<see cref="OweSourced"/>), and a flush asks the owner for every owed word past the copy, so a
+/// region of baked meshes holds no second copy of them on the host.
+/// </para>
+/// <para>
 /// The copy kernel reads the staging buffer as uints at <see cref="CopySourceBinding"/> and writes the destination at
 /// <see cref="CopyDestinationBinding"/>, <see cref="CopyWorkgroupSize"/> threads per group, and takes no push constants:
 /// the staging buffer states its copy. Its first <see cref="CopyHeaderWords"/> uints are <c>(count, runCount,
@@ -89,8 +95,11 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// that slot's next flush.</summary>
     public const ulong StagingFloorBytes = (16UL << 20);
 
-    // The host's copy of the region, ByteCount bytes of native memory the region frees when disposed.
+    // The host's copy of the region's first ShadowBytes bytes, native memory the region frees when disposed; the words past
+    // it are m_source's.
     private byte* m_contents;
+    private long m_shadowBytes;
+    private IGpuRegionSource? m_source;
     private readonly IGpuComputePipeline? m_copyPipeline;
 
     // The staged policy's copy sets: its share of its owner's reserved pool, or of its own; null under the other
@@ -304,6 +313,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         Policy = policy;
         SlotCount = slotCount;
         m_contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
+        m_shadowBytes = byteCount;
         m_copyPipeline = copyPipeline;
         m_bindings = bindings;
         m_buffers = buffers;
@@ -494,11 +504,12 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
     /// <summary>Gets the region's size in bytes, which <see cref="Grow"/> raises.</summary>
     public long ByteCount { get; private set; }
-    /// <summary>Gets the host's copy of the whole region: what every slot's <see cref="Buffer"/> holds once flushed and
-    /// copied. The span reads native memory the region frees when disposed or moves when it grows, so it is read before
-    /// either. A span counts its length in an int, so a region past <see cref="int.MaxValue"/> bytes is read a piece at
-    /// a time through <see cref="ContentsAt"/>.</summary>
-    /// <exception cref="InvalidOperationException">The region holds more bytes than one span reaches.</exception>
+    /// <summary>Gets the host's copy of the region, its first <see cref="ShadowBytes"/> bytes (the whole region unless a
+    /// source holds the rest): what every slot's <see cref="Buffer"/> holds there once flushed and copied. The span reads
+    /// native memory the region frees when disposed or moves when it grows, so it is read before either. A span counts
+    /// its length in an int, so a copy past <see cref="int.MaxValue"/> bytes is read a piece at a time through
+    /// <see cref="ContentsAt"/>.</summary>
+    /// <exception cref="InvalidOperationException">The host copy holds more bytes than one span reaches.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public ReadOnlySpan<byte> Contents {
         get {
@@ -507,11 +518,11 @@ public sealed unsafe class GpuRegion : IDisposable {
                 instance: this
             );
 
-            if (ByteCount > int.MaxValue) {
-                throw new InvalidOperationException(message: $"The region's {ByteCount} bytes are past what one span reaches; read it through ContentsAt.");
+            if (m_shadowBytes > int.MaxValue) {
+                throw new InvalidOperationException(message: $"The region's {m_shadowBytes} host bytes are past what one span reaches; read it through ContentsAt.");
             }
 
-            return new ReadOnlySpan<byte>(pointer: m_contents, length: ((int)ByteCount));
+            return new ReadOnlySpan<byte>(pointer: m_contents, length: ((int)m_shadowBytes));
         }
     }
     /// <summary>Returns <paramref name="length"/> bytes of the host's copy of the region from <paramref name="offset"/>,
@@ -521,7 +532,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="length">The bytes.</param>
     /// <returns>The bytes.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> or <paramref name="length"/> is negative,
-    /// or the span runs past <see cref="ByteCount"/>.</exception>
+    /// or the span runs past <see cref="ShadowBytes"/>.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public ReadOnlySpan<byte> ContentsAt(long offset, int length) {
         ObjectDisposedException.ThrowIf(
@@ -534,8 +545,11 @@ public sealed unsafe class GpuRegion : IDisposable {
             offset: offset
         );
     }
-    /// <summary>Gets the retained CPU shadow payload bytes: the native host copy's size.</summary>
-    public ulong CpuShadowBytes => ((ulong)ByteCount);
+    /// <summary>Gets the retained CPU shadow payload bytes: the native host copy's size, <see cref="ShadowBytes"/>.</summary>
+    public ulong CpuShadowBytes => ((ulong)m_shadowBytes);
+    /// <summary>Gets the bytes of the region, from its start, that the host copy holds: <see cref="ByteCount"/> until a
+    /// source takes the words past them (<see cref="Shadow"/>).</summary>
+    public long ShadowBytes => m_shadowBytes;
     /// <summary>Gets whether the region has grown since its last copy recording, so its next one clears the new
     /// destination and carries the old one's bytes into it (<see cref="RecordCarry"/>).</summary>
     public bool OwesCarry => (m_carrySource is not null);
@@ -646,18 +660,23 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         var replaced = m_destination!;
 
-        // A zeroed allocation takes fresh pages the system zeroes as they are first touched, so only the bytes held are
-        // copied, where reallocating would also clear the new tail.
-        var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
+        // The host copy grows with a region that holds all of it; a source keeps the new tail, and the host copy its
+        // shadow. A zeroed allocation takes fresh pages the system zeroes as they are first touched, so only the bytes held
+        // are copied, where reallocating would also clear the new tail.
+        if (m_source is null) {
+            var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
 
-        System.Buffer.MemoryCopy(
-            destination: contents,
-            destinationSizeInBytes: byteCount,
-            source: m_contents,
-            sourceBytesToCopy: ByteCount
-        );
-        NativeMemory.Free(ptr: m_contents);
-        m_contents = contents;
+            System.Buffer.MemoryCopy(
+                destination: contents,
+                destinationSizeInBytes: byteCount,
+                source: m_contents,
+                sourceBytesToCopy: ByteCount
+            );
+            NativeMemory.Free(ptr: m_contents);
+            m_contents = contents;
+            m_shadowBytes = byteCount;
+            m_knownWords = ((int)(byteCount / sizeof(uint)));
+        }
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);
 
@@ -668,7 +687,6 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         m_destination = replacement;
         ByteCount = byteCount;
-        m_knownWords = ((int)(byteCount / sizeof(uint)));
         m_copySets!.ForgetWriter(region: this);
 
         return replaced;
@@ -716,23 +734,29 @@ public sealed unsafe class GpuRegion : IDisposable {
             usage: GpuBufferUsage.Storage
         );
         var replaced = m_destination!;
-        var contents = ((byte*)NativeMemory.Alloc(byteCount: ((nuint)byteCount)));
+        var shadow = Math.Min(
+            val1: m_shadowBytes,
+            val2: byteCount
+        );
+        var contents = ((byte*)NativeMemory.Alloc(byteCount: ((nuint)shadow)));
 
         System.Buffer.MemoryCopy(
             destination: contents,
-            destinationSizeInBytes: byteCount,
+            destinationSizeInBytes: shadow,
             source: m_contents,
-            sourceBytesToCopy: byteCount
+            sourceBytesToCopy: shadow
         );
         NativeMemory.Free(ptr: m_contents);
         m_contents = contents;
+        m_shadowBytes = shadow;
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);
         m_carrySource = null;
         m_carryBytes = 0;
         m_destination = replacement;
         ByteCount = byteCount;
-        m_knownWords = ((int)(byteCount / sizeof(uint)));
+        // Every word is owed below, so the destination holds the host copy once the copy runs.
+        m_knownWords = ((int)(shadow / sizeof(uint)));
         m_copySets!.ForgetWriter(region: this);
         OweAll(slot: 0);
 
@@ -796,6 +820,107 @@ public sealed unsafe class GpuRegion : IDisposable {
             sourceStageMask: GpuStage.Transfer
         );
         m_carrySource = null;
+    }
+    /// <summary>Keeps the host copy of the region's first <paramref name="shadowBytes"/> bytes alone and hands every word
+    /// past them to <paramref name="source"/>, which a flush asks for the words it owes there (<see cref="OweSourced"/>),
+    /// so the region holds no copy of words its owner already holds. A host copy that grows starts its new bytes unknown, so
+    /// writes there owe every word until each is written once; one that shrinks frees the rest. The shadow stays put as the
+    /// region grows, and a region that shrinks below it shrinks it too. Owed words stay owed.</summary>
+    /// <param name="source">The owner of the words past the host copy, which the region holds until disposed.</param>
+    /// <param name="shadowBytes">The bytes the host copy holds from the region's start; positive, a whole number of uints
+    /// and at most <see cref="ByteCount"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="shadowBytes"/> is not positive, not a whole number of
+    /// uints or past <see cref="ByteCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void Shadow(IGpuRegionSource source, long shadowBytes) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        if (
+            (Policy != GpuResidencyPolicy.Staged) ||
+            m_external
+        ) {
+            throw new InvalidOperationException(message: "Only a staged region that owns its destination hands words to a source.");
+        }
+        if (
+            (shadowBytes <= 0) ||
+            (shadowBytes > ByteCount) ||
+            ((shadowBytes % sizeof(uint)) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: shadowBytes,
+                message: $"A region's host copy holds a positive whole number of uints within its {ByteCount} bytes.",
+                paramName: nameof(shadowBytes)
+            );
+        }
+
+        m_source = source;
+        if (shadowBytes == m_shadowBytes) {
+            return;
+        }
+
+        var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)shadowBytes)));
+
+        System.Buffer.MemoryCopy(
+            destination: contents,
+            destinationSizeInBytes: shadowBytes,
+            source: m_contents,
+            sourceBytesToCopy: Math.Min(
+                val1: m_shadowBytes,
+                val2: shadowBytes
+            )
+        );
+        NativeMemory.Free(ptr: m_contents);
+        m_contents = contents;
+        // The destination holds the host copy no further than both copies reach.
+        m_knownWords = Math.Min(
+            val1: m_knownWords,
+            val2: ((int)(Math.Min(val1: m_shadowBytes, val2: shadowBytes) / sizeof(uint)))
+        );
+        m_shadowBytes = shadowBytes;
+    }
+    /// <summary>Owes the words of <paramref name="length"/> bytes from <paramref name="offset"/>, past the host copy, in
+    /// every buffer, comparing nothing: the region's source (<see cref="Shadow"/>) holds what they are, and the next flush
+    /// asks it for them.</summary>
+    /// <param name="offset">The first byte; a whole number of uints, at or past <see cref="ShadowBytes"/>.</param>
+    /// <param name="length">The bytes; positive, a whole number of uints, ending within <see cref="ByteCount"/>.</param>
+    /// <exception cref="InvalidOperationException">The region has no source.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The span is not whole uints, starts before
+    /// <see cref="ShadowBytes"/> or runs past <see cref="ByteCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void OweSourced(long offset, long length) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (m_source is null) {
+            throw new InvalidOperationException(message: "The region has no source for the words past its host copy.");
+        }
+        if (
+            (offset < m_shadowBytes) ||
+            (length <= 0) ||
+            (offset > (ByteCount - length)) ||
+            ((offset % sizeof(uint)) != 0) ||
+            ((length % sizeof(uint)) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: offset,
+                message: $"Sourced words are whole uints between the host copy's {m_shadowBytes} bytes and the region's {ByteCount}.",
+                paramName: nameof(offset)
+            );
+        }
+
+        Owe(
+            endWord: ((int)((offset + length) / sizeof(uint))),
+            startWord: ((int)(offset / sizeof(uint)))
+        );
+        m_stagedSlot = -1;
     }
     /// <summary>Makes <paramref name="slot"/> owe every word of the region again, as a new buffer does, so its next flush
     /// or copy sends the whole region whatever the slot last held. An owner that rewrites the whole region each frame
@@ -984,12 +1109,12 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
     /// <summary>Copies <paramref name="bytes"/> into <see cref="Contents"/> at <paramref name="offset"/> and owes, in
     /// every buffer, each run of words that differed, and every word of the span the destination is not known to hold
-    /// (an external destination's, after a retarget).</summary>
+    /// (an external destination's after a retarget, or the bytes a host copy grew by, <see cref="Shadow"/>).</summary>
     /// <param name="offset">The byte offset the bytes start at.</param>
     /// <param name="bytes">The new contents of that span.</param>
     /// <returns><see langword="true"/> when any word was owed.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is negative, the span runs past
-    /// <see cref="ByteCount"/>, or it lands past an external destination's end.</exception>
+    /// <see cref="ShadowBytes"/>, or it lands past an external destination's end.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public bool Write(long offset, ReadOnlySpan<byte> bytes) {
         ObjectDisposedException.ThrowIf(
@@ -998,7 +1123,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         ArgumentOutOfRangeException.ThrowIfNegative(value: offset);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            other: (ByteCount - bytes.Length),
+            other: (m_shadowBytes - bytes.Length),
             value: offset
         );
 
@@ -1066,7 +1191,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <see cref="Contents"/>.</param>
     /// <returns><see langword="true"/> when any word was owed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="runs"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="words"/> runs past <see cref="ByteCount"/>, or a run
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="words"/> runs past <see cref="ShadowBytes"/>, or a run
     /// past the end of <paramref name="words"/>.</exception>
     /// <exception cref="InvalidOperationException">The region's destination is external, whose contents the region does
     /// not know.</exception>
@@ -1078,7 +1203,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         ArgumentNullException.ThrowIfNull(argument: runs);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            other: (ByteCount / sizeof(uint)),
+            other: (m_shadowBytes / sizeof(uint)),
             value: ((long)words.Length)
         );
 
@@ -1210,12 +1335,12 @@ public sealed unsafe class GpuRegion : IDisposable {
             value: slot
         );
     }
-    // Length bytes of the host copy from offset as a writable span; the copy moves when the region grows.
+    // Length bytes of the host copy from offset as a writable span; the copy moves when it grows or shrinks.
     private Span<byte> HostSpan(long offset, int length) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: offset);
         ArgumentOutOfRangeException.ThrowIfNegative(value: length);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            other: (ByteCount - length),
+            other: (m_shadowBytes - length),
             value: offset
         );
 
@@ -1224,11 +1349,26 @@ public sealed unsafe class GpuRegion : IDisposable {
             pointer: (m_contents + offset)
         );
     }
-    // Writes the words [startWord, startWord + length) of the host copy into a buffer from byte destination, a piece of
-    // at most WriteChunkBytes at a time, since a span's length is an int.
+    // Writes the words [startWord, startWord + length) of the region into a buffer from byte destination: those the host
+    // copy holds, a piece of at most WriteChunkBytes at a time since a span's length is an int, and those past it from the
+    // source.
     private void WriteHostWords(IGpuStorageBuffer buffer, int startWord, int length, ulong destination) {
         var offset = (((long)startWord) * sizeof(uint));
-        var remaining = (((long)length) * sizeof(uint));
+        var remaining = Math.Clamp(
+            max: (((long)length) * sizeof(uint)),
+            min: 0L,
+            value: (m_shadowBytes - offset)
+        );
+        var sourced = ((((long)length) * sizeof(uint)) - remaining);
+
+        if (sourced > 0) {
+            m_source!.WriteWords(
+                buffer: buffer,
+                count: ((int)(sourced / sizeof(uint))),
+                destinationOffsetBytes: (destination + ((ulong)remaining)),
+                word: ((int)((offset + remaining) / sizeof(uint)))
+            );
+        }
 
         while (remaining > 0) {
             var piece = ((int)Math.Min(

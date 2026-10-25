@@ -246,6 +246,20 @@ working set mixes warm-up, caches and garbage. The owner's method:
    regions released, but the process holds them for a while, so a single
    private reading can sit several GB above the floor. Compare the floor
    across samples, never one reading.
+7. Private bytes count the device's own heaps too. On the lead machine
+   (Direct3D 12, RTX 4070) every device-local heap is mapped into the process as
+   write-combined private pages with almost nothing resident: the debug
+   world's 1.9 GB mesh-region destination is one such allocation, and about
+   5 GB of a windowed World's private bytes are these. Read system memory as
+   the working set, and separate a page probe's write-combined pages by their
+   residency before charging them to a host buffer.
+8. Attribute managed holders by walking the heap, not by a sampled dump:
+   `dotnet-gcdump report` samples a multi-GB heap and its per-type totals do
+   not add up to it. A scratch ClrMD program (`Microsoft.Diagnostics.Runtime`
+   4.x reads .NET 11; attach with `suspend: true`, since a snapshot of a large
+   World fails) that sums live arrays by their referrer chain names the
+   holders exactly. A suspended World shows the pause as one long frame in
+   `host.frames`, so never attach during a frame-time reading.
 
 ## Branches
 

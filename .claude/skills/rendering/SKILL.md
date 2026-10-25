@@ -406,6 +406,15 @@ compares and fails naming the file that drifted, it writes nothing.
   floor) once it holds four times more, and a relocated mesh region shrinks to
   its need (`GpuRegion.Shrink`). Upload heaps are system memory: a staging
   buffer kept at a whole region's size costs the process that much working set.
+- The mesh region keeps no host copy of its meshes. Its host copy is the draw
+  records alone (`GpuRegion.Shadow`); a placed mesh's words are owed without a
+  compare (`GpuRegion.OweSourced`) and the upload's flush writes them from the
+  `SdfMesh` arrays (`SdfWorldTables.WriteSourcedMeshWords`, an
+  `IGpuRegionSource`). The irradiance scene likewise reads its triangles through
+  each mesh's positions and indices, never a copy. A new consumer of baked
+  triangles reads the `SdfMesh` arrays rather than copying them: the debug
+  world's meshes are about 1.8 GB of managed arrays, and every copy costs that
+  much again in working set.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.

@@ -23,8 +23,8 @@
     <ItemGroup Condition="'$(PuckRecordMethods)' == 'true'">
         <AssemblyMetadata Include="PuckRecordMethods" Value="true" />
     </ItemGroup>
-    <!-- A debug World keeps about 5 GB of large-object arrays live (baked meshes, the irradiance scene) and frees
-         large arrays in bursts; without it the GC holds freed regions committed and leaves the large object heap
+    <!-- A debug World keeps about 3 GB of large-object arrays live (baked meshes, the irradiance scene's hierarchy) and
+         frees large arrays in bursts; without it the GC holds freed regions committed and leaves the large object heap
          uncompacted, about 2 GB of commit and private bytes on a windowed debug World. Measured with host.memory. -->
     <ItemGroup>
         <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />

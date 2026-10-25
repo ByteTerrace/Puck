@@ -368,6 +368,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             buffers: gpu.BufferFactory, bindings: gpu.Bindings, recorder: gpu.Recorder, copyPipeline: m_regionCopyPipeline,
             name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex)));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
+        ShadowMeshRecords();
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));
         m_previousMeshTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
