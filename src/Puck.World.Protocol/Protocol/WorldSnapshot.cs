@@ -119,8 +119,8 @@ public readonly record struct EntitySnapshot(
 /// <param name="StepTicks">The engine ticks the reported step advanced by — the client's easer-decay delta.</param>
 /// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
 /// <param name="Authority">The authority identity every entry belongs to.</param>
-/// <param name="FieldCells">The field-lattice cells written since the previous snapshot — or every cell when
-/// <paramref name="FieldsFull"/> is set. Empty for a world without a <c>fields</c> section.</param>
+/// <param name="FieldCells">Field-lattice writes and typed document-cell values since the previous snapshot.
+/// A primer carries every streamed document cell, and every lattice cell when <paramref name="FieldsFull"/> is set.</param>
 /// <param name="FieldsFull"><see langword="true"/> when <paramref name="FieldCells"/> carries every cell (a primer or a
 /// resync), so a mirror replaces rather than patches.</param>
 /// <param name="EngineTick">The engine-tick coordinate <see cref="Tick"/> completed at — what a presentation-side
@@ -139,8 +139,8 @@ public readonly record struct WorldSnapshot(
     bool FieldsFull = false,
     ulong EngineTick = 0UL
 );
-/// <summary>One field-lattice cell write carried on a snapshot.</summary>
-/// <param name="Cell">The cell index (row-major: z, then layer, then x).</param>
+/// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
+/// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
 /// <param name="Field">The field's index in the declared <c>fields.fields</c> list.</param>
 /// <param name="Raw">The cell's value, raw Q48.16 bits.</param>
 /// <param name="Row">A document row ordinal for a typed state cell, or -1 for a field-lattice cell.</param>

@@ -22,8 +22,8 @@ public enum WorldCellWriteVerdict {
     /// <summary>The arena refused the operand.</summary>
     Rejected,
 }
-/// <summary>The server's columnar store: the arena is the authoritative state during a tick, and the installed
-/// document is the arena's export at the end of it.</summary>
+/// <summary>The server's authoritative columnar store. Bound plain values stream through snapshots; an immutable
+/// document export is materialized for document edits, checkpoints and explicit definition reads.</summary>
 /// <remarks>Construction, document installation, and checkpoint restoration validate the complete state section.
 /// Pool storage is admitted through its typed snapshot; ordinary rows use <see cref="StateArena.TryLoad"/>.</remarks>
 public sealed partial class WorldServer {

@@ -352,7 +352,7 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                if (Host.Engagement.PlayersOn(screenIndex: screen.Index).Count > 0) {
+                if (Host.Engagement.HasPlayersOn(screenIndex: screen.Index)) {
                     continue;
                 }
 

@@ -40,7 +40,9 @@ public static class WorldTabletopFrame {
     public static bool TryFind(WorldDefinition definition, string placementId, out WorldTabletopEngage engage, out CompiledTopology topology) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        foreach (var placement in definition.Placements) {
+        var placements = definition.Placements;
+        for (var index = 0; index < placements.Count; index++) {
+            var placement = placements[index];
             if (
                 string.Equals(
                 a: placement.Id,

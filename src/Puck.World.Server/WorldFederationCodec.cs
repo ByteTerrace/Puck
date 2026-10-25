@@ -1567,6 +1567,10 @@ public static partial class WorldFederationCodec {
                     break;
                 }
                 value = ((kind == CellKind.Text) ? CellValue.Text(value: reader.ReadString(field: "snapshot state text", maxBytes: (StateCapacity.MaxTextValueLength * 4))) : CellValue.FromNumber(kind: kind, raw: reader.ReadInt64()));
+                if (kind == CellKind.Text && value.AsText.Length > StateCapacity.MaxTextValueLength) {
+                    reader.Fail(WireRefusal.PayloadTooLarge, "snapshot state text exceeds the cell limit");
+                    break;
+                }
             }
 
             deltas[index] = new FieldCellDelta(
