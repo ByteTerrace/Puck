@@ -63,6 +63,9 @@ public sealed class SdfMeshRegionArena {
     public IReadOnlySet<SdfMesh> Moved => m_moved;
     /// <summary>Gets whether the latest plan moved every mesh, so the region owes every word.</summary>
     public bool Relocated { get; private set; }
+    /// <summary>Gets whether the latest plan's list named the meshes the plan before it named, in the same order, so every
+    /// placement and the reserve stand as they were and only the draws' own values can have moved.</summary>
+    public bool Unchanged { get; private set; }
 
     /// <summary>Places the meshes a list of draws names: a mesh already placed keeps its words, and a new one is added at
     /// the arena's end, unless the plan relocates every mesh.</summary>
@@ -84,9 +87,12 @@ public sealed class SdfMeshRegionArena {
             m_placed.Clear();
             m_moved.Clear();
             Relocated = false;
+            Unchanged = true;
 
             return;
         }
+
+        Unchanged = false;
 
         m_named.Clear();
         m_placed.Clear();
