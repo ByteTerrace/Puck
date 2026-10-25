@@ -19,6 +19,7 @@ How a world is composed, compiled, packaged, released, and rolled back, and what
 
 Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the arcade's cabinet module used twice, with a retail-scale cartridge in one. Its decisions are in [the register](../decisions/machines-and-cartridges.md).
 
+- [The UI overhaul](ui.md)—one retained UI tree for worlds, the engine's own surfaces, mods and diegetic screens, in six steps.
 - [Humble Gaming Deck](humble-gaming-deck.md)—the NES and Famicom emulator core (hosted in World screens through the `humble-gaming-deck` engine), the shared-layer changes it needs, and its accuracy target.
 
 ## [Play](play.md)

@@ -1103,6 +1103,33 @@ mesh replaces the skinned one when it lands (`SdfMeshSettle`). A pose still
 changing never rebakes, and a residency starts at most two such rebakes at once
 and four a second; `world.counters sdf.mesh-settle` counts them.
 
+A finished mesh is merged before the library keeps it (`SdfMeshPlanarMerge`, the
+first level of detail), since the contour leaves a quad a lattice cell on every
+flat face and every pass that draws or traces the mesh pays for each. A region is
+a run of triangles across shared edges that shade alike everywhere: one material,
+one member, one normal bit for bit at every vertex, and every vertex within a few
+units in the last place of a float of one plane. A vertex only its region names,
+whose triangles close a ring about it, goes, and the hole it leaves is ear-clipped
+again from the vertices about it, each ear certified by exact orientation tests on
+the float coordinates, then flipped toward the region's Delaunay triangulation
+where the circle test is certain. Every vertex on a region's outline stays, where
+an unmerged neighbour, another region or the mesh's open edge meets it, so the
+outline is kept edge for edge, no T-junction opens a crack, and the rasterizer
+covers each polygon as it covered the quads. A straight run two merged faces share
+keeps its vertices too: dropped from both sides, the geometry holds but the
+rasterizer snaps the shared edge from other vertices, for one part in a hundred of
+the triangles left. No vertex moves and none changes its normal, so a flat face
+shades as it did; a curved surface, whose vertex normals differ, is left as the
+contour made it. A retriangulated face interpolates depth with other rounding, so
+where it meets a separately baked mesh a pixel at the junction may take the other
+surface, as two coincident meshes' pixels do. The store keeps the merged mesh,
+every pass draws it and the irradiance trace reads it, boxing a long thin triangle
+in pieces so its hierarchy stays tight (`SdfMeshIrradianceScene`). On the debug
+world the merge takes the world residency's 57.3 M baked triangles to 35.4 M, the
+stored set's 1.74 GB to 1.02 GB and the mesh region's 1.81 GB to 1.11 GB, and a
+lobby frame's mesh pass from 11.5 M triangles to 4.9 M; the done line counts what
+it removed (`merged=`).
+
 A body straddling a portal whose counterpart stands in the same world is drawn
 on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding
 the body's slots is clipped to the front of the glass it straddles, and gains a
@@ -1171,7 +1198,7 @@ garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
 The World's library also keeps every mesh it stores between runs, in the
 `meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to
-8 GiB, six of the debug world's sets, a set at a time: each bake identity's entries are one directory, removed whole,
+8 GiB, about eight of the debug world's sets, a set at a time: each bake identity's entries are one directory, removed whole,
 least recently used first, by the caches' one retention, `CacheRetention`), keyed by the group's
 geometry and the bake's identity (`SdfMeshBakeIdentity`): the bake kernels'
 bytecode and the code the bake runs, the IL of every method its own code reaches

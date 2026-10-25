@@ -566,6 +566,7 @@ public sealed partial class WorldAddonRuntime {
                 continue;
             }
 
+            ApplyCellWrites(addon: addon, tick: tick);
             FoldActs(
                 addon: addon,
                 tick: tick
@@ -684,7 +685,7 @@ public sealed partial class WorldAddonRuntime {
             var fuelConsumedThisTick = addon.Pump.FuelConsumed;
 
             addon.LastTickFuelConsumed = fuelConsumedThisTick;
-            addon.PeakTickFuelConsumed = Math.Max(addon.PeakTickFuelConsumed, fuelConsumedThisTick);
+            addon.PeakTickFuelConsumed = Math.Max(val1: addon.PeakTickFuelConsumed, val2: fuelConsumedThisTick);
             addon.TotalFuelConsumed = addon.TotalFuelConsumed.AddSaturating(right: fuelConsumedThisTick);
 
             if (!pumped) {

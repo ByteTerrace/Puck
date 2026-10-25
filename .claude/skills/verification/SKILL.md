@@ -195,7 +195,11 @@ time. A World run with effective `host.presentation: none` uses no GPU.
   transition once. It never counts itself. A process search of your own
   (`Get-Process`, `pgrep`, `tasklist | findstr`) matches its own command line:
   exclude its PID before concluding another job is running, and never skip or
-  postpone a granted leg on that match alone.
+  postpone a granted leg on that match alone. `puck host load` itself names any
+  running `Puck.World`, a headless one (`--headless true`) included, as holding
+  the GPU, though a headless World neither uses the GPU nor holds the lease: read
+  the process's command line, and let the lease (`puck_world_start` waits for
+  it) decide.
 - Stop only the processes you started, by the PIDs you recorded.
 - A sandboxed process inventory can omit machine-wide jobs, including a lease
   holder visible outside that sandbox. An empty `Get-Process` result there

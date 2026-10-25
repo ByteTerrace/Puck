@@ -956,15 +956,21 @@ public sealed partial class WorldDocument {
         ) ?? []);
         // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
         // the one caller that needs both.
-        var fieldCells = new FieldCellDelta[latticeDeltas.Length];
+        var stateCells = Host.StreamedCellCount(full: !consumeContinuity);
+        var cellCount = (latticeDeltas.Length + stateCells);
+
+        if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)cellCount)))); }
+        var fieldCells = m_snapshotCells.AsMemory(length: cellCount, start: 0);
 
         for (var index = 0; (index < latticeDeltas.Length); index++) {
-            fieldCells[index] = new FieldCellDelta(
+            fieldCells.Span[index] = new FieldCellDelta(
                 Cell: latticeDeltas[index].Cell,
                 Field: latticeDeltas[index].Field,
                 Raw: latticeDeltas[index].Raw
             );
         }
+
+        Host.CopyStreamedCells(fieldCells.Span[latticeDeltas.Length..], full: !consumeContinuity);
 
         return new WorldSnapshot(
             Tick: tick,
@@ -980,6 +986,8 @@ public sealed partial class WorldDocument {
             EngineTick: Host.CompletedEngineTicks
         );
     }
+
+    private FieldCellDelta[] m_snapshotCells = [];
 
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
     // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write

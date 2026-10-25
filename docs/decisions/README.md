@@ -24,6 +24,9 @@ contracts belong in the subsystem guides; proposed changes belong in
   content policy, and the cartridge program model.
 - [Play](play.md): the reference game's shape, creatures and scale, groups
   and matchmaking, and the agent surfaces.
+- [UI](ui.md): one retained tree as presentation, per-seat roots, a neutral
+  design language with looks layered on top, and mods' UI in a presentation
+  entry.
 - [Rendering](rendering.md): fixtures before features, attachment ownership,
   the hybrid resolve, the persistence boundary, distribution, P6's experiments
   in scope, hardware- and environment-only checks run once at the programme's

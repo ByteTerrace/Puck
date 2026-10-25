@@ -40,6 +40,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         )
         : null);
     private EntitySnapshot[] m_redacted = [];
+    private FieldCellDelta[] m_latticeCells = [];
 
     private bool m_invalidated;
 
@@ -189,10 +190,20 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         var currentDisclosure = disclosure();
 
+        // Projected documents disclose named observations in their own order. Document-row ordinals belong only
+        // to full local mirrors; remote values travel through the existing disclosure projection below.
+        if (m_latticeCells.Length < snapshot.FieldCells.Length) { Array.Resize(array: ref m_latticeCells, newSize: snapshot.FieldCells.Length); }
+        var cellCount = 0;
+
+        foreach (var cell in snapshot.FieldCells.Span) {
+            if (cell.Row < 0) { m_latticeCells[cellCount++] = cell; }
+        }
+        var latticeSnapshot = snapshot with { FieldCells = m_latticeCells.AsMemory(length: cellCount, start: 0) };
+
         m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
         if (!m_sampler.TryProject(
             projected: out var projected,
-            snapshot: in snapshot
+            snapshot: in latticeSnapshot
         )) {
             return;
         }
@@ -210,10 +221,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     }
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => DeliverDefinition(
-        definition: definition,
-        version: version
-    );
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+        DeliverDefinition(definition: (stamp.ArenaValues ? server!.MaterializeArena() : definition), version: version);
+    }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,
         WorldFederationCodec.EncodeRoute(

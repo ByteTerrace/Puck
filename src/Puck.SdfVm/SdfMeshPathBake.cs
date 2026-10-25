@@ -224,9 +224,11 @@ public sealed partial class SdfMeshPathBake {
     private long m_taps;
     private long m_discarded;
     private long m_refinedCells;
-    // The mesh edges the material cuts searched for a boundary, and the vertices the field check moved onto the surface.
+    // The mesh edges the material cuts searched for a boundary, the vertices the field check moved onto the surface, and
+    // the triangles the planar merge took out of the contours.
     private long m_cutEdges;
     private long m_softened;
+    private long m_merged;
     private double m_seconds;
     private bool m_reported;
     private long m_loaded;
@@ -634,7 +636,7 @@ public sealed partial class SdfMeshPathBake {
                 bytes += (((((long)mesh.Positions.Length) * SdfMeshRegion.VertexBytes) + (((long)mesh.Indices.Length) * sizeof(uint))) + (((long)mesh.TriangleCount) * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -785,6 +787,7 @@ public sealed partial class SdfMeshPathBake {
             m_refinedCells = 0;
             m_cutEdges = 0;
             m_softened = 0;
+            m_merged = 0;
             m_loaded = 0;
             m_reported = false;
             m_clock.Restart();
@@ -1436,15 +1439,21 @@ public sealed partial class SdfMeshPathBake {
 
         return new SdfMesh(indices: mesh.Indices, members: members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: mesh.TriangleMaterials, vertexMembers: vertexMembers);
     }
-    // Lands a group's finished mesh: in the library, which keeps it for another program or residency and its store, and as
-    // the group's drawn mesh.
+    // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge): in the
+    // library, which keeps it for another program or residency and its store, and as the group's drawn mesh.
     private void Land(Group group, SdfMesh? mesh) {
+        var merged = 0;
+
         if (mesh is not null) {
-            mesh = mesh with { BakeCell = group.DiagnosticCell };
+            var contoured = mesh.TriangleCount;
+
+            mesh = SdfMeshPlanarMerge.Merge(mesh: mesh) with { BakeCell = group.DiagnosticCell };
+            merged = (contoured - mesh.TriangleCount);
             Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
 
         lock (m_gate) {
+            m_merged += merged;
             group.Contouring = false;
             group.Done = true;
             Draw(group: group, mesh: mesh);
@@ -1502,7 +1511,7 @@ public sealed partial class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return ($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
+        return ($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
     }
 
     // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it

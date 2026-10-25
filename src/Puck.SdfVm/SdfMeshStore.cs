@@ -26,9 +26,9 @@ namespace Puck.SdfVm;
 /// </summary>
 public sealed class SdfMeshStore {
     /// <summary>The bytes a store holds at most unless its owner names another bound: eight gibibytes. The debug world's
-    /// meshes fill about 1.26 GB in about 1,150 entries under one identity and backend, and one per-user store serves
-    /// every World and worktree on a machine, so this keeps six such sets whole; a set larger than the bound alone keeps
-    /// its most recently used entries.</summary>
+    /// meshes fill about 1.02 GB in about 1,410 entries under one identity and backend, and one per-user store serves
+    /// every World and worktree on a machine, so this keeps about eight such sets whole; a set larger than the bound alone
+    /// keeps its most recently used entries.</summary>
     public const long DefaultCapacityBytes = (8L << 30);
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";

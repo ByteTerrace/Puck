@@ -67,7 +67,11 @@ public static class WorldFacePortalPolicy {
 
         var ceiling = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Motion.MoveSpeed));
 
-        foreach (var kit in definition.Kits) {
+        var kits = definition.Kits;
+
+        for (var index = 0; (index < kits.Count); index++) {
+            var kit = kits[index];
+
             if (kit is null) {
                 continue;
             }
@@ -87,7 +91,11 @@ public static class WorldFacePortalPolicy {
             );
 
             // An anisotropic shaping row's along facet travels backwards at its own rate, which no forward bound covers.
-            foreach (var row in (motion.Shaping ?? [])) {
+            var shaping = motion.Shaping;
+
+            for (var rowIndex = 0; (rowIndex < (shaping?.Count ?? 0)); rowIndex++) {
+                var row = shaping![rowIndex];
+
                 if (
                     (row?.Across is not null) &&
                     (row.Along?.BackwardSpeed is { } reverse)

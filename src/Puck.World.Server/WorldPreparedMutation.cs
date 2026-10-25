@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 /// document, what was compiled and built for it, and the resources the addon and machine hosts staged.</summary>
 /// <remarks>Whoever holds one installs it through <see cref="WorldDocument.InstallPrepared"/> or disposes it.
 /// Disposing one that was not installed releases what was staged; a plan its host committed is left alone.</remarks>
-internal sealed class WorldPreparedMutation(
+internal struct WorldPreparedMutation(
     WorldMutation mutation,
     WorldDefinition candidate,
     WorldRuleCompilation? compilation,

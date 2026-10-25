@@ -17,6 +17,7 @@ public sealed class ConsoleControlSession : IControlSession {
     private bool m_busy;
     private bool m_disposed;
     private TaskCompletionSource<CommandResult>? m_result;
+    private Action<CommandResult>? m_scriptResult;
 
     /// <summary>Creates a dedicated Console session. The capture delegate runs only on the ordinary command pump.</summary>
     /// <param name="source">The running host's existing text source.</param>
@@ -41,7 +42,13 @@ public sealed class ConsoleControlSession : IControlSession {
             // The settled result, never the submit-time one: a simulation-routed line answers nothing until its tick
             // applies, an edit answers nothing until the authority decides it, and a line that holds the session
             // answers when its hold ends.
-            onSettled: (_, result) => Volatile.Read(location: ref m_result)?.TrySetResult(result: result)
+            onSettled: (_, result) => {
+                if (Volatile.Read(location: ref m_scriptResult) is { } scriptResult) {
+                    scriptResult(result);
+                } else {
+                    Volatile.Read(location: ref m_result)?.TrySetResult(result: result);
+                }
+            }
         );
     }
 
@@ -260,27 +267,43 @@ public sealed class ConsoleControlSession : IControlSession {
                 token: cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
             }
-            var completion = new TaskCompletionSource<CommandResult>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            var lines = request.ReadCommands();
+            var completion = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            List<ControlCommandResult> results = [];
+            var remaining = ControlLimits.OutputCharacters;
 
-            Volatile.Write(
-                location: ref m_result,
-                value: completion
-            );
-            m_session.Enqueue(line: request.Command!);
-            var result = await completion.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            Volatile.Write(location: ref m_scriptResult, value: result => {
+                var line = lines[results.Count];
+                var bounded = new ControlResponse(request.Id,
+                    (result.IsError ? "refused" : (string.IsNullOrEmpty(value: result.Output) ? "submitted" : "completed")),
+                    result.Output, result.IsError, result.ClearTranscript)
+                    .BoundedTo(maximumCharacters: (remaining - (256 * ((lines.Length - results.Count) - 1))));
 
-            // A console answer longer than the transport carries is still the command's answer: it is delivered cut,
-            // with a marker, under the command's own status.
+                remaining -= bounded.Output.Length;
+                results.Add(item: new(line.Line, line.Command, bounded.Status, bounded.Output, bounded.IsError, bounded.ClearTranscript, bounded.Truncated));
+                if (results.Count == lines.Length) { completion.TrySetResult(); }
+            });
+            // Queue the entire script on the pump. No tick can observe just a prefix arriving from the worker.
+            if (lines.Length == 1) {
+                m_session.Enqueue(line: lines[0].Command);
+            } else {
+                await m_session.InvokeAsync(() => {
+                    foreach (var line in lines) { m_session.Enqueue(line: line.Command); }
+                    return true;
+                }, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            await completion.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            var failed = results.Any(predicate: static result => result.IsError);
+            var output = string.Join(separator: '\n', values: results.Select(selector: static result => result.Output));
+
             return new ControlResponse(
                 request.Id,
-                (result.IsError
-                ? "refused"
-                : (string.IsNullOrEmpty(value: result.Output)
-                    ? "submitted"
-                    : "completed")),
-                result.Output,
-                result.IsError,
-                result.ClearTranscript
+                (failed ? "refused" : (string.IsNullOrEmpty(value: output) ? "submitted" : "completed")),
+                output,
+                failed,
+                results.Any(predicate: static result => result.ClearTranscript),
+                Truncated: results.Any(predicate: static result => result.Truncated),
+                Commands: ((request.Command!.IndexOfAny(anyOf: ['\r', '\n']) >= 0) ? [.. results] : null)
             ).Bounded();
         } catch (Exception error) when ((error is IOException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException)) {
             return new(
@@ -291,6 +314,7 @@ public sealed class ConsoleControlSession : IControlSession {
             );
         } finally {
             m_session.AnswerDeadline = null;
+            Volatile.Write(location: ref m_scriptResult, value: null);
             Volatile.Write(
                 location: ref m_result,
                 value: null
