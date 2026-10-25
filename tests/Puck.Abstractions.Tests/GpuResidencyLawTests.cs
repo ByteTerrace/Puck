@@ -997,6 +997,12 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: (GpuRegion.CopyMaxGroupsPerDimension, 2U), actual: GpuRegion.CopyGroups(count: ((uint)words)));
         Assert.Equal(expected: (1U, 1U), actual: GpuRegion.CopyGroups(count: 1U));
         Assert.Equal(expected: (GpuRegion.CopyMaxGroupsPerDimension, 1U), actual: GpuRegion.CopyGroups(count: GpuRegion.CopyRowThreads));
+        // Past the most rows the dispatch stays at them, within Direct3D 12's 4,194,303 groups, and its threads copy several
+        // words each: the debug world's boot flush of its whole mesh region is about 86 rows of words.
+        Assert.Equal(expected: (GpuRegion.CopyMaxGroupsPerDimension, GpuRegion.CopyMaxRows), actual: GpuRegion.CopyGroups(count: (86U * GpuRegion.CopyRowThreads)));
+        Assert.True(condition: ((((ulong)GpuRegion.CopyMaxGroupsPerDimension) * GpuRegion.CopyMaxRows) <= 4_194_303UL));
+        Assert.Equal(expected: (GpuRegion.CopyRowThreads * GpuRegion.CopyMaxRows), actual: GpuRegion.CopyThreads(count: uint.MaxValue));
+        Assert.Equal(expected: 64U, actual: GpuRegion.CopyThreads(count: 1U));
     }
     [Fact]
     public void OnlyARegionWithAnExternalDestinationRetargets() {

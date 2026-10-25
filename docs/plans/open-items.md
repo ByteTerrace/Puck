@@ -445,7 +445,7 @@ Every package below carries its own check on the programme page; tick it there a
 
 ## [Rendering](rendering.md)
 
-- [ ] Identify and split the oversized compute dispatch reported by full Direct3D 12 GPU validation during debug-world boot: `65535 * 86 * 1 = 5636010` thread groups exceeds the reported limit of `4194303`. The warning occurs before the bake-settled notification; the originating pass is not yet identified. The validation run reproduces its motion stills, so the warning is not evidence for the separately isolated machine-video completion race.
+- [x] Identify and split the oversized compute dispatch reported by full Direct3D 12 GPU validation during debug-world boot: `65535 * 86 * 1 = 5636010` thread groups exceeds the reported limit of `4194303`. It was the region copy (`region-copy.comp`, `GpuRegion.CopyGroups`) staging the whole mesh region at boot, one thread a word in rows of 65,535 groups (107 rows for the region's 1.78 GB today). A copy now dispatches at most `GpuRegion.CopyMaxRows` (64) rows, and each thread copies the words one dispatch's threads apart (`GpuRegion.CopyThreads`, which the kernel computes from the count). Under `--debug-layers full` the lead/catch-up build logged the warning (`65535 * 107 * 1 = 7012245`) and this one logs no `[d3d12-debug]` line; both backends render the debug world.
 
 Every package below carries its own check on the programme page; tick it there and here in the same change. A package closes only when nothing it promises remains open: a check that waits for a machine, device or environment keeps its package open and is named in the item (see [deferred to the end](rendering.md#deferred-to-the-end)).
 

@@ -361,12 +361,8 @@ internal sealed class UploadModelGpu :
             throw new InvalidOperationException(message: $"A copy of {count} words dispatched {groupCountX}×{groupCountY} groups.");
         }
 
-        // The kernel's thread i is its row times CopyRowThreads plus its column; every thread of the dispatch below the
-        // count copies.
-        if (((((ulong)groupCountX) * GpuRegion.CopyWorkgroupSize) * groupCountY) < count) {
-            throw new InvalidOperationException(message: $"A copy of {count} words dispatched too few threads.");
-        }
-
+        // The kernel's thread t is its row times CopyRowThreads plus its column, and copies every word from t in steps of
+        // the dispatch's threads, so together they copy each word below the count once.
         for (var thread = 0u; (thread < count); thread++) {
             var run = (runCount - 1u);
 

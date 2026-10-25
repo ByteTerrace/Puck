@@ -42,10 +42,11 @@ namespace Puck.Abstractions.Gpu;
 /// <see cref="CopyDestinationBinding"/>, <see cref="CopyWorkgroupSize"/> threads per group, and takes no push constants:
 /// the staging buffer states its copy. Its first <see cref="CopyHeaderWords"/> uints are <c>(count, runCount,
 /// blockBase, destinationBase)</c>, then come <c>runCount</c> <c>(region word, first thread)</c> pairs, and the block
-/// starts at <c>blockBase</c>, holding the owed runs packed one after another. Thread <c>i</c> (its dispatch row times
-/// <see cref="CopyRowThreads"/> plus its column, <see cref="CopyGroups"/> sizing the dispatch) below <c>count</c> finds
-/// the last run whose first thread is at most <c>i</c>, takes <c>word</c> as that run's region word plus <c>i</c> minus
-/// its first thread, and copies <c>destination[destinationBase + word] = source[blockBase + i]</c>. A staging buffer
+/// starts at <c>blockBase</c>, holding the owed runs packed one after another. Thread <c>t</c> (its dispatch row times
+/// <see cref="CopyRowThreads"/> plus its column, <see cref="CopyGroups"/> sizing the dispatch) copies every block word
+/// <c>i</c> below <c>count</c> from <c>t</c> in steps of the dispatch's threads (<see cref="CopyThreads"/>): it finds the
+/// last run whose first thread is at most <c>i</c>, takes <c>word</c> as that run's region word plus <c>i</c> minus its
+/// first thread, and copies <c>destination[destinationBase + word] = source[blockBase + i]</c>. A staging buffer
 /// therefore holds only what its slot owes, and grows when a flush owes more. That kernel is <c>Puck.Shaders</c>'
 /// <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by every owner
 /// (<c>GpuRegionCopyPass</c>, an entry of the pass-pipeline cache). Its copy sets are its share of a <see cref="GpuRegionCopyPool"/>: one the region
@@ -71,6 +72,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>The threads in one row of a copy's dispatch: <see cref="CopyMaxGroupsPerDimension"/> groups of
     /// <see cref="CopyWorkgroupSize"/>.</summary>
     public const uint CopyRowThreads = (CopyMaxGroupsPerDimension * CopyWorkgroupSize);
+    /// <summary>The most rows one copy dispatches: Direct3D 12's GPU-based validation refuses a dispatch of more than
+    /// 4,194,303 groups, and 64 rows of <see cref="CopyMaxGroupsPerDimension"/> groups is the most whole rows within it.
+    /// A copy of more words than those threads has each thread copy several, one dispatch's threads apart.</summary>
+    public const uint CopyMaxRows = 64U;
     /// <summary>The most separate word ranges one copy carries; past it neighbouring ranges pair up and the words
     /// between them are copied again.</summary>
     public const int MaxCopyRuns = 256;
@@ -432,7 +437,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     );
 
     /// <summary>Returns the groups a copy of <paramref name="count"/> words dispatches: one row of up to
-    /// <see cref="CopyMaxGroupsPerDimension"/> groups, and as many full rows of that width as it takes past one.</summary>
+    /// <see cref="CopyMaxGroupsPerDimension"/> groups, and as many full rows of that width as it takes past one, at most
+    /// <see cref="CopyMaxRows"/>.</summary>
     /// <param name="count">The words the copy carries; at least one.</param>
     /// <returns>The groups along the dispatch's first and second dimensions.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is zero.</exception>
@@ -443,8 +449,21 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return ((groups <= CopyMaxGroupsPerDimension)
             ? (((uint)groups), 1U)
-            : (CopyMaxGroupsPerDimension, ((uint)((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension)))
+            : (CopyMaxGroupsPerDimension, ((uint)Math.Min(
+                val1: ((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension),
+                val2: CopyMaxRows
+            )))
         );
+    }
+    /// <summary>Returns the threads a copy of <paramref name="count"/> words dispatches (<see cref="CopyGroups"/> times
+    /// <see cref="CopyWorkgroupSize"/>): the step between the words one thread copies.</summary>
+    /// <param name="count">The words the copy carries; at least one.</param>
+    /// <returns>The threads.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is zero.</exception>
+    public static uint CopyThreads(uint count) {
+        var (x, y) = CopyGroups(count: count);
+
+        return ((x * CopyWorkgroupSize) * y);
     }
     /// <summary>Returns the bytes of the buffers a region that owns its destination creates: one host-visible buffer per
     /// slot under the ring, the one shared buffer in place, and under the staged policy one staging buffer per slot (the
