@@ -50,7 +50,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// <summary>The exact engine time completed on the current authority timeline.</summary>
     public ulong ElapsedTicks => m_server.CompletedEngineTicks;
     /// <summary>The authored simulation rate the fixed-step pump paces this world at.</summary>
-    public uint RatePerSecond => ((uint)m_server.Definition.SimulationRateHz);
+    public uint RatePerSecond => ((uint)m_server.Configuration.SimulationRateHz);
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
     public ulong Tick => (m_server.NextInputTick - 1UL);
 

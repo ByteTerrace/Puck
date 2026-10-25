@@ -193,13 +193,13 @@ public static class BodyFactVocabulary {
             return true;
         }
 
-        foreach (var fact in Publishable) {
+        for (var index = 0; (index < NameByRow.Length); index++) {
             if (string.Equals(
                 a: name,
-                b: fact.ToString(),
+                b: NameByRow[index],
                 comparisonType: StringComparison.Ordinal
             )) {
-                gate = Bit(fact: fact);
+                gate = Rows[index].Bit;
 
                 return true;
             }
@@ -207,6 +207,12 @@ public static class BodyFactVocabulary {
 
         return false;
     }
+    // Each row's fact member name, spelled once: an enum's ToString boxes it, and a driver gate resolves its tokens every
+    // frame.
+    private static readonly string[] NameByRow = Array.ConvertAll(
+        array: Rows,
+        converter: static row => row.Fact.ToString()
+    );
 
     /// <summary>The body-state facts carrying a <see cref="BodyFacts"/> bit, in bit order — the order every echo
     /// joins them in.</summary>

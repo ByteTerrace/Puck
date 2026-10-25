@@ -276,9 +276,14 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
 
         if (request.TimeoutMilliseconds is < 1 or > ControlLimits.TimeoutMilliseconds) { error = "Deadline must be 1..120000 milliseconds."; } else if (request.Operation == "capture") { error = ((request.Command is not null) ? "Capture accepts no command or path." : request.Capture?.RefusalOf()); } else if (request.Operation != "exec") { error = "Unknown control operation."; } else if (request.Capture is not null) { error = "Exec takes no capture options."; } else if (
             string.IsNullOrWhiteSpace(value: request.Command) ||
-            (request.Command.AsSpan().TrimStart()[0] == '#') ||
-            (request.Command.IndexOfAny(anyOf: ['\r', '\n', '\0']) >= 0)
-        ) { error = "Exec requires one nonblank, noncomment console line."; } else if (request.Command.Length > 8192) { error = "Console line exceeds 8192 characters."; }
+            request.Command.Contains(value: '\0')
+        ) { error = "Exec requires console commands without NUL characters."; } else if (request.Command.Length > 8192) { error = "Console script exceeds 8192 characters."; } else {
+            var commands = request.ReadCommands();
+
+            if (commands.Length is 0 or > ControlLimits.ScriptLines) {
+                error = $"Exec requires 1..{ControlLimits.ScriptLines} nonblank, noncomment console lines.";
+            }
+        }
         return ((error is null)
             ? null
             : new(

@@ -67,7 +67,11 @@ public static class WorldFacePortalPolicy {
 
         var ceiling = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Motion.MoveSpeed));
 
-        foreach (var kit in definition.Kits) {
+        var kits = definition.Kits;
+
+        for (var index = 0; (index < kits.Count); index++) {
+            var kit = kits[index];
+
             if (kit is null) {
                 continue;
             }
@@ -87,7 +91,11 @@ public static class WorldFacePortalPolicy {
             );
 
             // An anisotropic shaping row's along facet travels backwards at its own rate, which no forward bound covers.
-            foreach (var row in (motion.Shaping ?? [])) {
+            var shaping = motion.Shaping;
+
+            for (var rowIndex = 0; (rowIndex < (shaping?.Count ?? 0)); rowIndex++) {
+                var row = shaping![rowIndex];
+
                 if (
                     (row?.Across is not null) &&
                     (row.Along?.BackwardSpeed is { } reverse)
@@ -110,22 +118,17 @@ public static class WorldFacePortalPolicy {
         ArgumentNullException.ThrowIfNull(definition);
 
         var catalog = WorldFaceCatalog.For(definition: definition);
-        var crossingFloor = CrossingFloor(definition: definition);
         var openings = new List<WorldFaceAperture.Box>();
 
         foreach (var placement in definition.Placements) {
             foreach (var face in (placement?.FaceSources ?? [])) {
                 if (
                     (face?.Portal is not null) &&
-                    catalog.TryFind(
-                    placementId: placement!.Id,
-                    faceName: face.Face,
-                    out var row
-                ) &&
-                    TryAperture(
+                    catalog.TryFindAperture(
                     aperture: out var aperture,
-                    crossingFloor: crossingFloor,
-                    row: in row
+                    definition: definition,
+                    faceName: face.Face,
+                    placementId: placement!.Id
                 ) &&
                     (aperture is WorldFaceAperture.Box box)
                 ) {

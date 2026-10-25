@@ -746,8 +746,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The screens a body carries this frame, one bit per screen index (WorldStampPool.TryCarriedScreen).
     private uint CarriedScreens() {
         var carried = 0u;
+        var screens = m_client.Definition.Screens;
 
-        foreach (var screen in m_client.Definition.Screens) {
+        // Indexed: this runs every frame, and enumerating the interface allocates.
+        for (var row = 0; (row < screens.Count); row++) {
+            var screen = screens[row];
+
             if (
                 (screen.Carry is not null) &&
                 (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces) &&

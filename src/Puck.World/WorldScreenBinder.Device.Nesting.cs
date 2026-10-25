@@ -22,30 +22,7 @@ public sealed partial class WorldScreenBinder {
                     (scene.ViewCount != 0) &&
                     !m_routedScreens.ContainsKey(key: scene)
                 ) {
-                    var screens = new WorldNestedScreens<SessionFeed>(
-                        definition: () => scene.Endpoint.Definition,
-                        depth: 0,
-                        head: WorldViewNames.Routed(authority: scene.Endpoint.Identity),
-                        shares: SharesProducer,
-                        world: scene.Endpoint.Identity
-                    );
-
-                    m_routedScreens.Add(
-                        key: scene,
-                        value: screens
-                    );
-                    m_nestedOwners.Add(
-                        key: screens,
-                        value: new NestedOwner(
-                            Eye: () => (scene.TrySeatCamera(camera: out var camera)
-                                ? camera.Position
-                                : null),
-                            Feed: null,
-                            Instance: scene.Endpoint.Identity,
-                            Local: () => scene.Endpoint.Definition,
-                            Scene: scene
-                        )
-                    );
+                    AddRoutedScreens(scene: scene);
                     moved = true;
                 }
             }
@@ -84,6 +61,34 @@ public sealed partial class WorldScreenBinder {
         }
 
         return moved;
+    }
+    // Follows a world a seat is presented in, apart from the reconcile, since the closures over the scene are made on
+    // entry to the scope holding them, and nearly every frame follows no new world.
+    private void AddRoutedScreens(WorldRoutedScene scene) {
+        var screens = new WorldNestedScreens<SessionFeed>(
+            definition: () => scene.Endpoint.Definition,
+            depth: 0,
+            head: WorldViewNames.Routed(authority: scene.Endpoint.Identity),
+            shares: SharesProducer,
+            world: scene.Endpoint.Identity
+        );
+
+        m_routedScreens.Add(
+            key: scene,
+            value: screens
+        );
+        m_nestedOwners.Add(
+            key: screens,
+            value: new NestedOwner(
+                Eye: () => (scene.TrySeatCamera(camera: out var camera)
+                    ? camera.Position
+                    : null),
+                Feed: null,
+                Instance: scene.Endpoint.Identity,
+                Local: () => scene.Endpoint.Definition,
+                Scene: scene
+            )
+        );
     }
     // Lists the feeds of the levels the presentation shows beside the boot world's sessions.
     private void AddPresentedFeeds() {

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Nodes;
 using Puck.Commands;
 using Puck.World.Server;
 
@@ -128,8 +129,22 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// <returns>The number of lines dropped.</returns>
     public int Clear() => m_pending.Clear();
     /// <summary>Describes the armed lines and the lines that ran, oldest first, one record.</summary>
+    /// <param name="json">Return structured ticks, commands and outcomes instead of transcript text.</param>
     /// <returns>The read-back.</returns>
-    public string Describe() {
+    public string Describe(bool json = false) {
+        if (json) {
+            static JsonObject Record(Line line, string status) => new() {
+                ["tick"] = line.Tick,
+                ["command"] = line.Text,
+                ["status"] = status,
+                ["output"] = line.Answer,
+            };
+            return new JsonObject {
+                ["tick"] = CompletedTick,
+                ["pending"] = new JsonArray([.. m_pending.Pending.Select(selector: static entry => Record(line: entry.Row, status: "pending"))]),
+                ["ran"] = new JsonArray([.. m_log.Select(selector: static line => Record(line: line, status: line.Outcome))]),
+            }.ToJsonString();
+        }
         var builder = new StringBuilder();
 
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.at: tick {CompletedTick} pending {PendingCount} ran {m_log.Count}]");

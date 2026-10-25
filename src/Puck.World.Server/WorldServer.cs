@@ -249,7 +249,10 @@ public sealed partial class WorldServer : IWorldServerHost {
         Tick = m_tick.DeliveryTick,
     });
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
-    public WorldDefinition Definition => m_document.Definition;
+    public WorldDefinition Definition => (m_tickInProgress ? m_document.Definition : MaterializeArena());
+    /// <summary>Gets installed declarations without exporting tick values. State reads use the arena or
+    /// <see cref="Definition"/>; scheduling and other declaration-only work use this view.</summary>
+    public WorldDefinition Configuration => m_document.Definition;
     /// <summary>Gets the version of <see cref="Definition"/>: this server's activation, minted once at construction,
     /// and the install ordinal within it. Every delivered document and every mutation verdict carries it.</summary>
     public WorldDocumentVersion DocumentVersion => new(
@@ -443,6 +446,13 @@ public sealed partial class WorldServer : IWorldServerHost {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
         try { ThrowIfAuthorityRetiring(); operation(); } finally { m_authorityGate.Exit(); }
+    }
+
+    /// <summary>Runs a stateful operation under the authority gate without a boundary closure.</summary>
+    internal void ExecuteAuthorityAction<T>(T state, Action<T> operation) {
+        ArgumentNullException.ThrowIfNull(operation);
+        EnterAuthorityGate();
+        try { ThrowIfAuthorityRetiring(); operation(state); } finally { m_authorityGate.Exit(); }
     }
 
     /// <summary>Gets or sets a callback invoked on a thread whose <see cref="ExecuteAuthorityOperation{T}"/> finds the

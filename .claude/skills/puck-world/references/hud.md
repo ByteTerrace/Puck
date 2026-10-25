@@ -9,9 +9,11 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 `src/Puck.World/WorldHudCommandModule.cs`. Mutation kinds: see
 [mutations.md](mutations.md) (ordinals 39–43).
 
-**Owner's rulings for the debug world.** The controller bar is the only
-on-screen UI the debug world wants: add no other panel, chip or hint row (a
-mouse chord stays off the bar; the bar's `modifiers` row stays off). Every
+**Owner's rulings for the debug world.** The debug world once kept the
+controller bar as its only on-screen UI to clean things up; the owner lifted
+that restriction, so a panel, prompt or menu is added where it serves (the
+[UI decisions](../../../../docs/decisions/ui.md) and the host menu in them).
+A mouse chord stays off the bar and the bar's `modifiers` row stays off. Every
 control the bar shows has a sensible keyboard equivalent bound beside it, for
 example WASD beside the d-pad (`worlds/debug/avatars/moth.puck`, `moth.md`).
 Addon panels sit behind a separate toggle, off by default, and agents show

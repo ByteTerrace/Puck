@@ -533,10 +533,10 @@ to follow them too:
 - **Rules don't know the layout.** A compiled rule knows the catalog it was
   compiled against and nothing about how the arena lays rows out. Anything that
   depends on the layout lives in the layout and is rebuilt with it.
-- **The document keeps answering.** Every read the arena answers must also
-  have an answer through the installed document's rows, because readers outside
-  the tick's rule evaluation (console read-backs, presentation bindings,
-  validators) read the document through `StateReader`.
+- **Every boundary sees the live values.** Rules read the arena. Plain addon cell
+  writes reach presentation bindings through snapshot values; console read-backs,
+  exports, checkpoints and document edits materialize immutable rows when needed.
+  Declaration-only host work uses `WorldServer.Configuration`, which does not export values.
 - **Absence reads the same way.** A board cell equal to the row's `Empty` value
   reads as present only when the row authored it, a declared keyed cell the row
   doesn't hold reads as integer zero, and an empty zone endpoint reads as absent.

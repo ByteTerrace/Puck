@@ -500,6 +500,11 @@ public sealed class SdfMeshIrradiance {
         if ((key == m_sceneKey) || (draws == 0)) { return null; }
         if (key == m_buildingKey) { return m_build; }
 
+        return StartSceneBuild(draws: draws, frame: frame, key: key);
+    }
+    // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
+    // matches the installed scene.
+    private Task StartSceneBuild(SdfFrame frame, int key, int draws) {
         var snapshot = frame.MeshDraws.ToArray();
         var previous = m_scene;
 

@@ -1254,7 +1254,7 @@ kits {
   ]
 }
 
-// Engaging a device shows no HUD prompt: the controller bar is the devices' only on-screen UI. The section's panel list
+// Engaging a device shows no HUD prompt. The section's panel list
 // starts here because the garden, which imports controls.puck too, authors its own; the debug world's only panels are
 // its addons' (watchdog.puck, guide.puck), which merge into it.
 hud {

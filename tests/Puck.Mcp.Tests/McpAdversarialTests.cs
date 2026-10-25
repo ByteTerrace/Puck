@@ -26,6 +26,29 @@ public sealed class McpAdversarialTests {
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
+    // Native JSON travels as a value; transcript-like brackets and incomplete JSON remain text.
+    [Theory]
+    [InlineData("{\"value\":1}", true)]
+    [InlineData("[1,2]", true)]
+    [InlineData("[world.status: ready]", false)]
+    [InlineData("{\"incomplete\":", false)]
+    public async Task JsonOutputIsExposedWithoutInterpretingTranscriptText(string output, bool structured) {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        await using var adapter = new InProcessAdapter(() => new ScriptedSession(entered: null, name: output));
+        var result = await adapter.ExecAsync(command: "read", id: 1);
+
+        Assert.Equal(output, result.GetProperty(propertyName: "output").GetString());
+        var data = result.GetProperty(propertyName: "data");
+
+        if (structured) {
+            using var expected = JsonDocument.Parse(output);
+
+            Assert.True(condition: JsonElement.DeepEquals(element1: expected.RootElement, element2: data));
+        } else {
+            Assert.Equal(JsonValueKind.Null, data.ValueKind);
+        }
+        Assert.Equal(JsonValueKind.Null, result.GetProperty(propertyName: "commands").ValueKind);
+    }
     // Law: stdin ends the adapter cleanly only at a well-formed EOF. Every input fault fails the adapter with its cause
     // rather than reading as EOF, whatever the read sizes; a UTF-8 scalar may span reads.
     [InlineData("scalar-spans-reads")]
@@ -298,20 +321,20 @@ public sealed class McpAdversarialTests {
         await using var adapter = new InProcessAdapter(createSession: () => new CaptureRecordingSession(seen: seen));
 
         async Task<JsonElement> CaptureAsync(int id, string arguments) {
-            adapter.Send(line: InProcessAdapter.Request(id: id, parameters: ("""{"name":"puck_capture_frame","arguments":""" + arguments + "}")));
+            adapter.Send(line: InProcessAdapter.Request(id: id, parameters: (("""{"name":"puck_capture_frame","arguments":""" + arguments) + "}")));
 
             return await adapter.ResultAsync(id: id);
         }
 
-        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 1, arguments: """{"mode":"presented","frames":4,"region":{"x":0,"y":0.25,"width":0.5,"height":0.5}}""")));
-        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 2, arguments: """{"frames":2}""")));
-        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 3, arguments: """{"mode":"settled"}""")));
-        Assert.StartsWith(expectedStartString: "A settled capture is one frame", actualString: Output(result: await CaptureAsync(id: 4, arguments: """{"mode":"settled","frames":2}""")), comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: "Invalid argument: region.", actual: Output(result: await CaptureAsync(id: 5, arguments: """{"region":{"x":0}}""")));
-        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(id: 6, arguments: """{"tick":1200}""")));
-        Assert.StartsWith(expectedStartString: "A presented capture reads the frames", actualString: Output(result: await CaptureAsync(id: 7, arguments: """{"mode":"presented","tick":1200}""")), comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: "Invalid argument: tick.", actual: Output(result: await CaptureAsync(id: 8, arguments: """{"tick":-3}""")));
-        Assert.Equal(expected: (ControlCapture.Settled, (ulong?)1200UL), actual: (seen[3]!.Mode, seen[3]!.Tick));
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(arguments: """{"mode":"presented","frames":4,"region":{"x":0,"y":0.25,"width":0.5,"height":0.5}}""", id: 1)));
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(arguments: """{"frames":2}""", id: 2)));
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(arguments: """{"mode":"settled"}""", id: 3)));
+        Assert.StartsWith(expectedStartString: "A settled capture is one frame", actualString: Output(result: await CaptureAsync(arguments: """{"mode":"settled","frames":2}""", id: 4)), comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: "Invalid argument: region.", actual: Output(result: await CaptureAsync(arguments: """{"region":{"x":0}}""", id: 5)));
+        Assert.Equal(expected: "completed", actual: Status(result: await CaptureAsync(arguments: """{"tick":1200}""", id: 6)));
+        Assert.StartsWith(expectedStartString: "A presented capture reads the frames", actualString: Output(result: await CaptureAsync(arguments: """{"mode":"presented","tick":1200}""", id: 7)), comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: "Invalid argument: tick.", actual: Output(result: await CaptureAsync(arguments: """{"tick":-3}""", id: 8)));
+        Assert.Equal(expected: (ControlCapture.Settled, ((ulong?)1200UL)), actual: (seen[3]!.Mode, seen[3]!.Tick));
         Assert.Equal(expected: 4, actual: seen.Count);
         Assert.Equal(expected: (ControlCapture.Presented, 4), actual: (seen[0]!.Mode, seen[0]!.Frames));
         Assert.Equal(expected: new[] { 0, 0.25, 0.5, 0.5 }, actual: seen[0]!.Region);

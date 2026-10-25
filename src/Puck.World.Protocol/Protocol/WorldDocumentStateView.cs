@@ -20,6 +20,18 @@ namespace Puck.World.Client;
 /// </summary>
 /// <param name="definition">Returns the definition currently delivered; read on every call.</param>
 public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : IWorldStateView {
+    private sealed record ValueRow(CellValue[] Values, Dictionary<string, int> Keys);
+
+    private readonly Dictionary<int, ValueRow> m_valueRows = [];
+    private readonly int[] m_valueRowsMoved = new int[StateCapacity.MaxRows];
+
+    private int m_valueRowsMovedCount;
+
+    /// <summary>Gets the serial of the latest snapshot cell batch.</summary>
+    public int ValueSerial { get; private set; }
+    /// <summary>Gets the document row ordinals moved by the latest snapshot cell batch.</summary>
+    public ReadOnlySpan<int> ValueRowsMoved => m_valueRowsMoved.AsSpan(length: m_valueRowsMovedCount, start: 0);
+
     private readonly Func<WorldDefinition> m_definition = (definition ?? throw new ArgumentNullException(paramName: nameof(definition)));
     // The delivered field cells, one raw Q48.16 array per declared field over the lattice they were delivered on; the
     // field each document ordinal names (-1 for a row that is no field) and the ordinal each field's row holds, both
@@ -30,7 +42,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     private WorldFieldLatticeDefinition? m_lattice;
 
     private int[] m_ordinalOfField = [];
-
     // The delivered action-state register file of every entity index (raw Q48.16 presented values, the slots of one
     // body contiguous), the catalog ordinal each slot's lane row holds, and which slots a delivery moved since the
     // owner last took them, all shaped for the definition last shaped for.
@@ -42,7 +53,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
     /// <inheritdoc/>
     public WorldPresentationManifest Manifest => WorldPresentationManifest.Of(definition: m_definition());
-
     /// <summary>Gets the most body-state rows one <see cref="TakeMovedBodyState"/> names.</summary>
     public static int MaxMovedBodyState => StateCapacity.MaxBodySlots;
 
@@ -150,6 +160,13 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         }
 
         var row = rows[ordinal];
+
+        if (m_valueRows.TryGetValue(key: ordinal, value: out var values)) {
+            sample = new WorldStateSample(
+                Value: (values.Keys.TryGetValue(key: (key ?? StateRow.SlotKey.Value), value: out var cellIndex) ? values.Values[cellIndex] : default),
+                Min: row.Min, Max: row.Max, Motion: WorldStateMotion.Still);
+            return true;
+        }
 
         if (m_fieldOfOrdinal[ordinal] is var field and >= 0) {
             var cells = m_cells[field];
@@ -339,8 +356,31 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         _ = Shape();
 
         Span<bool> changed = stackalloc bool[WorldFieldCapacity.MaxFields];
+        Span<bool> valueChanged = stackalloc bool[StateCapacity.MaxRows];
+
+        m_valueRowsMovedCount = 0;
+        ValueSerial++;
 
         foreach (var delta in deltas) {
+            if (delta.Row >= 0) {
+                var rows = m_shaped!.State;
+
+                if ((((uint)delta.Row) >= ((uint)rows.Count)) || (rows[delta.Row].Cells is not { } declared) ||
+                    (((uint)delta.Cell) >= ((uint)declared.Count)) || (delta.Value.Kind != rows[delta.Row].Kind)) { continue; }
+                if (!m_valueRows.TryGetValue(key: delta.Row, value: out var stored)) {
+                    var values = new CellValue[declared.Count];
+                    var keys = new Dictionary<string, int>(capacity: declared.Count, comparer: StringComparer.Ordinal);
+
+                    for (var i = 0; (i < declared.Count); i++) { values[i] = declared[i].Value; keys.Add(key: declared[i].Key.Value, value: i); }
+                    stored = new ValueRow(Keys: keys, Values: values);
+                    m_valueRows.Add(key: delta.Row, value: stored);
+                }
+                if (stored.Values[delta.Cell] != delta.Value) {
+                    stored.Values[delta.Cell] = delta.Value;
+                    if (!valueChanged[delta.Row]) { m_valueRowsMoved[m_valueRowsMovedCount++] = delta.Row; valueChanged[delta.Row] = true; }
+                }
+                continue;
+            }
             if (delta.Field >= m_cells.Length) {
                 continue;
             }
@@ -471,6 +511,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         }
 
         m_shaped = document;
+        m_valueRows.Clear();
         ShapeBodyState(document: document);
 
         var fields = document.Fields;

@@ -51,7 +51,11 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             return [];
         }
 
-        var definition = source.Server.Definition;
+        var definition = source.Server.Configuration;
+
+        if (definition.Adjacencies is not { Count: > 0 }) {
+            return [];
+        }
         var rows = (definition.Adjacencies ?? []).Where(predicate: static row => (row is not null)).ToArray();
         var visuals = new List<WorldAdjacencyProjection>(capacity: (rows.Length + ((rows.Length * (rows.Length - 1)) / 2)));
         var direct = new Dictionary<string, IWorldAdjacencyNeighbour>(comparer: StringComparer.Ordinal);
@@ -404,7 +408,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             return false;
         }
 
-        var definition = source.Server.Definition;
+        var definition = source.Server.Configuration;
 
         if (WorldDefinitionRows.FindAdjacency(
             adjacencies: definition.Adjacencies,
@@ -458,7 +462,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 identity: identity,
                 mirror: mirror,
                 lease: lease,
-                sourceDefinition: () => source.Server.Definition,
+                sourceDefinition: () => source.Server.Configuration,
                 sourceDescription: $"{m_sourceInstanceName}/{adjacencyName}",
                 narrationHub: m_instances.Narration
             );

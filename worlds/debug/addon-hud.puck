@@ -1,6 +1,5 @@
 // The addon HUD toggle. The debug world's addons (the watchdog, the guide, and any later addon tool) keep their HUD
-// panels hidden unless `addonHud` is 1, so the controller bar stays the only on-screen UI in ordinary play (the owner's
-// ruling). An agent or the owner shows them when needed:
+// panels hidden unless `addonHud` is 1, so they stay out of ordinary play (the owner's ruling). An agent or the owner shows them when needed:
 //
 //   world.state.cell.set addonHud $value 1    (0 hides them again)
 //

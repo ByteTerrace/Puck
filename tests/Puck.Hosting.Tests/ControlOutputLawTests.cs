@@ -10,6 +10,27 @@ public sealed class ControlOutputLawTests {
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
+    // A script cannot multiply the transport's output allowance by its line count.
+    [Fact]
+    public async Task AScriptSharesOneOutputBudgetAcrossItsSettledAnswers() {
+        var source = new TextCommandSource(new CommandRegistry([new LongModule()]));
+        using var session = new ConsoleControlSession(source, _ => throw new InvalidOperationException(message: "No renderer."));
+        var reply = session.ExecuteAsync(new(1, "exec", "# shared budget\nlong 1500000\n\nlong 1500000", 1000), Token);
+
+        source.Collect();
+        source.Collect();
+        var response = await reply;
+
+        Assert.Equal("completed", response.Status);
+        Assert.True(condition: response.Truncated);
+        Assert.True(condition: (response.Output.Length <= ControlLimits.OutputCharacters));
+        var commands = Assert.IsType<ControlCommandResult[]>(@object: response.Commands);
+
+        Assert.Equal([2, 4], commands.Select(selector: static line => line.Line));
+        Assert.All(commands, static line => Assert.True(condition: line.Truncated));
+        Assert.True(condition: (commands.Sum(selector: static line => line.Output.Length) <= ControlLimits.OutputCharacters));
+        Assert.True(condition: response.IsValidFor(request: new(1, "exec", "long 1500000\nlong 1500000", 1000)));
+    }
     // A help listing runs to well over 64 KiB; the transport carries it whole.
     [Fact]
     public async Task AnAnswerLongerThanSixtyFourKibCrossesTheWireWhole() {

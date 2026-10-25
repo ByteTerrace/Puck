@@ -55,6 +55,9 @@ public sealed record HostLogRead(IReadOnlyList<HostLogLine> Lines, int Matched, 
 /// lines with <see cref="Append"/>. The ring holds at most <see cref="Capacity"/> lines and
 /// <see cref="CharacterBudget"/> characters and evicts the oldest past either, so its retention never grows with the
 /// run. It is presentation of the process's output and never feeds simulation state. Safe from any thread.
+/// <para>A held line's characters live in one circular character buffer allocated with the log, and a line's tag is
+/// spelled once per distinct tag, so a line written allocates nothing the ring keeps: a busy host's lines never outlive
+/// a young collection as objects of their own. A <see cref="Read"/> spells the lines it answers.</para>
 /// </summary>
 /// <param name="capacity">The most lines held.</param>
 /// <param name="characterBudget">The most characters held across every line.</param>
@@ -66,16 +69,28 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
     /// <summary>The longest line held; a longer one is cut and ends in a marker naming its length.</summary>
     public const int MaxLineCharacters = 4096;
 
+    // The most characters a cut line's marker adds: "… [", a length of up to ten digits, and " characters]".
+    private const int CutMarkerCharacters = 32;
+    // The distinct tags spelled once; a host writing more spells the rest per line.
+    private const int MaxCategories = 1024;
+
     private readonly Lock m_gate = new();
-    private readonly HostLogLine[] m_ring = new HostLogLine[Math.Max(val1: 1, val2: capacity)];
+    private readonly Entry[] m_ring = new Entry[Math.Max(val1: 1, val2: capacity)];
+    private readonly char[] m_text = new char[Math.Max(val1: Math.Max(val1: 1, val2: characterBudget), val2: (MaxLineCharacters + CutMarkerCharacters))];
     private readonly string[] m_lastCategory = [string.Empty, string.Empty];
+    private readonly Dictionary<string, string> m_categories = new(comparer: StringComparer.Ordinal);
 
     private int m_characters;
     private int m_count;
     private long m_dropped;
     private int m_head;
     private long m_sequence;
+    // Where the oldest held line's characters start in m_text; the held lines follow it in order, wrapping at its end.
+    private int m_textHead;
     private Func<ulong>? m_tick;
+
+    // One held line: its characters are m_text's Length from Start, wrapping at its end.
+    private readonly record struct Entry(long Sequence, ulong? Tick, HostLogStream Stream, string Category, int Start, int Length);
 
     /// <summary>Gets the line capacity.</summary>
     public int LineCapacity => m_ring.Length;
@@ -108,7 +123,7 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
         ArgumentNullException.ThrowIfNull(argument: text);
 
         foreach (var line in text.AsSpan().TrimEnd(trimChars: "\r\n").EnumerateLines()) {
-            Commit(line: line, stream: stream);
+            Commit(length: line.Length, line: line, stream: stream);
         }
     }
     /// <summary>Wraps a writer so every line written through it is also held here.</summary>
@@ -126,23 +141,48 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
     public HostLogRead Read(HostLogQuery query) {
         ArgumentNullException.ThrowIfNull(argument: query);
 
-        var matched = new List<HostLogLine>();
+        var matched = new List<(Entry Entry, string? Text)>();
 
         lock (m_gate) {
             for (var index = 0; (index < m_count); index++) {
-                var line = m_ring[((m_head + index) % m_ring.Length)];
+                var entry = m_ring[((m_head + index) % m_ring.Length)];
 
-                if (Matches(line: line, query: query)) {
-                    matched.Add(item: line);
+                if (!Matches(entry: entry, query: query)) {
+                    continue;
                 }
+
+                string? text = null;
+
+                if (!string.IsNullOrEmpty(value: query.Text)) {
+                    text = TextOf(entry: entry);
+                    if (!text.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: query.Text)) {
+                        continue;
+                    }
+                }
+
+                matched.Add(item: (entry, text));
             }
 
             var last = Math.Max(val1: 0, val2: query.Last);
+            var first = Math.Max(val1: 0, val2: (matched.Count - last));
+            var lines = new List<HostLogLine>(capacity: (matched.Count - first));
+
+            for (var index = first; (index < matched.Count); index++) {
+                var (entry, text) = matched[index];
+
+                lines.Add(item: new HostLogLine(
+                    Category: entry.Category,
+                    Sequence: entry.Sequence,
+                    Stream: entry.Stream,
+                    Text: (text ?? TextOf(entry: entry)),
+                    Tick: entry.Tick
+                ));
+            }
 
             return new HostLogRead(
                 Dropped: m_dropped,
                 Held: m_count,
-                Lines: ((matched.Count > last) ? matched[(matched.Count - last)..] : matched),
+                Lines: lines,
                 Matched: matched.Count,
                 Newest: m_sequence
             );
@@ -150,53 +190,105 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
     }
 
     // The tag a line opens with: the text after '[' up to ']', ':' or a space.
-    private static string CategoryOf(ReadOnlySpan<char> line) {
+    private static ReadOnlySpan<char> CategoryOf(ReadOnlySpan<char> line) {
         if (!line.StartsWith(value: '[')) {
-            return string.Empty;
+            return [];
         }
 
         var end = line[1..].IndexOfAny(values: "]: ");
 
-        return ((end > 0) ? line.Slice(start: 1, length: end).ToString() : string.Empty);
+        return ((end > 0) ? line.Slice(start: 1, length: end) : []);
     }
-    private static bool Matches(HostLogLine line, HostLogQuery query) =>
-        (line.Sequence > query.Since) &&
-        ((query.Stream is not { } stream) || (line.Stream == stream)) &&
-        ((query.FromTick is not { } from) || (line.Tick >= from)) &&
-        ((query.ToTick is not { } to) || (line.Tick <= to)) &&
-        (string.IsNullOrEmpty(value: query.Category) || line.Category.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: query.Category)) &&
-        (string.IsNullOrEmpty(value: query.Text) || line.Text.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: query.Text));
+    private static bool Matches(in Entry entry, HostLogQuery query) =>
+        (entry.Sequence > query.Since) &&
+        ((query.Stream is not { } stream) || (entry.Stream == stream)) &&
+        ((query.FromTick is not { } from) || (entry.Tick >= from)) &&
+        ((query.ToTick is not { } to) || (entry.Tick <= to)) &&
+        (string.IsNullOrEmpty(value: query.Category) || entry.Category.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: query.Category));
 
-    private void Commit(ReadOnlySpan<char> line, HostLogStream stream) {
-        var text = ((line.Length > MaxLineCharacters)
-            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{line[..MaxLineCharacters]}… [{line.Length} characters]")
-            : line.ToString());
+    // A held line's characters, spelled, under the gate.
+    private string TextOf(in Entry entry) {
+        var tail = Math.Min(val1: entry.Length, val2: (m_text.Length - entry.Start));
+
+        return string.Concat(
+            str0: m_text.AsSpan(start: entry.Start, length: tail),
+            str1: m_text.AsSpan(start: 0, length: (entry.Length - tail))
+        );
+    }
+    // A tag spelled once, under the gate.
+    private string CategoryName(ReadOnlySpan<char> category) {
+        if (category.IsEmpty) {
+            return string.Empty;
+        }
+
+        var lookup = m_categories.GetAlternateLookup<ReadOnlySpan<char>>();
+
+        if (lookup.TryGetValue(key: category, value: out var name)) {
+            return name;
+        }
+
+        name = category.ToString();
+
+        if (m_categories.Count < MaxCategories) {
+            m_categories.Add(key: name, value: name);
+        }
+
+        return name;
+    }
+    // Copies characters into the circular buffer at a position, wrapping at its end, and returns the position after them.
+    private int Store(int at, ReadOnlySpan<char> characters) {
+        var tail = Math.Min(val1: characters.Length, val2: (m_text.Length - at));
+
+        characters[..tail].CopyTo(destination: m_text.AsSpan(start: at));
+        characters[tail..].CopyTo(destination: m_text);
+
+        return ((at + characters.Length) % m_text.Length);
+    }
+
+    // Holds one line, of which `line` is at most the first MaxLineCharacters characters of `length`: a longer one is held
+    // cut, ending in a marker naming its length.
+    private void Commit(ReadOnlySpan<char> line, int length, HostLogStream stream) {
+        Span<char> marker = stackalloc char[CutMarkerCharacters];
+        var cut = (length > MaxLineCharacters);
+        var markerLength = 0;
+
+        if (cut) {
+            line = line[..MaxLineCharacters];
+            _ = marker.TryWrite(provider: CultureInfo.InvariantCulture, handler: $"… [{length} characters]", charsWritten: out markerLength);
+        }
+
+        var held = (line.Length + markerLength);
         var tick = Volatile.Read(location: ref m_tick)?.Invoke();
 
         lock (m_gate) {
             var slot = (int)stream;
-            var continuation = ((text.Length > 0) && char.IsWhiteSpace(c: text[0]));
-            var category = (continuation ? m_lastCategory[slot] : CategoryOf(line: text));
+            var continuation = ((line.Length > 0) && char.IsWhiteSpace(c: line[0]));
+            var category = (continuation ? m_lastCategory[slot] : CategoryName(category: CategoryOf(line: line)));
 
             m_lastCategory[slot] = category;
 
-            while ((m_count > 0) && ((m_count == m_ring.Length) || ((m_characters + text.Length) > characterBudget))) {
-                m_characters -= m_ring[m_head].Text.Length;
+            while ((m_count > 0) && ((m_count == m_ring.Length) || ((m_characters + held) > characterBudget))) {
+                m_characters -= m_ring[m_head].Length;
+                m_textHead = ((m_textHead + m_ring[m_head].Length) % m_text.Length);
                 m_ring[m_head] = default;
                 m_head = ((m_head + 1) % m_ring.Length);
                 m_count--;
                 m_dropped++;
             }
 
-            m_ring[((m_head + m_count) % m_ring.Length)] = new HostLogLine(
+            var start = ((m_textHead + m_characters) % m_text.Length);
+
+            _ = Store(at: Store(at: start, characters: line), characters: marker[..markerLength]);
+            m_ring[((m_head + m_count) % m_ring.Length)] = new Entry(
                 Category: category,
+                Length: held,
                 Sequence: ++m_sequence,
+                Start: start,
                 Stream: stream,
-                Text: text,
                 Tick: tick
             );
             m_count++;
-            m_characters += text.Length;
+            m_characters += held;
         }
     }
 
@@ -204,7 +296,9 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
     // log's other writers; a line split across calls is assembled per writer.
     private sealed class HostLogWriter(TextWriter inner, HostLog log, HostLogStream stream) : TextWriter {
         private readonly Lock m_gate = new();
-        private readonly StringBuilder m_pending = new();
+        // The line being assembled: its first characters, at most MaxLineCharacters of them, and its whole length.
+        private char[] m_pending = new char[256];
+        private int m_pendingLength;
 
         public override Encoding Encoding => inner.Encoding;
         public override IFormatProvider FormatProvider => inner.FormatProvider;
@@ -263,25 +357,41 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
                 var end = text.IndexOf(value: '\n');
 
                 if (end < 0) {
-                    if (m_pending.Length <= MaxLineCharacters) {
-                        _ = m_pending.Append(value: text);
-                    }
+                    Pend(text: text);
 
                     return;
                 }
 
-                _ = m_pending.Append(value: text[..end]);
+                Pend(text: text[..end]);
 
-                var length = m_pending.Length;
-
-                if ((length > 0) && (m_pending[length - 1] == '\r')) {
-                    m_pending.Length = (length - 1);
+                // A line ending in a carriage return is held without it; the return is held only when the line was cut
+                // before it, as the length then names what was written.
+                if ((m_pendingLength > 0) && (m_pendingLength <= MaxLineCharacters) && (m_pending[m_pendingLength - 1] == '\r')) {
+                    m_pendingLength--;
                 }
 
-                log.Commit(line: m_pending.ToString(), stream: stream);
-                _ = m_pending.Clear();
+                log.Commit(
+                    length: m_pendingLength,
+                    line: m_pending.AsSpan(start: 0, length: Math.Min(val1: m_pendingLength, val2: MaxLineCharacters)),
+                    stream: stream
+                );
+                m_pendingLength = 0;
                 text = text[(end + 1)..];
             }
+        }
+        // Adds text to the line being assembled, keeping at most its first MaxLineCharacters characters.
+        private void Pend(ReadOnlySpan<char> text) {
+            var kept = Math.Max(val1: 0, val2: Math.Min(val1: text.Length, val2: (MaxLineCharacters - m_pendingLength)));
+
+            if (kept > 0) {
+                if ((m_pendingLength + kept) > m_pending.Length) {
+                    Array.Resize(array: ref m_pending, newSize: Math.Min(val1: MaxLineCharacters, val2: Math.Max(val1: (m_pendingLength + kept), val2: (2 * m_pending.Length))));
+                }
+
+                text[..kept].CopyTo(destination: m_pending.AsSpan(start: m_pendingLength));
+            }
+
+            m_pendingLength += text.Length;
         }
     }
 }

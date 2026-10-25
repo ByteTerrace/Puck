@@ -187,7 +187,7 @@ public static class WorldGaitDrivers {
                 : 1f
             ));
 
-            if (CreationDriverDocument.TryDriverSignal(
+            if (CreationDriverDocument.TryDriverSignalName(
                 name: out var source,
                 signal: driver.Signal
             )) {
@@ -448,13 +448,9 @@ public static class WorldGaitDrivers {
         : 1f
     );
     // The phase an earlier driver reached this frame; the canonicalizer refuses a name no earlier driver carries.
-    private static float PhaseOf(IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int before, string driver) {
+    private static float PhaseOf(IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int before, ReadOnlySpan<char> driver) {
         for (var index = 0; (index < before); index++) {
-            if (string.Equals(
-                a: rows[index].Name,
-                b: driver,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (rows[index].Name.AsSpan().SequenceEqual(other: driver)) {
                 return phases[index];
             }
         }
