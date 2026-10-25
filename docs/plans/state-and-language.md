@@ -960,6 +960,24 @@ has no tests), and Arena's leave (a `schedule` step can submit `player.leave`,
 but the world has no tests). Reversi landed without its `search` row; its flips
 are two rules, and no job has been authored or planned against them.
 
+### S9 — The authoring consensus
+
+The team's consensus on improving the language
+([decision](../decisions/state-and-language.md#the-authoring-consensus)), in
+waves. Each wave migrates every shipped source with `puck migrate` and deletes
+what it replaces.
+
+| Wave | Items |
+|---|---|
+| 1 | Compound assignment, one expression language and the locals' order, then one bracket rule. Beside it: `sql { }` deleted, a wrapping printer, and saving through the source tree. |
+| 2 | Every condition as an expression (HUD, placement responses, element text); no JSON showing through; `function`. |
+| 3 | Names for bodies and identities with dot reads; one composition construct; then typed test steps with `eventually`. |
+| 4 | Complete state sugar; one rule grammar for cartridges; one authorization declaration; creation axes and rotations. |
+
+**Check:** each item's before and after compiles every shipped source to the
+same documents where the meaning is unchanged, `puck test worlds/debug
+--reproduce` passes, and the deleted spelling is refused by name.
+
 ## Sequencing
 
 Landed: the rebuild and the means to build and test a world against it
