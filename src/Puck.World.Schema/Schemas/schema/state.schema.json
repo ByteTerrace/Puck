@@ -627,7 +627,7 @@
             "additionalProperties": false
           },
           "verdict": {
-            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed or a Bool row is held by a witness: a row of that kind naming this one in Witness, written by the same firing, refused at every door this row is refused at, and frozen when this row settles.",
+            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed, Bool or Text row is held by a witness: a row of that kind naming this one in Witness, written by the same firing, refused at every door this row is refused at, and frozen when this row settles.",
             "type": "object",
             "properties": {
               "gate": {

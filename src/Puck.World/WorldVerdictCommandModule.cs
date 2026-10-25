@@ -78,11 +78,7 @@ internal sealed class WorldVerdictCommandModule(WorldServer server) : ICommandMo
 
         return WorldVerdict.DescribeSeen(
             key: key.Value,
-            kind: row.Kind,
-            raw: ((value.HasValue && (value.Kind is CellKind.Bool or CellKind.Fixed or CellKind.Int))
-                ? value.Raw
-                : 0L
-            )
+            value: value.HasValue ? value : CellValue.Int(0)
         );
     }
     private long ReadCell(WorldStateRow row, CellName key) {

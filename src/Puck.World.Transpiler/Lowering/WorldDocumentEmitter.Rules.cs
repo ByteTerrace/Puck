@@ -520,6 +520,22 @@ public static partial class WorldDocumentEmitter {
         }
         var comparison = Enum.GetName(value: parsedComparison)!;
 
+        if (cmp.Left.Syntax is ExpressionSpelling.SourceString || cmp.Right.Syntax is ExpressionSpelling.SourceString) {
+            if (cmp.Kind is not null) {
+                scope.Diagnostics.ReportError(PuckDiagnosticCodes.OperandParse,
+                    "A Text comparison cannot carry a numeric kind annotation", cmp.Span);
+            }
+            var literal = (cmp.Right.Syntax as ExpressionSpelling.SourceString) ?? (ExpressionSpelling.SourceString)cmp.Left.Syntax!;
+            var stateText = cmp.Right.Syntax is ExpressionSpelling.SourceString ? leftText : rightText;
+            if (ClassifyBareComparison(stateText, "0", out var stateToken, out _) == BareComparisonShape.StateAgainstConstant &&
+                stateToken!.Payload is InstructionPayload.State state) {
+                return NewCompareState(state.Name.Spelling, state.Key?.Spelling, comparison, text: literal.Value);
+            }
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.OperandParse,
+                "A text comparison requires a named state row on the other side", cmp.Span);
+            return new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() };
+        }
+
         if (
             TryTypedPoolFieldKind(kind: out _, scope: scope, text: authoredLeftText) ||
             TryTypedPoolFieldKind(kind: out _, scope: scope, text: authoredRightText)
@@ -705,7 +721,7 @@ public static partial class WorldDocumentEmitter {
         };
     }
 
-    private static JsonObject NewCompareState(string state, string? key, string comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null) {
+    private static JsonObject NewCompareState(string state, string? key, string comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null, string? text = null) {
         var obj = new JsonObject { ["$type"] = "compareState", ["state"] = state, ["comparison"] = comparison };
 
         if (key is not null) {
@@ -714,6 +730,7 @@ public static partial class WorldDocumentEmitter {
         if (value is { } v) {
             obj["value"] = v;
         }
+        if (text is not null) { obj["text"] = text; }
         if (comparandState is not null) {
             obj["comparandState"] = comparandState;
         }

@@ -321,6 +321,7 @@ One gate expression per line, in the grammar a rule's `when` already uses:
 expect {
   home[0] == 10
   winner == 0
+  guide[title] == "SHEAR"
 }
 ```
 
@@ -341,9 +342,14 @@ read (`missingCount`), or the row and the key joined by `$` (`home$0`). The `$`
 marks a [generated name](../reference/dsl.md#generated-names), so none of them can
 collide with a row the world declares. A value read from a `Fixed` or `Bool` row
 is recorded in a witness row of that kind, `expect$<line>$fixed` or
-`expect$<line>$bool`, and listed the same way; a value read from a `Text` row is
-not listed, because no verdict row holds text. The generated world is named
+`expect$<line>$bool`, and listed the same way. Text equality and inequality also
+read literal strings or another Text row; their values are recorded in
+`expect$<line>$text` and printed as quoted strings. The generated world is named
 `<source stem>~<test slug>`.
+
+Witnesses currently require the row's kind to be known during test lowering.
+Rows whose kinds are only known after basis/import composition are still
+evaluated, but their witness values are omitted.
 
 ## Authored schedules and verdict rows
 

@@ -7,7 +7,8 @@ namespace Puck.State.Rules;
 /// <paramref name="Operand"/> nor <paramref name="Expression"/> applies.</param>
 /// <param name="Operand">The live operand, or <see langword="null"/>.</param>
 /// <param name="Expression">The compiled postfix program, or <see langword="null"/>.</param>
-public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOperand? Operand = null, CompiledExpressionToken[]? Expression = null) {
+/// <param name="Text">The literal text of a Text comparison, or null for the numeric and operand forms.</param>
+public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOperand? Operand = null, CompiledExpressionToken[]? Expression = null, string? Text = null) {
     /// <summary>Gets a value indicating whether this source is a compiled expression.</summary>
     public bool IsExpression => (Expression is not null);
     /// <summary>Gets a value indicating whether this source is a literal constant.</summary>

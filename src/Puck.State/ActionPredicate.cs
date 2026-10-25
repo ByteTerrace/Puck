@@ -22,9 +22,9 @@ public abstract record ActionPredicate {
     /// not compile. No implicit conversion is performed between the sides.</param>
     public sealed record CompareValue(ExpressionProgram Left, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, ExpressionProgram Right, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellKind? Kind = null) : ActionPredicate;
     /// <summary>Compares a named state cell against either a fixed authored value, or another named state
-    /// cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of
-    /// <paramref name="Value"/> and <paramref name="ComparandState"/> may be present (refused by name when both or
-    /// neither are). The comparand-row spelling is what lets a gate track a moving threshold — <c>$tick</c> compared
+    /// cell/reserved channel read live at the same evaluation. Exactly one of <paramref name="Value"/>,
+    /// <paramref name="Text"/> and <paramref name="ComparandState"/> must be present. The comparand-row spelling
+    /// is what lets a gate track a moving threshold — <c>$tick</c> compared
     /// against a schedule row the rule's own effects advance is "every N ticks"; a round row compared against a
     /// declared length row is a round boundary — composition over the same two-sided comparison, never a new
     /// mechanism.</summary>
@@ -33,7 +33,7 @@ public abstract record ActionPredicate {
     /// host's per-participant action program, a named counter slot the program declares.</param>
     /// <param name="Comparison">The comparison to apply.</param>
     /// <param name="Value">The authored constant comparand, or <see langword="null"/> when
-    /// <paramref name="ComparandState"/> spells the comparand instead.</param>
+    /// <paramref name="ComparandState"/> or <paramref name="Text"/> spells the comparand instead.</param>
     /// <param name="Key">The cell inside <paramref name="State"/> to read — <see langword="null"/> reads the row's
     /// slot cell, which a keyed row does not have (refused by name rather than silently reading <c>cells[0]</c>).</param>
     /// <param name="ComparandState">Another declared <c>state</c>-section row name, or a reserved channel, read live
@@ -43,13 +43,16 @@ public abstract record ActionPredicate {
     /// scales silently is worse than naming the mismatch.</param>
     /// <param name="ComparandKey">The cell inside <paramref name="ComparandState"/>, on the same (row, key) terms as
     /// <paramref name="Key"/>. Refused when <paramref name="ComparandState"/> names a reserved channel or is absent.</param>
+    /// <param name="Text">A literal Text comparand instead of Value or ComparandState. Text supports ordinal
+    /// equality and inequality; numeric and text kinds never compare implicitly.</param>
     public sealed record CompareState(
         StateChannelRef State,
         [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
         decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandKey = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
     ) : ActionPredicate;
     /// <summary>Every inner predicate holds (conjunction).</summary>
     public sealed record All(IReadOnlyList<ActionPredicate> Predicates) : ActionPredicate;

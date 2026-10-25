@@ -724,6 +724,6 @@ public sealed class RuleCompilerLawTests {
             ),
             name: "text"
         )),
-        expected: RuleRefusal.StateCellUnaddressable
+        expected: RuleRefusal.ComparandKindMismatch
     );
 }

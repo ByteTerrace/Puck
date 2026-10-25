@@ -355,7 +355,7 @@ public sealed class WorldVerdictLawTests {
                 }
             )),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "so a witness is kind Fixed or Bool"
+            expectedSubstring: "a witness is kind Fixed, Bool or Text"
         );
         Assert.Contains(
             actualString: Validate(definition: BuildDefinition(
@@ -399,27 +399,25 @@ public sealed class WorldVerdictLawTests {
         Assert.Equal(
             actual: WorldVerdict.DescribeSeen(
                 key: "hp",
-                kind: CellKind.Int,
-                raw: 3L
+                value: CellValue.Int(3L)
             ),
             expected: "hp=3"
         );
         Assert.Equal(
             actual: WorldVerdict.DescribeSeen(
                 key: "speed",
-                kind: CellKind.Fixed,
-                raw: 147456L
+                value: CellValue.Fixed(147456L)
             ),
             expected: "speed=2.25"
         );
         Assert.Equal(
             actual: WorldVerdict.DescribeSeen(
                 key: "open",
-                kind: CellKind.Bool,
-                raw: 0L
+                value: CellValue.Bool(false)
             ),
             expected: "open=false"
         );
+        Assert.Equal("title=\"SHEAR\"", WorldVerdict.DescribeSeen("title", CellValue.Text("SHEAR")));
     }
     [Fact]
     public void MoreVerdictRowsThanTheCeilingAreRefusedByName() {

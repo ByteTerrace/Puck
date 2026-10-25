@@ -100,6 +100,19 @@ public static class RuleEvaluation {
 
             var leftSource = predicate.LeftSource;
             var rightSource = predicate.RightSource;
+            if (predicate.ValueKind == CellKind.Text) {
+                var leftText = leftSource.Text;
+                var rightText = rightSource.Text;
+                var leftAnswered = leftText is not null || TryReadText(reader, leftSource.Operand, out leftText);
+                var rightAnswered = rightText is not null || TryReadText(reader, rightSource.Operand, out rightText);
+                if ((!leftAnswered || !rightAnswered) && raised == ExpressionFault.None) { raised = ExpressionFault.Absent; }
+                var equal = string.Equals(leftText, rightText, StringComparison.Ordinal);
+                var textHolds = leftAnswered && rightAnswered &&
+                    (predicate.Comparison == ExpressionOp.Equal ? equal : !equal);
+                stack[top++] = textHolds;
+                trace?.Add($"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(textHolds)}");
+                continue;
+            }
             var right = default(RuleFact);
             var rightFault = ExpressionFault.None;
             var leftRead = TryReadSource(
@@ -245,4 +258,52 @@ public static class RuleEvaluation {
         ? DescribeFact(fact: in fact)
         : "refused"
     );
+    /// <summary>Reads a live Text operand through the same addresses used by text-copy effects and gates.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="source">The compiled text operand.</param>
+    /// <param name="text">The text, or empty on a missing read.</param>
+    /// <returns>Whether a Text cell was read.</returns>
+    public static bool TryReadText(IStateReader reader, IRuleOperand? source, out string text) {
+        text = string.Empty;
+        CellValue carried;
+
+        switch (source) {
+            case StateCellOperand cell: {
+                    var ordinal = cell.RowOrdinal;
+
+                    if ((cell.RowFrom is { } live) && !live.TryResolve(reader: reader, rowOrdinal: out ordinal)) {
+                        return false;
+                    }
+                    var key = RuleReads.ResolveKey(keyFrom: cell.KeyFrom, literal: cell.Key, reader: reader);
+
+                    if (!key.IsValid || !reader.Arena.TryRead(key: key, rowOrdinal: ordinal, value: out carried)) {
+                        return false;
+                    }
+                    break;
+                }
+            case InstanceFieldOperand field: {
+                    var bindings = reader.InstanceBindings;
+
+                    if ((((uint)field.BindingSlot) >= ((uint)bindings.Length)) || (bindings[field.BindingSlot].PoolOrdinal != field.Pool.Ordinal) || !reader.Arena.TryReadLive(handle: bindings[field.BindingSlot], fieldOrdinal: field.Field.Ordinal, time: reader.Time, value: out carried)) {
+                        return false;
+                    }
+                    break;
+                }
+            case StaticInstanceFieldOperand field: {
+                    if (!reader.Arena.TryResolvePoolSlot(poolOrdinal: field.Pool.Ordinal, slot: field.Handle.Slot, handle: out var handle) ||
+                        !reader.Arena.TryReadLive(handle: handle, fieldOrdinal: field.Field.Ordinal, time: reader.Time, value: out carried)) {
+                        return false;
+                    }
+                    break;
+                }
+            default:
+                return false;
+        }
+
+        if (carried.Kind != CellKind.Text) {
+            return false;
+        }
+        text = carried.AsText;
+        return true;
+    }
 }

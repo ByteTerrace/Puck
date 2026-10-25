@@ -557,6 +557,9 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case ActionPredicate.CompareState compare:
+                if (compare.Text is not null) {
+                    errors.Add($"{path}.text is refused at body scope — action-state slots are numeric; text comparisons belong to world rules.");
+                }
                 // A per-body action-state slot is not keyed; `key` addresses a WORLD state row's cell and is
                 // legitimate only in a world rule. Refused rather than parsed and discarded.
                 if (compare.Key is not null) {

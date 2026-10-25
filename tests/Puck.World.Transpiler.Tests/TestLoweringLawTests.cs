@@ -28,6 +28,38 @@ public class TestLoweringLawTests {
     }
     private static string[] RowNames(JsonObject world) => [.. world["state"]!["world"]!.AsArray().Select(selector: static row => row!["name"]!.GetValue<string>())];
     private static JsonObject OneWorld(string source) => Assert.Single(collection: Green(source: source).TestWorlds).Json;
+    [Fact]
+    public void TextExpectationsKeepTheirLiteralAndTextWitnessWhenDecompiled() {
+        var source = """
+            schema: "puck.world.definition.v1"
+            documentId: "text-test"
+            state { world { slot title = "灯" } }
+            test "text" {
+              when { ticks 3 }
+              expect {
+                title == "灯"
+                "other" != title
+              }
+            }
+            """;
+        var world = OneWorld(source);
+        var witness = TestWorldFixtures.Row(world: world, name: "expect$1$text");
+        Assert.Equal("Text", witness["kind"]!.GetValue<string>());
+        Assert.Equal("expect$1", witness["witness"]!.GetValue<string>());
+        var decompiled = Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: world);
+        Assert.Contains("title == \"灯\"", decompiled);
+        Assert.Equal(Canonical(world), Canonical(OneWorld(decompiled)));
+    }
+    [Fact]
+    public void ATextComparisonsNumericKindAnnotationIsRefused() {
+        var compilation = WorldCompiler.Compile("""
+            schema: "puck.world.definition.v1"
+            documentId: "text-kind"
+            state { world { slot title = "a" } }
+            test "refused" { expect { title == "a" : Int } }
+            """, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(compilation.Diagnostics.HasErrors);
+    }
     public static TheoryData<string, string> InadmissibleLines() => new() {
         { "given {\n        hp = notALiteral\n    }\n    expect {\n        hp == 1\n    }", "from something other than a literal" },
         { "given {\n        missingRow = 1\n    }\n    expect {\n        hp == 1\n    }", "which this world's state section does not declare" },

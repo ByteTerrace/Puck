@@ -486,6 +486,7 @@ public static partial class WorldModelShape {
                 M("key", typeof(global::Puck.State.StateChannelRef), typeof(global::Puck.State.ActionPredicate.CompareState), "Key", Read | Write, static value => ((global::Puck.State.ActionPredicate.CompareState)value).Key),
                 M("comparandState", typeof(global::Puck.State.StateChannelRef), typeof(global::Puck.State.ActionPredicate.CompareState), "ComparandState", Read | Write, static value => ((global::Puck.State.ActionPredicate.CompareState)value).ComparandState),
                 M("comparandKey", typeof(global::Puck.State.StateChannelRef), typeof(global::Puck.State.ActionPredicate.CompareState), "ComparandKey", Read | Write, static value => ((global::Puck.State.ActionPredicate.CompareState)value).ComparandKey),
+                M("text", typeof(global::System.String), typeof(global::Puck.State.ActionPredicate.CompareState), "Text", Read | Write, static value => ((global::Puck.State.ActionPredicate.CompareState)value).Text),
             ],
             []),
         T(typeof(global::Puck.State.ActionPredicate.CompareValue), true, JsonTypeInfoKind.Object, null,

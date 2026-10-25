@@ -504,14 +504,16 @@ public static partial class WorldDecompiler {
     private static bool IsPredicateSafeForGateSugar(JsonObject node) => node["$type"]?.ToString() switch {
         // `comparison` and `kind` must be spelled exactly as their own enum members: the sugar can only reproduce
         // the canonical spelling, and printing a different one back changes the document. `value` and
-        // `comparandState` together contradict `CompareState`'s own exactly-one-of contract and the sugar carries
+        // `text` or `comparandState` together contradict `CompareState`'s own exactly-one-of contract and the sugar carries
         // only one of them; a key present with an explicit JSON null is also unrepresentable, since the comparand text the sugar prints always recompiles to a real value.
         "compareState" => (ExpressionComparisons.TryParseName(
         node["comparison"]?.ToString(),
         out _
     )
-            && ((node["value"] is not null) != (node["comparandState"] is not null))
+              && ((node["value"] is not null ? 1 : 0) + (node["text"] is not null ? 1 : 0) +
+                  (node["comparandState"] is not null ? 1 : 0) == 1)
             && !(node.ContainsKey(propertyName: "value") && (node["value"] is null))
+              && !(node.ContainsKey(propertyName: "text") && (node["text"] is null))
             && !(node.ContainsKey(propertyName: "comparandState") && (node["comparandState"] is null))
             && RowRefRoundTrips(
         (node["state"]?.ToString() ?? ""),
@@ -641,7 +643,9 @@ public static partial class WorldDecompiler {
         var symbol = ComparisonToSymbol(comparison: node["comparison"]?.ToString());
 
         // `IsPredicateSafeForGateSugar` admits exactly one non-null comparand, so both arms below are total.
-        var right = ((node["comparandState"] is { } comparandState)
+        var right = ((node["text"] is { } text)
+            ? FormatValue(indentLevel: 0, node: text)
+            : (node["comparandState"] is { } comparandState)
             ? FormatRowRef(
                 (comparandState.ToString() ?? ""),
                 node["comparandKey"]?.ToString()

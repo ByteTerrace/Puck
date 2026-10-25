@@ -87,7 +87,7 @@ whose compiled per-body triggers ask the same questions, so neither vocabulary
 can grow a case the other lacks.
 
 A **`compareState`** compares one state cell (or reserved channel such as
-`$tick`) against either a literal `value` or a second cell named by
+`$tick`) against a numeric literal `value`, a literal `text`, or a second cell named by
 `comparandState` and `comparandKey`. A **`compareValue`** compares two numeric
 expressions in one kind. A declared `kind` is used as written. Without one, the
 kind is inferred as a local's is: `Int`, unless both sides are constants and
@@ -95,6 +95,15 @@ one holds a fraction, and `Fixed` when the sides don't compile as `Int`. Neither
 side is converted to the other's kind. In `.puck`, a plain read compared with a
 literal or with another plain read lowers to `compareState`; anything else, or
 a comparison suffixed with `: Int` or `: Fixed`, lowers to `compareValue`.
+
+Text rows support `==` and `!=` against a quoted literal or another Text row,
+including keyed cells: `guide[title] == "SHEAR"` or `actual == expected`.
+Equality is ordinal and case sensitive, with no culture or Unicode normalization.
+Both sides must be Text; ordering and numeric/text mixing are refused. A missing live
+cell satisfies neither equality nor inequality. The compiled gate uses the same
+generation-checked text read as text-copy effects, and its work budget includes
+the bounded character comparison. In C#, spell a literal as
+`new ActionPredicate.CompareState("title", ExpressionOp.Equal, Text: "SHEAR")`.
 
 The effect arms, with their `.puck` spellings:
 
