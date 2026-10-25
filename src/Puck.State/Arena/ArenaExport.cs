@@ -1,4 +1,6 @@
 
+using System.Collections.Immutable;
+
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -71,9 +73,10 @@ public sealed partial class StateArena {
     /// <summary>Exports one document row as <see cref="ToRows"/> would: the row the arena was built over with its
     /// stored columns written back, or the row as declared when a host owns its values.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="previous">An earlier export whose unchanged immutable cells may be shared, or null.</param>
     /// <returns>The row.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> names no document row.</exception>
-    public StateRow ToRow(int rowOrdinal) {
+    public StateRow ToRow(int rowOrdinal, StateRow? previous = null) {
         if (
             (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) ||
             (m_catalog.Descriptors[rowOrdinal].Lane != StateLane.Document)
@@ -92,14 +95,29 @@ public sealed partial class StateArena {
             ? ExportRow(
                 layout: layout,
                 row: row,
-                rowOrdinal: rowOrdinal
+                rowOrdinal: rowOrdinal,
+                previous: previous
             )
             : row
         );
     }
 
-    private StateCell ExportCell(in ArenaRowLayout layout, Dictionary<CellName, StateCell>? traits, CellName name, int slot) {
+    private StateCell ExportCell(in ArenaRowLayout layout, Dictionary<CellName, StateCell>? traits, CellName name, int slot, StateCell? previous = null) {
         var authored = traits?.GetValueOrDefault(key: name);
+        var behavior = ((m_behaviors is null) ? StateCellBehavior.Inherit : (StateCellBehavior)m_behaviors[slot]);
+        var value = ValueAt(in layout, slot);
+        var sameClock = HasClock(slot) ? previous?.Clock is { } clock &&
+            clock.EpochEngineTick == ReadNumberRaw(ArenaColumn.ClockEpochEngineTick, slot) &&
+            clock.EpochTick == ReadNumberRaw(ArenaColumn.ClockEpochTick, slot) &&
+            clock.SubstepTicks == ReadNumberRaw(ArenaColumn.ClockSubstepTicks, slot) &&
+            clock.V0 == ReadNumberRaw(ArenaColumn.ClockV0, slot) && clock.Y0 == ReadNumberRaw(ArenaColumn.ClockY0, slot)
+            : previous?.Clock is null;
+        if (previous is not null && previous.Key == name && previous.Value == value &&
+            previous.Advance == authored?.Advance && previous.Cycle == authored?.Cycle && previous.Dynamics == authored?.Dynamics &&
+            previous.Behavior == behavior && previous.Observation == m_observations?[slot] &&
+            previous.Provenance == m_provenance?[slot] && previous.Visibility == m_visibilities?[slot] && sameClock) {
+            return previous;
+        }
 
         return new StateCell(
             Advance: authored?.Advance,
@@ -148,21 +166,35 @@ public sealed partial class StateArena {
             Visibility: m_visibilities?[slot]
         );
     }
-    private List<StateCell>? ExportCells(int rowOrdinal, in ArenaRowLayout layout, StateRow row) {
-        List<StateCell>? cells = null;
+    private IReadOnlyList<StateCell>? ExportCells(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous) {
+        ImmutableArray<StateCell>.Builder? cells = null;
         var traits = AuthoredTraits(
             layout: layout,
             row: row
         );
 
         var cursor = 0;
+        var prior = (previous ?? row).Cells;
+        var index = 0;
 
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
-            (cells ??= []).Add(item: ExportCell(layout: in layout, name: m_keys[key],
-                slot: ((layout.CellStart + cursor) - 1), traits: traits));
+            var old = ((prior is not null && index < prior.Count) ? prior[index] : null);
+            var cell = ExportCell(layout: in layout, name: m_keys[key],
+                slot: ((layout.CellStart + cursor) - 1), traits: traits, previous: old);
+            if (cells is null && !ReferenceEquals(cell, old)) {
+                cells = ImmutableArray.CreateBuilder<StateCell>();
+                for (var copied = 0; copied < index; copied++) { cells.Add(prior![copied]); }
+            }
+            cells?.Add(cell);
+            index++;
         }
-
-        return cells;
+        if (index == 0) { return null; }
+        if (cells is null && prior is not null && index == prior.Count) { return prior; }
+        if (cells is null) {
+            cells = ImmutableArray.CreateBuilder<StateCell>(index);
+            for (var copied = 0; copied < index; copied++) { cells.Add(prior![copied]); }
+        }
+        return cells.ToImmutable();
     }
     private List<ClosedBitset256>? ExportMasks(in ArenaRowLayout layout) {
         if (layout.MaskWordStart < 0) {
@@ -213,11 +245,12 @@ public sealed partial class StateArena {
 
         return masks;
     }
-    private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row) => (row with {
+    private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) => (row with {
         Cells = ExportCells(
         layout: layout,
         row: row,
-        rowOrdinal: rowOrdinal
+        rowOrdinal: rowOrdinal,
+        previous: previous
     ),
         DrawCursor = ReadNumberRaw(
         column: ArenaColumn.DrawCursor,

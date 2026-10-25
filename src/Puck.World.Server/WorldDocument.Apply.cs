@@ -1219,12 +1219,18 @@ public sealed partial class WorldDocument {
         var cells = (row.Cells ?? []);
         var previous = (before.Cells ?? []);
 
-        if (((row with { Cells = null }) != (before with { Cells = null })) || (cells.Count != previous.Count)) {
+        if (!SameComposeDeclaration(row, before) || row.DrawCursor != before.DrawCursor ||
+            row.HistoryCursor != before.HistoryCursor || !ReferenceEquals(row.DrawnMasks, before.DrawnMasks) ||
+            cells.Count != previous.Count) {
             return false;
         }
 
         for (var index = 0; (index < cells.Count); index++) {
-            if ((cells[index] with { Value = default }) != (previous[index] with { Value = default })) {
+            var cell = cells[index];
+            var old = previous[index];
+            if ((cell.Key != old.Key) || (cell.Advance != old.Advance) || (cell.Provenance != old.Provenance) ||
+                (cell.Dynamics != old.Dynamics) || (cell.Cycle != old.Cycle) || (cell.Behavior != old.Behavior) ||
+                (cell.Clock != old.Clock) || (cell.Visibility != old.Visibility) || (cell.Observation != old.Observation)) {
                 return false;
             }
         }

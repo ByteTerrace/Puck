@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Immutable;
 using Puck.Abstractions.Counting;
 using Puck.Maths;
 
@@ -340,11 +341,11 @@ public sealed partial class WorldServer {
         var descriptors = m_arena.Catalog.Descriptors;
         var driveGate = false;
         var refresh = false;
-        var rows = new WorldStateRow[installed.Count];
+        var rows = installed.ToImmutableList();
 
         // Document rows occupy the catalog's first ordinals in declaration order, which is the order the installed
         // document lists them in. A row is kept only where that holds by name; anything else is read from the arena.
-        for (var ordinal = 0; (ordinal < rows.Length); ordinal++) {
+        for (var ordinal = 0; (ordinal < rows.Count); ordinal++) {
             var name = descriptors[ordinal].Name;
             var moved = (
                 open[ordinal] ||
@@ -361,14 +362,12 @@ public sealed partial class WorldServer {
                     comparisonType: StringComparison.Ordinal
                 )
             ) {
-                rows[ordinal] = installed[ordinal];
-
                 continue;
             }
 
-            var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal));
+            var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal, previous: installed[ordinal]));
 
-            rows[ordinal] = published;
+            rows = rows.SetItem(ordinal, published);
 
             if (!moved) {
                 continue;

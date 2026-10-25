@@ -1014,10 +1014,17 @@ public static class WorldAddonMutationDecoder {
             throw new AddonMutationDecodeException(message: $"{context}: must be an array of {{\"key\", \"value\"}} objects");
         }
 
-        var cells = new List<StateCell>();
+        var cells = new List<StateCell>(element.GetArrayLength());
         var index = 0;
 
         foreach (var entry in element.EnumerateArray()) {
+            // Keep diagnostic paths cold. A successful cell needs neither a property dictionary nor a formatted
+            // path per field; the original decoder below still diagnoses every malformed shape in the same order.
+            if (TryDecodePlainStateCell(entry, kind, out var decoded)) {
+                cells.Add(decoded!);
+                index++;
+                continue;
+            }
             var cellContext = $"{context}[{index}]";
 
             if (entry.ValueKind != JsonValueKind.Object) {
@@ -1062,6 +1069,24 @@ public static class WorldAddonMutationDecoder {
         }
 
         return cells;
+    }
+    private static bool TryDecodePlainStateCell(JsonElement entry, CellKind kind, out StateCell? cell) {
+        cell = null;
+        if (entry.ValueKind != JsonValueKind.Object) { return false; }
+        JsonElement key = default, value = default;
+        foreach (var property in entry.EnumerateObject()) {
+            if (property.NameEquals("key"u8) && key.ValueKind == JsonValueKind.Undefined) { key = property.Value; }
+            else if (property.NameEquals("value"u8) && value.ValueKind == JsonValueKind.Undefined) { value = property.Value; }
+            else { return false; }
+        }
+        if (key.ValueKind != JsonValueKind.String || value.ValueKind == JsonValueKind.Undefined ||
+            !CellName.TryParse(key.GetString(), out var name, out _)) { return false; }
+        try {
+            cell = new StateCell(name, DecodeCellValue(value, kind, "value"));
+            return true;
+        } catch (AddonMutationDecodeException) {
+            return false;
+        }
     }
     private static WorldMutation DecodeUpsertHudElement(JsonElement root, Principal principal) {
         var members = UniqueMembers(

@@ -938,6 +938,15 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
+      "puck.world.addons": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
+          "Puck.World.Server": "[1.0.0, )"
+        }
+      },
       "puck.world.authoring": {
         "type": "Project",
         "dependencies": {

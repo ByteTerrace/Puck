@@ -5,11 +5,11 @@ namespace Puck.Hosting;
 /// <summary>
 /// One terminal-session tape: every submitted line and its result echo append into a bounded scrollback ring,
 /// published as a <see cref="ConsoleTapeFrame"/> for whatever renders that session's console panel.
-/// Event-driven: it publishes on each recorded line and on visibility flips, never per frame.
+/// Event-driven: it stages each recorded line and visibility flip; readers materialize immutable history on demand.
 /// </summary>
 /// <remarks>Single-threaded by contract: <see cref="Record"/> runs inside the command pump's drain and
 /// <see cref="SetVisible"/> inside a verb handler — both on the window-pump thread. Only the published immutable
-/// snapshot crosses to the render thread (through the store's lock-free buffer).</remarks>
+/// snapshot crosses to the render thread (through the store's synchronized staging copy).</remarks>
 public sealed class ConsoleTape : ICommandObserver {
     private const string EchoPrefix = "> ";
     private const int MaxLines = 64;
@@ -57,22 +57,9 @@ public sealed class ConsoleTape : ICommandObserver {
             m_head = ((m_head + 1) % MaxLines);
         }
     }
-    // Snapshot allocation is event-scoped (per recorded exchange), never per frame — the render thread only ever
-    // reads the immutable array the frame carries.
-    private void Publish() {
-        var lines = new ConsoleTapeLine[m_count];
-
-        for (var index = 0; (index < m_count); index++) {
-            lines[index] = m_ring[((m_head + index) % MaxLines)];
-        }
-
-        m_store.Publish(frame: new ConsoleTapeFrame(
-            Input: m_input,
-            Lines: lines,
-            Selected: m_selected,
-            Visible: m_visible
-        ));
-    }
+    // The store owns a bounded staging copy. Only a reader requesting history materializes an immutable snapshot;
+    // headless and hidden consoles still retain every echo without allocating a 64-line array for each edit.
+    private void Publish() => m_store.Publish(m_ring, m_head, m_count, m_input, m_selected, m_visible);
 
     /// <summary>Records the deferred verdict of a Simulation-routed console line — <see cref="Record"/> only ever saw
     /// the <see cref="CommandResult.None"/> the submit returned when the line entered the tick queue, so without this
