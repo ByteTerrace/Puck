@@ -63,9 +63,9 @@ public sealed class SdfMeshStore {
     public long CapacityBytes { get; }
     /// <summary>Gets the absolute directory the entries are kept in.</summary>
     public string Directory { get; }
-    /// <summary>Gets the entry format's eight-byte version tag (<c>PUCKMSH3</c>), which <see cref="Encode"/> and
-    /// <see cref="Refusal"/> fold into <see cref="SdfMeshBakeClosure"/> and <see cref="Record"/> writes beside each
-    /// identity's parts so a format bump is a counted miss under a new key and <see cref="ExplainMisses"/> names it.</summary>
+    /// <summary>Gets the entry format's eight-byte version tag (<c>PUCKMSH3</c>). A bump already moves the bake identity,
+    /// because the tag is inlined into the entry codec the closure hashes; <see cref="Record"/> writes it beside the
+    /// identity's parts so <see cref="ExplainMisses"/> can name the bump.</summary>
     public static string EntryVersion { get; } = VersionText(magic: Magic);
 
     internal static string VersionText(ulong magic) {

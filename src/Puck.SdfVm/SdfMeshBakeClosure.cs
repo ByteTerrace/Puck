@@ -116,7 +116,9 @@ public sealed partial class SdfMeshBakeClosure {
 
         var walk = new Walk(directory: Path.GetFullPath(path: directory));
 
-        return new SdfMeshBakeClosure(entryVersion: walk.EntryVersion, members: walk.Run(roots: roots), reasons: walk.Reasons);
+        var members = walk.Run(roots: roots);
+
+        return new SdfMeshBakeClosure(entryVersion: walk.EntryVersion, members: members, reasons: walk.Reasons);
     }
     /// <summary>Returns the members whose hash differs between two closures' members, with those only one holds, in
     /// ordinal order.</summary>
@@ -202,7 +204,8 @@ public sealed partial class SdfMeshBakeClosure {
         // While a layout or a signature is named, the types it names join nothing.
         private bool m_quiet;
 
-        public string EntryVersion { get; private set; } = SdfMeshStore.EntryVersion;
+        // The store's entry version as the walked build's assembly holds it, known once Run has read it.
+        public string EntryVersion { get; private set; } = string.Empty;
         public SortedDictionary<string, string> Reasons { get; } = new(comparer: StringComparer.Ordinal);
 
         public SortedDictionary<string, UInt128> Run(IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {

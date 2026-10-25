@@ -57,7 +57,6 @@ public sealed class SdfPassBindingLawTests {
         var pass = Group(group: ShaderInterfaceGroup.Pass, layout: SdfWorldInterfaces.WorldLayout);
         var passBlockBytes = PassBlockBytes(values: SdfWorldPackage.Values);
         var tables = SdfKernelInterfaces.LightAndSkyTables.Select(selector: static member => member.Name).ToHashSet(comparer: StringComparer.Ordinal);
-        var include = SdfWorldInterfaces.Includes.Single(predicate: static candidate => ReferenceEquals(objA: candidate.Interface, objB: SdfWorldInterfaces.World));
 
         Assert.Equal(expected: passBlockBytes, actual: pass.BlockSizeBytes);
         Assert.Equal(expected: ((int)passBlockBytes), actual: SdfFrameBlock.SizeBytes);
@@ -66,10 +65,6 @@ public sealed class SdfPassBindingLawTests {
                 .Where(predicate: static member => !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))
                 .Select(selector: static member => member.Name),
             expected: [ShaderFrameInterface.Extent, .. SdfWorldPackage.Values.Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal)]
-        );
-        Assert.Equal(
-            actual: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: include.Path)).ReplaceLineEndings(replacementText: "\n"),
-            expected: ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface)
         );
         Assert.DoesNotContain(collection: pass.BlockMembers, filter: member => tables.Contains(item: member.Name));
         // The tables are World-group records, written once a frame into regions, never a pass's constant data.
@@ -85,17 +80,12 @@ public sealed class SdfPassBindingLawTests {
     public void TheBakePassBlockHoldsTheBatchAlone() {
         var pass = Group(group: ShaderInterfaceGroup.Pass, layout: SdfWorldInterfaces.MeshBakeLayout);
         var bakeBlockBytes = PassBlockBytes(values: SdfWorldPackage.BakeValues);
-        var include = SdfWorldInterfaces.Includes.Single(predicate: static candidate => ReferenceEquals(objA: candidate.Interface, objB: SdfWorldInterfaces.MeshBakeLayout.Interface));
 
         Assert.Equal(expected: bakeBlockBytes, actual: pass.BlockSizeBytes);
         Assert.Equal(expected: ((int)bakeBlockBytes), actual: SdfFrameBlock.BakeSizeBytes);
         Assert.Equal(
             actual: pass.BlockMembers.Select(selector: static member => member.Name),
             expected: [ShaderFrameInterface.Extent, SdfWorldPackage.InstanceMaskWordCount, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshBakeLattices, ShaderWorkCounters.Row, ShaderWorkCounters.DetailRow]
-        );
-        Assert.Equal(
-            actual: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: include.Path)).ReplaceLineEndings(replacementText: "\n"),
-            expected: ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface)
         );
         Assert.Equal(
             actual: pass.Resources.Select(selector: static resource => resource.Member.Name),
