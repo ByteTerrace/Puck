@@ -468,10 +468,14 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     slot: slot,
                     windowSeconds: recently.WindowSeconds
                 );
+            // Indexed, since the lists are interfaces and a foreach over one boxes its enumerator for each slot every frame.
             case OverlayPredicate.All all: {
                     var presence = 1f;
+                    var inners = (all.Predicates ?? []);
 
-                    foreach (var inner in (all.Predicates ?? [])) {
+                    for (var index = 0; (index < inners.Count); index++) {
+                        var inner = inners[index];
+
                         presence = MathF.Min(
                             x: presence,
                             y: Presence(
@@ -485,8 +489,11 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 }
             case OverlayPredicate.Any any: {
                     var presence = 0f;
+                    var inners = (any.Predicates ?? []);
 
-                    foreach (var inner in (any.Predicates ?? [])) {
+                    for (var index = 0; (index < inners.Count); index++) {
+                        var inner = inners[index];
+
                         presence = MathF.Max(
                             x: presence,
                             y: Presence(

@@ -90,9 +90,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         var moved = false;
 
+        // A state-only delivery hands over a new definition sharing the render section and every placement, at the same
+        // revision: the environment reads none of its state, so only the bound slots below move it.
         if ((revision != m_revision) || !ReferenceEquals(
-            objA: definition,
-            objB: m_definition
+            objA: definition.Render,
+            objB: m_definition?.Render
         )) {
             m_definition = definition;
             m_revision = revision;

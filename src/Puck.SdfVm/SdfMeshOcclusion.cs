@@ -46,7 +46,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private readonly IGpuStorageBuffer?[] m_candidates;
 
     private readonly byte[] m_pushed = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
-    private uint[] m_words = [];
+    // The candidates' words as Stage writes them, scratch every view on the thread shares: Stage copies them into its
+    // frame slot's buffer before it returns.
+    [ThreadStatic]
+    private static uint[]? CandidateScratch;
 
     private IGpuBuffer? m_visible;
     private IGpuBuffer? m_draws;
@@ -79,8 +82,13 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_height = Math.Max(val1: height, val2: 1u);
         m_levels = LevelsOf(height: m_height, width: m_width);
 
-        if (m_words.Length < (HeaderWords + (((int)count) * CandidateWords))) {
-            m_words = new uint[(HeaderWords + (((int)count) * CandidateWords))];
+        // Grown to a power of two of draws, as the candidate buffers are, so a draw count that wavers (a body straddling a
+        // door adds and drops its copies) allocates once.
+        var words = CandidateScratch;
+
+        if ((words is null) || (words.Length < (HeaderWords + (((int)count) * CandidateWords)))) {
+            words = new uint[(HeaderWords + (((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: Math.Max(val1: count, val2: 1u))) * CandidateWords))];
+            CandidateScratch = words;
         }
 
         var candidates = 0u;
@@ -101,25 +109,25 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             var word = (HeaderWords + (((int)candidates) * CandidateWords));
             var kept = box.GetValueOrDefault();
 
-            m_words[word] = draw;
-            m_words[(word + 1)] = ((uint)item.Mesh.Indices.Length);
-            Floats(destination: m_words.AsSpan(length: 3, start: (word + 2)), value: kept.Center);
-            Floats(destination: m_words.AsSpan(length: 3, start: (word + 5)), value: kept.HalfX);
-            Floats(destination: m_words.AsSpan(length: 3, start: (word + 8)), value: kept.HalfY);
-            Floats(destination: m_words.AsSpan(length: 3, start: (word + 11)), value: kept.HalfZ);
-            m_words[(word + 14)] = (box.HasValue ? 0u : UnboxedFlag);
-            m_words[(word + 15)] = 0u;
+            words[word] = draw;
+            words[(word + 1)] = ((uint)item.Mesh.Indices.Length);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 2)), value: kept.Center);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 5)), value: kept.HalfX);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 8)), value: kept.HalfY);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 11)), value: kept.HalfZ);
+            words[(word + 14)] = (box.HasValue ? 0u : UnboxedFlag);
+            words[(word + 15)] = 0u;
             candidates++;
         }
 
         m_count = candidates;
-        m_words[0] = candidates;
-        m_words[1] = m_levels;
-        m_words[2] = 0u;
-        m_words[3] = 0u;
+        words[0] = candidates;
+        words[1] = m_levels;
+        words[2] = 0u;
+        words[3] = 0u;
         EnsureBuffers(draws: count);
 
-        m_candidates[slot]!.Write(data: m_words.AsSpan(length: (HeaderWords + (((int)candidates) * CandidateWords)), start: 0));
+        m_candidates[slot]!.Write(data: words.AsSpan(length: (HeaderWords + (((int)candidates) * CandidateWords)), start: 0));
     }
     // Writes the occlusion's members of the mesh interface into a mesh set: the frame slot's candidates, the visible set,
     // both phases' draws and counts, the pyramid and the view's mesh target, each only when the set binds another.

@@ -138,6 +138,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // The words the held program differs in from the one held before it, when its background build measured them.
     private SdfProgramDelta? m_programDelta;
     private float m_time;
+    // What a background build hands the program it finished (ObserveBuilds), and the transforms the build's program was
+    // emitted under, copied at the emission: one build runs at a time, so the next emission waits for this one's to finish.
+    private Action<SdfProgram, IReadOnlyList<DynamicTransform>>? m_built;
+    private DynamicTransform[] m_builtTransforms = [];
 
     /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
     /// content moved emits the program, and every frame until the build finishes renders the program held before it, with
@@ -163,6 +167,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
         m_convergence = request;
+    }
+    /// <inheritdoc/>
+    /// <remarks>A program built in the frame that emitted it is never handed over.</remarks>
+    public void ObserveBuilds(Action<SdfProgram, IReadOnlyList<DynamicTransform>> built) {
+        ArgumentNullException.ThrowIfNull(argument: built);
+        Volatile.Write(location: ref m_built, value: built);
     }
 
     /// <inheritdoc/>
@@ -386,8 +396,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private IReadOnlyList<SdfSlotClip> ComposeSlotClips() {
         IReadOnlyList<SdfSlotClip> composed = [];
 
-        foreach (var emitter in m_emitters) {
-            var clips = emitter.SlotClips;
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            var clips = m_emitters[index].SlotClips;
 
             if (clips.Count == 0) {
                 continue;
@@ -575,13 +585,28 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 rebuilt = true;
             } else {
                 var held = m_program;
+                var observer = Volatile.Read(location: ref m_built);
+                var emittedUnder = m_builtTransforms;
+
+                if (observer is not null) {
+                    if (emittedUnder.Length != m_transforms.Length) {
+                        emittedUnder = new DynamicTransform[m_transforms.Length];
+                        m_builtTransforms = emittedUnder;
+                    }
+
+                    m_transforms.AsSpan().CopyTo(destination: emittedUnder);
+                }
 
                 // The build also finds the words its program differs in from the one held, so the tables that hold
-                // that program upload the new one without comparing it on the frame thread.
+                // that program upload the new one without comparing it on the frame thread, and hands the program to its
+                // observer before the frame that adopts it.
                 m_building = Task.Run(function: () => {
                     var built = Build(builder: builder);
+                    var delta = ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built));
 
-                    return (built, ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
+                    observer?.Invoke(arg1: built, arg2: emittedUnder);
+
+                    return (built, delta);
                 });
             }
         }

@@ -339,6 +339,86 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
     }
     [Fact]
+    public void AnExtentSwingingFasterThanItsBuildsBacksOffAndASettledOneInstallsAtOnce() {
+        const int SwingFrames = 48;
+        var gpu = new FakePipelineGpu();
+        using var node = InstalledNode(
+            gpu: gpu,
+            pipeline: Feedback(historyDimensions: FrameRelative)
+        );
+
+        // One resize builds one graph, whose images count it.
+        var before = Images(gpu: gpu);
+
+        node.Resize(
+            height: (Extent / 2),
+            width: (Extent / 2)
+        );
+        _ = node.ProduceBuildStart(gpu: gpu);
+        _ = Produce(node: node);
+
+        var perBuild = (Images(gpu: gpu) - before);
+
+        Assert.True(condition: (perBuild > 0));
+        Assert.Equal(
+            actual: node.Extent,
+            expected: ((Extent / 2), (Extent / 2))
+        );
+
+        // A window a falling camera crosses requests a new extent every frame: each build finishes after the request
+        // moved on, so it is discarded, and the wait before the next one doubles.
+        before = Images(gpu: gpu);
+        for (var frame = 0; (frame < SwingFrames); frame++) {
+            var side = (((frame % 2) == 0) ? (Extent / 4) : (Extent / 8));
+
+            node.Resize(
+                height: side,
+                width: side
+            );
+            _ = Produce(node: node);
+            node.WaitForBuild();
+        }
+
+        var swingBuilds = ((Images(gpu: gpu) - before) / perBuild);
+
+        Assert.InRange(
+            actual: swingBuilds,
+            high: 8,
+            low: 1
+        );
+        Assert.Equal(
+            actual: node.Extent,
+            expected: ((Extent / 2), (Extent / 2))
+        );
+
+        // Once the request holds still the waiting build installs it, and the install clears the wait: the next resize
+        // builds in the frame that finds it.
+        TestLiveness.Until(
+            reason: () => "The settled extent never installed.",
+            step: () => {
+                _ = Produce(node: node);
+                node.WaitForBuild();
+
+                return (node.Extent == ((Extent / 8), (Extent / 8)));
+            }
+        );
+        node.Resize(
+            height: Extent,
+            width: Extent
+        );
+        _ = node.ProduceBuildStart(gpu: gpu);
+        _ = Produce(node: node);
+
+        Assert.Equal(
+            actual: node.Extent,
+            expected: (Extent, Extent)
+        );
+    }
+    private static int Images(FakePipelineGpu gpu) => gpu.CreatedObjects.Count(predicate: created => created.Kind.EndsWith(
+        comparisonType: StringComparison.Ordinal,
+        value: " image"
+    ));
+    [Fact]
     public void AReinstallOfTheSameShadersJoinsEveryPassPipelineAndCreatesNone() {
         var gpu = new FakePipelineGpu();
         var cache = new GpuPassPipelineCache();

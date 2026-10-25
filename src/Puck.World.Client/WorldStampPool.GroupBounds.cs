@@ -70,8 +70,8 @@ public sealed partial class WorldStampPool {
             );
 
             foreach (var frame in (document.Frames ?? [])) {
-                var anchorPose = frame.Transforms.FirstOrDefault(predicate: pose => (pose.Id == anchor.Id));
-                var memberPose = frame.Transforms.FirstOrDefault(predicate: pose => (pose.Id == shape.Id));
+                var anchorPose = PoseOf(id: anchor.Id, poses: frame.Transforms);
+                var memberPose = PoseOf(id: shape.Id, poses: frame.Transforms);
 
                 separation = MathF.Max(
                     x: separation,
@@ -115,6 +115,17 @@ public sealed partial class WorldStampPool {
             float.IsFinite(f: radius) &&
             (radius > 0f)
         );
+    }
+    // A frame's first pose of a shape, found without the closure and enumerator a predicate search allocates for each
+    // shape of each group on every emission.
+    private static FrameTransformDocument? PoseOf(IReadOnlyList<FrameTransformDocument> poses, int id) {
+        for (var index = 0; (index < poses.Count); index++) {
+            if (poses[index].Id == id) {
+                return poses[index];
+            }
+        }
+
+        return null;
     }
     private static int GroupMotionOwner(Registration live, CreationDocument document, int index) =>
         CreationMotion.Owner(document: document, index: index, parents: live.PartParent);

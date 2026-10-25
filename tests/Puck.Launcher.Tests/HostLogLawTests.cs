@@ -88,6 +88,14 @@ public sealed class HostLogLawTests {
 
         Assert.Equal(expected: ["e", "f", "g"], actual: log.Read(query: new HostLogQuery()).Lines.Select(selector: static line => line.Text));
 
+        // Lines held past the end of the ring's character buffer wrap to its start and read back whole.
+        for (var index = 0; (index < 1000); index++) {
+            log.Append(stream: HostLogStream.Output, text: $"[w] {index:D4}");
+        }
+
+        Assert.Equal(expected: ["[w] 0999"], actual: log.Read(query: new HostLogQuery { Category = "w", Text = "0999" }).Lines.Select(selector: static line => line.Text));
+        Assert.Equal(expected: ["[w] 0999"], actual: log.Read(query: new HostLogQuery()).Lines.Select(selector: static line => line.Text));
+
         var wide = new HostLog();
 
         wide.Append(stream: HostLogStream.Error, text: new string(c: 'x', count: (HostLog.MaxLineCharacters + 5)));

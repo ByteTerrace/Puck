@@ -1156,7 +1156,10 @@ public sealed partial class WorldStampPool {
 
         var shapes = (document.Shapes ?? []);
 
-        foreach (var volume in volumes) {
+        // Indexed, since the list is an interface and a foreach over it boxes its enumerator every frame.
+        for (var position = 0; (position < volumes.Count); position++) {
+            var volume = volumes[position];
+
             if (!volume.Enabled) {
                 continue;
             }

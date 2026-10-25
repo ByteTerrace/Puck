@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -347,11 +348,19 @@ public sealed partial class SdfMeshPathBake {
             m_dressedSource = frame;
             // The host's map indexes the host's draws alone; a pick names the dressed list.
             if (frame.PickMap is { } hostMap) {
-                if (!ReferenceEquals(objA: m_dressedMap?.Inner, objB: hostMap) || (m_dressedMap.HostDraws != frame.MeshDraws.Count) || !m_dressedMap.Matches(draws: m_draws)) {
-                    m_dressedMap = new SdfDressedPickMap(draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap);
+                if (!Dresses(map: m_dressedMap, hostMap: hostMap, hostDraws: frame.MeshDraws.Count)) {
+                    // A body straddling a door adds and drops its carried copies tick by tick, so the map before this one
+                    // is kept and taken back when the list returns to it.
+                    var previous = m_dressedMap;
+
+                    m_dressedMap = (Dresses(map: m_spareMap, hostMap: hostMap, hostDraws: frame.MeshDraws.Count)
+                        ? m_spareMap
+                        : new SdfDressedPickMap(draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap));
+                    m_spareMap = previous;
                 }
             } else {
                 m_dressedMap = null;
+                m_spareMap = null;
             }
             m_dressed = (frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision, PickMap = m_dressedMap });
 
@@ -367,6 +376,15 @@ public sealed partial class SdfMeshPathBake {
     private SdfFrame? m_dressedSource;
     private SdfFrame? m_dressed;
     private SdfDressedPickMap? m_dressedMap;
+    private SdfDressedPickMap? m_spareMap;
+
+    // Whether a pick map extends a host map over exactly the dressed draws.
+    private bool Dresses([NotNullWhen(returnValue: true)] SdfDressedPickMap? map, ISdfPickMap hostMap, int hostDraws) => (
+        (map is not null) &&
+        ReferenceEquals(objA: map.Inner, objB: hostMap) &&
+        (map.HostDraws == hostDraws) &&
+        map.Matches(draws: m_draws)
+    );
 
     // The frame's lattices and their groups while TryTakeForFrame chooses them, reused frame to frame.
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
@@ -620,6 +638,40 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    // The groups PlanAhead planned, for the program and far distance it planned them at.
+    private (SdfProgram Program, float FarDistance, List<Group> Groups)? m_prepared;
+
+    /// <summary>Plans a program's groups (<see cref="SdfMeshBakeGroup.Plan{T}"/>) as soon as a build finishes it, on the
+    /// build's thread, at the dynamic transforms it was emitted under, and takes from the library the meshes it holds of
+    /// their geometry, renumbering any whose materials moved, so the frame that first draws the program restarts the bake
+    /// without planning it or renumbering its meshes. That restart plans again at its own transforms only the groups it
+    /// cannot keep from the program before whose box or geometry read a transform (<see cref="SdfMeshBakeGroup.Refresh{T}"/>).
+    /// The plan holds for the first restart of that program at that far distance; any other restart plans whole.</summary>
+    /// <param name="program">The program the build finished.</param>
+    /// <param name="transforms">The dynamic transforms the program was emitted under, which no other thread writes
+    /// while this runs.</param>
+    /// <param name="farDistance">The far distance of the frames the program was emitted for.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="transforms"/> is
+    /// <see langword="null"/>.</exception>
+    public void PlanAhead(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        var groups = SdfMeshBakeGroup.Plan(
+            create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
+            farDistance: farDistance,
+            program: program,
+            transforms: transforms
+        );
+
+        foreach (var group in groups) {
+            _ = Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out _);
+        }
+
+        lock (m_gate) {
+            m_prepared = (program, farDistance, groups);
+        }
+    }
     // Puts a group at an index of the list, under the gate.
     private void Replace(int index, Group group) {
         m_groups[index] = group;
@@ -637,12 +689,28 @@ public sealed partial class SdfMeshPathBake {
         // A slice samples one program: a new one takes every lattice again.
         m_slice?.Reset();
 
-        m_groups.AddRange(collection: SdfMeshBakeGroup.Plan(
-            create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
-            farDistance: frame.FarDistance,
-            program: frame.Program,
-            transforms: frame.DynamicTransforms
-        ));
+        // The plan a build already made off the frame's thread (PlanAhead), with each group this restart cannot keep that
+        // read the transforms planned again at the frame's; otherwise the whole plan.
+        if ((m_prepared is { } plan) && ReferenceEquals(objA: plan.Program, objB: frame.Program) && (plan.FarDistance == frame.FarDistance)) {
+            _ = SdfMeshBakeGroup.Refresh(
+                create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
+                farDistance: frame.FarDistance,
+                groups: plan.Groups,
+                program: frame.Program,
+                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)),
+                transforms: frame.DynamicTransforms
+            );
+            m_groups.AddRange(collection: plan.Groups);
+        } else {
+            m_groups.AddRange(collection: SdfMeshBakeGroup.Plan(
+                create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
+                farDistance: frame.FarDistance,
+                program: frame.Program,
+                transforms: frame.DynamicTransforms
+            ));
+        }
+
+        m_prepared = null;
 
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
         // a group whose geometry moved bakes again (Keeps).
