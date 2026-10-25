@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -13,35 +14,119 @@ public sealed partial class WorldDocument {
         Tick: tick,
         TicksPerSecond: definition.SimulationRateHz
     );
-    // Loads one arena over a definition's own state section — the store a compose applies its state members through.
-    // A submitted row declaration reaches this before any validator has seen it, so a section the arena cannot lay
-    // out at all (a board over a topology the document does not declare, a vector row over an undeclared space) is
-    // carried back as a refusal by the name the layout names rather than thrown out of the apply door.
-    // A write to one row seeds that row alone (`row`), when the definition's authored rows are the catalog's document
-    // rows in order with no pool storage, so ExportComposeArena exports only what the write moved.
-    private static bool TryOpenComposeArena(WorldDefinition definition, in ArenaTime time, [NotNullWhen(true)] out StateArena? arena, out string reason, string? row = null) {
+
+    // One returned scratch store per catalog. A concurrent or recursive compose takes another store, never an
+    // arena with an open scope. Weak catalog keys release the storage when its compiled declarations leave use.
+    private sealed class ComposeArenaPool {
+        public ComposeArenaEntry? Available;
+    }
+    private sealed record ComposeArenaEntry(StateArena Arena, WorldStateSection Source, ComposeArenaPool Pool);
+
+    private static readonly ConditionalWeakTable<StateCatalog, ComposeArenaPool> ComposeArenas = new();
+    private static readonly ConditionalWeakTable<StateArena, ComposeArenaEntry> ComposeEntries = new();
+    private static readonly HashSet<string> NoSeedRows = new(comparer: StringComparer.Ordinal);
+
+    private static bool CanReuseComposeArena(ComposeArenaEntry entry, WorldDefinition definition) {
+        var source = entry.Source;
+        var before = source;
+        var after = definition.StateRaw!;
+
+        if ((entry.Arena.Layout.Options != WorldSlotLanes.Options(definition: definition)) ||
+            !ReferenceEquals(objA: before.Body, objB: after.Body) || !ReferenceEquals(objA: before.Identity, objB: after.Identity) ||
+            !ReferenceEquals(objA: before.Lattices, objB: after.Lattices) || !ReferenceEquals(objA: before.Spaces, objB: after.Spaces) ||
+            !ReferenceEquals(objA: before.Enums, objB: after.Enums) || !ReferenceEquals(objA: before.Families, objB: after.Families) ||
+            !ReferenceEquals(objA: before.Records, objB: after.Records)) {
+            return false;
+        }
+        var rows = definition.AuthoredState;
+        var previous = (source.World ?? []);
+
+        if (rows.Count != previous.Count) { return false; }
+        for (var index = 0; (index < rows.Count); index++) {
+            if (!ReferenceEquals(objA: rows[index], objB: previous[index]) && !SameComposeDeclaration(rows[index], previous[index])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    private static bool SameComposeDeclaration(WorldStateRow row, WorldStateRow previous) {
+        if ((row.Name != previous.Name) || (row.Kind != previous.Kind) || (row.Shape != previous.Shape) ||
+            (row.Min != previous.Min) || (row.Max != previous.Max) || (row.Capacity != previous.Capacity) ||
+            (row.Overflow != previous.Overflow) || (row.Evicts != previous.Evicts) || (row.GatesDrive != previous.GatesDrive) ||
+            (row.Advance != previous.Advance) || (row.Draw != previous.Draw) || (row.Dynamics != previous.Dynamics) ||
+            (row.Field != previous.Field) || (row.Cycle != previous.Cycle) || (row.Domain != previous.Domain) ||
+            (row.ValuesFrom != previous.ValuesFrom) || (row.Inverse != previous.Inverse) || (row.Phase != previous.Phase) ||
+            (row.Visibility != previous.Visibility) || (row.Knowledge != previous.Knowledge) || (row.PhaseOf != previous.PhaseOf) ||
+            (row.Space != previous.Space) || (row.Enum != previous.Enum) || (row.HostOwned != previous.HostOwned) ||
+            (row.Generated != previous.Generated) || (row.Verdict != previous.Verdict) || (row.Witness != previous.Witness)) { return false; }
+        // Only explicit per-cell time traits are declaration. All other cell fields live in columns.
+        foreach (var cell in (row.Cells ?? [])) {
+            if ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null)) { continue; }
+            StateCell? before = null;
+
+            foreach (var candidate in (previous.Cells ?? [])) {
+                if (candidate.Key == cell.Key) { before = candidate; break; }
+            }
+            if ((before is null) || (cell.Advance != before.Advance) || (cell.Cycle != before.Cycle) || (cell.Dynamics != before.Dynamics)) { return false; }
+        }
+        foreach (var cell in (previous.Cells ?? [])) {
+            if ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null)) { continue; }
+            var found = false;
+
+            foreach (var candidate in (row.Cells ?? [])) {
+                if (candidate.Key == cell.Key) {
+                    found = ((candidate.Advance == cell.Advance) && (candidate.Cycle == cell.Cycle) && (candidate.Dynamics == cell.Dynamics));
+                    break;
+                }
+            }
+            if (!found) { return false; }
+        }
+        return true;
+    }
+    private static void CloseComposeArena(StateArena arena, int mark) {
+        arena.Rewind(mark: mark);
+        if (ComposeEntries.TryGetValue(key: arena, value: out var entry)) {
+            Interlocked.Exchange(location1: ref entry.Pool.Available, value: entry);
+        }
+    }
+    private static bool TryOpenComposeArena(WorldDefinition definition, in ArenaTime time, [NotNullWhen(true)] out StateArena? arena, out int mark, out string reason, string? row = null, IReadOnlySet<string>? seeded = null) {
+        arena = null;
+        mark = 0;
         try {
-            if ((row is not null) && ExportsWrittenRows(definition: definition)) {
-                return StateArena.TryCreateSeeding(
-                    arena: out arena,
-                    catalog: definition.StateCatalog,
-                    options: WorldSlotLanes.Options(definition: definition),
-                    reason: out reason,
-                    section: definition.StateRaw,
-                    seeded: new HashSet<string>(comparer: StringComparer.Ordinal) { row },
-                    time: in time
-                );
+            if (((row is not null) || (seeded is not null)) && ExportsWrittenRows(definition: definition)) {
+                var pool = ComposeArenas.GetValue(definition.StateCatalog, static _ => new ComposeArenaPool());
+                var entry = Interlocked.Exchange(location1: ref pool.Available, value: null);
+
+                if ((entry is null) || !CanReuseComposeArena(definition: definition, entry: entry)) {
+                    if (!StateArena.TryCreateSeeding(
+                        catalog: definition.StateCatalog, section: definition.StateRaw,
+                        options: WorldSlotLanes.Options(definition: definition), time: in time,
+                        seeded: NoSeedRows, arena: out arena, reason: out reason)) { return false; }
+                    entry = new ComposeArenaEntry(Arena: arena, Pool: pool, Source: definition.StateRaw!);
+                    ComposeEntries.Add(key: arena, value: entry);
+                }
+                arena = entry.Arena;
+                mark = arena.BeginScope();
+                if (!arena.TryLoadSeeding(definition.AuthoredState, (seeded ?? new HashSet<string>(comparer: StringComparer.Ordinal) { row! }), in time, out reason)) {
+                    CloseComposeArena(arena: arena, mark: mark);
+                    arena = null;
+                    return false;
+                }
+                return true;
             }
 
-            return StateArena.TryCreate(
+            if (!StateArena.TryCreate(
                 arena: out arena,
                 catalog: definition.StateCatalog,
                 options: WorldSlotLanes.Options(definition: definition),
                 reason: out reason,
                 section: definition.StateRaw,
                 time: in time
-            );
+            )) { return false; }
+            mark = arena.BeginScope();
+            return true;
         } catch (InvalidOperationException layout) {
+            if ((arena is not null) && (arena.Journal.Scopes > 0)) { CloseComposeArena(arena: arena, mark: mark); }
             arena = null;
             reason = layout.Message;
 

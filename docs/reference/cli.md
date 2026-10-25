@@ -2869,8 +2869,13 @@ instructions and full rotation expansions, and point evaluations with their
 instructions, read from `physics.sweep`, `sdf.bounds` and `sdf.point`). It
 then times a paced tick that drains a whole-row value write to the first plain
 integer slot (the shape of the gallery guide's addon writes), with its
-allocation and the arena row versions and installed rows the write moved: a
-value write costs the row it touched, so both counts read 1. The
+allocation and the arena row versions and installed rows the tick moved. The
+write itself replaces one row; rules and guests may also write in that tick.
+For the debug world, a second paced window submits the kinematics scope
+guest's thirteen cell upserts under its real row grants, reports the tick's
+time and allocation, and refuses the benchmark if any write fails to apply.
+Mutation construction and guest payload decoding sit outside both windows;
+these rows measure host apply cost. The
 screen machines emulate on worker threads the tick only submits to, and the
 back-to-back idle window is bounded by the slowest of them once their pending
 windows fill, so the lane also times the tick paced at the simulation rate,

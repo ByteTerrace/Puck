@@ -91,6 +91,20 @@ re-driving at the wrong step size (see [replay.md](replay.md)).
 
 ## Applying one mutation (`TryApplyMutation`)
 
+Ordinary contiguous cell upserts from one guest may share a batch preparation
+and installation at the drain. This is host coalescing, after the guest's
+per-act decode and metering: every member still passes complete authority and
+cell admission, and each original act retains its journal entry, narration,
+echo and completion. Rows with cross-row meaning or time traits use the
+individual path. A failed combined preparation falls back to the original
+ordered acts, preserving partial success and per-act refusal details.
+The [server reference](../../../../src/Puck.World.Server/README.md) owns the
+eligibility checks and scratch-store lifetime. Seed a borrowed compose arena
+inside its scope, so rewind empties it on acceptance and rejection alike;
+catalog identity alone does not prove unchanged row declarations or lane widths.
+Partial seeding recomputes only boards whose inputs it loaded. An unrelated
+board's empty scratch inputs must never journal and export over its live row.
+
 Compose → validate → capacity → solids → install (swap + derived rebuild) →
 journal → echo. Precisely:
 

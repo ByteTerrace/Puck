@@ -222,7 +222,7 @@ public sealed partial class StateArena {
 
     // The declared rows a seeding arena loads: the named rows, and the tokens and codes rows of every derived board
     // one of them is, feeds or is fed by, so a board recomputes from what the section holds.
-    private List<StateRow> SeededRows(IReadOnlySet<string> seeded) {
+    private List<StateRow> SeededRows(IReadOnlySet<string> seeded, IReadOnlyList<StateRow>? source = null) {
         var names = new HashSet<string>(collection: seeded, comparer: StringComparer.Ordinal);
 
         for (var ordinal = 0; (ordinal < m_layout.RowCount); ordinal++) {
@@ -243,7 +243,7 @@ public sealed partial class StateArena {
 
         var rows = new List<StateRow>(capacity: names.Count);
 
-        foreach (var row in m_rows) {
+        foreach (var row in (source ?? m_rows)) {
             if (names.Contains(item: row.Name.Value)) {
                 rows.Add(item: row);
             }
@@ -251,6 +251,16 @@ public sealed partial class StateArena {
 
         return rows;
     }
+
+    /// <summary>Loads only the named document rows and their derived-board inputs into an existing arena.</summary>
+    /// <param name="rows">The current document rows.</param>
+    /// <param name="seeded">The row names to load.</param>
+    /// <param name="time">The clocks the load settles to.</param>
+    /// <param name="reason">Why a row was refused.</param>
+    /// <returns>Whether the load succeeded. An enclosing scope can rewind the entire load.</returns>
+    public bool TryLoadSeeding(IReadOnlyList<StateRow> rows, IReadOnlySet<string> seeded, in ArenaTime time, out string reason) =>
+        TryLoadCore(rows: SeededRows(seeded: seeded, source: rows), time: in time, reason: out reason, onlyLoadedBoards: true);
+
     private static bool TryValidateDerivedDomains(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<StateRow> rows, out string reason) {
         for (var boardOrdinal = 0; (boardOrdinal < layout.RowCount); boardOrdinal++) {
             ref readonly var boardLayout = ref layout[boardOrdinal];

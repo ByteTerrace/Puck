@@ -359,14 +359,28 @@ it reloads the live columns in place only for the catalog they already hold.
 
 A value write (a cell write or removal, or a whole-row write that moves cell
 values alone) costs the row it touches. Its compose seeds a scratch arena with
-that row alone (`StateArena.TryCreateSeeding`, which also seeds a derived
+that row alone (`StateArena.TryLoadSeeding`, which also seeds a derived
 board's tokens and codes rows) and exports only the rows the compose scope
 wrote, so every other row of the candidate is the installed document's own
 instance. The install then loads only the rows that are not those instances
 (`WorldServer.SyncArenaValues`): an unwritten row keeps its columns, its
 version and its generation, and the state delivery names the written row alone
 as moved. `puck bench world` counts the arena versions and installed rows one
-such write moves.
+such write moves. The compose store is borrowed from a cache scoped to the
+catalog, with declaration and lane-width checks before reuse. Its seeding
+load runs inside the compose scope: rewind releases the cells and speculative
+keys after both success and refusal. Concurrent or recursive composition
+borrows a separate store; the cache retains only one returned store.
+
+Contiguous ordinary cell upserts from one guest share one batch preparation
+and installation (`WorldDocument.CellBurst.cs`). Every member still passes
+the original authority and cell admission doors, and every original act keeps
+its own journal entry, narration, echo and completion. Time traits, evictions,
+derived or relational rows, drive gates, population-count bindings and document-value bindings take the
+individual path. A failed combined preparation also runs the original acts
+individually, preserving ordered partial success and each refusal's reason.
+`puck bench world` includes the debug scope guest's thirteen-cell burst and
+checks that all thirteen writes actually apply.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 

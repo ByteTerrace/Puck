@@ -93,12 +93,58 @@ internal static class WorldBenchmarks {
             server: server,
             stepTicks: stepTicks
         );
+        MeasureCellBurst(rows: rows, server: server, stepTicks: stepTicks);
         MeasureMachines(
             bench: bench,
             definition: definition,
             rows: rows,
             stepTicks: stepTicks
         );
+    }
+    private static void MeasureCellBurst(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+        // The debug scope's thirteen writes, using its real actor and row grants. Decode/fuel is outside this
+        // host-cost window, just as construction of the whole-row mutation is outside MeasureValueWrite's window.
+        var scope = WorldDefinitionRows.FindStateRow(server.Definition.State, "scope");
+
+        if (scope is null) { rows.Add(item: ("world: 13-cell guest burst", "no scope rows")); return; }
+        var principal = Puck.Commands.Principal.Addon(name: "kinematics-scope");
+        var samples = new long[SampleTicks];
+        var allocations = new long[SampleTicks];
+        var applied = 0;
+
+        server.MutationJournalTap += (_, _, mutation) => {
+            if (mutation.Principal == principal) { applied++; }
+        };
+        var period = ((long)((((ulong)Stopwatch.Frequency) * stepTicks) / FixedTickConversion.TicksPerSecond));
+        var due = Stopwatch.GetTimestamp();
+
+        for (var tick = 0; (tick < (WarmupTicks + SampleTicks)); tick++) {
+            while (Stopwatch.GetTimestamp() < due) { Thread.Sleep(millisecondsTimeout: 1); }
+            due += period;
+            var writes = new List<Puck.World.Protocol.WorldMutation.UpsertStateCell>();
+
+            foreach (var cell in scope.Cells!) {
+                writes.Add(item: new(principal, "scope", cell.Key.Value, ((cell.Key.Value == "enabled") ? 0 : tick), Puck.World.Protocol.WorldDocumentWriteKind.Set));
+            }
+            foreach (var name in new[] { "scopeHeight", "scopeVelocity", "scopeFacts", "scopeContacts", "scopeTicks", "scopeEvents" }) {
+                writes.Add(item: new(principal, name, "0", tick, Puck.World.Protocol.WorldDocumentWriteKind.Set));
+            }
+            foreach (var write in writes) {
+                server.EnqueueMutation(write, sourceAddonInstanceId: long.MaxValue);
+            }
+            var before = applied;
+            var start = Stopwatch.GetTimestamp();
+            var bytes = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
+
+            if ((applied - before) != 13) { throw new InvalidOperationException(message: $"guest burst applied {(applied - before)} of 13 writes"); }
+            if (tick >= WarmupTicks) {
+                samples[(tick - WarmupTicks)] = (Stopwatch.GetTimestamp() - start);
+                allocations[(tick - WarmupTicks)] = bytes;
+            }
+        }
+        Array.Sort(array: allocations);
+        rows.Add(item: ("world: 13-cell guest burst tick (median)", $"{MedianMilliseconds(samples: samples):F3} ms"));
+        rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{allocations[(SampleTicks / 2)]:N0} bytes"));
     }
     // A whole-row write that moves one cell's value and nothing else, as an addon's UpsertStateRow does (the gallery
     // guide's): the tick that drains it, timed and metered, beside the arena rows whose version it moved and the

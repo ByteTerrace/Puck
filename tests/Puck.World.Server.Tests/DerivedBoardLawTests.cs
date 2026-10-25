@@ -75,6 +75,25 @@ public sealed class DerivedBoardLawTests {
     );
 
     [Fact]
+    public void ARepeatedValueWriteKeepsAnUnrelatedDerivedBoardAndItsInputs() {
+        var document = Document(a: 0, b: 1);
+        var gauge = new WorldStateRow(Name(value: "gauge"), CellKind.Int,
+            Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(value: 0))]);
+        using var fixture = Fixtures.FreshServer(document.WithWorldState([.. document.AuthoredState, gauge]));
+        var board = Find(document: fixture.Server.Definition, row: "board");
+        var tokens = Find(document: fixture.Server.Definition, row: "tokens");
+        var codes = Find(document: fixture.Server.Definition, row: "codes");
+
+        for (var value = 1; (value <= 2); value++) {
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "gauge",
+                StateRow.SlotKey.Value, value, WorldDocumentWriteKind.Set));
+            fixture.Step();
+            Assert.Same(board, Find(document: fixture.Server.Definition, row: "board"));
+            Assert.Same(tokens, Find(document: fixture.Server.Definition, row: "tokens"));
+            Assert.Same(codes, Find(document: fixture.Server.Definition, row: "codes"));
+        }
+    }
+    [Fact]
     public void ADirectBoardWriteIsRefused() {
         using var fixture = Fixtures.FreshServer(definition: Document(
             a: 0,

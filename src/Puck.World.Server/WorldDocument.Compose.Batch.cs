@@ -35,7 +35,12 @@ public sealed partial class WorldDocument {
         StateArena? arena = null;
         var mark = 0;
         var arenaDirty = false;
-        HashSet<string>? referencedRows = null;
+        IReadOnlySet<string>? referencedRows = null;
+        HashSet<string>? seeded = new(comparer: StringComparer.Ordinal);
+
+        foreach (var member in batch.Mutations) {
+            if (member is WorldMutation.UpsertStateCell upsert) { seeded.Add(item: upsert.Row); } else if (member is WorldMutation.RemoveStateCell remove) { seeded.Add(item: remove.Row); } else { seeded = null; break; }
+        }
 
         reason = string.Empty;
         evictedKey = null;
@@ -112,6 +117,7 @@ public sealed partial class WorldDocument {
                                 held: arena,
                                 mark: ref mark,
                                 reason: out reason,
+                                seeded: seeded,
                                 time: in time,
                                 working: working
                             )) {
@@ -146,6 +152,7 @@ public sealed partial class WorldDocument {
                                 held: arena,
                                 mark: ref mark,
                                 reason: out reason,
+                                seeded: seeded,
                                 time: in time,
                                 working: working
                             )) {
@@ -297,12 +304,12 @@ public sealed partial class WorldDocument {
         } finally {
             // The batch's own store is scratch: the candidate it exported is what the ordinary mutation pipeline
             // installs, so the arena is rewound whether the batch composed or refused.
-            arena?.Rewind(mark: mark);
+            if (arena is not null) { CloseComposeArena(arena: arena, mark: mark); }
         }
     }
     // Loads the batch's arena over the document `working` currently holds, or leaves the one already open — which
     // is the same document, since every member that could have rewritten the state section drops it.
-    private static bool TryOpenBatchArena(WorldDefinition working, in ArenaTime time, StateArena? held, ref int mark, [NotNullWhen(true)] out StateArena? arena, out string reason) {
+    private static bool TryOpenBatchArena(WorldDefinition working, in ArenaTime time, StateArena? held, ref int mark, [NotNullWhen(true)] out StateArena? arena, out string reason, IReadOnlySet<string>? seeded) {
         reason = string.Empty;
 
         if (held is not null) {
@@ -313,14 +320,15 @@ public sealed partial class WorldDocument {
 
         if (!TryOpenComposeArena(
             arena: out arena,
+            mark: out mark,
             definition: working,
             reason: out reason,
+            seeded: seeded,
             time: in time
         )) {
             return false;
         }
 
-        mark = arena.BeginScope();
 
         return true;
     }
@@ -345,15 +353,11 @@ public sealed partial class WorldDocument {
     // drops it. Collecting the set is a structural read (which rows a document value names, never their live
     // content), so it never needs an export; only an actual hit — the rehydration below — does, since that reads
     // the written row's current value back out of `working`.
-    private static bool TryRefreshReferenced(ref WorldDefinition working, ref HashSet<string>? referencedRows, string rowName, StateArena? arena, ref bool arenaDirty, out string reason) {
+    private static bool TryRefreshReferenced(ref WorldDefinition working, ref IReadOnlySet<string>? referencedRows, string rowName, StateArena? arena, ref bool arenaDirty, out string reason) {
         reason = string.Empty;
 
         if (referencedRows is null) {
-            referencedRows = new HashSet<string>(comparer: StringComparer.Ordinal);
-            WorldStateDocumentValues.CollectReferencedRows(
-                definition: working,
-                rows: referencedRows
-            );
+            referencedRows = WorldStateDocumentValues.ReferencedRows(definition: working);
         }
 
         if (!referencedRows.Contains(item: rowName)) {
