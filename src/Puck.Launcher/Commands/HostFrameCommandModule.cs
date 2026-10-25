@@ -3,20 +3,20 @@ using Puck.Commands;
 namespace Puck.Launcher.Commands;
 
 /// <summary>
-/// The windowed host's frame-timing surface: <c>host.frames</c> reads the <see cref="HostFrameTimeline"/>, the
+/// The host's frame-timing surface: <c>host.frames</c> reads the <see cref="HostFrameTimeline"/>, the
 /// interval of each recent host iteration split into the loop's phases. Registered by
-/// <see cref="LauncherServiceRegistration.AddLauncherTerminal"/>, so the verb exists only on the windowed host.
+/// the windowed and headless terminal registration methods.
 /// </summary>
 internal sealed class HostFrameCommandModule(HostFrameTimeline timeline) : ICommandModule {
+    private const double DefaultBudgetMilliseconds = (1000.0 / 60.0);
     private const int DefaultFrames = 600;
     private const int DefaultWorst = 8;
-    private const double DefaultBudgetMilliseconds = (1000.0 / 60.0);
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            description: $"Reads the windowed host's per-iteration timeline: host.frames [frames] [budget-ms] [worst] echoes the last frames iterations' interval (default {DefaultFrames}, at most {HostFrameTimeline.Capacity}) as avg, p50, p99 and max, the count over budget-ms (default one 60 Hz period), the most work an iteration did outside the pacer's wait, how late the pacer woke at most, and the collections and their pause time; then produce, simulate and their sum per iteration as avg, p50, p99 and max; then the worst slowest iterations (default {DefaultWorst}), and the busiest one when they do not hold it, each split into input, commands, simulate (with its fixed steps), begin (the presenter's wait for the previous frame), produce, present and the pacer's wait with its lateness, with the garbage collections by generation and the GC pause time inside it. host.frames reset forgets every recorded iteration.",
+            description: $"Reads the host's per-iteration timeline: host.frames [frames] [budget-ms] [worst] echoes the last frames iterations' interval (default {DefaultFrames}, at most {HostFrameTimeline.Capacity}) as avg, p50, p99 and max, the count over budget-ms (default one 60 Hz period), the most work an iteration did outside the pacer's wait, how late the pacer woke at most, and the collections and their pause time; then produce, simulate and their sum per iteration as avg, p50, p99 and max; then the worst slowest iterations (default {DefaultWorst}), and the busiest one when they do not hold it, each split into input, commands, simulate (with its fixed steps), begin (the presenter's wait for the previous frame), produce, present and the pacer's wait with its lateness, with the garbage collections by generation and the GC pause time inside it. host.frames reset forgets every recorded iteration.",
             handler: (_, args) => {
                 if ((args.Count == 1) && args.Is(index: 0, value: "reset")) {
                     timeline.Reset();

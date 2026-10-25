@@ -27,6 +27,8 @@ public sealed partial class StateArena {
     private CellKeyTable m_keys;
 
     private int[] m_keyMarks = new int[16];
+    private readonly HashSet<string> m_seedNames = new(comparer: StringComparer.Ordinal);
+    private readonly List<StateRow> m_seedRows = [];
     private long m_importVisibilityBytes = -1L;
 
     private readonly ArenaJournal m_journal;
@@ -222,8 +224,12 @@ public sealed partial class StateArena {
 
     // The declared rows a seeding arena loads: the named rows, and the tokens and codes rows of every derived board
     // one of them is, feeds or is fed by, so a board recomputes from what the section holds.
-    private List<StateRow> SeededRows(IReadOnlySet<string> seeded, IReadOnlyList<StateRow>? source = null) {
-        var names = new HashSet<string>(collection: seeded, comparer: StringComparer.Ordinal);
+    private List<StateRow> SeededRows(IReadOnlySet<string>? seeded, IReadOnlyList<StateRow>? source = null, string? single = null) {
+        var names = m_seedNames;
+
+        names.Clear();
+        if (seeded is not null) { names.UnionWith(other: seeded); }
+        if (single is not null) { names.Add(item: single); }
 
         for (var ordinal = 0; (ordinal < m_layout.RowCount); ordinal++) {
             ref readonly var board = ref m_layout[ordinal];
@@ -241,9 +247,15 @@ public sealed partial class StateArena {
             }
         }
 
-        var rows = new List<StateRow>(capacity: names.Count);
+        var rows = m_seedRows;
 
-        foreach (var row in (source ?? m_rows)) {
+        rows.Clear();
+
+        var from = (source ?? m_rows);
+
+        for (var index = 0; (index < from.Count); index++) {
+            var row = from[index];
+
             if (names.Contains(item: row.Name.Value)) {
                 rows.Add(item: row);
             }
@@ -260,6 +272,14 @@ public sealed partial class StateArena {
     /// <returns>Whether the load succeeded. An enclosing scope can rewind the entire load.</returns>
     public bool TryLoadSeeding(IReadOnlyList<StateRow> rows, IReadOnlySet<string> seeded, in ArenaTime time, out string reason) =>
         TryLoadCore(rows: SeededRows(seeded: seeded, source: rows), time: in time, reason: out reason, onlyLoadedBoards: true);
+    /// <summary>Loads one named document row and its derived-board inputs into this scratch arena.</summary>
+    /// <param name="rows">The current document rows.</param>
+    /// <param name="row">The row name.</param>
+    /// <param name="time">The clocks the load settles to.</param>
+    /// <param name="reason">Why the load was refused.</param>
+    /// <returns>Whether the load succeeded.</returns>
+    public bool TryLoadSeeding(IReadOnlyList<StateRow> rows, string row, in ArenaTime time, out string reason) =>
+        TryLoadCore(rows: SeededRows(seeded: null, single: row, source: rows), time: in time, reason: out reason, onlyLoadedBoards: true);
 
     private static bool TryValidateDerivedDomains(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<StateRow> rows, out string reason) {
         for (var boardOrdinal = 0; (boardOrdinal < layout.RowCount); boardOrdinal++) {

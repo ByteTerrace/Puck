@@ -440,15 +440,23 @@ public sealed partial class WorldMachineHost {
             if (runtime is IMachineInputPorts ports) {
                 var sole = (ports.InputPorts.Count == 1);
 
-                foreach (var (name, port) in ports.InputPorts) {
-                    var input = MachineInput(
-                        instance: instance.Declaration.Name,
-                        pads: pads,
-                        port: name,
-                        sole: sole
-                    );
+                if (ports.InputPorts is FrozenDictionary<string, IMachineInputPort> frozen) {
+                    for (var index = 0; (index < frozen.Count); index++) {
+                        var input = MachineInput(instance: instance.Declaration.Name, pads: pads, port: frozen.Keys[index], sole: sole);
 
-                    port.SetState(state: in input);
+                        frozen.Values[index].SetState(state: in input);
+                    }
+                } else {
+                    foreach (var (name, port) in ports.InputPorts) {
+                        var input = MachineInput(
+                            instance: instance.Declaration.Name,
+                            pads: pads,
+                            port: name,
+                            sole: sole
+                        );
+
+                        port.SetState(state: in input);
+                    }
                 }
             }
             if ((runtime is IQueuedMachineRuntime queued) && !(SynchronousSteps?.Invoke() ?? false)) {

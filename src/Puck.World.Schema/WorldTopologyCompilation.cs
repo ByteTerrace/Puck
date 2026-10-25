@@ -17,7 +17,11 @@ public static class WorldTopologyCompilation {
     // Every real placement carries at most one board facet naming this topology (validated: WorldDefinitionValidator.
     // Board.cs refuses a second placement claiming the same topology) — the first match is the only one there can be.
     private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) {
-        foreach (var placement in definition.Placements) {
+        var placements = definition.Placements;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+
             if (string.Equals(
                 a: placement.Board?.Topology,
                 b: topologyName,

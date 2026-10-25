@@ -79,11 +79,10 @@ public sealed partial class WorldTick {
         reason = string.Empty;
         return true;
     }
-
     // A tabletop engages a live body standing within its engage radius of the board's centre; a placement carrying no
     // board facet with an engage block is no tabletop. The body's squared ground-plane distance from the board's centre
     // is answered beside it, for the probe's nearest-target choice.
-    private bool CheckTabletopEngagePolicy(int entityIndex, string placementId, out string reason, out FixedQ4816 distanceSquared) {
+    private bool CheckTabletopEngagePolicy(int entityIndex, string placementId, out string reason, out FixedQ4816 distanceSquared, bool describe = true) {
         distanceSquared = FixedQ4816.Zero;
 
         if (!WorldTabletopFrame.TryFind(
@@ -92,13 +91,13 @@ public sealed partial class WorldTick {
             placementId: placementId,
             topology: out var topology
         )) {
-            reason = $"placement '{placementId}' carries no engageable tabletop";
+            reason = (describe ? $"placement '{placementId}' carries no engageable tabletop" : string.Empty);
 
             return false;
         }
 
         if (Host.Body(index: entityIndex) is not { } body) {
-            reason = $"body {entityIndex} is not live";
+            reason = (describe ? $"body {entityIndex} is not live" : string.Empty);
 
             return false;
         }
@@ -108,7 +107,7 @@ public sealed partial class WorldTick {
         distanceSquared = PlanarDistanceSquared(body: body, centre: WorldTabletopFrame.Centre(topology: topology));
 
         if (distanceSquared > (radius * radius)) {
-            reason = $"body {entityIndex} is outside tabletop '{placementId}''s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)";
+            reason = (describe ? $"body {entityIndex} is outside tabletop '{placementId}''s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)" : string.Empty);
 
             return false;
         }
@@ -117,6 +116,7 @@ public sealed partial class WorldTick {
 
         return true;
     }
+
     /// <summary>Returns whether an engageable screen has something a seat engages: a live booted machine, whose pad the
     /// seat plays, or a producer source (a window capture, a camera, a test pattern), which the seat's camera frames on
     /// the screen and no pad reaches. Read from the document and the machine host alone, so a replay decides it the
@@ -131,6 +131,7 @@ public sealed partial class WorldTick {
 
         return (hasMachine || (screen.Source is WorldScreenSource.Producer));
     }
+
     // The squared distance on the ground plane from a body to a screen's origin, which the engage radius bounds.
     private static FixedQ4816 PlanarDistanceSquared(WorldBody body, WorldScreen screen) => PlanarDistanceSquared(
         body: body,
@@ -377,6 +378,7 @@ public sealed partial class WorldTick {
                     ordinal: out var ordinal
                 ) ||
                     !CheckTabletopEngagePolicy(
+                    describe: false,
                     distanceSquared: out var distance,
                     entityIndex: slot,
                     placementId: placement.Id,
@@ -403,7 +405,6 @@ public sealed partial class WorldTick {
             }
         }
     }
-
     // The leave half of the context button: a seat captured on a screen or at a tabletop (its set holds that
     // application and not its own body) whose engage channel this world resolves probes that channel, and its rising
     // edge dissolves the set back to the own-body default. The validator refuses a screen engage channel the route's

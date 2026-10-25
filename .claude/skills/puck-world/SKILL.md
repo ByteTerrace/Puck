@@ -292,6 +292,14 @@ Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
 
 ## Running it
 
+`host.frames` reads both windowed and headless host iterations. A headless `--unpaced` run takes one fixed tick
+per iteration, so `world.wait 1` followed by `host.frames 1` isolates that tick's simulate time; warm the ordinary
+simulation first when measuring a guest's first write separately from whole-engine cold boot. Check the reported
+step count. In a paced run the pump can drain a released command between steps of the current iteration, while
+`host.frames` reads only completed iterations: an echo immediately before the reading need not belong to that row.
+Use the unpaced recipe for individual ticks; its machine-queue backpressure still contributes to simulate time.
+Rendered phases are zero.
+
 A World you drive call by call is a `puck_world_start` World
 ([above](#the-live-world-is-shared)). A whole script piped through stdin, with
 its streams captured, is this recipe:

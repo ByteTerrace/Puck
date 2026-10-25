@@ -488,7 +488,10 @@ public sealed class WorldEventFeed {
     private void CollectRegions(WorldDefinition definition, WorldPopulation population) {
         var ordinal = 0;
 
-        foreach (var placement in definition.Placements) {
+        var placements = definition.Placements;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
             // A dealt template senses nothing itself; its region facet is what its dealt children carry.
             if (
                 (placement is null) ||
@@ -689,6 +692,7 @@ public sealed class WorldEventFeed {
         ) {
             var sphereIsLeft = (left.Kind == FixedBodyColliderKind.Sphere);
             var sphere = (sphereIsLeft ? left : right);
+
             var (sphereCenter, _) = FixedDynamicBodyContacts.Segment(
                 orientation: (sphereIsLeft ? leftOrientation : rightOrientation),
                 position: (sphereIsLeft ? leftPosition : rightPosition),

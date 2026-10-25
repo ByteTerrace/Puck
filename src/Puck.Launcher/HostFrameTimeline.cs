@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Puck.Launcher;
 
-/// <summary>The phases of one windowed host iteration, in the order the loop runs them.</summary>
+/// <summary>The phases of one host iteration, in the order the loop runs them.</summary>
 public enum HostFramePhase {
     /// <summary>Window events and input capture.</summary>
     Input,
@@ -20,9 +20,8 @@ public enum HostFramePhase {
     /// <summary>The pacer's wait for the next slot.</summary>
     Wait,
 }
-
 /// <summary>
-/// The windowed host's per-iteration timeline: a ring of the latest iterations, each the interval from its start to
+/// The windowed or headless host's per-iteration timeline: a ring of the latest iterations, each the interval from its start to
 /// the next one's, split into the loop's phases, with its fixed steps and the garbage collections and pause time that
 /// fell inside it. The <c>host.frames</c> verb reads it. Every write and read runs on the host pump thread.
 /// </summary>
@@ -40,6 +39,7 @@ public sealed class HostFrameTimeline {
     private readonly long[] m_late = new long[Capacity];
     private readonly int[] m_collections = new int[(Capacity * 3)];
     private readonly long[] m_open = new long[PhaseCount];
+
     private readonly long m_frequency;
 
     private long m_count;
@@ -116,9 +116,11 @@ public sealed class HostFrameTimeline {
     /// <summary>Records how far past its deadline the pacer's wait returned, for an iteration whose wait slept.</summary>
     /// <param name="ticks">The overshoot, in the clock's timestamp ticks.</param>
     public void NoteLate(long ticks) => m_openLate = ticks;
+
     /// <summary>Gets the iterations recorded since the last <see cref="Reset"/>: a coordinate <see cref="Scan"/> reads
     /// a span of.</summary>
     public long Recorded => m_count;
+
     /// <summary>Reads the iterations from one coordinate to another: how many did more work than a budget, and the
     /// slowest. Work is an iteration's interval less the pacer's wait, so a late wake of the pacer is not a stall.</summary>
     /// <param name="from">The first iteration, a value of <see cref="Recorded"/> taken earlier; one the ring has since
@@ -237,13 +239,13 @@ public sealed class HostFrameTimeline {
 
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[host.frames: {count} iterations | avg={(total / count):0.00} p50={Percentile(sorted: sorted, fraction: 0.5):0.00} p99={Percentile(sorted: sorted, fraction: 0.99):0.00} max={sorted[^1]:0.00} ms | over {budgetMilliseconds:0.0} ms: {over} | busiest {busiest:0.00} ms of work | pacer late at most {latest:0.00} ms | {collections} collections pausing {TimeSpan.FromTicks(value: pause).TotalMilliseconds:0.00} ms]"
+            handler: $"[host.frames: {count} iterations | avg={(total / count):0.00} p50={Percentile(fraction: 0.5, sorted: sorted):0.00} p99={Percentile(fraction: 0.99, sorted: sorted):0.00} max={sorted[^1]:0.00} ms | over {budgetMilliseconds:0.0} ms: {over} | busiest {busiest:0.00} ms of work | pacer late at most {latest:0.00} ms | {collections} collections pausing {TimeSpan.FromTicks(value: pause).TotalMilliseconds:0.00} ms]"
         );
 
         // The frame thread's own work per iteration: produce and simulate, the two phases a frame's cost lives in.
-        AppendPhases(builder: builder, indices: indices, label: "produce", first: HostFramePhase.Produce, second: null);
-        AppendPhases(builder: builder, indices: indices, label: "simulate", first: HostFramePhase.Simulate, second: null);
-        AppendPhases(builder: builder, indices: indices, label: "produce+simulate", first: HostFramePhase.Produce, second: HostFramePhase.Simulate);
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce", second: null);
+        AppendPhases(builder: builder, first: HostFramePhase.Simulate, indices: indices, label: "simulate", second: null);
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce+simulate", second: HostFramePhase.Simulate);
 
         var order = Enumerable.Range(
             count: count,
@@ -288,7 +290,7 @@ public sealed class HostFrameTimeline {
         Array.Sort(array: values);
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"\n  {label}: avg={(total / values.Length):0.00} p50={Percentile(sorted: values, fraction: 0.5):0.00} p99={Percentile(sorted: values, fraction: 0.99):0.00} max={values[^1]:0.00} ms"
+            handler: $"\n  {label}: avg={(total / values.Length):0.00} p50={Percentile(fraction: 0.5, sorted: values):0.00} p99={Percentile(fraction: 0.99, sorted: values):0.00} max={values[^1]:0.00} ms"
         );
     }
     private double Milliseconds(long ticks) => ((ticks * 1000.0) / m_frequency);

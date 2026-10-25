@@ -37,6 +37,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
     private readonly TimeProvider m_time;
+    private readonly HostFrameTimeline m_timeline;
 
     public HeadlessTickHostedService(
         IHostApplicationLifetime applicationLifetime,
@@ -52,7 +53,8 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         TextCommandSource textSource,
         TerminalControl terminal,
         StandardInputBacklog inputBacklog,
-        TimeProvider time
+        TimeProvider time,
+        HostFrameTimeline timeline
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(time);
@@ -83,6 +85,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_snapshotInputCaptures = [.. snapshotInputCaptures];
         m_textSource = textSource;
         m_time = time;
+        m_timeline = timeline;
         m_simulation = LauncherHostLoop.SingleOrDefault(
             items: simulations,
             name: nameof(IFixedStepSimulation),
@@ -146,6 +149,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             );
 
             while (!stoppingToken.IsCancellationRequested) {
+                m_timeline.BeginIteration();
                 m_textSource.Collect();
 
                 // Flush the command pump's buffered result echoes ONCE, right after the drain that produced them (see
@@ -170,6 +174,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 }
 
                 hostFrame++;
+                m_timeline.Mark(phase: HostFramePhase.Commands);
 
                 // Re-resolved every iteration — see ResolveRatePerSecond's own remarks above.
                 var ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
@@ -184,21 +189,23 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                     // An offline schedule already pins every input and observation to the simulation's integer tick
                     // grid, so an unpaced run takes one step per iteration through the ordinary FixedStepPump/InputRouter
                     // path, and wall time decides no step.
-                    _ = pump?.TryStep(
+                    m_timeline.NoteSteps(steps: ((pump?.TryStep(
                         intervalTicks: intervalTicks,
                         stepTicks: stepTicks
-                    );
+                    ) == true) ? 1 : 0));
                 } else {
-                    _ = pump?.Advance(
+                    m_timeline.NoteSteps(steps: (pump?.Advance(
                         deltaTicks: intervalTicks,
                         maxFrameTicks: maxFrameTicks,
                         stepTicks: stepTicks
-                    );
+                    ) ?? 0));
                 }
+                m_timeline.Mark(phase: HostFramePhase.Simulate);
 
                 // Simulation-routed console handlers run while snapshots are applied above. Flush their real results
                 // in this iteration rather than leaving them buffered until the next tick.
                 m_bufferedOutput.Flush();
+                m_timeline.Mark(phase: HostFramePhase.Commands);
 
                 if (m_options.Unpaced) {
                     continue;
@@ -222,7 +229,9 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                         spinThreshold: spinThreshold,
                         time: m_time
                     );
+                    m_timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (m_time.GetTimestamp() - nextDeadline)));
                 }
+                m_timeline.Mark(phase: HostFramePhase.Wait);
             }
 
             m_logger.LogInformation(message: "Headless run ending; shutting the host down.");

@@ -132,6 +132,12 @@ public sealed partial class WorldInstanceHost {
 
         return declared;
     }
+    // A value-only state write publishes a new definition every tick. Observation declarations depend only on
+    // these immutable sections, including the effective face catalog (which changes when a bound face changes).
+    private static bool SameSessionDeclarations(WorldDefinition before, WorldDefinition after) =>
+        (ReferenceEquals(objA: before.Screens, objB: after.Screens) &&
+        ReferenceEquals(objA: WorldFaceCatalog.For(definition: before).Rows, objB: WorldFaceCatalog.For(definition: after).Rows) &&
+        ReferenceEquals(objA: before.Render.Sky?.Layers, objB: after.Render.Sky?.Layers));
 
     // How many observations deep each running instance is seen, as of the sessions open now (ScreenDepths), and the queue its
     // walk takes; both reused, so a steady step allocates nothing.
@@ -523,10 +529,7 @@ public sealed partial class WorldInstanceHost {
         var definition = instance.Server.Definition;
         var changed = false;
 
-        if (!ReferenceEquals(
-            objA: definition,
-            objB: owned.Reconciled
-        )) {
+        if ((owned.Reconciled is null) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
             var declared = DeclaredSessions(definition: definition);
 
             foreach (var screen in owned.Rows.Keys.ToList()) {
@@ -560,6 +563,9 @@ public sealed partial class WorldInstanceHost {
                 }
             }
 
+            owned = (definition, owned.Rows);
+            m_screenSessions[instance.Name] = owned;
+        } else if (!ReferenceEquals(objA: definition, objB: owned.Reconciled)) {
             owned = (definition, owned.Rows);
             m_screenSessions[instance.Name] = owned;
         }

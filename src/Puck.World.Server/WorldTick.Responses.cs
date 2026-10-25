@@ -78,7 +78,11 @@ public sealed partial class WorldTick {
 
         m_responseMoves.Clear();
 
-        foreach (var placement in Host.Document.Definition.Placements) {
+        var placements = Host.Document.Definition.Placements;
+
+        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
+            var placement = placements[placementIndex];
+
             if (placement.Respond is not { Count: > 0 } responses) {
                 continue;
             }

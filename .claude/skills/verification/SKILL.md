@@ -104,6 +104,9 @@ A generator verb (`schema`, `registry`, `vocabulary`, `locks`, `baselines`,
 reports drift. Restore a fresh worktree once
 (`dotnet restore Puck.slnx -nodeReuse:false`) before its first build with
 `--no-restore` or `puck references`: both fail on an unrestored tree.
+On Windows, refresh the private CLI only after any lease command hosted by that copy has exited: the lease
+process itself keeps its loaded DLLs locked while the child build runs. Copy after lease completion, or host
+the build lease from another CLI copy.
 
 ## Boot every World with `--devices none`
 

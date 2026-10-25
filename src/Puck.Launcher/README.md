@@ -51,7 +51,7 @@ pacing](../../docs/reference/hosting.md#host-pacing) has the rule, and
 `PresentPacingPolicyLawTests` holds the decision from the display's facts. The loop runs
 at the highest thread priority, so it wakes promptly on either: at normal
 priority the timer's wait returned up to 5.7 ms late on a quiet machine. It
-records each iteration in a `HostFrameTimeline`, which the windowed-only
+records each iteration in a `HostFrameTimeline`, which the
 `host.frames [frames] [budget-ms] [worst]` verb reads: the interval's average,
 median, 99th percentile and maximum over the last iterations, the count over a
 budget (one 60 Hz period by default), the most work any iteration did outside
@@ -59,6 +59,7 @@ the pacing wait, how late the timer woke (zero while the swap chain paces), the
 garbage collections and their pause time, and the slowest iterations split into
 input, commands, simulate (with its fixed steps), begin, produce, present and
 wait.
+The headless host records commands, simulate and wait through the same timeline; rendered phases stay zero. Its `--unpaced` mode records one fixed tick per iteration, so a cold write can be read separately from catch-up steps.
 `host.frames reset` starts a fresh window. It is the worst-frame reading a
 frame-time bar is judged by; `world.fps` reads a two-second window and counts
 the frame in progress at the moment it runs, so a script reads it once before

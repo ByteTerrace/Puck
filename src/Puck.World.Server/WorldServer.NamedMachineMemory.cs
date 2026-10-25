@@ -118,8 +118,12 @@ public sealed partial class WorldServer {
             m_namedMemoryRows = m_document.Definition.MachinesRaw;
             var retained = new HashSet<(string Machine, string Binding)>();
 
-            foreach (var machine in m_document.Definition.Machines) {
-                foreach (var binding in (machine.Memory ?? [])) {
+            for (var machineIndex = 0; (machineIndex < m_document.Definition.Machines.Count); machineIndex++) {
+                var machine = m_document.Definition.Machines[machineIndex];
+
+                for (var bindingIndex = 0; (bindingIndex < (machine.Memory?.Count ?? 0)); bindingIndex++) {
+                    var binding = machine.Memory![bindingIndex];
+
                     retained.Add(item: (machine.Name, binding.Name));
                 }
             }
@@ -127,8 +131,11 @@ public sealed partial class WorldServer {
                 m_namedMemory.Remove(key: key);
             }
         }
-        foreach (var machine in m_document.Definition.Machines) {
-            foreach (var binding in (machine.Memory ?? [])) {
+        for (var machineIndex = 0; (machineIndex < m_document.Definition.Machines.Count); machineIndex++) {
+            var machine = m_document.Definition.Machines[machineIndex];
+
+            for (var bindingIndex = 0; (bindingIndex < (machine.Memory?.Count ?? 0)); bindingIndex++) {
+                var binding = machine.Memory![bindingIndex];
                 var generation = (m_machines.InstanceState(name: machine.Name)?.Generation ?? 0);
                 var key = (machine.Name, binding.Name);
 

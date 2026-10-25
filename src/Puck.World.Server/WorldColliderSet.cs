@@ -58,11 +58,14 @@ public sealed class WorldColliderSet : IContactField {
     private readonly FixedStaticCollider[] m_colliders;
     // Each m_colliders entry's world bounds, in the same order, so a sweep skips the colliders a body cannot reach.
     private readonly FixedVector3?[] m_colliderExtents;
+
     // A uniform grid over world X and Z of those bounds, so a sweep visits the colliders near its move rather than
     // all of them. A collider without bounds, or one spanning more than GridCellLimit cells, joins every query.
     private const int GridCellShift = 18;
     private const int GridCellLimit = 64;
+
     private static readonly FixedQ4816 RegionMargin = FixedQ4816.One;
+
     private readonly Dictionary<(int X, int Z), int[]> m_colliderGrid;
     private readonly int[] m_unboundedColliders;
     private readonly List<int> m_candidates = [];
@@ -92,6 +95,7 @@ public sealed class WorldColliderSet : IContactField {
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
+        m_attachedVisitor = RecordAttachedCopy;
         m_attachedOrigins = new FixedVector3[attachedRows.Count];
         m_previousAttachedOrigins = new FixedVector3[attachedRows.Count];
         m_attachedRotations = new FixedQuaternion[attachedRows.Count];
@@ -540,11 +544,62 @@ public sealed class WorldColliderSet : IContactField {
         RefreshAttachedRows(population: population);
     }
 
-    // The visitor below captures this method's locals, and a captured local's closure is allocated where its scope
-    // opens — at method entry. Keeping the walk in its own method is what lets a document with no attached row pay
-    // nothing per tick.
+    // This single-threaded refresh reuses its visitor and working fold for every attached row.
+    private readonly Action<FixedCreationStampPrimitiveCopy> m_attachedVisitor;
+
+    private Fnv1aHash m_refreshHash;
+    private FixedQ4816 m_refreshMargin;
+    private int m_refreshRow;
+
+    private void RecordAttachedCopy(FixedCreationStampPrimitiveCopy copy) {
+
+        FixedStaticCollider attached;
+
+        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+            var normal = copy.PlaneNormal;
+
+            attached = FixedStaticCollider.HalfSpace(
+                point: (copy.Center + (normal * m_refreshMargin)),
+                normal: normal
+            );
+            m_attachedColliders.Add(item: attached);
+            m_attachedColliderRows.Add(item: m_refreshRow);
+            FoldCollider(
+                collider: in attached,
+                hash: ref m_refreshHash
+            );
+        } else if (
+            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
+            (copy.UniformScale > FixedQ4816.Zero)
+        ) {
+            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+
+            attached = FixedStaticCollider.Sphere(
+                center: copy.Center,
+                radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + m_refreshMargin)
+            );
+            m_attachedColliders.Add(item: attached);
+            m_attachedColliderRows.Add(item: m_refreshRow);
+            FoldCollider(
+                collider: in attached,
+                hash: ref m_refreshHash
+            );
+        } else {
+            attached = PlacementFinite(
+                copy: copy,
+                margin: m_refreshMargin
+            );
+            m_attachedColliders.Add(item: attached);
+            m_attachedColliderRows.Add(item: m_refreshRow);
+            FoldCollider(
+                collider: in attached,
+                hash: ref m_refreshHash
+            );
+        }
+
+    }
     private void RefreshAttachedRows(WorldPopulation population) {
-        var hash = Fnv1aHash.Create();
+        m_refreshHash = Fnv1aHash.Create();
 
         for (var row = 0; (row < m_attachedRows.Count); row++) {
             var (placement, creation) = m_attachedRows[row];
@@ -564,8 +619,8 @@ public sealed class WorldColliderSet : IContactField {
             m_attachedOrigins[row] = fixedPosition;
             m_attachedResolved[row] = true;
 
-            var margin = FixedQ4816.FromDouble(value: placement.Solid!.Margin);
-            var colliderRow = row;
+            m_refreshMargin = FixedQ4816.FromDouble(value: placement.Solid!.Margin);
+            m_refreshRow = row;
             // The SAME creation-shape transform chain the static loop above (and the renderer) already runs, fed the
             // resolved dynamic origin/yaw instead of the row's static authored Position/YawDegrees — and taken through
             // the FIXED-POINT emitter, because this runs every tick on a live body's pose. The single-precision
@@ -586,56 +641,12 @@ public sealed class WorldColliderSet : IContactField {
                     Scale: FixedQ4816.FromDouble(value: placement.Scale),
                     ReflectionNormal: null
                 ),
-                visitor: copy => {
-                    FixedStaticCollider attached;
-
-                    if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                        var normal = copy.PlaneNormal;
-
-                        attached = FixedStaticCollider.HalfSpace(
-                            point: (copy.Center + (normal * margin)),
-                            normal: normal
-                        );
-                        m_attachedColliders.Add(item: attached);
-                        m_attachedColliderRows.Add(item: colliderRow);
-                        FoldCollider(
-                            collider: in attached,
-                            hash: ref hash
-                        );
-                    } else if (
-                        (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
-                        (copy.UniformScale > FixedQ4816.Zero)
-                    ) {
-                        var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
-
-                        attached = FixedStaticCollider.Sphere(
-                            center: copy.Center,
-                            radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                        );
-                        m_attachedColliders.Add(item: attached);
-                        m_attachedColliderRows.Add(item: colliderRow);
-                        FoldCollider(
-                            collider: in attached,
-                            hash: ref hash
-                        );
-                    } else {
-                        attached = PlacementFinite(
-                            copy: copy,
-                            margin: margin
-                        );
-                        m_attachedColliders.Add(item: attached);
-                        m_attachedColliderRows.Add(item: colliderRow);
-                        FoldCollider(
-                            collider: in attached,
-                            hash: ref hash
-                        );
-                    }
-                }
+                visitor: m_attachedVisitor
             );
         }
 
-        if (hash.Value != m_attachedHash) {
-            m_attachedHash = hash.Value;
+        if (m_refreshHash.Value != m_attachedHash) {
+            m_attachedHash = m_refreshHash.Value;
             AttachedRevision++;
         }
     }
@@ -683,12 +694,13 @@ public sealed class WorldColliderSet : IContactField {
         }
         return (found && (displacement != FixedVector3.Zero));
     }
+
     // The cells a world-axis box covers, inclusive: GridCellShift makes each cell 4 m of Q48.16 raw units.
     private static (int X0, int X1, int Z0, int Z1) CellRange(in FixedVector3 center, in FixedVector3 extent) =>
-        ((int)((center.X - extent.X).Value >> GridCellShift), (int)((center.X + extent.X).Value >> GridCellShift),
-         (int)((center.Z - extent.Z).Value >> GridCellShift), (int)((center.Z + extent.Z).Value >> GridCellShift));
+        (((int)((center.X - extent.X).Value >> GridCellShift)), ((int)((center.X + extent.X).Value >> GridCellShift)),
+         ((int)((center.Z - extent.Z).Value >> GridCellShift)), ((int)((center.Z + extent.Z).Value >> GridCellShift)));
     private static long CellCount((int X0, int X1, int Z0, int Z1) range) =>
-        ((((long)range.X1 - range.X0) + 1L) * (((long)range.Z1 - range.Z0) + 1L));
+        (((((long)range.X1) - range.X0) + 1L) * ((((long)range.Z1) - range.Z0) + 1L));
     private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(FixedStaticCollider[] colliders, FixedVector3?[] extents) {
         var cells = new Dictionary<(int X, int Z), List<int>>();
         var unbounded = new List<int>();
@@ -733,7 +745,7 @@ public sealed class WorldColliderSet : IContactField {
         var maximum = (firstCenter + firstExtent);
 
         foreach (ref readonly var volume in volumes) {
-            foreach (var at in (ReadOnlySpan<FixedVector3>)[previousPosition, position]) {
+            foreach (var at in ((ReadOnlySpan<FixedVector3>)[previousPosition, position])) {
                 var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
 
                 negatedMinimum = FixedVector3.Max(left: negatedMinimum, right: -(center - extent));
@@ -772,10 +784,11 @@ public sealed class WorldColliderSet : IContactField {
         var count = 0;
 
         for (var read = 0; (read < span.Length); read++) {
-            if ((count == 0) || (span[count - 1] != span[read])) { span[count++] = span[read]; }
+            if ((count == 0) || (span[(count - 1)] != span[read])) { span[count++] = span[read]; }
         }
         return new FixedColliderCandidates(indices: span[..count], regionCenter: regionCenter, regionExtent: regionExtent);
     }
+
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
@@ -789,7 +802,7 @@ public sealed class WorldColliderSet : IContactField {
             velocity: ref velocity,
             volumes: volumes,
             colliderExtents: m_colliderExtents,
-            candidates: Candidates(previousPosition: position, position: position, orientation: in orientation, volumes: volumes)
+            candidates: Candidates(orientation: in orientation, position: position, previousPosition: position, volumes: volumes)
         );
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
@@ -798,7 +811,7 @@ public sealed class WorldColliderSet : IContactField {
             dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
             previousPosition: in previousPosition, position: ref position, velocity: ref velocity,
             orientation: in orientation, volumes: volumes, up: in up, colliderExtents: m_colliderExtents,
-            candidates: Candidates(previousPosition: in previousPosition, position: position, orientation: in orientation, volumes: volumes));
+            candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, volumes: volumes));
     /// <inheritdoc/>
     // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
     // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.

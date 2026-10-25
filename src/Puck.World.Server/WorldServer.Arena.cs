@@ -227,16 +227,21 @@ public sealed partial class WorldServer {
         definition: definition,
         previous: previous
     ));
+
+    private readonly List<StateRow> m_replacedRows = [];
+
     /// <summary>Collects the rows of <paramref name="definition"/> that are not the instances
     /// <paramref name="previous"/> holds at the same position.</summary>
     /// <param name="definition">The candidate document.</param>
     /// <param name="previous">The document it was composed over, which holds the same state catalog and so lists the
     /// same rows in the same order.</param>
     /// <returns>The replaced rows, in document order.</returns>
-    internal static List<StateRow> ReplacedRows(WorldDefinition definition, WorldDefinition previous) {
+    internal List<StateRow> ReplacedRows(WorldDefinition definition, WorldDefinition previous) {
         var after = definition.AuthoredState;
         var before = previous.AuthoredState;
-        var rows = new List<StateRow>();
+        var rows = m_replacedRows;
+
+        rows.Clear();
 
         for (var index = 0; (index < after.Count); index++) {
             if (!ReferenceEquals(

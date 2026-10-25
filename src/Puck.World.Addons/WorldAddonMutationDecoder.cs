@@ -2,6 +2,7 @@ using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
+using System.Collections.Immutable;
 using System.Text.Json.Serialization.Metadata;
 using Puck.World.Protocol;
 
@@ -31,6 +32,10 @@ namespace Puck.World.Addons;
 /// <see cref="TryDecode"/> refuses an unwired ordinal by name rather than guessing a shape for it, so wiring one in
 /// is strictly additive — a new <c>Decoders</c> row, never a change to this method's own contract.</remarks>
 public static class WorldAddonMutationDecoder {
+    /// <summary>Initializes the mutation vocabulary and JSON contracts while mounting, before the tick loop runs.</summary>
+    public static void Prepare() => _ = Decoders.Count;
+
+    private static readonly int UpsertStateRowOrdinal = WorldMutationKindCatalog.All().Single(predicate: static entry => (entry.Type == typeof(WorldMutation.UpsertStateRow))).Ordinal;
     // The kinds a guest may submit, keyed by the catalog's declared ordinal and section, so the dispatch reads the one
     // ordinal the catalog declares rather than restating it.
     private static readonly Dictionary<int, (WorldSection Section, Func<JsonElement, Principal, WorldMutation> Decode)> Decoders = Wire(
@@ -834,7 +839,7 @@ public static class WorldAddonMutationDecoder {
         );
 
         if (
-            !members.Remove(
+            !members.TryGetValue(
             key: "participants",
             value: out var participantsElement
         ) ||
@@ -1012,19 +1017,26 @@ public static class WorldAddonMutationDecoder {
                 throw new AddonMutationDecodeException(message: $"{context}: '{kind}' is not a cell kind an addon can write");
         }
     }
-    private static List<StateCell> DecodeStateCells(JsonElement element, CellKind kind, string context) {
+    private static IReadOnlyList<StateCell> DecodeStateCells(JsonElement element, CellKind kind, string context, IReadOnlyList<StateCell>? previous = null) {
         if (element.ValueKind != JsonValueKind.Array) {
             throw new AddonMutationDecodeException(message: $"{context}: must be an array of {{\"key\", \"value\"}} objects");
         }
 
-        var cells = new List<StateCell>(capacity: element.GetArrayLength());
+        var count = element.GetArrayLength();
+        ImmutableArray<StateCell>.Builder? cells = null;
         var index = 0;
 
         foreach (var entry in element.EnumerateArray()) {
             // Keep diagnostic paths cold. A successful cell needs neither a property dictionary nor a formatted
             // path per field; the original decoder below still diagnoses every malformed shape in the same order.
-            if (TryDecodePlainStateCell(cell: out var decoded, entry: entry, kind: kind)) {
-                cells.Add(item: decoded!);
+            var old = (((previous is not null) && (index < previous.Count)) ? previous[index] : null);
+
+            if (TryDecodePlainStateCell(cell: out var decoded, entry: entry, kind: kind, previous: old)) {
+                if ((cells is null) && !ReferenceEquals(objA: decoded, objB: old)) {
+                    cells = ImmutableArray.CreateBuilder<StateCell>(initialCapacity: count);
+                    for (var copied = 0; (copied < index); copied++) { cells.Add(item: previous![copied]); }
+                }
+                cells?.Add(item: decoded!);
                 index++;
                 continue;
             }
@@ -1062,6 +1074,10 @@ public static class WorldAddonMutationDecoder {
                 throw new AddonMutationDecodeException(message: $"{cellContext}: requires 'value'");
             }
 
+            if (cells is null) {
+                cells = ImmutableArray.CreateBuilder<StateCell>(initialCapacity: count);
+                for (var copied = 0; (copied < index); copied++) { cells.Add(item: previous![copied]); }
+            }
             cells.Add(item: DecodeStateCell(
                 context: $"{cellContext}.value",
                 element: valueElement,
@@ -1071,20 +1087,36 @@ public static class WorldAddonMutationDecoder {
             index++;
         }
 
-        return cells;
+        if ((cells is null) && (previous is not null) && (previous.Count == count)) { return previous; }
+        if (cells is null) {
+            cells = ImmutableArray.CreateBuilder<StateCell>(initialCapacity: count);
+            for (var copied = 0; (copied < count); copied++) { cells.Add(item: previous![copied]); }
+        }
+        return cells.MoveToImmutable();
     }
-    private static bool TryDecodePlainStateCell(JsonElement entry, CellKind kind, out StateCell? cell) {
+    private static bool TryDecodePlainStateCell(JsonElement entry, CellKind kind, out StateCell? cell, StateCell? previous = null) {
         cell = null;
+        if (previous is not {
+            Advance: null, Cycle: null, Dynamics: null, Clock: null, Provenance: null,
+            Visibility: null, Observation: null, Behavior: StateCellBehavior.Inherit
+        }) { previous = null; }
         if (entry.ValueKind != JsonValueKind.Object) { return false; }
         JsonElement key = default, value = default;
 
         foreach (var property in entry.EnumerateObject()) {
             if (property.NameEquals(utf8Text: "key"u8) && (key.ValueKind == JsonValueKind.Undefined)) { key = property.Value; } else if (property.NameEquals(utf8Text: "value"u8) && (value.ValueKind == JsonValueKind.Undefined)) { value = property.Value; } else { return false; }
         }
-        if ((key.ValueKind != JsonValueKind.String) || (value.ValueKind == JsonValueKind.Undefined) ||
-            !CellName.TryParse(candidate: key.GetString(), name: out var name, reason: out _)) { return false; }
+        if ((key.ValueKind != JsonValueKind.String) || (value.ValueKind == JsonValueKind.Undefined)) { return false; }
+        CellName name;
+
+        if ((previous is not null) && key.ValueEquals(text: previous.Key.Value)) { name = previous.Key; } else if (!CellName.TryParse(candidate: key.GetString(), name: out name, reason: out _)) { return false; }
         try {
-            cell = new StateCell(name, DecodeCellValue(context: "value", element: value, kind: kind));
+            var decoded = (((kind == CellKind.Text) && (previous?.Value.Kind == CellKind.Text) &&
+                (value.ValueKind == JsonValueKind.String) && value.ValueEquals(text: previous.Value.AsText))
+                ? previous.Value : DecodeCellValue(context: "value", element: value, kind: kind));
+
+            cell = (((previous is not null) && (previous.Key == name) && (previous.Value == decoded))
+                ? previous : new StateCell(name, decoded));
             return true;
         } catch (AddonMutationDecodeException) {
             return false;
@@ -1356,8 +1388,9 @@ public static class WorldAddonMutationDecoder {
     // list, one walk, no per-$type branching. Min/Max ordering, the value's own in-range check, and the
     // capacity/text-length ceilings are all WorldDefinitionValidator's job; this only turns wire scalars into the
     // typed row, exactly like the HUD decoders leave capacity/authoring-policy checks to the same validate stage.
-    private static WorldMutation DecodeUpsertStateRow(JsonElement root, Principal principal) {
+    private static WorldMutation DecodeUpsertStateRow(JsonElement root, Principal principal, WorldMutation.UpsertStateRow? prior = null) {
         const string Context = "UpsertStateRow";
+        var previous = prior?.Row;
 
         var members = UniqueMembers(
             context: Context,
@@ -1370,11 +1403,13 @@ public static class WorldAddonMutationDecoder {
             members: members
         );
 
-        var name = RequireString(
+        var name = (((previous is not null) && members.TryGetValue(key: "name", value: out var nameElement) &&
+            (nameElement.ValueKind == JsonValueKind.String) && nameElement.ValueEquals(text: previous.Name.Value))
+            ? previous.Name.Value : RequireString(
             context: Context,
             members: members,
             name: "name"
-        );
+        ));
         var rowName = RequireCellName(
             candidate: name,
             context: $"{Context}.name"
@@ -1412,9 +1447,7 @@ public static class WorldAddonMutationDecoder {
             throw new AddonMutationDecodeException(message: $"{Context}: '{name}' declares 'value' beside 'capacity' — declaring a capacity is declaring a keyed row, whose cells are authored under 'cells'");
         }
 
-        return new WorldMutation.UpsertStateRow(
-            Principal: principal,
-            Row: new WorldStateRow(
+        var row = new WorldStateRow(
                 Name: rowName,
                 Kind: kind,
                 Min: OptionalStateNumber(
@@ -1459,15 +1492,18 @@ public static class WorldAddonMutationDecoder {
                         )]
             : (hasCells
                 ? DecodeStateCells(
+                            previous: (((previous is not null) && (previous.Name == rowName) && (previous.Kind == kind)) ? previous.Cells : null),
                             context: $"{Context}.cells",
                             element: cellsElement,
                             kind: kind
                         )
                 : []))
-            )
+
         );
+
+        return (((prior is not null) && (prior.Principal == principal) && (row == previous)) ? prior : new WorldMutation.UpsertStateRow(Principal: principal, Row: row));
     }
-    private static long? OptionalInt64(Dictionary<string, JsonElement> members, string name, string context) {
+    private static long? OptionalInt64(JsonMembers members, string name, string context) {
         if (!members.TryGetValue(
             key: name,
             value: out var element
@@ -1484,7 +1520,7 @@ public static class WorldAddonMutationDecoder {
 
         return value;
     }
-    private static long? OptionalStateNumber(Dictionary<string, JsonElement> members, string name, CellKind kind, string context) =>
+    private static long? OptionalStateNumber(JsonMembers members, string name, CellKind kind, string context) =>
         (members.TryGetValue(
             key: name,
             value: out var element
@@ -1496,7 +1532,7 @@ public static class WorldAddonMutationDecoder {
             )
             : null
         );
-    private static bool RequireBool(Dictionary<string, JsonElement> members, string name, string context) {
+    private static bool RequireBool(JsonMembers members, string name, string context) {
         if (
             !members.TryGetValue(
             key: name,
@@ -1521,7 +1557,7 @@ public static class WorldAddonMutationDecoder {
             ? name
             : throw new AddonMutationDecodeException(message: $"{context}: '{candidate}' {reason}")
         );
-    private static TEnum RequireEnum<TEnum>(Dictionary<string, JsonElement> members, string name, Dictionary<string, TEnum> map, string context) where TEnum : struct, Enum {
+    private static TEnum RequireEnum<TEnum>(JsonMembers members, string name, Dictionary<string, TEnum> map, string context) where TEnum : struct, Enum {
         if (
             !members.TryGetValue(
             key: name,
@@ -1532,21 +1568,15 @@ public static class WorldAddonMutationDecoder {
             throw new AddonMutationDecodeException(message: $"{context}: '{name}' must be a string");
         }
 
-        var token = (element.GetString() ?? "");
-
-        if (!map.TryGetValue(
-            key: token,
-            value: out var value
-        )) {
-            throw new AddonMutationDecodeException(message: $"{context}: '{name}' names '{token}', which is not one of {{{string.Join(
+        foreach (var (token, value) in map) {
+            if (element.ValueEquals(text: token)) { return value; }
+        }
+        throw new AddonMutationDecodeException(message: $"{context}: '{name}' names '{(element.GetString() ?? "")}', which is not one of {{{string.Join(
                 separator: ", ",
                 values: map.Keys
             )}}}");
-        }
-
-        return value;
     }
-    private static float RequireFinite(Dictionary<string, JsonElement> members, string name, string context) {
+    private static float RequireFinite(JsonMembers members, string name, string context) {
         if (
             !members.TryGetValue(
             key: name,
@@ -1567,7 +1597,7 @@ public static class WorldAddonMutationDecoder {
 
     private delegate bool TryGetNumber<T>(JsonElement element, out T value);
 
-    private static T RequireNumber<T>(Dictionary<string, JsonElement> members, string name, string context, string expected, TryGetNumber<T> getter) {
+    private static T RequireNumber<T>(JsonMembers members, string name, string context, string expected, TryGetNumber<T> getter) {
         var element = RequireNumberElement(
             context: context,
             expected: expected,
@@ -1581,7 +1611,7 @@ public static class WorldAddonMutationDecoder {
 
         return value;
     }
-    private static int RequireInt32(Dictionary<string, JsonElement> members, string name, string context) =>
+    private static int RequireInt32(JsonMembers members, string name, string context) =>
         RequireNumber(
             context: context,
             expected: "an integer",
@@ -1589,7 +1619,7 @@ public static class WorldAddonMutationDecoder {
             members: members,
             name: name
         );
-    private static long RequireInt64(Dictionary<string, JsonElement> members, string name, string context) =>
+    private static long RequireInt64(JsonMembers members, string name, string context) =>
         RequireNumber(
             context: context,
             expected: "an integer",
@@ -1597,7 +1627,7 @@ public static class WorldAddonMutationDecoder {
             members: members,
             name: name
         );
-    private static IntentSource RequireIntentSource(Dictionary<string, JsonElement> members, string context) {
+    private static IntentSource RequireIntentSource(JsonMembers members, string context) {
         var token = RequireString(
             context: context,
             members: members,
@@ -1632,28 +1662,24 @@ public static class WorldAddonMutationDecoder {
     }
     // Unknown members Disallow, mirroring the world document's own ambient JsonUnmappedMemberHandling.Disallow
     // convention: a payload misspelling a key gets a loud refusal, never a silently ignored field.
-    private static void RequireNoUnknownMembers(Dictionary<string, JsonElement> members, IReadOnlyList<string> allowed, string context) {
-        foreach (var name in members.Keys) {
+    private static void RequireNoUnknownMembers(JsonMembers members, IReadOnlyList<string> allowed, string context) {
+        foreach (var property in members.Element.EnumerateObject()) {
             var known = false;
 
-            foreach (var candidate in allowed) {
-                if (string.Equals(
-                    a: candidate,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
+            for (var index = 0; (index < allowed.Count); index++) {
+                if (property.NameEquals(text: allowed[index])) {
                     known = true;
                     break;
                 }
             }
 
             if (!known) {
-                throw new AddonMutationDecodeException(message: $"{context}: unknown member '{name}'");
+                throw new AddonMutationDecodeException(message: $"{context}: unknown member '{property.Name}'");
             }
         }
     }
     /// <summary>Owns lookup and JSON-kind validation for required numeric mutation members.</summary>
-    private static JsonElement RequireNumberElement(Dictionary<string, JsonElement> members, string name, string context, string expected) {
+    private static JsonElement RequireNumberElement(JsonMembers members, string name, string context, string expected) {
         if (
             !members.TryGetValue(
             key: name,
@@ -1666,7 +1692,7 @@ public static class WorldAddonMutationDecoder {
 
         return element;
     }
-    private static WorldHudRect RequireRect(Dictionary<string, JsonElement> members, string name, string context) {
+    private static WorldHudRect RequireRect(JsonMembers members, string name, string context) {
         if (
             !members.TryGetValue(
             key: name,
@@ -1749,7 +1775,7 @@ public static class WorldAddonMutationDecoder {
 
         return whole;
     }
-    private static string RequireString(Dictionary<string, JsonElement> members, string name, string context) {
+    private static string RequireString(JsonMembers members, string name, string context) {
         if (
             !members.TryGetValue(
             key: name,
@@ -1762,7 +1788,7 @@ public static class WorldAddonMutationDecoder {
 
         return (element.GetString() ?? throw new AddonMutationDecodeException(message: $"{context}: '{name}' must not be null"));
     }
-    private static Vector3 RequireVector3(Dictionary<string, JsonElement> members, string name, string context) {
+    private static Vector3 RequireVector3(JsonMembers members, string name, string context) {
         if (
             !members.TryGetValue(
             key: name,
@@ -1803,22 +1829,53 @@ public static class WorldAddonMutationDecoder {
             z: values[2]
         );
     }
-    // JsonDocument preserves every occurrence of a repeated name (unlike a source-gen POCO path, which silently
-    // keeps the LAST one) — walking EnumerateObject ourselves is what lets a repeat be refused instead of silently
-    // resolved to whichever occurrence a serializer would have picked. Mirrors SdfDocumentDecoder's own helper.
-    private static Dictionary<string, JsonElement> UniqueMembers(JsonElement element, string context) {
-        var members = new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal);
+
+    private readonly struct JsonMembers(JsonElement element) {
+        public JsonElement Element { get; } = element;
+
+        public bool TryGetValue(string key, out JsonElement value) => Element.TryGetProperty(propertyName: key, value: out value);
+        public bool ContainsKey(string key) => Element.TryGetProperty(propertyName: key, value: out _);
+    }
+
+    // The object remains in the document's pooled storage until decode ends. Recognized property names need no
+    // strings or dictionary: each declared name has a bit. Unknown names take the diagnostic walk, which still
+    // diagnoses the first duplicate before unknown-member validation, including duplicate unknown names.
+    private static readonly string[] MemberNames = new[] {
+        RectMembers, ElementMembers, PanelMembers, RemovePanelMembers, RemoveElementMembers, SetDefaultsMembers,
+        SetDefaultsCursorMembers, RemoveStateRowMembers, UpsertStateCellMembers, RemoveStateCellMembers,
+        StateRowMembers, StateCellMembers, InputHoldMembers, InputHoldParticipantMembers, PlacementMembers,
+        RemovePlacementMembers, DistributionMembers, DiscRegionMembers, PointsRegionMembers, LatticeRegionMembers,
+        SequenceMembers, MirrorMembers, EmissionMembers, SolidMembers, RegionMembers, AttachMembers, InhabitMembers,
+    }.SelectMany(selector: static names => names).Distinct(comparer: StringComparer.Ordinal).ToArray();
+
+    private static JsonMembers UniqueMembers(JsonElement element, string context) {
+        Span<ulong> seen = stackalloc ulong[((MemberNames.Length + 63) / 64)];
+
+        seen.Clear();
 
         foreach (var property in element.EnumerateObject()) {
-            if (!members.TryAdd(
-                key: property.Name,
-                value: property.Value
-            )) {
+            var index = 0;
+
+            while ((index < MemberNames.Length) && !property.NameEquals(text: MemberNames[index])) { index++; }
+            if (index == MemberNames.Length) {
+                var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                foreach (var entry in element.EnumerateObject()) {
+                    if (!names.Add(item: entry.Name)) {
+                        throw new AddonMutationDecodeException(message: $"{context}: duplicate key '{entry.Name}'");
+                    }
+                }
+                return new JsonMembers(element: element);
+            }
+            var bit = (1UL << (index & 63));
+
+            if ((seen[(index >> 6)] & bit) != 0UL) {
                 throw new AddonMutationDecodeException(message: $"{context}: duplicate key '{property.Name}'");
             }
+            seen[(index >> 6)] |= bit;
         }
 
-        return members;
+        return new JsonMembers(element: element);
     }
     // Keys each wired kind's decoder by the ordinal and section its catalog entry declares.
     private static Dictionary<int, (WorldSection Section, Func<JsonElement, Principal, WorldMutation> Decode)> Wire(params (Type Kind, Func<JsonElement, Principal, WorldMutation> Decode)[] kinds) {
@@ -1846,8 +1903,9 @@ public static class WorldAddonMutationDecoder {
     /// <param name="principal">The acting identity to stamp onto the decoded mutation.</param>
     /// <param name="mutation">The decoded mutation, on success.</param>
     /// <param name="error">The human-readable refusal reason, on failure.</param>
+    /// <param name="previous">A prior immutable decode from this guest slot, whose unchanged cells may be shared.</param>
     /// <returns><see langword="true"/> when the payload decoded to a well-formed mutation of the declared kind.</returns>
-    public static bool TryDecode(int kindOrdinal, WorldSection section, ReadOnlyMemory<byte> payload, Principal principal, out WorldMutation? mutation, out string error) {
+    public static bool TryDecode(int kindOrdinal, WorldSection section, ReadOnlyMemory<byte> payload, Principal principal, out WorldMutation? mutation, out string error, WorldMutation? previous = null) {
         mutation = null;
         error = "";
 
@@ -1872,7 +1930,10 @@ public static class WorldAddonMutationDecoder {
             }
 
             try {
-                mutation = wired.Decode(arg1: document.RootElement, arg2: principal);
+                mutation = (((previous is WorldMutation.UpsertStateRow prior) &&
+                    (kindOrdinal == UpsertStateRowOrdinal))
+                    ? DecodeUpsertStateRow(document.RootElement, principal, prior)
+                    : wired.Decode(arg1: document.RootElement, arg2: principal));
             } catch (AddonMutationDecodeException exception) {
                 error = exception.Message;
                 return false;

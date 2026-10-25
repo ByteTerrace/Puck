@@ -6,6 +6,7 @@ public sealed partial class StateArena {
     // Import is synchronous and cannot re-enter the arena. Reuse the bounded key-validation workspace.
     private readonly HashSet<string> m_importKeys = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_importCellKeys = new(comparer: StringComparer.Ordinal);
+    private readonly List<(int RowOrdinal, StateRow Row)> m_importRows = [];
 
     /// <summary>Loads a document's rows into the columns, replacing the stored state of every row the list
     /// names.</summary>
@@ -102,7 +103,8 @@ public sealed partial class StateArena {
     );
 
     private bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out List<(int RowOrdinal, StateRow Row)> admitted, out long visibilityBytes, out string reason) {
-        admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
+        admitted = m_importRows;
+        admitted.Clear();
         var pending = m_importKeys;
 
         pending.Clear();
@@ -112,7 +114,9 @@ public sealed partial class StateArena {
 
         visibilityBytes = m_visibilityBytes;
 
-        foreach (var row in (rows ?? [])) {
+        for (var index = 0; (index < (rows?.Count ?? 0)); index++) {
+            var row = rows![index];
+
             if (!TryAdmitImport(
                 pending: pending,
                 reason: out reason,
@@ -390,7 +394,8 @@ public sealed partial class StateArena {
         var declared = DocumentRow(rowOrdinal: rowOrdinal);
         var members = 0;
 
-        foreach (var cell in cells) {
+        for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
+            var cell = cells[cellIndex];
             var position = ImportPosition(
                 cell: cell!,
                 layout: layout
@@ -712,7 +717,9 @@ public sealed partial class StateArena {
 
         seen.Clear();
 
-        foreach (var cell in cells) {
+        for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
+            var cell = cells[cellIndex];
+
             if (cell is null) {
                 reason = $"row '{row.Name.Value}' carries a cell with no key";
 

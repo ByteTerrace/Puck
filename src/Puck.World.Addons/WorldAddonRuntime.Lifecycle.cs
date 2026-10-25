@@ -440,6 +440,7 @@ public sealed partial class WorldAddonRuntime {
     /// <inheritdoc/>
     public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out string? reason) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
+        if (candidate.Addons.Any(predicate: static row => row.Enabled)) { WorldAddonMutationDecoder.Prepare(); }
 
         // A candidate whose channel declarations differ from what the currently-mounted set was compiled against
         // invalidates every row's reuse eligibility at once, even a row that compares structurally equal to its own

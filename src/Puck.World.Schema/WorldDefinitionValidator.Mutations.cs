@@ -5,17 +5,23 @@ public static partial class WorldDefinitionValidator {
         public readonly HashSet<string> Dynamics = new(comparer: StringComparer.Ordinal);
         public readonly List<string> Errors = [];
         public readonly HashSet<string> Seen = new(comparer: StringComparer.Ordinal);
+        public readonly HashSet<string> CellKeys = new(comparer: StringComparer.Ordinal);
         public readonly Queue<string> Queue = new();
         public readonly Dictionary<string, StateSpace> Spaces = new(comparer: StringComparer.Ordinal);
         public readonly Dictionary<string, StateEnum> Enums = new(comparer: StringComparer.Ordinal);
+        public readonly Dictionary<string, List<WorldStateRow>> Dependents = new(comparer: StringComparer.Ordinal);
+        public readonly Stack<List<WorldStateRow>> DependentLists = new();
 
         public void Clear() {
             Dynamics.Clear();
             Errors.Clear();
             Seen.Clear();
+            CellKeys.Clear();
             Queue.Clear();
             Spaces.Clear();
             Enums.Clear();
+            foreach (var rows in Dependents.Values) { rows.Clear(); DependentLists.Push(item: rows); }
+            Dependents.Clear();
         }
     }
 
@@ -105,6 +111,7 @@ public static partial class WorldDefinitionValidator {
             var path = $"state['{row.Name}']";
 
             ValidateStateRow(
+                cellKeys: workspace.CellKeys,
                 dynamicsNames: dynamicsNames,
                 enums: enumsByName,
                 errors: errors,
@@ -149,7 +156,7 @@ public static partial class WorldDefinitionValidator {
             if (dependentsByRow is null) {
                 // Missing row names must not trigger unrelated domain inference before a row is validated.
                 // Lists retain authored order; dictionary enumeration never determines validation order.
-                dependentsByRow = new Dictionary<string, List<WorldStateRow>>(comparer: StringComparer.Ordinal);
+                dependentsByRow = workspace.Dependents;
                 foreach (var dependent in (definition.State ?? [])) {
                     if (
                         (dependent is null) ||
@@ -162,7 +169,7 @@ public static partial class WorldDefinitionValidator {
                         key: source,
                         value: out var dependents
                     )) {
-                        dependents = [];
+                        dependents = (workspace.DependentLists.TryPop(result: out var reused) ? reused : []);
                         dependentsByRow[key: source] = dependents;
                     }
                     dependents.Add(item: dependent);

@@ -117,7 +117,11 @@ public sealed partial class WorldDocument {
                 }
                 arena = entry.Arena;
                 mark = arena.BeginScope();
-                if (!arena.TryLoadSeeding(definition.AuthoredState, (seeded ?? new HashSet<string>(comparer: StringComparer.Ordinal) { row! }), in time, out reason)) {
+                var loaded = ((seeded is not null)
+                    ? arena.TryLoadSeeding(definition.AuthoredState, seeded, in time, out reason)
+                    : arena.TryLoadSeeding(definition.AuthoredState, row!, in time, out reason));
+
+                if (!loaded) {
                     CloseComposeArena(arena: arena, mark: mark);
                     arena = null;
                     return false;
@@ -221,8 +225,14 @@ public sealed partial class WorldDocument {
                 continue;
             }
             if (open[ordinal] || (ordinal == declaredOrdinal)) {
+                var published = ((WorldStateRow)arena.ToRow(rowOrdinal: ordinal, previous: installed[index]));
+
+                if (published == installed[index]) {
+                    index++;
+                    continue;
+                }
                 rows ??= installed.ToImmutableList();
-                rows = rows.SetItem(index: index, value: ((WorldStateRow)arena.ToRow(rowOrdinal: ordinal, previous: installed[index])));
+                rows = rows.SetItem(index: index, value: published);
             }
 
             index++;
