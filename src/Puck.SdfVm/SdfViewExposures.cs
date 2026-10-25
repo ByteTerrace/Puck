@@ -83,6 +83,13 @@ public sealed class SdfViewExposures {
             var ev100 = exposure.Ev100;
 
             m_cuts[index] = view.CutRevision;
+            // Another residency renders the view and meters it there; its camera is in that world's coordinates.
+            if (view.Elsewhere) {
+                m_reads[index] = false;
+                m_sources[index] = "elsewhere";
+                m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : ev100));
+                continue;
+            }
             m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, luminance: out var luminance,
                 position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
             m_sources[index] = source switch {

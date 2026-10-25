@@ -66,6 +66,22 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets the materials the group's shapes carry, in the order its geometry numbers them.</summary>
     public int[] MaterialOrder { get; private set; } = [];
 
+    /// <summary>Gives the group the material ids a later program numbers its shapes with, place for place: the geometry
+    /// names each material by its place (<see cref="SdfMeshGeometryBuilder.Materials"/>), so the group's geometry and form
+    /// stay as they were.</summary>
+    /// <param name="materials">The ids, as many as <see cref="MaterialOrder"/> holds.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="materials"/> holds another count of ids.</exception>
+    protected void Renumber(int[] materials) {
+        ArgumentNullException.ThrowIfNull(argument: materials);
+
+        if (materials.Length != MaterialOrder.Length) {
+            throw new ArgumentException(message: $"A group of {MaterialOrder.Length} materials is renumbered by as many ids, not {materials.Length}.", paramName: nameof(materials));
+        }
+
+        MaterialOrder = materials;
+    }
+
     /// <summary>Gets the first slot of <see cref="PoseRows"/>.</summary>
     public int PoseFirst { get; private set; }
 

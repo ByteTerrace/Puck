@@ -70,6 +70,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, so its output is display-referred before
     /// the tonemap.</summary>
     public bool Unexposed { get; init; }
+    /// <summary>Whether another residency renders the view: a seat presented in another world keeps its view's place
+    /// among its own world's views while that world's scene renders it, its camera in that world's coordinates. The
+    /// frame's own residency draws nothing for such a view: its irradiance window, which follows the first view, holds
+    /// where it stood while that view is such a view, and it meters no exposure for one. The default,
+    /// <see langword="false"/>, is a view the frame's residency renders.</summary>
+    public bool Elsewhere { get; init; }
 }
 /// <summary>A view-local stamp fade. The shared transforms, mirrors, portal views and shadow casters remain intact.</summary>
 /// <param name="FirstSlot">The stamp's first dynamic-transform slot.</param>

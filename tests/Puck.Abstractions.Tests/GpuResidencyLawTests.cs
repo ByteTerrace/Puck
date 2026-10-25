@@ -854,6 +854,36 @@ public sealed class GpuResidencyLawTests {
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => external.WriteRuns(runs: none, words: before));
     }
+    // A run list past its capacity closes its narrowest gaps: runs packed at a table's head merge among themselves and a
+    // run at its far end stays apart, so the units a flush stages stay near the units written rather than spanning the
+    // table, as a mesh region's draw records and a mesh landing at its end would.
+    [Fact]
+    public void RunsPastTheirCapacityCloseTheNarrowestGapsAndKeepAFarRunApart() {
+        const int Far = 1_000_000;
+        var runs = new GpuUploadRuns(capacity: 8);
+
+        for (var run = 0; (run < 5); run++) {
+            runs.Add(length: 1, start: (run * 3));
+        }
+
+        runs.Add(length: 1, start: 40);
+        runs.Add(length: 4, start: Far);
+        // Out of order, as a write behind the table's last one lands.
+        runs.Add(length: 1, start: 20);
+        runs.Add(length: 1, start: 30);
+
+        var owed = 0L;
+        var farApart = false;
+
+        for (var index = 0; (index < runs.Count); index++) {
+            owed += runs.Length(index: index);
+            farApart |= ((runs.Start(index: index) == Far) && (runs.Length(index: index) == 4));
+        }
+
+        Assert.InRange(actual: runs.Count, high: 8, low: 2);
+        Assert.True(condition: farApart);
+        Assert.InRange(actual: owed, high: 64L, low: 12L);
+    }
     [Fact]
     public void AnExternalDestinationTakesTheRegionAtItsTargetAndARetargetOwesEveryWordWrittenAfterIt() {
         const int DestinationWords = 64;

@@ -5,12 +5,16 @@ namespace Puck.Abstractions.Gpu;
 /// the table's own unit (words for a device-local copy, bytes or words for a host-visible buffer). A range that
 /// touches the last run, or starts within the merge gap after it, extends that run, so a table dirtied in increasing
 /// order coalesces into as few runs as its changes allow; an out-of-order range merges into any run it overlaps or
-/// touches. The run count is bounded by the construction capacity: when a new run would exceed it, neighbouring runs
-/// pair up into one run each (covering the gap between them), which keeps the upload correct and its run list bounded
-/// at the price of re-sending those gaps. Allocation-free after construction.
+/// touches. The run count is bounded by the construction capacity: when a new run would exceed it, the runs closest
+/// together merge across the narrowest gaps until half the capacity remains, which keeps the upload correct and its run
+/// list bounded at the price of re-sending those gaps, and never joins two runs far apart (a table's head and a write at
+/// its far end) while nearer runs stay apart. Allocation-free after construction.
 /// </summary>
 public sealed class GpuUploadRuns {
     private readonly int[] m_ends;
+    // The gaps between the runs in order, and the same gaps sorted, as a coarsening reads them.
+    private readonly int[] m_gaps;
+    private readonly int[] m_widths;
     private readonly int m_mergeGap;
     private readonly int[] m_starts;
 
@@ -32,8 +36,10 @@ public sealed class GpuUploadRuns {
         ArgumentOutOfRangeException.ThrowIfNegative(value: mergeGap);
 
         m_ends = new int[capacity];
+        m_gaps = new int[capacity];
         m_mergeGap = mergeGap;
         m_starts = new int[capacity];
+        m_widths = new int[capacity];
     }
 
     /// <summary>Gets the number of runs held.</summary>
@@ -154,30 +160,104 @@ public sealed class GpuUploadRuns {
     /// <returns>The run's start.</returns>
     public int Start(int index) => m_starts[index];
 
-    // Pairs runs (0, 1), (2, 3), … into one run each, halving the count; an odd last run stays as it is.
+    // Halves the run count by closing the smallest gaps: the runs are put in order of their starts, and each gap no wider
+    // than the one that leaves half the runs is closed, so the units re-sent are the narrowest gaps between runs and never
+    // a span between runs far apart while nearer ones stay separate.
     private void Coarsen() {
+        // Runs recorded in increasing order, as a table's writes mostly are, are in order already.
+        for (var index = 1; (index < m_count); index++) {
+            if (m_starts[index] < m_starts[(index - 1)]) {
+                Array.Sort(
+                    items: m_ends,
+                    keys: m_starts,
+                    index: 0,
+                    length: m_count
+                );
+
+                break;
+            }
+        }
+
+        var target = (m_starts.Length / 2);
+        var closing = (m_count - target);
+
+        for (var index = 0; (index < (m_count - 1)); index++) {
+            m_gaps[index] = Math.Max(
+                val1: 0,
+                val2: (m_starts[(index + 1)] - m_ends[index])
+            );
+        }
+
+        m_gaps.AsSpan(length: (m_count - 1), start: 0).CopyTo(destination: m_widths);
+
+        // The widest gap closed; gaps of exactly its width close only while fewer than `closing` have.
+        var widest = Select(rank: (closing - 1), values: m_widths.AsSpan(length: (m_count - 1), start: 0));
+        var narrower = 0;
+
+        for (var index = 0; (index < (m_count - 1)); index++) {
+            if (m_gaps[index] < widest) {
+                narrower++;
+            }
+        }
+
+        var equalClosing = (closing - narrower);
         var kept = 0;
 
-        for (var index = 0; (index < m_count); index += 2) {
-            var start = m_starts[index];
-            var end = m_ends[index];
+        for (var index = 0; (index < m_count); index++) {
+            var joins = (
+                (index > 0) &&
+                (
+                    (m_gaps[(index - 1)] < widest) ||
+                    ((m_gaps[(index - 1)] == widest) && (equalClosing-- > 0))
+                )
+            );
 
-            if ((index + 1) < m_count) {
-                start = Math.Min(
-                    val1: start,
-                    val2: m_starts[(index + 1)]
+            if (joins) {
+                m_ends[(kept - 1)] = Math.Max(
+                    val1: m_ends[(kept - 1)],
+                    val2: m_ends[index]
                 );
-                end = Math.Max(
-                    val1: end,
-                    val2: m_ends[(index + 1)]
-                );
+
+                continue;
             }
 
-            m_starts[kept] = start;
-            m_ends[kept] = end;
+            m_starts[kept] = m_starts[index];
+            m_ends[kept] = m_ends[index];
             kept++;
         }
 
         m_count = kept;
+    }
+    // The value of a rank among values in increasing order (zero the smallest), found by partitioning them in place about
+    // a middle pivot and keeping the side that holds the rank, in linear time on average.
+    private static int Select(Span<int> values, int rank) {
+        var low = 0;
+        var high = (values.Length - 1);
+
+        while (low < high) {
+            var pivot = values[(low + ((high - low) / 2))];
+            var left = low;
+            var right = high;
+
+            while (left <= right) {
+                while (values[left] < pivot) { left++; }
+                while (values[right] > pivot) { right--; }
+                if (left <= right) {
+                    (values[left], values[right]) = (values[right], values[left]);
+                    left++;
+                    right--;
+                }
+            }
+
+            if (rank <= right) {
+                high = right;
+            } else if (rank >= left) {
+                low = left;
+            } else {
+                return values[rank];
+            }
+        }
+
+        return values[rank];
     }
 }

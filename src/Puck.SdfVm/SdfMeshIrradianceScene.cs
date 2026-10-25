@@ -99,14 +99,23 @@ public sealed partial class SdfMeshIrradianceScene {
         }
 
         var instances = new List<Instance>(capacity: draws.Count);
+        var materials = new HashSet<int>();
+        var materialRuns = new HashSet<(ReadOnlyMemory<uint> Triangles, int Base)>();
 
         foreach (var draw in draws) {
             if (!IsStatic(draw: in draw)) { continue; }
             if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(mesh: draw.Mesh)], instance: out var instance)) {
                 instances.Add(item: instance);
+                if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
+                    AddMaterials(materials: materials, draw: in draw);
+                }
             }
         }
         if (instances.Count == 0) { return null; }
+
+        var order = materials.ToArray();
+
+        Array.Sort(array: order);
 
         return new SdfMeshIrradianceScene(
             geometries: geometries,
@@ -114,7 +123,28 @@ public sealed partial class SdfMeshIrradianceScene {
             instances: instances,
             retained: Retain(geometries: geometries, previous: previous),
             trianglesBuilt: trianglesBuilt
-        );
+        ) { Materials = order };
+    }
+    /// <summary>Gets the program material ids the scene's triangles carry, in increasing order: the materials a ray that
+    /// meets the scene reads, and the only ones whose values its bounce light depends on.</summary>
+    public int[] Materials { get; private init; } = [];
+
+    // Adds the program material ids a draw's triangles carry: its base, offset by each distinct triangle material.
+    private static void AddMaterials(HashSet<int> materials, in SdfMeshDraw draw) {
+        var triangles = draw.Mesh.TriangleMaterials.Span;
+
+        if (triangles.IsEmpty) {
+            _ = materials.Add(item: draw.Material);
+            return;
+        }
+
+        var last = -1L;
+
+        foreach (var material in triangles) {
+            if (material == last) { continue; }
+            last = material;
+            _ = materials.Add(item: (draw.Material + ((int)material)));
+        }
     }
     /// <summary>Returns whether a draw belongs to the static scene: one neither dynamic nor glass. Glass neither blocks
     /// nor bounces the probes' rays: light reaches what lies behind it untinted.</summary>

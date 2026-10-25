@@ -632,12 +632,27 @@ public sealed partial class SdfMeshPathBake {
         // a group whose geometry moved bakes again (Keeps).
         var rebaked = 0;
         var loading = 0;
+        var renumbered = 0;
+        var formed = 0;
 
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
             if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)) {
                 m_groups[index] = old;
+                continue;
+            }
+            // A dynamic group whose shapes only took other material ids, because a palette registered before them came
+            // or went (a body leaving or entering the world), keeps its mesh renumbered by place, as a mesh taken from
+            // the library is.
+            if (
+                (old is not null) &&
+                Renumbers(group: group, old: old) &&
+                Library.TryTake(geometry: old.Sealed, materials: group.MaterialOrder, mesh: out var renumber)
+            ) {
+                old.Renumber(materials: group.MaterialOrder, mesh: renumber);
+                m_groups[index] = old;
+                renumbered++;
                 continue;
             }
             // Geometry the library holds a mesh of, baked at another index or slot, in an earlier program (a body that left
@@ -652,6 +667,18 @@ public sealed partial class SdfMeshPathBake {
             if (Library.HoldsEmpty(geometry: group.Sealed)) {
                 group.Outcome = "no surface, as baked before";
                 group.Done = true;
+                continue;
+            }
+            // A dynamic group of a form the library holds a mesh of, baked with its other slots at another pose (a body
+            // crossing from another world mid-stride, or wearing a creation another body wears), takes that skinned mesh
+            // and watches its members against the pose the mesh was baked at, so it bakes again only once it settles away
+            // from it (Settle).
+            if (group.Dynamic && Library.TryTakeForm(form: group.Form, materials: group.MaterialOrder, mesh: out var shaped)) {
+                group.Mesh = shaped;
+                group.Done = true;
+                group.Stored = true;
+                group.Watch(baked: shaped);
+                formed++;
                 continue;
             }
 
@@ -678,18 +705,27 @@ public sealed partial class SdfMeshPathBake {
             m_reported = false;
             m_clock.Restart();
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={frame.Program.Instances.Count}");
-            if ((rebaked > 0) && (Library.Disk is { } disk)) {
-                Console.Error.WriteLine(value: $"[sdf.mesh-bake] miss residency={Residency} baking={rebaked}: {disk.ExplainMisses(identity: Identity)}");
-            } else {
-                Library.Disk?.Record(identity: Identity);
+            // The store's account reads its directory, so it runs off the frame's thread.
+            if (Library.Disk is { } disk) {
+                var identity = Identity;
+                var residency = Residency;
+                var baking = rebaked;
+
+                _ = Task.Run(action: () => {
+                    if (baking > 0) {
+                        Console.Error.WriteLine(value: $"[sdf.mesh-bake] miss residency={residency} baking={baking}: {disk.ExplainMisses(identity: identity)}");
+                    } else {
+                        disk.Record(identity: identity);
+                    }
+                });
             }
         }
         // A program that takes every group from the library lands nothing, so the started bake whose pending groups it
         // dropped reports here or never.
         if (m_clock.IsRunning) { Finish(); }
-        // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
-        // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        if (((rebaked + loading) > 0) || (previous.Count != m_groups.Count)) {
+        // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
+        // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
+        if (((rebaked + loading + renumbered + formed) > 0) || (previous.Count != m_groups.Count)) {
             m_drawnMeshes = -1;
         }
     }
@@ -702,6 +738,17 @@ public sealed partial class SdfMeshPathBake {
 
         return ((old.Sealed == group.Sealed) || (old.Dynamic && group.Dynamic && (old.Form == group.Form) && ((old.Mesh is not null) || !old.Done)));
     }
+    // Whether a new program's group is the finished dynamic group the previous program planned at its selector with only
+    // its material ids moved: the same form, as many materials, and a mesh drawing.
+    private static bool Renumbers(Group group, Group old) => (
+        old.Dynamic &&
+        group.Dynamic &&
+        old.Done &&
+        (old.Mesh is not null) &&
+        (old.Replaces is null) &&
+        (old.Form == group.Form) &&
+        (old.MaterialOrder.Length == group.MaterialOrder.Length)
+    );
     // Starts a group the library holds no mesh of at the coarse lattice over its box, under the bake's identity. Geometry
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
     // store refuses its entry; true when it loads.
@@ -1310,7 +1357,7 @@ public sealed partial class SdfMeshPathBake {
     private void Land(Group group, SdfMesh? mesh) {
         if (mesh is not null) {
             mesh = mesh with { BakeCell = group.DiagnosticCell };
-            Library.Store(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
+            Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
 
         lock (m_gate) {
@@ -1327,7 +1374,7 @@ public sealed partial class SdfMeshPathBake {
     // Takes a group's mesh from the library's store; a group whose entry the store refuses or no longer holds bakes from
     // its coarse lattice.
     private void Load(Group group) {
-        var loaded = Library.TryLoad(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
+        var loaded = Library.TryLoad(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
 
         lock (m_gate) {
             group.Contouring = false;
@@ -1550,8 +1597,15 @@ public sealed partial class SdfMeshPathBake {
         public Vector3[]? StillPositions { get; private set; }
         public float StillSince { get; set; }
 
-        // Takes the member slots and their baked poses from the group's geometry, once.
-        public void Watch() {
+        // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place.
+        public void Renumber(int[] materials, SdfMesh mesh) {
+            Renumber(materials: materials);
+            Mesh = mesh;
+        }
+        // Takes the member slots and their baked poses from the group's geometry, once; or, for a mesh baked at another
+        // pose of the group's form, each member's pose as that mesh's skin records it (SdfMesh.Members), by its offset
+        // from the group's slot.
+        public void Watch(SdfMesh? baked = null) {
             var members = Geometry.Poses.Where(predicate: pose => (pose.Key != Slot)).ToArray();
 
             MemberSlots = [.. members.Select(selector: static pose => pose.Key)];
@@ -1561,6 +1615,14 @@ public sealed partial class SdfMeshPathBake {
             CurrentOrientations = new Quaternion[members.Length];
             StillPositions = new Vector3[members.Length];
             StillOrientations = new Quaternion[members.Length];
+            if (baked is null) { return; }
+            foreach (var member in baked.Members.Span) {
+                var index = Array.IndexOf(array: MemberSlots, value: (Slot + member.SlotOffset));
+
+                if (index < 0) { continue; }
+                BakedPositions[index] = member.Position;
+                BakedOrientations[index] = member.Orientation;
+            }
         }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from

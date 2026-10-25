@@ -19,7 +19,8 @@ namespace Puck.SdfVm;
 /// path) leaves it as it was, and an edit to anything the bake runs changes it.
 /// <para>The bake's roots (<see cref="BakeRoots"/>) are its planning, sampling, contouring and meshing types, the
 /// frame-block rows its kernel reads, the program's packing of the words the kernel walks, and the store's entry format.
-/// The walk stops at the library and the store, which hold meshes rather than make them; at the kernels' interfaces and
+/// The walk stops at the library and the store, which hold meshes rather than make them; at the GPU region and its owed
+/// runs, which carry a table's words to the device rather than choose them, as the driver does; at the kernels' interfaces and
 /// the render graph's package, whose declarations reach the bake through the kernels' bytecode; and at assemblies outside
 /// <c>Puck</c>: the runtime is the platform the bake runs on, as the driver is for its kernels. A type a parameter, a
 /// local or a field merely carries joins the closure only where code makes, converts or calls into it, and a record's
@@ -46,6 +47,8 @@ public sealed partial class SdfMeshBakeClosure {
         ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),
     ];
     private static readonly HashSet<string> StopTypes = new(collection: [
+        "Puck.Abstractions.Gpu.GpuRegion",
+        "Puck.Abstractions.Gpu.GpuUploadRuns",
         "Puck.SdfVm.SdfKernelInterfaces",
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",

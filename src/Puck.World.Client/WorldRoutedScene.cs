@@ -108,10 +108,11 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <summary>Clears the views the presenter latched, before it latches this frame's.</summary>
     public void BeginViews() => m_views.Clear();
     /// <summary>Latches a seat's view of this world for the frame.</summary>
-    /// <param name="view">The seat's view, framed in this world's own coordinates.</param>
+    /// <param name="view">The seat's view, framed in this world's own coordinates; this scene's residency renders it,
+    /// whatever its boot frame's copy says (<see cref="SdfViewSnapshot.Elsewhere"/>).</param>
     /// <returns>The view's index in the scene's frames.</returns>
     public int AddView(in SdfViewSnapshot view) {
-        m_views.Add(item: view);
+        m_views.Add(item: (view with { Elsewhere = false }));
 
         return (m_views.Count - 1);
     }

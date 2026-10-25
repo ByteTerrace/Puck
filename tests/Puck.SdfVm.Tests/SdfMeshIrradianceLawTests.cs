@@ -147,6 +147,29 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.Equal(expected: (resized.Low.X + 3), actual: moved.Low.X);
     }
+    // A first view another residency renders (a seat crossed into another world, its camera in that world's coordinates)
+    // holds the window where it stood and meters no exposure; the window follows the view again once this residency
+    // renders it.
+    [Fact]
+    public void AWindowHoldsWhileItsFirstViewRendersElsewhereAndFollowsItBack() {
+        var frame = Frame() with { IndirectBounces = 0 };
+        var volume = new SdfMeshIrradiance();
+        var (here, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
+        var camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: 40f, y: 2f, z: 0f),
+            target: new Vector3(x: 41f, y: 2f, z: 0f), viewportHeight: 4u, viewportWidth: 4u);
+        var elsewhere = frame with { Views = [frame.Views[0] with { Camera = camera, Elsewhere = true }] };
+        var held = volume.Stage(bakePending: false, frame: elsewhere, tier: SdfIndirectTier.Medium, write: static _ => { });
+        var exposures = new SdfViewExposures();
+
+        exposures.Stage(frame: elsewhere, irradiance: volume, seconds: 0.1d);
+
+        Assert.Equal(expected: here.Low, actual: held.Low);
+        Assert.Contains(expectedSubstring: "source=elsewhere", actualString: exposures.Describe()[0]);
+
+        var (back, _) = Trace(frame: (elsewhere with { Views = [elsewhere.Views[0] with { Elsewhere = false }] }), tier: SdfIndirectTier.Medium, volume: volume);
+
+        Assert.Equal(expected: (here.Low.X + 20), actual: back.Low.X);
+    }
     /// <summary>A lockstep frame waits for its scene and window's trace, including a cold scene and a replacement:
     /// each writes the same probes the asynchronous trace lands over many frames, in one staging.</summary>
     [Fact]

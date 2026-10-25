@@ -23,6 +23,8 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
 
     private readonly Lock m_gate = new();
     private readonly Dictionary<SdfMeshGeometry, List<Variant>> m_meshes = [];
+    // The geometry the latest mesh of each dynamic form was held under (TryTakeForm).
+    private readonly Dictionary<UInt128, SdfMeshGeometry> m_forms = [];
 
     /// <summary>Gets the store the library keeps its meshes in between runs, or <see langword="null"/>.</summary>
     public SdfMeshStore? Disk { get; } = store;
@@ -45,15 +47,41 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     /// group carries.</param>
     /// <param name="materials">The group's material ids, by their place in the geometry.</param>
     /// <param name="identity">The identity of the bake that meshed it (<see cref="SdfMeshStore.IdentityOf"/>).</param>
+    /// <param name="form">The form of the dynamic group the mesh was baked for (<see cref="SdfMeshGeometryBuilder.Form"/>),
+    /// which <see cref="TryTakeForm"/> then answers with it, or <see langword="null"/> for a group in world space.</param>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
-    public void Store(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128 identity = default) {
+    public void Store(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128 identity = default, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
-        if (Hold(geometry: geometry, materials: materials, mesh: mesh)) {
+        if (Hold(geometry: geometry, materials: materials, mesh: mesh, form: form)) {
             _ = Disk?.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh);
         }
+    }
+    /// <summary>Takes the latest mesh the library holds of a dynamic group's form, baked at whatever pose its other slots
+    /// stood in (<see cref="SdfMeshGeometryBuilder.Form"/>): the same shapes, which the mesh's skin carries through each
+    /// member's slot (<see cref="SdfMesh.Members"/>), renumbered for the taking group's materials as
+    /// <see cref="TryTake"/> renumbers. A body crossing into another world mid-stride takes the mesh its other pose
+    /// baked, and settles later (<see cref="SdfMeshSettle"/>).</summary>
+    /// <param name="form">The form.</param>
+    /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
+    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the library holds a mesh of the form.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
+    public bool TryTakeForm(UInt128 form, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh) {
+        ArgumentNullException.ThrowIfNull(argument: materials);
+
+        SdfMeshGeometry geometry;
+
+        lock (m_gate) {
+            if (!m_forms.TryGetValue(key: form, value: out geometry)) {
+                mesh = null;
+                return false;
+            }
+        }
+
+        return TryTake(geometry: geometry, materials: materials, mesh: out mesh);
     }
     /// <summary>Records that a geometry's bake found no surface, so a later group of it, in another program or residency,
     /// finishes with no mesh rather than baking again. The record lasts the run and empties with the meshes.</summary>
@@ -83,15 +111,17 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
     /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
     /// <param name="refusal">Why the store refused the entry it held, or <see langword="null"/>.</param>
+    /// <param name="form">The form of the dynamic group loading it, as <see cref="Store"/> takes it, or
+    /// <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public bool TryLoad(UInt128 identity, SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out string? refusal) {
+    public bool TryLoad(UInt128 identity, SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out string? refusal, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         mesh = null;
         refusal = null;
         if ((Disk is null) || !Disk.TryRead(geometry: geometry, identity: identity, materials: out var stored, mesh: out var read, refusal: out refusal)) { return false; }
-        _ = Hold(geometry: geometry, materials: stored, mesh: read);
+        _ = Hold(geometry: geometry, materials: stored, mesh: read, form: form);
 
         return TryTake(geometry: geometry, materials: materials, mesh: out mesh);
     }
@@ -126,11 +156,17 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
         }
     }
 
-    // Holds a geometry's first mesh for the run, emptying the library past its capacity; false when it held one already.
-    private bool Hold(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials) {
+    // Holds a geometry's first mesh for the run, emptying the library past its capacity, and makes it its form's latest;
+    // false when it held one already.
+    private bool Hold(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128? form) {
         lock (m_gate) {
+            if (form is { } shapes) { m_forms[shapes] = geometry; }
             if (m_meshes.ContainsKey(key: geometry)) { return false; }
-            if (m_meshes.Count >= Capacity) { m_meshes.Clear(); }
+            if (m_meshes.Count >= Capacity) {
+                m_meshes.Clear();
+                m_forms.Clear();
+                if (form is { } kept) { m_forms[kept] = geometry; }
+            }
             m_meshes.Add(key: geometry, value: [new Variant(Materials: materials, Mesh: mesh)]);
 
             return true;

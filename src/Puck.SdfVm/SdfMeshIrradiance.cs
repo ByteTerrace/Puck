@@ -128,11 +128,20 @@ public sealed class SdfMeshIrradiance {
     private Lighting? m_lighting;
     private int m_lightingKey;
     private SdfProgram? m_materialsProgram;
+    private SdfMeshIrradianceScene? m_materialsScene;
     private int m_materialsKey;
     private int m_generation;
     private Layout m_layout;
     private SdfMeshIrradianceParameters m_published;
     private int m_unwritten;
+    // The window's refill (Refill): the window's version, which a move advances, whether its refill is owed, the refill in
+    // flight on the thread pool and whether it still runs, and the cells it lists and the slot words it composes for them.
+    private int m_windowVersion;
+    private bool m_refillOwed;
+    private bool m_refillRunning;
+    private Task? m_refill;
+    private readonly List<(int X, int Y, int Z)> m_refillCells = [];
+    private uint[] m_refillWords = [];
 
     private CameraSample?[] m_cameraSamples = [];
 
@@ -165,7 +174,7 @@ public sealed class SdfMeshIrradiance {
         get {
             lock (m_gate) {
                 // A faulted trace settles nothing: the next Stage reports it.
-                return ((m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_owed) || !m_landed.IsEmpty || m_dirty || m_wrote);
+                return ((m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_owed) || m_refillOwed || !m_landed.IsEmpty || m_dirty || m_wrote);
             }
         }
     }
@@ -190,6 +199,12 @@ public sealed class SdfMeshIrradiance {
     }
 
     private void WriteToTables(ReadOnlyMemory<uint> words) => m_writeTables!.WriteMeshIrradiance(words: words.Span);
+    // The camera the window follows: the first view's. While another residency renders that view
+    // (SdfViewSnapshot.Elsewhere: its seat is presented in another world, its camera in that world's coordinates) the
+    // window holds where it stood, about where the seat left this world and will come back to it.
+    private Vector3 WindowCamera(SdfFrame frame) => ((frame.Views[0].Elsewhere && m_windowValid)
+        ? m_camera
+        : frame.Views[0].Camera.Position);
 
     /// <summary>Advances the volume for a frame as <see cref="Stage(SdfFrame, SdfWorldTables, SdfIndirectTier, bool)"/>
     /// does, writing the volume table through a delegate rather than a residency's tables.</summary>
@@ -229,7 +244,7 @@ public sealed class SdfMeshIrradiance {
             m_wrote = false;
             if (!bakePending) { _ = RefreshScene(frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
-            m_camera = frame.Views[0].Camera.Position;
+            m_camera = WindowCamera(frame: frame);
             if (m_cameraSamples.Length != frame.Views.Count) {
                 m_cameraSamples = new CameraSample?[frame.Views.Count];
                 m_nextCameraSample = 0;
@@ -254,10 +269,16 @@ public sealed class SdfMeshIrradiance {
                     m_generation++;
                     m_reported = false;
                 }
-                FillFromCache();
+                OweRefill(pooled: !frame.TickLocked);
             }
             m_layout = layout;
             drain = (frame.TickLocked && m_owed && (m_scene is not null) && (m_lighting is not null));
+        }
+
+        // A lockstep frame refills its window before it renders, waiting for a refill in flight, which takes the gate.
+        if (frame.TickLocked) {
+            m_refill?.Wait();
+            Refill();
         }
 
         // A lockstep frame renders the window traced to the end, so its indirect light and its views' exposure meters
@@ -511,18 +532,29 @@ public sealed class SdfMeshIrradiance {
         m_traced = 0;
         m_rays = 0;
     }
-    // The part of a program's materials the trace reads (Shade: what each reflects and emits), hashed once per program.
-    // A program rebuilt with a material changed in place (a bound color's move, a placement showing another
-    // creation over the same meshes) leaves the static draws as they were, so only this key retraces it.
+    // The part of a program's materials the trace reads (Shade: what each reflects and emits), hashed once per program and
+    // scene: the materials the static scene's triangles carry (SdfMeshIrradianceScene.Materials), by id. A program rebuilt
+    // with one of them changed in place (a bound color's move, a placement showing another creation over the same meshes)
+    // leaves the static draws as they were, so only this key retraces it; a body's palette coming or going, which no
+    // probe ray meets, leaves it alone.
     private int MaterialsKey(SdfProgram program) {
-        if (ReferenceEquals(objA: program, objB: m_materialsProgram)) { return m_materialsKey; }
+        if (ReferenceEquals(objA: program, objB: m_materialsProgram) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
 
         var key = 17;
+        var materials = program.Materials;
 
-        foreach (var material in program.Materials) {
-            key = HashCode.Combine(value1: key, value2: material.Albedo, value3: material.Emissive, value4: material.Metal, value5: material.Bleed, value6: material.EmissiveLane);
+        foreach (var id in (m_scene?.Materials ?? [])) {
+            if ((id < 0) || (id >= materials.Count)) {
+                key = HashCode.Combine(value1: key, value2: id);
+                continue;
+            }
+
+            var material = materials[id];
+
+            key = HashCode.Combine(value1: key, value2: id, value3: material.Albedo, value4: material.Emissive, value5: material.Metal, value6: material.Bleed, value7: material.EmissiveLane);
         }
         m_materialsProgram = program;
+        m_materialsScene = m_scene;
         m_materialsKey = key;
 
         return key;
@@ -530,38 +562,116 @@ public sealed class SdfMeshIrradiance {
     private bool InWindow((int X, int Y, int Z) cell) =>
         ((cell.X >= m_low.X) && (cell.X < (m_low.X + m_layout.Dims.X)) && (cell.Y >= m_low.Y) && (cell.Y < (m_low.Y + m_layout.Dims.Y)) &&
         (cell.Z >= m_low.Z) && (cell.Z < (m_low.Z + m_layout.Dims.Z)));
-    // Writes every cached probe of the window whose slot holds another cell's.
-    private void FillFromCache() {
-        var dims = m_layout.Dims;
-
+    // Owes the refill of a window the volume just moved to: no table is published until it lands, and it runs on the thread
+    // pool (Refill), or in a lockstep frame on the frame's thread, since a window that jumps far re-stores every slot.
+    private void OweRefill(bool pooled) {
+        m_windowVersion++;
+        m_refillOwed = true;
         m_unwritten = m_layout.Count;
-        for (var z = m_low.Z; (z < (m_low.Z + dims.Z)); z++) {
-            for (var y = m_low.Y; (y < (m_low.Y + dims.Y)); y++) {
-                for (var x = m_low.X; (x < (m_low.X + dims.X)); x++) {
-                    var slot = SlotOf(dims: dims, x: x, y: y, z: z);
+        if (pooled && !m_refillRunning) {
+            m_refillRunning = true;
+            m_refill = Task.Run(action: Refill);
+        }
+    }
+    // Writes every cached probe of the window whose slot holds another cell's: the cells are listed under the gate, their
+    // slots composed outside it, and written under it again unless the window moved meanwhile, when the next round lists
+    // the new window. A probe that lands in between stores itself and is left as it stands.
+    private void Refill() {
+        while (true) {
+            int version;
+            (int X, int Y, int Z) low;
+            (int X, int Y, int Z) dims;
 
-                    if ((m_volume[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag)) {
-                        m_unwritten--;
-                        continue;
-                    }
-                    if (m_cache.ContainsKey(key: (x, y, z))) { Store(cell: (x, y, z)); }
+            lock (m_gate) {
+                if (!m_refillOwed) {
+                    m_refillRunning = false;
+                    return;
                 }
+
+                version = m_windowVersion;
+                low = m_low;
+                dims = m_layout.Dims;
+                m_refillCells.Clear();
+
+                var unwritten = m_layout.Count;
+
+                for (var z = low.Z; (z < (low.Z + dims.Z)); z++) {
+                    for (var y = low.Y; (y < (low.Y + dims.Y)); y++) {
+                        for (var x = low.X; (x < (low.X + dims.X)); x++) {
+                            if (Holds(cell: (x, y, z), dims: dims)) {
+                                unwritten--;
+                                continue;
+                            }
+                            if (m_cache.ContainsKey(key: (x, y, z))) { m_refillCells.Add(item: (x, y, z)); }
+                        }
+                    }
+                }
+
+                m_unwritten = unwritten;
+            }
+
+            var cells = m_refillCells.Count;
+
+            if (m_refillWords.Length < (cells * SdfMeshIrradianceProbe.ProbeWords)) {
+                m_refillWords = new uint[(cells * SdfMeshIrradianceProbe.ProbeWords)];
+            }
+
+            var composed = 0;
+
+            for (var index = 0; (index < cells); index++) {
+                var cell = m_refillCells[index];
+
+                if (Compose(cell: cell, words: m_refillWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (composed * SdfMeshIrradianceProbe.ProbeWords)))) {
+                    m_refillCells[composed++] = cell;
+                }
+            }
+
+            lock (m_gate) {
+                if (version != m_windowVersion) { continue; }
+
+                for (var index = 0; (index < composed); index++) {
+                    var cell = m_refillCells[index];
+
+                    if (Holds(cell: cell, dims: dims)) { continue; }
+                    m_refillWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords))
+                        .CopyTo(destination: SlotWords(cell: cell));
+                    m_unwritten--;
+                    m_dirty = true;
+                }
+
+                m_refillOwed = false;
+                m_refillRunning = false;
+
+                return;
             }
         }
     }
+    // Whether a cell's slot holds that cell's probe.
+    private bool Holds((int X, int Y, int Z) cell, (int X, int Y, int Z) dims) =>
+        ((m_volume[(SlotOf(dims: dims, x: cell.X, y: cell.Y, z: cell.Z) * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag));
+    // A cell's slot words in the volume.
+    private Span<uint> SlotWords((int X, int Y, int Z) cell) =>
+        m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims) * SdfMeshIrradianceProbe.ProbeWords));
     // Writes a cached cell's probe into its slot: its cubes averaged with the neighbours its centre sees, its own light
     // visibility.
     private void Store((int X, int Y, int Z) cell) {
-        if (!m_cache.TryGetValue(key: cell, value: out var cached)) { return; }
+        var words = SlotWords(cell: cell);
+        var held = ((words[0] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag));
+
+        if (!Compose(cell: cell, words: words)) { return; }
+        if (!held) { m_unwritten--; }
+        m_dirty = true;
+    }
+    // Composes a cached cell's slot words: its cubes averaged with the neighbours its centre sees, its own light visibility;
+    // false, writing nothing, when the cache holds no probe of it. It reads the cache alone, so it runs outside the gate.
+    private bool Compose((int X, int Y, int Z) cell, Span<uint> words) {
+        if (!m_cache.TryGetValue(key: cell, value: out var cached)) { return false; }
 
         var probe = Readable(probe: cached);
-
-        var words = m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims) * SdfMeshIrradianceProbe.ProbeWords));
         Span<float> sky = stackalloc float[6];
         Span<Vector3> radiance = stackalloc Vector3[6];
 
         Filter(cell: cell, probe: probe, radiance: radiance, sky: sky);
-        if ((words[0] & ~SdfMeshIrradianceProbe.InvalidFlag) != (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag)) { m_unwritten--; }
         words[0] = (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag) | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u);
         for (var pair = 0; (pair < 3); pair++) {
             words[(1 + pair)] = Pack(low: sky[(2 * pair)], high: sky[((2 * pair) + 1)]);
@@ -582,7 +692,8 @@ public sealed class SdfMeshIrradiance {
             words[(SdfMeshIrradianceProbe.PlanesWord + (2 * index))] = Pack(high: plane.Y, low: plane.X);
             words[((SdfMeshIrradianceProbe.PlanesWord + (2 * index)) + 1)] = Pack(high: plane.W, low: plane.Z);
         }
-        m_dirty = true;
+
+        return true;
     }
     // How far a probe lets a point at `toward` from its centre take its light: one while the point lies nearer along
     // every axis than the probe's depth that way, each axis fading to nothing over DepthFade metres past its depth,

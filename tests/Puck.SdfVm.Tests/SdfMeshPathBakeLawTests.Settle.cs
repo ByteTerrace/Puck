@@ -139,8 +139,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
     }
 
     // Groups of a box on slot 2g+1 and a smaller box memberGap slots later, smooth-free: each a dynamic instance on its own slot.
-    private static SdfProgram SettleProgram(int groups, float scale = 1f, int memberGap = 1) {
+    private static SdfProgram SettleProgram(int groups, float scale = 1f, int memberGap = 1, int leadingMaterials = 0) {
         var builder = new SdfProgramBuilder();
+
+        // Materials an earlier palette registers, which number the groups' own one later.
+        for (var leading = 0; (leading < leadingMaterials); leading++) {
+            _ = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: (0.25f + (0.25f * leading)))));
+        }
+
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
         for (var group = 0; (group < groups); group++) {

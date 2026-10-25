@@ -366,7 +366,12 @@ laws exercise that boundary.
   shifts every group after it: a responding static row registers the palette
   of every creation it can show (`WorldPlacementStamper.EmitStatic`,
   `ResponsePaletteLawTests`), and a creation with nothing to draw emits no
-  instance, so a response swaps one row's materials alone.
+  instance, so a response swaps one row's materials alone. A body leaving or
+  entering a world adds or drops its palette ahead of every later body's: a
+  skinned group of the same form and material count at its slot keeps its
+  mesh renumbered (`SdfMeshPathBake.Renumbers`), so the bodies after it bake
+  nothing, though they stand off their baked pose (the renumber law in
+  `SdfMeshPathBakeLawTests.Rebuild`).
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity
   (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
@@ -398,7 +403,8 @@ laws exercise that boundary.
   constructs counts its whole layout, since its synthesized equality and
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
-  which hold meshes, and at the runtime. So an edit to `Puck.Maths` code the
+  which hold meshes, at `GpuRegion` and `GpuUploadRuns`, which carry the point
+  table's words to the device rather than choose them, and at the runtime. So an edit to `Puck.Maths` code the
   contour calls re-bakes, while an edit to the rest of the renderer, a new
   public member of a referenced assembly, a comment or another checkout path
   keeps every entry, and worktrees of one bake share one set. Code the bake

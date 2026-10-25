@@ -128,6 +128,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private float m_elapsedSeconds;
     private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
+    // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
+    private int m_staticFieldDefinition = -1;
+    private int m_staticFieldNeighbours = -1;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
     // so a later departure re-narrates instead of staying silent forever.
@@ -1643,7 +1646,18 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         if (programChanged) {
             m_lastProgram = program;
-            RebuildStaticField();
+
+            // The field holds the delivered definition's static placements and screens and the neighbours' strips alone,
+            // so a rebuild for a body coming or going, or for a value-only state delivery, which changes no scene shape,
+            // leaves it as it was.
+            if (
+                (m_client.DefinitionRevision != m_staticFieldDefinition) ||
+                (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours)
+            ) {
+                m_staticFieldDefinition = m_client.DefinitionRevision;
+                m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
+                RebuildStaticField();
+            }
         }
 
         // Emit one view per joined local seat (a 1..MaxSlots count up to the ViewportCapacity floor, so players can join
@@ -1893,6 +1907,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ? new SdfStampFade(fadeSlot, WorldStampPool.SlotsPerPlacement, m_roster.Seat(slot: slot)!.View.BodyOpacity)
                     : default),
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
+                Elsewhere = (presentedElsewhere is not null),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 // A matted view renders at native scale whatever the dynamic resolution's floor, so the picture is never

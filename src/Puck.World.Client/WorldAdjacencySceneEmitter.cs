@@ -659,6 +659,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             bandIndex++;
         }
     }
+    /// <summary>Gets the revision of the neighbours' geometry as the last <see cref="WriteRevision"/> polled it: it moves
+    /// when a neighbour's definition or snapshot moves, a neighbour becomes reachable or unreachable, or a bound color its
+    /// border baked moves, and not when only the bodies each band selects change.</summary>
+    public int NeighbourRevision => m_neighbourRevision;
     /// <inheritdoc/>
     public void WriteRevision(Span<int> destination) {
         // Poll every band's neighbour reachability/definition-revision — a live neighbour edit (or a neighbour

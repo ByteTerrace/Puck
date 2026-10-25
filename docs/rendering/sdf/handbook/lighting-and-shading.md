@@ -233,15 +233,21 @@ in the frame.
   scene up to 8 million triangles), and retraces every probe; `world.counters
   sdf.mesh-gi` counts the builds and the geometry each built and reused. A
   change of a directional light, the gains, the
-  sources, the bounces or what the materials reflect and emit (a bound
-  color's move, a placement showing another creation over the same meshes, as
-  the gallery hall's light switches do) retraces them over the same scene. Old probes keep
+  sources, the bounces or what the static scene's materials reflect and emit (a
+  bound color's move, a placement showing another creation over the same meshes,
+  as the gallery hall's light switches do) retraces them over the same scene; a
+  body's palette coming or going, which no probe ray meets, retraces nothing
+  (`SdfMeshIrradianceScene.Materials` names the ids the key reads). Old probes keep
   drawing, and remain available to the exposure meter and neighbour filter,
   until each cell completes its replacement sweeps. The tracer distinguishes
   generations instead of clearing those samples. A layout change clears the
   staging volume, but the GPU keeps its previous table and coordinates until
   every slot in the new window has a first measurement; a moving window follows
-  the same rule. Unwritten cells never become an open-sky fallback. Before the
+  the same rule, and the thread pool refills its slots from the cache, so a
+  window that jumps far costs the frame nothing. The window follows the first
+  view's camera, and holds where it stood while another residency renders that
+  view (`SdfViewSnapshot.Elsewhere`: its seat crossed into another world), so a
+  crossing neither moves nor retraces the world it left. Unwritten cells never become an open-sky fallback. Before the
   initial scene supplies a volume, indirect light has no measured value.
   `puck mesh scene --world <file>` times the
   scene over a world's stored static meshes on the CPU: a full build, one
