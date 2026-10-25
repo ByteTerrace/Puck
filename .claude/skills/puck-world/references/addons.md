@@ -381,8 +381,8 @@ join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
 a named sphere, addressed by the carrying placement's own `Id`; the cell's `B`
 is the region's position among the guest's own `Observe/region:` requests, in
 manifest order, so a guest's table of regions follows its row), collision
-pairs (a flat proximity test — NOT the physical contact resolver, which has
-no body-vs-body form here), control-application engaged/disengaged, and
+pairs (a flat proximity test, independent of physical contact resolution),
+control-application engaged/disengaged, and
 federation link established/dropped.
 Application edges are queued from `WorldGrants`' own set writes, so every
 member added or removed fires one — including the context-button auto-engage
