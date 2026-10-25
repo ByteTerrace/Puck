@@ -189,14 +189,13 @@ public sealed partial class WorldAddonRuntime {
         ));
     // Requesting is not receiving, but the reverse gap is the dangerous one: reporting only the intersection of
     // "requested" and "held" lets a capability the addon holds but never declared go completely unmentioned. So this
-    // builds what the settled table says the addon's OWN principal HOLDS, right now, across every capability (via
-    // WorldGrants.Held), and separately annotates the manifest's own wish list against that held set: granted
-    // (requested and held), withheld (requested, not held), and unrequested (held, never requested). The unrequested
-    // list is the INERT one: a hold outside the manifest materializes no handle (see IsRequested). Called for EVERY
+    // lists concrete held subjects admitted by the SAME reach check as event dispatch. A wildcard request is withheld
+    // only when it reaches no held subject; concrete holds it covers belong in granted, never in the inert list.
+    // Unrequested holds use the shared manifest matcher too. Called for EVERY
     // row regardless of whether it declares Requests, because a document can grant an addon's principal something
     // directly without the row ever asking for it. Capability disclosure is narration: computed here, against the
-    // settled table as of PREPARE, but the caller stages the returned text and prints it only once the plan that
-    // produced it actually commits — a refused prepare must never have printed a mount claim that never became true.
+    // settled table at Finish, after the caller has committed the plan — a refused prepare must never print a
+    // mount claim that never became true.
     private static string? BuildCapabilityDisclosureNarration(string name, IReadOnlyList<WorldCapabilityRequest>? requests, IWorldGrantsView grants) {
         var principal = Principal.Addon(name: name);
         var held = grants.Held(grantee: principal);
@@ -208,34 +207,31 @@ public sealed partial class WorldAddonRuntime {
             return null;
         }
 
-        var heldLabels = new HashSet<string>(capacity: held.Count);
-
-        foreach (var (capability, subject) in held) {
-            _ = heldLabels.Add(item: $"{capability.ToString().ToLowerInvariant()}/{subject.Describe()}");
-        }
-
         var granted = new List<string>();
-        var withheld = new List<string>();
-
-        if (requests is { Count: > 0 }) {
-            foreach (var request in requests) {
-                var label = $"{request.Capability.ToString().ToLowerInvariant()}/{request.Subject.Describe()}";
-
-                (heldLabels.Contains(item: label)
-                    ? granted
-                    : withheld).Add(item: label);
-            }
-        }
-
-        // Held but never named in Requests — the unrequested-authority case. Excludes every label already accounted
-        // for as "granted" above, so the same hold is never listed twice.
+        var reachable = new List<(WorldCapability Capability, GrantSubject Subject)>();
         var unrequested = new List<string>();
 
         foreach (var (capability, subject) in held) {
             var label = $"{capability.ToString().ToLowerInvariant()}/{subject.Describe()}";
 
-            if (!granted.Contains(item: label)) {
+            if (CanReach(capability: capability, grants: grants, principal: principal, requests: requests, subject: subject)) {
+                granted.Add(item: label);
+                reachable.Add(item: (capability, subject));
+            } else if (!WorldCapabilityRequests.Contains(capability: capability, requests: requests, subject: subject)) {
                 unrequested.Add(item: label);
+            }
+        }
+
+        var withheld = new List<string>();
+
+        if (requests is { Count: > 0 }) {
+            foreach (var request in requests) {
+                if (!reachable.Exists(match: pair => ((pair.Capability == request.Capability) &&
+                    ((request.Subject.Kind == GrantSubjectKind.All) || (pair.Subject == request.Subject))))) {
+                    var label = $"{request.Capability.ToString().ToLowerInvariant()}/{request.Subject.Describe()}";
+
+                    if (!withheld.Contains(item: label)) { withheld.Add(item: label); }
+                }
             }
         }
 

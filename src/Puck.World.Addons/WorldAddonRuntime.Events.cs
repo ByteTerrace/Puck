@@ -65,10 +65,9 @@ public sealed partial class WorldAddonRuntime {
                 A: ((edge.Family is WorldEventFamily.LinkEstablished or WorldEventFamily.LinkDropped)
                     ? addon.AdjacencyOrdinals.GetValueOrDefault(edge.GateA, -1)
                     : edge.A),
-                // A region edge names its region by the manifest's own order: the gate above admitted it only because
-                // the manifest requests it.
+                // A wildcard admits the event without adding a name to the manifest's region table.
                 B: ((edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit)
-                    ? addon.RegionOrdinals[edge.GateA]
+                    ? addon.RegionOrdinals.GetValueOrDefault(edge.GateA, -1)
                     : edge.B)
             );
             addon.EventCellsDelivered = ((addon.EventCellsDelivered == ulong.MaxValue)
@@ -209,16 +208,13 @@ public sealed partial class WorldAddonRuntime {
     }
     private EventGateStatus EventGate(MountedAddon addon, GrantSubject subject) {
         if (
-            !IsRequested(
-            addon: addon,
+            !CanReach(
+            requests: addon.Requests,
+            principal: addon.Principal,
+            grants: m_server.Grants,
             capability: WorldCapability.Observe,
             subject: subject
         ) ||
-            !m_server.Grants.Allows(
-            principal: addon.Principal,
-            capability: WorldCapability.Observe,
-            subject: subject
-        ).IsAllowed ||
             !m_server.Grants.TryGetEventBudget(
             principal: addon.Principal,
             capability: WorldCapability.Observe,
