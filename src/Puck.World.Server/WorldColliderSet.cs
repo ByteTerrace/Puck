@@ -70,7 +70,7 @@ public sealed class WorldColliderSet : IContactField {
     private readonly int[] m_unboundedColliders;
     private readonly List<int> m_candidates = [];
 
-    public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private init; } = [];
+    public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private set; } = [];
 
     // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
     // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
@@ -475,6 +475,85 @@ public sealed class WorldColliderSet : IContactField {
 
     // The static solid rows this set compiled, by row, so a set built from a later definition takes the rows that stand.
     private Dictionary<WorldPlacement, PlacementColliders> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
+
+    /// <summary>Takes a response change into this set in place when it moves no collider: each changed row now shows
+    /// another creation, and when that creation compiles, at the row's frame, to exactly the colliders and grip the
+    /// row had, the set keeps every collider and only names the new creation in its diagnostics.</summary>
+    /// <param name="previous">The definition the set was last built or carried over.</param>
+    /// <param name="definition">The definition the response change installed: the same rows, with the changed ones
+    /// showing other creations.</param>
+    /// <param name="rows">The indices of the rows whose shown creation the change moved.</param>
+    /// <returns><see langword="true"/> when the set now stands for <paramref name="definition"/>; <see langword="false"/>
+    /// when a changed row's colliders differ (or it is attached), so the set must be built again, and nothing was
+    /// changed.</returns>
+    internal bool TryCarryAcrossHolding(WorldDefinition previous, WorldDefinition definition, IReadOnlyList<int> rows) {
+        List<(WorldPlacement Before, WorldPlacement After, PlacementColliders Compiled)>? carried = null;
+
+        foreach (var row in rows) {
+            var before = previous.Placements[row];
+            var after = definition.Placements[row];
+
+            // A dealt template and a row with no solid facet compile nothing here.
+            if ((after.Solid is null) || (after.Deal is not null)) {
+                continue;
+            }
+            if (
+                (after.Attach is not null) ||
+                !m_placements.TryGetValue(key: before, value: out var compiled) ||
+                (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: after.ShownPrototypeId) is not { } creation)
+            ) {
+                return false;
+            }
+
+            var next = (ReferenceEquals(objA: creation, objB: compiled.Creation)
+                ? compiled
+                : CompilePlacement(
+                    creation: creation,
+                    defaultGrip: compiled.DefaultGrip,
+                    frame: compiled.Frame,
+                    placement: after,
+                    worldSeed: compiled.WorldSeed
+                )
+            );
+
+            if (
+                (next.Holdable != compiled.Holdable) ||
+                (next.HoldableIsOverride != compiled.HoldableIsOverride) ||
+                !next.Colliders.AsSpan().SequenceEqual(other: compiled.Colliders)
+            ) {
+                return false;
+            }
+
+            (carried ??= []).Add(item: (before, after, next));
+        }
+
+        if (carried is null) {
+            return true;
+        }
+
+        var diagnostics = DiagnosticColliders.ToArray();
+
+        foreach (var (before, after, next) in carried) {
+            var compiled = m_placements[before];
+
+            _ = m_placements.Remove(key: before);
+            m_placements[after] = next;
+
+            if (compiled.Diagnostics.Length == 0) {
+                continue;
+            }
+
+            var start = Array.FindIndex(array: diagnostics, match: diagnostic => ReferenceEquals(objA: diagnostic, objB: compiled.Diagnostics[0]));
+
+            if (start >= 0) {
+                next.Diagnostics.CopyTo(array: diagnostics, index: start);
+            }
+        }
+
+        DiagnosticColliders = diagnostics;
+
+        return true;
+    }
 
     private static PlacementColliders CompilePlacement(WorldPlacement placement, WorldPrototype creation, CompiledPlacementFrame frame, ulong worldSeed, bool defaultGrip) {
         var solid = placement.Solid!;

@@ -21,8 +21,7 @@ internal struct WorldPreparedMutation(
     bool[]? tickCollided,
     CellName? evictedKey,
     ulong tick,
-    ulong engineTick,
-    bool responseSwap = false
+    ulong engineTick
 ) : IDisposable {
     private bool m_addonSettled;
     private bool m_machineSettled;
@@ -36,9 +35,6 @@ internal struct WorldPreparedMutation(
     public IWorldMachinePreparedPlan? MachinePlan { get; } = machinePlan;
     public WorldMutation Mutation { get; } = mutation;
     public bool SolidAffecting { get; } = solidAffecting;
-    /// <summary>Gets whether the mutation is a response swap (<see cref="WorldDocument.IsResponseSwap"/>), which
-    /// installs without an arena replacement.</summary>
-    public bool ResponseSwap { get; } = responseSwap;
     public WorldSolidField? Solids { get; } = solids;
     public ulong Tick { get; } = tick;
     public bool[]? TickCollided { get; } = tickCollided;

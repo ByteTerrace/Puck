@@ -689,6 +689,12 @@ public sealed class WorldSessionMirror : IClientSink {
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
         lock (m_followGate) {
+            // A delivery that moved which creations placements show is a scene change to this mirror's readers, which
+            // watch the definition revision alone.
+            if (WorldPlacementResponse.CompareHoldings(after: definition, before: Volatile.Read(location: ref m_document).Definition) != WorldHoldingChange.None) {
+                _ = Interlocked.Increment(location: ref m_definitionRevision);
+            }
+
             Publish(
                 definition: definition,
                 version: version

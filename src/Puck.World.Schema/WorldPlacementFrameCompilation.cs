@@ -139,34 +139,12 @@ public static class WorldPlacementFrameCompilation {
             createValueCallback: static s => new StrongBox<IReadOnlyDictionary<string, CompiledPlacementFrame>>(value: Compile(placements: s.Rows))
         ).Value!;
     }
-    /// <summary>Hands a section's compiled frame table to another whose rows differ from it only in which creation they
-    /// show (<see cref="WorldPlacement.Holding"/>), which no frame reads, so the target compiles nothing.</summary>
-    /// <param name="source">The section the target replaced.</param>
-    /// <param name="target">The section holding the swapped rows.</param>
-    /// <returns><see langword="true"/> when the target took the source's table.</returns>
-    public static bool CarryAcrossHolding(WorldPlacementsSection? source, WorldPlacementsSection? target) {
-        if (
-            (source is null) ||
-            (target is null) ||
-            !Cache.TryGetValue(key: source, value: out var table) ||
-            (source.Rows is not { } sourceRows) ||
-            (target.Rows is not { } targetRows) ||
-            (sourceRows.Count != targetRows.Count)
-        ) {
-            return false;
+    // Hands a section's compiled frame table to a section whose rows differ from it only in their holding masks
+    // (WorldDefinition.WithPlacementHoldings), which no frame reads.
+    internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
+        if (Cache.TryGetValue(key: source, value: out var table)) {
+            Cache.AddOrUpdate(key: target, value: table);
         }
-        for (var index = 0; (index < targetRows.Count); index++) {
-            var before = sourceRows[index];
-            var after = targetRows[index];
-
-            if (!ReferenceEquals(objA: before, objB: after) && ((before with { Holding = after.Holding }) != after)) {
-                return false;
-            }
-        }
-
-        Cache.AddOrUpdate(key: target, value: table);
-
-        return true;
     }
     /// <summary>Rotates a document vector about +Y through the deterministic placement-frame rotation.</summary>
     /// <param name="vector">The local vector.</param>

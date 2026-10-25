@@ -12,11 +12,13 @@ public sealed partial class WorldDocument {
     /// or the state after a value change, stamped with the tick and the rows the export sweep found moved.</summary>
     internal void DeliverPending() {
         if (m_pendingDefinitionDelivery) {
+            var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
             Host.ForgetMovedRows();
             Host.Output.DeliverDefinition(
                 definition: m_definition,
                 version: Host.DocumentVersion
             );
+            Host.Output.Narrate(channel: "probe", text: $"[probe.deliver] {System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeStart).TotalMilliseconds:0.0}");
         } else if (m_pendingStateDelivery) {
             var stamp = Host.TakeStateStamp() with { ArenaValues = Host.StreamsArenaValues };
 

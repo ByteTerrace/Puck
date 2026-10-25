@@ -130,6 +130,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
     private int m_staticFieldNeighbours = -1;
+    private int m_staticFieldResponses = -1;
     // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
     private Task<SdfFieldEvaluator>? m_staticFieldBuild;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
@@ -1645,13 +1646,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             m_lastProgram = program;
 
             // The field holds the delivered definition's static placements and screens and the neighbours' strips alone,
-            // so a rebuild for a body coming or going, or for a value-only state delivery, which changes no scene shape,
+            // so a rebuild for a body coming or going, or for a value-only state delivery that moves no shown creation,
             // leaves it as it was.
             if (
                 (m_client.DefinitionRevision != m_staticFieldDefinition) ||
+                (m_client.ResponseRevision != m_staticFieldResponses) ||
                 (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours)
             ) {
                 m_staticFieldDefinition = m_client.DefinitionRevision;
+                m_staticFieldResponses = m_client.ResponseRevision;
                 m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
                 RebuildStaticField();
             }

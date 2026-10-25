@@ -1067,22 +1067,6 @@ public sealed partial class WorldDocument {
         Host.Population.SyncBodyCells(definition: definition);
     }
 
-    // Installs a response swap (IsResponseSwap): the rows show other creations the document was validated with, so the
-    // compiled rules, the arena, the grants, the fields and the machines all stand. Only the delivery and, for a solid
-    // row, what the population compiles from the solid rows (WorldPopulation.InstallResponseSolids). A response row
-    // never inhabits a body or carries face sources (the validator refuses both), so no body moves.
-    private void InstallResponseSwap(WorldDefinition definition, WorldMutation mutation) {
-        // No frame reads which creation a row shows, and a swap between creations that carry no face derives the faces
-        // the document had, so the frame table and the face catalog carry over.
-        _ = WorldPlacementFrameCompilation.CarryAcrossHolding(source: m_definition.PlacementsRaw, target: definition.PlacementsRaw);
-        _ = WorldFaceCatalog.CarryAcrossHolding(source: m_definition, target: definition);
-        MarkDefinitionDeliveryPending();
-        AdoptDefinition(definition: definition);
-
-        if (SwapsSolid(mutation: mutation)) {
-            Host.Population.InstallResponseSolids(definition: definition, solids: m_solids);
-        }
-    }
     // Rebuilds the population's compiled tables and live bodies against a definition, then reconciles the inhabited
     // placements and their cell-driven counts the rebuild re-seeded.
     private void RebuildPopulation(WorldDefinition definition) {
@@ -1254,9 +1238,6 @@ public sealed partial class WorldDocument {
     internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldDefinition current, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
         compilation = null;
 
-        if (IsResponseSwap(mutation: mutation, previous: current)) {
-            return TryValidateResponseSwap(mutation: mutation, reason: out reason);
-        }
         if (IsValueMutation(candidate: candidate, mutation: mutation, previous: current)) {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
         }
@@ -1264,56 +1245,6 @@ public sealed partial class WorldDocument {
         return (retainCompilation
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
-    }
-    /// <summary>Returns whether a mutation is a response swap: one placement upsert, or a batch of them, each moving
-    /// nothing of an existing responding row but its <see cref="WorldPlacement.Holding"/> bits, which name the creation
-    /// it shows among those the document was validated with (every alternative, its colliders and its faces were
-    /// admitted with the row). Such a mutation validates its bits alone and keeps the live arena.</summary>
-    /// <param name="mutation">The mutation.</param>
-    /// <param name="previous">The document it composes against.</param>
-    /// <returns><see langword="true"/> for a response swap.</returns>
-    internal static bool IsResponseSwap(WorldMutation mutation, WorldDefinition previous) {
-        switch (mutation) {
-            case WorldMutation.UpsertPlacement upsert:
-                return SwapsHolding(placement: upsert.Placement, previous: previous);
-            case WorldMutation.Batch { Mutations.Count: > 0, ExpectedDefinition: null, ExpectedInputs: null, ExpectedSpatialReads: null, ExpectedCells: null } batch:
-                foreach (var member in batch.Mutations) {
-                    if ((member is not WorldMutation.UpsertPlacement upsert) || !SwapsHolding(placement: upsert.Placement, previous: previous)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private static bool SwapsHolding(WorldPlacement placement, WorldDefinition previous) => (
-        (placement.Respond is { Count: > 0 }) &&
-        (WorldDefinitionRows.FindPlacement(placements: previous.Placements, id: placement.Id) is { } before) &&
-        ((before with { Holding = placement.Holding }) == placement)
-    );
-    // Whether a response swap moves a solid row, whose shown creation's colliders the contact field holds.
-    private static bool SwapsSolid(WorldMutation mutation) => (mutation switch {
-        WorldMutation.UpsertPlacement upsert => (upsert.Placement.Solid is not null),
-        WorldMutation.Batch batch => batch.Mutations.Any(predicate: static member => (member is WorldMutation.UpsertPlacement { Placement.Solid: not null })),
-        _ => false,
-    });
-    private static bool TryValidateResponseSwap(WorldMutation mutation, out string reason) {
-        if (mutation is WorldMutation.UpsertPlacement single) {
-            return WorldDefinitionValidator.TryValidateResponseHolding(placement: single.Placement, reason: out reason);
-        }
-
-        foreach (var member in ((WorldMutation.Batch)mutation).Mutations) {
-            if (!WorldDefinitionValidator.TryValidateResponseHolding(placement: ((WorldMutation.UpsertPlacement)member).Placement, reason: out reason)) {
-                return false;
-            }
-        }
-
-        reason = string.Empty;
-
-        return true;
     }
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
     // over them, with nothing compiled.
