@@ -40,7 +40,7 @@ Desktop included; releasing the button shows the cursor again where the drag
 began.
 
 Every control the controller bar shows has a keyboard equivalent (the owner's
-rule): the bar is the debug world's only on-screen UI.
+rule).
 
 | Keyboard and mouse | Gamepad | Action |
 |---|---|---|
