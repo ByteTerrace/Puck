@@ -130,6 +130,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
     private int m_staticFieldNeighbours = -1;
+    // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
+    private Task<SdfFieldEvaluator>? m_staticFieldBuild;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
     // so a later departure re-narrates instead of staying silent forever.
@@ -428,9 +430,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the client so the chase camera's clearance sweep and the stamp pool's limb probes share ONE evaluator. The live
     // program cannot be queried directly because its avatar catalog carries TransformDynamic instructions;
     // reconstructing only the static placements/screens/adjacency geometry also keeps a body from treating itself, or
-    // the avatar a camera follows, as an obstacle.
+    // the avatar a camera follows, as an obstacle. The program is emitted here, from the frame's own state; the
+    // evaluator it compiles to is built on the thread pool while the field it replaces stays published, and a
+    // tick-locked frame waits for it (AdoptStaticField), so a still of one tick reads the field that tick delivered.
     private void RebuildStaticField() {
-        m_client.PublishStaticField(field: null);
+        SdfProgram program;
 
         try {
             var definition = m_client.Definition;
@@ -465,13 +469,36 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
 
             m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
-            m_client.PublishStaticField(field: new SdfFieldEvaluator(program: builder.Build()));
+            program = builder.Build();
         } catch (ArgumentException exception) {
-            // Placement admission isolates unsupported props. A failure in the remaining combined scene still leaves
-            // no field; name it so missing surface targets cannot be mistaken for a probe or rig problem.
-            Console.Error.WriteLine(value: $"[world.presentation-field: unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+            m_staticFieldBuild = null;
+            m_client.PublishStaticField(field: null);
+            ReportStaticFieldUnavailable(exception: exception);
+
+            return;
+        }
+
+        m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: program));
+        AdoptStaticField(wait: TickLocked);
+    }
+    // Publishes the presentation field's evaluator once its build has finished, or waits for it.
+    private void AdoptStaticField(bool wait) {
+        if ((m_staticFieldBuild is not { } build) || (!wait && !build.IsCompleted)) {
+            return;
+        }
+
+        m_staticFieldBuild = null;
+
+        try {
+            m_client.PublishStaticField(field: build.GetAwaiter().GetResult());
+        } catch (ArgumentException exception) {
+            m_client.PublishStaticField(field: null);
+            ReportStaticFieldUnavailable(exception: exception);
         }
     }
+    // Placement admission isolates unsupported props. A failure in the remaining combined scene still leaves no field;
+    // name it so missing surface targets cannot be mistaken for a probe or rig problem.
+    private static void ReportStaticFieldUnavailable(ArgumentException exception) => Console.Error.WriteLine(value: $"[world.presentation-field: unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
     // The delivery boundary: a definition delivery (scene/screen mutation, swap, or undo) landed since the last frame,
     // so the binder's runtime source machinery reconciles to the new definition BEFORE the host rebuilds the program
     // off the live geometry — cameras FIRST, so a same-delivery View source change resolves the new camera rows.
@@ -1590,6 +1617,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
         m_transforms = transforms;
+        AdoptStaticField(wait: TickLocked);
 
         // A rebuilt program is a NEW instance (the host hands back the previous one whenever the composed revision
         // held), so reference inequality IS the re-upload signal — and it covers the first frame, whose program has
