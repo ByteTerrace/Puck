@@ -28,6 +28,22 @@ that session.
 3. Tests kept honest: write one only where running cannot show the behavior and
    it will outlive the next rewrite; a test the change breaks is updated or
    deleted in the same change. Run the tests you added or touched.
+4. Frame time held, for a change that reaches the running World (simulation,
+   presentation, physics, rendering, addons, the debug world's documents): on
+   the lead machine the RTX 4070 holds 60 FPS at the highest settings, and that
+   is the owner's floor, not a goal. In a windowed World with its bakes settled,
+   read `host.frames` after standing still and again after the change's own
+   workload (walk the area it touches, `player.move` in a `world.at` script),
+   and the commit body states both readings. A frame over 16.7 ms that the
+   change caused blocks the landing, whatever else passed. A reported speed-up
+   is measured in frame time, never inferred from one phase: a tick that fell
+   from 247 ms to 61 ms is still four frames late.
+5. The player's body seen, for a change that reaches what draws bodies (stamps,
+   clips, fades, cameras, portals): walk or pose the body around the area and
+   look at captures or picks (`world.view.pick primary 0.5 0.5` under a
+   third-person camera names `body:0`; `[world.straddle: ...]` in the log names
+   every body drawn clipped at a door). A body that vanishes away from any
+   portal blocks the landing.
 
 Gates, parity, canaries, counters, baselines, `puck laws prove` and review
 passes are tools to use when they pay for themselves, never preconditions. A
