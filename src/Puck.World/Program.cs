@@ -613,6 +613,11 @@ if (connectTarget is { } remoteEndpoint) {
         actingPrincipal: Principal.Console
     );
 }
+// A rendering World compiles its own code in the background, so a first crossing or a first addon write runs compiled
+// code rather than stalling a frame on the JIT; a headless World has no frame to stall.
+if (hostSettings.Presentation != WorldHostPresentation.None) {
+    _ = WorldCodeWarmer.Start(entry: typeof(WorldCodeWarmer).Assembly, error: Console.Error);
+}
 return await LauncherHostRun.RunAsync(
     error: Console.Error,
     host: host,

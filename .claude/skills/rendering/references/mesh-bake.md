@@ -285,6 +285,10 @@ laws exercise that boundary.
   on the debug world. Newly placed meshes land within
   `SdfWorldTables.MeshLandingWords` a frame, their draws waiting out of the
   staged records until they do, and a grown region takes the words it held. A
+  list past the draw reserve doubles it and moves only the meshes the grown
+  reserve takes (`SdfMeshRegionArena.Moved`), written that frame: relocating
+  every mesh for it wrote and compared the debug world's 1.78 GB region in one
+  970 ms frame the first time a body fell through a floor painting. A
   placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
