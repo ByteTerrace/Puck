@@ -59,6 +59,48 @@ public sealed class SdfMeshRegionArenaLawTests {
         Assert.Equal(expected: (kept.Length + 1), actual: arena.Placements.Count);
     }
 
+    [Fact]
+    public void AListPastTheReserveMovesOnlyTheMeshesTheGrownReserveTakes() {
+        var small = Triangle(offset: 0f);
+        // Long enough to begin inside the grown reserve and end past it.
+        var big = new SdfMesh(
+            indices: new uint[] { 0, 1, 2 },
+            positions: Enumerable.Range(count: 4096, start: 0).Select(selector: static index => new Vector3(x: index, y: 0f, z: 0f)).ToArray()
+        );
+        var tail = Triangle(offset: 1f);
+        var arena = new SdfMeshRegionArena();
+
+        arena.Plan(draws: [Draw(mesh: small), Draw(mesh: big), Draw(mesh: tail)]);
+        Assert.True(condition: arena.Relocated);
+
+        var reserveEnd = ((2 * SdfMeshRegionArena.MinimumDrawCapacity) * SdfMeshRecord.DrawWords);
+        var kept = arena.Placements[tail];
+        var end = arena.Words;
+
+        Assert.True(condition: ((arena.Placements[big].VertexWord < reserveEnd) && (kept.VertexWord >= reserveEnd)));
+
+        var many = Enumerable.Range(count: (SdfMeshRegionArena.MinimumDrawCapacity + 1), start: 0).Select(selector: index => Draw(mesh: ((index % 3) switch {
+            0 => small,
+            1 => big,
+            _ => tail,
+        }))).ToArray();
+
+        arena.Plan(draws: many);
+        Assert.False(condition: arena.Relocated);
+        Assert.Equal(expected: (2 * SdfMeshRegionArena.MinimumDrawCapacity), actual: arena.DrawCapacity);
+        Assert.Equal(expected: [small, big], actual: arena.Placed);
+        Assert.Equal(expected: 2, actual: arena.Moved.Count);
+        Assert.True(condition: (arena.Moved.Contains(item: small) && arena.Moved.Contains(item: big)));
+        Assert.Equal(expected: kept, actual: arena.Placements[tail]);
+        Assert.Equal(expected: end, actual: arena.Placements[small].VertexWord);
+
+        // A mesh the grown reserve takes that the list does not name is forgotten, never moved.
+        arena.Plan(draws: [.. Enumerable.Range(count: ((4 * SdfMeshRegionArena.MinimumDrawCapacity) + 1), start: 0).Select(selector: _ => Draw(mesh: tail))]);
+        Assert.False(condition: arena.Relocated);
+        Assert.Equal(expected: [tail], actual: arena.Placed);
+        Assert.False(condition: arena.Placements.ContainsKey(key: small));
+    }
+
     private static SdfMesh Triangle(float offset) => new(
         indices: new uint[] { 0, 1, 2 },
         positions: new Vector3[] { new(x: offset, y: 0f, z: 0f), new(x: (offset + 1f), y: 0f, z: 0f), new(x: offset, y: 1f, z: 0f) }
