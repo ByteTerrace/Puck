@@ -252,13 +252,17 @@ public static class WorldCompiler {
             }
         }
 
+        // Only a source with a test block reads the composed state of its imports: a test's given lines and witness
+        // rows resolve against it, and composing every imported document is not free.
+        var hasTests = document.Statements.OfType<TestDeclarationNode>().Any();
         var (inheritedEnums, inheritedState) = ((effectiveImports == ImportHandling.Ignore)
             ? (Enums: [], State: null)
             : InheritedState(
                 basis: document.Basis,
-                imports: (walkedImports
+                imports: ((walkedImports && hasTests)
                     ? [.. document.Statements.OfType<ImportNode>().Where(predicate: static import => !import.NamesFile)]
                     : []),
+                keepState: hasTests,
                 reads: basisReads,
                 sourcePath: sourcePath
             ));
@@ -348,14 +352,15 @@ public static class WorldCompiler {
         return result with { Inputs = reads.Inputs };
     }
 
-    // The state section and enums a source's basis and document imports declare, read from their composed documents
-    // through the one composer, so the source lowers an enum member it writes and a test's given lines and witness
-    // rows as the composed world reads them. A basis or import that does not resolve or compose leaves the source to
-    // lower alone: the source's own composition reports why (PUCK035). A cycle stops at the source already being
-    // read, whose composition refuses the cycle by name.
+    // The enums a source's basis declares and, when `keepState` is set, the state section its basis and document
+    // imports declare, read from their composed documents through the one composer, so the source lowers an enum
+    // member it writes and a test's given lines and witness rows as the composed world reads them. A basis or import
+    // that does not resolve or compose leaves the source to lower alone: the source's own composition reports why
+    // (PUCK035). A cycle stops at the source already being read, whose composition refuses the cycle by name.
     private static (IReadOnlyList<WorldDocumentEmitter.EnumDefinition> Enums, JsonObject? State) InheritedState(
         string? basis,
         IReadOnlyList<ImportNode> imports,
+        bool keepState,
         string? sourcePath,
         CompileInputLog reads
     ) {
@@ -380,7 +385,9 @@ public static class WorldCompiler {
             JsonObject? state = null;
 
             if ((basis is not null) && (TryReadComposed(name: basis, referrer: referrer) is { } basisDoc)) {
-                state = ((basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject);
+                state = (keepState
+                    ? (basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject
+                    : (basisDoc["state"] as JsonObject));
             }
 
             foreach (var import in imports) {
@@ -421,7 +428,7 @@ public static class WorldCompiler {
                     .ToArray()
                 : []);
 
-            return (enums, state);
+            return (enums, (keepState ? state : null));
         } catch (System.Text.Json.JsonException) {
             return ([], null);
         } finally {

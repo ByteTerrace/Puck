@@ -239,6 +239,9 @@ The value is a literal of the row's own kind: a whole number for an `Int` row,
 a decimal for a `Fixed` one, `true` or `false` for a `Bool` one, a quoted string
 for a `Text` one. The row must be one the world declares, and the value must be
 one the row's kind and envelope admit — the same refusals an authored cell gets.
+The world is the composed one: a source on a `basis`, or with document imports,
+writes `given` lines against the rows it inherits and names an inherited enum's
+members (`aiSide = White`).
 
 ### `when` — the tick grid
 
@@ -347,9 +350,9 @@ read literal strings or another Text row; their values are recorded in
 `expect$<line>$text` and printed as quoted strings. The generated world is named
 `<source stem>~<test slug>`.
 
-Witnesses currently require the row's kind to be known during test lowering.
-Rows whose kinds are only known after basis/import composition are still
-evaluated, but their witness values are omitted.
+A row's kind is read from the composed state, so a row the source takes from its
+`basis` or an `import` (the debug world's guide and watchdog rows) is recorded
+and printed the same way as one it declares.
 
 ## Authored schedules and verdict rows
 

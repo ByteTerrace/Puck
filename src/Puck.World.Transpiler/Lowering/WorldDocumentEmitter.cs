@@ -202,6 +202,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         discoveredEmbeddings = textsMap;
+        // A schema-less document that another imports carries its enums too, so the importer's test names their members.
         if ((composition.Worlds.Count == 0) && WorldSourceDeclaration.Of(document: document).EmitsDocument) {
             MaterializeDeclaredEnums(root: root, scope: scope);
         }

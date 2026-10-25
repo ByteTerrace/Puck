@@ -219,8 +219,8 @@ public sealed class BasisCompositionLawTests {
                     table telemetry {
                       count = 0
                     }
-                    slot ratio: Fixed = 1.5
-                    slot ready: Bool = true
+                    slot ratio = 1.5
+                    slot ready = true
                     table guide {
                       title = "Welcome"
                     }
