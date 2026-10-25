@@ -45,7 +45,13 @@ hud {
         ]
       }
       elements [
-        { id: "line", kind: Text, rect { x: 0.03, y: 0, width: 0.94, height: 1 }, style: Danger, "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}" }
+        {
+          id: "line"
+          kind: Text
+          rect { x: 0.03, y: 0, width: 0.94, height: 1 }
+          style: Danger
+          "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}"
+        }
       ]
     }
   ]
@@ -73,5 +79,8 @@ grants: concat(
     { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdog" }
     { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdogLog" }
   ],
-  map(watchedBodies, body => { grantee: "addon:watchdog", capability: Observe, subject: $"body:{body}", budget: 1, eventBudget: 8 })
+  map(
+    watchedBodies,
+    body => { grantee: "addon:watchdog", capability: Observe, subject: $"body:{body}", budget: 1, eventBudget: 8 }
+  )
 )

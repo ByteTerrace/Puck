@@ -47,14 +47,28 @@ hud {
         ]
       }
       elements [
-        { id: "values", kind: Text, rect { x: 0.02, y: 0, width: 0.96, height: 0.5 }, style: Dim, "template": "DEV body {state.scope.body} yQ16 {state.scope.height} vyQ16 {state.scope.velocity} facts {state.scope.facts} contact {state.scope.contacts}" }
-        { id: "trace", kind: Text, rect { x: 0.02, y: 0.5, width: 0.96, height: 0.5 }, style: Accent, "template": "{state.scopeTrace}" }
+        {
+          id: "values"
+          kind: Text
+          rect { x: 0.02, y: 0, width: 0.96, height: 0.5 }
+          style: Dim
+          "template": "DEV body {state.scope.body} yQ16 {state.scope.height} vyQ16 {state.scope.velocity} facts {state.scope.facts} contact {state.scope.contacts}"
+        }
+        {
+          id: "trace"
+          kind: Text
+          rect { x: 0.02, y: 0.5, width: 0.96, height: 0.5 }
+          style: Accent
+          "template": "{state.scopeTrace}"
+        }
       ]
     }
   ]
 }
 
-let scopeRows = ["scope", "scopeTrace", "scopeHeight", "scopeVelocity", "scopeFacts", "scopeContacts", "scopeTicks", "scopeEvents"]
+let scopeRows = [
+  "scope", "scopeTrace", "scopeHeight", "scopeVelocity", "scopeFacts", "scopeContacts", "scopeTicks", "scopeEvents"
+]
 addon "kinematics-scope" {
   modulePath: "addons/kinematics-scope.wat"
   hash: "auto"
@@ -70,8 +84,20 @@ addon "kinematics-scope" {
 grants: concat(
   [
     { grantee: "addon:kinematics-scope", capability: Observe, subject: "state:scope", budget: 2 }
-    { grantee: "addon:kinematics-scope", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 16 }
+    {
+      grantee: "addon:kinematics-scope"
+      capability: Mutate
+      subject: "section:State"
+      kindMask: "UpsertStateCell"
+      budget: 16
+    }
   ],
-  map(scopeRows, row => { grantee: "addon:kinematics-scope", capability: Edit, subject: $"state:{row}", kindMask: "UpsertStateCell" }),
-  map(range(0, 45), body => { grantee: "addon:kinematics-scope", capability: Observe, subject: $"body:{body}", budget: 2 })
+  map(
+    scopeRows,
+    row => { grantee: "addon:kinematics-scope", capability: Edit, subject: $"state:{row}", kindMask: "UpsertStateCell" }
+  ),
+  map(
+    range(0, 45),
+    body => { grantee: "addon:kinematics-scope", capability: Observe, subject: $"body:{body}", budget: 2 }
+  )
 )

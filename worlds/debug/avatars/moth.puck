@@ -2145,7 +2145,14 @@ prototypes {
       frames [
         {
           name: "blink"
-          transforms: map(blinkPose, row => { id: row[0], position: map([row[1], row[2], row[3]], (v, k) => headAt[k] + (v - mothHeadPivot[k]) * headScale), rotation [0, 0, 0, 1] })
+          transforms: map(
+            blinkPose,
+            row => {
+              id: row[0]
+              position: map([row[1], row[2], row[3]], (v, k) => headAt[k] + (v - mothHeadPivot[k]) * headScale)
+              rotation [0, 0, 0, 1]
+            }
+          )
         }
       ]
       // The suit is pristine, as on the sheets: wear reaches only the tightest edges, and faintly.
@@ -2188,11 +2195,51 @@ prototypes {
           // The sole grooves, and the hood's ivory trim in the helmet's frame: a horseshoe round the face opening, its
           // ellipse projected along the face's forward axis; the throat opening leaves the helmet no surface below it.
           paints [
-            { parent: "sole-left", type: "Prism", position [0, 0.02, 0.29], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
-            { parent: "sole-left", type: "Prism", position [0, 0.022, -0.115], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
-            { parent: "sole-right", type: "Prism", position [0, 0.02, 0.29], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
-            { parent: "sole-right", type: "Prism", position [0, 0.022, -0.115], rotation [0, diagonal, 0, diagonal], scale [0.0065, 0.0065, 0.3], profile { kind: "Ellipse" }, color: lavenderSeam }
-            { parent: "helmet", type: "Prism", position [0, -0.0198, 0.21575], scale [0.24265, 0.26245, 0.2], profile { kind: "Ellipse" }, stroke: 0.0227, color: ivoryPlate }
+            {
+              parent: "sole-left"
+              type: "Prism"
+              position [0, 0.02, 0.29]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile { kind: "Ellipse" }
+              color: lavenderSeam
+            }
+            {
+              parent: "sole-left"
+              type: "Prism"
+              position [0, 0.022, -0.115]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile { kind: "Ellipse" }
+              color: lavenderSeam
+            }
+            {
+              parent: "sole-right"
+              type: "Prism"
+              position [0, 0.02, 0.29]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile { kind: "Ellipse" }
+              color: lavenderSeam
+            }
+            {
+              parent: "sole-right"
+              type: "Prism"
+              position [0, 0.022, -0.115]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile { kind: "Ellipse" }
+              color: lavenderSeam
+            }
+            {
+              parent: "helmet"
+              type: "Prism"
+              position [0, -0.0198, 0.21575]
+              scale [0.24265, 0.26245, 0.2]
+              profile { kind: "Ellipse" }
+              stroke: 0.0227
+              color: ivoryPlate
+            }
           ]
         }
         {
@@ -2243,10 +2290,54 @@ prototypes {
           // Where each eye's upper lid and lash meet its white, in the eye's frame: their own curves, half a millimetre
           // wider than the tubes, so the white under a tube's edge reads as the tube rather than two meshes trading pixels.
           paints [
-            { parent: "eye-left", type: "Sweep", curve { a: map([-0.047, 0, 0.027], v => v * headScale), b: map([0, 0.066, 0.052], v => v * headScale), c: map([0.047, 0.004, 0.027], v => v * headScale), radiusStart: 0.0045 * headScale, radiusEnd: 0.0045 * headScale }, color: "#171210" }
-            { parent: "eye-left", type: "Sweep", curve { a: map([0.04, 0.017, 0.03], v => v * headScale), b: map([0.05, 0.023, 0.023], v => v * headScale), c: map([0.059, 0.023, 0.016], v => v * headScale), radiusStart: 0.0035 * headScale, radiusEnd: 0.0035 * headScale }, color: "#171210" }
-            { parent: "eye-right", type: "Sweep", curve { a: map([0.047, 0, 0.027], v => v * headScale), b: map([0, 0.066, 0.052], v => v * headScale), c: map([-0.047, 0.004, 0.027], v => v * headScale), radiusStart: 0.0045 * headScale, radiusEnd: 0.0045 * headScale }, color: "#171210" }
-            { parent: "eye-right", type: "Sweep", curve { a: map([-0.04, 0.017, 0.03], v => v * headScale), b: map([-0.05, 0.023, 0.023], v => v * headScale), c: map([-0.059, 0.023, 0.016], v => v * headScale), radiusStart: 0.0035 * headScale, radiusEnd: 0.0035 * headScale }, color: "#171210" }
+            {
+              parent: "eye-left"
+              type: "Sweep"
+              curve {
+                a: map([-0.047, 0, 0.027], v => v * headScale)
+                b: map([0, 0.066, 0.052], v => v * headScale)
+                c: map([0.047, 0.004, 0.027], v => v * headScale)
+                radiusStart: 0.0045 * headScale
+                radiusEnd: 0.0045 * headScale
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-left"
+              type: "Sweep"
+              curve {
+                a: map([0.04, 0.017, 0.03], v => v * headScale)
+                b: map([0.05, 0.023, 0.023], v => v * headScale)
+                c: map([0.059, 0.023, 0.016], v => v * headScale)
+                radiusStart: 0.0035 * headScale
+                radiusEnd: 0.0035 * headScale
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-right"
+              type: "Sweep"
+              curve {
+                a: map([0.047, 0, 0.027], v => v * headScale)
+                b: map([0, 0.066, 0.052], v => v * headScale)
+                c: map([-0.047, 0.004, 0.027], v => v * headScale)
+                radiusStart: 0.0045 * headScale
+                radiusEnd: 0.0045 * headScale
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-right"
+              type: "Sweep"
+              curve {
+                a: map([-0.04, 0.017, 0.03], v => v * headScale)
+                b: map([-0.05, 0.023, 0.023], v => v * headScale)
+                c: map([-0.059, 0.023, 0.016], v => v * headScale)
+                radiusStart: 0.0035 * headScale
+                radiusEnd: 0.0035 * headScale
+              }
+              color: "#171210"
+            }
           ]
         }
         {
@@ -2323,8 +2414,20 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "shoulderSlab-left", type: "Box", position [0, -0.04, 0], scale [0.2, 0.026, 0.25], color: ivoryPlate }
-            { parent: "shoulderSlabLower-left", type: "Box", position [0, 0.035, 0], scale [0.2, 0.034, 0.25], color: ivoryPlate }
+            {
+              parent: "shoulderSlab-left"
+              type: "Box"
+              position [0, -0.04, 0]
+              scale [0.2, 0.026, 0.25]
+              color: ivoryPlate
+            }
+            {
+              parent: "shoulderSlabLower-left"
+              type: "Box"
+              position [0, 0.035, 0]
+              scale [0.2, 0.034, 0.25]
+              color: ivoryPlate
+            }
           ]
         }
         {
@@ -2345,8 +2448,20 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "shoulderSlab-right", type: "Box", position [0, -0.04, 0], scale [0.2, 0.026, 0.25], color: ivoryPlate }
-            { parent: "shoulderSlabLower-right", type: "Box", position [0, 0.035, 0], scale [0.2, 0.034, 0.25], color: ivoryPlate }
+            {
+              parent: "shoulderSlab-right"
+              type: "Box"
+              position [0, -0.04, 0]
+              scale [0.2, 0.026, 0.25]
+              color: ivoryPlate
+            }
+            {
+              parent: "shoulderSlabLower-right"
+              type: "Box"
+              position [0, 0.035, 0]
+              scale [0.2, 0.034, 0.25]
+              color: ivoryPlate
+            }
           ]
         }
         {
@@ -2367,7 +2482,13 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "podCoreCut-left", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
+            {
+              parent: "podCoreCut-left"
+              type: "Box"
+              position [-0.117, 0.9953, 0]
+              scale [0.22, 0.0109, 0.22]
+              color: "#7A7F8C"
+            }
           ]
         }
         {
@@ -2388,7 +2509,13 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "podCoreCut-right", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
+            {
+              parent: "podCoreCut-right"
+              type: "Box"
+              position [-0.117, 0.9953, 0]
+              scale [0.22, 0.0109, 0.22]
+              color: "#7A7F8C"
+            }
           ]
         }
         // The chest slab's lavender centre, in the slab's frame, leaving the ivory border round it.
@@ -2442,14 +2569,64 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "podCoreCut-right", type: "Box", position [0.0526, 0.8091, 0.0417], rotation [0.0451, 0.0937, 0.896, -0.4318], scale [0.0312, 0.0094, 0.2], color: "#9DA3B4" }
-            { parent: "podCoreCut-right", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
-            { parent: "podCoreCut-left", type: "Box", position [0.0526, 0.8091, -0.0417], rotation [-0.0451, -0.0937, 0.896, -0.4318], scale [0.0312, 0.0094, 0.2], color: "#9DA3B4" }
-            { parent: "podCoreCut-left", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
-            { parent: "sidePanel-left", type: "Box", position [0.16, 0.115, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
-            { parent: "sidePanel-left", type: "Box", position [0.16, 0.08, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
-            { parent: "sidePanel-right", type: "Box", position [-0.16, 0.115, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
-            { parent: "sidePanel-right", type: "Box", position [-0.16, 0.08, 0.03], scale [0.08, 0.0075, 0.032], color: ventSlot }
+            {
+              parent: "podCoreCut-right"
+              type: "Box"
+              position [0.0526, 0.8091, 0.0417]
+              rotation [0.0451, 0.0937, 0.896, -0.4318]
+              scale [0.0312, 0.0094, 0.2]
+              color: "#9DA3B4"
+            }
+            {
+              parent: "podCoreCut-right"
+              type: "Box"
+              position [-0.117, 0.9953, 0]
+              scale [0.22, 0.0109, 0.22]
+              color: "#7A7F8C"
+            }
+            {
+              parent: "podCoreCut-left"
+              type: "Box"
+              position [0.0526, 0.8091, -0.0417]
+              rotation [-0.0451, -0.0937, 0.896, -0.4318]
+              scale [0.0312, 0.0094, 0.2]
+              color: "#9DA3B4"
+            }
+            {
+              parent: "podCoreCut-left"
+              type: "Box"
+              position [-0.117, 0.9953, 0]
+              scale [0.22, 0.0109, 0.22]
+              color: "#7A7F8C"
+            }
+            {
+              parent: "sidePanel-left"
+              type: "Box"
+              position [0.16, 0.115, 0.03]
+              scale [0.08, 0.0075, 0.032]
+              color: ventSlot
+            }
+            {
+              parent: "sidePanel-left"
+              type: "Box"
+              position [0.16, 0.08, 0.03]
+              scale [0.08, 0.0075, 0.032]
+              color: ventSlot
+            }
+            {
+              parent: "sidePanel-right"
+              type: "Box"
+              position [-0.16, 0.115, 0.03]
+              scale [0.08, 0.0075, 0.032]
+              color: ventSlot
+            }
+            {
+              parent: "sidePanel-right"
+              type: "Box"
+              position [-0.16, 0.08, 0.03]
+              scale [0.08, 0.0075, 0.032]
+              color: ventSlot
+            }
           ]
         }
         {
@@ -2471,8 +2648,24 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "shin-left", type: "Prism", position [0, -0.29, -0.225], scale [0.2, 0.206, 0.225], profile { kind: "Convex", vertices: archBackOutline, cornerRadius: 0.07 }, stroke: 0.0035, color: lavenderSeam }
-            { parent: "shin-right", type: "Prism", position [0, -0.29, -0.225], scale [0.2, 0.206, 0.225], profile { kind: "Convex", vertices: archBackOutline, cornerRadius: 0.07 }, stroke: 0.0035, color: lavenderSeam }
+            {
+              parent: "shin-left"
+              type: "Prism"
+              position [0, -0.29, -0.225]
+              scale [0.2, 0.206, 0.225]
+              profile { kind: "Convex", vertices: archBackOutline, cornerRadius: 0.07 }
+              stroke: 0.0035
+              color: lavenderSeam
+            }
+            {
+              parent: "shin-right"
+              type: "Prism"
+              position [0, -0.29, -0.225]
+              scale [0.2, 0.206, 0.225]
+              profile { kind: "Convex", vertices: archBackOutline, cornerRadius: 0.07 }
+              stroke: 0.0035
+              color: lavenderSeam
+            }
           ]
         }
         {
@@ -2549,9 +2742,27 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "bracer-left", type: "Box", position [-0.11, 0, 0], scale [0.09, 0.25, 0.2], color: lavenderPlate }
-            { parent: "bracer-left", type: "Box", position [0.12, 0.075, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
-            { parent: "bracer-left", type: "Box", position [0.12, 0.04, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [-0.11, 0, 0]
+              scale [0.09, 0.25, 0.2]
+              color: lavenderPlate
+            }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0.12, 0.075, 0]
+              scale [0.03, 0.0075, 0.042]
+              color: ventSlot
+            }
+            {
+              parent: "bracer-left"
+              type: "Box"
+              position [0.12, 0.04, 0]
+              scale [0.03, 0.0075, 0.042]
+              color: ventSlot
+            }
           ]
         }
         {
@@ -2572,9 +2783,27 @@ prototypes {
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
           paints [
-            { parent: "bracer-right", type: "Box", position [0.11, 0, 0], scale [0.09, 0.25, 0.2], color: lavenderPlate }
-            { parent: "bracer-right", type: "Box", position [-0.12, 0.075, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
-            { parent: "bracer-right", type: "Box", position [-0.12, 0.04, 0], scale [0.03, 0.0075, 0.042], color: ventSlot }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [0.11, 0, 0]
+              scale [0.09, 0.25, 0.2]
+              color: lavenderPlate
+            }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [-0.12, 0.075, 0]
+              scale [0.03, 0.0075, 0.042]
+              color: ventSlot
+            }
+            {
+              parent: "bracer-right"
+              type: "Box"
+              position [-0.12, 0.04, 0]
+              scale [0.03, 0.0075, 0.042]
+              color: ventSlot
+            }
           ]
         }
         {
@@ -2603,10 +2832,34 @@ prototypes {
           roughness: 0.65
           specular: 0.05
           paints [
-            { type: "Box", position [0.12, -0.04, 0.09], rotation [0, 0, 0.1736482, 0.9848078], scale [0.06, 0.003, 0.08], color: "#0D1016" }
-            { type: "Box", position [-0.12, -0.04, 0.09], rotation [0, 0, -0.1736482, 0.9848078], scale [0.06, 0.003, 0.08], color: "#0D1016" }
-            { type: "Box", position [0.12, -0.1, 0.09], rotation [0, 0, 0.1736482, 0.9848078], scale [0.06, 0.003, 0.08], color: "#0D1016" }
-            { type: "Box", position [-0.12, -0.1, 0.09], rotation [0, 0, -0.1736482, 0.9848078], scale [0.06, 0.003, 0.08], color: "#0D1016" }
+            {
+              type: "Box"
+              position [0.12, -0.04, 0.09]
+              rotation [0, 0, 0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+            {
+              type: "Box"
+              position [-0.12, -0.04, 0.09]
+              rotation [0, 0, -0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+            {
+              type: "Box"
+              position [0.12, -0.1, 0.09]
+              rotation [0, 0, 0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+            {
+              type: "Box"
+              position [-0.12, -0.1, 0.09]
+              rotation [0, 0, -0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
           ]
         }
         {
@@ -7374,7 +7627,14 @@ render {
     // The sun, a clear midday's 100,000 lux. The sky fills the shadows: its luminance (each layer's, by default a
     // white surface's under this sun) reaches every surface the irradiance volume finds open to it.
     lights [
-      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
+      directional(
+        name: "key",
+        direction: [3, 5, -4],
+        color: "#FFF0DC",
+        illuminance: 100000lx,
+        shadow: always,
+        angularRadius: 0.2
+      )
     ]
   }
   // The camera adapts like an eye: it meters the light about each view's camera and eases there over three quarters of
@@ -7414,9 +7674,29 @@ render {
         }
       ]
       )
-      gradient(name: "studio", visibility: lighting, stops: [{ elevation: -1, color: "#151117" }, { elevation: 1, color: "#6E6572" }])
-      panel(name: "panel1", direction: [0.6, 1, -0.5], size: [0.25, 0.5], color: "#FFF1E0", intensity: 1.8, blur: 0.15, visibility: lighting)
-      panel(name: "panel2", direction: [-0.6, 0.75, 0.6], size: [0.24, 0.6], color: "#EEE4FF", intensity: 1, blur: 0.18, visibility: lighting)
+      gradient(
+        name: "studio",
+        visibility: lighting,
+        stops: [{ elevation: -1, color: "#151117" }, { elevation: 1, color: "#6E6572" }]
+      )
+      panel(
+        name: "panel1",
+        direction: [0.6, 1, -0.5],
+        size: [0.25, 0.5],
+        color: "#FFF1E0",
+        intensity: 1.8,
+        blur: 0.15,
+        visibility: lighting
+      )
+      panel(
+        name: "panel2",
+        direction: [-0.6, 0.75, 0.6],
+        size: [0.24, 0.6],
+        color: "#EEE4FF",
+        intensity: 1,
+        blur: 0.18,
+        visibility: lighting
+      )
     ]
   }
   atmosphere {
@@ -7863,7 +8143,16 @@ views {
     version: "puck.camera.program.v1"
     operations [
       orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
-      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true, closeTargetOffset: [0, 1.74, 0], closeTargetStartFraction: 0.6, closeTargetFullFraction: 0.2)
+      lookAt(
+        focusDistance: 4.2,
+        opcode: "lookAt",
+        subject: reference(),
+        targetOffset: [0, 1, 0],
+        worldAxes: true,
+        closeTargetOffset: [0, 1.74, 0],
+        closeTargetStartFraction: 0.6,
+        closeTargetFullFraction: 0.2
+      )
       fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
       dynamics(row: `camera-boom`)
       firstPerson(eyePoint: [0, 1.75, 0.22], active: 0, transitionSeconds: 0.5, hideRadius: 0.45)
