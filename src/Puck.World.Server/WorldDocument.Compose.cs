@@ -1306,10 +1306,14 @@ public sealed partial class WorldDocument {
                         tick: tick
                     );
 
+                    // A redeclaration that keeps the catalog moves this row alone; any other one seeds every row.
                     if (!TryOpenComposeArena(
                         arena: out var arena,
                         definition: declared,
                         reason: out reason,
+                        row: (ReferenceEquals(objA: declared.StateCatalog, objB: current.StateCatalog)
+                            ? m.Row.Name.Value
+                            : null),
                         time: in time
                     )) {
                         candidate = current;
@@ -1320,11 +1324,14 @@ public sealed partial class WorldDocument {
                     var mark = arena.BeginScope();
 
                     try {
+                        var declaredOrdinal = -1;
+
                         if (arena.Catalog.TryResolve(
                             handle: out var handle,
                             lane: StateLane.Document,
                             name: m.Row.Name.Value
                         )) {
+                            declaredOrdinal = handle.Ordinal;
                             _ = arena.TrySettleRedeclared(
                                 previous: previousRow,
                                 rowOrdinal: handle.Ordinal,
@@ -1334,6 +1341,7 @@ public sealed partial class WorldDocument {
 
                         candidate = ExportComposeArena(
                             arena: arena,
+                            declaredOrdinal: declaredOrdinal,
                             definition: declared
                         );
 
@@ -1372,6 +1380,7 @@ public sealed partial class WorldDocument {
                         arena: out var arena,
                         definition: current,
                         reason: out reason,
+                        row: m.Row,
                         time: in time
                     )) {
                         candidate = current;
@@ -1416,6 +1425,7 @@ public sealed partial class WorldDocument {
                         arena: out var arena,
                         definition: current,
                         reason: out reason,
+                        row: m.Row,
                         time: in time
                     )) {
                         candidate = current;

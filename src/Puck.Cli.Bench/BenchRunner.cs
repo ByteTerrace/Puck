@@ -75,7 +75,9 @@ public static class BenchRunner {
             prints one row per number: server construction time, idle-tick time and quiet-tick allocation (median
             over a sampled window, after a warmup), the contact work per sampled tick as deterministic counts
             (sweeps, sweep bounds queries, interval walks with their instructions and rotation expansions, point
-            evaluations with their instructions), the tick paced at the simulation rate with the count of
+            evaluations with their instructions), a paced tick that drains a whole-row value write to one plain
+            integer slot with its allocation and the arena versions and installed rows it moved, the tick paced at
+            the simulation rate with the count of
             submissions that waited on a screen machine's worker, and each screen machine's own tick of emulation
             timed alone. A server construction can cost hundreds of milliseconds, past what an iteration-based job
             can amortize honestly, which is why this lane sits beside BenchmarkDotNet rather than inside it.

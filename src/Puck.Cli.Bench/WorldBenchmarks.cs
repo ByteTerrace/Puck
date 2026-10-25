@@ -88,12 +88,96 @@ internal static class WorldBenchmarks {
             rows.Add(item: ($"world: {ContactWorkKinds[kind].Name} per tick", $"{((countsAfter[kind] - countsBefore[kind]) / ((double)SampleTicks)):F1}"));
         }
 
+        MeasureValueWrite(
+            rows: rows,
+            server: server,
+            stepTicks: stepTicks
+        );
         MeasureMachines(
             bench: bench,
             definition: definition,
             rows: rows,
             stepTicks: stepTicks
         );
+    }
+    // A whole-row write that moves one cell's value and nothing else, as an addon's UpsertStateRow does (the gallery
+    // guide's): the tick that drains it, timed and metered, beside the arena rows whose version it moved and the
+    // installed rows it replaced, which a quiet tick's own rule writes add to.
+    private static void MeasureValueWrite(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+        var row = server.Definition.State.FirstOrDefault(predicate: candidate => (
+            (candidate.Shape == Puck.State.RowShape.Slot) &&
+            (candidate.Kind == Puck.State.CellKind.Int) &&
+            !candidate.IsRuleWritten &&
+            (candidate.Dynamics is null) &&
+            (candidate.Cycle is null) &&
+            (candidate.Advance is null) &&
+            (candidate.Cells is { Count: 1 } cells) &&
+            (cells[0].Dynamics is null) &&
+            (cells[0].Cycle is null) &&
+            (cells[0].Advance is null)
+        ));
+
+        if (row is null) {
+            rows.Add(item: ("world: state value write", "no plain integer slot row to write"));
+
+            return;
+        }
+
+        var allocationSamples = new long[SampleTicks];
+        var elapsedTicksSamples = new long[SampleTicks];
+        var versionsMoved = new long[SampleTicks];
+        var rowsReplaced = new long[SampleTicks];
+        var versions = new ulong[server.Arena.Layout.RowCount];
+        // Paced like the game, so a screen machine's full window does not stand in for the write's own cost.
+        var period = ((long)((((ulong)Stopwatch.Frequency) * stepTicks) / FixedTickConversion.TicksPerSecond));
+        var due = Stopwatch.GetTimestamp();
+
+        for (var tick = 0; (tick < (WarmupTicks + SampleTicks)); tick++) {
+            while (Stopwatch.GetTimestamp() < due) {
+                Thread.Sleep(millisecondsTimeout: 1);
+            }
+
+            due += period;
+
+            var installed = server.Definition.State;
+            var current = WorldDefinitionRows.FindStateRow(rows: installed, name: row.Name.Value)!;
+            var cell = current.Cells![0];
+            var written = (current with { Cells = [(cell with { Value = Puck.State.CellValue.Int(value: (cell.Value.Raw + 1L)) })] });
+
+            for (var ordinal = 0; (ordinal < versions.Length); ordinal++) {
+                versions[ordinal] = server.Arena.RowVersion(rowOrdinal: ordinal);
+            }
+
+            server.EnqueueMutation(mutation: new Puck.World.Protocol.WorldMutation.UpsertStateRow(Principal: Puck.Commands.Principal.World, Row: written));
+
+            var timestampBefore = Stopwatch.GetTimestamp();
+            var allocated = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
+            var elapsed = (Stopwatch.GetTimestamp() - timestampBefore);
+
+            if (tick < WarmupTicks) {
+                continue;
+            }
+
+            var sample = (tick - WarmupTicks);
+            var after = server.Definition.State;
+
+            allocationSamples[sample] = allocated;
+            elapsedTicksSamples[sample] = elapsed;
+
+            for (var ordinal = 0; (ordinal < versions.Length); ordinal++) {
+                versionsMoved[sample] += ((versions[ordinal] != server.Arena.RowVersion(rowOrdinal: ordinal)) ? 1L : 0L);
+            }
+            for (var index = 0; (index < Math.Min(val1: after.Count, val2: installed.Count)); index++) {
+                rowsReplaced[sample] += (ReferenceEquals(objA: after[index], objB: installed[index]) ? 0L : 1L);
+            }
+        }
+
+        Array.Sort(array: allocationSamples);
+        Array.Sort(array: versionsMoved);
+        Array.Sort(array: rowsReplaced);
+        rows.Add(item: ($"world: state value write tick (median, row '{row.Name.Value}')", $"{MedianMilliseconds(samples: elapsedTicksSamples):F3} ms"));
+        rows.Add(item: ("world: state value write tick allocation (median)", $"{allocationSamples[(allocationSamples.Length / 2)]:N0} bytes"));
+        rows.Add(item: ("world: state value write tick rows moved (median)", $"{versionsMoved[(versionsMoved.Length / 2)]} arena versions, {rowsReplaced[(rowsReplaced.Length / 2)]} installed rows of {server.Definition.State.Count}"));
     }
     // The screen machines emulate on worker threads the tick only submits to; a tick waits on one only when that
     // machine's pending window is full. The back-to-back window above is bounded by the slowest machine once the

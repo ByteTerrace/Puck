@@ -1095,11 +1095,13 @@ public sealed partial class WorldDocument {
     private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
 
     private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) {
+        var previous = m_definition;
+
         AdoptDefinition(definition: definition);
-        // A state-value install is a fresh seed of the arena: ordinary rows enter through the import door, while a
-        // pool candidate arrives as the already-validated typed replacement prepared before commit.
+        // Ordinary rows the write replaced enter through the import door, while a pool candidate arrives as the
+        // already-validated typed replacement prepared before commit.
         if (arena is null) {
-            Host.SyncArena(definition: definition);
+            Host.SyncArenaValues(definition: definition, previous: previous);
         } else {
             Host.AdoptPreparedArena(arena: arena, definition: definition);
         }

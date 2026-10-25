@@ -89,11 +89,18 @@ public sealed class WorldFaceCatalog {
         ClaimingFaceCount = claimingFaceCount;
         SlotCapacity = slotCapacity;
         m_index = new Dictionary<(string, string), int>(capacity: rows.Count);
+        m_screens = [];
 
         for (var index = 0; (index < rows.Count); index++) {
             m_index[(rows[index].PlacementId, rows[index].FaceName)] = index;
+
+            if (rows[index].ScreenIndex >= 0) {
+                _ = m_screens.TryAdd(key: rows[index].ScreenIndex, value: index);
+            }
         }
     }
+
+    private readonly Dictionary<int, int> m_screens;
 
     /// <summary>Gets how many rows resolved to a source that renders something, and so asked for a screen slot.</summary>
     public int ClaimingFaceCount { get; }
@@ -524,5 +531,30 @@ public sealed class WorldFaceCatalog {
         row = default;
 
         return false;
+    }
+    /// <summary>Finds the first derived face row, in document order, seated at a screen index.</summary>
+    /// <param name="screenIndex">The derived-face screen index.</param>
+    /// <param name="row">The row when one is seated there; otherwise the default.</param>
+    /// <returns><see langword="true"/> when a face is seated at <paramref name="screenIndex"/>.</returns>
+    public bool TryFindScreen(int screenIndex, out WorldFaceRow row) {
+        if (m_screens.TryGetValue(
+            key: screenIndex,
+            value: out var index
+        )) {
+            row = Rows[index];
+
+            return true;
+        }
+
+        row = default;
+
+        return false;
+    }
+    // The catalog reads placements, creations, cameras and the authoring policy, never a state row, so a definition
+    // that replaced another's state section alone derives the same catalog.
+    internal static void CarryAcrossState(WorldDefinition source, WorldDefinition target) {
+        if (PerDefinition.TryGetValue(key: source, value: out var catalog)) {
+            PerDefinition.AddOrUpdate(key: target, value: catalog);
+        }
     }
 }

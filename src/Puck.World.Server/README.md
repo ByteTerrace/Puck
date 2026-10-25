@@ -357,6 +357,17 @@ installs as declared, and a section no arena holds refuses the rebuild by name
 (an undo, a checkpoint's rule recompile) reach, installs the same replacement;
 it reloads the live columns in place only for the catalog they already hold.
 
+A value write (a cell write or removal, or a whole-row write that moves cell
+values alone) costs the row it touches. Its compose seeds a scratch arena with
+that row alone (`StateArena.TryCreateSeeding`, which also seeds a derived
+board's tokens and codes rows) and exports only the rows the compose scope
+wrote, so every other row of the candidate is the installed document's own
+instance. The install then loads only the rows that are not those instances
+(`WorldServer.SyncArenaValues`): an unwritten row keeps its columns, its
+version and its generation, and the state delivery names the written row alone
+as moved. `puck bench world` counts the arena versions and installed rows one
+such write moves.
+
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
 Every body's named action state — the `state.body` and `state.identity`

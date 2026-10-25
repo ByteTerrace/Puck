@@ -17,8 +17,22 @@ public sealed partial class WorldDocument {
     // A submitted row declaration reaches this before any validator has seen it, so a section the arena cannot lay
     // out at all (a board over a topology the document does not declare, a vector row over an undeclared space) is
     // carried back as a refusal by the name the layout names rather than thrown out of the apply door.
-    private static bool TryOpenComposeArena(WorldDefinition definition, in ArenaTime time, [NotNullWhen(true)] out StateArena? arena, out string reason) {
+    // A write to one row seeds that row alone (`row`), when the definition's authored rows are the catalog's document
+    // rows in order with no pool storage, so ExportComposeArena exports only what the write moved.
+    private static bool TryOpenComposeArena(WorldDefinition definition, in ArenaTime time, [NotNullWhen(true)] out StateArena? arena, out string reason, string? row = null) {
         try {
+            if ((row is not null) && ExportsWrittenRows(definition: definition)) {
+                return StateArena.TryCreateSeeding(
+                    arena: out arena,
+                    catalog: definition.StateCatalog,
+                    options: WorldSlotLanes.Options(definition: definition),
+                    reason: out reason,
+                    section: definition.StateRaw,
+                    seeded: new HashSet<string>(comparer: StringComparer.Ordinal) { row },
+                    time: in time
+                );
+            }
+
             return StateArena.TryCreate(
                 arena: out arena,
                 catalog: definition.StateCatalog,
@@ -35,8 +49,20 @@ public sealed partial class WorldDocument {
         }
     }
     // The candidate's state section is the arena's export: every exported row is the row the arena was built over
-    // with its stored columns written back, so a WorldStateRow's own traits ride across and the cast is total.
-    private static WorldDefinition ExportComposeArena(WorldDefinition definition, StateArena arena) {
+    // with its stored columns written back, so a WorldStateRow's own traits ride across and the cast is total. A row
+    // the open compose scope did not write, other than `declaredOrdinal` (a row the compose loaded from a submitted
+    // declaration), exports as the row it was loaded from, so it keeps the definition's own instance: an install
+    // reads an unchanged instance as a row the mutation left alone.
+    private static WorldDefinition ExportComposeArena(WorldDefinition definition, StateArena arena, int declaredOrdinal = -1) {
+        if (TryExportWrittenRows(
+            arena: arena,
+            declaredOrdinal: declaredOrdinal,
+            definition: definition,
+            exported: out var written
+        )) {
+            return written;
+        }
+
         var exported = arena.ToRows();
         var rows = new WorldStateRow[exported.Count];
 
@@ -45,6 +71,72 @@ public sealed partial class WorldDocument {
         }
 
         return definition.WithWorldState(rows: rows, pools: ((definition.StateRaw?.Pools is { Count: > 0 }) ? arena.ToPools() : null), pairPools: ((definition.StateRaw?.PairPools is { Count: > 0 }) ? arena.ToPairPools() : null));
+    }
+    // Whether the definition's authored rows are its catalog's document rows, one for one in catalog order, with no
+    // pool storage expanding them: the condition under which a compose exports only the rows it wrote.
+    private static bool ExportsWrittenRows(WorldDefinition definition) {
+        var installed = definition.AuthoredState;
+        var descriptors = definition.StateCatalog.Descriptors;
+        var aligned = (definition.StateRaw is { Pools: not { Count: > 0 }, PairPools: not { Count: > 0 } });
+        var index = 0;
+
+        for (var ordinal = 0; (aligned && (ordinal < descriptors.Count)); ordinal++) {
+            if (descriptors[ordinal].Lane == StateLane.Document) {
+                aligned = (
+                    (index < installed.Count) &&
+                    string.Equals(
+                        a: installed[index].Name.Value,
+                        b: descriptors[ordinal].Name,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                );
+                index++;
+            }
+        }
+
+        return (aligned && (index == installed.Count));
+    }
+    // Exports only the rows the open compose scope wrote, and `declaredOrdinal`; false sends the caller to the whole
+    // export.
+    private static bool TryExportWrittenRows(WorldDefinition definition, StateArena arena, int declaredOrdinal, out WorldDefinition exported) {
+        exported = definition;
+
+        if (
+            (arena.Journal.Scopes == 0) ||
+            !ReferenceEquals(objA: arena.Catalog, objB: definition.StateCatalog) ||
+            !ExportsWrittenRows(definition: definition)
+        ) {
+            return false;
+        }
+
+        var installed = definition.AuthoredState;
+        var descriptors = arena.Catalog.Descriptors;
+        var count = arena.Layout.RowCount;
+        var open = new bool[count];
+
+        arena.FlagOpenRows(rows: open);
+
+        WorldStateRow[]? rows = null;
+        var index = 0;
+
+        for (var ordinal = 0; (ordinal < count); ordinal++) {
+            if (descriptors[ordinal].Lane != StateLane.Document) {
+                continue;
+            }
+            if (open[ordinal] || (ordinal == declaredOrdinal)) {
+                rows ??= [.. installed];
+                rows[index] = ((WorldStateRow)arena.ToRow(rowOrdinal: ordinal));
+            }
+
+            index++;
+        }
+
+        exported = ((rows is null)
+            ? definition
+            : definition.WithWorldState(rows: rows)
+        );
+
+        return true;
     }
     // Applies one cell write through the arena's own kernels. `working` supplies the row RECORD — its kind, its
     // cycle and eviction declarations — so a same-batch row declaration ahead of this write is what the write sees;
