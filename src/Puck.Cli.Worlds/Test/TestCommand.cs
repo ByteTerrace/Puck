@@ -75,6 +75,9 @@ public static partial class TestCommand {
     // One run of the verb inside runDirectory: the --keep directory, or a run directory the caller concludes with the
     // exit code this returns.
     private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory) {
+        var preparation = new WorldBootWork();
+        using var attribution = WorldBootWork.Attribute(work: preparation);
+
         if (!TryCollectWorlds(
             generatedDirectory: Path.Combine(
             path1: runDirectory,
@@ -88,6 +91,8 @@ public static partial class TestCommand {
 
             return 2;
         }
+
+        Console.WriteLine(value: $"test: preparation worlds={worlds.Count} compiles={preparation.Read(kind: WorldBootWork.Compiles)} compositions={preparation.Read(kind: WorldBootWork.Compositions)} shared={preparation.Read(kind: WorldBootWork.CompositionsShared)}");
 
         if (!TryResolveArtifact(
             artifact: out var artifact,
@@ -108,28 +113,25 @@ public static partial class TestCommand {
             max: Math.Max(val1: 1, val2: worlds.Count)
         );
 
-        Parallel.For(
-            fromInclusive: 0,
-            toExclusive: worlds.Count,
+        var replicas = (reproduce ? 2 : 1);
+        var batchPassed = new bool[(parallelism * replicas)];
+
+        Parallel.For(fromInclusive: 0, toExclusive: (parallelism * replicas),
             parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            body: index => results[index] = RunWorldCaptured(
-                artifact: artifact!,
-                reproduce: reproduce,
-                world: worlds[index],
-                worldDirectory: Path.Combine(
-                    path1: runDirectory,
-                    path2: "worlds",
-                    path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture)
-                )
-            )
-        );
+            body: worker => batchPassed[worker] = RunBatch(artifact: artifact!, chunk: (worker / replicas), chunks: parallelism,
+                run: ((worker % replicas) + 1), runDirectory: runDirectory, worlds: worlds));
+        for (var index = 0; (index < worlds.Count); index++) {
+            results[index] = RunWorldCaptured(reproduce: reproduce, world: worlds[index],
+                worldDirectory: WorldDirectory(index: index, runDirectory: runDirectory));
+        }
 
         foreach (var result in results) {
             Console.Out.Write(value: result.Output);
             Console.Error.Write(value: result.Error);
         }
 
-        if (results.Any(predicate: result => (result.Verdict == 2))) {
+        Console.WriteLine(value: $"test: work processes={(parallelism * replicas)} host-boots={results.Sum(selector: static result => result.Boots)} exported-authority-ticks={results.Aggregate(seed: 0UL, func: static (total, result) => (total + result.Ticks))}");
+        if (batchPassed.Any(predicate: static passed => !passed) || results.Any(predicate: result => (result.Verdict == 2))) {
             return 2;
         }
 
@@ -148,26 +150,31 @@ public static partial class TestCommand {
 
         return 0;
     }
-    private static TestWorldRun RunWorldCaptured(TestWorld world, string artifact, string worldDirectory, bool reproduce) {
+    private static TestWorldRun RunWorldCaptured(TestWorld world, string worldDirectory, bool reproduce) {
         using var output = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
         using var error = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
         var verdict = RunWorld(
-            artifact: artifact,
+            boots: out var boots,
             error: error,
             output: output,
             reproduce: reproduce,
             test: world,
+            ticks: out var ticks,
             worldDirectory: worldDirectory
         );
 
         return new TestWorldRun(
+            Boots: boots,
+            Ticks: ticks,
             Error: error.ToString(),
             Output: output.ToString(),
             Verdict: verdict
         );
     }
     // One world: one ordinary run, or two plus a byte comparison for explicit reproducibility qualification.
-    private static int RunWorld(TestWorld test, string artifact, string worldDirectory, TextWriter output, TextWriter error, bool reproduce) {
+    private static int RunWorld(TestWorld test, string worldDirectory, TextWriter output, TextWriter error, bool reproduce, out int boots, out ulong ticks) {
+        boots = 0;
+        ticks = 0UL;
         var name = test.Name;
         var world = test.Path;
 
@@ -176,7 +183,7 @@ public static partial class TestCommand {
 
         if (!TryReadSchedule(
             reason: out var scheduleReason,
-            schedule: out var schedule,
+            schedule: out var collectedSchedule,
             world: world
         )) {
             error.WriteLine(value: $"ERROR: {scheduleReason}");
@@ -184,26 +191,29 @@ public static partial class TestCommand {
             return 2;
         }
 
+        var schedule = collectedSchedule!;
         TestReading? first = null;
         string? unexpected = null;
 
         var runCount = (reproduce ? 2 : 1);
 
         for (var run = 1; (run <= runCount); run++) {
-            if (!TryRunLeg(
-                artifact: artifact,
-                exportTick: schedule!.ExportTick,
+            if (File.Exists(path: Path.Combine(path1: worldDirectory, path2: $"run{run}", path3: "started"))) {
+                boots++;
+            }
+            if (!TryReadBatchLeg(
                 legDirectory: Path.Combine(
                 path1: worldDirectory,
                 path2: $"run{run.ToString(provider: CultureInfo.InvariantCulture)}"
             ),
-                rateHz: schedule.RateHz,
                 reading: out var reading,
                 error: error,
                 world: world
             )) {
                 return 2;
             }
+
+            ticks += reading!.Worlds.Aggregate(seed: 0UL, func: static (total, world) => (total + world.ExportTick));
 
             // Reaching the authored tick, accounting for every declared row, and every row answering what it declared
             // are part of the verdict, and they are checked on each requested leg: two identically truncated runs
@@ -234,6 +244,25 @@ public static partial class TestCommand {
                 first = reading;
 
                 continue;
+            }
+
+            var beforeHashes = (JsonNode.Parse(utf8Json: first!.ManifestBytes)?["hashes"] as JsonArray);
+            var afterHashes = (JsonNode.Parse(utf8Json: reading!.ManifestBytes)?["hashes"] as JsonArray);
+
+            if ((beforeHashes is null) || (afterHashes is null) || (beforeHashes.Count == 0) || (afterHashes.Count == 0)) {
+                error.WriteLine(value: $"  REFUSED: {name} did not record its per-tick authoritative hashes.");
+                return 2;
+            }
+            for (var index = 0; (index < Math.Max(val1: beforeHashes.Count, val2: afterHashes.Count)); index++) {
+                var before = ((index < beforeHashes.Count) ? beforeHashes[index] : null);
+                var after = ((index < afterHashes.Count) ? afterHashes[index] : null);
+
+                if (!JsonNode.DeepEquals(node1: before, node2: after)) {
+                    var divergent = (after ?? before!);
+
+                    error.WriteLine(value: $"  REFUSED: the two runs of {name} diverged at tick {divergent["tick"]} in '{divergent["world"]}' (authority tick {divergent["authorityTick"]}).");
+                    return 2;
+                }
             }
 
             // Every world the run armed is compared, not just the booted one: a composed run whose far world
@@ -355,7 +384,7 @@ public static partial class TestCommand {
         )
     );
 
-    private sealed record TestWorldRun(int Verdict, string Output, string Error);
+    private sealed record TestWorldRun(int Verdict, string Output, string Error, int Boots, ulong Ticks);
 
     // The export tick and the simulation rate come from the document's own text rather than a composed load: the
     // schedule and the rate are the two things this verb needs before it can boot anything, and composing a document

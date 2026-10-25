@@ -251,7 +251,15 @@ a Fixed or Bool row sits in a row of that kind carrying `witness: "<verdict
 row>"`, which the same doors refuse and which freezes with its verdict.
 `world.verdicts` reads the verdict rows; `puck test <path>` boots each such world through the real
 executable and prints one line per verdict, and `--reproduce` boots it twice
-and refuses one whose two exports differ. A `schedule` declaring `instances`
+and refuses one whose two exports differ. Its manifest also carries per-tick
+authoritative replay hashes for the boot world and every running instance;
+reproduction names the first differing sampled tick and instance before still
+requiring byte-identical exports and manifests. Preparation shares composed
+imports, including authored-value origins, through the existing content-checked
+composition cache; each reader gets a fresh tree. Worker processes reuse startup
+and derived caches while booting and disposing a fresh host for each document.
+Reproduce replicas always occupy different processes, even with `--jobs 1`.
+A `schedule` declaring `instances`
 arms those sibling worlds beside the booted one (the `world.instance.start`
 path), steps them in the same host step, exports each at the tick the booted
 world declares, and judges each world's own verdicts under its name; a row's

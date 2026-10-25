@@ -1885,12 +1885,29 @@ submitted is the process's own state, never the document's — so a restored,
 re-read or rewound world submits every row again from tick 1 and measures a
 different trajectory from the one the export was asked for.
 
+Test preparation uses the existing source-compile cache and shares composed
+imports with their authored-value origins. Each reader receives a fresh JSON
+tree; editing an input invalidates the held composition. Both ordinary and
+reproduce runs use this preparation. The work summary reports source compiles,
+compositions and shared images, worker processes, host boots, and the sum of exported authority
+ticks (excluding the host's extra shutdown ticks). Executable build reuse is
+reported separately. Each worker boots and fully disposes a fresh host per
+document through the normal World composition root, with separate mutable
+state, schedules and persistence. Only process startup and the existing derived
+content caches are reused. Reproduce replicas always use different worker
+processes, even with `--jobs 1`; `--jobs` bounds concurrent workers. For 96 worlds,
+`--reproduce --jobs 2` uses four workers and 192 fresh host boots. Ordinary runs
+use the same preparation and worker path, with one replica.
+
 Ordinary authoring runs every isolated test world once. `--reproduce` adds the
 determinism qualification pass: each world runs twice into sibling leg
 directories, and a world whose two exports or two `test-run.json` manifests
 differ byte for byte is refused rather than reported. The manifest records only
-facts a rerun reproduces exactly: a row's authored tick, outcome and detail. A
-recorded edit verdict carries no tick because an echo reaches the runner when
+facts a rerun reproduces exactly: a row's authored tick, outcome and detail,
+plus each running authority's replay hash at every completed boot-world tick
+through the export. A differing trace refuses the run naming the first sampled
+tick and instance; the final state exports and complete manifests must still
+match byte for byte. A recorded edit verdict carries no tick because an echo reaches the runner when
 the host narrates it, which is not the tick the edit applied on. The comparison
 is possible because the export tick is the document's rather than the runner's.
 
@@ -3181,13 +3198,14 @@ usage error.
 
 `puck mesh identity [--build <dir>] [--backend directx|vulkan] [--against
 <dir>] [--members]` prints the bake identity a build keys its stored meshes by
-(`SdfMeshBakeIdentity`): its value, the code the bake runs
+(`SdfMeshBakeIdentity`): its value, the store's entry format version
+(`SdfMeshStore.EntryVersion`), the code the bake runs
 (`SdfMeshBakeClosure`, its members counted by assembly) and the hashes of the
 mask and bake kernels' bytecode, read from the build's assemblies and kernels
 with no device. `--build` names the World build's directory (absent, this CLI's
 own); `--against <dir>` names another build and lists each code member that
-changed, was added or was removed between them, and whether each kernel
-differs, so an edit can be checked to keep or move the stored meshes before a
+changed, was added or was removed between them, and whether the entry version or
+each kernel differs, so an edit can be checked to keep or move the stored meshes before a
 boot; `--members` prints every member with its hash. The value is the key a
 saved copy of the store is restored under. Exit codes: 0 printed; 1 a build
 could not be read; 2 a usage error.

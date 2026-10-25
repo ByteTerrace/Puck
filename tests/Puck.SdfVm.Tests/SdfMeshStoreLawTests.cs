@@ -177,6 +177,9 @@ public sealed class SdfMeshStoreLawTests {
         mask[(int)SdfKernel.MeshBakeMask] = new byte[] { 200 };
 
         Assert.True(condition: identity.HasParts);
+        Assert.Equal(expected: "PUCKMSH3", actual: SdfMeshStore.EntryVersion);
+        Assert.Equal(expected: SdfMeshStore.EntryVersion, actual: identity.EntryVersion);
+        Assert.Equal(expected: string.Empty, actual: new SdfMeshBakeIdentity(value: 5).EntryVersion);
         Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: identity.Code);
         Assert.Equal(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: views)).Value);
         Assert.NotEqual(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bake)).Value);
@@ -191,7 +194,8 @@ public sealed class SdfMeshStoreLawTests {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [(byte)kernel])).ToArray();
-        var first = SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bytes));
+        var kernels = new SdfKernelSet(bytecode: bytes);
+        var first = SdfMeshStore.IdentityOf(kernels: kernels);
 
         // Nothing recorded: the store names no earlier identity, then records this one.
         Assert.Contains(expectedSubstring: "records no earlier identity", actualString: store.ExplainMisses(identity: first));
@@ -201,6 +205,46 @@ public sealed class SdfMeshStoreLawTests {
         Assert.Contains(expectedSubstring: "parts unknown", actualString: store.ExplainMisses(identity: new SdfMeshBakeIdentity(value: 5)));
         store.Record(identity: new SdfMeshBakeIdentity(value: 5));
         Assert.Single(collection: Directory.GetFiles(path: store.Directory, searchPattern: ("*" + SdfMeshStore.IdentityExtension)));
+
+        // An entry-version bump moves the identity to a new key, misses cleanly without refusing or overwriting the earlier
+        // entry, and names the version bump as the miss's cause.
+        var bumpedBuild = scratch.PathOf(name: "bumped");
+
+        _ = Directory.CreateDirectory(path: bumpedBuild);
+        foreach (var dll in Directory.GetFiles(path: AppContext.BaseDirectory, searchPattern: "Puck.*.dll")) {
+            var destination = Path.Combine(path1: bumpedBuild, path2: Path.GetFileName(path: dll));
+
+            if (string.Equals(a: Path.GetFileName(path: dll), b: "Puck.SdfVm.dll", comparisonType: StringComparison.Ordinal)) {
+                var image = File.ReadAllBytes(path: dll);
+                var oldVersion = System.Text.Encoding.ASCII.GetBytes(s: SdfMeshStore.EntryVersion);
+                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: "PUCKMSH4");
+                var replaced = 0;
+
+                for (var index = 0; (index <= (image.Length - oldVersion.Length)); index++) {
+                    if (image.AsSpan(start: index, length: oldVersion.Length).SequenceEqual(other: oldVersion)) {
+                        newVersion.CopyTo(destination: image.AsSpan(start: index, length: newVersion.Length));
+                        replaced++;
+                    }
+                }
+                Assert.True(condition: (replaced >= 3));
+                File.WriteAllBytes(bytes: image, path: destination);
+            } else {
+                File.Copy(destFileName: destination, sourceFileName: dll);
+            }
+        }
+
+        var bumped = SdfMeshBakeIdentity.Of(code: SdfMeshBakeClosure.Of(directory: bumpedBuild), kernels: kernels);
+
+        Assert.Equal(expected: "PUCKMSH4", actual: bumped.EntryVersion);
+        Assert.NotEqual(expected: first.Value, actual: bumped.Value);
+        Assert.False(condition: store.TryRead(geometry: Geometry, identity: bumped.Value, materials: out _, mesh: out _, refusal: out var bumpedRefusal));
+        Assert.Null(@object: bumpedRefusal);
+        Assert.True(condition: store.Contains(geometry: Geometry, identity: first.Value));
+        Assert.Equal(
+            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> PUCKMSH4) changed",
+            actual: store.ExplainMisses(identity: bumped)
+        );
+        File.Delete(path: Path.Combine(path1: store.Directory, path2: (bumped.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));
 
         // Another bake kernel is named as the bake kernel, against the identity it shares the code and mask with.
         var rebaked = bytes.ToArray();
@@ -216,7 +260,7 @@ public sealed class SdfMeshStoreLawTests {
         // the earlier record holds none of them, and a file of another format is passed over.
         var path = Path.Combine(path1: store.Directory, path2: ("0".PadLeft(totalWidth: 32, paddingChar: '0') + SdfMeshStore.IdentityExtension));
 
-        File.WriteAllText(contents: $"puck.mesh-identity.v1\ncode {(first.Code + 1):x32}\nmask {first.MaskKernel:x32}\nbake {first.BakeKernel:x32}\n{0:x32} Puck.Gone!Gone.Member`0()Void\n", path: path);
+        File.WriteAllText(contents: $"puck.mesh-identity.v1\nversion {first.EntryVersion}\ncode {(first.Code + 1):x32}\nmask {first.MaskKernel:x32}\nbake {first.BakeKernel:x32}\n{0:x32} Puck.Gone!Gone.Member`0()Void\n", path: path);
         File.WriteAllText(contents: "another format\n", path: Path.Combine(path1: store.Directory, path2: ("1".PadLeft(totalWidth: 32, paddingChar: '0') + SdfMeshStore.IdentityExtension)));
         File.Delete(path: Path.Combine(path1: store.Directory, path2: (first.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));
 
