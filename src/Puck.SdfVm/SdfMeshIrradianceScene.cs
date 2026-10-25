@@ -698,15 +698,18 @@ public sealed partial class SdfMeshIrradianceScene {
             var wider = (count > m_braid);
 
             if (count >= ParallelPrimitives) {
-                Parallel.Invoke(
-                    () => BuildNode(count: (mid - first), first: first, node: child, wide: wider),
-                    () => BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wider)
-                );
+                BuildChildrenInParallel(child: child, count: count, first: first, mid: mid, wide: wider);
                 return;
             }
             BuildNode(count: (mid - first), first: first, node: child, wide: wider);
             BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wider);
         }
+        // Apart from BuildNode, since the closure its two branches share is made on entry to the method holding them, and
+        // nearly every node builds its children in line.
+        private void BuildChildrenInParallel(int child, int first, int count, int mid, bool wide) => Parallel.Invoke(
+            () => BuildNode(count: (mid - first), first: first, node: child, wide: wide),
+            () => BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wide)
+        );
         // A binned surface-area split along the centroids' longest axis, which partitions the range in place; an even
         // split when the bins cannot separate them.
         private int Split(int first, int count, Vector3 centroidLow, Vector3 centroidHigh) {

@@ -36,11 +36,20 @@ public sealed class WorldHudSpeechFeed(IHudBindingResolver bindings, Action<stri
     }
     /// <summary>Stops utterances whose elements no longer show.</summary>
     public void EndFrame() {
-        foreach (var key in m_seen.Keys.Where(predicate: key => !m_visible.Contains(item: key)).ToArray()) {
+        foreach (var key in m_seen.Keys) {
+            if (!m_visible.Contains(item: key)) {
+                m_hidden.Add(item: key);
+            }
+        }
+        foreach (var key in m_hidden) {
             stop(key);
             m_seen.Remove(key: key);
         }
+
+        m_hidden.Clear();
     }
+    // The keys a frame's end found hidden, reused from frame to frame.
+    private readonly List<string> m_hidden = [];
     /// <summary>Resolves the same literal, binding or template the text renderer presents.</summary>
     public static string ResolveText(WorldHudElement element, IHudBindingResolver bindings, int seat) {
         if ((element.Template is { Length: > 0 } template) && HudTemplate.TryParse(error: out _, segments: out var segments, template: template)) {

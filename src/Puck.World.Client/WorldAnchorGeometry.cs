@@ -20,35 +20,30 @@ public static class WorldAnchorGeometry {
             return Vector3.Zero;
         }
 
-        foreach (var placement in definition.Placements) {
-            if (!string.Equals(
-                a: placement.Id,
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                continue;
-            }
-
-            var creation = WorldDefinitionRows.FindCreation(
-                creations: definition.Creations,
-                id: placement.ShownPrototypeId
-            );
-
-            return ((creation is null)
-                ? WorldDefinitionRows.ResolvedPosition(
-                    definition: definition,
-                    placement: placement
-                )
-                : StaticShapePosition(
-                    creation: creation,
-                    definition: definition,
-                    placement: placement,
-                    shapeId: shapeId
-                )
-            );
+        if (WorldDefinitionRows.FindPlacement(
+            id: placementId,
+            placements: definition.Placements
+        ) is not { } placement) {
+            return Vector3.Zero;
         }
 
-        return Vector3.Zero;
+        var creation = WorldDefinitionRows.FindCreation(
+            creations: definition.Creations,
+            id: placement.ShownPrototypeId
+        );
+
+        return ((creation is null)
+            ? WorldDefinitionRows.ResolvedPosition(
+                definition: definition,
+                placement: placement
+            )
+            : StaticShapePosition(
+                creation: creation,
+                definition: definition,
+                placement: placement,
+                shapeId: shapeId
+            )
+        );
     }
     /// <summary>The stamped world position of one shape within a placement (root ∘ scale · local under the yaw), or the
     /// placement root when no shape id resolves. Both root and yaw are the placement's COMPOSED (world) frame — see

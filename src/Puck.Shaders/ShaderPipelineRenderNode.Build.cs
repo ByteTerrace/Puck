@@ -108,6 +108,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (
             m_disposed ||
             m_build.IsPending ||
+            ResizeBacksOff ||
             !TryDesiredCandidate(
                 candidate: out var candidate,
                 extent: out var extent,
@@ -172,11 +173,17 @@ public sealed partial class ShaderPipelineRenderNode {
             !TryDesiredKey(key: out var desired) ||
             !key.Matches(other: desired)
         ) {
+            if (m_buildResizes) {
+                m_resizeBackoff = Math.Clamp(value: (2 * m_resizeBackoff), min: 1, max: MaxResizeBackoff);
+            }
+
             built?.Discard(later: DisposeLater);
             EnsureBuild();
 
             return;
         }
+
+        m_resizeBackoff = 0;
 
         if (error is not null) {
             if (!key.Candidate) {
@@ -276,8 +283,41 @@ public sealed partial class ShaderPipelineRenderNode {
         m_lastSwapError = null;
         ForgetRefusal();
     }
+    // The most advances a resize waits after a discarded one before it builds again.
+    private const int MaxResizeBackoff = 32;
+
+    // Whether the running build only resizes the installed graph, the advance the latest such build started in, and the
+    // advances the next one waits after it. A resize build discarded because the requested extent moved again before it
+    // finished doubles the wait, and a build that installs clears it: a request swinging between extents every few
+    // frames (a window a falling camera crosses) builds a graph a few times a second rather than every frame, while one
+    // that settles builds at once.
+    private bool m_buildResizes;
+    private long m_resizeBuildAdvance;
+    private int m_resizeBackoff;
+
+    // Whether the next build would only resize the installed graph and waits out its backoff.
+    private bool ResizeBacksOff => (
+        (m_resizeBackoff > 0) &&
+        OnlyResizes &&
+        ((m_advances - m_resizeBuildAdvance) < m_resizeBackoff)
+    );
+    private bool OnlyResizes => (
+        m_ready &&
+        (m_pipeline is not null) &&
+        (m_pending is null) &&
+        m_resizePending &&
+        !m_rebindPending &&
+        !m_recountPending
+    );
+
     // Kept apart from EnsureBuild so the build's closure is allocated only when a build starts, never on a polled frame.
     private void StartBuild(BuildKey key) {
+        m_buildResizes = OnlyResizes;
+
+        if (m_buildResizes) {
+            m_resizeBuildAdvance = m_advances;
+        }
+
         var request = new BuildRequest(
             // The storages whose history the install carries over keep their own images, so the build makes none for them.
             Carried: [.. CarriedHistoryOf(extent: (key.Width, key.Height), plan: key.Pipeline!.Plan).Keys],

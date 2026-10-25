@@ -19,11 +19,12 @@ public sealed partial class WorldScreenBinder {
 
     private int m_infinityEpoch;
 
-    private InfinityRoot InfinityRootOf(WorldSessionMirror mirror, string instance, int depth, string name) {
+    // A routed scene's root is named by the scene, a name spelled only when the root is made.
+    private InfinityRoot InfinityRootOf(WorldSessionMirror mirror, string instance, int depth, string? name, WorldRoutedScene? routed = null) {
         var key = (mirror, depth);
 
         if (!m_infinityRoots.TryGetValue(key: key, value: out var root)) {
-            root = new InfinityRoot(depth: depth, instance: instance, mirror: mirror, name: name);
+            root = new InfinityRoot(depth: depth, instance: instance, mirror: mirror, name: (name ?? RoutedViewName(scene: routed!)));
             m_infinityRoots.Add(key: key, value: root);
         }
         root.Epoch = m_infinityEpoch;
@@ -38,7 +39,7 @@ public sealed partial class WorldScreenBinder {
         if (Presenter is { } presenter) {
             foreach (var scene in presenter.RoutedScenes) {
                 if (presenter.Presents(scene: scene)) {
-                    _ = InfinityRootOf(scene.Endpoint.Mirror, scene.Endpoint.Identity, 0, RoutedViewName(scene: scene));
+                    _ = InfinityRootOf(scene.Endpoint.Mirror, scene.Endpoint.Identity, 0, name: null, routed: scene);
                 }
             }
         }

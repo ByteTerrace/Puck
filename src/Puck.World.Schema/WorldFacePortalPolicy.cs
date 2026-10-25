@@ -110,22 +110,17 @@ public static class WorldFacePortalPolicy {
         ArgumentNullException.ThrowIfNull(definition);
 
         var catalog = WorldFaceCatalog.For(definition: definition);
-        var crossingFloor = CrossingFloor(definition: definition);
         var openings = new List<WorldFaceAperture.Box>();
 
         foreach (var placement in definition.Placements) {
             foreach (var face in (placement?.FaceSources ?? [])) {
                 if (
                     (face?.Portal is not null) &&
-                    catalog.TryFind(
-                    placementId: placement!.Id,
-                    faceName: face.Face,
-                    out var row
-                ) &&
-                    TryAperture(
+                    catalog.TryFindAperture(
                     aperture: out var aperture,
-                    crossingFloor: crossingFloor,
-                    row: in row
+                    definition: definition,
+                    faceName: face.Face,
+                    placementId: placement!.Id
                 ) &&
                     (aperture is WorldFaceAperture.Box box)
                 ) {

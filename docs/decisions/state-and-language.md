@@ -446,6 +446,58 @@ language.
 deferred; [the table](../plans/state-rebuild.md#candidates-adopted-into-packages)
 says where each landed.
 
+### The authoring consensus
+
+The owner asked the lead and its partners (Codex, Antigravity and Fable, two
+rounds of independent review) for consensus on genuinely improving the
+language, with big changes welcome, and deferred the result to the team: "Our
+main goal is for the language to truly grow and improve." The work and its
+order are [S9](../plans/state-and-language.md#s9--the-authoring-consensus).
+
+- **One expression language.** A gate is any expression; `and`, `or` and `not`
+  are operators. The predicate grammar, the kind suffix and the
+  `((e) == 1 : Int)` idiom go; `compareState` and `compareValue` are the
+  emitter's lowering choice. Truth conversion, short-circuiting, absence and
+  kind inference are specified before the old grammar is deleted, and only
+  provable 0/1 uses of `&`/`|` migrate.
+- **A local reads where it is written.** A rule's locals evaluate in the order
+  the source shows, or a reading the source would mislead is refused.
+- **One bracket rule.** `row.key` is a literal key and `row[expr]` evaluates its
+  expression. Names resolve lexically, a function only in call position, and an
+  unknown bare word is an error, never a literal key.
+- **Every condition is that expression**: HUD visibility, placement responses
+  and element text included.
+- **Compound assignment in world rules.** `-=` lowers to `addState` with a
+  negated operand, keeping `+=`'s envelope; the destination key is evaluated
+  once.
+- **Names, not numbers.** Bodies, spawns, kits, cameras, machines and screens
+  are named by the feature that declares them and allocated by the compiler;
+  built-in reads become dot reads on named subjects (`liftCar.y`).
+- **One composition construct.** `template` folds into `module`; `use`
+  instantiates and `import` brings declarations only. A feature is one module,
+  owning its sections and identities, and can be instantiated twice.
+- **Tests say what a player does and when a claim holds.** Steps are typed
+  calls on the existing verbs, checked against their signatures; a bare
+  expectation holds at the end and `eventually` marks one that holds on some
+  tick, reporting its witness tick.
+- **No JSON showing through.** Keywords are contextual, sections take arrays
+  directly, and noise fields take defaults. PUCK040 stays (a literal's
+  punctuation marks its shape; a binding keeps its colon).
+- **State sugar is complete**, so no source writes `row { }`; `: Kind` is
+  always allowed.
+- **One rule grammar for worlds and cartridges**, each target refusing what its
+  machine cannot do. Cartridge rules take whole expressions over compiler
+  temporaries, and their variables are `slot`s.
+- **One world-authored authorization declaration** produces an addon's requests
+  and its grants. An imported addon's requests never authorize themselves.
+- **Creation shapes share the world's axes** and take unit-bearing rotations.
+- **`function`**: compile-time, inlined, non-recursive.
+- **Saving edits the source.** `world.save` rewrites the source tree, so a save
+  keeps `let`, `for` and modules; whether the document printer of P1 shrinks is
+  decided by that work. The printer wraps long lines.
+- **`sql { }` is deleted.** It is a second spelling of rows and rules that never
+  printed back.
+
 ## Costing
 
 **A weighted semantic execution model over a portable ideal machine.** Price

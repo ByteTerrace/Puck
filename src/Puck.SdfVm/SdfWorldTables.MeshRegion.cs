@@ -317,7 +317,9 @@ public sealed partial class SdfWorldTables {
     private void WriteOwedMeshes(IReadOnlyList<SdfMeshDraw> draws) {
         var written = 0L;
 
-        foreach (var draw in draws) {
+        for (var index = 0; ((index < draws.Count) && (m_meshesOwed.Count > 0)); index++) {
+            var draw = draws[index];
+
             if (written >= MeshLandingWords) { return; }
             if (m_meshesOwed.Remove(item: draw.Mesh)) {
                 WriteMeshWords(mesh: draw.Mesh, placement: m_meshArena.Placements[draw.Mesh]);

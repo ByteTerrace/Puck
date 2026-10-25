@@ -21,6 +21,13 @@ agent works in that mode by default, without asking:
   development"). Change one whenever the design is better for it, migrate every
   caller, and re-record what it invalidates in the same change; a brief never
   makes one a stopping condition. Determinism itself stays (rule 4).
+- The engine is generic (the owner's ruling). No one feature's, world's or
+  game's look or vocabulary enters an engine contract: core design tokens,
+  enums, schema names and defaults, default shader paths, or engine prose. The
+  CRT phosphor roles in the UI theme and the CRT treatment every screen got by
+  default were such leaks. A feature's look is that feature's material, style
+  or skin, opted into where it is used. A leak is fixed when it is found, not
+  recorded for later.
 - The owner decides only what the engine should do, how it should look, and
   the owner-only actions (pushing `main`, deploying, anything outside the
   repository). Everything else is yours: decide it, do it, and report what you
