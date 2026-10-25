@@ -59,7 +59,7 @@ public sealed class ConsolePanelWriter {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
         if (
-            !m_source.TrySnapshot(frame: out var frame) ||
+            !m_source.TrySnapshot(frame: out var frame, includeHiddenHistory: false) ||
             !frame.Visible
         ) {
             return;

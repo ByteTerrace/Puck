@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using Puck.World.Protocol;
 
@@ -206,11 +207,13 @@ public sealed partial class WorldDocument {
         var installed = definition.AuthoredState;
         var descriptors = arena.Catalog.Descriptors;
         var count = arena.Layout.RowCount;
-        var open = new bool[count];
+        var open = ((count <= 512) ? (Span<bool>)stackalloc bool[count] : new bool[count]);
+
+        open.Clear();
 
         arena.FlagOpenRows(rows: open);
 
-        WorldStateRow[]? rows = null;
+        ImmutableList<WorldStateRow>? rows = null;
         var index = 0;
 
         for (var ordinal = 0; (ordinal < count); ordinal++) {
@@ -218,8 +221,8 @@ public sealed partial class WorldDocument {
                 continue;
             }
             if (open[ordinal] || (ordinal == declaredOrdinal)) {
-                rows ??= [.. installed];
-                rows[index] = ((WorldStateRow)arena.ToRow(rowOrdinal: ordinal));
+                rows ??= installed.ToImmutableList();
+                rows = rows.SetItem(index: index, value: ((WorldStateRow)arena.ToRow(rowOrdinal: ordinal, previous: installed[index])));
             }
 
             index++;

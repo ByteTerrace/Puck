@@ -43,8 +43,8 @@ public static class WorldAddonMutationDecoder {
         (typeof(WorldMutation.SetHudDefaults), static (root, principal) => DecodeSetHudDefaults(principal: principal, root: root)),
         (typeof(WorldMutation.UpsertStateRow), static (root, principal) => DecodeUpsertStateRow(principal: principal, root: root)),
         (typeof(WorldMutation.RemoveStateRow), static (root, principal) => DecodeRemoveStateRow(principal: principal, root: root)),
-        (typeof(WorldMutation.UpsertStateCell), static (root, principal) => DecodeUpsertStateCell(root, principal)),
-        (typeof(WorldMutation.RemoveStateCell), static (root, principal) => DecodeRemoveStateCell(root, principal)),
+        (typeof(WorldMutation.UpsertStateCell), static (root, principal) => DecodeUpsertStateCell(principal: principal, root: root)),
+        (typeof(WorldMutation.RemoveStateCell), static (root, principal) => DecodeRemoveStateCell(principal: principal, root: root)),
         (typeof(WorldMutation.SetInputHold), static (root, principal) => DecodeSetInputHold(principal: principal, root: root))
     );
     private static readonly string[] RectMembers = ["x", "y", "width", "height"];
@@ -665,24 +665,27 @@ public static class WorldAddonMutationDecoder {
     }
     private static WorldMutation DecodeUpsertStateCell(JsonElement root, Principal principal) {
         var context = "UpsertStateCell";
-        var members = UniqueMembers(root, context);
-        RequireNoUnknownMembers(members, UpsertStateCellMembers, context);
-        var spelling = RequireString(members, "kind", context);
+        var members = UniqueMembers(context: context, element: root);
+
+        RequireNoUnknownMembers(allowed: UpsertStateCellMembers, context: context, members: members);
+        var spelling = RequireString(context: context, members: members, name: "kind");
         var kind = spelling switch {
             "set" => WorldDocumentWriteKind.Set,
             "add" => WorldDocumentWriteKind.Add,
-            _ => throw new AddonMutationDecodeException($"{context}: kind must be 'set' or 'add'"),
+            _ => throw new AddonMutationDecodeException(message: $"{context}: kind must be 'set' or 'add'"),
         };
-        var text = members.ContainsKey("text") ? RequireString(members, "text", context) : null;
+        var text = (members.ContainsKey(key: "text") ? RequireString(context: context, members: members, name: "text") : null);
+
         return new WorldMutation.UpsertStateCell(principal,
-            RequireString(members, "row", context), RequireString(members, "key", context),
-            RequireInt64(members, "value", context), kind, Text: text);
+            RequireString(context: context, members: members, name: "row"), RequireString(context: context, members: members, name: "key"),
+            RequireInt64(context: context, members: members, name: "value"), kind, Text: text);
     }
     private static WorldMutation DecodeRemoveStateCell(JsonElement root, Principal principal) {
         var context = "RemoveStateCell";
-        var members = UniqueMembers(root, context);
-        RequireNoUnknownMembers(members, RemoveStateCellMembers, context);
-        return new WorldMutation.RemoveStateCell(principal, RequireString(members, "row", context), RequireString(members, "key", context));
+        var members = UniqueMembers(context: context, element: root);
+
+        RequireNoUnknownMembers(allowed: RemoveStateCellMembers, context: context, members: members);
+        return new WorldMutation.RemoveStateCell(principal, RequireString(context: context, members: members, name: "row"), RequireString(context: context, members: members, name: "key"));
     }
     private static WorldMutation DecodeRemoveStateRow(JsonElement root, Principal principal) {
         return DecodeSingleKeyRemoval(
@@ -1014,10 +1017,17 @@ public static class WorldAddonMutationDecoder {
             throw new AddonMutationDecodeException(message: $"{context}: must be an array of {{\"key\", \"value\"}} objects");
         }
 
-        var cells = new List<StateCell>();
+        var cells = new List<StateCell>(capacity: element.GetArrayLength());
         var index = 0;
 
         foreach (var entry in element.EnumerateArray()) {
+            // Keep diagnostic paths cold. A successful cell needs neither a property dictionary nor a formatted
+            // path per field; the original decoder below still diagnoses every malformed shape in the same order.
+            if (TryDecodePlainStateCell(cell: out var decoded, entry: entry, kind: kind)) {
+                cells.Add(item: decoded!);
+                index++;
+                continue;
+            }
             var cellContext = $"{context}[{index}]";
 
             if (entry.ValueKind != JsonValueKind.Object) {
@@ -1062,6 +1072,23 @@ public static class WorldAddonMutationDecoder {
         }
 
         return cells;
+    }
+    private static bool TryDecodePlainStateCell(JsonElement entry, CellKind kind, out StateCell? cell) {
+        cell = null;
+        if (entry.ValueKind != JsonValueKind.Object) { return false; }
+        JsonElement key = default, value = default;
+
+        foreach (var property in entry.EnumerateObject()) {
+            if (property.NameEquals(utf8Text: "key"u8) && (key.ValueKind == JsonValueKind.Undefined)) { key = property.Value; } else if (property.NameEquals(utf8Text: "value"u8) && (value.ValueKind == JsonValueKind.Undefined)) { value = property.Value; } else { return false; }
+        }
+        if ((key.ValueKind != JsonValueKind.String) || (value.ValueKind == JsonValueKind.Undefined) ||
+            !CellName.TryParse(candidate: key.GetString(), name: out var name, reason: out _)) { return false; }
+        try {
+            cell = new StateCell(name, DecodeCellValue(context: "value", element: value, kind: kind));
+            return true;
+        } catch (AddonMutationDecodeException) {
+            return false;
+        }
     }
     private static WorldMutation DecodeUpsertHudElement(JsonElement root, Principal principal) {
         var members = UniqueMembers(

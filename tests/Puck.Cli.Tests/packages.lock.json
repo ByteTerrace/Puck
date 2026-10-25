@@ -1793,7 +1793,8 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Runs": "[1.0.0, )",
-          "Puck.Cli.Worlds": "[1.0.0, )"
+          "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.World.Addons": "[1.0.0, )"
         }
       },
       "puck.cli.content": {

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Scripting;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -107,6 +108,10 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
             subject
         );
     }
+    // Shared by event dispatch and mount narration. A wildcard expands manifest reach only; live grants still
+    // decide authority for each concrete subject, including reservations and revocations.
+    private static bool CanReach(IReadOnlyList<WorldCapabilityRequest>? requests, Principal principal, IWorldGrantsView grants, WorldCapability capability, GrantSubject subject) =>
+        (WorldCapabilityRequests.Contains(capability: capability, requests: requests, subject: subject) && grants.Allows(capability: capability, principal: principal, subject: subject).IsAllowed);
     private static void QueueAnswer(MountedAddon addon, ushort ordinal, AddonVerdict verdict, ushort handleIndex = 0, ushort handleGeneration = 0) {
         addon.Answers[addon.AnswerCount++] = new AddonInCell(
             Kind: AddonInCellKind.Answer,

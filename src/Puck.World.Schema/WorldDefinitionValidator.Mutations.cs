@@ -1,6 +1,27 @@
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    private sealed class TouchedStateWorkspace {
+        public readonly HashSet<string> Dynamics = new(comparer: StringComparer.Ordinal);
+        public readonly List<string> Errors = [];
+        public readonly HashSet<string> Seen = new(comparer: StringComparer.Ordinal);
+        public readonly Queue<string> Queue = new();
+        public readonly Dictionary<string, StateSpace> Spaces = new(comparer: StringComparer.Ordinal);
+        public readonly Dictionary<string, StateEnum> Enums = new(comparer: StringComparer.Ordinal);
+
+        public void Clear() {
+            Dynamics.Clear();
+            Errors.Clear();
+            Seen.Clear();
+            Queue.Clear();
+            Spaces.Clear();
+            Enums.Clear();
+        }
+    }
+
+    [ThreadStatic]
+    private static TouchedStateWorkspace? TouchedStateScratch;
+
     /// <summary>Validates every row a state transform names on its own terms — the same per-row and cross-row
     /// checks the whole-document walk applies to those rows today, with no rule, interaction, pattern, table,
     /// search plan, or flock affinity compiled. The containing definition has already composed the mutation; this
@@ -15,9 +36,23 @@ public static partial class WorldDefinitionValidator {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rowNames);
 
+        // A nested validation gets its own workspace; no candidate or diagnostics escape through the cache.
+        var workspace = (TouchedStateScratch ?? new TouchedStateWorkspace());
+
+        TouchedStateScratch = null;
+        try {
+            return ValidateTouchedStateRowsCore(definition: definition, reason: out reason, rowNames: rowNames, workspace: workspace);
+        } finally {
+            workspace.Clear();
+            TouchedStateScratch = workspace;
+        }
+    }
+
+    private static bool ValidateTouchedStateRowsCore(WorldDefinition definition, IEnumerable<string> rowNames, TouchedStateWorkspace workspace, out string reason) {
+
         reason = string.Empty;
 
-        var dynamicsNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var dynamicsNames = workspace.Dynamics;
 
         foreach (var dynamics in (definition.DynamicsRaw ?? [])) {
             if (dynamics?.Name is { } dynamicsName) {
@@ -25,9 +60,9 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        var errors = new List<string>();
-        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var queue = new Queue<string>();
+        var errors = workspace.Errors;
+        var seen = workspace.Seen;
+        var queue = workspace.Queue;
 
         foreach (var rowName in rowNames) {
             if (seen.Add(item: rowName)) {
@@ -37,8 +72,12 @@ public static partial class WorldDefinitionValidator {
 
         var catalog = definition.StateCatalog;
         var rows = definition.State;
-        var spacesByName = definition.Spaces.Where(predicate: static s => (s is not null)).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
-        var enumsByName = definition.Enums.Where(predicate: static e => (e is not null)).ToDictionary(keySelector: static e => e.Name.Value, elementSelector: static e => e, comparer: StringComparer.Ordinal);
+        var spacesByName = workspace.Spaces;
+
+        foreach (var space in definition.Spaces) { if (space is not null) { spacesByName.Add(key: space.Name.Value, value: space); } }
+        var enumsByName = workspace.Enums;
+
+        foreach (var value in definition.Enums) { if (value is not null) { enumsByName.Add(key: value.Name.Value, value: value); } }
         Dictionary<string, List<WorldStateRow>>? dependentsByRow = null;
         BoardDerivation? derivation = null;
 
@@ -150,7 +189,6 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
-
     private static void AddPositionSource(WorldDefinition definition, ISet<string> names, StateChannelRef? source) {
         if (source is null) {
             return;

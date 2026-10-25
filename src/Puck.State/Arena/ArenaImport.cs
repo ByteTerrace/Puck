@@ -3,6 +3,10 @@ using System.Globalization;
 namespace Puck.State;
 
 public sealed partial class StateArena {
+    // Import is synchronous and cannot re-enter the arena. Reuse the bounded key-validation workspace.
+    private readonly HashSet<string> m_importKeys = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_importCellKeys = new(comparer: StringComparer.Ordinal);
+
     /// <summary>Loads a document's rows into the columns, replacing the stored state of every row the list
     /// names.</summary>
     /// <param name="rows">The rows to load; a row the list omits keeps what it holds.</param>
@@ -99,8 +103,12 @@ public sealed partial class StateArena {
 
     private bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out List<(int RowOrdinal, StateRow Row)> admitted, out long visibilityBytes, out string reason) {
         admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
-        var pending = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var seen = new bool[m_layout.RowCount];
+        var pending = m_importKeys;
+
+        pending.Clear();
+        var seen = ((m_layout.RowCount <= 512) ? (Span<bool>)stackalloc bool[m_layout.RowCount] : new bool[m_layout.RowCount]);
+
+        seen.Clear();
 
         visibilityBytes = m_visibilityBytes;
 
@@ -177,7 +185,9 @@ public sealed partial class StateArena {
         StateCell? authored = null;
 
         if (declared.Cells is { } cells) {
-            foreach (var candidate in cells) {
+            for (var index = 0; (index < cells.Count); index++) {
+                var candidate = cells[index];
+
                 if (candidate.Key == cell.Key) {
                     authored = candidate;
 
@@ -698,7 +708,9 @@ public sealed partial class StateArena {
         }
 
         var declared = DocumentRow(rowOrdinal: rowOrdinal);
-        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seen = m_importCellKeys;
+
+        seen.Clear();
 
         foreach (var cell in cells) {
             if (cell is null) {

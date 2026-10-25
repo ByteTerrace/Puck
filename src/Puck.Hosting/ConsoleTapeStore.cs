@@ -25,21 +25,57 @@ public readonly record struct ConsoleTapeFrame(
 public interface IConsoleTapeSource {
     /// <summary>Copies the latest published frame, when one exists.</summary>
     /// <param name="frame">The latest frame, when published.</param>
+    /// <param name="includeHiddenHistory">Whether a hidden panel's history is needed. Renderers may skip it;
+    /// a diagnostic reader still receives the complete current history by default.</param>
     /// <returns><see langword="true"/> when a frame has been published.</returns>
-    bool TrySnapshot(out ConsoleTapeFrame frame);
+    bool TrySnapshot(out ConsoleTapeFrame frame, bool includeHiddenHistory = true);
 }
 /// <summary>
-/// The console-tape state store: the <see cref="ConsoleTape"/> publishes an immutable frame on every console edit,
-/// the render thread snapshots it. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/> (a
-/// sequence-guarded slot: no locks on the read path, no torn frames, nothing allocated per publish) so DI registration
-/// and constructor parameters still name a console-specific type.
+/// The console-tape state store: edits update bounded staging storage under a short lock, and a reader materializes
+/// one immutable frame for all edits since its previous read. Hidden rendering can skip history, while ordinary
+/// snapshot reads retain the complete history and older snapshots remain immutable.
 /// </summary>
 public sealed class ConsoleTapeStore : IConsoleTapeSource {
-    private readonly PublishBuffer<ConsoleTapeFrame> m_buffer = new();
+    private readonly Lock m_gate = new();
+
+    private ConsoleTapeFrame m_frame;
+
+    private ConsoleTapeLine[] m_pending = [];
+
+    private int m_count;
+    private bool m_dirty;
+    private bool m_published;
 
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
-    public void Publish(in ConsoleTapeFrame frame) => m_buffer.Publish(frame: frame);
+    public void Publish(in ConsoleTapeFrame frame) {
+        lock (m_gate) {
+            m_frame = frame;
+            m_dirty = false;
+            m_published = true;
+        }
+    }
+
+    internal void Publish(ConsoleTapeLine[] ring, int head, int count, string input, bool selected, bool visible) {
+        lock (m_gate) {
+            if (m_pending.Length < ring.Length) { m_pending = new ConsoleTapeLine[ring.Length]; }
+            for (var index = 0; (index < count); index++) { m_pending[index] = ring[((head + index) % ring.Length)]; }
+            m_count = count;
+            m_frame = new ConsoleTapeFrame(visible, (m_frame.Lines ?? []), input, selected);
+            m_dirty = true;
+            m_published = true;
+        }
+    }
+
     /// <inheritdoc/>
-    public bool TrySnapshot(out ConsoleTapeFrame frame) => m_buffer.TrySnapshot(frame: out frame);
+    public bool TrySnapshot(out ConsoleTapeFrame frame, bool includeHiddenHistory = true) {
+        lock (m_gate) {
+            if (m_dirty && (m_frame.Visible || includeHiddenHistory)) {
+                m_frame = m_frame with { Lines = m_pending.AsSpan(length: m_count, start: 0).ToArray() };
+                m_dirty = false;
+            }
+            frame = m_frame;
+            return m_published;
+        }
+    }
 }

@@ -16,6 +16,7 @@
         <ProjectReference Include="../Puck.Cli.Runs/Puck.Cli.Runs.csproj" />
         <ProjectReference Include="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.World.Addons/Puck.World.Addons.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

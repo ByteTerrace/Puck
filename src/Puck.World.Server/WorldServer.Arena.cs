@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Immutable;
 using Puck.Abstractions.Counting;
 using Puck.Maths;
 
@@ -248,6 +249,7 @@ public sealed partial class WorldServer {
 
         return rows;
     }
+
     // Reloads the named rows into the live columns and marks the document and the arena agreed. A refusal is a door
     // that did not validate the load first, or a validator hole.
     private void LoadInPlace(IReadOnlyList<StateRow> rows) {
@@ -266,7 +268,6 @@ public sealed partial class WorldServer {
 
         MarkPublished();
     }
-
     // The document and the arena agree on every row as they stand.
     private void MarkPublished() {
         var rows = m_arena.Layout.RowCount;
@@ -340,11 +341,11 @@ public sealed partial class WorldServer {
         var descriptors = m_arena.Catalog.Descriptors;
         var driveGate = false;
         var refresh = false;
-        var rows = new WorldStateRow[installed.Count];
+        var rows = installed.ToImmutableList();
 
         // Document rows occupy the catalog's first ordinals in declaration order, which is the order the installed
         // document lists them in. A row is kept only where that holds by name; anything else is read from the arena.
-        for (var ordinal = 0; (ordinal < rows.Length); ordinal++) {
+        for (var ordinal = 0; (ordinal < rows.Count); ordinal++) {
             var name = descriptors[ordinal].Name;
             var moved = (
                 open[ordinal] ||
@@ -361,14 +362,12 @@ public sealed partial class WorldServer {
                     comparisonType: StringComparison.Ordinal
                 )
             ) {
-                rows[ordinal] = installed[ordinal];
-
                 continue;
             }
 
-            var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal));
+            var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal, previous: installed[ordinal]));
 
-            rows[ordinal] = published;
+            rows = rows.SetItem(index: ordinal, value: published);
 
             if (!moved) {
                 continue;

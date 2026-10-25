@@ -1,6 +1,7 @@
 using Puck.Commands;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using System.Collections.Immutable;
 
 using Puck.World.Protocol;
 
@@ -2030,29 +2031,14 @@ public sealed partial class WorldDocument {
     // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert.
     private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) {
         var key = keyOf(arg: item);
-        var result = new List<T>(capacity: (list.Count + 1));
-        var replaced = false;
+        var result = list.ToImmutableList();
 
-        foreach (var existing in list) {
-            if (
-                !replaced &&
-                EqualityComparer<TKey>.Default.Equals(
-                x: keyOf(arg: existing),
-                y: key
-            )
-            ) {
-                result.Add(item: item);
-                replaced = true;
-            } else {
-                result.Add(item: existing);
+        for (var index = 0; (index < list.Count); index++) {
+            if (EqualityComparer<TKey>.Default.Equals(x: keyOf(list[index]), y: key)) {
+                return result.SetItem(index: index, value: item);
             }
         }
-
-        if (!replaced) {
-            result.Add(item: item);
-        }
-
-        return result;
+        return result.Add(value: item);
     }
     // The token after the one <paramref name="matches"/> accepts, wrapping; the first when none matches.
     private static string NextInCycle(IReadOnlyList<string> tokens, Func<string, bool> matches) {
