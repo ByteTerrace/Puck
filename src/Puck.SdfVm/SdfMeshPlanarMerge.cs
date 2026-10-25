@@ -9,18 +9,19 @@ namespace Puck.SdfVm;
 /// for.
 /// <para>A region is a connected run of triangles, across edges two triangles share by index, that shade alike everywhere:
 /// one material, one member (<see cref="SdfMesh.VertexMembers"/>), one normal bit for bit at every vertex, and every vertex
-/// within a few units in the last place of a float of one plane. Within a region a vertex no other triangle names at its
-/// place (an interior vertex) is removed, and the hole its fan leaves is triangulated again from the vertices about it. A
-/// vertex on the boundary between exactly two regions is removed from both when it lies exactly on the straight line between
-/// its two neighbours along that boundary, which both regions share, so both take one edge between those neighbours. Every
-/// vertex a triangle outside the regions names at its place (an unmerged neighbour), every vertex three regions meet at,
-/// every corner and every vertex on the mesh's open edge stays, so no T-junction opens a crack.</para>
+/// within a few units in the last place of a float of one plane. A vertex only its region's triangles name at its place,
+/// and whose triangles close a ring about it, is removed, and the hole its ring leaves is triangulated again from the
+/// vertices about it. Every other vertex stays: one an unmerged neighbour names, one two regions share, one on the mesh's
+/// open edge. So every region keeps its outline edge for edge, no T-junction opens a crack, and the rasterizer covers each
+/// polygon's outline as it did. A straight run between two merged faces keeps its vertices too: dropping one from both sides
+/// moves where the rasterizer snaps the shared edge by a fraction of a subpixel, which turned a pixel at a glyph's foot, for
+/// one part in a hundred of the triangles left.</para>
 /// <para>A removal is taken only where exact orientation tests on the vertices' own float coordinates certify it: each new
 /// triangle faces as its region does and holds no other vertex of the hole, so together they cover the hole exactly. Each
 /// is then improved by flipping edges toward the Delaunay triangulation of the region's remaining vertices where the circle
 /// test is certain, so the polygons' triangles are as round as their vertices allow. No vertex moves and none changes its
-/// normal, so a region shades as its one normal everywhere, as it did, and the rasterizer covers the polygons it covered.
-/// The merge is a pure function of the mesh, and presentation alone.</para>
+/// normal, so a region shades as its one normal everywhere, as it did. The merge is a pure function of the mesh, and
+/// presentation alone.</para>
 /// </summary>
 public static class SdfMeshPlanarMerge {
     // How far off a region's plane a vertex may lie, as a share of the larger of its own largest coordinate and its
@@ -55,25 +56,13 @@ public static class SdfMeshPlanarMerge {
         private readonly bool[] m_alive;
         private readonly int[] m_degree;
         private readonly int[] m_leave;
-        private int m_regions;
-        // Per site (its first vertex): whether a triangle outside every region names it, the up to two regions that name it
-        // and the vertex each names it by, and whether it was removed.
-        private bool[] m_blocked = [];
-        private int[] m_regionA = [];
-        private int[] m_regionB = [];
-        private int[] m_vertexA = [];
-        private int[] m_vertexB = [];
-        private bool[] m_removed = [];
-        private bool[] m_queued = [];
         private int m_removedTriangles;
         // Scratch every removal reuses.
-        private readonly List<int> m_fan = [];
-        private readonly List<int> m_fanB = [];
+        private readonly List<int> m_ring = [];
         private readonly List<int> m_polygon = [];
         private readonly List<int> m_outer = [];
         private readonly List<(int A, int B, int C)> m_ears = [];
         private readonly Stack<int> m_flips = new();
-        private readonly Queue<int> m_queue = new();
         private int[] m_previous = [];
         private int[] m_following = [];
         private int[] m_outside = [];
@@ -104,7 +93,6 @@ public static class SdfMeshPlanarMerge {
             m_alive = new bool[m_triangles];
             m_degree = new int[vertices];
             m_leave = new int[vertices];
-            Array.Fill(array: m_leave, value: -1);
             for (var half = 0; (half < indices.Length); half++) {
                 m_corners[half] = (int)indices[half];
                 m_degree[m_corners[half]]++;
@@ -116,30 +104,14 @@ public static class SdfMeshPlanarMerge {
         public SdfMesh Run() {
             Twins();
             if (!Regions()) { return m_mesh; }
-            Sites();
 
-            // The sites are taken in a scattered order, so the holes removals leave stay a few vertices wide: in lattice
+            // The vertices are taken in a scattered order, so the holes removals leave stay a few vertices wide: in lattice
             // order each removal widens the last one's hole, and its ears and flips grow with it.
-            var candidates = new List<(uint Order, int Site)>();
+            var candidates = Candidates();
 
-            for (var vertex = 0; (vertex < m_site.Length); vertex++) {
-                if ((m_site[vertex] == vertex) && !m_blocked[vertex] && (m_regionA[vertex] >= 0)) {
-                    candidates.Add(item: (unchecked((uint)vertex * 2654435761u), vertex));
-                }
-            }
             candidates.Sort();
             foreach (var (_, vertex) in candidates) {
-                m_queued[vertex] = true;
-                m_queue.Enqueue(item: vertex);
-            }
-            while (m_queue.TryDequeue(result: out var site)) {
-                m_queued[site] = false;
-                if (m_blocked[site] || m_removed[site]) { continue; }
-                if (m_regionB[site] < 0) {
-                    RemoveInterior(site: site);
-                } else {
-                    RemoveBoundary(site: site);
-                }
+                Remove(vertex: vertex);
             }
 
             return ((m_removedTriangles == 0) ? m_mesh : Build());
@@ -198,6 +170,7 @@ public static class SdfMeshPlanarMerge {
             var members = m_mesh.VertexMembers.Span;
             var eligible = new bool[m_triangles];
             var queue = new Queue<int>();
+            var regions = 0;
             var any = false;
 
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
@@ -222,7 +195,7 @@ public static class SdfMeshPlanarMerge {
 
                 if (!OnPlane(plane: plane, positions: positions, triangle: seed)) { continue; }
 
-                var region = m_regions++;
+                var region = regions++;
                 var material = (materials.IsEmpty ? 0u : materials[seed]);
                 var member = (members.IsEmpty ? SdfMesh.NoMember : members[m_corners[(3 * seed)]]);
                 var size = 0;
@@ -267,225 +240,69 @@ public static class SdfMeshPlanarMerge {
 
             return true;
         }
-        // Each site's account: whether a triangle outside every region names it, and the regions that do with the vertex
-        // each names it by; a site three regions name, or one region by two vertices, is blocked.
-        private void Sites() {
+        // The vertices a removal may take, each the one vertex one region's triangles name at its place, no triangle outside
+        // that region naming the place, keyed by a scattered order.
+        private List<(uint Order, int Vertex)> Candidates() {
+            const int None = -1;
+            const int Blocked = -2;
             var vertices = m_site.Length;
+            var named = new int[vertices];
+            var region = new int[vertices];
+            var candidates = new List<(uint Order, int Vertex)>();
 
-            m_blocked = new bool[vertices];
-            m_regionA = new int[vertices];
-            m_regionB = new int[vertices];
-            m_vertexA = new int[vertices];
-            m_vertexB = new int[vertices];
-            m_removed = new bool[vertices];
-            m_queued = new bool[vertices];
-            Array.Fill(array: m_regionA, value: -1);
-            Array.Fill(array: m_regionB, value: -1);
+            Array.Fill(array: named, value: None);
             for (var half = 0; (half < (3 * m_triangles)); half++) {
                 var vertex = m_corners[half];
                 var site = m_site[vertex];
-                var region = m_regionOf[(half / 3)];
+                var own = m_regionOf[(half / 3)];
 
-                if (region < 0) {
-                    m_blocked[site] = true;
-                } else if ((m_regionA[site] < 0) || (m_regionA[site] == region)) {
-                    m_blocked[site] |= ((m_regionA[site] == region) && (m_vertexA[site] != vertex));
-                    m_regionA[site] = region;
-                    m_vertexA[site] = vertex;
-                } else if ((m_regionB[site] < 0) || (m_regionB[site] == region)) {
-                    m_blocked[site] |= ((m_regionB[site] == region) && (m_vertexB[site] != vertex));
-                    m_regionB[site] = region;
-                    m_vertexB[site] = vertex;
-                } else {
-                    m_blocked[site] = true;
+                if ((own < 0) || ((named[site] != None) && ((named[site] != vertex) || (region[site] != own)))) {
+                    named[site] = Blocked;
+                } else if (named[site] == None) {
+                    named[site] = vertex;
+                    region[site] = own;
                 }
             }
+            for (var site = 0; (site < vertices); site++) {
+                if (named[site] >= 0) { candidates.Add(item: (unchecked((uint)named[site] * 2654435761u), named[site])); }
+            }
+
+            return candidates;
         }
 
-        // The half-edges leaving a vertex, in counter-clockwise order about it: one fan from its first edge to its last, or
-        // a closed ring. False when its triangles are not one fan.
-        private bool Fan(int vertex, List<int> fan, out bool closed) {
-            fan.Clear();
-            closed = false;
-
+        // The half-edges leaving a vertex, counter-clockwise about it, when its triangles close one ring about it.
+        private bool Ring(int vertex, List<int> ring) {
             var start = m_leave[vertex];
-            var degree = m_degree[vertex];
-
-            if ((start < 0) || (degree == 0)) { return false; }
-
-            // Back clockwise to the fan's first edge, or round to the start.
             var half = start;
 
-            for (var step = 0; ; step++) {
-                var twin = m_twins[half];
+            ring.Clear();
+            do {
+                ring.Add(item: half);
+                half = m_twins[Previous(half: half)];
+            } while ((half >= 0) && (half != start) && (ring.Count < m_degree[vertex]));
 
-                if (twin < 0) { break; }
-
-                var before = Next(half: twin);
-
-                if (before == start) {
-                    closed = true;
-                    break;
-                }
-                if (step > degree) { return false; }
-                half = before;
-            }
-
-            var first = (closed ? start : half);
-
-            half = first;
-            for (var step = 0; (step <= degree); step++) {
-                fan.Add(item: half);
-
-                var twin = m_twins[Previous(half: half)];
-
-                if ((twin < 0) || (twin == first)) { break; }
-                half = twin;
-            }
-
-            return ((fan.Count == degree) && (closed == (m_twins[Previous(half: fan[^1])] == first)));
+            return ((half == start) && (ring.Count == m_degree[vertex]) && (m_corners[start] == vertex));
         }
-        // Removes a vertex only one region names, whose fan closes about it within the region.
-        private void RemoveInterior(int site) {
-            var vertex = m_vertexA[site];
-            var region = m_regionA[site];
-
-            if (!Fan(closed: out var closed, fan: m_fan, vertex: vertex) || !closed || !Within(fan: m_fan, region: region) || !Turns(closed: true, fan: m_fan, vertex: vertex)) {
-                m_blocked[site] = true;
-                return;
-            }
+        // Removes a vertex whose triangles close a ring about it, filling the hole with the ears of the polygon about it.
+        private void Remove(int vertex) {
+            if (!Ring(ring: m_ring, vertex: vertex) || !Turns(ring: m_ring, vertex: vertex)) { return; }
 
             m_polygon.Clear();
             m_outer.Clear();
-            foreach (var half in m_fan) {
+            foreach (var half in m_ring) {
                 m_polygon.Add(item: m_corners[Next(half: half)]);
                 m_outer.Add(item: m_twins[Next(half: half)]);
             }
-            if (!Triangulate(polygon: CollectionsMarshal.AsSpan(list: m_polygon))) { m_blocked[site] = true; return; }
-            _ = Replace(closing: -1, ears: CollectionsMarshal.AsSpan(list: m_ears), fan: CollectionsMarshal.AsSpan(list: m_fan), outer: CollectionsMarshal.AsSpan(list: m_outer), polygon: CollectionsMarshal.AsSpan(list: m_polygon), region: region, vertex: vertex);
+            if (!Triangulate(polygon: CollectionsMarshal.AsSpan(list: m_polygon))) { return; }
+            Replace(ears: CollectionsMarshal.AsSpan(list: m_ears), outer: CollectionsMarshal.AsSpan(list: m_outer), polygon: CollectionsMarshal.AsSpan(list: m_polygon), ring: CollectionsMarshal.AsSpan(list: m_ring));
             Flip();
-            m_removed[site] = true;
         }
-        // Removes a vertex on the boundary between two regions from both, where it lies exactly between its two neighbours
-        // along that boundary and both regions run along it between the same two sites.
-        private void RemoveBoundary(int site) {
-            var (regionA, regionB) = (m_regionA[site], m_regionB[site]);
-            var (vertexA, vertexB) = (m_vertexA[site], m_vertexB[site]);
-
-            if (!Runs(regionA: regionA, regionB: regionB, vertexA: vertexA, vertexB: vertexB)) { return; }
-
-            // A run goes from its leaving neighbour (its first half-edge's target) to its entering neighbour (its last
-            // triangle's third corner); the other region's runs the other way between the same sites.
-            var leavingA = m_corners[Next(half: m_fan[0])];
-            var enteringA = m_corners[Previous(half: m_fan[^1])];
-            var leavingB = m_corners[Next(half: m_fanB[0])];
-            var enteringB = m_corners[Previous(half: m_fanB[^1])];
-
-            if ((m_site[leavingA] != m_site[enteringB]) || (m_site[enteringA] != m_site[leavingB]) || !Between(high: leavingA, low: enteringA, middle: vertexA)) { return; }
-            if (!Turns(closed: false, fan: m_fan, vertex: vertexA) || !Turns(closed: false, fan: m_fanB, vertex: vertexB)) { return; }
-
-            // Both holes triangulate before either is filled, so a refusal leaves the mesh as it was.
-            var polygonA = Chain(fan: m_fan, outer: m_outer);
-            var outerA = m_outer.ToArray();
-
-            if (!Triangulate(polygon: polygonA)) { return; }
-
-            var earsA = m_ears.ToArray();
-            var fanA = m_fan.ToArray();
-            var fanB = m_fanB.ToArray();
-            var polygonB = Chain(fan: m_fanB, outer: m_outer);
-
-            if (!Triangulate(polygon: polygonB)) { return; }
-
-            var earsB = m_ears.ToArray();
-            var closingA = Replace(closing: -1, ears: earsA, fan: fanA, outer: outerA, polygon: polygonA, region: regionA, vertex: vertexA);
-
-            if (vertexA == vertexB) {
-                // The vertex both regions name leaves from region B's triangles until they go too.
-                m_leave[vertexA] = fanB[0];
-            }
-
-            // Region B's outer twins are read once region A's hole is filled, which may have linked one of them, and both
-            // holes are filled before either flips, so the closing edges link while they stand where they were made.
-            // Where both regions name the two neighbours by the same vertices, their new edges between them are twins.
-            _ = Chain(fan: m_fanB, outer: m_outer);
-            _ = Replace(closing: (((leavingA == enteringB) && (enteringA == leavingB)) ? closingA : -1), ears: earsB, fan: fanB, outer: CollectionsMarshal.AsSpan(list: m_outer), polygon: polygonB, region: regionB, vertex: vertexB);
-            Flip();
-            m_removed[site] = true;
-            Enqueue(site: m_site[leavingA]);
-            Enqueue(site: m_site[enteringA]);
-        }
-        private void Enqueue(int site) {
-            if (m_blocked[site] || m_removed[site] || m_queued[site] || (m_regionB[site] < 0)) { return; }
-            m_queued[site] = true;
-            m_queue.Enqueue(item: site);
-        }
-        // Fills m_fan with region A's open fan at vertexA and m_fanB with region B's at vertexB: each vertex's own triangles
-        // when the regions name the site by two vertices, or the two runs of the one vertex's ring otherwise.
-        private bool Runs(int vertexA, int vertexB, int regionA, int regionB) {
-            if (vertexA != vertexB) {
-                return (
-                    Fan(closed: out var closedA, fan: m_fan, vertex: vertexA) && !closedA && Within(fan: m_fan, region: regionA) &&
-                    Fan(closed: out var closedB, fan: m_fanB, vertex: vertexB) && !closedB && Within(fan: m_fanB, region: regionB)
-                );
-            }
-            if (!Fan(closed: out var closed, fan: m_fan, vertex: vertexA) || !closed) { return false; }
-
-            // The ring turned to start where region A's run starts, then split where it hands over to region B.
-            var count = m_fan.Count;
-            var start = -1;
-
-            for (var at = 0; (at < count); at++) {
-                if ((m_regionOf[(m_fan[at] / 3)] == regionA) && (m_regionOf[(m_fan[(((at + count) - 1) % count)] / 3)] == regionB)) {
-                    if (start >= 0) { return false; }
-                    start = at;
-                }
-            }
-            if (start < 0) { return false; }
-
-            var ring = m_fan.ToArray();
-
-            m_fan.Clear();
-            m_fanB.Clear();
-            // Only the two regions name the vertex, and region A's run starts once, so region B's run is the rest.
-            for (var at = 0; (at < count); at++) {
-                var half = ring[((start + at) % count)];
-
-                (((m_regionOf[(half / 3)] == regionA) && (m_fanB.Count == 0)) ? m_fan : m_fanB).Add(item: half);
-            }
-
-            return true;
-        }
-        // An open fan's chain of neighbours, its first half-edge's target to its last triangle's third corner, with the twin
-        // of each of the fan's outer edges.
-        private int[] Chain(List<int> fan, List<int> outer) {
-            var polygon = new int[(fan.Count + 1)];
-
-            outer.Clear();
-            for (var at = 0; (at < fan.Count); at++) {
-                polygon[at] = m_corners[Next(half: fan[at])];
-                outer.Add(item: m_twins[Next(half: fan[at])]);
-            }
-            polygon[fan.Count] = m_corners[Previous(half: fan[^1])];
-
-            return polygon;
-        }
-        private bool Within(List<int> fan, int region) {
-            var within = true;
-
-            foreach (var half in fan) {
-                within &= (m_regionOf[(half / 3)] == region);
-            }
-
-            return within;
-        }
-        // Whether a fan's triangles turn once about its vertex, a whole turn for a ring and a half turn for an open fan along a
-        // straight boundary: a fan that winds twice in its plane is no hole to fill.
-        private bool Turns(List<int> fan, int vertex, bool closed) {
+        // Whether a ring's triangles turn once about its vertex in their plane: a ring that winds twice is no hole to fill.
+        private bool Turns(List<int> ring, int vertex) {
             var angle = 0.0;
             var (cu, cw) = ((double)m_u[vertex], (double)m_w[vertex]);
 
-            foreach (var half in fan) {
+            foreach (var half in ring) {
                 var b = m_corners[Next(half: half)];
                 var c = m_corners[Previous(half: half)];
                 var (bu, bw) = ((m_u[b] - cu), (m_w[b] - cw));
@@ -494,22 +311,7 @@ public static class SdfMeshPlanarMerge {
                 angle += Math.Atan2(y: ((bu * dw) - (bw * du)), x: ((bu * du) + (bw * dw)));
             }
 
-            return (Math.Abs(value: (angle - (closed ? (2.0 * Math.PI) : Math.PI))) < 1.0);
-        }
-        // Whether a vertex lies exactly on the segment between two others, strictly inside it.
-        private bool Between(int low, int middle, int high) {
-            var positions = m_mesh.Positions.Span;
-            var (a, b, c) = (positions[low], positions[middle], positions[high]);
-
-            if (
-                (SdfMeshPlanarMerge.Orient(ax: a.X, ay: a.Y, bx: b.X, by: b.Y, cx: c.X, cy: c.Y) != 0) ||
-                (SdfMeshPlanarMerge.Orient(ax: a.Y, ay: a.Z, bx: b.Y, by: b.Z, cx: c.Y, cy: c.Z) != 0) ||
-                (SdfMeshPlanarMerge.Orient(ax: a.Z, ay: a.X, bx: b.Z, by: b.X, cx: c.Z, cy: c.X) != 0)
-            ) { return false; }
-
-            static bool Inside(float low, float middle, float high) => (((low < middle) && (middle < high)) || ((low > middle) && (middle > high)));
-
-            return ((a.X != c.X) ? Inside(high: c.X, low: a.X, middle: b.X) : ((a.Y != c.Y) ? Inside(high: c.Y, low: a.Y, middle: b.Y) : Inside(high: c.Z, low: a.Z, middle: b.Z)));
+            return (Math.Abs(value: (angle - (2.0 * Math.PI))) < 1.0);
         }
 
         // Ear-clips a simple polygon wound counter-clockwise in its plane into m_ears (positions in the polygon), each ear
@@ -519,7 +321,6 @@ public static class SdfMeshPlanarMerge {
             var count = polygon.Length;
 
             m_ears.Clear();
-            if (count < 3) { return false; }
             if (m_previous.Length < count) {
                 m_previous = new int[(2 * count)];
                 m_following = new int[(2 * count)];
@@ -580,13 +381,11 @@ public static class SdfMeshPlanarMerge {
         private bool Holds(int a, int b, int c, int point) =>
             ((Orient(a: a, b: b, c: point) >= 0) && (Orient(a: b, b: c, c: point) >= 0) && (Orient(a: c, b: a, c: point) >= 0));
 
-        // Fills a vertex's fan in a region with the ears over its polygon, which an open fan closes along the straight edge
-        // from its last vertex to its first, whose twin is `closing`. Returns that edge's half-edge, or -1 for a ring.
-        private int Replace(ReadOnlySpan<int> fan, ReadOnlySpan<int> outer, ReadOnlySpan<int> polygon, ReadOnlySpan<(int A, int B, int C)> ears, int region, int vertex, int closing) {
+        // Fills a vertex's ring with the ears over the polygon about it.
+        private void Replace(ReadOnlySpan<int> ring, ReadOnlySpan<int> outer, ReadOnlySpan<int> polygon, ReadOnlySpan<(int A, int B, int C)> ears) {
             var count = polygon.Length;
-            var open = (count == (fan.Length + 1));
 
-            foreach (var half in fan) {
+            foreach (var half in ring) {
                 var triangle = (half / 3);
 
                 m_alive[triangle] = false;
@@ -594,50 +393,35 @@ public static class SdfMeshPlanarMerge {
                     m_degree[m_corners[((3 * triangle) + corner)]]--;
                 }
             }
-            if (m_degree[vertex] == 0) { m_leave[vertex] = -1; }
 
             // The ears replay in the order they were clipped: each polygon edge still standing, from a position to the one
-            // following it, holds the half-edge outside it (the twin of the fan's outer edge, `closing` for an open
-            // polygon's closing edge, or the far side of a diagonal an earlier ear cut), which the ear that takes it links.
+            // following it, holds the half-edge outside it (the twin of the ring's outer edge, or the far side of a diagonal
+            // an earlier ear cut), which the ear that takes it links.
             if (m_outside.Length < count) { m_outside = new int[(2 * count)]; }
 
             var outside = m_outside.AsSpan(length: count, start: 0);
-            var closingHalf = -1;
 
-            for (var at = 0; (at < count); at++) {
-                outside[at] = ((open && (at == (count - 1))) ? closing : outer[at]);
-            }
-            // A hole takes fewer triangles than its fan held, so each ear takes the place of one of the fan's triangles in
-            // the region (whose triangles it already lists), and the places left over stay dead.
+            outer.CopyTo(destination: outside);
+            // A hole takes two triangles fewer than its ring held, so each ear takes the place of one of the ring's triangles
+            // in the region, and the two places left over stay dead.
             for (var at = 0; (at < ears.Length); at++) {
                 var (a, b, c) = ears[at];
-                var triangle = (fan[at] / 3);
+                var triangle = (ring[at] / 3);
 
                 Fill(a: polygon[a], b: polygon[b], c: polygon[c], triangle: triangle);
-
-                closingHalf = (((open && (a == (count - 1)) && (b == 0)) ? (3 * triangle) : closingHalf));
-                closingHalf = (((open && (b == (count - 1)) && (c == 0)) ? ((3 * triangle) + 1) : closingHalf));
                 Link(half: (3 * triangle), twin: outside[a]);
                 Link(half: ((3 * triangle) + 1), twin: outside[b]);
                 if (at == (ears.Length - 1)) {
-                    closingHalf = (((open && (c == (count - 1)) && (a == 0)) ? ((3 * triangle) + 2) : closingHalf));
                     Link(half: ((3 * triangle) + 2), twin: outside[c]);
                 } else {
                     m_twins[((3 * triangle) + 2)] = -1;
                     outside[a] = ((3 * triangle) + 2);
                 }
+                m_flips.Push(item: (3 * triangle));
+                m_flips.Push(item: ((3 * triangle) + 1));
+                m_flips.Push(item: ((3 * triangle) + 2));
             }
-
-            m_removedTriangles += (fan.Length - ears.Length);
-            for (var at = 0; (at < ears.Length); at++) {
-                var half = (3 * (fan[at] / 3));
-
-                m_flips.Push(item: half);
-                m_flips.Push(item: (half + 1));
-                m_flips.Push(item: (half + 2));
-            }
-
-            return closingHalf;
+            m_removedTriangles += (ring.Length - ears.Length);
         }
         private void Fill(int triangle, int a, int b, int c) {
             m_corners[(3 * triangle)] = a;
@@ -649,20 +433,19 @@ public static class SdfMeshPlanarMerge {
                 m_leave[m_corners[((3 * triangle) + corner)]] = ((3 * triangle) + corner);
             }
         }
-        // Flips the queued edges toward each region's Delaunay triangulation: an edge between two triangles of one region
+        // Flips the queued edges toward the region's Delaunay triangulation: an edge between two alive triangles of one region
         // whose far vertex lies certainly inside the near triangle's circumcircle, where the flipped pair winds as they did.
         private void Flip() {
             while (m_flips.TryPop(result: out var half)) {
                 var twin = m_twins[half];
 
-                if ((twin < 0) || (m_regionOf[(half / 3)] < 0) || !m_alive[(half / 3)] || !m_alive[(twin / 3)] || (m_regionOf[(half / 3)] != m_regionOf[(twin / 3)])) { continue; }
+                if ((twin < 0) || !m_alive[(half / 3)] || !m_alive[(twin / 3)] || (m_regionOf[(half / 3)] != m_regionOf[(twin / 3)])) { continue; }
 
                 var a = m_corners[half];
                 var b = m_corners[Next(half: half)];
                 var c = m_corners[Previous(half: half)];
                 var d = m_corners[Previous(half: twin)];
 
-                if ((m_corners[twin] != b) || (m_corners[Next(half: twin)] != a) || (c == d)) { continue; }
                 if (!InCircle(a: a, b: b, c: c, d: d) || (Orient(a: a, b: d, c: c) <= 0) || (Orient(a: d, b: b, c: c) <= 0)) { continue; }
 
                 var bc = m_twins[Next(half: half)];
@@ -747,6 +530,7 @@ public static class SdfMeshPlanarMerge {
 
             return new SdfMesh(indices: indices, members: m_mesh.Members, normals: keptNormals, positions: keptPositions, triangleMaterials: triangleMaterials, vertexMembers: keptMembers) { BakeCell = m_mesh.BakeCell };
         }
+
         private int Orient(int a, int b, int c) => SdfMeshPlanarMerge.Orient(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c]);
         private bool InCircle(int a, int b, int c, int d) => SdfMeshPlanarMerge.InCircle(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c], dx: m_u[d], dy: m_w[d]);
     }

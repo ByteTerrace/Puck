@@ -5,24 +5,27 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// THE LAW: the planar merge changes no pixel. It keeps every vertex it keeps where it was, with its normal and member;
-/// covers each material's surface facing each normal with exactly the area it covered; opens no edge (an edge one side
-/// names and the other does not, as a T-junction leaves); winds every triangle as its normal faces; and reaches the polygons
-/// a flat face tiles: a gridded cube, whose faces meet along straight creases between vertex copies, merges to its twelve
-/// triangles. A vertex an unmerged neighbour names stays, and so does every vertex of a triangle that cannot merge.
+/// covers each material's surface facing each normal with exactly the area it covered, inside exactly the outline it had,
+/// edge for edge; opens no edge (an edge one side names and the other does not, as a T-junction leaves); winds every
+/// triangle as its normal faces; and empties each flat face of its inside vertices: a gridded cube keeps the vertices
+/// along its edges and nothing inside its faces. A vertex an unmerged neighbour names stays, and so does every vertex of a
+/// triangle that cannot merge.
 /// </summary>
 public sealed class SdfMeshPlanarMergeLawTests {
     private const int Cells = 8;
     private const float Cell = 0.25f;
 
     [Fact]
-    public void AGriddedCubeMergesToItsTwelveTriangles() {
+    public void AGriddedCubeKeepsItsEdgesAndEmptiesItsFaces() {
         foreach (var jitter in new[] { false, true }) {
             var cube = Cube(jitter: jitter, kink: false);
             var merged = SdfMeshPlanarMerge.Merge(mesh: cube);
 
+            // Each face is a polygon of the 4 x Cells vertices along its edges, which a polygon covers with two triangles
+            // fewer.
             Holds(before: cube, after: merged);
-            Assert.Equal(expected: 12, actual: merged.TriangleCount);
-            Assert.Equal(expected: 24, actual: merged.Positions.Length);
+            Assert.Equal(expected: (6 * ((4 * Cells) - 2)), actual: merged.TriangleCount);
+            Assert.Equal(expected: (6 * (4 * Cells)), actual: merged.Positions.Length);
             Assert.Equal(expected: cube.BakeCell, actual: merged.BakeCell);
         }
     }
@@ -33,7 +36,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var kept = merged.Positions.ToArray().ToHashSet();
 
         Holds(before: cube, after: merged);
-        Assert.True(condition: (merged.TriangleCount > 12));
+        Assert.True(condition: (merged.TriangleCount > (6 * ((4 * Cells) - 2))));
 
         // Every vertex of a triangle whose corners carry differing normals stays at its place.
         var positions = cube.Positions.Span;
@@ -52,16 +55,19 @@ public sealed class SdfMeshPlanarMergeLawTests {
     [Fact]
     public void MaterialsAndMembersBoundTheirPolygons() {
         // One plane, its halves of two materials sharing the vertices along the line between them, which steps once, its left
-        // columns riding a member: the line's straight run straightens to its ends, its step and the open edge keep their
-        // vertices, and no triangle crosses a member.
+        // columns riding a member: the line and the open edge keep their vertices, a vertex inside one material goes, and
+        // no triangle crosses a member that did not.
         var plane = Plane(material: static (x, y) => ((x < ((y < (Cells / 2)) ? (Cells / 2) : ((Cells / 2) + 1))) ? 0u : 1u), member: static (x, _) => ((x < 2) ? (byte)0 : SdfMesh.NoMember));
         var merged = SdfMeshPlanarMerge.Merge(mesh: plane);
+        var kept = merged.Positions.ToArray();
 
         Holds(before: plane, after: merged);
         Assert.True(condition: (merged.TriangleCount < plane.TriangleCount));
-        Assert.DoesNotContain(expected: plane.Positions.Span[((6 * (Cells + 1)) + 6)], collection: merged.Positions.ToArray());
+        Assert.DoesNotContain(expected: plane.Positions.Span[((6 * (Cells + 1)) + 6)], collection: kept);
         Assert.Equal(expected: Mixed(mesh: plane), actual: Mixed(mesh: merged));
-        Assert.DoesNotContain(collection: merged.Positions.ToArray(), filter: static point => ((point.X == ((Cells / 2) * Cell)) && (point.Y > 0f) && (point.Y < (((Cells / 2) - 0.5f) * Cell))));
+        for (var y = 0; (y <= (Cells / 2)); y++) {
+            Assert.Contains(expected: plane.Positions.Span[((y * (Cells + 1)) + (Cells / 2))], collection: kept);
+        }
 
         // A mesh that carries no vertex normals, or one triangle, or no region of two, is the mesh itself; here the first
         // triangle's corners carry its neighbour's normal off its plane.
@@ -183,6 +189,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
             Assert.Equal(expected: area, actual: areaAfter[key], tolerance: (1e-9 * Math.Abs(value: area)));
         }
         Assert.Equal(expected: OpenEdges(mesh: before), actual: OpenEdges(mesh: after));
+        Assert.True(condition: Outline(mesh: before).SetEquals(other: Outline(mesh: after)));
 
         var positions = after.Positions.Span;
         var normals = after.Normals.Span;
@@ -226,6 +233,25 @@ public sealed class SdfMeshPlanarMergeLawTests {
         }
 
         return areas;
+    }
+    // The outline of each material's surface facing each normal: the edges between two places that its triangles run one
+    // way more often than the other.
+    private static HashSet<(uint, Vector3, Vector3, Vector3)> Outline(SdfMesh mesh) {
+        var positions = mesh.Positions.Span;
+        var normals = mesh.Normals.Span;
+        var indices = mesh.Indices.Span;
+        var materials = mesh.TriangleMaterials.Span;
+        var counts = new Dictionary<(uint, Vector3, Vector3, Vector3), int>();
+
+        for (var at = 0; (at < indices.Length); at++) {
+            var triangle = (at / 3);
+            var bucket = ((materials.IsEmpty ? 0u : materials[triangle]), normals[(int)indices[(3 * triangle)]]);
+            var key = (bucket.Item1, bucket.Item2, positions[(int)indices[at]], positions[(int)indices[(((at % 3) == 2) ? (at - 2) : (at + 1))]]);
+
+            counts[key] = (counts.GetValueOrDefault(key: key) + 1);
+        }
+
+        return [.. counts.Keys.Where(predicate: key => (counts[key] != counts.GetValueOrDefault(key: (key.Item1, key.Item2, key.Item4, key.Item3))))];
     }
     // The edges between two places one way more often than the other: the mesh's open edge, and every crack.
     private static int OpenEdges(SdfMesh mesh) {
