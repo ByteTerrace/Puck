@@ -110,7 +110,7 @@ public static partial class RuleCompiler {
             }
             if ((field.Kind == CellKind.Text) && !site.AllowText) {
                 throw new RuleException(
-                    detail: $"pool field '{name}' is kind=Text — a rule compares numbers, never text",
+                    detail: $"pool field '{name}' is kind=Text — a numeric expression cannot read text; use a Text equality gate",
                     refusal: RuleRefusal.StateCellUnaddressable,
                     ruleName: site.RuleName
                 );
@@ -130,7 +130,7 @@ public static partial class RuleCompiler {
         if (TryResolveStaticInstanceField(cell: cell, context: context, field: out var staticField, handle: out var staticHandle, pool: out var staticPool, reference: operand)) {
             if ((staticField.Kind == CellKind.Text) && !site.AllowText) {
                 throw new RuleException(
-                    detail: $"pool field '{name}' is kind=Text — a rule compares numbers, never text",
+                    detail: $"pool field '{name}' is kind=Text — a numeric expression cannot read text; use a Text equality gate",
                     refusal: RuleRefusal.StateCellUnaddressable,
                     ruleName: site.RuleName
                 );
@@ -320,7 +320,7 @@ public static partial class RuleCompiler {
             !site.AllowText
         ) {
             throw new RuleException(
-                detail: $"state row '{name}' is kind=Text — a rule compares numbers, never text",
+                detail: $"state row '{name}' is kind=Text — a numeric expression cannot read text; use a Text equality gate",
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName
             );

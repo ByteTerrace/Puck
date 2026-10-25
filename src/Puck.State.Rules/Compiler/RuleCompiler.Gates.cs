@@ -810,7 +810,7 @@ public static partial class RuleCompiler {
     private static GateToken ResolvePredicate(ActionPredicate.CompareState compare, string ruleName, RuleCompileContext context) {
         var comparison = compare.Comparison;
         var hasComparand = (compare.ComparandState is not null);
-        var hasValue = (compare.Value is not null);
+        var hasValue = (compare.Value is not null || compare.Text is not null);
         var name = compare.State.Spelling;
 
         if (!comparison.IsComparison()) {
@@ -833,9 +833,11 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
-        if (hasValue == hasComparand) {
+        if ((compare.Value is not null && compare.Text is not null) || hasValue == hasComparand) {
             throw new RuleException(
-                detail: (hasValue
+                detail: (compare.Text is not null
+                ? "compareState requires exactly one of 'value', 'text' and 'comparandState'"
+                : hasValue
                 ? "names both 'value' and 'comparandState' — a compareState spells exactly one comparand, never both"
                 : "names neither 'value' nor 'comparandState' — a compareState must spell exactly one comparand"),
                 refusal: RuleRefusal.ComparandAmbiguous,
@@ -851,11 +853,25 @@ public static partial class RuleCompiler {
                 FieldLabel: "state",
                 KeyFieldLabel: "key",
                 RuleName: ruleName,
-                Verb: "compareState"
+                Verb: "compareState",
+                AllowText: true
             )
         );
 
         if (hasValue) {
+            if (compare.Text is { } text) {
+                if (lhs.ValueKind != CellKind.Text) {
+                    throw new RuleException(RuleRefusal.ComparandKindMismatch, ruleName,
+                        $"'{name}' is kind={lhs.ValueKind} but its comparand is Text");
+                }
+                ValidateTextComparison(comparison, text.Length, ruleName);
+                return new GateToken(CompiledValueSource.FromOperand(lhs.Operand), comparison,
+                    new CompiledValueSource(Text: text), CellKind.Text, $"{lhs.Describe} {comparison.Symbol()} \"{text}\"");
+            }
+            if (lhs.ValueKind == CellKind.Text) {
+                throw new RuleException(RuleRefusal.ComparandKindMismatch, ruleName,
+                    $"'{name}' is kind=Text but its comparand is numeric");
+            }
             var (value, lowered) = LowerConstantComparison(
                 comparison: comparison,
                 kind: lhs.ValueKind,
@@ -880,7 +896,8 @@ public static partial class RuleCompiler {
                 FieldLabel: "comparandState",
                 KeyFieldLabel: "comparandKey",
                 RuleName: ruleName,
-                Verb: "compareState"
+                Verb: "compareState",
+                AllowText: true
             )
         );
 
@@ -893,6 +910,7 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
+        if (lhs.ValueKind == CellKind.Text) { ValidateTextComparison(comparison, 0, ruleName); }
 
         return new GateToken(
             Comparison: comparison,
@@ -901,5 +919,11 @@ public static partial class RuleCompiler {
             RightSource: CompiledValueSource.FromOperand(operand: rhs.Operand),
             ValueKind: lhs.ValueKind
         );
+    }
+    private static void ValidateTextComparison(ExpressionOp comparison, int length, string ruleName) {
+        if (comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual) || length > StateCapacity.MaxTextValueLength) {
+            throw new RuleException(RuleRefusal.PredicateKindInadmissible, ruleName,
+                $"Text comparisons require == or != and at most {StateCapacity.MaxTextValueLength} characters");
+        }
     }
 }

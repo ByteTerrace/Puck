@@ -5,7 +5,7 @@ namespace Puck.World;
 /// the verdict's name, <paramref name="Gate"/> is the expectation in the author's words, the cell
 /// <paramref name="Status"/> names carries <see cref="WorldVerdict.NotEvaluated"/>/<see cref="WorldVerdict.Pass"/>/
 /// <see cref="WorldVerdict.Fail"/>, and every other cell of the row is a value the gate saw, written by the same
-/// rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed or a Bool
+/// rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed, Bool or Text
 /// row is held by a witness: a row of that kind naming this one in <see cref="WorldStateRow.Witness"/>, written by
 /// the same firing, refused at every door this row is refused at, and frozen when this row settles.
 /// </summary>
@@ -54,18 +54,18 @@ public static class WorldVerdict {
     /// <summary>Returns one value a verdict's gate saw as <c>key=value</c>, spelled the way a source spells a value
     /// of that kind — the form <c>puck test</c> and <c>world.verdicts</c> both print.</summary>
     /// <param name="key">The cell's key in the verdict row or its witness.</param>
-    /// <param name="kind">The kind of the row that holds the cell.</param>
-    /// <param name="raw">The cell's stored number: an int, a bool's 0 or 1, or raw <c>FixedQ4816</c> bits.</param>
+    /// <param name="value">The typed cell value the gate read.</param>
     /// <returns>The spelling.</returns>
-    public static string DescribeSeen(string key, CellKind kind, long raw) => kind switch {
-        CellKind.Bool => $"{key}={((raw != 0L) ? "true" : "false")}",
+    public static string DescribeSeen(string key, CellValue value) => value.Kind switch {
+        CellKind.Text => $"{key}={System.Text.Json.JsonSerializer.Serialize(value.AsText)}",
+        CellKind.Bool => $"{key}={(value.AsBool ? "true" : "false")}",
         CellKind.Fixed => string.Create(
             provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"{key}={(((decimal)raw) / 65536m)}"
+            handler: $"{key}={(((decimal)value.AsFixed) / 65536m)}"
         ),
         _ => string.Create(
             provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"{key}={raw}"
+            handler: $"{key}={value.AsInt}"
         ),
     };
     /// <summary>Determines whether a status cell's value is a passing verdict.</summary>

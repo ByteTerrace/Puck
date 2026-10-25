@@ -17,6 +17,10 @@ state {
       count = 0
       tick = -1
       first = -1
+      checked = 0
+      observed = 0
+      checkedTick = -1
+      absent = 0
     }
     table watchdogLog {
       first = ""

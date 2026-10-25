@@ -408,8 +408,7 @@ public static partial class TestCommand {
                 } else {
                     saw.Add(item: WorldVerdict.DescribeSeen(
                         key: key,
-                        kind: CellKind.Int,
-                        raw: value
+                        value: CellValue.Int(value)
                     ));
                 }
             }
@@ -434,11 +433,11 @@ public static partial class TestCommand {
 
                     saw.Add(item: WorldVerdict.DescribeSeen(
                         key: key,
-                        kind: kind,
-                        raw: ReadResolved(
+                        value: ReadResolvedValue(
                             export: export,
                             key: key,
-                            row: witnessName
+                            row: witnessName,
+                            kind: kind
                         )
                     ));
                 }
@@ -455,9 +454,22 @@ public static partial class TestCommand {
 
         return verdicts;
     }
-    private static long ReadResolved(JsonObject export, string row, string key) {
+    private static long ReadResolved(JsonObject export, string row, string key) =>
+        FindResolvedCell(export, row, key)?["value"]?.GetValue<long>() ?? WorldVerdict.NotEvaluated;
+
+    private static CellValue ReadResolvedValue(JsonObject export, string row, string key, CellKind kind) {
+        var cell = FindResolvedCell(export, row, key);
+        if (kind == CellKind.Text) { return CellValue.Text(cell?["text"]?.GetValue<string>()); }
+        var raw = cell?["value"]?.GetValue<long>() ?? 0L;
+        return kind switch {
+            CellKind.Bool => CellValue.Bool(raw != 0),
+            CellKind.Fixed => CellValue.Fixed(raw),
+            _ => CellValue.Int(raw),
+        };
+    }
+    private static JsonObject? FindResolvedCell(JsonObject export, string row, string key) {
         if (export[propertyName: "resolved"] is not JsonArray rows) {
-            return WorldVerdict.NotEvaluated;
+            return null;
         }
 
         foreach (var node in rows) {
@@ -473,12 +485,12 @@ public static partial class TestCommand {
                     (cell is JsonObject value) &&
                     (value[propertyName: "key"]?.GetValue<string>() == key)
                 ) {
-                    return (value[propertyName: "value"]?.GetValue<long>() ?? WorldVerdict.NotEvaluated);
+                    return value;
                 }
             }
         }
 
-        return WorldVerdict.NotEvaluated;
+        return null;
     }
 
     /// <summary>Creates the <c>test</c> verb.</summary>

@@ -99,9 +99,8 @@ chess cursor instead of the car.
 
 ## The watchdog
 
-The watchdog reads the pose of every body but the chess pieces every tick, and
-of up to four pieces a tick in turn (two with every range/tool body present),
-and listens for collision begins. It records:
+The watchdog reads every observed body's pose every tick with one `BodyPoses`
+bulk query, and listens for collision begins. It records:
 
 | Violation | When |
 |---|---|
@@ -123,7 +122,10 @@ the guest read it in.
 Two state rows hold the record, and `world.state` reads them over MCP:
 
 - `watchdog`, numbers: `count`, `tick` (the last violation's) and `first` (the
-  first's), -1 before any;
+  first's), -1 before any; `checked` and `observed` count the last batch's checked bodies
+  and the observed set, `absent` counts inactive observed slots, and `checkedTick` names that
+  batch's settled tick. A headless boot checks 44 live bodies and finds one inactive seat in
+  the 45-slot set every tick; joining that seat makes all 45 live;
 - `watchdogLog`, text: `first` and `last`, as lines such as
   `t=61 below-floor body=0 y=-3.01`.
 

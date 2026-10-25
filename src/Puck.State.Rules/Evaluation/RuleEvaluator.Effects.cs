@@ -466,7 +466,7 @@ public sealed partial class RuleEvaluator {
         if (effect.Field.Kind == CellKind.Text) {
             var text = effect.Text;
 
-            if ((text is null) && !TryReadText(source: effect.Source.Operand, text: out text)) {
+            if ((text is null) && !RuleEvaluation.TryReadText(reader: m_host, source: effect.Source.Operand, text: out text)) {
                 return true;
             }
             if (!m_host.Arena.TryWrite(handle: handle, fieldOrdinal: effect.Field.Ordinal, value: CellValue.Text(value: text), reason: out var textReason)) {
@@ -495,7 +495,7 @@ public sealed partial class RuleEvaluator {
         if (effect.Field.Kind == CellKind.Text) {
             var text = effect.Text;
 
-            if ((text is null) && !TryReadText(source: effect.Source.Operand, text: out text)) {
+            if ((text is null) && !RuleEvaluation.TryReadText(reader: m_host, source: effect.Source.Operand, text: out text)) {
                 return true;
             }
             if (!m_host.Arena.TryWrite(handle: handle, fieldOrdinal: effect.Field.Ordinal, value: CellValue.Text(value: text), reason: out var textReason)) {
@@ -968,7 +968,7 @@ public sealed partial class RuleEvaluator {
         var write = ((WriteEffect)effect);
         var text = write.Text;
 
-        if ((text is null) && !TryReadText(source: write.Source.Operand, text: out text)) {
+        if ((text is null) && !RuleEvaluation.TryReadText(reader: m_host, source: write.Source.Operand, text: out text)) {
             return true;
         }
 
@@ -986,49 +986,6 @@ public sealed partial class RuleEvaluator {
                 text: text
             )
         );
-    }
-    private bool TryReadText(IRuleOperand? source, out string text) {
-        text = string.Empty;
-        CellValue carried;
-
-        switch (source) {
-            case StateCellOperand cell: {
-                    var ordinal = cell.RowOrdinal;
-
-                    if ((cell.RowFrom is { } live) && !live.TryResolve(reader: m_host, rowOrdinal: out ordinal)) {
-                        return false;
-                    }
-                    var key = RuleReads.ResolveKey(keyFrom: cell.KeyFrom, literal: cell.Key, reader: m_host);
-
-                    if (!key.IsValid || !m_host.Arena.TryRead(key: key, rowOrdinal: ordinal, value: out carried)) {
-                        return false;
-                    }
-                    break;
-                }
-            case InstanceFieldOperand field: {
-                    var bindings = m_host.InstanceBindings;
-
-                    if ((((uint)field.BindingSlot) >= ((uint)bindings.Length)) || (bindings[field.BindingSlot].PoolOrdinal != field.Pool.Ordinal) || !m_host.Arena.TryReadLive(handle: bindings[field.BindingSlot], fieldOrdinal: field.Field.Ordinal, time: m_host.Time, value: out carried)) {
-                        return false;
-                    }
-                    break;
-                }
-            case StaticInstanceFieldOperand field: {
-                    if (!m_host.Arena.TryResolvePoolSlot(poolOrdinal: field.Pool.Ordinal, slot: field.Handle.Slot, handle: out var handle) ||
-                        !m_host.Arena.TryReadLive(handle: handle, fieldOrdinal: field.Field.Ordinal, time: m_host.Time, value: out carried)) {
-                        return false;
-                    }
-                    break;
-                }
-            default:
-                return false;
-        }
-
-        if (carried.Kind != CellKind.Text) {
-            return false;
-        }
-        text = carried.AsText;
-        return true;
     }
     private bool Apply(IRuleEffect effect, in Mutation mutation, in EffectFiring firing, out bool moved) {
         moved = m_host.Apply(

@@ -160,6 +160,11 @@ public static partial class RuleWorkBudget {
                 kind: token.ValueKind
             ));
 
+            if (token.ValueKind == CellKind.Text) {
+                // Equality compares at most the literal's length, or the maximum admitted cell length for two rows.
+                cost += 1L + Math.Min(token.LeftSource.Text?.Length ?? StateCapacity.MaxTextValueLength,
+                    token.RightSource.Text?.Length ?? StateCapacity.MaxTextValueLength);
+            }
             cost += ((token.LeftSource.IsExpression || token.RightSource.IsExpression)
                 ? (1L + sides)
                 : sides

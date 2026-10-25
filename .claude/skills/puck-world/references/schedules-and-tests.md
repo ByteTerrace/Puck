@@ -11,6 +11,15 @@ hazards stay in the main [SKILL.md](../SKILL.md).
 - Captures
 - Schedules, verdicts, and `test` blocks
 
+Rule gates and test `expect` lines can compare Text rows with `==` and `!=`, against
+a quoted literal or another Text row. Equality is ordinal and case sensitive;
+missing live cells satisfy neither comparison. Test verdicts retain the actual
+text in a Text witness row and print it as a quoted value. The debug addon tests
+read the guide's title/note and the watchdog log directly.
+Rows whose kinds are only known after basis/import composition still evaluate
+but currently have no witness values; this reporting gap is recorded in
+[open items](../../../../docs/plans/open-items.md#addon-system).
+
 ## Tick-exact debug capture
 
 **Start with `puck motion`.** It is this procedure as one command: it boots a

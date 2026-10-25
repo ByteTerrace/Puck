@@ -15338,7 +15338,7 @@
                       ],
                       "anyOf": [
                         {
-                          "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+                          "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Exactly one of Value, Text and ComparandState must be present. The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
                           "properties": {
                             "$type": {
                               "const": "compareState"
@@ -16384,7 +16384,7 @@
                               ]
                             },
                             "value": {
-                              "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
+                              "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
                               "type": [
                                 "number",
                                 "null"
@@ -16675,6 +16675,14 @@
                                   }
                                 }
                               ]
+                            },
+                            "text": {
+                              "description": "A literal Text comparand instead of Value or ComparandState. Text supports ordinal equality and inequality; numeric and text kinds never compare implicitly.",
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "default": null
                             }
                           },
                           "required": [
@@ -18436,7 +18444,7 @@
                                 ],
                                 "anyOf": [
                                   {
-                                    "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+                                    "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Exactly one of Value, Text and ComparandState must be present. The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
                                     "properties": {
                                       "$type": {
                                         "const": "compareState"
@@ -18549,7 +18557,7 @@
                                         ]
                                       },
                                       "value": {
-                                        "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
+                                        "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
                                         "type": [
                                           "number",
                                           "null"
@@ -18840,6 +18848,14 @@
                                             }
                                           }
                                         ]
+                                      },
+                                      "text": {
+                                        "description": "A literal Text comparand instead of Value or ComparandState. Text supports ordinal equality and inequality; numeric and text kinds never compare implicitly.",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ],
+                                        "default": null
                                       }
                                     },
                                     "required": [
@@ -20632,7 +20648,7 @@
                                         ],
                                         "anyOf": [
                                           {
-                                            "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+                                            "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Exactly one of Value, Text and ComparandState must be present. The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
                                             "properties": {
                                               "$type": {
                                                 "const": "compareState"
@@ -20745,7 +20761,7 @@
                                                 ]
                                               },
                                               "value": {
-                                                "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
+                                                "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
                                                 "type": [
                                                   "number",
                                                   "null"
@@ -21036,6 +21052,14 @@
                                                     }
                                                   }
                                                 ]
+                                              },
+                                              "text": {
+                                                "description": "A literal Text comparand instead of Value or ComparandState. Text supports ordinal equality and inequality; numeric and text kinds never compare implicitly.",
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ],
+                                                "default": null
                                               }
                                             },
                                             "required": [
@@ -39082,7 +39106,7 @@
                           ],
                           "anyOf": [
                             {
-                              "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+                              "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Exactly one of Value, Text and ComparandState must be present. The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
                               "properties": {
                                 "$type": {
                                   "const": "compareState"
@@ -39195,7 +39219,7 @@
                                   ]
                                 },
                                 "value": {
-                                  "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
+                                  "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
                                   "type": [
                                     "number",
                                     "null"
@@ -39486,6 +39510,14 @@
                                       }
                                     }
                                   ]
+                                },
+                                "text": {
+                                  "description": "A literal Text comparand instead of Value or ComparandState. Text supports ordinal equality and inequality; numeric and text kinds never compare implicitly.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
                                 }
                               },
                               "required": [

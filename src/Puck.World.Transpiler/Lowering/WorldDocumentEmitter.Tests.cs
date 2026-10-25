@@ -381,6 +381,7 @@ public static partial class WorldDocumentEmitter {
     private static JsonNode? UnseenValue(CellKind kind) => kind switch {
         CellKind.Bool => JsonValue.Create(value: false),
         CellKind.Fixed => JsonValue.Create(value: "0"),
+        CellKind.Text => JsonValue.Create(value: ""),
         _ => null,
     };
 
@@ -1179,7 +1180,7 @@ public static partial class WorldDocumentEmitter {
 
         foreach (var (readState, readKey) in reads) {
             // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
-            // read of a Fixed or a Bool row is a cell of that kind's witness.
+            // read of a Fixed, Bool or Text row is a cell of that kind's witness.
             if (
                 (KindOfRow(
                     name: readState,

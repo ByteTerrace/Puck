@@ -303,6 +303,10 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
+                if (query.Verb == AddonAbi.RequestVerbs.BodyPoses) {
+                    ResolveBodyPoses(addon, in query, tick);
+                    continue;
+                }
                 if (query.Verb >= AddonAbi.RequestVerbs.ReadStateText) {
                     ResolveDebuggerQuery(addon, in query, tick);
                     continue;

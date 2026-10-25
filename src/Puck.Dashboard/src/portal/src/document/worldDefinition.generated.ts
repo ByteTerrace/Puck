@@ -449,7 +449,7 @@ export type ActionPredicateAnyNonNullable = {
 };
 
 /**
- * Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold — $tick compared against a schedule row the rule's own effects advance is "every N ticks"; a round row compared against a declared length row is a round boundary — composition over the same two-sided comparison, never a new mechanism.
+ * Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Exactly one of Value, Text and ComparandState must be present. The comparand-row spelling is what lets a gate track a moving threshold — $tick compared against a schedule row the rule's own effects advance is "every N ticks"; a round row compared against a declared length row is a round boundary — composition over the same two-sided comparison, never a new mechanism.
  */
 export type ActionPredicateCompareState = {
   $type?: "compareState";
@@ -462,7 +462,7 @@ export type ActionPredicateCompareState = {
    */
   comparison: ExpressionComparison;
   /**
-   * The authored constant comparand, or null when ComparandState spells the comparand instead.
+   * The authored constant comparand, or null when ComparandState or Text spells the comparand instead.
    */
   value?: number | null;
   /**
@@ -477,6 +477,10 @@ export type ActionPredicateCompareState = {
    * The cell inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.
    */
   comparandKey?: StateChannelRefNonNullable;
+  /**
+   * A literal Text comparand instead of Value or ComparandState. Text supports ordinal equality and inequality; numeric and text kinds never compare implicitly.
+   */
+  text?: string | null;
 };
 
 /**
@@ -12369,7 +12373,7 @@ export type WorldStateRow = {
     medium?: WorldLatticeMedium | null;
   };
   /**
-   * The verdict trait on a state row: the row is a test expectation's answer. The row's own name is the verdict's name, Gate is the expectation in the author's words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed or a Bool row is held by a witness: a row of that kind naming this one in Witness, written by the same firing, refused at every door this row is refused at, and frozen when this row settles.
+   * The verdict trait on a state row: the row is a test expectation's answer. The row's own name is the verdict's name, Gate is the expectation in the author's words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed, Bool or Text row is held by a witness: a row of that kind naming this one in Witness, written by the same firing, refused at every door this row is refused at, and frozen when this row settles.
    */
   verdict?: {
     /**

@@ -117,8 +117,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{witnessed}' names no verdict row.");
         }
 
-        if (row.Kind is not (CellKind.Bool or CellKind.Fixed)) {
-            errors.Add(item: $"{path} is declared on a {row.Kind} row — a gate reads numbers, an Int one is a cell of the verdict row itself, so a witness is kind Fixed or Bool.");
+        if (row.Kind is not (CellKind.Bool or CellKind.Fixed or CellKind.Text)) {
+            errors.Add(item: $"{path} is declared on a {row.Kind} row — Int reads belong to the verdict row itself; a witness is kind Fixed, Bool or Text.");
         }
 
         if (row.IsSlot) {

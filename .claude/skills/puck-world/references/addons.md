@@ -244,7 +244,11 @@ grounded/obstruction witnesses in two cells. `ReadStateCell` (4) reads a numeric
 cell through an Observe/State handle, acquired by a named `State` Ask (wire
 kind 5). `Log` (5) emits up to eight attributed 2048-byte UTF-8 lines per guest per tick
 into the World's `host.log` ring. State names and keys use strict UTF-8;
-numeric values remain raw fixed-point or integer values. ReadStateText (6) provides bounded text chunks; vector reads remain an open gap. The [ABI reference](../../../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
+numeric values remain raw fixed-point or integer values. `BodyPoses` (13) reads an ordered
+array of Observe/body handles into guest memory, one 64-byte pose/verdict record per handle,
+with one completion cell instead of four cells per body. It shares each body's Observe budget
+with individual reads and prepays bounded host fuel; the watchdog uses it for every observed
+body every tick. ReadStateText (6) provides bounded text chunks; vector reads remain an open gap. The [ABI reference](../../../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
 owns the exact layouts and remaining-fuel charges.
 
 The decoder also serves `UpsertStateCell`/`RemoveStateCell` (47/48), through

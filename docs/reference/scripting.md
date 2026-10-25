@@ -5,7 +5,8 @@ each one once per sim tick, on the sim thread. An addon holds **no ambient autho
 enumerate the world, it cannot name a subject it was not told about, and it acts only through
 **handles the host mints for it**. Everything it hears and everything it says crosses as fixed-size
 32-byte cells in two rings inside its own linear memory—a host→guest **input ring** and a
-guest→host **output ring**. A module is fully self-contained: it declares zero imports, so it runs
+guest→host **output ring**. Bulk reads write their result records into a guest-provided memory
+range and return one completion cell. A module is fully self-contained: it declares zero imports, so it runs
 and can be tested in any wasm runtime, not just this host.
 
 Everything is built for **bit-identical replay**: the Wasmtime engine is pinned and configured with
@@ -55,8 +56,8 @@ toolchain beyond the engine.
 
 - *No ambient authority:* an addon cannot enumerate the world or name a subject it was not told
   about; every action crosses through a handle the host mints for it.
-- *A fixed-size two-ring cell ABI:* every host↔guest exchange is 32-byte cells in the guest's own
-  linear memory—no framing, no variable-length messages, one structural decoder for every module.
+- *A fixed-size two-ring cell ABI:* requests and completions use 32-byte cells; bulk pose records
+  use a separate bounded range in the guest's own linear memory.
 - *Bit-identical replay:* every Wasmtime determinism knob is pinned explicit; no floating point
   crosses the boundary; a runaway module halts at a fuel-deterministic point, never a wall-clock one.
 - *Runnable outside this host:* a module declares zero imports, so the same `.wasm` bytes compile,
@@ -129,10 +130,10 @@ little-endian; every fixed-point value is `FixedQ4816` raw `i64` bits (`One = 0x
 
 `AddonAbi.AbiVersion` is the ABI's version. There is one addon ABI; this host speaks exactly that
 version, and a guest reporting any other value faults `AbiMismatch` loudly at mount and never ticks,
-naming both. A change to the ABI raises the version in the same change, and the generated Rust
-constant (`ABI_VERSION`) moves with it, so a guest built before the ABI changed is refused at mount;
-`puck wasm-stdlib` then `puck wasm build`, which rebuilds every committed guest, are owed after any
-change to the host's ABI source.
+naming both. A breaking change to the cell/export shape raises the version and rebuilds the
+committed guests. Adding request verbs is prefix growth: existing guests retain their declared
+verb counts and mount unchanged. `puck wasm-stdlib` regenerates the Rust constants after either kind
+of change; `puck wasm build` rebuilds guests when their source or ABI shape changes.
 
 ### Guest exports
 
@@ -491,6 +492,34 @@ as any other malformed record—the moment a declared ordinal repeats.
 | 10 | `Engage` | Drive/Body; A is a screen index or -1 to dissolve; B=C=0 | One cell: Applied or refusal; the manifest must request Control on every affected screen (a narrowing, not authority); the authority is the Drive grant over the body, the engage policy, and the engage check over each target |
 | 11 | `MachineOperation` | Control/Screen; A/B name a UTF-8 JSON envelope up to 2048 bytes, C=0 | One cell: provider status in A; Applied or refusal; the manifest must request Control on the named machine (a narrowing, not authority); the authority is the granted Control on the screen and on the machine instance, which the server checks when it applies the operation |
 | 12 | `MachineStatus` | Observe/Screen; A=B=C=0 | One cell: runtime status in A, completed steps in B |
+| 13 | `BodyPoses` | zero handle fields; A points to packed Observe handles (`u16 index, u16 generation`), B is their count (1–4096), C points to B writable 64-byte records | One cell: `Applied`, record count in A, settled tick in B; each bulk record carries its own authority verdict |
+
+`BodyPoses` reads an observed set in the caller's order, including every observed body when the
+guest supplies all its Observe handles. The host copies the entire handle array before writing
+results, so input and output ranges may overlap. Each little-endian 64-byte record contains:
+
+| Offset | Value |
+|---|---|
+| 0 | `i32` body index, or -1 on refusal |
+| 4 | `u8 AddonVerdict`; bytes 5–7 are zero |
+| 8, 16, 24 | position X, Y, Z as Q48.16 raw `i64` |
+| 32, 40, 48, 56 | quaternion X, Y, Z, W as Q48.16 raw `i64` |
+
+Each handle passes live resolution, manifest, grant and per-body Observe budget checks before a
+pose is read. Denied records contain no pose data (all seven lanes are zero). Duplicate handles
+spend the same per-body budget as `BodyPose` and `BodyKinematics`; batching never increases that
+budget. A malformed count, nonzero outer handle or invalid memory range answers `MalformedPayload`
+and writes no result. Host fuel is charged before work: 128 per request plus 132 per record
+(handle copy, result write and authority/pose read). Exhaustion faults the mount without publishing
+a partial result. Invalid destination ranges can still spend read budgets.
+
+The host writes the records at the ordinary post-population read point; the completion arrives in
+the next tick's input batch. Guests consume records only after the matching completion, reserve
+the destination until then, and keep it separate from their rings and other pending results.
+Only the completion uses the input ring budget, so 45 poses take one cell rather than 180.
+Completion starvation follows the ordinary retryable ring policy; it does not make unwitnessed
+bytes a successful response. Replay recomputes the same bounded copies, checks and records under
+the guest's pinned receipt; it needs no new recorded ingress or host import.
 
 Orientation is the body's canonical `FixedQuaternion`, never a yaw scalar; any derived heading
 projection is the guest's own work. Every `BodyPose` part cell carries the response channel in

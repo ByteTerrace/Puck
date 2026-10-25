@@ -25,6 +25,9 @@ public static partial class WorldDocumentEmitter {
         internal string Bind(OperandExpressionNode operand) {
             WriteOperand(operand: operand);
             var text = m_text.ToString();
+            // A literal string can be the comparand of a text gate. Arithmetic still compiles through the
+            // numeric expression reader below and refuses strings inside a numeric program.
+            if (operand.Syntax is Syntax.SourceString) { return text; }
 
             if (operand.Form == DocumentValueForm.Expression) {
                 if (Syntax.TryParse(error: out var error, program: out var program, text: text)) {

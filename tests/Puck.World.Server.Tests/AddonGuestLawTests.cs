@@ -160,6 +160,20 @@ public sealed partial class AddonGuestLawTests {
         Assert.Equal(expected: 0, actual: tick.CellCount);
         Assert.Equal(expected: AddonState.Enabled, actual: guest.State);
     }
+    [Theory]
+    [InlineData(65528, true)]
+    [InlineData(65529, false)]
+    [InlineData(-1, false)]
+    [InlineData(4294967296L, false)]
+    public void BulkResultWritesCheckTheWholeGuestMemoryRange(long pointer, bool allowed) {
+        using var engine = new ScriptingEngine(ScriptingEngineOptions.Deterministic);
+        using var guest = Mount(engine, Quiet);
+        byte[] bytes = [1, 2, 3, 4, 5, 6, 7, 8];
+        Assert.Equal(allowed, guest.TryWriteMemory(pointer, bytes, out _));
+        var copy = new byte[8];
+        Assert.True(guest.TryCopyMemory(65528, 8, copy, out _));
+        Assert.Equal(allowed ? bytes : new byte[8], copy);
+    }
     [Fact]
     public void HostQueriesShareTheWasmsTickFuelAndExhaustionIsSticky() {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);

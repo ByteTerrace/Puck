@@ -53,6 +53,10 @@ public static class AddonAbi {
     public const int MaxChannels = 8;
     /// <summary>The maximum number of 32-byte cells the host writes to the input ring per tick (<c>64</c>).</summary>
     public const int MaxInCells = 64;
+    /// <summary>The maximum number of Observe handles in one bulk pose read.</summary>
+    public const int MaxPoseBatchBodies = 4096;
+    /// <summary>Bytes per bulk pose record: body i32, verdict u8, three zero bytes, then seven Q48.16 i64 lanes.</summary>
+    public const int BodyPoseRecordBytes = 64;
     /// <summary>The maximum total mutation-payload bytes EVERY mounted addon may dispatch, SUMMED, in ONE tick
     /// (<c>65536</c>, 64 KiB) — the global ceiling on host-side JSON decode work this seam admits per tick,
     /// regardless of how many guests are mounted or how their individual per-addon budgets are set. Excess is
@@ -181,7 +185,11 @@ public static class AddonAbi {
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
         /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
         /// fewer verbs.</summary>
-        public const int Count = 13;
+        public const int Count = 14;
+        /// <summary>Reads an ordered set of Observe/body handles into guest memory. Zero handle fields;
+        /// A points to packed (index u16, generation u16) pairs, B is their count, C points to B pose records.
+        /// One completion cell carries the record count and settled tick; each record carries its own verdict.</summary>
+        public const int BodyPoses = 13;
         /// <summary>Reads height/vertical world velocity, then body facts/contact flags (two answer parts).</summary>
         public const int BodyKinematics = 3;
         /// <summary>Reads a 16-byte UTF-8 text chunk through Observe/State. A/B name the key; C is byte offset.</summary>

@@ -1,8 +1,7 @@
 // The debug world's three addons (addons.md), each scenario booted in the whole debug world:
 // `puck test worlds/debug/addons-tests.puck`. The watchdog (watchdog.puck) counts violations in `watchdog`, the
 // gallery guide (guide.puck) names the exhibit she stands at by its walking-order position in `guideAt`, and the
-// companion (companion.puck) is body 42. A test gate reads numbers, so the rows' text twins are read with
-// `world.state` instead.
+// companion (companion.puck) is body 42. The expectations read numeric counts and the actual text rows.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -14,6 +13,12 @@ test "the watchdog stays quiet through an ordinary boot" {
   }
   expect {
     watchdog[count] == 0
+    watchdog[checked] == 44
+    watchdog[observed] == 45
+    watchdog[absent] == 1
+    watchdog[checkedTick] >= 88
+    watchdogLog[first] == ""
+    watchdogLog[last] == ""
     machineDebuggerViolations[count] == 0
     machineDebugger0[tick] == -1
     machineDebugger1[tick] == -1
@@ -40,6 +45,8 @@ test "the guide names the exhibit the Moth stands before" {
   }
   expect {
     guideAt == 45
+    guide[title] == "SHEAR"
+    guide[note] == "A box sheared into a curving lean."
   }
 }
 
@@ -52,6 +59,8 @@ test "the guide clears when she walks away" {
   }
   expect {
     guideAt == -1
+    guide[title] == ""
+    guide[note] == ""
   }
 }
 

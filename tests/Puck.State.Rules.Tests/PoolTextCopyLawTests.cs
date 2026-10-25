@@ -115,4 +115,19 @@ public sealed class PoolTextCopyLawTests {
             ]),
         ])));
     }
+    [Fact]
+    public void TextPoolComparisonsReadTheLiveCellAndAbsenceDoesNotSatisfyInequality() {
+        var (arena, context, _) = Arrange();
+        var reader = new ArenaEffectHost(arena);
+        var source = StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0);
+        var equal = RuleCompiler.Compile(new Rule(Name("equal"), [],
+            Gate: new ActionPredicate.CompareState(source, ExpressionOp.Equal, Text: "fresh")), context, requireEffects: false);
+        Assert.True(RuleEvaluation.GateHolds(reader, equal.Gate, out _));
+        var handle = arena.SnapshotPool(arena.Catalog.Pools[0].Ordinal)[0];
+        Assert.True(arena.TryRelease(handle, out _));
+        var unequal = RuleCompiler.Compile(new Rule(Name("unequal"), [],
+            Gate: new ActionPredicate.CompareState(source, ExpressionOp.NotEqual, Text: "fresh")), context, requireEffects: false);
+        Assert.False(RuleEvaluation.GateHolds(reader, unequal.Gate, out var fault));
+        Assert.Equal(ExpressionFault.Absent, fault);
+    }
 }
