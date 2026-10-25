@@ -120,6 +120,8 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             contents: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
         );
 
+        // Publish pending health first: two updates before a stub launch must not promote an unstarted version.
+        HealthGateFile.MarkPending(cacheRoot: root, version: manifest.Version);
         AtomicFile.WriteAllText(
             path: currentPath,
             contents: manifest.Version

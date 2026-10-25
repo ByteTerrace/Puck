@@ -125,6 +125,8 @@ process-interruption recovery do not establish power-loss durability across
 filesystems.
 
 `last-good` advances from `current` only while `state/health.json` is absent.
+Activation writes pending health before changing current, so successive updates
+cannot bless a version that has never started.
 The selected executable clears that marker after startup, under `update.lock`,
 only when both its version and actual executable directory match `current`.
 An old or concurrently replaced process leaves it intact. The stub refuses

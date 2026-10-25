@@ -56,6 +56,26 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
         Assert.Equal(expected: hasLastGood, actual: File.Exists(path: lastGood));
         if (hasLastGood) { Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: lastGood)); }
     }
+    [Fact]
+    public void ConsecutiveUpdatesBeforeLaunchingNeverPromoteAnUnstartedVersion() {
+        Directory.CreateDirectory(path: m_root.RootPath);
+        File.WriteAllText(path: Current, contents: "1.0.0");
+        var content = "new binary"u8.ToArray();
+
+        foreach (var version in new[] { "1.0.1", "1.0.2" }) {
+            Directory.CreateDirectory(path: Version(version: version));
+            File.WriteAllBytes(path: Path.Combine(path1: Version(version: version), path2: "app.dll"), bytes: content);
+            var manifest = new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: null, Notes: null,
+                Payloads: [new ReleasePayload(Rid: "win-x64", Files: [new ReleasePayloadFile(Path: "app.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length)])],
+                Revoked: null, Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema,
+                Signature: null, StateGeneration: 1, Version: version);
+            var result = new FileUpdateApplier().Apply(manifest: manifest, rid: "win-x64", cacheRoot: m_root.RootPath);
+
+            Assert.True(condition: result.Applied, userMessage: result.RefusalReason);
+            Assert.True(condition: File.Exists(path: Marker));
+            Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")));
+        }
+    }
     [InlineData(null)]
     [InlineData("")]
     [InlineData("-1")]

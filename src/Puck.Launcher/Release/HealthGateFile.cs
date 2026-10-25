@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Hosting;
+using Puck.Assets;
+using System.Text.Json;
 
 namespace Puck.Launcher.Release;
 
@@ -32,6 +34,15 @@ internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime
 
 /// <summary>The health attempt counter's clearing half — see <see cref="SelfUpdateHealthGateHostedService"/>.</summary>
 public static class HealthGateFile {
+    private sealed record HealthRecord(string Version, int Attempts);
+
+    /// <summary>Marks a selected install unproven before the current pointer changes. The caller holds update.lock.
+    /// Zero attempts is pending startup; only deletion proves startup.</summary>
+    /// <param name="cacheRoot">The install root.</param>
+    /// <param name="version">The version about to become current.</param>
+    public static void MarkPending(string cacheRoot, string version) => AtomicFile.WriteAllText(
+        path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"),
+        contents: JsonSerializer.Serialize(value: new HealthRecord(Attempts: 0, Version: version)));
     /// <summary>Deletes the health marker only for the process still selected by current, under the install lease.
     /// A busy install leaves the marker intact; an older process cannot bless a newer selected install.</summary>
     /// <param name="cacheRoot">The install root (the same directory the stub reads <c>state/health.json</c> under).</param>
