@@ -134,7 +134,7 @@ public sealed partial class StateArena {
         }
     }
 
-    private StateArena(StateCatalog catalog, ArenaLayout layout, IStateSection? section, in ArenaTime time, out string reason) {
+    private StateArena(StateCatalog catalog, ArenaLayout layout, IStateSection? section, in ArenaTime time, out string reason, IReadOnlySet<string>? seeded = null) {
         ArgumentNullException.ThrowIfNull(argument: catalog);
         ArgumentNullException.ThrowIfNull(argument: layout);
 
@@ -203,7 +203,10 @@ public sealed partial class StateArena {
         m_poolMutationDepth++;
         var loaded = TryLoad(
             reason: out reason,
-            rows: m_rows,
+            rows: ((seeded is null)
+                ? m_rows
+                : SeededRows(seeded: seeded)
+            ),
             time: in time
         );
 
@@ -217,6 +220,37 @@ public sealed partial class StateArena {
         }
     }
 
+    // The declared rows a seeding arena loads: the named rows, and the tokens and codes rows of every derived board
+    // one of them is, feeds or is fed by, so a board recomputes from what the section holds.
+    private List<StateRow> SeededRows(IReadOnlySet<string> seeded) {
+        var names = new HashSet<string>(collection: seeded, comparer: StringComparer.Ordinal);
+
+        for (var ordinal = 0; (ordinal < m_layout.RowCount); ordinal++) {
+            ref readonly var board = ref m_layout[ordinal];
+
+            if (!board.IsDerivedBoard) {
+                continue;
+            }
+
+            var tokens = m_catalog.Descriptors[board.InverseTokensOrdinal].Name;
+            var codes = m_catalog.Descriptors[board.InverseCodesOrdinal].Name;
+
+            if (names.Contains(item: m_catalog.Descriptors[ordinal].Name) || names.Contains(item: tokens) || names.Contains(item: codes)) {
+                names.Add(item: tokens);
+                names.Add(item: codes);
+            }
+        }
+
+        var rows = new List<StateRow>(capacity: names.Count);
+
+        foreach (var row in m_rows) {
+            if (names.Contains(item: row.Name.Value)) {
+                rows.Add(item: row);
+            }
+        }
+
+        return rows;
+    }
     private static bool TryValidateDerivedDomains(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<StateRow> rows, out string reason) {
         for (var boardOrdinal = 0; (boardOrdinal < layout.RowCount); boardOrdinal++) {
             ref readonly var boardLayout = ref layout[boardOrdinal];
@@ -290,6 +324,49 @@ public sealed partial class StateArena {
             ),
             reason: out reason,
             section: section,
+            time: in time
+        );
+
+        arena = ((reason.Length == 0)
+            ? built
+            : null
+        );
+
+        return (arena is not null);
+    }
+    /// <summary>Creates an arena over one compiled catalog that seeds only the named rows from the section, with every
+    /// other row declared and empty: a scratch store a write to those rows composes through at the cost of what it
+    /// names.</summary>
+    /// <remarks>The rows of a derived board one of <paramref name="seeded"/> is, feeds or is fed by are seeded too,
+    /// so the board recomputes from what the section holds. A write composed here reads only its own row, so its
+    /// export of that row is what a fully seeded arena would export; the empty rows are never a replica of the
+    /// section, and a capacity measured against the whole arena (retained keys, visibility payload) is the live
+    /// arena's to judge.</remarks>
+    /// <param name="catalog">The compiled catalog the arena stores.</param>
+    /// <param name="section">The authored section the catalog was compiled from.</param>
+    /// <param name="options">The lane widths to build, or <see langword="null"/> for the defaults.</param>
+    /// <param name="time">The clocks a cell born under a value-over-time trait settles to.</param>
+    /// <param name="seeded">The names of the document rows to seed.</param>
+    /// <param name="arena">The arena on success; otherwise <see langword="null"/>.</param>
+    /// <param name="reason">Why a seeded row was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the arena was built and its named rows seeded.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="catalog"/> or <paramref name="seeded"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A row names a topology, space, or capacity the arena cannot lay
+    /// out.</exception>
+    public static bool TryCreateSeeding(StateCatalog catalog, IStateSection? section, ArenaOptions? options, in ArenaTime time, IReadOnlySet<string> seeded, [NotNullWhen(true)] out StateArena? arena, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: seeded);
+
+        var built = new StateArena(
+            catalog: catalog,
+            layout: ArenaLayout.Build(
+                catalog: catalog,
+                options: options,
+                section: section
+            ),
+            reason: out reason,
+            section: section,
+            seeded: seeded,
             time: in time
         );
 

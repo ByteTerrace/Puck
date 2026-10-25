@@ -42,7 +42,6 @@ public sealed partial class WorldServer {
     private bool m_consumersOwed;
     private bool m_driveGateOwed;
     private bool m_fieldsOwed;
-    private HashSet<string>? m_documentValueRows;
     // Document rows occupy the catalog's first ordinals, so this bounds every walk that only the exported document
     // depends on — a slot lane's write moves its own row's version and nothing the document carries.
     private int m_documentRowCount;
@@ -209,21 +208,63 @@ public sealed partial class WorldServer {
             return;
         }
 
+        LoadInPlace(rows: definition.State);
+        m_publishEveryRow = true;
+    }
+
+    /// <summary>Re-seeds the arena from an installed document that replaced <paramref name="previous"/> in its state
+    /// values alone, loading only the rows that are not the instances <paramref name="previous"/> holds at the same
+    /// position.</summary>
+    /// <remarks>A value write composes its candidate over the installed document and keeps every row it did not
+    /// write, and the arena agrees with the installed document between ticks, so the replaced rows are the whole
+    /// difference and the load costs what the write touched: an unwritten row keeps its columns, its version and its
+    /// generation. Both documents hold the catalog the arena stores and no pool storage, which a value install
+    /// requires before it reaches here.</remarks>
+    /// <param name="definition">The document being installed.</param>
+    /// <param name="previous">The document it replaces, which the arena holds.</param>
+    internal void SyncArenaValues(WorldDefinition definition, WorldDefinition previous) => LoadInPlace(rows: ReplacedRows(
+        definition: definition,
+        previous: previous
+    ));
+    /// <summary>Collects the rows of <paramref name="definition"/> that are not the instances
+    /// <paramref name="previous"/> holds at the same position.</summary>
+    /// <param name="definition">The candidate document.</param>
+    /// <param name="previous">The document it was composed over, which holds the same state catalog and so lists the
+    /// same rows in the same order.</param>
+    /// <returns>The replaced rows, in document order.</returns>
+    internal static List<StateRow> ReplacedRows(WorldDefinition definition, WorldDefinition previous) {
+        var after = definition.AuthoredState;
+        var before = previous.AuthoredState;
+        var rows = new List<StateRow>();
+
+        for (var index = 0; (index < after.Count); index++) {
+            if (!ReferenceEquals(
+                objA: after[index],
+                objB: before[index]
+            )) {
+                rows.Add(item: after[index]);
+            }
+        }
+
+        return rows;
+    }
+    // Reloads the named rows into the live columns and marks the document and the arena agreed. A refusal is a door
+    // that did not validate the load first, or a validator hole.
+    private void LoadInPlace(IReadOnlyList<StateRow> rows) {
         var time = m_ruleHost.Time;
 
-        if (!m_arena.TryLoad(
+        if (
+            !m_arena.TryLoad(
             reason: out var reason,
-            rows: definition.State,
+            rows: rows,
             time: in time
-        )) {
-            throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
-        }
-        if (reason.Length != 0) {
+        ) ||
+            (reason.Length != 0)
+        ) {
             throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
         }
 
         MarkPublished();
-        m_publishEveryRow = true;
     }
 
     // The document and the arena agree on every row as they stand.
@@ -246,20 +287,9 @@ public sealed partial class WorldServer {
             m_publishedVersions[ordinal] = version;
         }
     }
-    // The rows a document value reads by name. The set is a function of the document's own non-state sections, so
-    // it is collected once per installed document rather than per publication.
-    private HashSet<string> DocumentValueRows() {
-        if (m_documentValueRows is null) {
-            m_documentValueRows = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            WorldStateDocumentValues.CollectReferencedRows(
-                definition: m_document.Definition,
-                rows: m_documentValueRows
-            );
-        }
-
-        return m_documentValueRows;
-    }
+    // The rows a document value reads by name: a function of the document's own non-state sections, collected once
+    // and carried across every publication's state-only replacement.
+    private IReadOnlySet<string> DocumentValueRows() => WorldStateDocumentValues.ReferencedRows(definition: m_document.Definition);
 
     /// <summary>Composes what a publication would install, and installs nothing: the installed document carrying
     /// the arena's values as they stand, an open scope's writes included.</summary>
@@ -632,8 +662,6 @@ public sealed partial class WorldServer {
             definition = SettleInstalledRows(definition: definition);
         }
         m_document.AdoptDefinition(definition: definition);
-        // The rows a document value reads are a function of the sections this install may have replaced.
-        m_documentValueRows = null;
         // Recomposition may change dependencies: only the exact definition can reuse its validation result.
         if (!ReferenceEquals(
             objA: compilation?.Definition,

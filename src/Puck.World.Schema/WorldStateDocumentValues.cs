@@ -32,6 +32,9 @@ public static class WorldStateDocumentValues {
 
     private static readonly ConcurrentDictionary<Type, ValueProperty[]> PropertyCache = new();
     private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
+    // The rows each definition's document values name, collected once per definition. A value holder can drop its
+    // reference (Detach) but never gain one, so a set collected earlier is never missing a row the definition names.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
 
     private sealed record ValueProperty(string Name, Type PropertyType, Func<object, object?> GetValue);
     private sealed record Traversal(bool Skip, ValueProperty[] Properties);
@@ -392,7 +395,7 @@ public static class WorldStateDocumentValues {
     /// names to <paramref name="rows"/>, in one walk.</summary>
     /// <remarks>A cell write carries a value, never a reference, and references live in the sections around the
     /// state table, so a batch of cell writes collects this set once and asks each member's row against it, where
-    /// <see cref="ReferencesRow(WorldDefinition, string)"/> would walk the whole graph per member. A member that
+    /// <see cref="ReferencesRow(WorldDefinition, object, string)"/> over the whole definition would walk the graph per member. A member that
     /// re-declares a row or edits any other section is where the set can change; the caller collects again after
     /// one.</remarks>
     /// <param name="definition">The document to walk.</param>
@@ -403,6 +406,35 @@ public static class WorldStateDocumentValues {
             graph: definition,
             rows: rows
         );
+    }
+    /// <summary>Gets the name of every state row a retained document-value reference in
+    /// <paramref name="definition"/> names, collected by one walk the first time a definition asks and kept for its
+    /// lifetime.</summary>
+    /// <param name="definition">The document whose references are read.</param>
+    /// <returns>The referenced row names; the caller never modifies the set.</returns>
+    public static IReadOnlySet<string> ReferencedRows(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return ReferencedRowSets.GetValue(
+            createValueCallback: static candidate => {
+                var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                CollectReferencedRows(
+                    graph: candidate,
+                    rows: rows
+                );
+
+                return rows;
+            },
+            key: definition
+        );
+    }
+    // A state row holds literal cells and never a document value, so a definition that differs from another only in
+    // its state section names the same rows, and the set already collected for one serves the other.
+    internal static void CarryReferencedRows(WorldDefinition source, WorldDefinition target) {
+        if (ReferencedRowSets.TryGetValue(key: source, value: out var rows)) {
+            ReferencedRowSets.AddOrUpdate(key: target, value: rows);
+        }
     }
     /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="graph"/>
     /// — one section or value holder of a definition — names to <paramref name="rows"/>, in one walk.</summary>
@@ -459,13 +491,6 @@ public static class WorldStateDocumentValues {
             ReturnSeen(seen: seen);
         }
     }
-    /// <summary>Reports whether any retained document-value reference reads <paramref name="rowName"/>.</summary>
-    public static bool ReferencesRow(WorldDefinition definition, string rowName) =>
-        ReferencesRow(
-            definition: definition,
-            graph: definition,
-            rowName: rowName
-        );
     /// <summary>Reports whether <paramref name="graph"/> — one section or value holder of
     /// <paramref name="definition"/> — carries a document-value reference naming <paramref name="rowName"/>.</summary>
     /// <param name="definition">The document the references resolve against.</param>
@@ -537,17 +562,14 @@ public static class WorldStateDocumentValues {
     }
     /// <summary>
     /// Rehydrates and resolves a fresh candidate after a referenced state row changes, retaining the input object
-    /// unchanged when the row has no consumers: <see cref="ReferencesRow(WorldDefinition, string)"/> decides, and
+    /// unchanged when the row has no consumers: <see cref="ReferencedRows"/> decides, and
     /// <see cref="TryRehydrate"/> does the work.
     /// </summary>
     public static bool TryRefresh(WorldDefinition definition, string rowName, out WorldDefinition refreshed, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
 
-        if (!ReferencesRow(
-            definition: definition,
-            rowName: rowName
-        )) {
+        if (!ReferencedRows(definition: definition).Contains(item: rowName)) {
             refreshed = definition;
             reason = string.Empty;
             return true;

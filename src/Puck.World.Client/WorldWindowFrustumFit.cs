@@ -62,45 +62,44 @@ public static class WorldWindowFrustumFit {
         counterpart = default;
         counterpartGlass = null;
 
-        foreach (var row in WorldFaceCatalog.For(definition: local).Rows) {
-            if (row.ScreenIndex != screenIndex) {
-                continue;
-            }
-
-            var face = ((WorldDefinitionRows.FindPlacement(
-                placements: local.Placements,
-                id: row.PlacementId
-            ) is { } placement)
-                ? WorldDefinitionRows.FindPlacementFace(
-                    face: row.FaceName,
-                    placement: placement
-                )
-                : null);
-
-            if (
-                (face?.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } named }) ||
-                !WorldPortalCounterpart.TryParse(
-                    counterpart: named,
-                    face: out var counterpartFace,
-                    placementId: out var counterpartPlacement
-                ) ||
-                !WorldFaceCatalog.For(definition: destination).TryFind(
-                    faceName: counterpartFace,
-                    placementId: counterpartPlacement,
-                    row: out var counterpartRow
-                )
-            ) {
-                return false;
-            }
-
-            source = row.Frame;
-            counterpart = counterpartRow.Frame;
-            counterpartGlass = ((counterpartRow.ScreenIndex >= 0) ? counterpartRow.Source : null);
-
-            return true;
+        if (!WorldFaceCatalog.For(definition: local).TryFindScreen(
+            row: out var row,
+            screenIndex: screenIndex
+        )) {
+            return false;
         }
 
-        return false;
+        var face = ((WorldDefinitionRows.FindPlacement(
+            placements: local.Placements,
+            id: row.PlacementId
+        ) is { } placement)
+            ? WorldDefinitionRows.FindPlacementFace(
+                face: row.FaceName,
+                placement: placement
+            )
+            : null);
+
+        if (
+            (face?.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } named }) ||
+            !WorldPortalCounterpart.TryParse(
+                counterpart: named,
+                face: out var counterpartFace,
+                placementId: out var counterpartPlacement
+            ) ||
+            !WorldFaceCatalog.For(definition: destination).TryFind(
+                faceName: counterpartFace,
+                placementId: counterpartPlacement,
+                row: out var counterpartRow
+            )
+        ) {
+            return false;
+        }
+
+        source = row.Frame;
+        counterpart = counterpartRow.Frame;
+        counterpartGlass = ((counterpartRow.ScreenIndex >= 0) ? counterpartRow.Source : null);
+
+        return true;
     }
 
     /// <summary>Returns the glass a screen row draws, as an aperture: its rectangle, and its Normal

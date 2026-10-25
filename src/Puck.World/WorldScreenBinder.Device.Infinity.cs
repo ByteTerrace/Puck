@@ -56,6 +56,8 @@ public sealed partial class WorldScreenBinder {
                     WorldRoutedScene scene => (Presenter?.Presents(scene: scene) == true),
                     SessionFeed feed => m_feeds.Contains(item: feed),
                     InfinityEntry entry => entry.Root.Entries.Values.Contains(value: entry),
+                    // The boot frame's home films, which FitBootSky retires by its own begin and end each frame.
+                    _ when ReferenceEquals(objA: consumer.Target, objB: m_homeFilms) => (Presenter is not null),
                     _ => false,
                 };
 
@@ -65,20 +67,32 @@ public sealed partial class WorldScreenBinder {
         }
         RebuildInfinityOutputs();
     }
+    // Called for every root several times a frame, so the check that nothing it planned from moved runs apart from
+    // the replan, whose closures would otherwise be allocated on every call.
     private void FollowInfinity(InfinityRoot root) {
         var depth = Math.Max(val1: 0, val2: (BootNestingDepth() - root.Depth));
 
-        if ((root.NestingDepth == depth)
-            && root.Definitions.All(predicate: row => ReferenceEquals(objA: row.Mirror.Definition, objB: row.Definition))
-            && root.Observations.All(predicate: row => (ReferenceEquals(objA: m_instanceHost.InfinitySession(instanceName: row.Owner, layerName: row.Layer), objB: row.Hosted)
-                && ReferenceEquals(objA: row.Hosted?.Observation, objB: row.Observation)
-                && (row.Available == (row.Hosted?.Observation is { Ended: false }))))) {
-            return;
+        if ((root.NestingDepth != depth) || InfinityInputsMoved(root: root)) {
+            ReplanInfinity(depth: depth, root: root);
         }
-
-        root.Definitions.Clear();
+    }
+    private bool InfinityInputsMoved(InfinityRoot root) {
+        foreach (var row in root.Skies) {
+            if (!ReferenceEquals(objA: row.Mirror.Definition.Render?.Sky, objB: row.Sky)) { return true; }
+        }
+        foreach (var row in root.Observations) {
+            if (!ReferenceEquals(objA: m_instanceHost.InfinitySession(instanceName: row.Owner, layerName: row.Layer), objB: row.Hosted)
+                || !ReferenceEquals(objA: row.Hosted?.Observation, objB: row.Observation)
+                || (row.Available != (row.Hosted?.Observation is { Ended: false }))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private void ReplanInfinity(InfinityRoot root, int depth) {
+        root.Skies.Clear();
         root.Observations.Clear();
-        root.Definitions.Add(item: (root.Mirror, root.Mirror.Definition));
+        root.Skies.Add(item: (root.Mirror, root.Mirror.Definition.Render?.Sky));
         var owners = new Dictionary<string, (WorldSessionMirror Mirror, string Instance)>(comparer: StringComparer.Ordinal);
         var sources = new Dictionary<string, InfinitySource>(comparer: StringComparer.Ordinal);
         var roots = WorldInfinityViewSpecs.Of(root.Mirror.Definition.Render?.Sky);
@@ -145,7 +159,7 @@ public sealed partial class WorldScreenBinder {
             var source = Source(name: name, spec: spec);
 
             if (source.Mirror is not { } mirror) { return []; }
-            root.Definitions.Add(item: (mirror, mirror.Definition));
+            root.Skies.Add(item: (mirror, mirror.Definition.Render?.Sky));
             var children = WorldInfinityViewSpecs.Of(mirror.Definition.Render?.Sky);
 
             foreach (var child in children) { owners[WorldViewNames.NestedSky(name, child.Name)] = (mirror, source.Instance!); }
@@ -226,7 +240,13 @@ public sealed partial class WorldScreenBinder {
         m_infinityRoots.Clear();
         m_infinityOutputs.Clear();
     }
-    private IEnumerable<InfinityEntry> InfinityEntries() => m_infinityRoots.Values.SelectMany(selector: root => root.Entries.Values);
+    // Read several times a frame, so a world that plans no infinity layer walks its roots and allocates nothing.
+    private IEnumerable<InfinityEntry> InfinityEntries() {
+        foreach (var root in m_infinityRoots.Values) {
+            if (root.Entries.Count != 0) { return m_infinityRoots.Values.SelectMany(selector: static held => held.Entries.Values); }
+        }
+        return [];
+    }
 
     private sealed class InfinityRoot(WorldSessionMirror mirror, string instance, int depth, string name) {
         public WorldSessionMirror Mirror { get; } = mirror;
@@ -238,11 +258,19 @@ public sealed partial class WorldScreenBinder {
 
         public int NestingDepth { get; set; } = -1;
         public WorldInfinityViewPlan Plan { get; set; } = WorldInfinityViewPlan.Empty;
-        public List<(WorldSessionMirror Mirror, WorldDefinition Definition)> Definitions { get; } = [];
+        // The sky section of each mirror the plan was resolved from: the only part of a definition the plan reads.
+        public List<(WorldSessionMirror Mirror, WorldRenderSky? Sky)> Skies { get; } = [];
         public List<InfinityObservation> Observations { get; } = [];
         public Dictionary<string, InfinityEntry> Entries { get; } = new(comparer: StringComparer.Ordinal);
         public Dictionary<string, InfinityConsumer> Consumers { get; } = new(comparer: StringComparer.Ordinal);
         public Dictionary<string, WorldInfinityViewPlan> Subplans { get; } = new(comparer: StringComparer.Ordinal);
+
+        // The fit's per-frame questions about this root's entries, as delegates built once.
+        public Func<string, bool> Available => (m_available ??= Entries.ContainsKey);
+        public Func<string, IReadOnlyList<string>?> ReadsOf => (m_readsOf ??= name => Entries.GetValueOrDefault(key: name)?.Screens?.Reads);
+
+        private Func<string, bool>? m_available;
+        private Func<string, IReadOnlyList<string>?>? m_readsOf;
 
         public WorldInfinityViewPlan PlanOf(string? parent) {
             if (parent is null) { return Plan; }
@@ -283,6 +311,8 @@ public sealed partial class WorldScreenBinder {
         public uint Width { get; set; }
 
         public GpuWorkSample Sample { get; } = new();
+        // The nested viewer tier the fit asks of the root that holds this consumer, built on its first fit.
+        public Func<string, QualityTier>? TierOf { get; set; }
 
         private static WorldInfinityViews Create(string name, WorldInfinityViewPlan plan) {
             var fit = new WorldInfinityViews(consumer: name);

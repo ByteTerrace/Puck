@@ -731,6 +731,8 @@ public sealed partial record WorldDefinition(
         };
 
         PreserveCompatibleCompilation(target: updated);
+        WorldStateDocumentValues.CarryReferencedRows(source: this, target: updated);
+        WorldFaceCatalog.CarryAcrossState(source: this, target: updated);
 
         return updated;
     }

@@ -2849,7 +2849,11 @@ and quiet-tick allocation (median over a sampled window, after a warmup), and
 the contact work behind each sampled tick as deterministic counts (certified
 sweeps and the bounds queries they charge, interval walks with their
 instructions and full rotation expansions, and point evaluations with their
-instructions, read from `physics.sweep`, `sdf.bounds` and `sdf.point`). The
+instructions, read from `physics.sweep`, `sdf.bounds` and `sdf.point`). It
+then times a paced tick that drains a whole-row value write to the first plain
+integer slot (the shape of the gallery guide's addon writes), with its
+allocation and the arena row versions and installed rows the write moved: a
+value write costs the row it touched, so both counts read 1. The
 screen machines emulate on worker threads the tick only submits to, and the
 back-to-back idle window is bounded by the slowest of them once their pending
 windows fill, so the lane also times the tick paced at the simulation rate,

@@ -354,6 +354,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
     }
 
+    // The rig each authored camera program compiles to against one state mirror, recompiled only when the cache's
+    // inputs move. A rig ResolveCamera resolves holds no history (its look and spread stay at rest), so the cached
+    // rig answers what a fresh compile would.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldStateMirror, System.Runtime.CompilerServices.ConditionalWeakTable<WorldCameraProgram, WorldCameraRigCompiler.Cache>> ResolvedRigs = new();
+
     /// <summary>Resolves the camera a session's ordinary projection renders a destination through this frame: the named
     /// camera if the destination still declares it, else the destination's first declared camera, else a fixed overview
     /// over its spawn points. It is resolved from the live mirrored definition every time, so a live edit of the
@@ -382,12 +387,18 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 definition: definition,
                 mirror: mirror
             );
-            var rig = WorldCameraRigCompiler.Compile(
-                definition: definition,
-                domains: domains,
-                mirror: mirror.FollowState(),
-                program: cameraRow.Rig
-            );
+            var state = mirror.FollowState();
+            var cache = ResolvedRigs.GetOrCreateValue(key: state).GetOrCreateValue(key: cameraRow.Rig);
+            IWorldCameraProgramRig rig;
+
+            lock (cache) {
+                rig = cache.Resolve(
+                    definition: definition,
+                    domains: domains,
+                    mirror: state,
+                    program: cameraRow.Rig
+                );
+            }
             var anchor = new SdfAnchor(
                 Orientation: orientation,
                 Position: position

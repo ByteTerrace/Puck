@@ -188,7 +188,7 @@ public sealed partial class WorldDocument {
         if (
             !replacesArena &&
             !Host.Arena.TryValidateLoad(
-            rows: candidate.State,
+            rows: WorldServer.ReplacedRows(definition: candidate, previous: current),
             reason: out reason
         )) {
             return false;

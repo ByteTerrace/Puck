@@ -91,6 +91,12 @@ public sealed record WorldPlacementPortal(
 /// transfer-time existence check against the destination's own delivered definition, so the two can never disagree
 /// on what "malformed" or "missing" means.</summary>
 public static class WorldPortalCounterpart {
+    // Each authored counterpart string's halves, split once: a window's frustum fit parses its portal's counterpart
+    // every frame, and the string is the document's own instance.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, Halves> Parsed = new();
+
+    private sealed record Halves(string PlacementId, string Face);
+
     /// <summary>Splits a counterpart string into its placement id and face name, at the first <c>/</c>.</summary>
     /// <param name="counterpart">The authored counterpart string.</param>
     /// <param name="placementId">The placement id half, when parsing succeeds.</param>
@@ -103,6 +109,12 @@ public static class WorldPortalCounterpart {
 
         if (string.IsNullOrWhiteSpace(value: counterpart)) {
             return false;
+        }
+        if (Parsed.TryGetValue(key: counterpart, value: out var halves)) {
+            placementId = halves.PlacementId;
+            face = halves.Face;
+
+            return true;
         }
 
         var separator = counterpart.IndexOf(
@@ -126,6 +138,7 @@ public static class WorldPortalCounterpart {
 
         placementId = candidatePlacementId;
         face = candidateFace;
+        Parsed.AddOrUpdate(key: counterpart, value: new Halves(Face: candidateFace, PlacementId: candidatePlacementId));
 
         return true;
     }
