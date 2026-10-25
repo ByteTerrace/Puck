@@ -381,16 +381,21 @@ join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
 a named sphere, addressed by the carrying placement's own `Id`; the cell's `B`
 is the region's position among the guest's own `Observe/region:` requests, in
 manifest order, so a guest's table of regions follows its row), collision
-pairs (a flat proximity test — NOT the physical contact resolver, which has
-no body-vs-body form here), control-application engaged/disengaged, and
+pairs (a flat proximity test, independent of physical contact resolution),
+control-application engaged/disengaged, and
 federation link established/dropped.
 Application edges are queued from `WorldGrants`' own set writes, so every
 member added or removed fires one — including the context-button auto-engage
 and a revoke-driven dissolution. Link edges compare a per-adjacency staleness
 count against that row's authored `livenessGraceSeconds` (`0`, the default,
-disables the row's sensing entirely, so an unauthored world emits none); `A`
-is the adjacency row's 0-based document ordinal, `B` the staleness in
-simulation ticks on a drop and `0` on an establish. The sixth,
+disables the row's sensing entirely, so an unauthored world emits none). The
+server feed retains document ordinals internally; at the guest boundary `A`
+is the adjacency's 0-based index among the manifest's unique
+`Observe/adjacency:<name>` requests. Duplicate requests retain their first
+index and ungranted requests still occupy their slot, so a grant change never
+renumbers the guest's table. A wildcard-only observation carries -1 because it
+supplies no named entry. `B` is the staleness in simulation ticks on a drop and
+`0` on an establish. The sixth,
 machine-memory watches, is ADDON-scoped (`WorldAddonRow.MemoryWatches`, each
 a `(screen, address, length)` row) and reads `Server.WorldMachineHost`
 DIRECTLY (`WorldMachineHost` implements `IWorldMachineMemoryPeek` itself,

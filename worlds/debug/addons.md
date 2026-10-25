@@ -48,9 +48,10 @@ world, guest receipts and the ticks at which the switch and other inputs changed
 
 **Traversal.** Set `traversal[run]` to 1 for a pass. `traversalRoute` contains
 world-space fixed-point coordinates with keys `0x`, `0y`, `0z`, and so on;
-the route includes both studio steps, both ramps, the stairs, the round dais,
-the gallery's two flights, and calling/riding the lift. `start` (default 0)
-selects the first entry and `count` the exclusive end. `timeout`
+the route contains two independent passes: the studio's steps, ramps, stairs
+and round dais (entries 0–14), and the gallery's two flights and lift
+(entries 15–22). `start` (default 0) selects the first entry and `count`
+(default 15) the exclusive end. `timeout`
 (ticks per waypoint, default 600) and `tolerance` (raw Q16 horizontal tolerance,
 default 32768) are authored controls. Vertical tolerance is 0.6 m. The bot
 walks and strafes without teleporting or using flight. A timeout records the
@@ -61,10 +62,23 @@ are cumulative counters; `waypoint`, `tick`, `done` and `run` describe the
 current pass. A new pass clears `done`; it switches `run` off when done. A miss is a route probe finding,
 not proof of a physics bug: inspect its approach and authored tolerance.
 Before entering the lift it waits for `liftAt` to reach level one's 72
-sixteenth-metre cells. The studio is sealed: the default pass reaches the
-fifteen studio goals, then reports the closed wall and the unreachable gallery
-goals. For an independent stairwell probe, pose body 43 at (11.2, 0.05, 32.5)
-from the host, set `start` to 17, and run a fresh pass. The guest itself never poses a body.
+sixteenth-metre cells. The studio is sealed, so the default pass finishes there;
+the old connecting goals crossed its continuous front wall. To run the gallery
+pass separately, issue these lines after the studio pass stops:
+
+```text
+body.stop 43
+body.pose 11.2 0.05 32.5 0 0 0 43
+world.state.cell.set traversal start 15
+world.state.cell.set traversal count 23
+world.state.cell.set traversal run 1
+```
+
+The host initializes the idle body's starting pose; the guest itself never
+poses a body and walks every goal of each pass. Read `world.state traversal`
+afterward: both passes together reach 23 goals with `done=1`, `missed=0` and
+`falls=0`. Restore `start=0` and `count=15` and initialize the body at
+(60, 0.05, -30) before another studio pass.
 
 **Scope.** Set `scope[body]` to a body index (0–44), then `scope[enabled]` to
 1. It queries settled kinematics each tick and records `scopeHeight`,
@@ -92,10 +106,12 @@ were the limiting host work. A 300-step seeded fuzz pass was clean under the
 watchdog on the merged head, ending at (53.75, 0.03, -34.04), inside its bounds;
 its 373-tick delivery recording verified `MATCH`. A longer scope run filled the 4,096-line
 host log ring and evicted 1,547 old lines, while state history remained bounded
-at 128 samples. The gallery stairwell leg (`traversal start 17`, body 43 posed at
-(11.2, 0.05, 32.5)) reaches all eight goals with no falls, riding the lift car.
+at 128 samples. The gallery stairwell leg (`start=15`, `count=23`, body 43 posed at
+(11.2, 0.05, 32.5)) reaches all eight goals with no falls or timeouts, riding the lift car.
 Its first run missed the car entry and fell because the lift attached to the
-chess cursor instead of the car.
+chess cursor instead of the car. A fresh headless run also carried the rounded
+Moth (body 0) from y=0.07 to y=9.07 and back to y=0.07, grounded at every
+readback; no further contact or carry correction was needed.
 
 ## The watchdog
 

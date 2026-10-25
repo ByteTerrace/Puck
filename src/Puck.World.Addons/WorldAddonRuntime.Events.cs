@@ -60,7 +60,11 @@ public sealed partial class WorldAddonRuntime {
                 HandleGeneration: 0,
                 Verdict: AddonVerdict.None,
                 Verb: ((byte)verb),
-                A: edge.A,
+                // Named link events use the guest's own table, just as region events do below. A wildcard
+                // request permits delivery but supplies no name the guest could resolve to a table entry.
+                A: ((edge.Family is WorldEventFamily.LinkEstablished or WorldEventFamily.LinkDropped)
+                    ? addon.AdjacencyOrdinals.GetValueOrDefault(edge.GateA, -1)
+                    : edge.A),
                 // A region edge names its region by the manifest's own order: the gate above admitted it only because
                 // the manifest requests it.
                 B: ((edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit)

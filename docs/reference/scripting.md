@@ -619,10 +619,15 @@ tick budget. `world.addons` includes those charges in its last-tick and lifetime
 | 7, 8 | `EventRouteEngaged`, `EventRouteDisengaged` | `A` = the source body; `B` = the screen index, or `-(body + 1)` for a body target |
 | 9 | `EventMachineMemoryChanged` | `A` = `(screen << 32) \| address`; `B` = the new value |
 | 10 | `EventGap` | `A` = the mount's lifetime count of dropped events |
-| 11, 12 | `EventLinkEstablished`, `EventLinkDropped` | `A` = the `adjacencies` row's ordinal; `B` = the staleness in ticks on a drop |
+| 11, 12 | `EventLinkEstablished`, `EventLinkDropped` | `A` = the adjacency's position among the guest's unique `Observe/adjacency:<name>` requests in manifest order, or -1 for a wildcard-only observation; `B` = the staleness in ticks on a drop |
 
 Verbs 1 to 12 are world events, delivered only through an `Observe` grant that carries an event budget; they mint no
 handle. `AddonAbi.ObservationVerbs` is the authoritative list.
+
+Named event indices follow the first request for each distinct subject, including
+requests that currently have no grant. Grant order and document row order do not
+renumber them. A link observed through `Observe/all` without a named request has
+no manifest name to resolve; its index is -1.
 
 The host writes one `GrantedBody` cell per `(capability, body)` the addon's principal holds, in
 projection order, in the first batch after mount and in the first batch after any grant change that
