@@ -240,6 +240,11 @@ public sealed class HostFrameTimeline {
             handler: $"[host.frames: {count} iterations | avg={(total / count):0.00} p50={Percentile(sorted: sorted, fraction: 0.5):0.00} p99={Percentile(sorted: sorted, fraction: 0.99):0.00} max={sorted[^1]:0.00} ms | over {budgetMilliseconds:0.0} ms: {over} | busiest {busiest:0.00} ms of work | pacer late at most {latest:0.00} ms | {collections} collections pausing {TimeSpan.FromTicks(value: pause).TotalMilliseconds:0.00} ms]"
         );
 
+        // The frame thread's own work per iteration: produce and simulate, the two phases a frame's cost lives in.
+        AppendPhases(builder: builder, indices: indices, label: "produce", first: HostFramePhase.Produce, second: null);
+        AppendPhases(builder: builder, indices: indices, label: "simulate", first: HostFramePhase.Simulate, second: null);
+        AppendPhases(builder: builder, indices: indices, label: "produce+simulate", first: HostFramePhase.Produce, second: HostFramePhase.Simulate);
+
         var order = Enumerable.Range(
             count: count,
             start: 0
@@ -264,6 +269,28 @@ public sealed class HostFrameTimeline {
         return builder.ToString();
     }
 
+    private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second) {
+        var values = new double[indices.Length];
+        var total = 0.0;
+
+        for (var i = 0; (i < indices.Length); i++) {
+            var phases = (((int)(indices[i] % Capacity)) * PhaseCount);
+            var ticks = m_phases[(phases + ((int)first))];
+
+            if (second is { } other) {
+                ticks += m_phases[(phases + ((int)other))];
+            }
+
+            values[i] = Milliseconds(ticks: ticks);
+            total += values[i];
+        }
+
+        Array.Sort(array: values);
+        builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"\n  {label}: avg={(total / values.Length):0.00} p50={Percentile(sorted: values, fraction: 0.5):0.00} p99={Percentile(sorted: values, fraction: 0.99):0.00} max={values[^1]:0.00} ms"
+        );
+    }
     private double Milliseconds(long ticks) => ((ticks * 1000.0) / m_frequency);
     private static double Percentile(double[] sorted, double fraction) => sorted[Math.Min(
         val1: (sorted.Length - 1),
