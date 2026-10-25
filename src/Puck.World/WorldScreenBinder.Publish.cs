@@ -80,7 +80,6 @@ public sealed partial class WorldScreenBinder {
 
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
-        CollectOnceSettled();
 
         // Resolve the render adapter LUID once, backend-neutrally — the device is created lazily, so the value is
         // first available here (not at construction). Capture feeds and the camera GPU tier then open their platform
