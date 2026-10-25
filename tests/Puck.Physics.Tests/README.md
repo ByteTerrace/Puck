@@ -17,6 +17,10 @@ These tests keep the Physics kernels honest through separate evidence:
   Barnes–Hut, remains bit-deterministic and allocation-free after workspace warm-up, and reduces 4,096-body interaction
   work below the quadratic baseline; overflow fixtures pin both rejected M2L pairs and deferred L2L expansions;
 - the contact cases pin dynamic compound correction direction and the policy-free analytic static push contract;
+- `ConvexContactWorkLawTests` probes shallow overlap and separation at support-surface offsets across chamfered
+  and rounded boxes, the thin exponent-4 chair and cylinder rims, using both sphere and capsule ends;
+- `SharpBoxContactLawTests` checks thin rotated boxes against sharp static corners and dynamic capsule/box
+  corner corrections, including reversed body order, local volume offsets and clearance after correction;
 - `SphereBoxContactLawTests` checks shared static/dynamic sphere-box geometry at faces, edges, corners, interior
   centers, and rotated faces, plus one-raw-unit overlaps and zero warmed allocations;
 - `FixedSpatialNeighborhoodTests` compares complete grid queries with an independent wide-integer distance oracle,

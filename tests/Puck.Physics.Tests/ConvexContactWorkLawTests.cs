@@ -7,6 +7,44 @@ public sealed class ConvexContactWorkLawTests {
     private static FixedVector3 V(double x, double y, double z) => new(X: Q(value: x), Y: Q(value: y), Z: Q(value: z));
 
     [Fact]
+    public void SurfaceOffsetsDetectShallowOverlapAndRejectSeparation() {
+        var identity = FixedQuaternion.Identity;
+        FixedStaticCollider[] shapes = [
+            FixedStaticCollider.ChamferedBox(FixedVector3.Zero, identity, V(x: 2, y: 1, z: 1), Q(value: 0.2), Q(value: 0.02)),
+            FixedStaticCollider.ChamferedBox(FixedVector3.Zero, identity, V(x: 2, y: 1, z: 1), Q(value: 0.4), Q(value: 0)),
+            FixedStaticCollider.Superellipsoid(FixedVector3.Zero, identity, V(x: 0.25, y: 0.045, z: 0.25), Q(value: 4)),
+            FixedStaticCollider.RoundedBox(FixedVector3.Zero, identity, V(x: 2, y: 1, z: 1), Q(value: 0.2)),
+            FixedStaticCollider.Cylinder(FixedVector3.Zero, Q(value: 1), Q(value: 0.5), identity),
+        ];
+        FixedQ4816[] components = [-FixedQ4816.One, Q(value: -0.7), Q(value: -0.3), Q(value: -0.1),
+            FixedQ4816.Zero, Q(value: 0.1), Q(value: 0.3), Q(value: 0.7), FixedQ4816.One];
+
+        foreach (var shape in shapes) {
+            foreach (var x in components) {
+                foreach (var y in components) {
+                    foreach (var z in components) {
+                        if ((x == FixedQ4816.Zero) && (y == FixedQ4816.Zero) && (z == FixedQ4816.Zero)) { continue; }
+                        var normal = new FixedVector3(X: x, Y: y, Z: z).Normalize();
+                        var surface = shape.SupportPoint(direction: normal);
+
+                        foreach (var kind in new[] { FixedBodyColliderKind.Sphere, FixedBodyColliderKind.Capsule }) {
+                            // The capsule extends away from the surface, leaving the same spherical end in contact.
+                            var body = new FixedBodyColliderVolume(kind, FixedVector3.Zero, (normal * Q(value: 0.6)),
+                                FixedVector3.Zero, identity, Q(value: 0.35));
+                            var position = (surface + (normal * Q(value: 0.349)));
+
+                            Assert.True(condition: shape.TryGetPush(position, identity, body, FixedQ4816.Zero, out var push),
+                                userMessage: $"Miss: {shape.Kind}, fillet={shape.Radius}, body={kind}, normal={normal}");
+                            Assert.True(condition: (push.Penetration > FixedQ4816.Zero));
+                            Assert.False(condition: shape.TryGetPush((surface + (normal * Q(value: 0.351))), identity, body, FixedQ4816.Zero, out _),
+                                userMessage: $"False contact: {shape.Kind}, fillet={shape.Radius}, body={kind}, normal={normal}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    [Fact]
     public void TheExactQueryRefusesShapesWithTheirOwnAnalyticKernel() {
         var sphere = FixedStaticCollider.Sphere(center: FixedVector3.Zero, radius: FixedQ4816.One);
 
