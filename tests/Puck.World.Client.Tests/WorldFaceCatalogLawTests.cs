@@ -832,4 +832,43 @@ public sealed class WorldFaceCatalogLawTests {
             );
         }
     }
+    // THE LAW: a face's opening is found by its placement and face name and is the same opening every time it is asked
+    // for; a face the document never declares, or one whose shape kind opens no region, has none.
+    [Fact]
+    public void AFacesOpeningIsFoundOnceAndAnUndeclaredOrUnmappedFaceHasNone() {
+        var definition = BuildDoorDocument();
+        var catalog = WorldFaceCatalog.For(definition: definition);
+
+        Assert.True(condition: catalog.TryFindAperture(
+            aperture: out var first,
+            definition: definition,
+            faceName: DoorFace,
+            placementId: DoorPlacementId
+        ));
+        Assert.True(condition: catalog.TryFindAperture(
+            aperture: out var second,
+            definition: definition,
+            faceName: DoorFace,
+            placementId: DoorPlacementId
+        ));
+        Assert.NotNull(@object: first);
+        Assert.Same(actual: second, expected: first);
+        Assert.False(condition: catalog.TryFindAperture(
+            aperture: out var undeclared,
+            definition: definition,
+            faceName: "nowhere",
+            placementId: DoorPlacementId
+        ));
+        Assert.Null(@object: undeclared);
+
+        var sphere = BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere);
+
+        Assert.False(condition: WorldFaceCatalog.For(definition: sphere).TryFindAperture(
+            aperture: out var unmapped,
+            definition: sphere,
+            faceName: DoorFace,
+            placementId: DoorPlacementId
+        ));
+        Assert.Null(@object: unmapped);
+    }
 }

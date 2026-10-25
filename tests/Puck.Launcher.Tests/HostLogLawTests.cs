@@ -101,6 +101,13 @@ public sealed class HostLogLawTests {
         wide.Append(stream: HostLogStream.Error, text: new string(c: 'x', count: (HostLog.MaxLineCharacters + 5)));
 
         Assert.EndsWith(expectedEndString: $"… [{HostLog.MaxLineCharacters + 5} characters]", actualString: wide.Read(query: new HostLogQuery()).Lines.Single().Text);
+
+        // A teed writer assembles a line longer than its first buffer whole.
+        using (var teed = wide.Tee(inner: TextWriter.Null, stream: HostLogStream.Output)) {
+            teed.WriteLine(value: new string(c: 'y', count: 600));
+        }
+
+        Assert.Equal(expected: new string(c: 'y', count: 600), actual: wide.Read(query: new HostLogQuery()).Lines.Last().Text);
         Assert.Equal(expected: (HostLog.Capacity, HostLog.CharacterBudget), actual: (wide.LineCapacity, wide.CharacterLimit));
     }
     [Fact]

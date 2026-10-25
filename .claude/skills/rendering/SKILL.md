@@ -492,6 +492,23 @@ iteration (avg, p50, p99, max) and the worst iterations split into their
 phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
+- **A window whose extent swings rebuilds on a backoff.** A window a moving
+  camera crosses (the endless fall's floor and ceiling paintings) requests a new
+  extent every few frames; a resize build the request outran is discarded, and
+  each discard doubles the advances the node waits before the next resize build
+  (at most 32), cleared by an install (`ShaderPipelineRenderNode.Build.cs`,
+  `AnExtentSwingingFasterThanItsBuildsBacksOffAndASettledOneInstallsAtOnce`).
+  Without the backoff such a window builds and discards a graph every frame.
+  Holding a window's larger allocation instead (a shrink delay in the
+  scheduler's footprint quantisation) keeps full-resolution windows rendering
+  and makes the fall GPU-bound at 30 Hz.
+- **A program's bake plan is made on its build thread.** The composition
+  source hands each program its background build finishes to
+  `ISdfFrameSource.ObserveBuilds`, the residency plans it there
+  (`SdfMeshPathBake.PlanAhead`), and the first frame that draws it re-plans only
+  the groups it cannot keep (`SdfMeshBakeGroup.Refresh`). Editing either file
+  changes the bake identity: check `puck mesh identity` before booting.
+
 ## Seeing a change
 
 - A lockstep frame waits for its composition's program build and its mesh bake.
