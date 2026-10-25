@@ -61,7 +61,7 @@ public static class MeshIdentityCommand {
             .GroupBy(keySelector: static member => member[..member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal)], comparer: StringComparer.Ordinal)
             .Select(selector: static group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{group.Key} {group.Count()}"));
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh identity {identity.Value:x32} ({backend}, build {buildDirectory})\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh identity {identity.Value:x32} ({backend}, build {buildDirectory}, entry version {identity.EntryVersion})\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  code {identity.Code:x32}: {identity.Members.Count} members ({string.Join(separator: ", ", values: assemblies)})\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  mask kernel {identity.MaskKernel:x32}, bake kernel {identity.BakeKernel:x32}\n");
         if (members) {
@@ -87,7 +87,7 @@ public static class MeshIdentityCommand {
             var changed = SdfMeshBakeClosure.Changed(earlier: other.Members, members: identity.Members);
 
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  against {other.Value:x32} (build {againstDirectory}): {((other.Value == identity.Value) ? "the same identity" : "another identity")}\n");
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"    mask kernel {((other.MaskKernel == identity.MaskKernel) ? "same" : "differs")}, bake kernel {((other.BakeKernel == identity.BakeKernel) ? "same" : "differs")}, code {changed.Count} member(s) differ\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"    entry version {((other.EntryVersion == identity.EntryVersion) ? "same" : $"{other.EntryVersion} -> {identity.EntryVersion}")}, mask kernel {((other.MaskKernel == identity.MaskKernel) ? "same" : "differs")}, bake kernel {((other.BakeKernel == identity.BakeKernel) ? "same" : "differs")}, code {changed.Count} member(s) differ\n");
             foreach (var member in changed) {
                 output.Append(provider: CultureInfo.InvariantCulture, handler: $"      {(identity.Members.ContainsKey(key: member) ? (other.Members.ContainsKey(key: member) ? "changed" : "added") : "removed")} {member}\n");
             }

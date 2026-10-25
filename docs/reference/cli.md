@@ -3198,13 +3198,14 @@ usage error.
 
 `puck mesh identity [--build <dir>] [--backend directx|vulkan] [--against
 <dir>] [--members]` prints the bake identity a build keys its stored meshes by
-(`SdfMeshBakeIdentity`): its value, the code the bake runs
+(`SdfMeshBakeIdentity`): its value, the store's entry format version
+(`SdfMeshStore.EntryVersion`), the code the bake runs
 (`SdfMeshBakeClosure`, its members counted by assembly) and the hashes of the
 mask and bake kernels' bytecode, read from the build's assemblies and kernels
 with no device. `--build` names the World build's directory (absent, this CLI's
 own); `--against <dir>` names another build and lists each code member that
-changed, was added or was removed between them, and whether each kernel
-differs, so an edit can be checked to keep or move the stored meshes before a
+changed, was added or was removed between them, and whether the entry version or
+each kernel differs, so an edit can be checked to keep or move the stored meshes before a
 boot; `--members` prints every member with its hash. The value is the key a
 saved copy of the store is restored under. Exit codes: 0 printed; 1 a build
 could not be read; 2 a usage error.

@@ -239,10 +239,11 @@ public sealed class MeshCommandTests {
         var (printed, report) = Invoke("mesh", "identity", "--build", build, "--against", build, "--members", "--why", "SdfDualContouring.Extract");
 
         Assert.Equal(expected: 0, actual: printed);
+        Assert.Contains(expectedSubstring: $"entry version {SdfMeshStore.EntryVersion})", actualString: report);
         Assert.Contains(expectedSubstring: SdfMeshBakeClosure.Of(directory: build).Hash.ToString(format: "x32", provider: null), actualString: report);
         Assert.Contains(expectedSubstring: "Puck.SignedDistance ", actualString: report);
         Assert.Contains(expectedSubstring: "the same identity", actualString: report);
-        Assert.Contains(expectedSubstring: "code 0 member(s) differ", actualString: report);
+        Assert.Contains(expectedSubstring: "entry version same, mask kernel same, bake kernel same, code 0 member(s) differ", actualString: report);
         Assert.Contains(expectedSubstring: "  why Puck.SignedDistance!Puck.SignedDistance.Baking.SdfDualContouring.Extract", actualString: report);
         Assert.Contains(expectedSubstring: "    from Puck.SdfVm!", actualString: report);
 
