@@ -365,7 +365,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, `current` and `started`. |
 | `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–540, default 300). Local stdio only. | Structured `status` (`started` or `refused`), `output`, `isError`, `world` (as `puck_worlds` lists it), `processId`, `checkout`, `build`, `stateDirectory`, `stdoutLog`, `stderrLog`. |
 | `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode`, `killed` and `leaseReleased`. |
-| `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`, and `world`, the World reached. Empty output is `submitted`, not authoritative application. |
+| `puck_exec` | Required `command`: a console line or newline-separated script, at most 8192 characters total and 64 nonblank, noncomment lines. Optional integer `timeoutMs`: 1–120000 for the whole script, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`, `world`, `data` and `commands`. Empty output is `submitted`, not authoritative application. |
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. Optional `mode`: `settled` (default) or `presented`. Optional `tick` (settled): the simulation tick the still shows. Optional `frames` (presented, 1–120, default 1) and `region` (presented: `{x, y, width, height}` in fractions of the frame, origin top-left). No path. | Settled: completed PNG image content, up to 16 MiB, plus completion metadata; the capture holds presentation from the frame it is armed in until it is served, temporal views converge over the held frame, and the PNG is a render of it. The World steps no tick past the one the still is armed at until it is served, and `output` names that tick and its state hashes (`Settled still held at tick=<T> hash=<world.state.hash at T> pose=<pose hash>; the frame shows tick <T>.`). With `tick`, the call holds its session (`world.wait until <tick>`) and arms the still right after that tick completes, so the still is exactly that tick; a tick the World has already completed is refused. Without it, the still is of whichever tick was last completed when the call reached the World. Presented: nothing is held or settled; each frame is read back as the display presented it. One frame returns its PNG inline with a one-frame report in `output`; a burst writes its PNGs to a private temporary directory on the World's machine, kept for the caller, and returns no image: `output` is the report, a line per frame (path, presentation index, the presentation its image was rendered on, tick, and changed pixels and mean and largest absolute Rec. 709 luma change against the frame before, over the region or whole frame) and a summary line. Both include the composed view and overlays and require an initialized renderer. |
 | `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`), `timeoutMs`, same range/default, and `world`. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
 
@@ -391,7 +391,30 @@ output names the tick it shows; it does not establish acceptance of a prior
 mutation. Human edits may also enter that frame. Human console input remains
 independent while this attachment waits.
 
-Each call is a round trip during which the World keeps stepping, so two calls
+Send a sequence in one `puck_exec` call, using actual newlines in `command`:
+
+```json
+{"world":"<your processId>","command":"body.pose - - - 0 - - 0\nbody.pose - - - 90 - - 0\nworld.wait 2\nbody.where 0"}
+```
+
+The World queues the complete script on its existing command pump before any
+line runs. Each line waits for the previous line's settlement; successive
+Simulation lines therefore apply on adjacent ticks. Reads see preceding writes,
+and `world.wait` holds only this script. Blank lines and `#` comments are skipped.
+Scripts continue after refusals: inspect every entry of `commands`, which gives
+the one-based source `line`, `command`, `status`, `output`, `isError`,
+`clearTranscript`, `truncated` and `data`. The aggregate status is refused if
+any line refused. The existing 1 MiB output allowance is shared across the
+script, with truncation marked per line. Cancellation or timeout discards lines
+still queued; already dispatched work may have applied. Inspect state before
+retrying an uncertain script. A script is ordered, not an atomic transaction.
+
+`data` carries an output that is a JSON object or array as a native value;
+otherwise it is null, including for truncated output. Use it with
+`world.at --json` or `world.debug-view report contacts --json`, for example.
+`commands` is null for a single-line call. Transcript text remains in `output`.
+
+Separate calls are round trips during which the World keeps stepping, so they
 never land a fixed number of ticks apart. A script whose commands and stills
 must land on exact ticks is armed in one call with `world.at`, which pins
 console lines to boot ticks however long the calls take, and is waited for with
@@ -399,7 +422,7 @@ console lines to boot ticks however long the calls take, and is waited for with
 the `puck-world` skill's
 [tick-exact debug capture](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture).
 
-Both tools advertise an output schema. Metadata is returned as structured content
+Console-backed tools advertise an output schema. Metadata is returned as structured content
 and matching JSON text, so clients that consume only text retain the same facts.
 `requestId` is null when no reliable host reply exists. `status` is `completed`,
 `submitted`, `refused` or `unknown`; an uncertain outcome is never certified as success.
