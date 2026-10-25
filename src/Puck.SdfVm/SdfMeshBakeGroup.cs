@@ -35,6 +35,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     /// <summary>Gets the instances a static group's run holds, from <c>-(Selector + 1)</c> on.</summary>
     public int Instances { get; internal set; } = 1;
+    /// <summary>Gets the program ordinal of the first instance the group holds, or -1 for the world group, which holds
+    /// none: the instance a host names the group's draw by.</summary>
+    public int FirstInstance => ((m_instances.Count > 0) ? m_instances[0] : -1);
     /// <summary>Gets whether the group's shapes all carry glass materials (<see cref="SdfProgram.IsGlassRange"/>): its
     /// mesh draws in the glass pass over the opaque image rather than in the mesh pass, casts no shadow and lights no
     /// probe. A glass instance never bakes with an opaque one, so a static group is glass or opaque whole; a dynamic

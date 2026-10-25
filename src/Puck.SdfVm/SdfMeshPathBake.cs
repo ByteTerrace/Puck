@@ -344,7 +344,15 @@ public sealed partial class SdfMeshPathBake {
             }
 
             m_dressedSource = frame;
-            m_dressed = (frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision });
+            // The host's map indexes the host's draws alone; a pick names the dressed list.
+            if (frame.PickMap is { } hostMap) {
+                if (!ReferenceEquals(objA: m_dressedMap?.Inner, objB: hostMap) || (m_dressedMap.HostDraws != frame.MeshDraws.Count) || !m_dressedMap.Matches(draws: m_draws)) {
+                    m_dressedMap = new SdfDressedPickMap(draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap);
+                }
+            } else {
+                m_dressedMap = null;
+            }
+            m_dressed = (frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision, PickMap = m_dressedMap });
 
             return m_dressed;
         }
@@ -357,6 +365,7 @@ public sealed partial class SdfMeshPathBake {
     // without a new frame.
     private SdfFrame? m_dressedSource;
     private SdfFrame? m_dressed;
+    private SdfDressedPickMap? m_dressedMap;
 
     // The frame's lattices and their groups while TryTakeForFrame chooses them, reused frame to frame.
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];

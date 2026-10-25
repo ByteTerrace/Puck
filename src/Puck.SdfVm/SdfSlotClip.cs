@@ -55,6 +55,11 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
         }
     }
 
+    /// <summary>Returns the identity a carried copy was made from.</summary>
+    /// <param name="identity">A draw's identity.</param>
+    /// <returns>The copied draw's identity, or <see langword="null"/> when <paramref name="identity"/> is not a copy's.</returns>
+    internal static object? CopiedFrom(object identity) => ((identity as Copy)?.Of);
+
     // The identity of a draw's carried copy: stable across frames while the draw's is, and never equal to the draw's.
     private sealed record Copy(object Of);
 }

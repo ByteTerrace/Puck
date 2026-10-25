@@ -943,6 +943,11 @@ public static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldPatrolCommandModule(
+            script: sp.GetRequiredService<WorldTickScript>(),
+            timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>(),
+            view: WorldPatrolCommandModule.ViewOf(graphs: sp.GetService<WorldViewGraphHost>(), viewports: sp.GetService<WorldSeatViewports>())
+        ));
         services.AddSingleton<WorldDiagnostics>();
         services.AddSingleton<WorldDiagnosticOverlay>();
         services.AddSingleton<ICommandModule, WorldDebugViewCommandModule>();

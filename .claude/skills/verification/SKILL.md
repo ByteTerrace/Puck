@@ -39,11 +39,14 @@ that session.
    is measured in frame time, never inferred from one phase: a tick that fell
    from 247 ms to 61 ms is still four frames late.
 5. The player's body seen, for a change that reaches what draws bodies (stamps,
-   clips, fades, cameras, portals): walk or pose the body around the area and
-   look at captures or picks (`world.view.pick primary 0.5 0.5` under a
-   third-person camera names `body:0`; `[world.straddle: ...]` in the log names
-   every body drawn clipped at a door). A body that vanishes away from any
-   portal blocks the landing.
+   clips, fades, cameras, portals): patrol the area and read the result
+   (`world.patrol <x0> <z0> <x1> <z1> <step>` in a windowed World with its bakes
+   settled, then `world.wait until <tick>` and `world.patrol`): it poses body 0 at
+   each point of the grid, picks the centre of the third-person view
+   (`world.view.pick primary 0.5 0.5` names `body=0`), and flags `OFF BODY` and
+   `STALL` points. `[world.straddle: ...]` in the log names every body drawn
+   clipped at a door. A body that vanishes away from any portal blocks the
+   landing.
 
 Gates, parity, canaries, counters, baselines, `puck laws prove` and review
 passes are tools to use when they pay for themselves, never preconditions. A

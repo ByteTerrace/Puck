@@ -405,6 +405,15 @@ check the flag: the owner may be holding the pad.
   `world.screenshot <path.png> presented 8`, which report each frame's changed
   pixels and luma change against the one before
   ([console](references/console.md#settled-stills-and-presented-bursts)).
+- **Patrol an area to see the body.** `world.patrol <x0> <z0> <x1> <z1> <step>
+  [yawDegrees|-] [settleTicks] [y|-]` on a windowed World poses body 0 at each grid
+  point of its current level (`y` names another level's floor height) and picks the centre of the first seat's rendered view
+  (more pixels about it where the centre misses the body). It answers with the tick
+  its `world.at` script ends at; `world.wait until <tick>`, then `world.patrol` gives
+  a summary and a line per flagged point (`OFF BODY`, `OCCLUDED` by an exhibit, `NO
+  ANSWER`, `STALL`), `world.patrol all` every point. A pick names `body=<index>` for a
+  body and `placement=<id>` for a placement. `world.patrol stop` clears every armed
+  `world.at` line, not only the patrol's.
 - **Capture motion on exact ticks.** `puck motion` does it for the Moth in one
   command (scenario file `worlds/debug/motion.scenarios.json`, contact sheets,
   `--reproduce`); the rest of this item is the procedure under it. Calls over MCP land wherever the World
