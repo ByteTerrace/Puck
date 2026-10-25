@@ -494,10 +494,12 @@ resume of the rate lever. It reproduces the authoritative trajectory. A recordin
 armed before the world's first step starts from the document's boot image. One
 armed later starts from a checkpoint taken at the arm, so it re-drives cleanly
 from its first tick. That checkpoint leaves out the owned identity documents, so
-a seat's identity travels as its projection. When the live state is one no
-checkpoint can capture (a mounted or pumped addon guest, a screen operation, a
-stepped machine without checkpoint support, a coupled link or rewind history, a
-live session, an engagement in flight, or an edit not yet applied),
+a seat's identity travels as its projection. Mounted addon guests restart from
+their pinned modules only after capture succeeds, so MCP can arm after boot
+without claiming to checkpoint guest memory. A refused arm preserves them.
+When a guest restart refuses or the live state is one no checkpoint can capture
+(a stepped machine without checkpoint support, a coupled link or rewind
+history, an engagement in flight, or an edit not yet applied),
 `replay.record` refuses by name (`StartNotCheckpointable`). A matching replay proves the hashed
 authoritative state; the document, the grant table, and the HUD are outside that
 hash. The world-level rules for transfer,

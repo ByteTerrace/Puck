@@ -640,7 +640,7 @@ public sealed partial class WorldAddonRuntime {
                 continue;
             }
 
-            // The boot-anchored replay arm predicate's own latch: an admitted execution is about to be ATTEMPTED,
+            // The ordinary checkpoint refusal latch: an admitted execution is about to be ATTEMPTED,
             // unconditionally, regardless of what the tick below does — see MountedAddon.HasEverPumped's own doc.
             addon.HasEverPumped = true;
 

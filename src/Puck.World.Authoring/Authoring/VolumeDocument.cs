@@ -47,6 +47,10 @@ public sealed record VolumeDocument(string Kind, DocumentVector3 Position, Docum
     /// <summary>Whether the family is supported.</summary>
     public bool IsKnownKind => (Kind is FlowKind or CloudKind);
 
+    // Each document's resolved ramp, made once: an animated volume resolves every frame, and the ramp depends on the
+    // document alone. Keyed by reference, so a record equal by value does not share another's.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VolumeDocument, SdfDensityStop[]> Ramps = [];
+
     /// <summary>Resolves the volume in the supplied parent frame and uniform scale.</summary>
     public SdfVolume ToVolume(int dynamicSlot, Vector3 origin, Quaternion rotation, float scale) => new(
         ((Kind == CloudKind)
@@ -64,13 +68,13 @@ public sealed record VolumeDocument(string Kind, DocumentVector3 Position, Docum
         ((Speed ?? DefaultSpeed) * scale),
         (Seed ?? 0u),
         (Steps ?? DefaultSteps),
-        Ramp.Select(selector: s => new SdfDensityStop(
+        Ramps.GetValue(key: this, createValueCallback: static volume => [.. volume.Ramp.Select(selector: s => new SdfDensityStop(
             s.Density,
             HexColor.Parse(
                 value: s.Color,
                 fallback: Vector3.One
             )
-        )).ToArray(),
+        ))]),
         (Intensity ?? DefaultIntensity),
         (Extinction ?? DefaultExtinction),
         (PulseAmplitude ?? 0f),

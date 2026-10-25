@@ -348,13 +348,16 @@ is captured and re-executed on replay through the ordinary tape-covered
 mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
 no separate lifecycle leaf left to reason about arming against.
 
-No checkpoint holds a guest's memory, so a recording in a world with mounted
-addons starts from the boot image: `replay.record` before the world's first
-step (the first line of the World's stdin; an MCP attachment arrives after
-that step), or it refuses as
-`StartNotCheckpointable`. `replay.drive` then works in the same session: its
-boot-image reset prepares every guest fresh, so the guests re-run from their
-modules' initial state and reproduce the recording tick for tick.
+No checkpoint holds a guest's memory. A post-boot `replay.record`, including
+one sent over MCP, prepares every mounted guest fresh and captures the
+surrounding authority state at the arm under one authority operation. It
+commits the restart only after capture succeeds, so refusal leaves every live
+store untouched. The recording and its re-drive both start those pinned guests
+from module initialization; guest-private trails, counters and pending answers
+restart, while poses, authored state, grants, sessions and machine cores remain.
+Ordinary checkpoints still refuse pumped guests. Arming before the first step
+uses the boot image as before. `replay.drive` prepares fresh guests for either
+kind of recorded start.
 
 When piping the startup script, close stdin after the replay arm. Headless
 startup drains that script before stepping; leaving the pipe open waiting for

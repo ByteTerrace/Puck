@@ -110,21 +110,7 @@ public sealed partial class WorldScreenBinder {
         var moved = false;
 
         if (feed.Nested is not { } screens) {
-            screens = new WorldNestedScreens<SessionFeed>(
-                definition: () => feed.Mirror.Definition,
-                depth: feed.Depth,
-                head: feed.RegistrationName,
-                shares: SharesProducer,
-                world: feed.InstanceName
-            );
-            feed.Nested = screens;
-            m_nestedOwners[screens] = new NestedOwner(
-                Eye: EyeOf(feed: feed),
-                Feed: feed,
-                Instance: feed.InstanceName,
-                Local: DestinationOf(feed: feed),
-                Scene: null
-            );
+            screens = NestFeed(feed: feed);
             moved = true;
         }
 
@@ -132,6 +118,28 @@ public sealed partial class WorldScreenBinder {
             screens: screens,
             sessions: sessions
         );
+    }
+    // Opens a feed's level of screens. Apart from ReconcileFeed, whose every call would otherwise allocate the closure
+    // the definition reader captures.
+    private WorldNestedScreens<SessionFeed> NestFeed(SessionFeed feed) {
+        var screens = new WorldNestedScreens<SessionFeed>(
+            definition: () => feed.Mirror.Definition,
+            depth: feed.Depth,
+            head: feed.RegistrationName,
+            shares: SharesProducer,
+            world: feed.InstanceName
+        );
+
+        feed.Nested = screens;
+        m_nestedOwners[screens] = new NestedOwner(
+            Eye: EyeOf(feed: feed),
+            Feed: feed,
+            Instance: feed.InstanceName,
+            Local: DestinationOf(feed: feed),
+            Scene: null
+        );
+
+        return screens;
     }
     // Lists the feeds again when one opened or closed since they were last listed.
     private void EnsureFeeds() {

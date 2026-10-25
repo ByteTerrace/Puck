@@ -101,7 +101,7 @@ surface.
   The fourteenth is `replay.record`'s
   `StartNotCheckpointable`: the world has stepped, so the tape would start from a
   checkpoint of the live state, and that state is one no checkpoint captures (a
-  mounted or pumped addon guest, a stepped machine whose runtime has no
+  guest whose pinned restart refuses, a stepped machine whose runtime has no
   checkpoint capability, a live coupled link or rewind history, an engagement in
   flight, an edit not yet applied); the refusal names the guest, machine or link.
   `ScreenOpContentMismatch`
@@ -125,6 +125,11 @@ surface.
   sizes an allocation, and bytes after the tape are refused.
 
 ## What the tape records — and does not
+
+`WorldReplayInspector` must deserialize the embedded definition with the tape's
+`DocumentDirectory`, just as the re-drive does. Even a header/edge inspection
+compiles its channel table, and validating without that directory falsely
+refuses a world whose patches or voices use relative asset paths.
 
 Record-start state: the live `WorldDefinition` as canonical JSON
 (`WorldReplaySnapshot.DefinitionJson`), the mounted-addon receipts (name,
@@ -439,8 +444,11 @@ and fed the recorded ticks, with local seat input masked at the loopback.
   the boot image. Later it starts from a checkpoint taken at the arm, which
   holds what the session reached: poses, cells, grants, latches, the live
   sessions, the screen slots and links, the machine cores and the binding memo
-  (above). A state no checkpoint captures refuses by name with
-  `StartNotCheckpointable`: a mounted or pumped addon guest, a stepped machine
+  (above). Mounted guests restart from their pinned modules, staged before
+  capture and committed only after it succeeds, so MCP can arm after boot
+  without claiming to checkpoint guest memory. A refused arm preserves the
+  running guests. A state no checkpoint captures refuses by name with
+  `StartNotCheckpointable`: a guest whose pinned restart refuses, a stepped machine
   without checkpoint support, a coupled link or rewind history, an engagement
   in flight, or an edit not yet applied. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`

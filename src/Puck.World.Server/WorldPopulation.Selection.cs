@@ -179,7 +179,11 @@ public sealed partial class WorldPopulation {
 
             var value = (raw >> FixedQ4816.FractionBitCount);
 
-            foreach (var selectCase in select.Cases) {
+            var cases = select.Cases;
+
+            for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
+                var selectCase = cases[caseIndex];
+
                 if (selectCase.Value != value) {
                     continue;
                 }

@@ -54,10 +54,7 @@ public static class WorldTopologyCompilation {
             if (
                 (topology is null) ||
                 (topology.Name != name) ||
-                !TopologyCompilation.TryValidate(
-                reason: out _,
-                topology: topology
-            )
+                !TopologyCompilation.Validates(topology: topology)
             ) {
                 continue;
             }

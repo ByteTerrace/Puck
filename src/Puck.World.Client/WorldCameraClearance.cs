@@ -119,6 +119,50 @@ public sealed class WorldCameraClearance {
     // How far along the boom the eye can travel from the target before geometry, swept by a sphere of radius, stops it or
     // its sightline, up to the boom's whole length.
     private static float Clear(SdfFieldEvaluator field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale) {
+        // A still camera asks the same questions every frame: an answer to bit-identical inputs over the same field is the
+        // one it had, so it is reused rather than marched again.
+        var query = new ClearanceQuery(Direction: direction, Field: field, Length: length, Radius: radius.Value, Scale: scale, Target: target, TargetObstructed: targetObstructed);
+        var answers = (AnswerScratch ??= new ClearanceAnswer[ClearanceAnswers]);
+
+        foreach (ref readonly var answer in answers.AsSpan()) {
+            if (answer.Query.Matches(other: in query)) {
+                return answer.Room;
+            }
+        }
+
+        var room = March(field: field, targetObstructed: targetObstructed, target: target, direction: direction, length: length, radius: radius, scale: scale);
+
+        answers[NextAnswer] = new ClearanceAnswer(Query: query, Room: room);
+        NextAnswer = ((NextAnswer + 1) % ClearanceAnswers);
+
+        return room;
+    }
+    // The clearance questions a thread asked last, kept for Clear to answer again: enough for every probe one chase
+    // camera's frame asks (the rest, the lifts and their refinements).
+    private const int ClearanceAnswers = 32;
+    [ThreadStatic] private static ClearanceAnswer[]? AnswerScratch;
+    [ThreadStatic] private static int NextAnswer;
+
+    private readonly record struct ClearanceAnswer(ClearanceQuery Query, float Room);
+    private readonly record struct ClearanceQuery(SdfFieldEvaluator? Field, bool TargetObstructed, Vector3 Target, Vector3 Direction, float Length, long Radius, float Scale) {
+        // Compares the floats by their bits, so an answer is reused only for exactly the inputs it was marched for.
+        public bool Matches(in ClearanceQuery other) => (
+            (Field is not null) &&
+            ReferenceEquals(objA: Field, objB: other.Field) &&
+            (TargetObstructed == other.TargetObstructed) &&
+            (Radius == other.Radius) &&
+            Same(left: Target, right: other.Target) &&
+            Same(left: Direction, right: other.Direction) &&
+            (BitConverter.SingleToInt32Bits(value: Length) == BitConverter.SingleToInt32Bits(value: other.Length)) &&
+            (BitConverter.SingleToInt32Bits(value: Scale) == BitConverter.SingleToInt32Bits(value: other.Scale))
+        );
+        private static bool Same(Vector3 left, Vector3 right) => (
+            (BitConverter.SingleToInt32Bits(value: left.X) == BitConverter.SingleToInt32Bits(value: right.X)) &&
+            (BitConverter.SingleToInt32Bits(value: left.Y) == BitConverter.SingleToInt32Bits(value: right.Y)) &&
+            (BitConverter.SingleToInt32Bits(value: left.Z) == BitConverter.SingleToInt32Bits(value: right.Z))
+        );
+    }
+    private static float March(SdfFieldEvaluator field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale) {
         var fixedLength = FixedQ4816.FromDouble(value: length);
         var fixedScale = FixedQ4816.FromDouble(value: scale);
         var skin = (targetObstructed
