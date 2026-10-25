@@ -29,7 +29,7 @@ public class TestLoweringLawTests {
     private static string[] RowNames(JsonObject world) => [.. world["state"]!["world"]!.AsArray().Select(selector: static row => row!["name"]!.GetValue<string>())];
     private static JsonObject OneWorld(string source) => Assert.Single(collection: Green(source: source).TestWorlds).Json;
     [Fact]
-    public void TextExpectationsKeepTheirLiteralAndTextWitnessWhenDecompiled() {
+    public void TextExpectationsKeepTheirLiteralAndTextWitness() {
         var source = """
             schema: "puck.world.definition.v1"
             documentId: "text-test"
@@ -46,9 +46,6 @@ public class TestLoweringLawTests {
         var witness = TestWorldFixtures.Row(world: world, name: "expect$1$text");
         Assert.Equal("Text", witness["kind"]!.GetValue<string>());
         Assert.Equal("expect$1", witness["witness"]!.GetValue<string>());
-        var decompiled = Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: world);
-        Assert.Contains("title == \"灯\"", decompiled);
-        Assert.Equal(Canonical(world), Canonical(OneWorld(decompiled)));
     }
     [Fact]
     public void ATextComparisonsNumericKindAnnotationIsRefused() {
@@ -415,14 +412,6 @@ public class TestLoweringLawTests {
             actual: Canonical(node: OneWorld(source: formatted)["schedule"]!),
             expected: Canonical(node: OneWorld(source: source)["schedule"]!)
         );
-
-        // A lowered test's authored refusal survives decompilation too, including the unqualified refusal.
-        var original = OneWorld(source: source);
-        var decompiled = Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: original);
-
-        Assert.Contains(actualString: decompiled, comparisonType: StringComparison.Ordinal, expectedSubstring: "seat2 refused \"is not disclosed\": world.state armour $value");
-        Assert.Contains(actualString: decompiled, comparisonType: StringComparison.Ordinal, expectedSubstring: "seat2 refused: world.state.cell.set armour $value 9");
-        Assert.Equal(actual: Canonical(node: OneWorld(source: decompiled)), expected: Canonical(node: original));
     }
     [Fact]
     public void ATestInsideAnotherConstructIsRefusedByName() => Assert.Contains(

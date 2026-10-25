@@ -636,15 +636,12 @@ family index to select it by.
 
 ## Decompiling
 
-A name the compiler generated prints back as the construct that generated it, never as an authored name, which
-PUCK113 would refuse: `Decompiler/WorldDecompiler.GeneratedNames.cs` reads a `ground` block back from its
-prototype and placement (regenerated through the emitter's own `GroundRows` and compared), prints a rule or group
-whose name joins scopes (`outer$inner`) inside one `rules` scope per part, and reads a generated test world's
-verdict rows, witnesses, verdict rules and schedule back as its `test` block. `WorldDecompiler.DecompileComposition`
-takes the worlds one composition emitted and prints the composition source: each world a module and a `world`
-declaration, each `border` and `door` read back from the rows `WorldCompositionLinks` generated and verified by
-reapplying them. Any other generated-form name — a hand-written document spelling one, a pool's catalog row, an
-identity row, one world of a composition read alone — throws `WorldDecompileRefusedException` naming it.
+A name the compiler generated never prints as an authored name, which PUCK113 would refuse:
+`Decompiler/WorldDecompiler.GeneratedNames.cs` prints a rule or group whose name joins scopes (`outer$inner`)
+inside one `rules` scope per part, and any other generated-form name — a `ground`'s, a `test` world's, a
+composition link's, an aliased module instance's, a pool's catalog row, an identity row, a hand-written document
+spelling one — throws `WorldDecompileRefusedException` naming it. Those constructs are written in source alone: a
+save edits the source around them and refuses an edit to a row they generate.
 
 `WorldDecompiler.Decompile` opens every file with a one-time-import header comment (`let`/`template` cannot be
 recovered on a re-run) and inverts `rules`/`shapes`/`placements`/`prototypes` into the sugar above, eliding a

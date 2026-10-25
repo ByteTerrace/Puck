@@ -158,7 +158,6 @@ public static partial class WorldDecompiler {
         }
 
         var names = NamesToSweep(root: root);
-        var generated = ReverseGenerated(root: root);
         var sb = new StringBuilder();
 
         // 1. Headers: schema, basis, documentId
@@ -340,21 +339,10 @@ public static partial class WorldDecompiler {
         );
 
         RefuseUnprintedGeneratedNames(
-            consumed: generated.Consumed,
             groupsPrintAsSugar: sugaredGroups,
             names: names,
             rulesPrintAsSugar: ((root["rules"] is JsonArray printedRules) && CanSugarRules(rules: printedRules))
         );
-
-        // A ground block prints after the prototypes and placements written before it and ahead of every other
-        // statement, so both sections come back in the order they were written.
-        foreach (var leading in generated.Leading) {
-            if (sb.Length > 0) {
-                sb.AppendLine();
-            }
-
-            leading(obj: sb);
-        }
 
         foreach (var (key, value) in root) {
             if (knownRootKeys.Contains(item: key) && !(
@@ -484,13 +472,7 @@ public static partial class WorldDecompiler {
             }
         }
 
-        var text = Respell(text: (sb.ToString().TrimEnd() + "\n"));
-
-        // A test's `when` lines carry console commands, which are not expressions to respell.
-        return ((generated.Test is { } test)
-            ? $"{text}\n{test}"
-            : text
-        );
+        return Respell(text: (sb.ToString().TrimEnd() + "\n"));
     }
     // One printer per root arm. Each answers whether it printed the section as its construct: a node whose shape
     // or sugar requirement does not hold prints as an ordinary field instead, which is the fallback the row's own

@@ -159,7 +159,10 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   A world document also gets its compiled world (`.puckb`) beside it.
   `--watch` recompiles on change; `--tree` mirrors a directory of sources.
 - `puck decompile` is **one-way**: `let`, `template` and `for` never come back.
-  Decompile once to import a JSON document, then edit the `.puck`.
+  Decompile once to import one hand-written JSON document, then edit the
+  `.puck`. A row a `ground`, `test`, `border`, `door` or aliased `use`
+  generated is refused by name: those are written in source, never printed
+  from a document (decision P1).
 - `puck format` prints `.puck` through `PuckPrinter` (two-space indent, lines
   broken past 120 columns, no options); the language server and `puck
   decompile` print through the same printer. Formatting is a fixed point and

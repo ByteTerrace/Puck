@@ -317,18 +317,29 @@ rather than shipping small twice.
 ## The language
 
 **P1 — The document is the truth; a surface owes it two things.** Every
-surface construct lowers to the document and prints back from it, and
-`compile(print(compile(source)))` equals `compile(source)`. A construct
-without a printer is not admitted. Nothing else about a surface is a
-contract: names, keywords, and shapes change freely, rewritten once across
-the sources with no alias.
+construct that writes an authored row or value lowers to the document and
+prints back from it, and `compile(print(compile(source)))` equals
+`compile(source)`; such a construct without a printer is not admitted. Two
+things print from a document, and nothing else does: `world.save`, which writes
+a changed value or a new row into the source that authors it and leaves every
+other character as written, and `puck decompile`, which imports a hand-written
+JSON document no source authors. Neither ever prints a row a construct
+generated: a save refuses an edit to one by name, and a hand-written document
+holds none. So a construct that generates rows (`ground`, `test`, a
+composition's `world`, `border` and `door`, an aliased `use`) is written in
+source alone, like the compile-time layer, and prints back from nothing; a
+generated name it leaves in a document is refused by name. A rule scope's
+members are authored rules under a joined name and still print back. Nothing
+else about a surface is a contract: names, keywords, and shapes change freely,
+rewritten once across the sources with no alias.
 
 **P2 — Two layers, reshaped differently.** The vocabulary layer (`rule`,
 `table`, `pattern`, `local`, a gate, an operand) is a projection of the
 document and reshapes by changing its one description. The compile-time layer
 (`let`, `module`, `for`, `function`, imports, units) exists only
 in the source, is evaluated away, and reshapes by rewriting the syntax tree. A
-decompiled document shows the expansion.
+decompiled document shows the expansion; a saved one keeps the layer as
+written, since a save edits only the changed nodes.
 
 **P3 — Formatting is printing.** The formatter parses a source and prints its
 tree, comments and blank lines included, so it cannot produce a source that
@@ -489,8 +500,10 @@ order are [S9](../plans/state-and-language.md#s9--the-authoring-consensus).
 - **Creation shapes share the world's axes** and take unit-bearing rotations.
 - **`function`**: compile-time, inlined, non-recursive.
 - **Saving edits the source.** `world.save` rewrites the source tree, so a save
-  keeps `let`, `for` and modules; whether the document printer of P1 shrinks is
-  decided by that work. The printer wraps long lines.
+  keeps `let`, `for` and modules. That work decided P1's printer: a save prints
+  only changed values and new authored rows, so the decompiler's read-back of
+  generated rows (ground, test, composition links) went, and P1 now covers the
+  constructs that write authored rows. The printer wraps long lines.
 - **`sql { }` is deleted.** It is a second spelling of rows and rules that never
   printed back.
 
