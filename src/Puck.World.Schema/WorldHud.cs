@@ -185,24 +185,6 @@ public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer L
         init => m_elements = (value ?? []);
     }
 }
-/// <summary>The bare (non-hovering) drawn cursor's palette role — the authored twin of the overlay color roles the
-/// renderer maps this token onto (Puck.World.Schema must not reference Puck.Overlays). Hover always lights the accent
-/// tier regardless, so accent here makes the bare cursor and its hover state indistinguishable — legal, but a
-/// world that wants hover to read should pick another role.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldHudCursorRole>))]
-public enum WorldHudCursorRole : byte {
-    /// <summary>The primary text hue.</summary>
-    TextPrimary,
-
-    /// <summary>The dimmed text hue.</summary>
-    TextDim,
-
-    /// <summary>The accent hue (also the hover tier).</summary>
-    Accent,
-
-    /// <summary>The console's phosphor hue.</summary>
-    Phosphor,
-}
 /// <summary>The drawn pointer cursor's per-world presentation policy — feel numbers each world plausibly wants
 /// different (a fast world reaches farther, an underwater world reads better with a larger glow), so they are
 /// document fields on the hud defaults row, never engine constants. Presentation-only: the cursor, its hover
@@ -210,9 +192,10 @@ public enum WorldHudCursorRole : byte {
 /// <param name="HoverRadius">The cursor ray's hover reach in world units — how far into the world a pointer resolves
 /// a hovered row.</param>
 /// <param name="SizePx">The drawn cursor's ring radius, pixels.</param>
-/// <param name="Role">The bare cursor's palette role; hover lights the accent tier regardless.</param>
+/// <param name="Role">The bare cursor's core color role; hover lights the accent tier regardless, so
+/// <see cref="WorldThemeRole.Accent"/> here makes the bare cursor and its hover indistinguishable.</param>
 /// <param name="Visible">The drawn cursor's visibility condition, or <see langword="null"/> for always.</param>
-public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
+public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldThemeRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
 /// <summary>The <c>hud</c> document section's defaults row (the <c>WorldMutation.SetHudDefaults</c> mutation
 /// target).</summary>
 /// <param name="Enabled">Whether the world-scope HUD panels render at all — a world-level kill switch independent of

@@ -7,14 +7,15 @@ using Xunit;
 namespace Puck.World.Client.Tests;
 
 /// <summary>
-/// THE LAW: an engaged screen is framed from the row, its source's rows and the window alone. The picture (the glass
-/// inside its bezel band) fills the matte a desktop emulator would show it in, each source row a whole number of window
+/// THE LAW: an engaged screen is framed from the row, its source's rows and the window alone. The picture (the whole
+/// face, or a CRT's glass inside its bezel band) fills the matte a desktop emulator would show it in, each source row a whole number of window
 /// pixels and its width the glass's own shape, square-on with the near plane one slab thickness short of the glass; the
 /// picture's corners land on the matte's whole pixels; and the seat's camera eases there and back
 /// on the rig's dynamics, its weight the view's screen fidelity, or cuts when the rig reports none.
 /// </summary>
 public sealed class WorldScreenFramingLawTests {
     private const float FieldOfView = 0.96f;
+
     private static readonly NormalizedRect Whole = new(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
     // A 4:3 screen facing +Z: 2 m right of the origin, 1 m up, 0.4 m by 0.3 m, 1 cm deep.
@@ -37,7 +38,7 @@ public sealed class WorldScreenFramingLawTests {
         var maxY = 0f;
 
         foreach (var (x, y) in new[] { (-1f, -1f), (-1f, 1f), (1f, -1f), (1f, 1f) }) {
-            var corner = (((Vector3)screen.Origin) + (Vector3.UnitX * (x * picture.X)) + (Vector3.UnitY * (y * picture.Y)));
+            var corner = ((((Vector3)screen.Origin) + (Vector3.UnitX * (x * picture.X))) + (Vector3.UnitY * (y * picture.Y)));
 
             Assert.True(condition: camera.TryProject(
                 depth: out _,
@@ -53,16 +54,20 @@ public sealed class WorldScreenFramingLawTests {
 
     [Fact]
     public void ThePictureFillsItsShareOfTheViewSquareOnWithTheNearPlaneJustShortOfIt() {
-        var screen = Screen();
+        var screen = (Screen() with { Material = WorldScreenMaterial.Crt });
         var picture = WorldScreenFraming.PictureHalfExtents(screen: screen);
 
-        // The glass's bezel band takes three hundredths of the face on each side.
-        Assert.Equal(expected: (0.2f * 0.94f), actual: picture.X, tolerance: 1e-6f);
-        Assert.Equal(expected: (0.15f * 0.94f), actual: picture.Y, tolerance: 1e-6f);
-        // A window into another world is an opening with no bezel: its picture is the whole face.
+        // A CRT's bezel band takes three hundredths of the face on each side.
+        Assert.Equal(actual: picture.X, expected: (0.2f * 0.94f), tolerance: 1e-6f);
+        Assert.Equal(actual: picture.Y, expected: (0.15f * 0.94f), tolerance: 1e-6f);
+        // A plain display's picture, and a window's, is the whole face.
         Assert.Equal(
             expected: new Vector2(x: 0.2f, y: 0.15f),
-            actual: WorldScreenFraming.PictureHalfExtents(screen: (screen with { Source = new WorldScreenSource.Session(Destination: "garden", Projection: WorldScreenProjection.Window) }))
+            actual: WorldScreenFraming.PictureHalfExtents(screen: Screen())
+        );
+        Assert.Equal(
+            expected: new Vector2(x: 0.2f, y: 0.15f),
+            actual: WorldScreenFraming.PictureHalfExtents(screen: (Screen() with { Source = new WorldScreenSource.Session(Destination: "garden", Projection: WorldScreenProjection.Window) }))
         );
 
         // At a share of 0.8 of a 1280 by 900 view the picture is 0.8 of its height, its width the picture's shape.
@@ -80,10 +85,10 @@ public sealed class WorldScreenFramingLawTests {
             screen: screen
         );
 
-        Assert.Equal(expected: 0.8f, actual: y, tolerance: 1e-4f);
-        Assert.Equal(expected: ((0.8f * (4f / 3f)) / (1280f / 900f)), actual: x, tolerance: 1e-4f);
-        Assert.Equal(expected: (Vector3)screen.Origin, actual: target);
-        Assert.Equal(expected: 0f, actual: (eye.X - 2f), tolerance: 1e-6f);
+        Assert.Equal(actual: y, expected: 0.8f, tolerance: 1e-4f);
+        Assert.Equal(actual: x, expected: ((0.8f * (4f / 3f)) / (1280f / 900f)), tolerance: 1e-4f);
+        Assert.Equal(expected: ((Vector3)screen.Origin), actual: target);
+        Assert.Equal(actual: (eye.X - 2f), expected: 0f, tolerance: 1e-6f);
         Assert.Equal(expected: (eye.Z - (2f * screen.HalfDepth)), actual: near, tolerance: 1e-6f);
 
         // A degenerate frame, lens or share frames nothing.
@@ -142,8 +147,8 @@ public sealed class WorldScreenFramingLawTests {
         var offset = WorldScreenFraming.MatteOffset(displayHeight: 901, displayWidth: 1281, matte: matte, view: Whole);
 
         Assert.Equal(expected: new NormalizedRect(Height: (720f / 901f), Width: (960f / 1281f), X: (160f / 1281f), Y: (90f / 901f)), actual: matte);
-        Assert.Equal(expected: (-0.5f / 720f), actual: offset.X, tolerance: 1e-6f);
-        Assert.Equal(expected: (-0.5f / 720f), actual: offset.Y, tolerance: 1e-6f);
+        Assert.Equal(actual: offset.X, expected: (-0.5f / 720f), tolerance: 1e-6f);
+        Assert.Equal(actual: offset.Y, expected: (-0.5f / 720f), tolerance: 1e-6f);
         Assert.Equal(expected: Vector2.Zero, actual: WorldScreenFraming.MatteOffset(displayHeight: 901, displayWidth: 1281, matte: (matte with { Height = 0f }), view: Whole));
         Assert.True(condition: WorldScreenFraming.TryFrame(eye: out var eye, fieldOfViewRadians: FieldOfView, near: out _, offset: offset, screen: screen, share: matte.Height, target: out var target));
 
@@ -154,13 +159,12 @@ public sealed class WorldScreenFramingLawTests {
             Assert.True(condition: camera.TryProject(
                 depth: out _,
                 ndc: out var ndc,
-                world: (((Vector3)screen.Origin) + (Vector3.UnitX * (x * picture.X)) + (Vector3.UnitY * (y * picture.Y)))
+                world: ((((Vector3)screen.Origin) + (Vector3.UnitX * (x * picture.X))) + (Vector3.UnitY * (y * picture.Y)))
             ));
-            Assert.Equal(expected: pixelX, actual: ((ndc.X + 1f) * 640.5f), tolerance: 0.01f);
-            Assert.Equal(expected: pixelY, actual: ((1f - ndc.Y) * 450.5f), tolerance: 0.01f);
+            Assert.Equal(actual: ((ndc.X + 1f) * 640.5f), expected: pixelX, tolerance: 0.01f);
+            Assert.Equal(actual: ((1f - ndc.Y) * 450.5f), expected: pixelY, tolerance: 0.01f);
         }
     }
-
     [Fact]
     public void TheCameraEasesToTheFramingOnTheRigsDynamicsAndBackAndCutsWithoutThem() {
         var screen = Screen();
@@ -174,7 +178,7 @@ public sealed class WorldScreenFramingLawTests {
         var target = chaseTarget;
 
         Assert.Equal(expected: 0f, actual: framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target));
-        Assert.Equal(expected: chaseEye, actual: eye);
+        Assert.Equal(actual: eye, expected: chaseEye);
 
         // Engaged, the weight (the view's screen fidelity) climbs monotonically and settles on the framing; only the
         // settled framing mattes the seat's view.
@@ -191,7 +195,7 @@ public sealed class WorldScreenFramingLawTests {
 
         Assert.Equal(expected: 1f, actual: framing.Weight);
         Assert.Same(expected: screen, actual: framing.Framed);
-        Assert.Equal(expected: (Vector3)screen.Origin, actual: target);
+        Assert.Equal(expected: ((Vector3)screen.Origin), actual: target);
 
         // Left, it eases back to the seat's camera, from the framing it last held, matting nothing.
         eye = chaseEye;
@@ -199,7 +203,7 @@ public sealed class WorldScreenFramingLawTests {
         _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target);
         Assert.InRange(actual: framing.Weight, high: 0.999f, low: 0.001f);
         Assert.Null(@object: framing.Framed);
-        Assert.NotEqual(expected: chaseEye, actual: eye);
+        Assert.NotEqual(actual: eye, expected: chaseEye);
 
         for (var frame = 0; (frame < 120); frame++) {
             eye = chaseEye;
@@ -208,7 +212,7 @@ public sealed class WorldScreenFramingLawTests {
         }
 
         Assert.Equal(expected: 0f, actual: framing.Weight);
-        Assert.Equal(expected: chaseEye, actual: eye);
+        Assert.Equal(actual: eye, expected: chaseEye);
 
         // A rig reporting no dynamics cuts straight to the framing.
         eye = chaseEye;
@@ -242,7 +246,7 @@ public sealed class WorldScreenFramingLawTests {
         Assert.Equal(expected: held.Target, actual: target);
         Assert.Equal(expected: 0.5f, actual: framing.FieldOfView);
         Assert.Equal(expected: 0f, actual: framing.Weight);
-        Assert.Equal(expected: 0f, actual: near);
+        Assert.Equal(actual: near, expected: 0f);
         Assert.Null(@object: framing.Framed);
 
         // Framed on top of it, the framing eases from the held view and takes the seat camera's lens.
@@ -255,7 +259,7 @@ public sealed class WorldScreenFramingLawTests {
         Assert.Equal(expected: FieldOfView, actual: framing.FieldOfView);
         Assert.Equal(expected: 1f, actual: framing.Weight);
         Assert.Same(expected: screen, actual: framing.Framed);
-        Assert.Equal(expected: (Vector3)screen.Origin, actual: target);
+        Assert.Equal(expected: ((Vector3)screen.Origin), actual: target);
         Assert.True(condition: (near > 0f));
 
         // Back to the held view, then out of it to the seat's camera.
@@ -273,15 +277,15 @@ public sealed class WorldScreenFramingLawTests {
             _ = framing.Apply(deltaSeconds: (1f / 60f), dynamics: in dynamics, eye: ref eye, fieldOfViewRadians: FieldOfView, held: null, screen: null, share: 1f, target: ref target);
         }
 
-        Assert.Equal(expected: chaseEye, actual: eye);
+        Assert.Equal(actual: eye, expected: chaseEye);
         Assert.Equal(expected: FieldOfView, actual: framing.FieldOfView);
     }
     [Fact]
     public void TheMatteIsTheDisplaysFillOrBlack() {
         var screen = Screen();
 
-        Assert.Equal(expected: new Vector4(x: 1f, y: 0f, z: 0f, w: 1f), actual: WorldScreenFraming.Fill(screen: (screen with { Route = new WorldScreenRoute(Display: new WorldScreenDisplay(Fill: "#FF0000"), EngageRadius: 3f, Engageable: true) })));
-        Assert.Equal(expected: new Vector4(x: 0f, y: 0f, z: 0f, w: 1f), actual: WorldScreenFraming.Fill(screen: screen));
-        Assert.Equal(expected: new Vector4(x: 0f, y: 0f, z: 0f, w: 1f), actual: WorldScreenFraming.Fill(screen: (screen with { Route = new WorldScreenRoute(Display: new WorldScreenDisplay(Fill: "red"), EngageRadius: 3f, Engageable: true) })));
+        Assert.Equal(expected: new Vector4(w: 1f, x: 1f, y: 0f, z: 0f), actual: WorldScreenFraming.Fill(screen: (screen with { Route = new WorldScreenRoute(Display: new WorldScreenDisplay(Fill: "#FF0000"), EngageRadius: 3f, Engageable: true) })));
+        Assert.Equal(expected: new Vector4(w: 1f, x: 0f, y: 0f, z: 0f), actual: WorldScreenFraming.Fill(screen: screen));
+        Assert.Equal(expected: new Vector4(w: 1f, x: 0f, y: 0f, z: 0f), actual: WorldScreenFraming.Fill(screen: (screen with { Route = new WorldScreenRoute(Display: new WorldScreenDisplay(Fill: "red"), EngageRadius: 3f, Engageable: true) })));
     }
 }

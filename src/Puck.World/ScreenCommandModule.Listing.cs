@@ -78,6 +78,11 @@ internal sealed partial class ScreenCommandModule {
                 ? $" display:fill={(screen.Route.Display?.Fill ?? WorldScreenDisplay.DefaultFill)}"
                 : ""
             );
+            // The material a display opts into; a plain screen names none.
+            var materialText = ((screen.Material == WorldScreenMaterial.Crt)
+                ? " material:crt"
+                : ""
+            );
             // How a local pad's sticks drive the pointer over the framed window.
             var padText = ((screen.Route.PadPointer is { } pad)
                 ? string.Create(
@@ -95,7 +100,7 @@ internal sealed partial class ScreenCommandModule {
                 ? "bound"
                 : "unbound")} {(screen.Route.Engageable
                 ? "engageable"
-                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{displayText}{padText}{engagedText}{orderText} mapping {(m_binder.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
+                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{materialText}{displayText}{padText}{engagedText}{orderText} mapping {(m_binder.Mappings.Describe(screen: screen.Index) ?? "none (no slot)")}"
             );
         }
 

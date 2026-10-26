@@ -57,11 +57,15 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
 
     // The render.tonemap each frame composes the root with, and the views section it reconciles.
     private WorldTonemap? m_tonemap;
+
     private WorldViewDefaults m_document = Views;
+
     private long m_frame;
     private RenderGraphHistory? m_history;
+
     // A 60 Hz display on a fixed signal, whose frames each span one refresh.
     private static readonly PresentationRate Paced60 = new(DisplayHertz: 60, GridHertz: 60d);
+
     // The engine ticks one 60 Hz frame spans.
     private const ulong FrameTicks = (FixedTickConversion.TicksPerSecond / 60UL);
 
@@ -242,7 +246,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
                 Package: RenderGraphPackageCatalog.SdfWorld
             )],
         });
-        m_host.ViewScenes = new ExtentScenes(Width: 64, Height: 16);
+        m_host.ViewScenes = new ExtentScenes(Height: 16, Width: 64);
         Frame(pane: Left);
         Frame(pane: Left);
 
@@ -250,7 +254,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
 
         Assert.Equal(
             actual: (mapping.Fit, mapping.SourceWidth, mapping.SourceHeight, mapping.Placement),
-            expected: (SourceFit.Contain, 64, 16, (SourcePlacement)new SourcePlacement.Pane(Region: Left))
+            expected: (SourceFit.Contain, 64, 16, ((SourcePlacement)new SourcePlacement.Pane(Region: Left)))
         );
         Assert.True(condition: m_host.TryGet(
             instance: WorldViewGraphs.MainInstance,
@@ -410,7 +414,8 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
                 Round: 0f,
                 Route: WorldScreenRoute.Passive,
                 Source: pattern,
-                Up: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitY)
+                Up: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitY),
+                Material: WorldScreenMaterial.Crt
             )]
         );
         screens.Publish(images: new PatternImages(Height: SourceHeight, Width: SourceWidth));
@@ -437,11 +442,11 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         );
 
         // The pane's point is the view image's (20.5 / 32, 40.5 / 64); its pinhole ray from (0, 1, 5) meets the face 5
-        // units ahead, and the glass's bezel insets the image inside the face.
+        // units ahead, and the CRT glass's bezel insets the image inside the face.
         var tangent = Math.Tan(a: 0.5);
         var u = (0.5 + ((5.0 * (((2.0 * (20.5 / 32.0)) - 1.0) * tangent)) / 2.4));
         var v = (0.5 - ((5.0 * ((1.0 - (2.0 * (40.5 / 64.0))) * tangent)) / 1.8));
-        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.CrtGlass.Inverse!);
 
         Assert.Equal(
             actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),

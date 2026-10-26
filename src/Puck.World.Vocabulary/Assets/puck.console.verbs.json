@@ -431,6 +431,7 @@
     { "name": "world.target", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.temporal", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.text", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.theme", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.timeline", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.toon", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.topologies", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
