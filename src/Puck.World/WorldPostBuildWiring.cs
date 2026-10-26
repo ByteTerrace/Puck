@@ -11,6 +11,7 @@ using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Machines;
 using Puck.World.Server;
+using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -423,6 +424,24 @@ public static class WorldPostBuildWiring {
                     server: worldServer,
                     tick: tick
                 );
+
+                if (target.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
+                    if (!WorldSourceSave.TrySave(
+                        definition: snapshot,
+                        path: target,
+                        bytesWritten: out var sourceBytes,
+                        written: out var sources,
+                        reason: out var sourceReason,
+                        catalogFingerprint: machineCatalogFingerprint,
+                        catalog: machineCatalog
+                    )) {
+                        Console.Error.WriteLine(value: $"[world.rule: save effect refused — {sourceReason}; nothing written]");
+                        return;
+                    }
+                    worldServer.Compact();
+                    Console.Error.WriteLine(value: $"[world.rule: save effect -> {target} ({((sources.Count == 0) ? "unchanged" : $"{sourceBytes} bytes in {string.Join(separator: ", ", values: sources.Select(selector: WorldDocumentLabel.Of))}")}, source preserved)]");
+                    return;
+                }
                 var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                     basisPath: out var basisPath,
                     catalog: machineCatalog,

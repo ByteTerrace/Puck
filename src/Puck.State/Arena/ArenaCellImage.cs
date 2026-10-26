@@ -24,7 +24,7 @@ public sealed partial class StateArena {
         ref readonly var layout = ref m_layout[rowOrdinal];
         if (!layout.IsStored) { return; }
         ClearRowStorage(rowOrdinal: rowOrdinal, layout: in layout);
-        if (layout.Shape is RowShape.Slot or RowShape.Keyed or RowShape.Ordered) {
+        if (layout.Shape is RowShape.Keyed or RowShape.Ordered) {
             WriteNumber(column: ArenaColumn.MemberCount, index: rowOrdinal, value: count);
             InitializeMemberLinks(rowOrdinal: rowOrdinal, count: count);
         }

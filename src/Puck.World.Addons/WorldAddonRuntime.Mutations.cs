@@ -56,6 +56,16 @@ public sealed partial class WorldAddonRuntime {
                     B: 0L
                 );
 
+                if (addon.Instance.State != AddonState.Enabled) {
+                    SetReservedVerdict(
+                        addon: addon,
+                        ordinal: query.Ordinal,
+                        verdict: AddonVerdict.QuotaExhausted
+                    );
+
+                    continue;
+                }
+
                 // The handle designates a SECTION subject; it never decides. Resolution failure is the revoked/
                 // re-sorted case the generation check exists for — deliberately distinct from a denial.
                 if (
