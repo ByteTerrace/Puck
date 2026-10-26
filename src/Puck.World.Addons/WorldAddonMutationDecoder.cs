@@ -792,15 +792,20 @@ public static class WorldAddonMutationDecoder {
                 name: "role"
             );
 
+            // The member's own name alone: TryParse also takes a number or a comma-joined list of names.
             if (
-                !Enum.TryParse<WorldHudCursorRole>(
+                !Enum.TryParse<WorldThemeRole>(
                 ignoreCase: false,
                 result: out var role,
                 value: roleToken
             ) ||
-                !Enum.IsDefined(value: role)
+                !string.Equals(
+                a: role.ToString(),
+                b: roleToken,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
-                throw new AddonMutationDecodeException(message: $"SetHudDefaults: cursor.role '{roleToken}' is not a cursor role token");
+                throw new AddonMutationDecodeException(message: $"SetHudDefaults: cursor.role '{roleToken}' is not a core theme role");
             }
 
             cursor = new WorldHudCursor(
@@ -1097,7 +1102,7 @@ public static class WorldAddonMutationDecoder {
     private static bool TryDecodePlainStateCell(JsonElement entry, CellKind kind, out StateCell? cell, StateCell? previous = null) {
         cell = null;
         if (previous is not {
-            Advance: null, Cycle: null, Dynamics: null, Clock: null, Provenance: null,
+            Advance: null, Cycle: null, Dynamics: null, Clock: null,
             Visibility: null, Observation: null, Behavior: StateCellBehavior.Inherit
         }) { previous = null; }
         if (entry.ValueKind != JsonValueKind.Object) { return false; }

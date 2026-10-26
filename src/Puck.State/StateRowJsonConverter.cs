@@ -25,6 +25,10 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         /// <summary>Gets the raw <c>capacity</c> member, when authored.</summary>
         public JsonElement? Capacity { get; internal set; }
+        /// <summary>Gets the runtime room of a growable row.</summary>
+        public JsonElement? ReservedCapacity { get; internal set; }
+        /// <summary>Gets the exported members' physical slots.</summary>
+        public JsonElement? CellSlots { get; internal set; }
         /// <summary>Gets the raw <c>cells</c> member, when authored.</summary>
         public JsonElement? Cells { get; internal set; }
         /// <summary>Gets the raw <c>cycle</c> member, when authored.</summary>
@@ -106,7 +110,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         return vector;
     }
-    private static StateCell ReadCell(CellKind cellKind, CellName key, JsonElement element, string context, StateAdvance? advance = null, string? provenance = null, StateDynamics? dynamics = null, StateCycle? cycle = null, StateCellBehavior behavior = StateCellBehavior.Inherit, StateCellClock? clock = null) => new(
+    private static StateCell ReadCell(CellKind cellKind, CellName key, JsonElement element, string context, StateAdvance? advance = null, StateDynamics? dynamics = null, StateCycle? cycle = null, StateCellBehavior behavior = StateCellBehavior.Inherit, StateCellClock? clock = null) => new(
         Key: key,
         Value: (cellKind switch {
             CellKind.Text => CellValue.Text(value: RequireString(
@@ -133,7 +137,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             )),
         }),
         Advance: advance,
-        Provenance: provenance,
         Dynamics: dynamics,
         Cycle: cycle,
         Behavior: behavior,
@@ -158,7 +161,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             JsonElement? cellDynamics = null;
             JsonElement? cellCycle = null, cellVisibility = null, cellObservation = null;
             JsonElement? cellBehavior = null, cellClock = null;
-            string? provenance = null;
 
             foreach (var member in entry.EnumerateObject()) {
                 switch (member.Name) {
@@ -184,12 +186,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     case "clock": cellClock = member.Value; break;
                     case "visibility": cellVisibility = member.Value; break;
                     case "observation": cellObservation = member.Value; break;
-                    case "provenance":
-                        provenance = ((member.Value.ValueKind == JsonValueKind.String)
-                            ? member.Value.GetString()
-                            : null
-                        );
-                        break;
                     default:
                         throw new JsonException(message: $"state row '{name}'.cells[{index}] contains unmapped member '{member.Name}'.");
                 }
@@ -266,8 +262,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 cycle: cycle,
                 dynamics: dynamics,
                 element: cellValueElement,
-                key: cellKey,
-                provenance: provenance
+                key: cellKey
             ) with {
                 Visibility = ((cellVisibility is { } cv)
                 ? ReadNested<StateVisibility>(
@@ -540,6 +535,12 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     break;
                 case "max":
                     max = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "cellSlots":
+                    members.CellSlots = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "reservedCapacity":
+                    members.ReservedCapacity = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "capacity":
                     capacity = JsonElement.ParseValue(reader: ref reader);
@@ -853,7 +854,8 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             candidate: symbols,
             name: name
         )
-        );
+        ) { ReservedCapacity = members.ReservedCapacity is { } reserved ? RequireInt32(element: reserved, context: "reservedCapacity") : null,
+            CellSlots = members.CellSlots is { } slots ? slots.EnumerateArray().Select(element => RequireInt32(element: element, context: "cellSlots")).ToArray() : null };
 
         return Create(
             members: members,
@@ -901,6 +903,14 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             raw: value.Max
         );
 
+        if (value.CellSlots is { } slots) {
+            writer.WriteStartArray(propertyName: "cellSlots");
+            foreach (var slot in slots) { writer.WriteNumberValue(value: slot); }
+            writer.WriteEndArray();
+        }
+        if (value.ReservedCapacity is { } reservedCapacity) {
+            writer.WriteNumber(propertyName: "reservedCapacity", value: reservedCapacity);
+        }
         if (value.Capacity is { } declaredCapacity) {
             writer.WriteNumber(
                 propertyName: "capacity",
@@ -1015,12 +1025,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     value: observation,
                     writer: writer
                 );
-                }
-                if (cell.Provenance is { } provenance) {
-                    writer.WriteString(
-                        propertyName: "provenance",
-                        value: provenance
-                    );
                 }
 
                 writer.WriteEndObject();
@@ -1146,7 +1150,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"reservedCapacity\":…,\"cellSlots\":[…],\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

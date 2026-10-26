@@ -8,7 +8,9 @@ public sealed class TransformDisclosureLawTests {
 
     private static StateSection WithPolicies(params string[] names) {
         var section = TransformFixture.Section();
-        return section with { Rows = section.Rows!.Select(row => names.Contains(row.Name.Value) ? row with { Visibility = Private } : row).ToArray() };
+        return section with { Rows = section.Rows!.Select(row => row with {
+            Visibility = names.Contains(row.Name.Value) ? Private : row.Visibility ?? new StateVisibility()
+        }).ToArray() };
     }
 
     [Theory]

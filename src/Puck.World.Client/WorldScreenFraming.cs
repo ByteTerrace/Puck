@@ -14,13 +14,13 @@ namespace Puck.World.Client;
 public readonly record struct WorldHeldView(Vector3 Eye, Vector3 Target, float FieldOfViewRadians);
 /// <summary>
 /// The engaged view: a seat captured on a screen it engaged pans and zooms its own camera onto the screen's picture (the
-/// glass inside its bezel band), square-on, until the picture fills the matte (<see cref="Matte"/>), the rect a desktop
+/// face, or a CRT's glass inside its bezel band), square-on, until the picture fills the matte (<see cref="Matte"/>), the rect a desktop
 /// emulator would show the console's picture in, and the window shows nothing else. Every number derives from the screen
-/// row's own frame (origin, right, up, half extents and depth), the glass's bezel (<see cref="WorldScreenMappings.Glass"/>),
+/// row's own frame (origin, right, up, half extents and depth), a CRT's bezel (<see cref="WorldScreenMappings.WarpOf"/>),
 /// the source's extent, the window's size and the seat camera's field of view, so a resized window refits at once. One
 /// instance per seat eases between the seat's ordinary camera and that framing on the seat rig's own reported dynamics,
 /// and back again when the seat leaves; a rig reporting no dynamics cuts. The ease's weight is the view's screen fidelity:
-/// at one the screen's pixels reach the window untouched, and below it the CRT treatment and the world's atmosphere and
+/// at one the screen's pixels reach the window untouched, and below it a CRT's treatment and the world's atmosphere and
 /// tone fade back in. While framed, the camera's near plane stands just short of the glass, so the engaging avatar and
 /// anything else between the eye and the device draws nothing, and once the ease settles (<see cref="Framed"/>) the
 /// root shows only the matte's part of the seat's view, which renders at native scale, so the pixels inside it are the
@@ -31,6 +31,7 @@ public readonly record struct WorldHeldView(Vector3 Eye, Vector3 Target, float F
 public sealed class WorldScreenFraming {
     private readonly WorldFramingEase m_ease = new();
     private readonly WorldFramingEase m_heldEase = new();
+
     private Vector3 m_frameEye;
     private float m_frameNear;
     private Vector3 m_frameTarget;
@@ -49,8 +50,8 @@ public sealed class WorldScreenFraming {
     /// screen's frame is degenerate.</summary>
     public WorldScreen? Framed { get; private set; }
 
-    /// <summary>Returns the half extents of a screen's picture: its face inside the glass's bezel band, or the whole face
-    /// for a window (a session with the window projection), which is an opening with no bezel.</summary>
+    /// <summary>Returns the half extents of a screen's picture: the whole face, or for a CRT its face inside the tube's
+    /// bezel band (<see cref="WorldScreenMappings.WarpOf"/>).</summary>
     /// <param name="screen">The screen row.</param>
     /// <returns>The picture's half width and half height, in world units, along the row's right and up axes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
@@ -58,8 +59,7 @@ public sealed class WorldScreenFraming {
         ArgumentNullException.ThrowIfNull(argument: screen);
 
         if (
-            (screen.Source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window }) ||
-            (WorldScreenMappings.Glass.Inverse is not SourceWarpInverse.Affine glass) ||
+            (WorldScreenMappings.WarpOf(screen: screen)?.Inverse is not SourceWarpInverse.Affine glass) ||
             !(glass.M11 > 0f) ||
             !(glass.M22 > 0f)
         ) {
@@ -144,8 +144,8 @@ public sealed class WorldScreenFraming {
             return Vector2.Zero;
         }
 
-        var x = ((((double)matte.X + (0.5d * matte.Width)) - ((double)view.X + (0.5d * view.Width))) * displayWidth);
-        var y = ((((double)matte.Y + (0.5d * matte.Height)) - ((double)view.Y + (0.5d * view.Height))) * displayHeight);
+        var x = (((((double)matte.X) + (0.5d * matte.Width)) - (((double)view.X) + (0.5d * view.Width))) * displayWidth);
+        var y = (((((double)matte.Y) + (0.5d * matte.Height)) - (((double)view.Y) + (0.5d * view.Height))) * displayHeight);
 
         return new Vector2(
             x: ((float)(x / height)),
@@ -165,7 +165,7 @@ public sealed class WorldScreenFraming {
             value: (screen.Route.Display?.Fill ?? WorldScreenDisplay.DefaultFill)
         )
             ? new Vector4(value: rgb, w: 1f)
-            : new Vector4(x: 0f, y: 0f, z: 0f, w: 1f));
+            : new Vector4(w: 1f, x: 0f, y: 0f, z: 0f));
     }
     /// <summary>Frames a screen's picture square-on: the eye stands on the face's normal, far enough that the picture's
     /// height is a share of the viewport's, looking at a point of the face that puts the picture's centre where the
@@ -221,7 +221,6 @@ public sealed class WorldScreenFraming {
 
         return true;
     }
-
     /// <summary>Advances the eases one frame and blends the seat's camera toward the held view and the screen's framing
     /// by them: the seat's camera first goes to the held view (<paramref name="held"/>) by its ease, then that goes to
     /// the framing by the framing's, so a framed seat arrives at the picture from the held view when it has one and from
@@ -327,14 +326,14 @@ public sealed class WorldScreenFraming {
         }
 
         eye = Vector3.Lerp(
+            amount: weight,
             value1: eye,
-            value2: m_frameEye,
-            amount: weight
+            value2: m_frameEye
         );
         target = Vector3.Lerp(
+            amount: weight,
             value1: target,
-            value2: m_frameTarget,
-            amount: weight
+            value2: m_frameTarget
         );
         FieldOfView = float.Lerp(
             value1: FieldOfView,

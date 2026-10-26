@@ -198,8 +198,8 @@ view and poses settle, then stands on the stationary motion.
 
 ## Views are render-graph instances
 
-A diegetic screen—a booted cabinet's CRT, a security monitor, a creation's
-preview easel—needs *something* to show. That something might be a posed
+A diegetic screen—a television on a games console, a security monitor, a
+creation's preview easel—needs *something* to show. That something might be a posed
 camera looking at the room, a hosted guest machine's framebuffer, or an
 entirely separate SDF world rendered offscreen. Each is an instance of the
 render graph (`RenderGraphInstance`), and a screen reads the instance it
@@ -271,9 +271,8 @@ whole power-of-two octaves that grow at once and halve only once the glass
 falls below two fifths of its octave (`WorldPortalVisibility.Octave`), since
 every extent change rebuilds the view's graph, its targets created off the frame
 thread while the installed graph keeps presenting; a window authors no
-resolution. It draws as clear glass, with none of a display's grille,
-scanlines, bloom or bezel (the mapping row's glass flag, clear for a mapping
-with no warp); between refreshes every consumer reads its
+resolution. It draws as clear glass at the luminance of the world beyond it
+(the mapping record's face, `SdfScreenFace.Opening`); between refreshes every consumer reads its
 latest completed image. A view nothing shows renders nothing and keeps its
 last image. The cost of every view is priced in the schedule and
 `world.budget` like any instance's, with no fixed view count.
@@ -357,9 +356,11 @@ into the slot's rect over the SDF world. This is about **layout**—how many
 things this frame renders and where each one's pixels land.
 
 **A screen source** is a program-declared `ScreenSlab` shape's **material**:
-its lit face samples a bound image, drawn from the screen's published mapping,
-through a CRT glass treatment (bezel, scanlines, vignette, glint, bloom), and separately, that same
-bound image's average color is summed into the room as colored light. This
+its lit face samples a bound image, drawn from the screen's published mapping
+through the screen's material—untreated by default, filling the face, or through
+a CRT's glass (bezel, scanlines, vignette, glint, bloom) for a screen that opts
+into it—and separately, that same bound image's average color is summed into the
+room as colored light. This
 is about **shading**—what a particular surface in the world *looks like*
 and what it *contributes to the room's lighting*, independent of anything
 about frame layout.
@@ -374,7 +375,7 @@ display with nothing behind it.
 The conflation to watch for: treating a screen surface as if it needs a
 *layout slot* to show something, or treating a *pane* as if it needs a
 `ScreenSlab` material to appear. Neither is true. A pane is pure layout; a
-screen source is pure shading fed by a wire. A booted cabinet's CRT is a
+screen source is pure shading fed by a wire. A booted machine's screen is a
 `ScreenSlab` sampling an instance's image—never a pane of the room's own frame.
 
 ---

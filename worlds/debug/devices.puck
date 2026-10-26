@@ -1335,6 +1335,9 @@ screens [
     round: 0
     source: machine(instance: `humble-gaming-deck`, output: "video")
     luminance: 150nit
+    // The television is a tube: its picture shows through the CRT's glass, inset in its bezel. The handhelds' panels
+    // show theirs plainly.
+    material: Crt
     // The deck has two controller ports; an engaged seat plays the first.
     route {
       engageable: true

@@ -246,7 +246,7 @@ public sealed partial class StateArena {
                         return false;
                     }
                     var payloadMatches = entry.Column switch {
-                        ArenaColumn.Text or ArenaColumn.Provenance => ((entry.Visibility is null) && (entry.Observation is null)),
+                        ArenaColumn.Text => ((entry.Visibility is null) && (entry.Observation is null)),
                         ArenaColumn.Visibility => ((entry.Text is null) && (entry.Observation is null)),
                         ArenaColumn.Observation => ((entry.Text is null) && (entry.Visibility is null)),
                         _ => ((entry.Text is null) && (entry.Visibility is null) && (entry.Observation is null)),
@@ -386,8 +386,16 @@ public sealed partial class StateArena {
             reason = $"carries column '{entry.Column}' which row '{m_rows[row].Name.Value}' cannot store";
             return false;
         }
-        if (((entry.Column is (ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Provenance or ArenaColumn.Visibility or ArenaColumn.Observation)) && (entry.Number != 0L)) || ((entry.Column == ArenaColumn.MemberKey) && (entry.Number is not (-1L or 0L)))) {
+        if (((entry.Column is (ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation)) && (entry.Number != 0L)) || ((entry.Column == ArenaColumn.MemberKey) && (entry.Number is not (-1L or 0L)))) {
             reason = $"carries a noncanonical number for column '{entry.Column}'";
+            return false;
+        }
+        if (IsLinkColumn(column: entry.Column) && ((entry.Number < 0L) || (entry.Number > layout.CellCapacity))) {
+            reason = "carries a member link outside its row";
+            return false;
+        }
+        if ((entry.Column == ArenaColumn.CellCapacity) && ((entry.Number < 0L) || (entry.Number > m_rows[row].CellCeiling))) {
+            reason = "carries a reservation outside its row ceiling";
             return false;
         }
         if (entry.Column == ArenaColumn.Number) {
@@ -413,9 +421,6 @@ public sealed partial class StateArena {
         } else if ((entry.Column == ArenaColumn.Text) && ((entry.Text?.Length ?? 0) > StateCapacity.MaxTextValueLength)) {
             reason = "carries text past the state text ceiling";
             return false;
-        } else if ((entry.Column == ArenaColumn.Provenance) && ((entry.Text?.Length ?? 0) > StateCapacity.MaxProvenanceLength)) {
-            reason = "carries provenance past its length ceiling";
-            return false;
         } else if ((entry.Column == ArenaColumn.Visibility) && !StateVisibilityStorage.TryMeasure(value: entry.Visibility, bytes: out _, reason: out reason)) {
             return false;
         }
@@ -429,9 +434,8 @@ public sealed partial class StateArena {
         }
         for (var index = mark; (index < m_journal.Length); index++) {
             var entry = m_journal[index];
-            var changeSlot = (m_layout.ChangeBase(column: entry.Column) + entry.Index);
 
-            RetainWrite(entry, ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default), differs: m_changeDiffers[changeSlot]);
+            RetainWrite(entry, ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default), differs: m_changeDiffers[(int)entry.Column]![entry.Index]);
         }
     }
 
@@ -567,8 +571,6 @@ public sealed partial class StateArena {
 
                 if (column == ArenaColumn.Text) {
                     segmentBytes = checked((segmentBytes + (((long)positions) * (32L + (2L * StateCapacity.MaxTextValueLength)))));
-                } else if (column == ArenaColumn.Provenance) {
-                    segmentBytes = checked((segmentBytes + (((long)positions) * (32L + (2L * StateCapacity.MaxProvenanceLength)))));
                 } else if (column == ArenaColumn.Visibility) {
                     var visibilityBytes = ((((64L + 32L) + (2L * SafeName.MaxLength)) + 64L) + (((long)StateCapacity.MaxVisibilityReaders) * ((sizeof(long) + 32L) + (2L * StateCapacity.MaxVisibilityReaderLength))));
 
@@ -593,10 +595,14 @@ public sealed partial class StateArena {
         return count;
     }
     private static int UndoPositionCount(StateCatalog catalog, ArenaColumn column, ArenaRowLayout layout, int row) {
+        if (!layout.HasColumn(column: column)) { return 0; }
         var poolRow = catalog.IsPoolRow(rowOrdinal: row);
         var poolFieldRow = catalog.IsPoolFieldRow(rowOrdinal: row);
 
         return (column switch {
+            ArenaColumn.CellCapacity => 1,
+            ArenaColumn.NextSlot or ArenaColumn.PreviousSlot => layout.CellCapacity,
+            ArenaColumn.HeadSlot or ArenaColumn.TailSlot => 1,
             ArenaColumn.Number => ((layout.Kind is (CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? layout.CellCapacity : 0),
             ArenaColumn.Text => ((layout.Kind == CellKind.Text) ? layout.CellCapacity : 0),
             ArenaColumn.Vector => ((layout.Kind == CellKind.Vector) ? layout.CellCapacity : 0),
@@ -606,12 +612,12 @@ public sealed partial class StateArena {
             // A pool snapshot may carry a persisted clock even when its field declares no advancing trait, and a
             // later load may introduce one without changing the layout. Reserve every pool field's clock columns.
             ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => ((!poolRow || poolFieldRow) ? layout.CellCapacity : 0),
-            // A turn is written by its group's rules, and no rule writes a cell's provenance, behavior, or audience
+            // A turn is written by its group's rules, and no rule writes a cell's behavior, or audience
             // restriction: those arrive only through an import, which never runs inside a pass. Only a knowledge
             // row's observe transform stamps a last-seen observation. Reserving the unreachable columns would price
             // every board cell at kilobytes and keep a board out of any useful depth; a write that does reach one
             // makes its turn unrewindable instead (RetainWrite).
-            ArenaColumn.Provenance or ArenaColumn.Behavior or ArenaColumn.Visibility => 0,
+            ArenaColumn.Behavior or ArenaColumn.Visibility => 0,
             ArenaColumn.Observation => ((!poolRow && (catalog.Rows[row].Knowledge is not null)) ? layout.CellCapacity : 0),
             ArenaColumn.HistoryCursor => ((layout.Shape == RowShape.Ring) ? 1 : 0),
             ArenaColumn.DrawCursor => ((layout.MaskWordStart >= 0) ? 1 : 0),
@@ -647,6 +653,7 @@ public sealed partial class StateArena {
         for (var index = (segment.Count - 1); (index >= 0); index--) {
             var retained = segment[index];
             var entry = retained.Entry;
+            segment.RestoreLimit = index;
 
             // A retained member-key entry carries its key's ledger ordinal: the ledger only ever sheds keys a rewound
             // scope minted, and a retained turn holds committed writes, so the ordinal still names the same key.
@@ -824,13 +831,24 @@ public sealed partial class StateArena {
             hash.Add(value: ((Pending is null) ? 0UL : 1UL));
             Pending?.AddTo(hash: ref hash);
         }
+        public void RemapLayout(ArenaLayout previous, ArenaLayout next, int entryCapacity, int componentCapacity) {
+            foreach (var segment in m_segments) { segment.RemapLayout(previous: previous, next: next, entryCapacity: entryCapacity, componentCapacity: componentCapacity); }
+            m_seen.Clear();
+            if (Pending is { } pending) {
+                for (var index = 0; index < pending.Count; index++) {
+                    var entry = pending[index].Entry;
+                    m_seen.Add(key: ((long)(byte)entry.Column << 32) | (uint)entry.Index, value: index);
+                }
+            }
+        }
     }
     private sealed class ArenaUndoSegment {
-        private readonly sbyte[] m_components;
-        private readonly ArenaUndoEntry[] m_entries;
+        private sbyte[] m_components;
+        private ArenaUndoEntry[] m_entries;
 
         private int m_componentCount;
         private int m_count;
+        public int RestoreLimit { get; set; } = -1;
 
         public ArenaUndoSegment(int entryCapacity, int componentCapacity) {
             m_entries = new ArenaUndoEntry[entryCapacity];
@@ -842,8 +860,16 @@ public sealed partial class StateArena {
 
         public ArenaUndoEntry this[int index] => m_entries[index];
 
+        public void RemapLayout(ArenaLayout previous, ArenaLayout next, int entryCapacity, int componentCapacity) {
+            var count = RestoreLimit >= 0 ? RestoreLimit : m_count;
+            for (var index = 0; index < count; index++) { m_entries[index] = m_entries[index] with { Entry = previous.Remap(entry: m_entries[index].Entry, next: next) }; }
+            Array.Resize(array: ref m_entries, newSize: Math.Max(val1: m_count, val2: entryCapacity));
+            Array.Resize(array: ref m_components, newSize: Math.Max(val1: m_componentCount, val2: componentCapacity));
+        }
+
         public ReadOnlySpan<sbyte> Components(ArenaUndoEntry entry) => m_components.AsSpan(entry.ComponentOffset, entry.ComponentLength);
         public void Reset(bool rewindable) {
+            RestoreLimit = -1;
             Array.Clear(array: m_entries, index: 0, length: m_count);
             m_count = 0;
             m_componentCount = 0;
@@ -873,7 +899,7 @@ public sealed partial class StateArena {
             Reset(rewindable: snapshot.Rewindable);
             foreach (var entry in snapshot.Entries) {
                 object? reference = entry.Column switch {
-                    ArenaColumn.Text or ArenaColumn.Provenance => entry.Text,
+                    ArenaColumn.Text => entry.Text,
                     ArenaColumn.Visibility => entry.Visibility,
                     ArenaColumn.Observation => entry.Observation,
                     _ => null,

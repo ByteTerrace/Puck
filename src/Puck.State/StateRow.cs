@@ -82,11 +82,6 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// <see cref="StateAdvance"/> for the read-side computation and <see cref="StateCellClock"/> for where its epoch
 /// lives. Legitimate only on a cell whose <see cref="Key"/> is not <see cref="StateRow.SlotKey"/> — a slot's one
 /// cell has no separate override to declare; its behavior is entirely its row's.</param>
-/// <param name="Provenance">The identity that minted this cell's current value. A keyed <see cref="CellKind.Int"/>
-/// row addressed by a holder's 0-based entity index is an item or currency fact: <see cref="Value"/> is the
-/// quantity or balance, and this field names who minted it. <see langword="null"/> means locally self-minted, the
-/// only value a single-authority world produces today; a federated authority is expected to populate a real issuer
-/// id.</param>
 /// <param name="Dynamics">This cell's own second-order easing trait, replacing its row's <see cref="StateRow.Dynamics"/>
 /// default wholesale, or <see langword="null"/> to inherit that default. Legitimate only on a cell whose
 /// <see cref="Key"/> is not <see cref="StateRow.SlotKey"/>.</param>
@@ -103,7 +98,7 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// settled anywhere but tick zero. See <see cref="StateCellClock"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
+public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Advance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -361,6 +356,7 @@ public record StateRow(
     /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
     /// <see cref="StateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
     public int CellCeiling => EffectiveDomain switch {
+        StateDomain.Slot => 1,
         StateDomain.Ring ring => Math.Clamp(
         ring.Capacity,
         1,
@@ -379,8 +375,17 @@ public record StateRow(
             min: 1,
             value: capacity
         )
-        : StateCapacity.DefaultCellRoom),
+        : StateCapacity.MaxCellsPerRow),
     };
+    /// <summary>Gets the initial room reserved by a keyed row: its explicit capacity or its authored cells.
+    /// Further growth is admitted and charged by the arena before a mint lands.</summary>
+    [JsonIgnore]
+    public int InitialCellCapacity => (Capacity is not null) ? CellCeiling : Math.Min(val1: CellCeiling, val2: Math.Max(val1: (Cells?.Count ?? 0), val2: ReservedCapacity ?? 0));
+    /// <summary>Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes
+    /// with the same memory and work reservation. Authored rows normally omit it.</summary>
+    public int? ReservedCapacity { get; init; }
+    /// <summary>Gets the physical slots of exported members in logical order. Null uses contiguous slots.</summary>
+    public IReadOnlyList<int>? CellSlots { get => field; init => field = StateLists.Freeze(items: value); }
     /// <summary>Gets the effective domain: the authored <see cref="Domain"/>, or <see cref="InferDomain"/>'s answer
     /// when unauthored.</summary>
     [JsonIgnore]
@@ -589,7 +594,7 @@ public record StateRow(
     /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="StateDomain.Slot"/>. A plain row
     /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
     public StateDomain InferDomain() =>
-        (((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)))
+        (((Phase is not null) || (Capacity is not null) || (ReservedCapacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)))
             ? StateDomain.Keys.Instance
             : StateDomain.Slot.Instance
         );
@@ -645,9 +650,6 @@ public static class StateCapacity {
     /// holds a compact handle for every slot, so nested claims and pool sweeps remain bounded without reusing a
     /// global binding such as <c>$each</c>.</summary>
     public const int MaxInstanceBindings = 32;
-    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
-    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
-    public const int DefaultCellRoom = 128;
     /// <summary>The combined body- and identity-state slot ceiling. Compilation allocates fixed parallel arrays of
     /// this authored length per body, so the document gate bounds both memory and checkpoint width before runtime.</summary>
     public const int MaxBodySlots = 128;
@@ -671,10 +673,6 @@ public static class StateCapacity {
     /// <summary>The section's family-count ceiling: one member-ordinal table per family in the catalog. A family's
     /// own size is bounded by <see cref="MaxRows"/>, since its members are rows.</summary>
     public const int MaxFamilies = 256;
-    /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
-    /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
-    /// type.</summary>
-    public const int MaxProvenanceLength = 256;
     /// <summary>The most explicit readers one row or cell visibility may retain.</summary>
     public const int MaxVisibilityReaders = 32;
     /// <summary>The most UTF-16 code units one explicit visibility reader token may retain.</summary>

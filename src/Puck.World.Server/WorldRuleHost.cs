@@ -84,6 +84,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     /// <summary>Invalidates observations captured against a replaced arena while preserving edge latch state.</summary>
     internal void InvalidateArenaScheduling() {
+        ConfigureGrowthAdmission();
         m_ruleGateHeld.InvalidateScheduler();
         m_interactionGateHeld.InvalidateScheduler();
     }
@@ -135,6 +136,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     // Moves the tick pair every read answers as of, on this host and on the arena host that shares its arena.
     private void AdvanceHost(ulong tick, ulong engineTick) {
+        BeginGrowthTick(engineTick: engineTick);
         m_hostEngineTick = engineTick;
         m_hostTick = tick;
         Host.ArenaHost.Advance(
@@ -574,6 +576,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// cannot answer.</exception>
     internal void Install(WorldRuleCompilation compilation) {
         ArgumentNullException.ThrowIfNull(argument: compilation);
+        m_growthCompilation = compilation;
+        ConfigureGrowthAdmission();
 
         m_groups = compilation.Groups;
         m_interactions = compilation.Interactions;

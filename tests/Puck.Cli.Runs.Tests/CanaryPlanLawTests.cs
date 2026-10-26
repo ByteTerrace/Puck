@@ -36,6 +36,7 @@ public sealed class CanaryPlanLawTests {
         TimeoutSeconds: timeoutSeconds,
         Title: id
     );
+
     [Fact]
     public void EachLegShapeCountsTheProcessesItStartsAndTheTimeItMaySpend() {
         var package = new CanaryPackage(
@@ -71,7 +72,7 @@ public sealed class CanaryPlanLawTests {
             actual: plan.Proofs.Select(selector: static proof => proof.Proof.Label)
         );
         Assert.Equal(
-            expected: [2, 3, 4, 6, 3, 2, 2],
+            expected: [2, 3, 4, 6, 4, 2, 2],
             actual: plan.Proofs.Select(selector: static proof => proof.WorldBoots)
         );
         Assert.Equal(
@@ -79,12 +80,12 @@ public sealed class CanaryPlanLawTests {
             actual: plan.Proofs.Select(selector: static proof => proof.WorldProcesses)
         );
         Assert.Equal(
-            expected: [0, 0, 0, 0, 4, 0, 0],
+            expected: [0, 0, 0, 0, 5, 0, 0],
             actual: plan.Proofs.Select(selector: static proof => proof.StubLaunches)
         );
-        // Two timeouts per leg pair, doubled for a relaunch and again for a stub's two launches.
+        // Two timeouts per leg pair, doubled for a relaunch; a stub proof observes five launches.
         Assert.Equal(
-            expected: [20, 40, 20, 200, 40, 20, 20],
+            expected: [20, 40, 20, 200, 50, 20, 20],
             actual: plan.Proofs.Select(selector: static proof => proof.BudgetSeconds)
         );
         Assert.Equal(
@@ -101,7 +102,7 @@ public sealed class CanaryPlanLawTests {
             actual: plan.GpuLegs
         );
         Assert.Equal(
-            expected: 22,
+            expected: 23,
             actual: plan.WorldBoots
         );
         // Four legs across two backends name one source, so the run packages it once.
@@ -110,7 +111,7 @@ public sealed class CanaryPlanLawTests {
             actual: plan.PackageSpawns
         );
         Assert.Equal(
-            expected: ((19 + 4) + 1),
+            expected: ((19 + 5) + 1),
             actual: plan.LegSpawns
         );
         Assert.Equal(

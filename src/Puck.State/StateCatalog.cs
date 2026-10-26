@@ -164,6 +164,7 @@ public sealed class StateCatalog {
         foreach (var pool in pools) {
             m_poolRows[pool.DomainRowOrdinal] = true;
             m_poolRows[pool.GenerationRowOrdinal] = true;
+            if (pool.IsPair) { m_poolRows[pool.LeftRowOrdinal] = true; m_poolRows[pool.RightRowOrdinal] = true; }
             foreach (var field in pool.Fields) {
                 m_poolRows[field.RowOrdinal] = true;
                 m_poolFieldRows[field.RowOrdinal] = true;
@@ -555,7 +556,7 @@ public sealed class StateCatalog {
             if (pool is null) {
                 throw new InvalidOperationException(message: "The state section contains a null pair pool declaration.");
             }
-            expandedRowCount += (2L + (records.TryGetValue(key: pool.Record.Value, value: out var record) ? (record.Fields?.Count ?? 0) : 0));
+            expandedRowCount += (4L + (records.TryGetValue(key: pool.Record.Value, value: out var record) ? (record.Fields?.Count ?? 0) : 0));
         }
         if (expandedRowCount > StateCapacity.MaxRows) {
             throw new InvalidOperationException(message: $"The expanded state section declares {expandedRowCount} rows, past the {StateCapacity.MaxRows}-row limit.");
@@ -598,6 +599,9 @@ public sealed class StateCatalog {
             foreach (var seed in live) {
                 if ((seed is null) || (seed.Slot < 0) || (seed.Slot >= pool.Capacity) || !liveBySlot.TryAdd(key: seed.Slot, value: seed)) {
                     throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' carries a null, duplicate, or out-of-range live slot.");
+                }
+                if (seed.LeftSlot is not null || seed.RightSlot is not null) {
+                    throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' carries pair endpoints on an ordinary instance.");
                 }
                 var seededFields = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -708,13 +712,11 @@ public sealed class StateCatalog {
             if (!pairDeclarations.TryGetValue(key: name, value: out var declaration)) {
                 throw new InvalidOperationException(message: $"State pool endpoint '{name}' is undeclared.");
             }
-            var computed = checked((((long)PoolCapacity(name: declaration.LeftPool.Value)) * PoolCapacity(name: declaration.RightPool.Value)));
-
-            if (computed > StateCapacity.MaxCellsPerRow) {
-                throw new InvalidOperationException(message: $"State pair pool '{name}' identity universe {computed} exceeds {StateCapacity.MaxCellsPerRow} cells per row.");
+            if ((declaration.MaxLive < 1) || (declaration.MaxLive > StateCapacity.MaxCellsPerRow)) {
+                throw new InvalidOperationException(message: $"State pair pool '{name}' max-live {declaration.MaxLive} exceeds its row capacity.");
             }
-            capacities[name] = ((int)computed);
-            return ((int)computed);
+            capacities[name] = declaration.MaxLive;
+            return declaration.MaxLive;
         }
         IReadOnlyList<StatePoolSeed> LiveSeeds(string name) => (ordinaryPools.TryGetValue(key: name, value: out var ordinary)
             ? (ordinary.Snapshot?.Live ?? (ordinary.Initial ?? []))
@@ -739,30 +741,31 @@ public sealed class StateCatalog {
             }
             var universe = checked((((long)leftCapacity) * rightCapacity));
 
-            if (universe > StateCapacity.MaxCellsPerRow) {
-                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' identity universe {universe} exceeds {StateCapacity.MaxCellsPerRow} cells per row.");
-            }
-            if ((pair.MaxLive < 1) || (pair.MaxLive > universe)) {
+            if ((pair.MaxLive < 1) || (pair.MaxLive > universe) || (pair.MaxLive > StateCapacity.MaxCellsPerRow)) {
                 throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' declares max-live {pair.MaxLive}, outside 1..{universe}.");
             }
             if ((pair.Initial is not null) && (pair.Snapshot is not null)) {
                 throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' carries both an initial population and a runtime snapshot.");
             }
 
-            var capacity = ((int)universe);
+            var capacity = pair.MaxLive;
             var generations = (pair.Snapshot?.Generations ?? Enumerable.Repeat(count: capacity, element: 0L).ToArray());
 
             if ((generations.Count != capacity) || generations.Any(predicate: static generation => (generation < 0L))) {
-                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' snapshot generations do not match its identity universe.");
+                throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' snapshot generations do not match its storage capacity.");
             }
             var liveBySlot = new SortedDictionary<int, StatePoolSeed>();
+            var identities = new HashSet<(int Left, int Right)>();
 
             foreach (var seed in (pair.Snapshot?.Live ?? (pair.Initial ?? []))) {
                 if ((seed is null) || (seed.Slot < 0) || (seed.Slot >= capacity) || !liveBySlot.TryAdd(key: seed.Slot, value: seed)) {
                     throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' carries a null, duplicate, or out-of-range live slot.");
                 }
-                var leftSlot = (seed.Slot / rightCapacity);
-                var rightSlot = (seed.Slot % rightCapacity);
+                var leftSlot = seed.LeftSlot ?? throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' slot {seed.Slot} requires leftSlot.");
+                var rightSlot = seed.RightSlot ?? throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' slot {seed.Slot} requires rightSlot.");
+                if (((uint)leftSlot >= (uint)leftCapacity) || ((uint)rightSlot >= (uint)rightCapacity) || !identities.Add(item: (leftSlot, rightSlot))) {
+                    throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' has an out-of-range or duplicate pair.");
+                }
 
                 if ((!pair.AllowSelf && (pair.LeftPool == pair.RightPool) && (leftSlot == rightSlot)) || (!pair.Directed && (leftSlot > rightSlot))) {
                     throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' carries a forbidden or noncanonical pair slot {seed.Slot}.");
@@ -791,8 +794,10 @@ public sealed class StateCatalog {
             var visibility = new StateVisibility(Readers: []);
             var domainName = PairPoolRowName(pool: pair, "live");
             var generationName = PairPoolRowName(pool: pair, "generation");
+            var leftName = PairPoolRowName(pool: pair, "left");
+            var rightName = PairPoolRowName(pool: pair, "right");
 
-            foreach (var generatedName in new[] { domainName.Value, generationName.Value }) {
+            foreach (var generatedName in new[] { domainName.Value, generationName.Value, leftName.Value, rightName.Value }) {
                 if (!names.Add(item: generatedName)) {
                     throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' generated duplicate row '{generatedName}'.");
                 }
@@ -800,6 +805,8 @@ public sealed class StateCatalog {
             StateCell[] Cells(Func<int, CellValue> value) => liveBySlot.Keys.Select(selector: slot => new StateCell(Key: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), Value: value(slot))).ToArray();
             rows.Add(item: new StateRow(Name: domainName, Kind: CellKind.Int, Capacity: capacity, Cells: Cells(value: slot => CellValue.Int(value: generations[slot])), Visibility: visibility) { Generated = true });
             rows.Add(item: new StateRow(Name: generationName, Kind: CellKind.Int, Capacity: capacity, Cells: Enumerable.Range(count: capacity, start: 0).Select(selector: slot => new StateCell(Key: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), Value: CellValue.Int(value: generations[slot]))).ToArray(), Min: 0L, Visibility: visibility) { Generated = true });
+            rows.Add(item: new StateRow(Name: leftName, Kind: CellKind.Int, Capacity: capacity, Cells: Cells(value: slot => CellValue.Int(value: liveBySlot[slot].LeftSlot!.Value)), Visibility: visibility) { Generated = true });
+            rows.Add(item: new StateRow(Name: rightName, Kind: CellKind.Int, Capacity: capacity, Cells: Cells(value: slot => CellValue.Int(value: liveBySlot[slot].RightSlot!.Value)), Visibility: visibility) { Generated = true });
             foreach (var field in (record.Fields ?? [])) {
                 var fieldName = PairPoolRowName(pool: pair, "field", field.Name.Value);
 
@@ -1044,7 +1051,8 @@ public sealed class StateCatalog {
                 DomainRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "live").Value],
                 GenerationRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "generation").Value],
                 Fields: fields.AsReadOnly(), IsPair: true, LeftPoolOrdinal: leftOrdinal, RightPoolOrdinal: rightOrdinal,
-                MaxLive: declaredPool.MaxLive, Directed: declaredPool.Directed, AllowSelf: declaredPool.AllowSelf));
+                MaxLive: declaredPool.MaxLive, Directed: declaredPool.Directed, AllowSelf: declaredPool.AllowSelf,
+                LeftRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "left").Value], RightRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "right").Value]));
         }
 
         return new StateCatalog(
@@ -1091,7 +1099,8 @@ public sealed class StateCatalog {
                 (left.Role != right.Role) ||
                 (left.Generated != right.Generated) ||
                 (left.HostOwned != right.HostOwned) ||
-                (left.LaneOrdinal != right.LaneOrdinal)
+                (left.LaneOrdinal != right.LaneOrdinal) ||
+                ((left.Lane == StateLane.Document) && (ArenaLayout.ColumnsOf(row: m_rows[left.LaneOrdinal]) != ArenaLayout.ColumnsOf(row: other.m_rows[right.LaneOrdinal])))
             ) {
                 return false;
             }
@@ -1174,6 +1183,7 @@ public sealed class StateCatalog {
         for (var index = 0; (index < rows.Count); index++) {
             if (
                 (rows[index] is not { } row) || row.Generated ||
+                (ArenaLayout.ColumnsOf(row: row) != ArenaLayout.ColumnsOf(row: m_rows[index])) ||
                 !Match(
                 name: row.Name,
                 lane: StateLane.Document,

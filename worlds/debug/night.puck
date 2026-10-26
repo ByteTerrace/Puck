@@ -10,7 +10,7 @@ basis: "avatars/moth"
 documentId: "night"
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
-import "theme"
+import "skin"
 import "controls"
 import "suit"
 import "size"

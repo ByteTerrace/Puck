@@ -47,7 +47,7 @@ public sealed class WorldScreenMappingLawTests {
             Version: WorldCameraProgram.CurrentVersion
         )
     );
-    // A screen at the arbitrary pose, 2.4 units wide and 1.8 tall, showing a source.
+    // A CRT screen at the arbitrary pose, 2.4 units wide and 1.8 tall, showing a source.
     private static WorldScreen Screen(int index, WorldScreenSource source) => new(
         HalfDepth: 0.1f,
         HalfHeight: 0.9f,
@@ -62,11 +62,12 @@ public sealed class WorldScreenMappingLawTests {
             Input: SourceDestination.Simulation
         ),
         Source: source,
-        Up: new DocumentVector3(value: Vector3.Transform(value: Vector3.UnitY, rotation: Pose))
+        Up: new DocumentVector3(value: Vector3.Transform(value: Vector3.UnitY, rotation: Pose)),
+        Material: WorldScreenMaterial.Crt
     );
-    // A ray along the face's inward normal onto the centre of source pixel (x, y), through the glass's bezel inset.
+    // A ray along the face's inward normal onto the centre of source pixel (x, y), through the CRT glass's bezel inset.
     private static SourceRay RayAt(double x, double y) {
-        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.CrtGlass.Inverse!);
         var u = ((((x + 0.5) / Width) - glass.M13) / glass.M11);
         var v = ((((y + 0.5) / Height) - glass.M23) / glass.M22);
         var right = Vector3.Transform(value: Vector3.UnitX, rotation: Pose);

@@ -1181,8 +1181,8 @@ which oracle laws pin. The three destinations are defined:
 surface only; `Passthrough` needs a source the local user opened, and
 `SourcePassthrough.ToClient` states the client-coordinate and DPI contract;
 `Presentation` is the `ISourcePicker` seam. A world screen's `route.input`
-names its destination, `WorldScreenMappings.Of` builds the row's mapping with
-the glass bezel as its warp, which the `$pointer:` rule read runs against a one-by-one source,
+names its destination, `WorldScreenMappings.Of` builds the row's mapping (a CRT
+screen's bezel as its warp), which the `$pointer:` rule read runs against a one-by-one source,
 `world.screens` echoes the destination, and the
 validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
@@ -1270,8 +1270,8 @@ point to the pane's pixel and moves it with the slot.
 
 Screens publish their mappings too (P13b-1's screen half). The screen binder
 holds a `WorldScreenMappingSet` (`src/Puck.World.Client/Sources`) reconciled
-with the rows it applies: each row's `WorldScreenMappings.Of` mapping, with the
-glass bezel as its warp, named by the instance its source is, a producer,
+with the rows it applies: each row's `WorldScreenMappings.Of` mapping, with a
+CRT screen's bezel as its warp, named by the instance its source is, a producer,
 machine or probe source by its `WorldSourceInstances` handle
 (`source$<producer>$<digest>`), a view by its camera's registration and a
 session by its screen's session view. A view's and a session's extent is
@@ -1321,8 +1321,8 @@ The GPU draws every screen from its mapping (P13b-5): a residency hands
 each screen's published mapping to `SdfWorldTables.SetScreenMapping`, which
 packs its single-precision draw form (`SourceMapping.Draw`) into the
 `screenMappings` table of the `sdf-world` interface, and the screen shading reads
-the glass's bezel inset, the layout, the letterbox and the crop from it. The
-bezel's one statement is `WorldScreenMappings.Glass`. The pointer's pane hover reads the
+a CRT's bezel inset, the layout, the letterbox and the crop from it. The
+bezel's one statement is `WorldScreenMappings.CrtGlass`. The pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 `hovered=`). `SdfWorldPasses.PickerOf` supplies the shared `SdfWorldPicker`:
@@ -3969,9 +3969,9 @@ Each commit is marked with what it waits on.
    whether the fit letterboxes) into a per-screen region bound as the
    `screenMappings` member of the `sdf-world` interface's pass group. The screen
    shading reads the bezel inset, the layout, the letterbox and the crop from it,
-   and a screen with no mapping shades as unbound glass. The bezel is the
-   mapping's warp, stated once as `WorldScreenMappings.Glass`; `CrtBezel`,
-   `CrtCurvature` and `WorldScreenMappings.Bezel` are gone. Laws:
+   and a screen with no mapping shades as unbound glass. A CRT screen's bezel is
+   the mapping's warp, stated once as `WorldScreenMappings.CrtGlass`; a plain
+   screen's mapping has none. Laws:
    `SourceMappingLawTests.TheDrawFormRunsTheChainTheHitRuns` (the draw form
    agrees with `MapRay` over every layout, fit, crop and warp) and
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.

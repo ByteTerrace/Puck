@@ -81,7 +81,7 @@ public sealed partial class StateArena {
                 ? layout.CellCapacity : (int)m_memberCounts[rowOrdinal]);
 
             for (var position = first; (position < count); position++) {
-                var slot = (layout.CellStart + position);
+                var slot = CellSlotAt(layout: layout, position: position);
                 var present = Bit(index: slot, words: m_presence);
 
                 if (!present && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
@@ -109,12 +109,12 @@ public sealed partial class StateArena {
             layout: out var layout,
             rowOrdinal: rowOrdinal
         ) &&
-            (((uint)position) < ((uint)layout.CellCapacity))
+            (((uint)position) < ((uint)HashCellExtent(layout: layout)))
         ) {
             return TryReadRawSlot(
                 raw: out raw,
                 rowOrdinal: rowOrdinal,
-                slot: (layout.CellStart + position)
+                slot: CellSlotAt(layout: layout, position: position)
             );
         }
 

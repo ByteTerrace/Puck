@@ -13,7 +13,7 @@ internal readonly record struct OperatorMcpWorld(string AttachmentId, int Proces
 internal readonly record struct OperatorMcpListedWorld(string AttachmentId, int ProcessId, string? Document, DateTimeOffset StartedUtc, bool Current, bool Started);
 internal readonly record struct OperatorMcpWorldList(OperatorMcpListedWorld[] Worlds);
 // What puck_world_start and puck_world_stop answer: the World and the files its run keeps.
-internal readonly record struct OperatorMcpWorldRun(string Status, string Output, bool IsError, OperatorMcpWorld? World, int? ProcessId, string? Checkout, string? Build, string? StateDirectory, string? StdoutLog, string? StderrLog, int? ExitCode, bool Killed, bool LeaseReleased);
+internal readonly record struct OperatorMcpWorldRun(string Status, string Output, bool IsError, OperatorMcpWorld? World, int? ProcessId, string? Checkout, string? Build, string? StateDirectory, string? StdoutLog, string? StderrLog, int? ExitCode, bool Killed, bool LeaseReleased, string? StartId);
 [JsonSerializable(typeof(OperatorMcpResultMetadata))]
 [JsonSerializable(typeof(OperatorMcpWorldList))]
 [JsonSerializable(typeof(OperatorMcpWorldRun))]

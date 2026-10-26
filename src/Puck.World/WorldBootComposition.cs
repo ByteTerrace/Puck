@@ -1486,6 +1486,10 @@ public static class WorldBootComposition {
         services.AddSingleton<BindingBarStore>();
         services.AddSingleton<MarkerStore>();
         services.AddSingleton<WorldThemeResolve>();
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldThemeCommandModule(
+            server: sp.GetRequiredService<WorldServer>(),
+            theme: sp.GetRequiredService<WorldThemeResolve>()
+        ));
         services.AddSingleton<OverlayToastStore>();
         services.AddSingleton(implementationFactory: static sp => new ConsoleInputSink(
             sessions: sp.GetRequiredService<ConsoleSessionBank>(),

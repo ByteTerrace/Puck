@@ -547,7 +547,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script) {
     // puck.world.definition.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
     // ReleaseTrustAnchor.Placeholder until a real release-signing chain is minted for this build.
     var updateSection = worldSource.Definition.Update;
-    var updateCacheRoot = Path.Combine(path1: stateRoot.PathOf(name: "updates"), path2: updateSection?.CacheRoot ?? string.Empty);
+    var updateChannel = (updateSection?.Channel ?? "stable");
+    var updateCacheRoot = Path.Combine(path1: stateRoot.PathOf(name: "updates"), path2: (updateSection?.CacheRoot ?? string.Empty));
     var updateCheckInterval = ((updateSection?.CheckIntervalSeconds is { } updateCheckSeconds)
         ? ((updateCheckSeconds > 0)
             ? TimeSpan.FromSeconds(value: updateCheckSeconds)
@@ -574,6 +575,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script) {
         releaseTrustAnchor = updateConfig!.ToTrustAnchor();
         releaseSource = updateConfig.ToReleaseSource();
         updateCacheRoot = (updateConfig.CacheRoot ?? updateCacheRoot);
+        updateChannel = (updateConfig.Channel ?? updateChannel);
     }
     // The stub reads its own selected version from `<cacheRoot>/current` (FileUpdateApplier's own contract: cacheRoot
     // IS the stub's install root). Reporting that same value back as InstalledVersion is what makes version-monotonicity
@@ -595,7 +597,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script) {
         options: new Puck.Launcher.Release.UpdateOptions(
             App: "puck.world",
             CacheRoot: updateCacheRoot,
-            Channel: (updateSection?.Channel ?? "stable"),
+            Channel: updateChannel,
             CheckInterval: updateCheckInterval,
             InstalledVersion: updateInstalledVersion,
             KeepVersions: (updateSection?.KeepVersions ?? 2),

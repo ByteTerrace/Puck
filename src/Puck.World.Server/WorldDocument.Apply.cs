@@ -1225,7 +1225,7 @@ public sealed partial class WorldDocument {
             var cell = cells[index];
             var old = previous[index];
 
-            if ((cell.Key != old.Key) || (cell.Advance != old.Advance) || (cell.Provenance != old.Provenance) ||
+            if ((cell.Key != old.Key) || (cell.Advance != old.Advance) ||
                 (cell.Dynamics != old.Dynamics) || (cell.Cycle != old.Cycle) || (cell.Behavior != old.Behavior) ||
                 (cell.Clock != old.Clock) || (cell.Visibility != old.Visibility) || (cell.Observation != old.Observation)) {
                 return false;

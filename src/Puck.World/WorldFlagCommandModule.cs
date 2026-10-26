@@ -26,8 +26,8 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
     /// <summary>The folder under the package the records and captures land in.</summary>
     public const string FolderName = "flags";
     /// <summary>The exhibit token that names the spawn point nearest the flagging seat's body, so a key bound to
-    /// <c>world.flag near</c> flags whatever exhibit the player stands at (every gallery exhibit has a spawn point
-    /// before it, named after it).</summary>
+    /// <c>world.flag near</c> flags whatever exhibit the player stands at, in a world that names a spawn point after
+    /// each exhibit it stands before.</summary>
     public const string NearToken = "near";
 
     // The id of the declared spawn point nearest the body's presented position, or null when the world declares none.
@@ -47,7 +47,6 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
 
         return nearest;
     }
-
     private static bool IsExhibitToken(ReadOnlySpan<char> token) {
         if (token.IsEmpty || (token.Length > 96)) { return false; }
         foreach (var c in token) {
@@ -97,7 +96,7 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
         for (var index = 1; (index < args.Count); index++) {
             note = ((note.Length == 0)
                 ? args[index].ToString()
-                : string.Concat(note, " ", args[index].ToString())
+                : string.Concat(str0: note, str1: " ", str2: args[index].ToString())
             );
         }
 
@@ -141,9 +140,9 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
 
         try {
             using var stream = new FileStream(
-                path: recordPath,
-                mode: FileMode.Create,
                 access: FileAccess.Write,
+                mode: FileMode.Create,
+                path: recordPath,
                 share: FileShare.None
             );
             using var writer = new Utf8JsonWriter(

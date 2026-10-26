@@ -182,9 +182,9 @@ public sealed class PoolWorkBudgetLawTests {
         var nested = Release(section: nestedSection);
         var directCost = direct.Effect.Cost(context: direct.Context).Units;
         var nestedCost = nested.Effect.Cost(context: nested.Context).Units;
-        // The door, one fixed slot's twenty lanes and its value entry twice, and the generation entry; the record
-        // declares no field.
-        var sparseRelease = (512L + 23L);
+        // Three fixed-slot rows (live and both endpoints): key, presence, count, value and visibility,
+        // plus the generation entry. The record declares no field.
+        var sparseRelease = (512L + (3L * 7L) + 1L);
 
         // Direct bound: 9 releases * (8 handles + 1 occupancy word) = 81. Nested bound:
         // 10 releases * (9 handles + 2 occupancy words) = 110. Include the sparse pool's own release.

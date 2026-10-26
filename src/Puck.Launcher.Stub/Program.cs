@@ -101,6 +101,9 @@ if (!File.Exists(path: executablePath)) {
 updateLease.Dispose();
 var startInfo = new ProcessStartInfo {
     FileName = executablePath,
+    RedirectStandardInput = Console.IsInputRedirected,
+    RedirectStandardOutput = Console.IsOutputRedirected,
+    RedirectStandardError = Console.IsErrorRedirected,
     UseShellExecute = false,
     WorkingDirectory = Path.GetDirectoryName(path: executablePath),
 };
@@ -108,5 +111,24 @@ foreach (var argument in args) {
     startInfo.ArgumentList.Add(item: argument);
 }
 using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: $"failed to start '{executablePath}'"));
-process.WaitForExit();
+Console.Error.WriteLine(value: $"[stub: launched version {launchVersion} pid={process.Id} executable={executablePath.Replace(newChar: '/', oldChar: '\\')}]");
+// Redirected handles are not reliably inherited through Process.Start on Windows. Forward bytes explicitly so
+// piped consoles and stdio protocols reach the selected application just as an interactive terminal does.
+using var inputLifetime = new CancellationTokenSource();
+async Task ForwardInputAsync() {
+    try {
+        await Console.OpenStandardInput().CopyToAsync(process.StandardInput.BaseStream, inputLifetime.Token);
+        process.StandardInput.Close();
+    } catch (Exception exception) when ((exception is IOException or OperationCanceledException or ObjectDisposedException)) { }
+}
+var inputPump = (startInfo.RedirectStandardInput ? ForwardInputAsync() : Task.CompletedTask);
+var outputPump = (startInfo.RedirectStandardOutput
+    ? process.StandardOutput.BaseStream.CopyToAsync(destination: Console.OpenStandardOutput()) : Task.CompletedTask);
+var errorPump = (startInfo.RedirectStandardError
+    ? process.StandardError.BaseStream.CopyToAsync(destination: Console.OpenStandardError()) : Task.CompletedTask);
+await process.WaitForExitAsync();
+inputLifetime.Cancel();
+await Task.WhenAll(outputPump, errorPump);
+// Parent stdin may stay open for the life of an MCP client. It must not hold a finished child open.
+_ = inputPump;
 return process.ExitCode;

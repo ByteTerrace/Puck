@@ -3,7 +3,7 @@ using Xunit;
 namespace Puck.State.Tests;
 
 /// <summary>CONTRACT UNDER TEST: a <see cref="StateArena"/> scope records every column it writes, so a rewind
-/// restores all of them — values, presence, membership, cursors, clocks, provenance, visibility, observation,
+/// restores all of them — values, presence, membership, cursors, clocks, visibility, observation,
 /// behavior, drawn masks, vectors, and the lane roster — and a commit keeps them.</summary>
 public sealed class ArenaScopeLawTests {
     [Fact]
@@ -48,11 +48,6 @@ public sealed class ArenaScopeLawTests {
             substepTicks: 7L,
             v0: 6L,
             y0: 5L
-        ));
-        Assert.True(condition: arena.TryWriteProvenance(
-            key: a,
-            provenance: "issuer",
-            rowOrdinal: ArenaFixture.Tokens
         ));
         Assert.True(condition: arena.TryWriteBehavior(
             behavior: StateCellBehavior.None,
@@ -277,7 +272,7 @@ public sealed class ArenaScopeLawTests {
         );
     }
     // A cell's runtime state rides its value, so a cell that is addressable but holds none takes no clock,
-    // behavior, provenance, visibility, or observation that an export would then drop.
+    // behavior, visibility, or observation that an export would then drop.
     [Fact]
     public void ACellHoldingNoValueTakesNoRuntimeState() {
         var (catalog, arena) = ArenaFixture.Build();
@@ -298,11 +293,6 @@ public sealed class ArenaScopeLawTests {
             substepTicks: 0L,
             v0: 0L,
             y0: 0L
-        ));
-        Assert.False(condition: arena.TryWriteProvenance(
-            key: empty,
-            provenance: "issuer",
-            rowOrdinal: ArenaFixture.History
         ));
         Assert.False(condition: arena.TryWriteBehavior(
             behavior: StateCellBehavior.None,
@@ -332,11 +322,6 @@ public sealed class ArenaScopeLawTests {
             reason: out _,
             rowOrdinal: ArenaFixture.Label,
             text: "bye"
-        ));
-        Assert.True(condition: arena.TryWriteProvenance(
-            key: slot,
-            provenance: "issuer",
-            rowOrdinal: ArenaFixture.Label
         ));
 
         var recorded = arena.Journal.Length;
@@ -511,10 +496,6 @@ public sealed class ArenaScopeLawTests {
                         key: key,
                         rowOrdinal: ordinal
                     ))
-                        .Append(value: (arena.Provenance(
-                        key: key,
-                        rowOrdinal: ordinal
-                    ) ?? "-"))
                         .Append(value: (arena.Visibility(
                         key: key,
                         rowOrdinal: ordinal

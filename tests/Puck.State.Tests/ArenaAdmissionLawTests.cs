@@ -266,11 +266,6 @@ public sealed class ArenaAdmissionLawTests {
             ),
             rowOrdinal: ArenaFixture.Deck
         ));
-        Assert.True(condition: arena.TryWriteProvenance(
-            key: b,
-            provenance: "issuer",
-            rowOrdinal: ArenaFixture.Deck
-        ));
         Assert.True(condition: arena.TryWriteVisibility(
             key: b,
             rowOrdinal: ArenaFixture.Deck,
@@ -321,10 +316,6 @@ public sealed class ArenaAdmissionLawTests {
             expected: StateCellBehavior.Inherit
         );
         Assert.Null(@object: arena.Observation(
-            key: b,
-            rowOrdinal: ArenaFixture.Vault
-        ));
-        Assert.Null(@object: arena.Provenance(
             key: b,
             rowOrdinal: ArenaFixture.Vault
         ));

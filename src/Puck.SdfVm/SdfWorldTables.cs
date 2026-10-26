@@ -49,13 +49,13 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // The ripple record's first row's third float: the screen's SdfUpdateRateCode while a tier view shows. KEEP IN SYNC
     // with sdfRateCode in debug/sdf-debug-views.hlsli.
     private const int ScreenRateOffset = (ScreenRippleOffset + (sizeof(float) * 2));
-    // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats, the glass flag in its
+    // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats, the face in its
     // fourth.
     private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
     private const int ScreenSamplerOffset = (ScreenBoundOffset + sizeof(float));
-    // The seventh row's fourth float: whether the face is a display drawn through the screen glass (a mapping with a warp)
-    // rather than an opening. KEEP IN SYNC with ScreenMappingData.state.w in frame/sdf-screen-mapping.hlsli.
-    private const int ScreenGlassOffset = (ScreenBoundOffset + (sizeof(float) * 3));
+    // The seventh row's fourth float: the screen's SdfScreenFace. KEEP IN SYNC with ScreenMappingData.state.w in
+    // frame/sdf-screen-mapping.hlsli.
+    private const int ScreenFaceOffset = (ScreenBoundOffset + (sizeof(float) * 3));
     private const int ScreenStateFloats = 4;
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli)
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
@@ -161,6 +161,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // The mapping each screen was last drawn from, compared by reference: a published mapping is republished unchanged
     // while its handle and extent hold, so an unchanged screen packs nothing.
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
+    private readonly SdfScreenFace[] m_screenFaces = new SdfScreenFace[MaxScreenSurfaces];
     private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
     // Each screen's SdfUpdateRateCode as SetScreenRate wrote it, which SetScreenRipple's rewrite of the record keeps.
     private readonly float[] m_screenRates = new float[MaxScreenSurfaces];

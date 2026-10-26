@@ -28,11 +28,10 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
 
     /// <inheritdoc/>
     public ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence) =>
-        VerifyCore(manifest: manifest, now: now, installedVersion: installedVersion, advanceSequence: advanceSequence, reserveInstall: false);
-
+        VerifyCore(advanceSequence: advanceSequence, installedVersion: installedVersion, manifest: manifest, now: now, reserveInstall: false);
     /// <inheritdoc/>
     public ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion) =>
-        VerifyCore(manifest: manifest, now: verifiedAt, installedVersion: installedVersion, advanceSequence: true, reserveInstall: true);
+        VerifyCore(advanceSequence: true, installedVersion: installedVersion, manifest: manifest, now: verifiedAt, reserveInstall: true);
 
     private ReleaseVerifyOutcome VerifyCore(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence, bool reserveInstall) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
@@ -42,8 +41,8 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: "manifest carries no signature");
         }
 
-        if (signature.Claim is null || signature.Chain is null ||
-            (signature.Chain.Count is not (0 or 2)) || signature.Chain.Any(predicate: entry => entry is null)) {
+        if ((signature.Claim is null) || (signature.Chain is null) ||
+            (signature.Chain.Count is not (0 or 2)) || signature.Chain.Any(predicate: entry => (entry is null))) {
             return ReleaseVerifyOutcome.Refuse(reason: "malformed signature: a claim and zero or two non-null chain entries are required");
         }
 
@@ -94,8 +93,9 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
         // Compare-only: refuses a replayed old manifest before anything it carries is trusted. The durable write
         // happens only at the very end, once every other check below has also passed.
         var manifestPin = ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(value: manifest, options: DocumentJsonOptions.Shared));
+
         if (!m_sequenceStore.IsAcceptable(requirement: requirement) &&
-            !(reserveInstall && m_sequenceStore.IsReserved(requirement: requirement, manifestPin: manifestPin))) {
+            !(reserveInstall && m_sequenceStore.IsReserved(manifestPin: manifestPin, requirement: requirement))) {
             return ReleaseVerifyOutcome.Refuse(reason: $"sequence {requirement.Sequence} at epoch {requirement.EpochStartUnixSeconds} does not exceed the stored high-water mark — refused as a replay");
         }
 
@@ -107,8 +107,8 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: $"manifest fails structural validation: {exception.Message}");
         }
 
-        if (!claim.PayloadBytes.Span.SequenceEqual(other: expectedCanonical.Bytes)) {
-            return ReleaseVerifyOutcome.Refuse(reason: "the signed claim payload does not match this manifest's own canonical bytes");
+        if (!claim.PayloadBytes.Span.SequenceEqual(other: System.Text.Encoding.UTF8.GetBytes(s: expectedCanonical.Hash.ToString()))) {
+            return ReleaseVerifyOutcome.Refuse(reason: "the signed claim payload does not match this manifest's canonical content pin");
         }
 
         if (
@@ -139,7 +139,7 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
         }
 
         if (advanceSequence && !(reserveInstall
-            ? m_sequenceStore.TryReserve(requirement: requirement, manifestPin: manifestPin)
+            ? m_sequenceStore.TryReserve(manifestPin: manifestPin, requirement: requirement)
             : m_sequenceStore.TryAdvance(requirement: requirement))) {
             return ReleaseVerifyOutcome.Refuse(reason: "the sequence was already committed by another verification or the stored mark is invalid");
         }

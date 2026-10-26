@@ -454,11 +454,10 @@ public sealed partial record WorldDefinition(
     /// none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldTargetRegister> TargetRegisters => (TargetRegistersRaw ?? []);
-    /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
-    /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in <c>theme.puck</c>, which a
-    /// world imports.</summary>
+    /// <summary>Gets the <c>theme</c> section — ABSENT resolves to the engine's neutral
+    /// <see cref="WorldThemeSection.Default"/>; a world's own look is a theme it authors or imports.</summary>
     [JsonIgnore]
-    public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
+    public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Default);
     /// <summary>Gets the <c>timeline</c> section, the world's named presentation clocks — ABSENT resolves to
     /// <see cref="WorldTimelineSection.Absent"/> (no named clocks).</summary>
     [JsonIgnore]

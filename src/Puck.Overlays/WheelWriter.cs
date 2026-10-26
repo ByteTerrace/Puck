@@ -105,7 +105,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         }
 
         var theme = m_theme.Current;
-        var chrome = theme.Chrome;
+        var wheel = theme.Styles.Wheel;
         var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MicroSize);
 
         builder.BeginClip(
@@ -142,8 +142,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             var outerRadius = (innerRadius + seat.RingWidth);
             var centroid = (innerRadius + (seat.RingWidth * 0.5f));
             var ringAlpha = ((isActive
-                ? chrome.WheelActiveRingAlpha
-                : chrome.WheelRingAlpha) * fade);
+                ? wheel.ActiveRingAlpha
+                : wheel.RingAlpha) * fade);
             var sectors = rings[ringIndex].Sectors.Span;
             var sectorCount = Math.Min(
                 val1: sectors.Length,
@@ -267,7 +267,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         // quiet the moment a piece takes the selection. Drawn AFTER the pieces: its halo falls outward onto the
         // first ring, and a halo painted before the pieces' fills would be buried under them.
         builder.WriteWedge(
-            alpha: (chrome.WheelActiveRingAlpha * fade),
+            alpha: (wheel.ActiveRingAlpha * fade),
             centerX: seat.CenterX,
             centerY: seat.CenterY,
             gap: 0f,
@@ -300,7 +300,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             );
 
             builder.WriteText(
-                alpha: (chrome.WheelLabelAlpha * fade),
+                alpha: (wheel.LabelAlpha * fade),
                 cellHeight: cellHeight,
                 maxChars: MaxSectorLabelChars,
                 role: OverlayColorRole.TextPrimary,
@@ -308,7 +308,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 x: (seat.CenterX - (hoveredWidth * 0.5f)),
                 y: hubTextY
             );
-            hubTextY += (cellHeight + chrome.WheelHubLabelGap);
+            hubTextY += (cellHeight + wheel.HubLabelGap);
         }
 
         var activeLabel = ((activeRing >= 0)
@@ -326,7 +326,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             );
 
             builder.WriteText(
-                alpha: (chrome.WheelRingAlpha * fade),
+                alpha: (wheel.RingAlpha * fade),
                 cellHeight: cellHeight,
                 maxChars: MaxRingLabelChars,
                 role: OverlayColorRole.TextDim,

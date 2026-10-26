@@ -123,7 +123,6 @@ public sealed class ArenaUndoLawTests {
         Assert.False(condition: arena.ValidateUndoSnapshot(reason: out var reason, snapshot: snapshot));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "noncanonical number");
     }
-    [InlineData(ArenaColumn.Provenance)]
     [InlineData(ArenaColumn.Visibility)]
     [InlineData(ArenaColumn.Behavior)]
     [InlineData(ArenaColumn.Observation)]
@@ -141,7 +140,7 @@ public sealed class ArenaUndoLawTests {
     public void ABoardRetainsThirtyTwoTurnsWithinTheCeilingAndAnUnretainedColumnWriteRefusesTheRewind() {
         var section = new StateSection(
             Lattices: [new LatticeTopology.Grid(Name: "board", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 16, Depth: 16)],
-            Rows: [new StateRow(Name: ArenaFixture.Name(value: "board"), Kind: CellKind.Int, Domain: new StateDomain.CellsOf(Topology: "board"))]
+            Rows: [new StateRow(Name: ArenaFixture.Name(value: "board"), Kind: CellKind.Int, Domain: new StateDomain.CellsOf(Topology: "board"), Cells: [new StateCell(Key: ArenaFixture.Name(value: "0"), Value: CellValue.Int(value: 0L), Behavior: StateCellBehavior.None)])]
         );
         var catalog = StateCatalog.Compile(section: section);
         var arena = new StateArena(catalog, section, ArenaTime.Origin);

@@ -2621,6 +2621,8 @@ export type StatePoolField = {
  */
 export type StatePoolSeed = {
   slot: number;
+  leftSlot?: number | null;
+  rightSlot?: number | null;
   /**
    * Gets the immutable field overrides.
    */
@@ -6106,16 +6108,14 @@ export type WorldHudCursor = {
    */
   sizePx: number;
   /**
-   * The bare cursor's palette role; hover lights the accent tier regardless.
+   * The bare cursor's core color role; hover lights the accent tier regardless, so Accent here makes the bare cursor and its hover indistinguishable.
    */
-  role: WorldHudCursorRole;
+  role: WorldThemeRole;
   /**
    * The drawn cursor's visibility condition, or null for always.
    */
   visible?: OverlayPredicateNullable | null;
 };
-
-export type WorldHudCursorRole = "TextPrimary" | "TextDim" | "Accent" | "Phosphor";
 
 export type WorldHudDefaults = {
   /**
@@ -7451,6 +7451,10 @@ export type WorldPlacementFace = {
    * How the face's screen samples its source's image, as a screen row's Filter does: Nearest, the default, keeps each source pixel crisp; Linear blends between source pixels. Omitted from the wire when Nearest.
    */
   filter?: GpuSamplerFilter;
+  /**
+   * How the face's screen presents its picture, as a screen row's Material does: Plain, the default, or Crt. Refused on a window. Omitted from the wire when Plain.
+   */
+  material?: WorldScreenMaterial;
 };
 
 export type WorldPlacementFaceList = (WorldPlacementFace | null)[];
@@ -11254,6 +11258,10 @@ export type WorldScreen = {
    * The body that carries the screen's picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.
    */
   carry?: WorldScreenCarry | null;
+  /**
+   * How the face presents its picture (WorldScreenMaterial): Plain, the default, shows it as its source made it, filling the face; Crt draws it through a cathode-ray tube's glass, and a pointer hit maps through that glass's bezel. Refused on a window, which is an opening rather than a display. Omitted from the wire when Plain.
+   */
+  material?: WorldScreenMaterial;
 };
 
 export type WorldScreenCarry = {
@@ -11296,6 +11304,8 @@ export type WorldScreenMagazine = {
    */
   wrap?: boolean;
 };
+
+export type WorldScreenMaterial = "Plain" | "Crt";
 
 export type WorldScreenPadPointer = {
   /**
@@ -11459,7 +11469,7 @@ export type WorldScreenSourceSession = {
 };
 
 /**
- * Authored reading text on the screen face, rendered through the engine's glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world's packed font atlas at shade time — the dense-text sibling of a creation's textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.
+ * Authored reading text on the screen face, rendered through the engine's glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world's packed font atlas at shade time — the dense-text sibling of a creation's textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the screen image pipeline, so no image source competes with it on the slot.
  */
 export type WorldScreenSourceText = {
   $type?: "text";
@@ -12212,7 +12222,6 @@ export type WorldStateRow = {
        */
       visible: boolean;
     };
-    provenance?: string;
   }[];
   /**
    * The row-wide declared lower bound every cell's Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max — a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.
@@ -12226,6 +12235,14 @@ export type WorldStateRow = {
    * The row's own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell — declaring a capacity is declaring table intent. Omitted from the wire when null.
    */
   capacity?: number;
+  /**
+   * Gets the physical slots of exported members in logical order. Null uses contiguous slots.
+   */
+  cellSlots?: number[];
+  /**
+   * Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory and work reservation. Authored rows normally omit it.
+   */
+  reservedCapacity?: number;
   /**
    * What Overflow does with a write TryAdmitWrite finds outside the row's declared envelope, or that overflows raw 64-bit arithmetic.
    */
@@ -12541,86 +12558,23 @@ export type WorldTether = {
   modeState?: string | null;
 };
 
-/**
- * One elevation bloom hue's lit ring + outer halo pair (see Puck.Overlays.DesignTokens.Elevation for the composite rule). Each color carries its own baked alpha (#RRGGBBAA).
- */
-export type WorldThemeBloomHue = {
+export type WorldThemeBarStyle = {
   /**
-   * The 1px lit ring color.
+   * The page name's opacity.
    */
-  ring: BindableColor;
+  labelAlpha: number;
   /**
-   * The outer distance-falloff halo color.
+   * A chord hint's opacity.
    */
-  halo: BindableColor;
-};
-
-export type WorldThemeChrome = {
+  hintAlpha: number;
   /**
-   * The one quiet-dim opacity every writer reaches for: an unbound bar slot, an unheld modifier indicator, a gauge track, a console selection band.
+   * An unbound slot's and an unheld modifier's opacity.
    */
-  dimQuietAlpha: number;
-  /**
-   * The binding bar's page-name opacity.
-   */
-  barLabelAlpha: number;
-  /**
-   * The binding bar's chord-hint opacity.
-   */
-  barHintAlpha: number;
-  /**
-   * The drawn cursor's ring opacity.
-   */
-  cursorAlpha: number;
-  /**
-   * The cursor's center-dot half-extent, as a fraction of the ring radius.
-   */
-  cursorDotRatio: number;
-  /**
-   * The cursor center dot's half-extent ceiling, px.
-   */
-  cursorDotMaxHalf: number;
-  /**
-   * The hover label's clearance outside the ring, px.
-   */
-  cursorLabelGap: number;
-  /**
-   * A non-active wheel ring's stroke and label opacity.
-   */
-  wheelRingAlpha: number;
-  /**
-   * The active wheel ring's stroke opacity.
-   */
-  wheelActiveRingAlpha: number;
-  /**
-   * The second (heavier-shell) stroke's radial offset, px.
-   */
-  wheelActiveRingOffset: number;
-  /**
-   * The hub dot's, marker's, and active-ring labels' opacity.
-   */
-  wheelLabelAlpha: number;
-  /**
-   * The wheel hub dot's half-extent, px.
-   */
-  wheelHubDotHalf: number;
-  /**
-   * The hovered-sector marker dot's half-extent, px.
-   */
-  wheelMarkerHalf: number;
-  /**
-   * The marker's clearance outside the ring, as a multiple of the cell height.
-   */
-  wheelMarkerGapRatio: number;
-  /**
-   * The active-ring label's clearance below the hub dot, px.
-   */
-  wheelHubLabelGap: number;
+  quietAlpha: number;
 };
 
 export type WorldThemeColor = {
   surfaceBase: BindableColor;
-  surfacePanel: BindableColor;
   surfaceRaised: BindableColor;
   surfaceInset: BindableColor;
   scrimPanel: WorldThemeScrim;
@@ -12628,107 +12582,79 @@ export type WorldThemeColor = {
   scrimChip: WorldThemeScrim;
   lineHair: BindableColor;
   lineSoft: BindableColor;
-  lineStrong: BindableColor;
-  lineInset: BindableColor;
   textPrimary: BindableColor;
   textDim: BindableColor;
   textMute: BindableColor;
   accent: BindableColor;
   accentQuiet: BindableColor;
-  accentLine: BindableColor;
   accentInk: BindableColor;
   positive: BindableColor;
   warning: BindableColor;
   danger: BindableColor;
-  phosphor: BindableColor;
-  phosphorDim: BindableColor;
-  phosphorCyan: BindableColor;
-  badgeDark: BindableColor;
-  badgeLight: BindableColor;
 };
 
-/**
- * One of the two settled cubic-bezier easings a theme's motion section authors.
- */
-export type WorldThemeCubicBezier = {
+export type WorldThemeConsoleStyle = {
   /**
-   * The first control point's x.
+   * The color of an echoed input line and of the prompt.
    */
-  x1?: number;
+  echo: WorldThemeStyleColor;
   /**
-   * The first control point's y.
+   * The title band's height, px.
    */
-  y1?: number;
+  headHeight: number;
   /**
-   * The second control point's x.
+   * The selected input's highlight opacity.
    */
-  x2?: number;
-  /**
-   * The second control point's y.
-   */
-  y2?: number;
+  selectionAlpha: number;
 };
 
-export type WorldThemeDiegetic = {
-  plateTop: BindableColor;
-  plateMid: BindableColor;
-  plateBottom: BindableColor;
-  plateStripeColor: BindableColor;
-  embossFill: BindableColor;
-  engraveFill: BindableColor;
-  embossShadowDropAlpha: number;
-  embossShadowDropBlur: number;
-  embossShadowDropOffsetY: number;
-  embossShadowLitAlpha: number;
-  embossShadowLitOffsetY: number;
-  engraveShadowLipAlpha: number;
-  engraveShadowLipOffsetY: number;
-  engraveShadowRecessAlpha: number;
-  engraveShadowRecessBlur: number;
-  engraveShadowRecessOffsetY: number;
-  screenWellOuter: BindableColor;
-  screenWellInner: BindableColor;
-  bezelOuter: BindableColor;
-  bezelInner: BindableColor;
-  bezelEdge: BindableColor;
-  phosphorGlowBlur: number;
+export type WorldThemeCursorStyle = {
+  /**
+   * The ring's opacity.
+   */
+  alpha: number;
+  /**
+   * The center dot's half-extent, as a fraction of the ring radius.
+   */
+  dotRatio: number;
+  /**
+   * The center dot's half-extent ceiling, px.
+   */
+  dotMaxHalf: number;
+  /**
+   * The hover label's clearance outside the ring, px.
+   */
+  labelGap: number;
 };
 
-export type WorldThemeElevation = {
-  bloomHaloBlur: number;
-  bloomHaloSpread: number;
-  bloomHaloAlpha: BindableScalar;
-  bloomRingWidth: number;
-  bloomRingAlpha: BindableScalar;
-  bloomNeutralHaloAlpha: BindableScalar;
-  bloomNeutralRingAlpha: BindableScalar;
-  bloomHeldInsetBlur: number;
-  bloomHeldInsetSpread: number;
-  bloomHeldInsetAlpha: BindableScalar;
-  bloomAccent: WorldThemeBloomHue;
-  bloomPositive: WorldThemeBloomHue;
-  bloomWarning: WorldThemeBloomHue;
-  bloomDanger: WorldThemeBloomHue;
-  bloomNeutral: WorldThemeBloomHue;
-  pressHeldGlowBlur: number;
-  pressHeldGlowSpread: number;
-  pressHeldGlowColor: BindableColor;
-  pressHeldShadowBlur: number;
-  pressHeldShadowOffsetY: number;
-  pressHeldTranslateY: number;
-  pressHeldShadowColor: BindableColor;
-  shadowSeatBlur: number;
-  shadowSeatOffsetY: number;
-  shadowSeatSpread: number;
-  shadowSeatStripSpread: number;
-  shadowSeatColor: BindableColor;
-  shadowSeatStripColor: BindableColor;
-  catchlightOffsetY: number;
-  catchlightColor: BindableColor;
-  chipRestOpacity: number;
-  edgeHairlineWidth: number;
-  ringStatusWidth: number;
-  ringStatusAlpha: number;
+export type WorldThemeGlowStyle = {
+  /**
+   * The halo's reach, px.
+   */
+  haloBlur: number;
+  /**
+   * The ring's alpha.
+   */
+  ringAlpha: BindableScalar;
+  /**
+   * The halo's alpha.
+   */
+  haloAlpha: BindableScalar;
+  /**
+   * The neutral tier's ring alpha.
+   */
+  neutralRingAlpha: BindableScalar;
+  /**
+   * The neutral tier's halo alpha.
+   */
+  neutralHaloAlpha: BindableScalar;
+};
+
+export type WorldThemeHudStyle = {
+  /**
+   * A gauge track's opacity.
+   */
+  trackAlpha: number;
 };
 
 export type WorldThemeIcon = {
@@ -12738,13 +12664,34 @@ export type WorldThemeIcon = {
   strokeHalfWidth: number;
 };
 
+export type WorldThemeKeycapStyle = {
+  /**
+   * The plate height the theme's px tokens are measured at, px: a plate of another size scales its hairline, radius and glow by its own size over this one.
+   */
+  referenceSize: number;
+  /**
+   * A resting plate's opacity.
+   */
+  restOpacity: number;
+  /**
+   * The badge disc's backing.
+   */
+  badge: WorldThemeStyleColor;
+  /**
+   * The badge's glyph.
+   */
+  badgeInk: WorldThemeStyleColor;
+  /**
+   * The seconds one march of a latched toggle's border takes around the plate; 0 draws the border still.
+   */
+  toggleMarch: number;
+};
+
 export type WorldThemeMotion = {
-  caretBlink: number;
-  durFast: number;
+  /**
+   * The medium duration (a transient's fade).
+   */
   durMed: number;
-  durPanel: number;
-  easeStd: WorldThemeCubicBezier;
-  easeOut: WorldThemeCubicBezier;
 };
 
 export type WorldThemeRadius = {
@@ -12753,8 +12700,10 @@ export type WorldThemeRadius = {
   radius3: number;
 };
 
+export type WorldThemeRole = "SurfaceBase" | "SurfaceRaised" | "SurfaceInset" | "ScrimPanel" | "ScrimStrip" | "ScrimChip" | "LineHair" | "LineSoft" | "TextPrimary" | "TextDim" | "TextMute" | "Accent" | "AccentQuiet" | "AccentInk" | "Positive" | "Warning" | "Danger";
+
 /**
- * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha lies between ScrimMinAlpha and one; a bound alpha a live write moves below the floor presents at it.
+ * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. A player's high-contrast preference raises a scrim to HighContrastScrimAlpha when it authors less.
  */
 export type WorldThemeScrim = {
   /**
@@ -12769,11 +12718,11 @@ export type WorldThemeScrim = {
 
 export type WorldThemeSection = {
   /**
-   * The semantic color roles.
+   * The core color roles.
    */
   color: WorldThemeColor;
   /**
-   * The spacing grid and component heights.
+   * The spacing steps.
    */
   space: WorldThemeSpace;
   /**
@@ -12781,19 +12730,15 @@ export type WorldThemeSection = {
    */
   radius: WorldThemeRadius;
   /**
-   * The type scale.
+   * The type sizes.
    */
   type: WorldThemeType;
   /**
-   * The two-tier elevation recipe.
+   * The stroke widths.
    */
-  elevation: WorldThemeElevation;
+  stroke: WorldThemeStroke;
   /**
-   * The diegetic material recipe.
-   */
-  diegetic: WorldThemeDiegetic;
-  /**
-   * The motion recipe.
+   * The durations.
    */
   motion: WorldThemeMotion;
   /**
@@ -12801,52 +12746,101 @@ export type WorldThemeSection = {
    */
   icon: WorldThemeIcon;
   /**
-   * The CPU writers' own opacity/px chrome.
+   * The component styles.
    */
-  chrome: WorldThemeChrome;
+  styles: WorldThemeStyles;
 };
 
 export type WorldThemeSpace = {
-  space0: number;
-  space1: number;
+  /**
+   * Two steps (8px in the default theme).
+   */
   space2: number;
+  /**
+   * Three steps.
+   */
   space3: number;
-  space4: number;
-  space5: number;
-  space6: number;
+  /**
+   * Eight steps (the stage margin).
+   */
   space8: number;
-  heightBadge: number;
-  heightBindBar: number;
-  heightChip: number;
-  heightConsoleHead: number;
-  heightModeRow: number;
-  heightPromptRow: number;
-  heightTrackerBar: number;
-  heightTrackerCell: number;
+};
+
+export type WorldThemeStroke = {
+  /**
+   * The hairline outline width.
+   */
+  hairline: number;
+};
+
+/**
+ * A component style's color: a core role by name (Role, so the component follows the world's palette), or its own literal, binding or keys (Color). Exactly one is authored.
+ */
+export type WorldThemeStyleColor = {
+  /**
+   * The core role the component takes, or null when it authors its own color. Omitted from the wire when null.
+   */
+  role?: WorldThemeRole | null;
+  /**
+   * The component's own color, or null when it names a role. Omitted from the wire when null.
+   */
+  color?: BindableColor;
+};
+
+export type WorldThemeStyles = {
+  glow: WorldThemeGlowStyle;
+  keycap: WorldThemeKeycapStyle;
+  bar: WorldThemeBarStyle;
+  console: WorldThemeConsoleStyle;
+  cursor: WorldThemeCursorStyle;
+  wheel: WorldThemeWheelStyle;
+  toast: WorldThemeToastStyle;
+  hud: WorldThemeHudStyle;
+};
+
+export type WorldThemeToastStyle = {
+  /**
+   * The chip's least height, px; zero shows no toast.
+   */
+  minHeight: number;
+  /**
+   * The status square's side, px.
+   */
+  iconSize: number;
+  /**
+   * The status rail's width, px.
+   */
+  railWidth: number;
 };
 
 export type WorldThemeType = {
-  bodySize: number;
-  bodyLine: number;
-  bodyWeight: number;
-  labelSize: number;
-  labelLine: number;
-  labelTracking: number;
-  labelWeight: number;
+  /**
+   * The small label size.
+   */
   microSize: number;
-  microLine: number;
-  microTracking: number;
-  microWeight: number;
+  /**
+   * The monospace body size.
+   */
   monoSize: number;
-  monoLine: number;
-  monoTracking: number;
-  monoWeight: number;
-  monoBadgeSize: number;
-  monoReadoutSize: number;
-  titleSize: number;
-  titleLine: number;
-  titleTracking: number;
-  titleWeight: number;
+};
+
+export type WorldThemeWheelStyle = {
+  /**
+   * A non-active ring's and the active ring label's opacity.
+   */
+  ringAlpha: number;
+  /**
+   * The active ring's and the hub's opacity.
+   */
+  activeRingAlpha: number;
+  /**
+   * The hovered sector label's opacity.
+   */
+  labelAlpha: number;
+  /**
+   * The gap between the hub's two labels, px.
+   */
+  hubLabelGap: number;
 };
 
 export type WorldTimelineSection = {
