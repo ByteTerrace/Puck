@@ -20,9 +20,27 @@ probes [
     rateHz: 30
     track: "probes/beacon.probe-track.json"
     bindings [
-      { $type: "parameter", channel: "red", target { $type: "probe", id: "meter", field: "tintR" }, range [0.2, 1], maxAgeSeconds: 1 }
-      { $type: "parameter", channel: "green", target { $type: "probe", id: "meter", field: "tintG" }, range [0.2, 1], maxAgeSeconds: 1 }
-      { $type: "parameter", channel: "blue", target { $type: "probe", id: "meter", field: "tintB" }, range [0.2, 1], maxAgeSeconds: 1 }
+      {
+        $type: "parameter"
+        channel: "red"
+        target { $type: "probe", id: "meter", field: "tintR" }
+        range [0.2, 1]
+        maxAgeSeconds: 1
+      }
+      {
+        $type: "parameter"
+        channel: "green"
+        target { $type: "probe", id: "meter", field: "tintG" }
+        range [0.2, 1]
+        maxAgeSeconds: 1
+      }
+      {
+        $type: "parameter"
+        channel: "blue"
+        target { $type: "probe", id: "meter", field: "tintB" }
+        range [0.2, 1]
+        maxAgeSeconds: 1
+      }
     ]
   }
   {

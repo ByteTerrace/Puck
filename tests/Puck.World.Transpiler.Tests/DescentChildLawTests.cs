@@ -10,7 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 /// stops a new structured member from being skipped silently.</summary>
 /// <remarks>Distinct from <c>TheDescentReachesEveryNodeKind</c>, which walks each node with empty children and so
 /// proves only that an arm exists. The members that carry a sub-grammar as a <see cref="string"/> rather than as a
-/// child — <c>EmbeddedBlockNode.Body</c>, the operand spans, a pattern's <c>Match</c> — are outside both laws by
+/// child — the operand spans, a pattern's <c>Match</c> — are outside both laws by
 /// construction, and the manual's rewriting section names them.</remarks>
 public class DescentChildLawTests {
     // Records every node the descent hands to a hook, so the law can ask afterwards whether each planted child

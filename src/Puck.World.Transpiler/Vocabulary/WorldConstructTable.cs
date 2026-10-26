@@ -14,7 +14,6 @@ public sealed class WorldConstructTable {
     private readonly Dictionary<string, IReadOnlyList<WorldConstruct>> m_inside;
     private readonly Dictionary<string, WorldConstruct> m_byKeyword;
     private readonly Dictionary<string, WorldConstruct> m_rootByKeyword;
-    private readonly HashSet<string> m_embeddedLanguages;
 
     /// <summary>Initializes a table over <paramref name="constructs"/>.</summary>
     /// <param name="constructs">The described constructs; no two may share both an enclosing construct and a
@@ -66,12 +65,6 @@ public sealed class WorldConstructTable {
                 m_byKeyword[group.Key] = chosen;
             }
         }
-        m_embeddedLanguages = new(
-            collection: Constructs
-                .Where(predicate: static construct => (construct.Shape == WorldConstructShape.EmbeddedLanguage))
-                .Select(selector: static construct => construct.Keyword),
-            comparer: StringComparer.OrdinalIgnoreCase
-        );
         m_rootByKeyword = new(comparer: StringComparer.OrdinalIgnoreCase);
         foreach (var construct in Inside(enclosing: null)) {
             _ = m_rootByKeyword.TryAdd(key: construct.Keyword, value: construct);
@@ -99,10 +92,7 @@ public sealed class WorldConstructTable {
             : $", lowering to {CodeList(names: member.DocumentKeys)}")}.{((member.Default is null)
                 ? ""
                 : $" Defaults to `{member.Default}`.")}";
-    private static string Shape(WorldConstructShape shape) => shape switch {
-        WorldConstructShape.EmbeddedLanguage => "embedded language",
-        _ => shape.ToString().ToLowerInvariant(),
-    };
+    private static string Shape(WorldConstructShape shape) => shape.ToString().ToLowerInvariant();
     private static void RenderConstruct(StringBuilder output, WorldConstruct construct) {
         _ = output.AppendLine().AppendLine(
             CultureInfo.InvariantCulture,
@@ -225,8 +215,8 @@ public sealed class WorldConstructTable {
     /// <returns>The arm every root construct writing there names, or <see langword="null"/> when none writes there
     /// or they disagree.</returns>
     /// <remarks>The printer's own dispatch: it reads a key off the document and has no keyword in hand. Two
-    /// spellings may write one key — <c>state</c> and <c>sql</c> both write <c>state</c> — and both must name the
-    /// same arm, since the printer has nothing to tell them apart by.</remarks>
+    /// spellings that write one key must name the same arm, since the printer has nothing to tell them apart
+    /// by.</remarks>
     public WorldRootArm? RootArmWriting(string documentKey) {
         var array = $"{documentKey}[]";
         var arms = Inside(enclosing: null)
@@ -248,13 +238,6 @@ public sealed class WorldConstructTable {
             : null
         );
     }
-    /// <summary>Returns a value indicating whether <paramref name="identifier"/> opens an embedded language
-    /// block.</summary>
-    /// <param name="identifier">A block identifier as written.</param>
-    /// <returns><see langword="true"/> when a described construct of that keyword is an embedded language.</returns>
-    /// <remarks>An embedded language's own name is matched without regard to case, matching how the block's
-    /// lowering finds its dialect; every other keyword is matched exactly.</remarks>
-    public bool IsEmbeddedLanguage(string identifier) => m_embeddedLanguages.Contains(item: identifier);
     /// <summary>Returns the one construct whose keyword is <paramref name="keyword"/>, wherever it is
     /// written.</summary>
     /// <param name="keyword">The keyword as written.</param>

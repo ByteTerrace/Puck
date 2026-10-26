@@ -102,7 +102,17 @@ prototypes {
         { color: "#C9A57B", roughness: 0.55, specular: 0.05 }
         { color: "#2E3136", roughness: 0.6, specular: 0.2, metal: 0.3 }
       ]
-      deskBox(label: "top", x0: 10.33, x1: 11.08, y0: (deskTop - 0.025), y1: deskTop, z0: 22.95, z1: 24.45, slot: 0, bevel: 0.003)
+      deskBox(
+        label: "top",
+        x0: 10.33,
+        x1: 11.08,
+        y0: (deskTop - 0.025),
+        y1: deskTop,
+        z0: 22.95,
+        z1: 24.45,
+        slot: 0,
+        bevel: 0.003
+      )
       deskBox(label: "leg-south", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 22.98, z1: 23.01, slot: 1)
       deskBox(label: "leg-north", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 24.39, z1: 24.42, slot: 1)
       deskBox(label: "modesty", x0: 10.37, x1: 10.39, y0: 0.4, y1: (deskTop - 0.02), z0: 23.005, z1: 24.395, slot: 1)
@@ -122,14 +132,87 @@ prototypes {
       ]
       // Each part sinks a few millimetres into the one behind it rather than abutting it: two coplanar faces meeting
       // fold the bake's contour.
-      deskBox(label: "bezel-top", x0: (panelFront - 0.005), x1: bezelFront, y0: (pictureY + pictureHalfHeight), y1: monitorTop, z0: monitorSouth, z1: monitorNorth, slot: 0)
-      deskBox(label: "bezel-chin", x0: (panelFront - 0.005), x1: bezelFront, y0: monitorBottom, y1: (pictureY - pictureHalfHeight), z0: monitorSouth, z1: monitorNorth, slot: 0)
-      deskBox(label: "bezel-north", x0: (panelFront - 0.005), x1: bezelFront, y0: (pictureY - pictureHalfHeight), y1: (pictureY + pictureHalfHeight), z0: (pictureZ + pictureHalfWidth), z1: monitorNorth, slot: 0)
-      deskBox(label: "bezel-south", x0: (panelFront - 0.005), x1: bezelFront, y0: (pictureY - pictureHalfHeight), y1: (pictureY + pictureHalfHeight), z0: monitorSouth, z1: (pictureZ - pictureHalfWidth), slot: 0)
-      deskBox(label: "panel", x0: (panelFront - 0.022), x1: panelFront, y0: monitorBottom, y1: monitorTop, z0: monitorSouth, z1: monitorNorth, slot: 1)
-      deskBox(label: "back", x0: (panelFront - 0.06), x1: (panelFront - 0.008), y0: 1.0, y1: 1.25, z0: (pictureZ - 0.24), z1: (pictureZ + 0.24), slot: 1, bevel: 0.012)
-      deskBox(label: "mount", x0: 10.65, x1: (panelFront - 0.056), y0: 1.06, y1: 1.16, z0: (pictureZ - 0.05), z1: (pictureZ + 0.05), slot: 1)
-      deskBox(label: "neck", x0: 10.615, x1: 10.655, y0: deskTop, y1: 1.18, z0: (pictureZ - 0.035), z1: (pictureZ + 0.035), slot: 2)
+      deskBox(
+        label: "bezel-top",
+        x0: (panelFront - 0.005),
+        x1: bezelFront,
+        y0: (pictureY + pictureHalfHeight),
+        y1: monitorTop,
+        z0: monitorSouth,
+        z1: monitorNorth,
+        slot: 0
+      )
+      deskBox(
+        label: "bezel-chin",
+        x0: (panelFront - 0.005),
+        x1: bezelFront,
+        y0: monitorBottom,
+        y1: (pictureY - pictureHalfHeight),
+        z0: monitorSouth,
+        z1: monitorNorth,
+        slot: 0
+      )
+      deskBox(
+        label: "bezel-north",
+        x0: (panelFront - 0.005),
+        x1: bezelFront,
+        y0: (pictureY - pictureHalfHeight),
+        y1: (pictureY + pictureHalfHeight),
+        z0: (pictureZ + pictureHalfWidth),
+        z1: monitorNorth,
+        slot: 0
+      )
+      deskBox(
+        label: "bezel-south",
+        x0: (panelFront - 0.005),
+        x1: bezelFront,
+        y0: (pictureY - pictureHalfHeight),
+        y1: (pictureY + pictureHalfHeight),
+        z0: monitorSouth,
+        z1: (pictureZ - pictureHalfWidth),
+        slot: 0
+      )
+      deskBox(
+        label: "panel",
+        x0: (panelFront - 0.022),
+        x1: panelFront,
+        y0: monitorBottom,
+        y1: monitorTop,
+        z0: monitorSouth,
+        z1: monitorNorth,
+        slot: 1
+      )
+      deskBox(
+        label: "back",
+        x0: (panelFront - 0.06),
+        x1: (panelFront - 0.008),
+        y0: 1.0,
+        y1: 1.25,
+        z0: (pictureZ - 0.24),
+        z1: (pictureZ + 0.24),
+        slot: 1,
+        bevel: 0.012
+      )
+      deskBox(
+        label: "mount",
+        x0: 10.65,
+        x1: (panelFront - 0.056),
+        y0: 1.06,
+        y1: 1.16,
+        z0: (pictureZ - 0.05),
+        z1: (pictureZ + 0.05),
+        slot: 1
+      )
+      deskBox(
+        label: "neck",
+        x0: 10.615,
+        x1: 10.655,
+        y0: deskTop,
+        y1: 1.18,
+        z0: (pictureZ - 0.035),
+        z1: (pictureZ + 0.035),
+        slot: 2
+      )
       shape Prism "foot" {
         material: 2
         position [-10.62, (deskTop + 0.005), (0 - pictureZ)]
@@ -158,7 +241,16 @@ prototypes {
       deskBox(label: "front", x0: 10.89, x1: 10.91, y0: 0.08, y1: 0.54, z0: 24.53, z1: 24.72, slot: 1, bevel: 0.003)
       for x in [10.46, 10.86] {
         for z in [24.545, 24.705] {
-          deskBox(label: $"foot-{x}-{z}", x0: (x - 0.02), x1: (x + 0.02), y0: 0.05, y1: 0.07, z0: (z - 0.015), z1: (z + 0.015), slot: 1)
+          deskBox(
+            label: $"foot-{x}-{z}",
+            x0: (x - 0.02),
+            x1: (x + 0.02),
+            y0: 0.05,
+            y1: 0.07,
+            z0: (z - 0.015),
+            z1: (z + 0.015),
+            slot: 1
+          )
         }
       }
       shape Cylinder "power" {
@@ -180,14 +272,33 @@ prototypes {
         { color: "#25272B", roughness: 0.55, specular: 0.05 }
         { color: "#3A3D44", roughness: 0.4, specular: 0.05 }
       ]
-      deskBox(label: "deck", x0: 10.82, x1: 10.96, y0: deskTop, y1: (deskTop + 0.016), z0: 23.48, z1: 23.92, slot: 0, bevel: 0.002)
+      deskBox(
+        label: "deck",
+        x0: 10.82,
+        x1: 10.96,
+        y0: deskTop,
+        y1: (deskTop + 0.016),
+        z0: 23.48,
+        z1: 23.92,
+        slot: 0,
+        bevel: 0.002
+      )
       shape Box "keys" {
         material: 1
         position [-10.89, (deskTop + 0.02), -23.7]
         scale [0.007, 0.004, 0.007]
         domain [repeat(spacing: [0.019, 1, 0.019], limit: [2, 0, 10], origin: [10.89, (deskTop + 0.02), 23.7])]
       }
-      deskBox(label: "space", x0: 10.921, x1: 10.935, y0: (deskTop + 0.016), y1: (deskTop + 0.024), z0: 23.645, z1: 23.755, slot: 1)
+      deskBox(
+        label: "space",
+        x0: 10.921,
+        x1: 10.935,
+        y0: (deskTop + 0.016),
+        y1: (deskTop + 0.024),
+        z0: 23.645,
+        z1: 23.755,
+        slot: 1
+      )
       shape Superellipsoid "mouse" {
         material: 0
         position [-10.9, (deskTop + 0.013), -23.38]
@@ -230,14 +341,32 @@ prototypes {
         position [(0 - chairX), 0.29, (0 - chairZ)]
         scale [0.022, 0.14, 0.022]
       }
-      deskBox(label: "mechanism", x0: (chairX - 0.09), x1: (chairX + 0.09), y0: 0.42, y1: 0.46, z0: (chairZ - 0.09), z1: (chairZ + 0.09), slot: 1)
+      deskBox(
+        label: "mechanism",
+        x0: (chairX - 0.09),
+        x1: (chairX + 0.09),
+        y0: 0.42,
+        y1: 0.46,
+        z0: (chairZ - 0.09),
+        z1: (chairZ + 0.09),
+        slot: 1
+      )
       shape Superellipsoid "seat" {
         material: 0
         position [(0 - chairX), 0.49, (0 - chairZ)]
         scale [0.25, 0.045, 0.25]
         exponent: 4
       }
-      deskBox(label: "spine", x0: (chairX + 0.225), x1: (chairX + 0.255), y0: 0.49, y1: 0.66, z0: (chairZ - 0.03), z1: (chairZ + 0.03), slot: 1)
+      deskBox(
+        label: "spine",
+        x0: (chairX + 0.225),
+        x1: (chairX + 0.255),
+        y0: 0.49,
+        y1: 0.66,
+        z0: (chairZ - 0.03),
+        z1: (chairZ + 0.03),
+        slot: 1
+      )
       shape Superellipsoid "back" {
         material: 0
         position [(0 - (chairX + 0.27)), 0.88, (0 - chairZ)]
@@ -246,8 +375,26 @@ prototypes {
         exponent: 4
       }
       for side in [-1, 1] {
-        deskBox(label: $"arm-post-{side}", x0: (chairX + 0.005), x1: (chairX + 0.035), y0: 0.5, y1: 0.71, z0: ((chairZ + (0.255 * side)) - 0.015), z1: ((chairZ + (0.255 * side)) + 0.015), slot: 1)
-        deskBox(label: $"arm-rest-{side}", x0: (chairX - 0.1), x1: (chairX + 0.14), y0: 0.71, y1: 0.735, z0: ((chairZ + (0.255 * side)) - 0.03), z1: ((chairZ + (0.255 * side)) + 0.03), slot: 0)
+        deskBox(
+          label: $"arm-post-{side}",
+          x0: (chairX + 0.005),
+          x1: (chairX + 0.035),
+          y0: 0.5,
+          y1: 0.71,
+          z0: ((chairZ + (0.255 * side)) - 0.015),
+          z1: ((chairZ + (0.255 * side)) + 0.015),
+          slot: 1
+        )
+        deskBox(
+          label: $"arm-rest-{side}",
+          x0: (chairX - 0.1),
+          x1: (chairX + 0.14),
+          y0: 0.71,
+          y1: 0.735,
+          z0: ((chairZ + (0.255 * side)) - 0.03),
+          z1: ((chairZ + (0.255 * side)) + 0.03),
+          slot: 0
+        )
       }
     }
   }
@@ -336,18 +483,59 @@ bindingOverlays [
             id: "desktop"
             label: "Desktop"
             entries [
-              { command: "source.passthrough.pointer", id: "deskPointer", label: "Pointer", sources ["gamepad.leftStick"] }
-              { command: "source.passthrough.scroll", id: "deskScroll", label: "Scroll", sources ["gamepad.rightStick"] }
-              { command: "source.passthrough.button.left", id: "deskClick", label: "Click", sources ["gamepad.buttonSouth"] }
-              { command: "source.passthrough.button.right", id: "deskRightClick", label: "Right click", sources ["gamepad.buttonNorth"] }
-              { command: "source.passthrough.button.middle", id: "deskMiddleClick", label: "Middle click", sources ["gamepad.buttonEast"] }
-              { command: "source.passthrough.button.back", id: "deskBack", label: "Back", sources ["gamepad.leftShoulder"] }
-              { command: "source.passthrough.button.forward", id: "deskForward", label: "Forward", sources ["gamepad.buttonWest"] }
+              {
+                command: "source.passthrough.pointer"
+                id: "deskPointer"
+                label: "Pointer"
+                sources ["gamepad.leftStick"]
+              }
+              {
+                command: "source.passthrough.scroll"
+                id: "deskScroll"
+                label: "Scroll"
+                sources ["gamepad.rightStick"]
+              }
+              {
+                command: "source.passthrough.button.left"
+                id: "deskClick"
+                label: "Click"
+                sources ["gamepad.buttonSouth"]
+              }
+              {
+                command: "source.passthrough.button.right"
+                id: "deskRightClick"
+                label: "Right click"
+                sources ["gamepad.buttonNorth"]
+              }
+              {
+                command: "source.passthrough.button.middle"
+                id: "deskMiddleClick"
+                label: "Middle click"
+                sources ["gamepad.buttonEast"]
+              }
+              {
+                command: "source.passthrough.button.back"
+                id: "deskBack"
+                label: "Back"
+                sources ["gamepad.leftShoulder"]
+              }
+              {
+                command: "source.passthrough.button.forward"
+                id: "deskForward"
+                label: "Forward"
+                sources ["gamepad.buttonWest"]
+              }
               { command: "source.passthrough.arrow.up", id: "deskUp", sources ["gamepad.dpadUp"] }
               { command: "source.passthrough.arrow.down", id: "deskDown", sources ["gamepad.dpadDown"] }
               { command: "source.passthrough.arrow.left", id: "deskLeft", sources ["gamepad.dpadLeft"] }
               { command: "source.passthrough.arrow.right", id: "deskRight", sources ["gamepad.dpadRight"] }
-              { channel: "interact", id: "deskLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
+              {
+                channel: "interact"
+                id: "deskLeave"
+                label: "Leave"
+                scale: 1
+                sources ["keyboard.e", "gamepad.rightShoulder"]
+              }
             ]
           }
         }

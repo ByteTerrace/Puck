@@ -23,14 +23,12 @@ public sealed class EmbedCommandTests {
                   revision: "1"
                 }
               ]
-            }
-
-            sql {
-                CREATE TABLE lore_table (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(lore)
-                );
-                INSERT INTO lore_table (id, v) VALUES ('k1', embed('hello world')), ('k2', embed('farewell'));
+              world {
+                table loreTable space(lore) {
+                  k1 = "hello world"
+                  k2 = "farewell"
+                }
+              }
             }
             """;
 
@@ -117,19 +115,15 @@ public sealed class EmbedCommandTests {
                   revision: "1"
                 }
               ]
-            }
-
-            sql {
-                CREATE TABLE tA (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(spaceA)
-                );
-                CREATE TABLE tB (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(spaceB)
-                );
-                INSERT INTO tA (id, v) VALUES ('k1', embed('keep_me', space: spaceA)), ('k2', embed('drop_me', space: spaceA));
-                INSERT INTO tB (id, v) VALUES ('k1', embed('drop_space', space: spaceB));
+              world {
+                table tA space(spaceA) {
+                  k1 = "keep_me"
+                  k2 = "drop_me"
+                }
+                table tB space(spaceB) {
+                  k1 = "drop_space"
+                }
+              }
             }
             """;
 
@@ -160,14 +154,11 @@ public sealed class EmbedCommandTests {
                   revision: "1"
                 }
               ]
-            }
-
-            sql {
-                CREATE TABLE tA (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(spaceA)
-                );
-                INSERT INTO tA (id, v) VALUES ('k1', embed('keep_me', space: spaceA));
+              world {
+                table tA space(spaceA) {
+                  k1 = "keep_me"
+                }
+              }
             }
             """;
 
@@ -213,17 +204,13 @@ public sealed class EmbedCommandTests {
                   revision: "1"
                 }
               ]
-            }
-
-            sql {
-                CREATE TABLE lore_table (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(lore)
-                );
-                INSERT INTO lore_table (id, v) VALUES
-                    ('k1', embed('fire breathing dragon')),
-                    ('k2', embed('friendly neighborhood spider')),
-                    ('k3', embed('deep blue sea ocean'));
+              world {
+                table loreTable space(lore) {
+                  k1 = "fire breathing dragon"
+                  k2 = "friendly neighborhood spider"
+                  k3 = "deep blue sea ocean"
+                }
+              }
             }
             """;
 
@@ -263,14 +250,11 @@ public sealed class EmbedCommandTests {
                   revision: "1"
                 }
               ]
-            }
-
-            sql {
-                CREATE TABLE lore_table (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(lore)
-                );
-                INSERT INTO lore_table (id, v) VALUES ('k1', embed('magic sword'));
+              world {
+                table loreTable space(lore) {
+                  k1 = "magic sword"
+                }
+              }
             }
             """;
 
@@ -319,14 +303,6 @@ public sealed class EmbedCommandTests {
 
         Assert.Contains(actualString: textExplicit, comparisonType: StringComparison.Ordinal, expectedSubstring: "embed(\"magic sword\")");
 
-        // 5. Decompile with --sql projects to SQL embed('...')
-        var sqlOut = Path.Combine(path1: dir.RootPath, path2: "sql_decompiled.puck");
-        var decompileSql = await SuiteRoot.InvokeAsync(args: ["decompile", worldJsonPath, "-o", sqlOut, "--sql"]);
-
-        Assert.Equal(actual: decompileSql, expected: 0);
-        var textSql = await File.ReadAllTextAsync(sqlOut, cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Contains(actualString: textSql, comparisonType: StringComparison.Ordinal, expectedSubstring: "embed('magic sword')");
     }
     [Fact]
     public async Task DecompileEmbedsPairReconstructsTableSugarAsync() {
@@ -335,7 +311,7 @@ public sealed class EmbedCommandTests {
         var lockPath = Path.Combine(path1: dir.RootPath, path2: "pair.embeddings.json");
         var outPuckPath = Path.Combine(path1: dir.RootPath, path2: "pair_decompiled.puck");
 
-        // Use puck embed on a small sql source to get real vectors for "dragon" and "knight"
+        // Use puck embed on a small source to get real vectors for "dragon" and "knight"
         var tempPuck = Path.Combine(path1: dir.RootPath, path2: "temp.puck");
         var tempSource = """
             schema: "puck.world.definition.v1"
@@ -343,10 +319,12 @@ public sealed class EmbedCommandTests {
               spaces [
                 { name: "lore", dimensions: 8, model: "puck-fixture", revision: "1" }
               ]
-            }
-            sql {
-                CREATE TABLE t (id TEXT PRIMARY KEY, v VECTOR(lore));
-                INSERT INTO t (id, v) VALUES ('1', embed('dragon')), ('2', embed('knight'));
+              world {
+                table t space(lore) {
+                  k1 = "dragon"
+                  k2 = "knight"
+                }
+              }
             }
             """;
 

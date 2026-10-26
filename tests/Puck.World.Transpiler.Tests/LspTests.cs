@@ -208,14 +208,11 @@ public class LspTests {
                   revision: "1"
                 }
               ]
-            }
-
-            sql {
-                CREATE TABLE lore_table (
-                    id TEXT PRIMARY KEY,
-                    v  VECTOR(lore)
-                );
-                INSERT INTO lore_table (id, v) VALUES ('k1', embed('unlocked text'));
+              world {
+                table loreTable space(lore) {
+                  k1 = "unlocked text"
+                }
+              }
             }
             """;
 

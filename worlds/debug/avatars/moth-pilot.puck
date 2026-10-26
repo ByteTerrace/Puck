@@ -603,7 +603,17 @@ prototypes {
         // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face.
         {
           name: "blink"
-          transforms: map(mothBlinkPose, row => { id: row[0], position: map([row[1], row[2], row[3]], (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale), rotation [0, 0, 0, 1] })
+          transforms: map(
+            mothBlinkPose,
+            row => {
+              id: row[0]
+              position: map(
+                [row[1], row[2], row[3]],
+                (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale
+              )
+              rotation [0, 0, 0, 1]
+            }
+          )
         }
       ]
       palette [
@@ -616,14 +626,66 @@ prototypes {
           specular: 0.03
           sheen: 0.25
           paints [
-            { parent: "torso", type: "Box", position [0.068, 0.18, -0.027], scale [0.016, 0.05, 0.07], color: strapGrey }
-            { parent: "torso", type: "Box", position [-0.068, 0.18, -0.027], scale [0.016, 0.05, 0.07], color: strapGrey }
-            { parent: "torso", type: "Box", position [0.045, 0.105, -0.122], rotation [0, 0, -0.2588, 0.9659], scale [0.016, 0.085, 0.1], color: strapGrey }
-            { parent: "torso", type: "Box", position [-0.045, 0.105, -0.122], rotation [0, 0, 0.2588, 0.9659], scale [0.016, 0.085, 0.1], color: strapGrey }
-            { parent: "torso", type: "Box", position [0.045, -0.075, -0.112], rotation [0, 0, 0.2079, 0.9781], scale [0.016, 0.1, 0.1], color: strapGrey }
-            { parent: "torso", type: "Box", position [-0.045, -0.075, -0.112], rotation [0, 0, -0.2079, 0.9781], scale [0.016, 0.1, 0.1], color: strapGrey }
-            { parent: "torso", type: "Box", position [0.19, 0.17, -0.008], scale [0.075, 0.048, 0.08], color: patchLavender }
-            { parent: "torso", type: "Box", position [-0.19, 0.17, -0.008], scale [0.075, 0.048, 0.08], color: patchLavender }
+            {
+              parent: "torso"
+              type: "Box"
+              position [0.068, 0.18, -0.027]
+              scale [0.016, 0.05, 0.07]
+              color: strapGrey
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [-0.068, 0.18, -0.027]
+              scale [0.016, 0.05, 0.07]
+              color: strapGrey
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [0.045, 0.105, -0.122]
+              rotation [0, 0, -0.2588, 0.9659]
+              scale [0.016, 0.085, 0.1]
+              color: strapGrey
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [-0.045, 0.105, -0.122]
+              rotation [0, 0, 0.2588, 0.9659]
+              scale [0.016, 0.085, 0.1]
+              color: strapGrey
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [0.045, -0.075, -0.112]
+              rotation [0, 0, 0.2079, 0.9781]
+              scale [0.016, 0.1, 0.1]
+              color: strapGrey
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [-0.045, -0.075, -0.112]
+              rotation [0, 0, -0.2079, 0.9781]
+              scale [0.016, 0.1, 0.1]
+              color: strapGrey
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [0.19, 0.17, -0.008]
+              scale [0.075, 0.048, 0.08]
+              color: patchLavender
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [-0.19, 0.17, -0.008]
+              scale [0.075, 0.048, 0.08]
+              color: patchLavender
+            }
           ]
         }
         // The trousers, the knee pads' straps painted round each leg above and below its pad, in the shin's frame
@@ -634,10 +696,34 @@ prototypes {
           specular: 0.03
           sheen: 0.2
           paints [
-            { parent: "shin-left", type: "Box", position [0, -0.08, -0.012], scale [0.08, 0.009, 0.09], color: padStrap }
-            { parent: "shin-right", type: "Box", position [0, -0.08, -0.012], scale [0.08, 0.009, 0.09], color: padStrap }
-            { parent: "thigh-left", type: "Box", position [0.012, -0.37, 0], scale [0.08, 0.009, 0.09], color: padStrap }
-            { parent: "thigh-right", type: "Box", position [-0.012, -0.37, 0], scale [0.08, 0.009, 0.09], color: padStrap }
+            {
+              parent: "shin-left"
+              type: "Box"
+              position [0, -0.08, -0.012]
+              scale [0.08, 0.009, 0.09]
+              color: padStrap
+            }
+            {
+              parent: "shin-right"
+              type: "Box"
+              position [0, -0.08, -0.012]
+              scale [0.08, 0.009, 0.09]
+              color: padStrap
+            }
+            {
+              parent: "thigh-left"
+              type: "Box"
+              position [0.012, -0.37, 0]
+              scale [0.08, 0.009, 0.09]
+              color: padStrap
+            }
+            {
+              parent: "thigh-right"
+              type: "Box"
+              position [-0.012, -0.37, 0]
+              scale [0.08, 0.009, 0.09]
+              color: padStrap
+            }
           ]
         }
         {
@@ -675,10 +761,54 @@ prototypes {
           specular: 0.04
           // Where each eye's upper lid and lash meet its white, in the eye's frame.
           paints [
-            { parent: "eye-left", type: "Sweep", curve { a: map([-0.047, 0, 0.027], v => v * pilotHeadScale), b: map([0, 0.066, 0.052], v => v * pilotHeadScale), c: map([0.047, 0.004, 0.027], v => v * pilotHeadScale), radiusStart: 0.0045 * pilotHeadScale, radiusEnd: 0.0045 * pilotHeadScale }, color: "#171210" }
-            { parent: "eye-left", type: "Sweep", curve { a: map([0.04, 0.017, 0.03], v => v * pilotHeadScale), b: map([0.05, 0.023, 0.023], v => v * pilotHeadScale), c: map([0.059, 0.023, 0.016], v => v * pilotHeadScale), radiusStart: 0.0035 * pilotHeadScale, radiusEnd: 0.0035 * pilotHeadScale }, color: "#171210" }
-            { parent: "eye-right", type: "Sweep", curve { a: map([0.047, 0, 0.027], v => v * pilotHeadScale), b: map([0, 0.066, 0.052], v => v * pilotHeadScale), c: map([-0.047, 0.004, 0.027], v => v * pilotHeadScale), radiusStart: 0.0045 * pilotHeadScale, radiusEnd: 0.0045 * pilotHeadScale }, color: "#171210" }
-            { parent: "eye-right", type: "Sweep", curve { a: map([-0.04, 0.017, 0.03], v => v * pilotHeadScale), b: map([-0.05, 0.023, 0.023], v => v * pilotHeadScale), c: map([-0.059, 0.023, 0.016], v => v * pilotHeadScale), radiusStart: 0.0035 * pilotHeadScale, radiusEnd: 0.0035 * pilotHeadScale }, color: "#171210" }
+            {
+              parent: "eye-left"
+              type: "Sweep"
+              curve {
+                a: map([-0.047, 0, 0.027], v => v * pilotHeadScale)
+                b: map([0, 0.066, 0.052], v => v * pilotHeadScale)
+                c: map([0.047, 0.004, 0.027], v => v * pilotHeadScale)
+                radiusStart: 0.0045 * pilotHeadScale
+                radiusEnd: 0.0045 * pilotHeadScale
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-left"
+              type: "Sweep"
+              curve {
+                a: map([0.04, 0.017, 0.03], v => v * pilotHeadScale)
+                b: map([0.05, 0.023, 0.023], v => v * pilotHeadScale)
+                c: map([0.059, 0.023, 0.016], v => v * pilotHeadScale)
+                radiusStart: 0.0035 * pilotHeadScale
+                radiusEnd: 0.0035 * pilotHeadScale
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-right"
+              type: "Sweep"
+              curve {
+                a: map([0.047, 0, 0.027], v => v * pilotHeadScale)
+                b: map([0, 0.066, 0.052], v => v * pilotHeadScale)
+                c: map([-0.047, 0.004, 0.027], v => v * pilotHeadScale)
+                radiusStart: 0.0045 * pilotHeadScale
+                radiusEnd: 0.0045 * pilotHeadScale
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-right"
+              type: "Sweep"
+              curve {
+                a: map([-0.04, 0.017, 0.03], v => v * pilotHeadScale)
+                b: map([-0.05, 0.023, 0.023], v => v * pilotHeadScale)
+                c: map([-0.059, 0.023, 0.016], v => v * pilotHeadScale)
+                radiusStart: 0.0035 * pilotHeadScale
+                radiusEnd: 0.0035 * pilotHeadScale
+              }
+              color: "#171210"
+            }
           ]
         }
         {
@@ -743,8 +873,20 @@ prototypes {
           roughness: 0.7
           specular: 0.04
           paints [
-            { parent: "torso", type: "Box", position [0.068, 0.095, 0.078], scale [0.02, 0.015, 0.04], color: ochreTone }
-            { parent: "torso", type: "Box", position [-0.068, 0.095, 0.078], scale [0.02, 0.015, 0.04], color: ochreTone }
+            {
+              parent: "torso"
+              type: "Box"
+              position [0.068, 0.095, 0.078]
+              scale [0.02, 0.015, 0.04]
+              color: ochreTone
+            }
+            {
+              parent: "torso"
+              type: "Box"
+              position [-0.068, 0.095, 0.078]
+              scale [0.02, 0.015, 0.04]
+              color: ochreTone
+            }
           ]
         }
         // The Humble Gaming Brick's shell: the same atomic-orange acrylic glass as the device in the gallery
@@ -757,8 +899,20 @@ prototypes {
           specular: 0.03
           sheen: 0.25
           paints [
-            { parent: "upperArm-left", type: "Box", position [0.018, 0.02, -0.001], scale [0.075, 0.048, 0.08], color: patchLavender }
-            { parent: "upperArm-right", type: "Box", position [-0.018, 0.02, -0.001], scale [0.075, 0.048, 0.08], color: patchLavender }
+            {
+              parent: "upperArm-left"
+              type: "Box"
+              position [0.018, 0.02, -0.001]
+              scale [0.075, 0.048, 0.08]
+              color: patchLavender
+            }
+            {
+              parent: "upperArm-right"
+              type: "Box"
+              position [-0.018, 0.02, -0.001]
+              scale [0.075, 0.048, 0.08]
+              color: patchLavender
+            }
           ]
         }
         // The brick's opaque parts, after its device: the lens, the keys, buttons, rubber, board, processor, cartridge,
@@ -1244,25 +1398,79 @@ prototypes {
         // Her pace in metres per second, the X every gait curve reads.
         { name: "pace", cadence: 1, signal: "speed", dynamics: "gait-pace", "when" ["always"] }
         // The one stride cycle her feet plant on and every gait driver rides, its length opening with her pace.
-        { name: "stride", cadence: 1, signal: "planarTravel", cadenceBy { driver: "pace", curve: "pilot-stride" }, "when" ["Grounded", "moving"] }
+        {
+          name: "stride"
+          cadence: 1
+          signal: "planarTravel"
+          cadenceBy { driver: "pace", curve: "pilot-stride" }
+          "when" ["Grounded", "moving"]
+        }
         // The stride swings, half their amplitude at a walk and whole at a run.
-        { name: "gait", cadence: 1, signal: "driver.stride", weightBy { driver: "pace", curve: "moth-gait" }, "when" ["Grounded", "moving"] }
+        {
+          name: "gait"
+          cadence: 1
+          signal: "driver.stride"
+          weightBy { driver: "pace", curve: "moth-gait" }
+          "when" ["Grounded", "moving"]
+        }
         // What only a run has: the forward lean and the bent elbows, and at twice the stride's rate, the bob.
-        { name: "run", cadence: 1, signal: "driver.stride", weightBy { driver: "pace", curve: "moth-run" }, "when" ["Grounded", "moving"] }
-        { name: "bob", cadence: 2, signal: "driver.stride", weightBy { driver: "pace", curve: "moth-run" }, "when" ["Grounded", "moving"] }
+        {
+          name: "run"
+          cadence: 1
+          signal: "driver.stride"
+          weightBy { driver: "pace", curve: "moth-run" }
+          "when" ["Grounded", "moving"]
+        }
+        {
+          name: "bob"
+          cadence: 2
+          signal: "driver.stride"
+          weightBy { driver: "pace", curve: "moth-run" }
+          "when" ["Grounded", "moving"]
+        }
         { name: "breath", cadence: 1.7, signal: "time", "when" ["still"] }
         // Twice the travel direction off the facing: a sine of it peaks on the diagonals and vanishes on a pure
         // strafe or backpedal, and half of it, linear, is the direction itself.
-        { name: "heading", cadence: 2, signal: "travelDirection", blendInSeconds: 0.12, blendOutSeconds: 0.3, "when" ["Grounded", "moving"] }
+        {
+          name: "heading"
+          cadence: 2
+          signal: "travelDirection"
+          blendInSeconds: 0.12
+          blendOutSeconds: 0.3
+          "when" ["Grounded", "moving"]
+        }
         { name: "trail", cadence: 1, signal: "turnRate", dynamics: "body-turn", "when" ["always"] }
         { name: "lean", cadence: 1, signal: "lateralAcceleration", dynamics: "body-lean", "when" ["Grounded"] }
         { name: "surge", cadence: 1, signal: "forwardAcceleration", dynamics: "body-lean", "when" ["Grounded"] }
         // Her vertical speed, eased: it poses her in the air, tucked rising and reaching for the ground falling.
-        { name: "air", cadence: 1, signal: "verticalSpeed", dynamics: "body-air", blendInSeconds: 0.06, blendOutSeconds: 0.04, "when" ["Airborne"] }
+        {
+          name: "air"
+          cadence: 1
+          signal: "verticalSpeed"
+          dynamics: "body-air"
+          blendInSeconds: 0.06
+          blendOutSeconds: 0.04
+          "when" ["Airborne"]
+        }
         // The same speed through an underdamped response that lags it: the landing's crouch and spring back up.
-        { name: "land", cadence: 1, signal: "verticalSpeed", dynamics: "body-land", blendInSeconds: 0, blendOutSeconds: 0.08, "when" ["Grounded"] }
+        {
+          name: "land"
+          cadence: 1
+          signal: "verticalSpeed"
+          dynamics: "body-land"
+          blendInSeconds: 0
+          blendOutSeconds: 0.08
+          "when" ["Grounded"]
+        }
         // Her arms come up to hold the handheld while her body's pilotHold cell is set.
-        { name: "hold", cadence: 1, signal: "time", blendInSeconds: 0.2, blendOutSeconds: 0.2, "when" ["state.pilotHold.$body"] }
+        {
+          name: "hold"
+          cadence: 1
+          signal: "time"
+          blendInSeconds: 0.2
+          blendOutSeconds: 0.2
+          "when" ["state.pilotHold.$body"]
+        }
       ]
 
       effectors [

@@ -2,11 +2,11 @@ namespace Puck.Transpiler.Ast;
 
 /// <summary>The one enumeration of a syntax node's children, and the one search for the nodes a source position
 /// stands in. Every reader that walks a parsed tree without rebuilding it — hover, the linter's reference scan, the
-/// embedding and SQL editor services — walks it through here, so a node kind gaining a child is reached by all of
-/// them at once.</summary>
+/// embedding editor services — walks it through here, so a node kind gaining a child is reached by all of them at
+/// once.</summary>
 /// <remarks>A rewrite rebuilds each node it descends through, so it keeps its own typed descent
-/// (<see cref="Rewriting.PuckSyntaxRewriter"/>). A member carrying a sub-grammar as text rather than as a node — an
-/// embedded block's body, a pattern's match, an operand's parsed expression tree — has no children here.</remarks>
+/// (<see cref="Rewriting.PuckSyntaxRewriter"/>). A member carrying a sub-grammar as text rather than as a node — a
+/// pattern's match, an operand's parsed expression tree — has no children here.</remarks>
 public static class SyntaxWalk {
     /// <summary>Returns every syntax node <paramref name="node"/> holds directly, in the order its source writes
     /// them.</summary>
