@@ -1223,7 +1223,7 @@ public static partial class ExpressionSpelling {
                 ));
             }
             if (key is { } spelled) {
-                if (SourceDialect && !spelled.StartsWith(value: '$') && IdentifierSpelling.IsName(text: spelled)) {
+                if (SourceDialect && !Quoted && IdentifierSpelling.IsIdentifier(text: name) && IdentifierSpelling.IsIdentifier(text: spelled)) {
                     into.Append(value: '.').Append(value: spelled);
                     return;
                 }
