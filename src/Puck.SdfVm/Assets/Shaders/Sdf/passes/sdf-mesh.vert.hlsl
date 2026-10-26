@@ -1,6 +1,7 @@
-// The mesh pass's vertex stage. One draw a mesh draw, non-indexed over the draw's index count, pulls its triangles from
-// the mesh region (sdf-mesh.hlsli): the pushed index and the instance index name the draw (sdfMeshRasterDraw), and a
-// vertex id's triangle is its three consecutive indices, which each vertex hands on flat with the draw so the surface
+// The mesh pass's vertex stage. One draw a mesh draw, non-indexed over its level's index count, pulls its triangles from
+// the mesh region (sdf-mesh.hlsli): the pushed index and the instance index name the draw and its level of detail
+// (sdfMeshRasterDraw, sdfMeshRasterLevel), and a vertex id's triangle, counted from the level's first
+// (sdfMeshLevelIndex), is its three consecutive indices, which each vertex hands on flat with the draw so the surface
 // pass resolves that triangle's surface. The projection is ViewProjection's, read from the view in the pass block:
 // reversed-Z with an infinite far plane and the view's surface near distance n as the near plane,
 // clip = (sx (x - ox w), sy (y - oy w), n, w) for a point at camera-space right x, up y and forward distance w, with the
@@ -15,8 +16,9 @@
 MeshRasterVertex VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID) {
     uint draw = sdfMeshRasterDraw(instanceId);
     uint record = sdfMeshRecord(draw);
+    uint k = (vertexId + sdfMeshLevelIndex(record, sdfMeshRasterLevel(instanceId)));
     ViewportData view = worldView();
-    float3 world = sdfMeshWorldPosition(record, vertexId);
+    float3 world = sdfMeshWorldPosition(record, k);
     float3 relative = (world - view.position.xyz);
     float w = dot(relative, view.forward.xyz);
     float scaleX = (1.0 / (view.up.w * view.right.w));
@@ -31,7 +33,7 @@ MeshRasterVertex VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_Instan
     );
     output.clip = sdfMeshClipDistance(record, world);
     output.world = world;
-    output.triangleIndex = (vertexId / 3u);
+    output.triangleIndex = (k / 3u);
     output.draw = draw;
 
     return output;

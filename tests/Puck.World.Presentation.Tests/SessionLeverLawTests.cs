@@ -325,6 +325,10 @@ public sealed class SessionLeverLawTests {
             expected: SdfMeshCullLevel.Off,
             actual: settings.Cull
         );
+        // The detail lever selects the levels of detail by their number the same way.
+        Assert.Equal(expected: SdfMeshDetailLevel.Auto, actual: settings.Detail);
+        sink.Apply(lever: Lever(a: ((double)SdfMeshDetailLevel.Level2), name: WorldSessionLevers.Detail));
+        Assert.Equal(expected: SdfMeshDetailLevel.Level2, actual: settings.Detail);
     }
     [Fact]
     public void TheShippedCompositionRegistersExactlyTheTokensTheVerbsSpeak() {
@@ -334,6 +338,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.Cull,
+            WorldSessionLevers.Detail,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.Rates,

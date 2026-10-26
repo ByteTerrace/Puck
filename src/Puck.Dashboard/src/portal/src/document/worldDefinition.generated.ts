@@ -2621,6 +2621,8 @@ export type StatePoolField = {
  */
 export type StatePoolSeed = {
   slot: number;
+  leftSlot?: number | null;
+  rightSlot?: number | null;
   /**
    * Gets the immutable field overrides.
    */
@@ -12224,7 +12226,6 @@ export type WorldStateRow = {
        */
       visible: boolean;
     };
-    provenance?: string;
   }[];
   /**
    * The row-wide declared lower bound every cell's Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max — a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.
@@ -12238,6 +12239,14 @@ export type WorldStateRow = {
    * The row's own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell — declaring a capacity is declaring table intent. Omitted from the wire when null.
    */
   capacity?: number;
+  /**
+   * Gets the physical slots of exported members in logical order. Null uses contiguous slots.
+   */
+  cellSlots?: number[];
+  /**
+   * Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory and work reservation. Authored rows normally omit it.
+   */
+  reservedCapacity?: number;
   /**
    * What Overflow does with a write TryAdmitWrite finds outside the row's declared envelope, or that overflows raw 64-bit arithmetic.
    */

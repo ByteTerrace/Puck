@@ -8,8 +8,8 @@ public sealed partial class StateArena {
     /// <returns>The hash value.</returns>
     /// <remarks>
     /// The fold reads the logical value of each position rather than the array behind it, so an arena that has
-    /// never written a clock hashes the same as one whose clock was written back to zero. Offsets are a function of
-    /// the catalog and the authored rows alone, so two hosts running the same document and the same writes fold the
+    /// never written a clock hashes the same as one whose clock was written back to zero. Reservations follow
+    /// the catalog, authored rows and admitted growth, so hosts running the same document and writes fold the
     /// same bytes in the same order.
     /// <para>A host-owned row is excluded: it has no columns here, and its facet hashes what it serves.</para>
     /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger
@@ -80,17 +80,19 @@ public sealed partial class StateArena {
         }
 
         foreach (var column in ArenaColumns.All) {
+            if (IsLinkColumn(column: column)) { continue; }
             hash.Add(value: ((ulong)((byte)column)));
 
             switch (ArenaColumns.Space(column: column)) {
                 case ArenaIndexSpace.Cell:
                     if (layout.IsStored) {
-                        for (var position = 0; (position < layout.CellCapacity); position++) {
+                        hash.Add(value: (ulong)layout.CellCapacity);
+                for (var position = 0; (position < HashCellExtent(layout: layout)); position++) {
                             FoldCell(
                                 column: column,
                                 hash: ref hash,
                                 layout: layout,
-                                slot: (layout.CellStart + position)
+                                slot: CellSlotAt(layout: layout, position: position)
                             );
                         }
                     }
@@ -132,6 +134,7 @@ public sealed partial class StateArena {
     }
 
     private void FoldColumn(ref Fnv1aHash hash, ArenaColumn column) {
+        if (IsLinkColumn(column: column)) { return; }
         if (ArenaColumns.Space(column: column) != ArenaIndexSpace.Cell) {
             var size = m_layout.Size(column: column);
 
@@ -171,12 +174,13 @@ public sealed partial class StateArena {
                     continue;
                 }
 
-                for (var position = 0; (position < layout.CellCapacity); position++) {
+                hash.Add(value: (ulong)layout.CellCapacity);
+                for (var position = 0; (position < HashCellExtent(layout: layout)); position++) {
                     FoldCell(
                         column: column,
                         hash: ref hash,
                         layout: layout,
-                        slot: (layout.CellStart + position)
+                        slot: CellSlotAt(layout: layout, position: position)
                     );
                 }
             }
@@ -208,13 +212,6 @@ public sealed partial class StateArena {
                 FoldText(
                     hash: ref hash,
                     text: m_texts?[slot]
-                );
-
-                break;
-            case ArenaColumn.Provenance:
-                FoldText(
-                    hash: ref hash,
-                    text: m_provenance?[slot]
                 );
 
                 break;

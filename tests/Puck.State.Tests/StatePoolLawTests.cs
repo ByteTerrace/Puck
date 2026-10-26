@@ -340,46 +340,13 @@ public sealed class StatePoolLawTests {
         Assert.Equal(expected: before, actual: arena.ComputeHash());
     }
     [Fact]
-    public void ReleasingAnotherSlotPreservesAnInactiveClockRestoredFromAnUndoSnapshot() {
-        StateArena RestoreClockAt(int position) {
-            var arena = Build(section: Section(initial: [new StatePoolSeed(Slot: 0), new StatePoolSeed(Slot: 1), new StatePoolSeed(Slot: 2)]));
-            var fieldRow = arena.Catalog.Pools[0].Fields[0].RowOrdinal;
-            var slot = (arena.Layout[fieldRow].CellStart + position);
-            var entries = new[] {
-                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockEpochTick, Components: null, Index: slot, MemberKey: null, Number: 3L, Observation: null, Text: null, Visibility: null),
-                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockEpochEngineTick, Components: null, Index: slot, MemberKey: null, Number: 5L, Observation: null, Text: null, Visibility: null),
-                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockY0, Components: null, Index: slot, MemberKey: null, Number: 7L, Observation: null, Text: null, Visibility: null),
-                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockV0, Components: null, Index: slot, MemberKey: null, Number: 11L, Observation: null, Text: null, Visibility: null),
-                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockSubstepTicks, Components: null, Index: slot, MemberKey: null, Number: 13L, Observation: null, Text: null, Visibility: null),
-            };
-
-            arena.ConfigureUndo(plans: [new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: [fieldRow])]);
-            var snapshot = new ArenaUndoSnapshot(Groups: [new ArenaUndoGroupSnapshot(Name: "turn", Depth: 1, Rows: [fieldRow], Segments: [new ArenaUndoSegmentSnapshot(Entries: entries, Rewindable: true)], Pending: null)]);
-
-            Assert.True(condition: arena.TryImportUndoSnapshot(reason: out var reason, snapshot: snapshot), userMessage: reason);
-            Assert.True(condition: arena.TryRewindGroup(group: "turn", reason: out reason), userMessage: reason);
-            return arena;
-        }
-
-        var released = RestoreClockAt(position: 2);
-        var releasedHandles = released.SnapshotPool(poolOrdinal: 0);
-
-        Assert.True(condition: released.TryRelease(handle: releasedHandles[1], reason: out var reason), userMessage: reason);
-
-        var control = RestoreClockAt(position: 2);
-        var controlHandles = control.SnapshotPool(poolOrdinal: 0);
-
-        Assert.True(condition: control.TryRelease(handle: controlHandles[0], reason: out reason), userMessage: reason);
-        foreach (var column in new[] {
-            ArenaColumn.ClockSet,
-            ArenaColumn.ClockEpochTick,
-            ArenaColumn.ClockEpochEngineTick,
-            ArenaColumn.ClockY0,
-            ArenaColumn.ClockV0,
-            ArenaColumn.ClockSubstepTicks,
-        }) {
-            Assert.Equal(expected: control.ComputeColumnHash(column: column), actual: released.ComputeColumnHash(column: column));
-        }
+    public void AnUndoSnapshotCannotIntroduceAnUndeclaredClock() {
+        var arena = Build(section: Section(initial: [new StatePoolSeed(Slot: 0)]));
+        var fieldRow = arena.Catalog.Pools[0].Fields[0].RowOrdinal;
+        arena.ConfigureUndo(plans: [new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: [fieldRow])]);
+        var entry = new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockEpochTick, Components: null, Index: arena.Layout[fieldRow].CellStart, MemberKey: null, Number: 3L, Observation: null, Text: null, Visibility: null);
+        var snapshot = new ArenaUndoSnapshot(Groups: [new ArenaUndoGroupSnapshot(Name: "turn", Depth: 1, Rows: [fieldRow], Segments: [new ArenaUndoSegmentSnapshot(Entries: [entry], Rewindable: true)], Pending: null)]);
+        Assert.False(condition: arena.TryImportUndoSnapshot(reason: out _, snapshot: snapshot));
     }
     [Fact]
     public void AdvancingFieldRequiresNumericKindAndPositiveDenominator() {
@@ -406,7 +373,7 @@ public sealed class StatePoolLawTests {
         Assert.False(condition: arena.TryClaim(handle: out _, poolOrdinal: 1, reason: out var genericReason));
         Assert.Contains(actualString: genericReason, expectedSubstring: "TryClaimPair");
         Assert.True(condition: arena.TryClaimPair(handle: out var pair, leftHandle: b, poolOrdinal: 1, reason: out _, rightHandle: a));
-        Assert.Equal(expected: 1, actual: pair.Slot);
+        Assert.Equal(expected: 0, actual: pair.Slot);
         Assert.False(condition: arena.TryClaimPair(handle: out _, leftHandle: a, poolOrdinal: 1, reason: out _, rightHandle: b));
 
         var before = arena.ComputeHash();
@@ -429,7 +396,7 @@ public sealed class StatePoolLawTests {
         var section = new StateSection(
             Records: [new StateRecord(Name: CellName.Parse(candidate: "node")), new StateRecord(Name: CellName.Parse(candidate: "edge"))],
             Pools: [new StatePool(Name: CellName.Parse(candidate: "nodes"), Record: CellName.Parse(candidate: "node"), Capacity: 2)],
-            PairPools: [new StatePairPool(Name: CellName.Parse(candidate: "edges"), Record: CellName.Parse(candidate: "edge"), LeftPool: CellName.Parse(candidate: "nodes"), RightPool: CellName.Parse(candidate: "nodes"), MaxLive: 1, Snapshot: new StatePoolSnapshot(Generations: new long[4], Live: [new StatePoolSeed(Slot: 1)]))]);
+            PairPools: [new StatePairPool(Name: CellName.Parse(candidate: "edges"), Record: CellName.Parse(candidate: "edge"), LeftPool: CellName.Parse(candidate: "nodes"), RightPool: CellName.Parse(candidate: "nodes"), MaxLive: 1, Snapshot: new StatePoolSnapshot(Generations: new long[1], Live: [new StatePoolSeed(Slot: 0, LeftSlot: 0, RightSlot: 1)]))]);
 
         Assert.Throws<InvalidOperationException>(testCode: () => StateCatalog.Compile(section: section));
     }

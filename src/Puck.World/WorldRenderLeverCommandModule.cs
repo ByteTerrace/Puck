@@ -140,6 +140,13 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
     // The world.temporal echo.
     private static string TemporalEcho(WorldRenderSettings settings) =>
         $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
+    // The world.detail echo's name of a level: the token that selects it.
+    private static string DetailName(SdfMeshDetailLevel level) => level switch {
+        SdfMeshDetailLevel.Level0 => "0",
+        SdfMeshDetailLevel.Level1 => "1",
+        SdfMeshDetailLevel.Level2 => "2",
+        _ => "auto",
+    };
     // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
     private static bool? ParseOnOff(ReadOnlySpan<char> token) {
         if (token.Equals(
@@ -433,6 +440,38 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.Cull,
+                    a: ((double)selected),
+                    formatEcho: Echo
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "world.detail",
+            description: "Selects which levels of detail of the baked meshes the raster passes draw, live (no rebuild): world.detail [auto|0|1|2|status]. auto, the default, has each view's mesh pass draw each mesh at the coarsest level whose recorded error projects to at most one display pixel over the nearest point of its box, going back to a finer one only once the level it drew shows more than 1.1 pixels, and each shadow cascade at the coarsest level within one of its texels; the glass pass, and a mesh whose draw no host box bounds, draw the mesh's own triangles. 0, 1 or 2 draws that level everywhere (a mesh's coarsest where it has fewer), so a capture shows what a level changes. world.counters gpu measures what each saves (vertices).",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.detail: {DetailName(level: settings.Detail)}]");
+
+                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                    return Echo();
+                }
+
+                var level = ((args.Count != 1) ? ((SdfMeshDetailLevel?)null) : args[0] switch {
+                    "auto" => SdfMeshDetailLevel.Auto,
+                    "0" => SdfMeshDetailLevel.Level0,
+                    "1" => SdfMeshDetailLevel.Level1,
+                    "2" => SdfMeshDetailLevel.Level2,
+                    _ => ((SdfMeshDetailLevel?)null),
+                });
+
+                if (level is not { } selected) {
+                    return CommandResult.Error(output: $"[world.detail: unknown '{args.Tail(start: 0)}' — auto|0|1|2|status]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Detail,
                     a: ((double)selected),
                     formatEcho: Echo
                 );

@@ -28,6 +28,8 @@ public static partial class WorldSessionLevers {
     public const string CadenceGate = "cadence";
     /// <summary>The raster passes' cull of mesh draws they cannot show (<c>world.cull</c>).</summary>
     public const string Cull = "cull";
+    /// <summary>The levels of detail the raster passes draw (<c>world.detail</c>), a <see cref="SdfMeshDetailLevel"/>.</summary>
+    public const string Detail = "detail";
     /// <summary>The indirect-light tier the irradiance volume traces at (<c>world.indirect</c>).</summary>
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
@@ -101,6 +103,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: Cull,
             setter: lever => settings.Cull = ((SdfMeshCullLevel)((int)lever.A))
+        );
+        sink.Register(
+            name: Detail,
+            setter: lever => settings.Detail = ((SdfMeshDetailLevel)((int)lever.A))
         );
         sink.Register(
             name: Rates,

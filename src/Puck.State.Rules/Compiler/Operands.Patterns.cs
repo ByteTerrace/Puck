@@ -14,15 +14,13 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     /// <param name="attributeOrdinal">The zone's attribute row's catalog ordinal, or <c>-1</c>.</param>
     /// <param name="matchFacet">What this operand answers about its word.</param>
     /// <param name="tokenExpression">The zone's per-token value expression, when the pattern carries one.</param>
-    /// <param name="capacity">The source row's cell capacity, for pricing the walk.</param>
     /// <param name="rowFrom">The live row read, or <see langword="null"/> for a fixed row.</param>
     /// <param name="occurrence">The zero-based occurrence selected by an at/length facet.</param>
-    public PatternOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledPattern pattern, BoardNeighbourQuery? board, int attributeOrdinal, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression, long capacity, LiveRow? rowFrom = null, int occurrence = 0) : base(valueKind: CellKind.Int) {
+    public PatternOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledPattern pattern, BoardNeighbourQuery? board, int attributeOrdinal, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression, LiveRow? rowFrom = null, int occurrence = 0) : base(valueKind: CellKind.Int) {
         ArgumentNullException.ThrowIfNull(argument: pattern);
 
         AttributeOrdinal = attributeOrdinal;
         Board = board;
-        Capacity = capacity;
         Key = key;
         KeyFrom = keyFrom;
         MatchFacet = matchFacet;
@@ -63,8 +61,6 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     /// <summary>Gets the board ray descriptor, for a board source; <see langword="null"/> otherwise. Only its
     /// direction is read (<c>-1</c> meaning every direction).</summary>
     public BoardNeighbourQuery? Board { get; }
-    /// <summary>Gets the source row's cell capacity, for pricing the walk.</summary>
-    public long Capacity { get; }
     /// <summary>Gets the literal board-origin or start-token cell key, or the invalid default.</summary>
     public CellKey Key { get; }
     /// <inheritdoc/>
@@ -358,26 +354,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             return 0;
         }
 
-        if (arena.TryCellSlot(
-            key: key,
-            rowOrdinal: rowOrdinal,
-            slot: out var slot
-        )) {
-            var position = (slot - arena.Layout[rowOrdinal].CellStart);
-            var cursor = position;
-
-            if (
-                arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var held,
-                rowOrdinal: rowOrdinal
-            ) &&
-                (cursor == (position + 1)) &&
-                (held == key)
-            ) {
-                return position;
-            }
-        }
+        if (arena.TryPositionOf(rowOrdinal: rowOrdinal, key: key, position: out var position)) { return position; }
 
         return int.MaxValue;
     }
@@ -423,7 +400,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             return RuleWork.Known(units: ((board.Visits + cells) + (occurrenceSearch ? (ray * ray) : 0L)));
         }
 
-        var capacity = ((long)((RowFrom is { } live) ? live.SelectionCapacity : Capacity));
+        var capacity = ((RowFrom is { } live) ? live.SelectionCapacity(context: context) : context.RowCapacity(rowOrdinal: RowOrdinal));
         var expression = (1L + RuleWorkBudget.ExpressionCost(
             context: context,
             tokens: (TokenExpression ?? [])

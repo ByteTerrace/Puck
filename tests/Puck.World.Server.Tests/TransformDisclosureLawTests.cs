@@ -176,7 +176,8 @@ public sealed class TransformDisclosureLawTests {
         var definition = Table();
         definition = definition with { StateRaw = definition.StateRaw! with {
             World = definition.State.Select(row => row.Name.Value == "rank"
-                ? row with { Visibility = confined ? new StateVisibility(Readers: ["seat1"]) : null }
+                ? row with { Visibility = confined ? new StateVisibility(Readers: ["seat1"]) : null,
+                    Cells = row.Cells!.Select(cell => cell.Key.Value == "a" ? cell with { Visibility = new StateVisibility(Readers: ["seat1"]) } : cell).ToArray() }
                 : row).ToArray(),
         } };
         using var fixture = Fixtures.FreshServer(definition: definition);

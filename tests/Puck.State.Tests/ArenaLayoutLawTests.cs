@@ -304,26 +304,6 @@ public sealed class ArenaLayoutLawTests {
         );
     }
     [Fact]
-    public void EveryColumnClaimsADisjointRangeOfTheChangeSlotSpace() {
-        var (_, arena) = ArenaFixture.Build();
-        var layout = arena.Layout;
-        var next = 0;
-
-        foreach (var column in ArenaColumns.All) {
-            Assert.Equal(
-                expected: next,
-                actual: layout.ChangeBase(column: column)
-            );
-
-            next += layout.Size(column: column);
-        }
-
-        Assert.Equal(
-            expected: layout.ChangeSlotCount,
-            actual: next
-        );
-    }
-    [Fact]
     public void TheSectionsAuthoredValuesSeedTheColumnsWithEveryCounterAtZero() {
         var (catalog, arena) = ArenaFixture.Build();
 

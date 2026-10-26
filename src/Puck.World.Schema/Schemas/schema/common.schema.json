@@ -10057,6 +10057,20 @@
         "slot": {
           "type": "integer"
         },
+        "leftSlot": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "rightSlot": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
         "values": {
           "description": "Gets the immutable field overrides.",
           "type": [

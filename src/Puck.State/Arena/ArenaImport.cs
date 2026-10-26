@@ -36,12 +36,15 @@ public sealed partial class StateArena {
     private bool TryLoadCore(IReadOnlyList<StateRow>? rows, in ArenaTime time, out string reason, bool onlyLoadedBoards) {
         if (!TryValidateLoad(
             admitted: out var admitted,
+            reservation: out var reservation,
             reason: out reason,
             rows: rows,
             visibilityBytes: out var visibilityBytes
         )) {
             return false;
         }
+
+        if (reservation is not null) { ApplyReservation(next: reservation); }
 
         // Admission proved the complete replacement. A later row may release visibility storage used by keys
         // imported into an earlier row, so intern against the final payload rather than a transient prefix.
@@ -97,12 +100,14 @@ public sealed partial class StateArena {
     /// validate again.</remarks>
     public bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out string reason) => TryValidateLoad(
         admitted: out _,
+        reservation: out _,
         reason: out reason,
         rows: rows,
         visibilityBytes: out _
     );
 
-    private bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out List<(int RowOrdinal, StateRow Row)> admitted, out long visibilityBytes, out string reason) {
+    private bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out List<(int RowOrdinal, StateRow Row)> admitted, out ArenaLayout? reservation, out long visibilityBytes, out string reason) {
+        reservation = null;
         admitted = m_importRows;
         admitted.Clear();
         var pending = m_importKeys;
@@ -138,16 +143,30 @@ public sealed partial class StateArena {
             admitted.Add(item: (rowOrdinal, row!));
         }
 
+        var proposed = m_layout;
+        try {
+            foreach (var (ordinal, imported) in admitted) {
+                var required = Math.Max(val1: imported.Cells?.Count ?? 0, val2: imported.ReservedCapacity ?? 0);
+                if (proposed.HasColumn(row: ordinal, column: ArenaColumn.CellCapacity) && (required > proposed[ordinal].CellCapacity)) {
+                    var capacity = imported.ReservedCapacity ?? GrowthCapacity(rowOrdinal: ordinal, required: required);
+                    proposed = proposed.WithCellCapacity(rowOrdinal: ordinal, capacity: capacity);
+                }
+            }
+        } catch (InvalidOperationException exception) { reason = exception.Message; return false; }
         var keyBytes = m_keys.Bytes;
 
         foreach (var name in pending) {
             keyBytes += CellKeyTable.EntryBytes(name: CellName.Parse(candidate: name));
         }
-        if ((((m_layout.Bytes + m_declarationVisibilityBytes) + visibilityBytes) + keyBytes) > ArenaCapacity.MaxBytes) {
+        if ((((proposed.Bytes + m_declarationVisibilityBytes) + visibilityBytes) + keyBytes) > ArenaCapacity.MaxBytes) {
             reason = $"the imported rows bring the arena's retained keys or live visibility payload past the {ArenaCapacity.MaxBytes}-byte ceiling";
             return false;
         }
 
+        if (!ReferenceEquals(objA: proposed, objB: m_layout)) {
+            if (!AdmitReservation(next: proposed, additionalBytes: (keyBytes - m_keys.Bytes) + (visibilityBytes - m_visibilityBytes), reason: out reason)) { return false; }
+            reservation = proposed;
+        }
         reason = string.Empty;
 
         return true;
@@ -247,14 +266,14 @@ public sealed partial class StateArena {
             index: rowOrdinal,
             value: 0L
         );
-        if (IsMaterialized(column: ArenaColumn.DrawCursor)) {
+        if (IsMaterialized(column: ArenaColumn.DrawCursor, row: rowOrdinal)) {
             WriteNumber(
                 column: ArenaColumn.DrawCursor,
                 index: rowOrdinal,
                 value: 0L
             );
         }
-        if (IsMaterialized(column: ArenaColumn.PhaseSequence)) {
+        if (IsMaterialized(column: ArenaColumn.PhaseSequence, row: rowOrdinal)) {
             WriteNumber(
                 column: ArenaColumn.PhaseSequence,
                 index: rowOrdinal,
@@ -263,7 +282,7 @@ public sealed partial class StateArena {
         }
         if (
             (layout.MaskWordStart >= 0) &&
-            IsMaterialized(column: ArenaColumn.DrawnMaskWord)
+            IsMaterialized(column: ArenaColumn.DrawnMaskWord, row: rowOrdinal)
         ) {
             for (var word = 0; (word < (layout.MaskCount * 4)); word++) {
                 WriteNumber(
@@ -356,13 +375,6 @@ public sealed partial class StateArena {
                 time: in time
             );
         }
-        if (cell.Provenance is { } provenance) {
-            WriteReference(
-                column: ArenaColumn.Provenance,
-                index: slot,
-                value: provenance
-            );
-        }
         if (cell.Visibility is { } visibility) {
             _ = StateVisibilityStorage.TryNormalize(
                 bytes: out _,
@@ -406,7 +418,7 @@ public sealed partial class StateArena {
             }
 
             var slot = (layout.CellStart + ((!m_catalog.IsPoolRow(rowOrdinal: rowOrdinal) && (layout.Shape is (RowShape.Slot or RowShape.Keyed or RowShape.Ordered)))
-                ? members
+                ? (row.CellSlots?[members] ?? members)
                 : position
             ));
 
@@ -436,6 +448,7 @@ public sealed partial class StateArena {
                 index: rowOrdinal,
                 value: members
             );
+            InitializeMemberLinks(rowOrdinal: rowOrdinal, count: members, slots: row.CellSlots);
             Reindex(
                 layout: layout,
                 rowOrdinal: rowOrdinal
@@ -645,6 +658,15 @@ public sealed partial class StateArena {
         var descriptor = m_catalog.Descriptors[rowOrdinal];
         ref readonly var layout = ref m_layout[rowOrdinal];
         var cells = (row.Cells ?? []);
+        var slotCapacity = Math.Max(layout.CellCapacity, row.ReservedCapacity ?? cells.Count);
+        if (row.CellSlots is { } slots && (!UsesLinks(layout: layout) || slots.Count != cells.Count || slots.Distinct().Count() != slots.Count || slots.Any(slot => slot < 0 || slot >= slotCapacity))) {
+            reason = $"row '{row.Name.Value}' carries invalid member slots";
+            return false;
+        }
+        if (row.ReservedCapacity is { } reserved && ((row.Capacity is not null) || (reserved < cells.Count) || (reserved > row.CellCeiling) || !layout.HasColumn(column: ArenaColumn.CellCapacity))) {
+            reason = $"row '{row.Name.Value}' carries an invalid runtime cell reservation";
+            return false;
+        }
 
         if (!StateVisibilityStorage.TryMeasure(
             bytes: out _,
@@ -672,6 +694,13 @@ public sealed partial class StateArena {
         )) {
             return false;
         }
+        foreach (var column in ArenaColumns.All) {
+            if (IsLinkColumn(column: column)) { continue; }
+            if (((ArenaLayout.ColumnsOf(row: row) & (1UL << (int)column)) != 0UL) && !m_layout.HasColumn(row: rowOrdinal, column: column)) {
+                reason = $"row '{row.Name.Value}' declares no '{column}' column; changing its traits requires a relayout";
+                return false;
+            }
+        }
         if (!TryAdmitRowState(
             layout: layout,
             reason: out reason,
@@ -692,7 +721,7 @@ public sealed partial class StateArena {
 
             return true;
         }
-        if (cells.Count > layout.CellCapacity) {
+        if (cells.Count > (layout.HasColumn(column: ArenaColumn.CellCapacity) ? row.CellCeiling : layout.CellCapacity)) {
             reason = $"row '{row.Name.Value}' holds {layout.CellCapacity} cells, so an imported row of {cells.Count} does not fit";
 
             return false;
@@ -755,11 +784,7 @@ public sealed partial class StateArena {
             )) {
                 return false;
             }
-            if ((cell.Provenance?.Length ?? 0) > StateCapacity.MaxProvenanceLength) {
-                reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' carries a provenance of {cell.Provenance!.Length} characters, past the {StateCapacity.MaxProvenanceLength}-character limit";
 
-                return false;
-            }
             if (!StateVisibilityStorage.TryMeasure(
                 bytes: out var cellVisibilityBytes,
                 reason: out var visibilityReason,

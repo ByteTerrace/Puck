@@ -129,13 +129,18 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
 - **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
-  applied in `SdfWorldPassRecorder.RecordMeshDraws`): a view's frustum, a
+  applied in `SdfWorldPassRecorder.Choose`): a view's frustum, a
   cascade's light box and the receivers it shadows. A box is the mesh's
   position bounds through the draw's matrix and carry, so a draw whose vertex
   stage moves vertices any other way (members' slots, a displacement) must have
   no box (`SdfMeshBox.TryOf` returns false) or it vanishes while visible. A
   missing object that `world.cull off` brings back is the cull's;
-  `gpu.vertices` in `world.counters gpu` counts what each pass draws.
+  `gpu.vertices` in `world.counters gpu` counts what each pass draws. The same
+  box chooses each kept draw's level of detail (`SdfMeshDetail`): the view's by
+  its error in display pixels over the box's nearest depth, with the 1.1-pixel
+  band kept per draw in the recorder, a cascade's by its texel. A draw with no
+  box draws its merged mesh, so a skinned body never coarsens. A shape that
+  changes when `world.detail 0` is set is the level's.
 - **The mesh pass also culls by occlusion** (`SdfMeshOcclusion`,
   `passes/sdf-mesh-occlusion.comp.hlsl`, the default `world.cull occlusion`):
   phase one draws the previous frame's visible set through a counted indirect
@@ -432,6 +437,22 @@ wrong. The contracts that bite most often:
   `SdfMeshPathBake.Land`): a flat face's interior vertices go and every outline
   vertex stays, so no pixel changes. A change that moves or renormals a vertex
   there, or drops an outline vertex, does change pixels.
+- **A landed mesh carries two coarser levels** (`SdfMeshCollapse`, after the
+  merge in `Land`; `SdfMesh.Levels`): half-edge collapses over the mesh's own
+  vertices, each with its measured error. The region lays a level's indices and
+  materials after the merged ones', so its triangles are numbered after them. A
+  draw pushes its level above its index (`SdfKernelInterfaces.MeshLevelShift`,
+  in a counted indirect draw's identity too), its record holds each level's
+  first triangle (`SdfMeshRecord.LevelTriangleWord`), and both raster vertex
+  stages add it to the vertex id (`sdfMeshLevelIndex`). Never pass the level as
+  a first vertex: Direct3D 12's `SV_VertexID` counts from zero whatever the
+  draw's first vertex, so the draw fetches the merged mesh's first triangles and
+  objects go missing. The surface pass reads the triangle the pixel names with
+  no level of its own. Everything that reads `SdfMesh.Indices` (the
+  irradiance trace, the audit, the diagnostics' nearest query) reads the merged
+  mesh, level zero. Each pass's choice is `SdfMeshDetail` beside the box cull, in
+  `SdfWorldPassRecorder.Choose`; `world.detail 0|1|2` forces one level
+  everywhere, and `world.detail auto` restores the choice.
 - **A field diagnostic is a bake lattice, never a pixel-kernel walk.**
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.

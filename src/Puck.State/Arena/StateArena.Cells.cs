@@ -98,15 +98,15 @@ public sealed partial class StateArena {
             layout: out var layout,
             rowOrdinal: rowOrdinal
         ) &&
-            (((uint)position) < ((uint)layout.CellCapacity)) &&
+            (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
             Bit(
-            index: (layout.CellStart + position),
+            index: CellSlotAt(layout: layout, position: position),
             words: m_presence
         )
         ) {
             value = ValueAt(
                 layout: layout,
-                slot: (layout.CellStart + position)
+                slot: CellSlotAt(layout: layout, position: position)
             );
 
             return true;
@@ -133,11 +133,16 @@ public sealed partial class StateArena {
         ref readonly var layout = ref m_layout[rowOrdinal];
         var extent = (((layout.Shape is RowShape.Keyed or RowShape.Ordered) && !m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))
             ? (int)m_memberCounts[rowOrdinal] : layout.CellCapacity);
+        if (UsesLinks(layout: layout)) {
+            if ((cursor < 0) || (cursor >= extent)) { cursor = extent; return false; }
+            key = KeyAtSlot(layout: layout, slot: CellSlotAt(layout: layout, position: cursor++));
+            return key.IsValid;
+        }
         var position = Math.Max(val1: 0, val2: cursor);
         var end = (layout.CellStart + extent);
 
         while (position < extent) {
-            var slot = (layout.CellStart + position);
+            var slot = CellSlotAt(layout: layout, position: position);
             var wordIndex = (slot >> 6);
             var word = m_presence[wordIndex] & (ulong.MaxValue << (slot & 63));
 
@@ -208,7 +213,7 @@ public sealed partial class StateArena {
                 ? 1
                 : m_memberCounts[rowOrdinal]
             ))) &&
-                (m_memberKeys[(layout.CellStart + position)] is >= 0 and var ordinal)
+                (m_memberKeys[CellSlotAt(layout: layout, position: position)] is >= 0 and var ordinal)
             ) {
                 key = m_keys.KeyAt(ordinal: ordinal);
                 return true;
@@ -217,9 +222,9 @@ public sealed partial class StateArena {
             // addresses nothing, exactly as an absent keyed member does.
             if (
                 (layout.Shape == RowShape.Lattice) &&
-                (((uint)position) < ((uint)layout.CellCapacity)) &&
+                (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
                 Bit(
-                index: (layout.CellStart + position),
+                index: CellSlotAt(layout: layout, position: position),
                 words: m_presence
             ) &&
                 CellName.TryParse(
@@ -310,7 +315,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        slot = (layout.CellStart + position);
+        slot = CellSlotAt(layout: layout, position: position);
         if (ordinal >= 0) {
             resolved[ordinal] = slot;
         }

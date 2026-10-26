@@ -81,7 +81,7 @@ public sealed class WorldStateDomainLawTests {
             actual: linked.CellCeiling
         );
         Assert.Equal(
-            expected: StateCapacity.DefaultCellRoom,
+            expected: StateCapacity.MaxCellsPerRow,
             actual: unauthored.CellCeiling
         );
         Assert.Equal(
