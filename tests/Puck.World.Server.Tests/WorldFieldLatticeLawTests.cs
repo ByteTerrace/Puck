@@ -13,6 +13,27 @@ namespace Puck.World.Server.Tests;
 /// <see cref="WorldPopulation"/>/<see cref="WorldServer"/> — the kernel's own reaction, paint, checkpoint, and
 /// read-back laws live in <c>tests/Puck.Physics.Tests/FieldLatticeLawTests.cs</c>, which needs no server.</summary>
 public sealed class WorldFieldLatticeLawTests {
+    [Fact]
+    public void NativeFieldDeliveriesRecheckTheirLiveRecipientPolicy() {
+        var definition = DrawLatticeDefinition();
+        definition = definition.WithWorldState(rows: [
+            definition.AuthoredState[0] with { Visibility = new StateVisibility(ReadersFrom: "readers") },
+            new WorldStateRow(CellName.Parse("readers"), CellKind.Text, Domain: StateDomain.Keys.Instance,
+                Cells: [new StateCell(CellName.Parse("allowed"), CellValue.Text("seat1"))])
+        ]);
+        using var fixture = Fixtures.FreshServer(definition);
+        ReadOnlyMemory<FieldCellDelta> changes = new FieldCellDelta[] { new(Cell: 0, Field: 0, Raw: 123) };
+        var first = Principal.Seat(0);
+        var second = Principal.Seat(1);
+        Assert.Single(WorldStateChangeDisclosure.Filter(fixture.Server, first, changes, rows: true).ToArray());
+        Assert.Empty(WorldStateChangeDisclosure.Filter(fixture.Server, second, changes, rows: true).ToArray());
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "readers", "allowed", 0,
+            WorldDocumentWriteKind.Set, Text: "seat2"));
+        fixture.Step();
+        Assert.Empty(WorldStateChangeDisclosure.Filter(fixture.Server, first, changes, rows: true).ToArray());
+        Assert.Single(WorldStateChangeDisclosure.Filter(fixture.Server, second, changes, rows: true).ToArray());
+    }
+
     private static WorldDefinition DrawLatticeDefinition(long cursor = 0L) {
         var definition = Fixtures.BuildDocument();
 

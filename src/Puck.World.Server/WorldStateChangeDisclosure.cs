@@ -12,7 +12,14 @@ public static class WorldStateChangeDisclosure {
         var result = new List<FieldCellDelta>();
         var changed = new HashSet<int>();
         foreach (var delta in changes.Span) {
-            if (delta.Row < 0) { result.Add(delta); }
+            if (delta.Row < 0) {
+                var fields = server.Population.Fields?.Input.Fields;
+                if (fields is null || (uint)delta.Field >= (uint)fields.Count || delta.Cell < 0) { continue; }
+                if (arena.Catalog.TryResolve(StateLane.Document, fields[delta.Field].Name, out var row) &&
+                    !WorldStateDisclosure.CanRead(server.Configuration, arena, arena.Rows[row.Ordinal],
+                        CellName.Parse(IndexKeyCache.Get(delta.Cell)), recipient)) { continue; }
+                result.Add(delta);
+            }
             else { changed.Add(delta.Row); }
         }
         if (!rows) { return result.ToArray(); }
