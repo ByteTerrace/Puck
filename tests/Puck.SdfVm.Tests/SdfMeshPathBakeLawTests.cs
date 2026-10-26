@@ -37,15 +37,16 @@ public sealed partial class SdfMeshPathBakeLawTests {
     });
 
     [Fact]
-    public void AStaticCopyBakesAsOneUnionMeshKeepingItsSmallShapeAtItsOwnResolution() {
+    public void AStaticCopyBakesItsUnionKeepingItsSmallShapeAtItsOwnResolution() {
         var (bake, frame) = Baked.Value;
 
         // The run of two shapes is one group, the lone block another.
         Assert.Contains(expectedSubstring: "groups=2 meshes=2", actualString: bake.Describe());
 
         var meshes = bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
-        var copy = Assert.Single(collection: meshes, predicate: static mesh => mesh.Positions.ToArray().Any(predicate: static point => (MathF.Abs(x: point.X) < 1f)));
-        var positions = copy.Positions.ToArray();
+        var copies = meshes.Where(static mesh => mesh.Positions.ToArray().Any(static point => MathF.Abs(point.X) < 1f)).ToArray();
+        Assert.NotEmpty(copies);
+        var positions = copies.SelectMany(static mesh => mesh.Positions.ToArray()).ToArray();
 
         // The copy's mesh is the union's surface: no vertex off it, and none on the plate's face under the block, where
         // two meshes once fought over one face.
@@ -74,7 +75,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         Drive(bake: bake, frame: frame, materials: materials, shapes: plates);
 
-        var positions = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray();
+        var positions = bake.Dress(frame: frame).MeshDraws.SelectMany(static draw => draw.Mesh.Positions.ToArray()).ToArray();
 
         foreach (var plate in plates) {
             var own = positions.Count(predicate: point => (MathF.Abs(x: Field(shape: plate, point: point)) < 0.001f));

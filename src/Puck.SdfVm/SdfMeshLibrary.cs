@@ -175,6 +175,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
     // list reaches keeps its id. The geometry's equality makes the two lists the same length.
     private static SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {
+        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(mesh.Chunks.Select(chunk => Renumber(chunk, from, to)).ToArray()); }
         var levels = new SdfMeshLevel[mesh.Levels.Count];
 
         for (var level = 0; (level < levels.Length); level++) {

@@ -135,6 +135,15 @@ the sums of its own triangles' distances, and a frame held for a settled capture
 chooses without the previous frame's level, so its still owes nothing to earlier
 frames.
 
+Large static unions now partition their contour triangles into spatial chunks before
+the planar merge and collapse (`SdfMeshChunks`). A triangle stays whole in its
+centroid's bin; the chunk's box encloses the whole surface it draws. Every chunk
+keeps every vertex on its open boundary during merging and locks it during collapse,
+so adjacent chunks keep identical seam edges at independently chosen levels, without
+a stitch or a T-junction. The existing pixel and texel rules choose each chunk's
+level. The store keeps the pieces; whole-group queries read their combined merged
+surface, and the irradiance trace reads the pieces' merged surfaces.
+
 The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
 `CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.

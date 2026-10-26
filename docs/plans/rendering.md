@@ -7585,12 +7585,65 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    - a shadow cascade takes the coarsest level within one of its texels;
    - the irradiance trace reads the merged level.
 
-   A draw's level is its whole mesh's, so a mesh whose box holds the camera
-   (the hall's shell and floors) draws its merged triangles in the view however
-   far most of it lies; chunking a union larger than one chunk, or clusters
-   with their own boxes and errors, would let its far parts coarsen. The
-   bake's contour, store and identity belong to the bake lane; the selector is
-   a draw-time choice beside P20-1's box.
+   - *Static-union chunks, landed:* `SdfMeshChunks` bins contour triangles by
+     centroid into 8 m pieces before the planar merge and collapse. Triangles
+     stay whole. Both operations retain every open edge and its collinear
+     vertices, so neighbouring chunks meet edge for edge at any pair of levels.
+     Each piece has its own box and errors and uses the same selector; only
+     the piece containing the camera must stay at level zero. The store keeps
+     the pieces; their joined merged surface remains the whole-group query and
+     irradiance input, without another GPU allocation. Glass skips the collapse
+     because it draws only level zero.
+
+     The brief's `0ef13172a` world with chunks, Direct3D 12, 1280×900, high,
+     cadence and rates off, `world.counters gpu`
+     read twice after each pose, primary `world` view only (the Step 2 table
+     also counted nested views):
+
+     | View | Mesh pass, detail 0 → auto | Near cascade | Far cascade |
+     |---|---:|---:|---:|
+     | Lobby | 4.528 → 0.895 M | 17.803 → 2.028 M | 22.928 → 2.145 M |
+     | Level 1 aisle | 8.169 → 1.435 M | 14.102 → 1.792 M | 18.444 → 1.904 M |
+     | Outdoors, facing the hall | 5.540 → 1.303 M | 6.211 → 0.946 M | 27.875 → 2.448 M |
+
+     `world.gpu-timing`, mesh/near/far in ms, detail 0 → auto: lobby
+     2.515/8.286/10.249 → 0.514/1.195/0.747; aisle
+     4.663/7.254/9.009 → 4.391/4.370/3.701; outdoors
+     2.768/2.610/11.944 → 2.478/1.402/4.203. The shared machine was heavily
+     loaded: locked-step `host.frames` averages were 90–99 ms in either mode,
+     simulation 75–86 ms, so these timings do not qualify the frame-rate floor.
+     The 120-frame walking captures average 163.49 ms auto and 140.60 ms at
+     level zero, including capture cost (produce 81.52/58.29 ms, simulate
+     81.46/81.83 ms).
+
+     The main cold bake took 778.965 s under that load, with 35.569 M merged
+     triangles and 4.728/2.919 M at levels 1/2. Its region uses 1.219 GB
+     (Step 2: 1.21 GB); the 1,406 stored meshes use 1.117 GB against the
+     unchunked set's 1.108 GB, 0.85% more. Settled lobby/aisle/outdoor captures
+     differ from level zero in 25,525/18,981/29,031 pixels, only 369/494/37
+     by more than 16 codes. Matching 120-frame presented bursts over the same
+     3 m lobby walk show no chunk seam or distinct switch; their largest
+     difference is 508 pixels over 16 codes out of 1,152,000.
+     `puck mesh audit --group hall` of the same 27 groups finds the same
+     117 open edges, 6 folds and 291 flipped faces before and after, with no
+     non-manifold edges or uncovered crossings; the retained seam vertices
+     add thin triangles (97,326 → 125,084 slivers).
+
+     Conservative triangle-box distance bounds avoid exact sample measurements
+     that cannot win, and the old fan's coordinates are read once per proposal.
+     On the same unchunked 1,406 meshes, collapse CPU time falls from 215.734
+     to 206.094 s (4.5%); every level's indices, materials and recorded error
+     remain byte-identical. The three refusal checks still measure every
+     candidate that could change their result.
+
+     After merging `lead/catch-up`, the windowed Vulkan debug world also bakes
+     and renders: its larger 4,350-group world settles in 467.581 s, uses
+     1.388 GB of mesh region, and the lobby's mesh/near/far counts fall from
+     4.551/17.846/23.991 M at level zero to 0.890/2.012/2.201 M automatically.
+     GPU times are 1.250/4.221/5.152 → 1.381/2.404/2.088 ms. The 120-frame
+     averages are 50.49 → 52.40 ms (simulate 43.66 → 44.52, produce
+     6.65 → 7.63); settled captures show continuous floors and ceilings.
+     The frame-rate floor remains unqualified in both modes.
 4. **Residency.** Today every mesh of a world is resident, the debug world's
    at the region's 2 GiB ceiling. Two shapes keep it bounded without stalls:
    distance rings with hysteresis (resident within R + h of any view's camera,

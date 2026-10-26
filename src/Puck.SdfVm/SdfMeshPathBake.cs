@@ -333,7 +333,10 @@ public sealed partial class SdfMeshPathBake {
                         ? (Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
                         : Matrix4x4.Identity);
 
-                    m_draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic, Glass = group.Glass });
+                    for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
+                        var part = (mesh.Chunks.Count == 0 ? mesh : mesh.Chunks[piece]);
+                        m_draws.Add(item: new SdfMeshDraw(Identity: (mesh.Chunks.Count == 0 ? group : part), Material: 0, Mesh: part, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic, Glass = group.Glass });
+                    }
                 }
                 // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
                 SdfSlotClip.Apply(
@@ -1448,7 +1451,10 @@ public sealed partial class SdfMeshPathBake {
         if (mesh is not null) {
             var contoured = mesh.TriangleCount;
 
-            mesh = SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh) with { BakeCell = group.DiagnosticCell });
+            mesh = mesh with { BakeCell = group.DiagnosticCell };
+            mesh = (!group.Dynamic && !group.Glass && (group.Instances > 1))
+                ? SdfMeshChunks.Bake(mesh)
+                : (group.Glass ? SdfMeshPlanarMerge.Merge(mesh) : SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh)));
             merged = (contoured - mesh.TriangleCount);
             Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
@@ -1510,9 +1516,10 @@ public sealed partial class SdfMeshPathBake {
         var skinned = m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
         // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its
         // coarsest where it has fewer).
-        var levelled = m_groups.Count(predicate: static group => (group.Mesh is { Levels.Count: > 0 }));
-        var first = m_groups.Sum(selector: static group => ((group.Mesh is { } mesh) ? (long)SdfMeshRegion.LevelOf(level: 1, mesh: mesh).TriangleCount : 0L));
-        var second = m_groups.Sum(selector: static group => ((group.Mesh is { } mesh) ? (long)SdfMeshRegion.LevelOf(level: 2, mesh: mesh).TriangleCount : 0L));
+        var pieces = m_groups.Where(static group => group.Mesh is not null).SelectMany(static group => group.Mesh!.Chunks.Count == 0 ? (IReadOnlyList<SdfMesh>)[group.Mesh!] : group.Mesh.Chunks).ToArray();
+        var levelled = pieces.Count(static mesh => mesh.Levels.Count > 0);
+        var first = pieces.Sum(static mesh => (long)SdfMeshRegion.LevelOf(level: 1, mesh: mesh).TriangleCount);
+        var second = pieces.Sum(static mesh => (long)SdfMeshRegion.LevelOf(level: 2, mesh: mesh).TriangleCount);
 
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));

@@ -109,6 +109,13 @@ laws exercise that boundary.
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
   serial contour of about a million samples is the bake's long pole on the
   debug world, so unions take each frame's first lattices.
+- **Large static unions draw in chunks.** `SdfMeshChunks` partitions the finished contour's triangles by their
+  centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
+  triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
+  edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent concatenates their merged
+  surfaces for whole-group queries, and never enters the GPU region. The store writes only the chunks and reconstructs
+  that query view on load. Dynamic groups and glass stay whole; glass skips collapse because its pass always draws level
+  zero. The existing per-draw box cull and detail selector apply to each chunk without shader changes.
 - **A glass instance is a group of its own** (`SdfMeshBakeGroup.Glass`, from
   `SdfProgram.IsGlassRange`): it never joins a static run and no instance joins
   it, whatever either declares, and a dynamic group is glass only while every
@@ -326,8 +333,12 @@ laws exercise that boundary.
   carries the largest such distance it inherited, so a collapse cannot cut a
   triangle through a thin rod the samples straddle. On the debug world's stored
   set it keeps 11% of the triangles at the first level and 6% at the second, for
-  9% more stored and region bytes and about 208 s of CPU over the whole set,
-  which `Land`'s tasks spread across cores. The done line counts `levelled=` meshes and
+  9% more stored and region bytes. Conservative triangle-box distance bounds
+  skip exact measurements that cannot improve the result, and the old fan's
+  coordinates are cached per proposal: the same 1,406 meshes take 206.1 CPU
+  seconds instead of 215.7 with identical indices, materials and recorded errors,
+  spread across `Land`'s tasks. Glass skips collapse because its pass uses only
+  level zero. The done line counts `levelled=` pieces and
   the triangles every mesh draws at `level1=` and `level2=`;
   `SdfMeshCollapseLawTests` measures each level's contract by brute force.
 

@@ -35,6 +35,8 @@ public sealed class SdfMeshStore {
 
     // "PUCKMSH4": counts, the contour cell, then the levels' count. Retired cache entries are derived again.
     private const ulong Magic = 0x3448534D4B435550ul;
+    // A chunked entry holds only its pieces, each in the ordinary checked mesh format.
+    private const ulong ChunkMagic = 0x3548534D4B435550ul;
     // The magic, the key, seven counts (vertices, normals, indices, triangle materials, the group's materials, members and
     // vertex members), the contour cell and the levels' count.
     private const int HeaderBytes = (sizeof(ulong) + 16 + (7 * sizeof(int)) + (3 * sizeof(float)) + sizeof(int));
@@ -395,6 +397,22 @@ public sealed class SdfMeshStore {
     }
     private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
     private static byte[] Encode(UInt128 key, SdfMesh mesh, int[] materials) {
+        if (mesh.Chunks.Count != 0) {
+            var parts = mesh.Chunks.Select(chunk => Encode(key, chunk, materials)).ToArray();
+            var container = new byte[28 + parts.Sum(static part => 4 + part.Length) + ChecksumBytes];
+            BinaryPrimitives.WriteUInt64LittleEndian(container, ChunkMagic);
+            BinaryPrimitives.WriteUInt128LittleEndian(container.AsSpan(8), key);
+            BinaryPrimitives.WriteInt32LittleEndian(container.AsSpan(24), parts.Length);
+            var cursor = 28;
+            foreach (var part in parts) {
+                BinaryPrimitives.WriteInt32LittleEndian(container.AsSpan(cursor), part.Length);
+                cursor += 4;
+                part.CopyTo(container, cursor);
+                cursor += part.Length;
+            }
+            BinaryPrimitives.WriteUInt128LittleEndian(container.AsSpan(cursor), XxHash128.HashToUInt128(container.AsSpan(0, cursor)));
+            return container;
+        }
         var positions = MemoryMarshal.AsBytes(span: mesh.Positions.Span);
         var normals = MemoryMarshal.AsBytes(span: mesh.Normals.Span);
         var indices = MemoryMarshal.AsBytes(span: mesh.Indices.Span);
@@ -466,6 +484,36 @@ public sealed class SdfMeshStore {
     }
     // An entry's mesh and its group's materials, or why its bytes are no sound entry for the key.
     private static bool TryDecode(byte[] bytes, UInt128 key, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: false)] out string? refusal) {
+        if ((bytes.Length >= 28 + ChecksumBytes) && (BinaryPrimitives.ReadUInt64LittleEndian(bytes) == ChunkMagic)) {
+            mesh = null;
+            materials = [];
+            refusal = "holds invalid chunks";
+            var end = bytes.Length - ChecksumBytes;
+            if ((BinaryPrimitives.ReadUInt128LittleEndian(bytes.AsSpan(8)) != key) ||
+                (XxHash128.HashToUInt128(bytes.AsSpan(0, end)) != BinaryPrimitives.ReadUInt128LittleEndian(bytes.AsSpan(end)))) { return false; }
+            var count = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(24));
+            if ((count < 1) || (count > (end - 28) / (HeaderBytes + ChecksumBytes + 4))) { return false; }
+            var chunks = new SdfMesh[count];
+            var cursor = 28;
+            for (var index = 0; index < count; index++) {
+                if (cursor > end - 4) { return false; }
+                var length = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(cursor));
+                cursor += 4;
+                if ((length < HeaderBytes + ChecksumBytes) || (length > end - cursor) ||
+                    (BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(cursor)) != Magic)) { return false; }
+                if (!TryDecode(bytes.AsSpan(cursor, length).ToArray(), key, out var chunk, out var palette, out refusal)) { return false; }
+                refusal = "holds invalid chunks";
+                if ((index > 0) && !materials.AsSpan().SequenceEqual(palette)) { return false; }
+                chunks[index] = chunk;
+                materials = palette;
+                cursor += length;
+            }
+            if (cursor != end) { return false; }
+            try { mesh = SdfMeshChunks.Join(chunks); }
+            catch (ArgumentException) { return false; }
+            refusal = null;
+            return true;
+        }
         refusal = Refusal(bytes: bytes, key: key);
         mesh = null;
         materials = [];

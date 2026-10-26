@@ -13,6 +13,9 @@ namespace Puck.SdfVm;
 public sealed record SdfMesh {
     /// <summary>The actual contour lattice spacing in object space; zero for an authored triangle mesh.</summary>
     public Vector3 BakeCell { get; init; }
+    /// <summary>Gets the independently drawn pieces of a large static union; empty for a single mesh. The mesh's own
+    /// triangles concatenate their merged surfaces for whole-group queries; only the pieces enter the mesh region.</summary>
+    public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
     /// <summary>Creates a mesh, refusing a malformed index list, a non-finite vertex, or a vertex or triangle attribute
     /// of the wrong length.</summary>
     /// <param name="positions">The object-space vertex positions.</param>
