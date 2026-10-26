@@ -98,6 +98,10 @@ public sealed partial class WorldAddonRuntime {
             }
         }
 
+        // Resolution caches the address, never the disclosure: a cell hidden from the addon refuses as an absent one does.
+        if (!IsDisclosed(addon: addon, subject: subject, name: cell.Name)) {
+            return AddonVerdict.NoSuchSubject;
+        }
         if (!cell.Resolved) {
             if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out cell.Row) ||
                 !arena.Keys.TryResolve(key: out cell.Key, name: cell.Name) || !arena.TryRead(cell.Row.Ordinal, cell.Key, out _)) {

@@ -87,6 +87,34 @@ public static class WorldStateDisclosure {
             rowOrdinal: ordinal
         ));
     }
+    /// <summary>Determines whether the recipient may read one cell of a named row, for a door that must answer a cell
+    /// the recipient may not read exactly as it answers an absent one.</summary>
+    /// <param name="definition">The live document, for the row declarations.</param>
+    /// <param name="arena">The live store.</param>
+    /// <param name="rowName">The name of the row carrying the cell.</param>
+    /// <param name="key">The cell's key.</param>
+    /// <param name="recipient">The recipient.</param>
+    /// <returns><see langword="true"/> when the document declares the row, generated storage included, and the
+    /// recipient may read the cell; <see langword="false"/> for an undeclared row.</returns>
+    public static bool CanReadCell(WorldDefinition definition, StateArena arena, string rowName, CellName key, Principal recipient) {
+        foreach (var row in definition.State) {
+            if (string.Equals(
+                a: row.Name.Value,
+                b: rowName,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return CanRead(
+                    arena: arena,
+                    definition: definition,
+                    key: key,
+                    recipient: recipient,
+                    row: row
+                );
+            }
+        }
+
+        return false;
+    }
     /// <summary>Projects the rows and cells with explicit observation policies, and every row in
     /// <paramref name="presented"/> whether or not it has one, each under the same per-cell rule; token attributes
     /// inherit their zone's restrictions. Discloses each cell as it is stored, with the value-over-time trait that
@@ -595,7 +623,7 @@ public static class WorldStateDisclosure {
     // One recipient's view of one live store: the canonical token is formatted once, and the ordered zones are
     // indexed by token domain once, so a cell's read check costs the zones over its own domain and nothing else.
     private readonly struct Observer {
-        private readonly Dictionary<string, List<(int Ordinal, WorldStateRow Row)>> m_zonesByDomain;
+        private readonly Dictionary<string, List<(int Ordinal, WorldStateRow Row)>>? m_zonesByDomain;
         private readonly StateArena m_arena;
         private readonly WorldDefinition m_definition;
         // Composing as a reader every restriction admits: the most any recipient could be handed.
@@ -606,7 +634,6 @@ public static class WorldStateDisclosure {
             m_definition = definition;
             m_unrestricted = unrestricted;
             Name = recipient?.Describe();
-            m_zonesByDomain = new(comparer: StringComparer.Ordinal);
 
             foreach (var row in definition.State) {
                 if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zoneDomain) {
@@ -621,6 +648,7 @@ public static class WorldStateDisclosure {
 
                 var domain = zoneDomain.Row.Value;
 
+                m_zonesByDomain ??= new(comparer: StringComparer.Ordinal);
                 if (!m_zonesByDomain.TryGetValue(
                     key: domain,
                     value: out var zones
@@ -743,6 +771,7 @@ public static class WorldStateDisclosure {
 
             if (
                 (domain is null) ||
+                (m_zonesByDomain is null) ||
                 !m_zonesByDomain.TryGetValue(
                 key: domain,
                 value: out var zones

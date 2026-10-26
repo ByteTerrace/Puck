@@ -4,6 +4,10 @@ One checkbox per package, grouped by [programme](README.md); the programme page
 holds each package's owner, deliverables, and check, so follow the link before
 starting work, and tick or remove an item in the same change that closes it.
 
+## Bringing `main` up to date
+
+- [ ] The owner's sequence: the current lanes finish and land, the integrated work is vetted by review, quiet-machine readings (frame times and memory) find no regression, and then the owner decides to push `main`, which deploys.
+
 ## Maths law classification
 
 - [ ] Classify the public Maths surface the retired ratchet grandfathered without
@@ -396,6 +400,15 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] A `test` block in a source that takes its state from a `basis` or an import resolves its `given` lines and enum member names against the composed document, and a schema-less imported document publishes its enums. `worlds/debug/chess-tests.puck` (on the debug world as basis) uses `given` lines and the chess enums.
 - [x] The debug world's chess board reads as a real one from each side. A camera looking toward +Z has -X on its right (`CameraSnapshot.LookAt`: right is forward crossed with up), so the board's files run toward -X (grid column = 7 - file): from White's -Z seat a1 is dark at her left and the queen stands on d1, her colour. The kings start in column 3, the castling rules name kingside by a falling column, and `chess.md`'s square formula and `chess-tests.puck`'s coordinates follow; the seated cursor's steps were already in the seat's own frame.
 - [ ] Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense, Ribbon.
+- [ ] S10 the state review ([S10](state-and-language.md#s10--the-state-review)):
+  - [x] Addon reads checked against per-recipient disclosure: `ReadStateCell` and `ReadStateText` read through `WorldStateDisclosure.CanRead` for the addon's own principal on every call, and a withheld cell answers `NoSuchSubject` like an absent one. The addon host delivers no state-cell changes (its observation cells are body, region, seat, collision, application, link and machine-memory events), so there is no change delivery to check.
+  - [ ] Charge what is used.
+  - [ ] One live store and one write door.
+  - [ ] Everything that steers the future hashed and checkpointed, running addons included.
+  - [ ] Rewind as a complete continuation.
+    - [ ] Chess allows undo (the owner's ruling): a player takes back a move through gameplay rewind over the complete continuation, the first consumer of this step.
+  - [ ] Entities as records in pools; seats as entities.
+  - [ ] Edges as values, versioned facets, explicit order, key reclamation, facets, one work allowance.
 - [ ] S9 the authoring consensus ([S9](state-and-language.md#s9--the-authoring-consensus)), four waves:
   - [ ] Wave 1: compound assignment, one expression language and the locals' order, one bracket rule; `sql { }` deleted, a wrapping printer, saving through the source tree.
   - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
@@ -717,6 +730,8 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] Vulkan records per-pass breadcrumbs for a device loss: device creation enables `VK_NV_device_diagnostic_checkpoints` where offered, every pass's debug label records a `vkCmdSetCheckpointNV` marker naming it, and `VK_ERROR_DEVICE_LOST` reads `vkGetQueueCheckpointDataNV` on the graphics queue into the fault report after `VK_EXT_device_fault`'s (`VulkanDeviceCheckpoints`), the peer of Direct3D 12's DRED breadcrumbs. On the RTX 4070 both extensions enable and a debug-world boot under `--debug-layers full` raises nothing new. Vulkan cannot remove a healthy device, so the read is proven against a CPU driver only; a real hang has not been provoked.
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
+
+- [ ] A board game room in the gallery (the owner's request, being considered): a room that hosts the landed board games (chess, Go, Reversi and the others in the state programme) on real tables, each playable by seats and addons. The room, which games and how it looks are open with the owner.
 
 ## [UI](ui.md)
 

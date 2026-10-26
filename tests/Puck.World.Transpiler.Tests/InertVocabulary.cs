@@ -4,7 +4,7 @@ using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>A document vocabulary that dimensions no field, names no positional argument and embeds no language: the
+/// <summary>A document vocabulary that dimensions no field, and names no positional argument: the
 /// stand-in for a schema that is not the world's, so what a world document alone offers can be told apart.</summary>
 internal sealed class InertVocabulary : IDocumentVocabulary {
     /// <summary>Gets the one instance.</summary>
@@ -12,8 +12,6 @@ internal sealed class InertVocabulary : IDocumentVocabulary {
 
     /// <inheritdoc/>
     public UnitDimension ClassifyField(string fieldKey) => UnitDimension.None;
-    /// <inheritdoc/>
-    public bool IsEmbeddedLanguage(string identifier) => false;
     /// <inheritdoc/>
     public string? NameCallArgument(string callName, int positionalIndex) => null;
     /// <summary>Returns a resolver that reads <paramref name="schema"/> with this vocabulary and everything else,

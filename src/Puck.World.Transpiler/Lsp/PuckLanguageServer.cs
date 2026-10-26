@@ -648,44 +648,17 @@ public sealed partial class PuckLanguageServer {
                 completionSourcePath = localCompPath;
             }
 
-            var keyItems = (GetStateRowKeyCompletions(
+            var keyItems = GetStateRowKeyCompletions(
                 cursorOffset: cursorOffset,
                 rowName: dotRowName,
                 sourcePath: completionSourcePath,
                 text: text
-            ) ?? PuckSqlLsp.GetSqlTableColumnCompletions(
-                resolver: m_vocabularyResolver,
-                tableName: dotRowName,
-                text: text
-            ));
+            );
 
             if (keyItems is { Count: > 0 }) {
                 SendResponse(
                     id: id,
                     result: new JsonObject { ["isIncomplete"] = false, ["items"] = keyItems }
-                );
-                return;
-            }
-        }
-
-        if (
-            m_documents.TryGetValue(
-            key: uri,
-            value: out var docText
-        )
-        ) {
-            var offset = LspJson.Offset(character: col, line: line, source: docText);
-
-            if (PuckSqlLsp.IsCursorInsideSqlBlock(
-                cursorOffset: offset,
-                resolver: m_vocabularyResolver,
-                text: docText
-            )) {
-                var sqlItems = PuckSqlLsp.GetSqlCompletions(resolver: m_vocabularyResolver, text: docText);
-
-                SendResponse(
-                    id: id,
-                    result: new JsonObject { ["isIncomplete"] = false, ["items"] = sqlItems }
                 );
                 return;
             }
@@ -1247,12 +1220,7 @@ public sealed partial class PuckLanguageServer {
             text: text,
             word: word
         );
-        var docCard = (PuckSqlLsp.GetSqlHoverCard(
-            offset: offset,
-            resolver: m_vocabularyResolver,
-            text: text,
-            word: word
-        ) ?? (PuckHoverInfo.Declaration(
+        var docCard = (PuckHoverInfo.Declaration(
             offset: offset,
             resolver: m_vocabularyResolver,
             source: text,
@@ -1261,7 +1229,7 @@ public sealed partial class PuckLanguageServer {
             sourcePath: hoverSourcePath,
             text: text,
             word: word
-        )))));
+        ))));
 
         if (docCard is null) {
             SendResponse(
@@ -1466,10 +1434,7 @@ public sealed partial class PuckLanguageServer {
         )
             ? PuckSemanticTokens.Encode(
                 source: text,
-                tokens: PuckSemanticTokens.Classify(
-                    source: text,
-                    vocabulary: m_vocabularyResolver.Resolve(source: text)
-                )
+                tokens: PuckSemanticTokens.Classify(source: text)
             )
             : []
         );

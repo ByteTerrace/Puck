@@ -10,7 +10,7 @@ namespace Puck.Transpiler.Rewriting;
 /// <para>Every node is rebuilt with the record <c>with</c> operator, so a node's <see cref="SyntaxNode.Trivia"/> —
 /// the author's comments, blank-line runs, and line breaks — and its span ride along untouched unless a hook
 /// replaces them. The walk is over source rather than over a lowered document, so the compile-time layer
-/// (<c>let</c>, <c>template</c>, <c>for</c>, <c>import</c>, units, <c>sql { }</c>) is still source afterwards
+/// (<c>let</c>, <c>template</c>, <c>for</c>, <c>import</c>, units) is still source afterwards
 /// rather than its expansion.</para>
 /// <para>A rewrite is not a parse: it reports nothing and refuses nothing about the source it was handed. It throws
 /// <see cref="PuckRewriteException"/> for the three things that are defects in the rewrite itself — a node kind the
@@ -277,7 +277,6 @@ public abstract partial class PuckSyntaxRewriter {
         DecisionBlockNode decision => (decision with { Statements = this.DescendStatements(statements: decision.Statements) }),
         DerivedStateNode derived => (derived with { Expression = this.Rewritten(node: derived.Expression) }),
         EffectStatementNode effect => this.DescendEffect(effect: effect),
-        EmbeddedBlockNode leaf => leaf,
         EnumDeclarationNode declaration => (declaration with { Members = this.RewrittenNodes(nodes: declaration.Members) }),
         ErrorStatementNode leaf => leaf,
         ExportNode leaf => leaf,

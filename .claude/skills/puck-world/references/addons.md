@@ -292,7 +292,11 @@ and the per-mount `EventGap` overflow summary.
 Ask resolution gates on the manifest BEFORE subject inspection — an
 unrequested or out-of-range ask answers `AttenuatedToEmpty`, never
 `NoSuchSubject` (which would be a body-enumeration oracle). Query order:
-resolve handle → `IsRequested` → `Allows` → budget → dispatch.
+resolve handle → `IsRequested` → `Allows` → budget → dispatch. A state read
+(`ReadStateCell`, `ReadStateText`) dispatches through `TryReadDisclosed`, which asks
+`WorldStateDisclosure.CanRead` for the addon's own principal (`addon:<name>`) against the live store on every
+read, so a cell hidden by row, cell or containing-zone visibility answers `NoSuchSubject` exactly like an absent
+one; list `addon:<name>` among the readers to admit a mod. A bound cell write (`WriteStateCell`, `WriteStateText`) asks `IsDisclosed`, and the server's compose of an addon's `UpsertStateCell`/`RemoveStateCell` (`IsWithheldFromWriter`) asks the same `WorldStateDisclosure.CanReadCell`, before either looks for the cell, so neither an Edit grant nor a Mutate grant reveals whether a hidden cell exists. No bound address caches that decision.
 `AddonVerdict`: `None`, `HeldConcrete`, `HeldWildcard`, `HeldAsReserver`,
 `NoHold`, `BeatenByReserver`, `AttenuatedToEmpty`, `NoSuchSubject`,
 `QuotaExhausted`, `StaleHandle`, `Applied`, `MalformedPayload`,

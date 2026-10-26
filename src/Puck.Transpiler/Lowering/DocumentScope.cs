@@ -28,10 +28,6 @@ public interface IDocumentVocabulary {
     /// <param name="positionalIndex">The argument's 0-based position.</param>
     /// <returns>The key, or <see langword="null"/> to fall back to the positional <c>arg&lt;n&gt;</c> spelling.</returns>
     string? NameCallArgument(string callName, int positionalIndex);
-    /// <summary>Returns whether the given identifier introduces an embedded language block (e.g. <c>sql { ... }</c>) for this vocabulary.</summary>
-    /// <param name="identifier">The block identifier.</param>
-    /// <returns><c>true</c> if the block should be parsed as raw embedded source rather than standard DSL statements.</returns>
-    bool IsEmbeddedLanguage(string identifier) => false;
     /// <summary>Returns whether a declaration statement of <paramref name="keyword"/> writes
     /// <paramref name="modifier"/> bare — as a flag with no argument list, the way a <c>table</c> writes
     /// <c>evicts</c>.</summary>

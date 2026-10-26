@@ -93,8 +93,8 @@ comparison. No shipped source compared fractionally against an Int cell, so
 nothing argued for a looser rule.
 
 **D7 — One expression IR.** `ExpressionProgram`, a postfix program, is what a
-world document holds; the `.puck` grammar, the SQL dialect, and infix strings
-are front ends that parse to it. Operator metadata (spelling, arity, kinds,
+world document holds; the `.puck` grammar and infix strings are front ends that
+parse to it. Operator metadata (spelling, arity, kinds,
 cost, fold) lives in one table the parser, compiler, folder, printer, and
 evaluator consume. `puck.cartridge.v1` stays outside: its forge reads its
 vocabulary as text, so it spells a program as infix through one converter
@@ -326,7 +326,7 @@ the sources with no alias.
 **P2 — Two layers, reshaped differently.** The vocabulary layer (`rule`,
 `table`, `pattern`, `local`, a gate, an operand) is a projection of the
 document and reshapes by changing its one description. The compile-time layer
-(`let`, `module`, `for`, `function`, imports, units, `sql { }`) exists only
+(`let`, `module`, `for`, `function`, imports, units) exists only
 in the source, is evaluated away, and reshapes by rewriting the syntax tree. A
 decompiled document shows the expansion.
 
@@ -432,10 +432,6 @@ because the name is what the body reads. A source with `world` statements
 emits several documents and one with none emits one; there is no separate
 file kind.
 
-**`sql { }` is compile-time layer.** One row on the construct table, the
-`sql` keyword delegating to the SQL parser, with the projection law running
-through the expansion. A paradigm earns a parser; a genre earns a library.
-
 **Tests are worlds.** A `test` block lowers to a generated document, so the
 runner is the engine's own boot, verdicts are state, a failing test is a
 world one can open, and the same test through both hosts is the parity check.
@@ -497,6 +493,63 @@ order are [S9](../plans/state-and-language.md#s9--the-authoring-consensus).
   decided by that work. The printer wraps long lines.
 - **`sql { }` is deleted.** It is a second spelling of rows and rules that never
   printed back.
+
+### The state review
+
+The owner asked every partner for a critical review of the state system as a
+whole. Codex (GPT-6 Astra), Antigravity (Gemini 4 Argon) and Fable reviewed it
+independently and answered the lead's synthesis in a second round, beside a
+usage audit of where the engine misuses or bypasses it. The work is
+[S10](../plans/state-and-language.md#s10--the-state-review). No determinism
+defect was found; the weaknesses are structural and economic.
+
+- **One live store.** The arena is the only live gameplay state, read through
+  one reader and published from the journal's changed positions. A definition
+  holds declarations and seeds and is materialized only at export and edit
+  boundaries; a checkpoint snapshots the arena itself. Traits a live read needs
+  move into the catalog or columns, so no tick reads the document. Opaque
+  machines and native cores keep their own snapshot owners.
+- **One write door.** Rules, addons and host cell operations commit through one
+  grant-checked transaction that carries a batch and is atomic; post-commit
+  deliveries (sound, network) are named as such. Reads use bound handles, and
+  every addon read and change delivery is checked against per-recipient
+  disclosure. A bound address never caches authorization.
+- **Appearance chosen by state is a projection,** never a document edit:
+  placement responses and deals derive from state, and only colliders whose
+  geometry changes are updated.
+- **Charge what is used.** No column is reserved or priced on a row that does
+  not declare its trait; the unused provenance column goes; a growable row
+  charges its growth deterministically; relationships do not reserve a
+  Cartesian universe; removing or evicting a cell never materializes or shifts
+  more than it must.
+- **One deterministic work allowance,** priced by what a world actually holds
+  and does, refusing atomically or resuming across ticks, beside memory and
+  journal bounds. The uncertified reference-cycle model is deleted. Measured
+  per-world reports establish headroom against 16.7 ms; they do not replace
+  deterministic refusal, which untrusted mods require.
+- **Everything that steers the future is hashed and checkpointed with it**:
+  input-hold history, edge histories, portal occupancy, the machine-binding
+  memo, the music clock, and a running addon's continuation (gameplay
+  continuation in arena rows, or its guest captured), so a live modded world can
+  checkpoint.
+- **Rewind restores a complete continuation**: rows, pool generations, owned
+  latches and progress, draws and an explicit clock policy. Firing scopes stay
+  for speculation, gameplay undo is rebuilt on that bundle, document-edit undo
+  stays distinct, and `world.history` stays the editor's time travel.
+- **Entities are records in pools**: the one entity noun, with a reference cell
+  kind persisting pool, slot and generation, `forEach` over a pool, in-place
+  reloads, and native integer-indexed storage instead of string-keyed
+  generated rows. Seats are entities too: a rule can evaluate per seat with
+  `$seat` bound.
+- **Edges are values** (`previous`, `rose`, `fell`) with specified sampling,
+  absence and undo semantics, stored only for rows read that way; a facet a
+  rule reads is versioned so the rule can skip; rule order an author relies on
+  is an explicit phase or dependency.
+- **Key names are reclaimed** deterministically once nothing references them,
+  with generation-safe identifiers.
+- **The row stops being a kitchen sink**: rare traits are optional facets stored
+  where declared, and disclosure policy is evaluated per recipient while its
+  future-affecting inputs stay authoritative state.
 
 ## Costing
 

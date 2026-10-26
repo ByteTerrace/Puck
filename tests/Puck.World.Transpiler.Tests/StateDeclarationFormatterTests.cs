@@ -45,43 +45,6 @@ public class StateDeclarationFormatterTests {
         }
 
         """;
-    private const string SqlDeclarationSource = """
-        schema: "puck.world.definition.v1"
-
-        sql {
-            -- Define the fighters table
-            CREATE TABLE fighters (
-                id TEXT PRIMARY KEY,
-                hp INT NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
-                mana INT DEFAULT 0 ADVANCE 5 PER SECOND,
-                title TEXT
-            ) CAPACITY 32;
-
-            /* Initial seed fighters */
-            INSERT INTO fighters (id, hp, title) VALUES
-                ('hero', 80, 'Hero''s Journey'),
-                ('goblin', 30, 'Goblin');
-
-            DECLARE gold INT DEFAULT 10 CHECK (gold >= 0);
-
-            CREATE RULE regen EVERY TICK AS
-                UPDATE fighters SET mana = mana + 1 WHERE mana < 100;
-
-            CREATE RULE heal EVERY TICK AS
-            BEGIN ATOMIC
-                UPDATE fighters SET hp = 100 WHERE id = 'hero';
-            EXCEPTION
-                UPDATE fighters SET hp = 0 WHERE id = 'hero';
-            END;
-        }
-
-        """;
-
-    [InlineData(nameof(DeclarationSource))]
-    [InlineData(nameof(SqlDeclarationSource))]
-    [Theory]
-    public void FormattingEveryDeclarationFormIsStable(string name) => PuckFormat.AssertStable(source: ((name == nameof(DeclarationSource))
-        ? DeclarationSource
-        : SqlDeclarationSource)
-    );
+    [Fact]
+    public void FormattingEveryDeclarationFormIsStable() => PuckFormat.AssertStable(source: DeclarationSource);
 }

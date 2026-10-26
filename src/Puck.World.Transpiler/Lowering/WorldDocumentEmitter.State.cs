@@ -83,8 +83,7 @@ public static partial class WorldDocumentEmitter {
             }
 
             if (stmt is PropertyNode { Name: "world" } prop) {
-                if (scope.Annotations.ContainsKey(key: "StateWorldDeclarationBlock") ||
-                    scope.Annotations.ContainsKey(key: "StateWorldSqlForm")) {
+                if (scope.Annotations.ContainsKey(key: "StateWorldDeclarationBlock")) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.StateWorldSectionMixed,
                         message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
