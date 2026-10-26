@@ -10,7 +10,7 @@ of 41 stones at the end of the table on their right: Black's at -X, White's at
 (`import "go"`).
 
 The game is two layers. The rules of Go are a move door over the logical board
-`goBoard`: a request moves the token `goMove[play]` to a point, and the door
+`goBoard`: a request moves the token `goMove.play` to a point, and the door
 plays it when the point is empty and the stone either captures or keeps a
 liberty, refusing a suicide and a move that remakes the position a full turn
 back (simple ko). A capture is `clearEnclosed`, the placed stone's own liberty

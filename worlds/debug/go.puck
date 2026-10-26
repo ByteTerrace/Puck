@@ -7,7 +7,7 @@ import "shapes"
 // go.md beside this file says how to play, read the game and set the opponent.
 //
 // The game has two layers. The rules of Go are a move door over the logical board `goBoard`, as a headless game has
-// them: a request names the point the move token `goMove[play]` is moved to, and the door plays it when the point is
+// them: a request names the point the move token `goMove.play` is moved to, and the door plays it when the point is
 // empty and the stone either captures or keeps a liberty (no suicide), refusing a move that remakes the position one
 // full turn back (simple ko). Two passes in a row end the game, scored by area. Over it lies the physical layer: each
 // stone body is a token whose point (`goCell`) is read off the board whenever the physics has rested. A settled table
@@ -407,7 +407,7 @@ rules "" when goHold == goSettleTicks and search(ply) == 0 {
   rule "go-read-stones" {
     local point = board(cellOf, goBoard, placement, $each)
     forEach: goCode
-    goCell[$each] = (point >= 0) ? point : (-1 - goOrdinal[$each])
+    goCell[$each] = point >= 0 ? point : -1 - goOrdinal[$each]
   }
 
   // Each set's points are found by walking every row of the board both ways from its ends (a ray never reads the
@@ -526,18 +526,18 @@ rules "" when goHold == goSettleTicks and search(ply) == 0 {
   // through the door.
   rule "go-read-legal" {
     goLegal = (
-      (goChangedCount == 1) &
-      (goCollisions == 0) &
-      (goNewCell >= 0) &
-      (goOver == 0) &
-      (goBoard[goNewCell[$value]] == 0) &
-      (goSeen[goNewCell[$value]] == goTurn)
+      (goChangedCount == 1) and
+      (goCollisions == 0) and
+      (goNewCell >= 0) and
+      (goOver == 0) and
+      (goBoard[goNewCell] == 0) and
+      (goSeen[goNewCell] == goTurn)
     )
   }
 
   rule "go-read-request" {
     when physics(quiescent) == 1 and goLegal == 1
-    goMove[play] = goNewCell
+    goMove.play = goNewCell
   }
 
   // Anything else that changed is illegal, and is put right below.
@@ -587,19 +587,19 @@ rule "go-open" {
 // is the one the history ring holds a turn back (ko). Every other request is refused by name here and answered below.
 template goPlay(colour, foe) {
   rule $"go-play-{colour}" {
-    when goMove[play] != goPlaced and goMove[play] >= 0 and goOver == 0 and goTurn == colour
-    local taken = board(enclosedAt, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[goMove[play]]
-    local breath = board(boundaryAt, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goMove[play]]
+    local taken = board(enclosedAt, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[goMove.play]
+    local breath = board(boundaryAt, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goMove.play]
+    when goMove.play != goPlaced and goMove.play >= 0 and goOver == 0 and goTurn == colour
     mode: Level
     goKo = 0
     if taken == 1 {
       transform boardCombine(row: goProbe, operation: Copy, left: goBoard)
-      goProbe[goMove[play]] = colour
+      goProbe[goMove.play] = colour
       transform clearEnclosed(row: goProbe, from: cell(goMove, play), lower: foe, upper: foe)
       goKo = board(fingerprint, goProbe) == history(goPositions, 1)
     }
     if taken >= 0 and (taken > 0 or breath > 0) and goKo == 0 {
-      goBoard[goMove[play]] = colour
+      goBoard[goMove.play] = colour
       if taken > 0 {
         transform clearEnclosed(row: goBoard, from: cell(goMove, play), lower: foe, upper: foe)
       }
@@ -608,7 +608,7 @@ template goPlay(colour, foe) {
       goPrisoners[$"{colour}"] += taken
       goCaptured = taken
       push goPositions = board(fingerprint, goBoard)
-      goPlaced = goMove[play]
+      goPlaced = goMove.play
       goMoves += 1
       goPasses = 0
       goRefusal = 0
@@ -617,7 +617,7 @@ template goPlay(colour, foe) {
       goAccepted = 1
       goTurn = foe
     } else {
-      goRefusal = (taken < 0) ? goOccupied : ((goKo == 1) ? goKoRefused : goSuicide)
+      goRefusal = taken < 0 ? goOccupied : goKo == 1 ? goKoRefused : goSuicide
     }
   }
 }
@@ -628,11 +628,11 @@ goPlay(colour: goWhite, foe: goBlack)
 // A request neither door admitted: an occupied point, a suicide, a ko, or a stone after the game. The token goes back to
 // the last stone played, so the next request is a fresh one.
 rule "go-refuse" {
-  when goMove[play] != goPlaced
+  when goMove.play != goPlaced
   mode: Level
   goRejected += 1
   goVerdict = 0
-  goMove[play] = goPlaced
+  goMove.play = goPlaced
   goSync = 1
 }
 
@@ -652,32 +652,24 @@ rule "go-pass" {
 // beside it in atari, with one liberty. The search never reads these, so its judge never pays for them.
 template goReport(colour, foe) {
   rule $"go-report-{colour}" {
-    when goReported != goMoves and goBoard[goPlaced[$value]] == colour
-    local north = board(neighbour, goBoard, N)[goPlaced[$value]]
-    local east = board(neighbour, goBoard, E)[goPlaced[$value]]
-    local south = board(neighbour, goBoard, S)[goPlaced[$value]]
-    local west = board(neighbour, goBoard, W)[goPlaced[$value]]
+    local north = board(neighbour, goBoard, N)[goPlaced]
+    local east = board(neighbour, goBoard, E)[goPlaced]
+    local south = board(neighbour, goBoard, S)[goPlaced]
+    local west = board(neighbour, goBoard, W)[goPlaced]
+    when goReported != goMoves and goBoard[goPlaced] == colour
     mode: Level
     goReported = goMoves
-    goGroup = board(component, goBoard, colour, colour, goPoints)[goPlaced[$value]]
-    goLiberties = board(boundary, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goPlaced[$value]]
+    goGroup = board(component, goBoard, colour, colour, goPoints)[goPlaced]
+    goLiberties = board(boundary, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goPlaced]
     goAtari = (
-      (
-        ((goBoard[local(north)] ?? goEmpty) == foe) &
-        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(north)] ?? 0) == 1)
-      ) |
-      (
-        ((goBoard[local(east)] ?? goEmpty) == foe) &
-        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(east)] ?? 0) == 1)
-      ) |
-      (
-        ((goBoard[local(south)] ?? goEmpty) == foe) &
-        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(south)] ?? 0) == 1)
-      ) |
-      (
-        ((goBoard[local(west)] ?? goEmpty) == foe) &
-        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(west)] ?? 0) == 1)
-      )
+      ((goBoard[north] ?? goEmpty) == foe) and
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[north] ?? 0) == 1) or
+      ((goBoard[east] ?? goEmpty) == foe) and
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[east] ?? 0) == 1) or
+      ((goBoard[south] ?? goEmpty) == foe) and
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[south] ?? 0) == 1) or
+      ((goBoard[west] ?? goEmpty) == foe) and
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[west] ?? 0) == 1)
     )
   }
 }
@@ -738,7 +730,7 @@ rule "go-score-tally" {
   goTerritory[1] = count(goOwner, c -> c == 1)
   goTerritory[2] = count(goOwner, c -> c == 2)
   goWinner = (
-    (2 * (goStoneCount[1] + goTerritory[1]) > 2 * (goStoneCount[2] + goTerritory[2]) + goKomiHalves) ? goBlack : goWhite
+    2 * (goStoneCount[1] + goTerritory[1]) > 2 * (goStoneCount[2] + goTerritory[2]) + goKomiHalves ? goBlack : goWhite
   )
   goScoring = 2
 }
@@ -751,7 +743,7 @@ rule "go-reset" {
   mode: Level
   transform boardCombine(row: goBoard, operation: Clear)
   goTurn = goBlack
-  goMove[play] = -1
+  goMove.play = -1
   goPlaced = -1
   goPasses = 0
   goOver = 0
@@ -798,13 +790,13 @@ rule "go-sync-done" {
 // side to move onto an empty point, of the position's colour onto a point the table lacks. The settled board is then
 // read as ever. The seated player, the computer and a reading that fills a gap all play this way.
 rule "go-put-pick" {
+  local colour = goBoard[goPut] != 0 ? goBoard[goPut] : goTurn
   when goPut >= 0
   mode: Level
-  local colour = (goBoard[goPut[$value]] != 0) ? goBoard[goPut[$value]] : goTurn
   goPick = (
     -1 -
     (
-      (colour == goBlack) ? max(goCell, where: goIsBlack, atLeast: goTrayLow, atMost: -1) :
+      colour == goBlack ? max(goCell, where: goIsBlack, atLeast: goTrayLow, atMost: -1) :
       max(goCell, where: goIsWhite, atLeast: goTrayLow, atMost: -1)
     )
   )
@@ -831,33 +823,33 @@ rule "go-put-done" {
 rule "go-ai-enable" {
   mode: Level
   goAiEnabled = (
-    (physics(quiescent) == 1) &
-    (goAiSide == goTurn) &
-    (goOver == 0) &
-    (goHold == goSettleTicks) &
-    (goJudging == 0) &
-    (goPut < 0) &
+    (physics(quiescent) == 1) and
+    (goAiSide == goTurn) and
+    (goOver == 0) and
+    (goHold == goSettleTicks) and
+    (goJudging == 0) and
+    (goPut < 0) and
     (goSync == 0)
   )
 }
 
 rule "go-ai-play" {
-  when physics(quiescent) == 1 and
+  when (physics(quiescent) == 1 and
     goAiEnabled == 1 and
-    goAiBest[revision] == goAiRevision and
-    goAiBest[to] >= 0 and
-    search(ply) == 0
+    goAiBest.revision == goAiRevision and
+    goAiBest.to >= 0 and
+    search(ply) == 0)
   mode: Level
-  goPut = goAiBest[to]
+  goPut = goAiBest.to
   goAiEnabled = 0
 }
 
 rule "go-ai-pass" {
-  when physics(quiescent) == 1 and
+  when (physics(quiescent) == 1 and
     goAiEnabled == 1 and
-    goAiBest[revision] == goAiRevision and
-    goAiBest[to] < 0 and
-    search(ply) == 0
+    goAiBest.revision == goAiRevision and
+    goAiBest.to < 0 and
+    search(ply) == 0)
   mode: Level
   goPassRequest += 1
   goAiEnabled = 0
@@ -896,46 +888,46 @@ search {
 rule "go-seat-presses" {
   mode: Level
   if board(engaged, goBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    goSeat[pickEdge] = goSeat[pickDown] == 0
-    goSeat[pickDown] = 1
+    goSeat.pickEdge = goSeat.pickDown == 0
+    goSeat.pickDown = 1
   } else {
-    goSeat[pickEdge] = 0
-    goSeat[pickDown] = 0
+    goSeat.pickEdge = 0
+    goSeat.pickDown = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
-    goSeat[cancelEdge] = goSeat[cancelDown] == 0
-    goSeat[cancelDown] = 1
+    goSeat.cancelEdge = goSeat.cancelDown == 0
+    goSeat.cancelDown = 1
   } else {
-    goSeat[cancelEdge] = 0
-    goSeat[cancelDown] = 0
+    goSeat.cancelEdge = 0
+    goSeat.cancelDown = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    goSeat[aheadEdge] = goSeat[aheadDown] == 0
-    goSeat[aheadDown] = 1
+    goSeat.aheadEdge = goSeat.aheadDown == 0
+    goSeat.aheadDown = 1
   } else {
-    goSeat[aheadEdge] = 0
-    goSeat[aheadDown] = 0
+    goSeat.aheadEdge = 0
+    goSeat.aheadDown = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    goSeat[behindEdge] = goSeat[behindDown] == 0
-    goSeat[behindDown] = 1
+    goSeat.behindEdge = goSeat.behindDown == 0
+    goSeat.behindDown = 1
   } else {
-    goSeat[behindEdge] = 0
-    goSeat[behindDown] = 0
+    goSeat.behindEdge = 0
+    goSeat.behindDown = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    goSeat[rightEdge] = goSeat[rightDown] == 0
-    goSeat[rightDown] = 1
+    goSeat.rightEdge = goSeat.rightDown == 0
+    goSeat.rightDown = 1
   } else {
-    goSeat[rightEdge] = 0
-    goSeat[rightDown] = 0
+    goSeat.rightEdge = 0
+    goSeat.rightDown = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    goSeat[leftEdge] = goSeat[leftDown] == 0
-    goSeat[leftDown] = 1
+    goSeat.leftEdge = goSeat.leftDown == 0
+    goSeat.leftDown = 1
   } else {
-    goSeat[leftEdge] = 0
-    goSeat[leftDown] = 0
+    goSeat.leftEdge = 0
+    goSeat.leftDown = 0
   }
 }
 
@@ -944,53 +936,53 @@ rule "go-seat-point" {
   local pointed = board(pointer, goBoard, 1)
   when board(engaged, goBoard, 1) == 1
   mode: Level
-  if pointed >= 0 and pointed != goSeat[pointer] {
-    goSeat[cursor] = pointed
+  if pointed >= 0 and pointed != goSeat.pointer {
+    goSeat.cursor = pointed
   }
-  goSeat[pointer] = pointed
+  goSeat.pointer = pointed
 }
 
 // A step moves the cursor one point in the seat's own frame: from the -Z side up the board is +row and right is
 // -column (the camera's right is its forward crossed with up), and each other side turns both a quarter.
 rule "go-seat-step" {
-  when (goSeat[aheadEdge] - goSeat[behindEdge]) != 0 or (goSeat[rightEdge] - goSeat[leftEdge]) != 0
-  mode: Level
   local seatSide = board(side, goBoard, 1)
   local cursorColumn = (
-    goSeat[cursor] % goSize +
-    (goSeat[aheadEdge] - goSeat[behindEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    (goSeat[rightEdge] - goSeat[leftEdge]) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+    goSeat.cursor % goSize +
+    (goSeat.aheadEdge - goSeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    (goSeat.rightEdge - goSeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
   )
   local cursorRow = (
-    goSeat[cursor] / goSize +
-    (goSeat[aheadEdge] - goSeat[behindEdge]) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    (goSeat[rightEdge] - goSeat[leftEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+    goSeat.cursor / goSize +
+    (goSeat.aheadEdge - goSeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    (goSeat.rightEdge - goSeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
   )
-  goSeat[cursor] = clamp(cursorRow, 0, goSize - 1) * goSize + clamp(cursorColumn, 0, goSize - 1)
+  when (goSeat.aheadEdge - goSeat.behindEdge) or (goSeat.rightEdge - goSeat.leftEdge)
+  mode: Level
+  goSeat.cursor = clamp(cursorRow, 0, goSize - 1) * goSize + clamp(cursorColumn, 0, goSize - 1)
 }
 
 // The seat's turn, once the table has rested and matches the position.
 rule "go-seat-ready" {
   mode: Level
-  goSeat[ready] = (
-    (board(engaged, goBoard, 1) == 1) &
-    (goAiSide != goTurn) &
-    (goOver == 0) &
-    (goHold == goSettleTicks) &
-    (goJudging == 0) &
-    (goPut < 0) &
+  goSeat.ready = (
+    (board(engaged, goBoard, 1) == 1) and
+    (goAiSide != goTurn) and
+    (goOver == 0) and
+    (goHold == goSettleTicks) and
+    (goJudging == 0) and
+    (goPut < 0) and
     (goSync == 0)
   )
 }
 
 rule "go-seat-put" {
-  when board(engaged, goBoard, 1) == 1 and goSeat[pickEdge] == 1 and goSeat[ready] == 1 and goBoard[goSeat[cursor]] == 0
+  when board(engaged, goBoard, 1) == 1 and goSeat.pickEdge == 1 and goSeat.ready == 1 and goBoard[goSeat.cursor] == 0
   mode: Level
-  goPut = goSeat[cursor]
+  goPut = goSeat.cursor
 }
 
 rule "go-seat-pass" {
-  when board(engaged, goBoard, 1) == 1 and goSeat[cancelEdge] == 1 and goSeat[ready] == 1
+  when board(engaged, goBoard, 1) == 1 and goSeat.cancelEdge == 1 and goSeat.ready == 1
   mode: Level
   goPassRequest += 1
 }
@@ -999,13 +991,13 @@ rule "go-seat-pass" {
 rule "go-seat-cursor-shown" {
   when board(engaged, goBoard, 1) == 1
   mode: Level
-  poseCell(key: `placement:goCursor`, topology: goBan, expression: goSeat[cursor], offset: [0, 0.004, 0])
+  poseCell(key: `placement:goCursor`, topology: goBan, expression: goSeat.cursor, offset: [0, 0.004, 0])
 }
 
 rule "go-seat-cursor-parked" {
   when board(engaged, goBoard, 1) == 0
   mode: Level
-  poseCell(key: `placement:goCursor`, topology: goBan, expression: goSeat[cursor], offset: [0, -0.035, 0])
+  poseCell(key: `placement:goCursor`, topology: goBan, expression: goSeat.cursor, offset: [0, -0.035, 0])
 }
 
 commands [

@@ -11,7 +11,7 @@ holds it and `debug.puck` imports it whole (`import "reversi"`). The game follow
 the [World Othello Federation's official rules](https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english).
 
 The game is two layers. The rules are a move door over the logical board
-`reversiBoard`: a request moves the token `reversiMove[play]` to a cell, and the
+`reversiBoard`: a request moves the token `reversiMove.play` to a cell, and the
 door plays it when the cell is empty and brackets at least one unbroken run of
 the opponent's discs along one of the eight compass rays (one `$match` read of
 the `reversiBlackLine` or `reversiWhiteLine` pattern); every bracketed run flips

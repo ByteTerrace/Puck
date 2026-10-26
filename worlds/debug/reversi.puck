@@ -9,7 +9,7 @@ import "shapes"
 // reversi.md beside this file says how to play, read the game and set the opponent.
 //
 // The game has two layers. The rules are a move door over the logical board `reversiBoard`: a request names the
-// cell the move token `reversiMove[play]` is moved to, and the door plays it when the cell is empty and brackets at least
+// cell the move token `reversiMove.play` is moved to, and the door plays it when the cell is empty and brackets at least
 // one unbroken run of the opponent's discs along one of the eight compass rays; every bracketed disc flips. A side with
 // no legal move passes; two passes in a row end the game, as a full board does, and the side holding more discs wins.
 // Over it lies the physical layer: each disc body is a token whose cell (`reversiCell`) and up face (`reversiFace`)
@@ -440,7 +440,7 @@ rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
   rule "reversi-read-discs" {
     local square = board(cellOf, reversiBoard, placement, $each)
     forEach: reversiFace
-    reversiCell[$each] = (square >= 0) ? square : (-1 - reversiOrdinal[$each])
+    reversiCell[$each] = square >= 0 ? square : -1 - reversiOrdinal[$each]
     if upright(placement, $each) >= 0 {
       reversiFace[$each] = 1
     } else {
@@ -452,8 +452,8 @@ rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
   // sharing a cell.
   rule "reversi-read-board" {
     local changed = (
-      (board(mask, reversiSeen, 1, 1) ^ board(mask, reversiBoard, 1, 1)) |
-      (board(mask, reversiSeen, 2, 2) ^ board(mask, reversiBoard, 2, 2))
+      board(mask, reversiSeen, 1, 1) ^ board(mask, reversiBoard, 1, 1) |
+      board(mask, reversiSeen, 2, 2) ^ board(mask, reversiBoard, 2, 2)
     )
     local missing = board(mask, reversiBoard, 1, 2) & ~board(mask, reversiSeen, 1, 2)
     reversiChangedCount = setBitCount(changed)
@@ -466,26 +466,26 @@ rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
   // the door.
   rule "reversi-read-legal" {
     reversiLegal = (
-      (reversiChangedCount == 1) &
-      (reversiCollisions == 0) &
-      (reversiNewCell >= 0) &
-      (reversiWinner == 0) &
-      (reversiBoard[reversiNewCell[$value]] == 0) &
-      (reversiSeen[reversiNewCell[$value]] == reversiTurn)
+      (reversiChangedCount == 1) and
+      (reversiCollisions == 0) and
+      (reversiNewCell >= 0) and
+      (reversiWinner == 0) and
+      (reversiBoard[reversiNewCell] == 0) and
+      (reversiSeen[reversiNewCell] == reversiTurn)
     )
   }
 
   rule "reversi-read-request" {
     when physics(quiescent) == 1 and reversiLegal == 1
-    reversiMove[play] = reversiNewCell
+    reversiMove.play = reversiNewCell
   }
 
   // Anything else that changed is illegal, and is put right below: a disc showing a face the position does not give
   // its cell is turned over (so a missing flip is no illegality, only a change put right), a stray goes back.
   rule "reversi-read-illegal" {
-    when (reversiChangedCount > 0 or reversiCollisions > 0) and reversiLegal == 0 and (
-        board(mask, reversiSeen, 1, 2) & ~board(mask, reversiBoard, 1, 2)
-      ) != 0
+    when ((reversiChangedCount > 0 or reversiCollisions > 0) and
+      reversiLegal == 0 and
+      (board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))))
     reversiIllegal += 1
   }
 
@@ -514,14 +514,14 @@ for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
   rule $"reversi-moves-{direction}" {
     local black = board(mask, reversiBoard, 1, 1)
     local white = board(mask, reversiBoard, 2, 2)
-    local own = (reversiTurn == 1) ? black : white
-    local opponent = (reversiTurn == 1) ? white : black
+    local own = reversiTurn == 1 ? black : white
+    local opponent = reversiTurn == 1 ? white : black
     local run1 = boardShift(own, reversiGrid, $"{direction}") & opponent
-    local run2 = run1 | (boardShift(run1, reversiGrid, $"{direction}") & opponent)
-    local run3 = run2 | (boardShift(run2, reversiGrid, $"{direction}") & opponent)
-    local run4 = run3 | (boardShift(run3, reversiGrid, $"{direction}") & opponent)
-    local run5 = run4 | (boardShift(run4, reversiGrid, $"{direction}") & opponent)
-    local run6 = run5 | (boardShift(run5, reversiGrid, $"{direction}") & opponent)
+    local run2 = run1 | boardShift(run1, reversiGrid, $"{direction}") & opponent
+    local run3 = run2 | boardShift(run2, reversiGrid, $"{direction}") & opponent
+    local run4 = run3 | boardShift(run3, reversiGrid, $"{direction}") & opponent
+    local run5 = run4 | boardShift(run4, reversiGrid, $"{direction}") & opponent
+    local run6 = run5 | boardShift(run5, reversiGrid, $"{direction}") & opponent
     mode: Level
     reversiMoves[$"{direction}"] = boardShift(run6, reversiGrid, $"{direction}") & ~(black | white)
   }
@@ -530,24 +530,24 @@ for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
 // A side with no legal move passes, once the table has rested and matches the position. Two consecutive passes end the
 // game; an accepted move clears the count, so only consecutive ones accumulate.
 rule "reversi-pass" {
-  when physics(quiescent) == 1 and
+  when (physics(quiescent) == 1 and
     reversiWinner == 0 and
     reversiHold == reversiSettleTicks and
     reversiJudging == 0 and
     reversiPut < 0 and
     reversiSync == 0 and
     (
-      reversiMoves[N] |
-      reversiMoves[NE] |
-      reversiMoves[E] |
-      reversiMoves[SE] |
-      reversiMoves[S] |
-      reversiMoves[SW] |
-      reversiMoves[W] |
-      reversiMoves[NW]
+      reversiMoves.N |
+      reversiMoves.NE |
+      reversiMoves.E |
+      reversiMoves.SE |
+      reversiMoves.S |
+      reversiMoves.SW |
+      reversiMoves.W |
+      reversiMoves.NW
     ) == 0 and
     reversiPasses < 2 and
-    search(ply) == 0
+    search(ply) == 0)
   mode: Level
   reversiTurn = 3 - reversiTurn
   reversiPasses += 1
@@ -558,19 +558,19 @@ rule "reversi-pass" {
 // everything it closes on falls through to the refusal below.
 template reversiPlace(colour, opponentRun, line) {
   rule $"reversi-place-{colour}" {
-    when reversiMove[play] != reversiPlaced and
-      reversiMove[play] >= 0 and
+    when (reversiMove.play != reversiPlaced and
+      reversiMove.play >= 0 and
       reversiWinner == 0 and
       reversiTurn == colour and
-      reversiBoard[reversiMove[play]] == 0 and
-      match(line, reversiBoard, any, count)[reversiMove[play]] >= 1
+      reversiBoard[reversiMove.play] == 0 and
+      match(line, reversiBoard, any, count)[reversiMove.play] >= 1)
     mode: Level
     reversiPrevOwn = setBitCount(board(mask, reversiBoard, colour, colour))
     for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
-      reversiRay[$"{direction}"] = match(opponentRun, reversiBoard, $"{direction}", distance)[reversiMove[play]]
+      reversiRay[$"{direction}"] = match(opponentRun, reversiBoard, $"{direction}", distance)[reversiMove.play]
     }
-    reversiBoard[reversiMove[play]] = colour
-    reversiPlaced = reversiMove[play]
+    reversiBoard[reversiMove.play] = colour
+    reversiPlaced = reversiMove.play
     reversiFlipping = 1
   }
 }
@@ -586,7 +586,7 @@ template reversiFlip(colour, bracket) {
     when reversiFlipping == 1 and reversiTurn == colour
     mode: Level
     for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
-      if match(bracket, reversiBoard, $"{direction}", prefix)[reversiMove[play]] >= 1 {
+      if match(bracket, reversiBoard, $"{direction}", prefix)[reversiMove.play] >= 1 {
         transform setRay(
           row: reversiBoard,
           from: cell(reversiMove, play),
@@ -606,7 +606,7 @@ rule "reversi-finish" {
   when reversiFlipping == 1
   mode: Level
   reversiFlips = (
-    ((reversiTurn == 1) ? setBitCount(board(mask, reversiBoard, 1, 1)) : setBitCount(board(mask, reversiBoard, 2, 2))) -
+    (reversiTurn == 1 ? setBitCount(board(mask, reversiBoard, 1, 1)) : setBitCount(board(mask, reversiBoard, 2, 2))) -
     reversiPrevOwn -
     1
   )
@@ -622,11 +622,11 @@ rule "reversi-finish" {
 // A request the door did not admit is answered, not applied: the board stays where it was and the refusal is counted.
 // The token goes back to the last disc played, so the next request is a fresh one.
 rule "reversi-refuse" {
-  when reversiMove[play] != reversiPlaced
+  when reversiMove.play != reversiPlaced
   mode: Level
   reversiRejected += 1
   reversiVerdict = 0
-  reversiMove[play] = reversiPlaced
+  reversiMove.play = reversiPlaced
   reversiSync = 1
 }
 
@@ -635,8 +635,9 @@ rule "reversi-score" {
   reversiBlack = setBitCount(board(mask, reversiBoard, 1, 1))
   reversiWhite = setBitCount(board(mask, reversiBoard, 2, 2))
   reversiWinner = (
-    ((reversiBlack + reversiWhite) >= 64) | (reversiPasses >= 2) ?
-      ((reversiBlack > reversiWhite) ? 1 : ((reversiWhite > reversiBlack) ? 2 : 3)) :
+    (reversiBlack + reversiWhite >= 64) or (reversiPasses >= 2) ? reversiBlack > reversiWhite ? 1 :
+    reversiWhite > reversiBlack ? 2 :
+    3 :
     0
   )
 }
@@ -650,7 +651,7 @@ rule "reversi-reset" {
   mode: Level
   transform boardCombine(row: reversiBoard, operation: Copy, left: reversiStart)
   reversiTurn = 1
-  reversiMove[play] = -1
+  reversiMove.play = -1
   reversiPlaced = -1
   reversiPasses = 0
   reversiWinner = 0
@@ -671,22 +672,22 @@ rule "reversi-accept-done" {
 }
 
 rule "reversi-sync-black" {
-  when reversiSync == 1 and
+  when (reversiSync == 1 and
     search(ply) == 0 and
     reversiCell[$each] >= 0 and
     reversiBoard[reversiCell[$each]] == 1 and
-    reversiFace[$each] != 1
+    reversiFace[$each] != 1)
   mode: Level
   forEach: reversiFace
   poseCell(key: `placement:$each`, topology: reversiGrid, expression: reversiCell[$each], offset: [0, 0.06, 0])
 }
 
 rule "reversi-sync-white" {
-  when reversiSync == 1 and
+  when (reversiSync == 1 and
     search(ply) == 0 and
     reversiCell[$each] >= 0 and
     reversiBoard[reversiCell[$each]] == 2 and
-    reversiFace[$each] != 2
+    reversiFace[$each] != 2)
   mode: Level
   forEach: reversiFace
   poseCell(
@@ -717,18 +718,18 @@ rule "reversi-sync-done" {
 // cell the table lacks. The settled board is then read as ever. The seated player, the computer and a reading that
 // fills a gap all play this way.
 rule "reversi-put-pick" {
-  when reversiPut >= 0
-  mode: Level
-  local colour = (reversiBoard[reversiPut[$value]] != 0) ? reversiBoard[reversiPut[$value]] : reversiTurn
+  local colour = reversiBoard[reversiPut] != 0 ? reversiBoard[reversiPut] : reversiTurn
   local own = (
     -1 -
     (
-      (colour == 1) ? max(reversiCell, where: reversiBlackTray, atLeast: reversiTrayLow, atMost: -1) :
+      colour == 1 ? max(reversiCell, where: reversiBlackTray, atLeast: reversiTrayLow, atMost: -1) :
       max(reversiCell, where: reversiWhiteTray, atLeast: reversiTrayLow, atMost: -1)
     )
   )
+  when reversiPut >= 0
+  mode: Level
   reversiPutFace = colour
-  reversiPick = own >= 0 ? own : (-1 - max(reversiCell, atLeast: reversiTrayLow, atMost: -1))
+  reversiPick = own >= 0 ? own : -1 - max(reversiCell, atLeast: reversiTrayLow, atMost: -1)
 }
 
 rule "reversi-put-black" {
@@ -765,24 +766,24 @@ rule "reversi-put-done" {
 rule "reversi-ai-enable" {
   mode: Level
   reversiAiEnabled = (
-    (physics(quiescent) == 1) &
-    (reversiAiSide == reversiTurn) &
-    (reversiWinner == 0) &
-    (reversiHold == reversiSettleTicks) &
-    (reversiJudging == 0) &
-    (reversiPut < 0) &
+    (physics(quiescent) == 1) and
+    (reversiAiSide == reversiTurn) and
+    (reversiWinner == 0) and
+    (reversiHold == reversiSettleTicks) and
+    (reversiJudging == 0) and
+    (reversiPut < 0) and
     (reversiSync == 0)
   )
 }
 
 rule "reversi-ai-play" {
-  when physics(quiescent) == 1 and
+  when (physics(quiescent) == 1 and
     reversiAiEnabled == 1 and
-    reversiAiBest[revision] == reversiAiRevision and
-    reversiAiBest[to] >= 0 and
-    search(ply) == 0
+    reversiAiBest.revision == reversiAiRevision and
+    reversiAiBest.to >= 0 and
+    search(ply) == 0)
   mode: Level
-  reversiPut = reversiAiBest[to]
+  reversiPut = reversiAiBest.to
   reversiAiEnabled = 0
 }
 
@@ -819,39 +820,39 @@ search {
 rule "reversi-seat-presses" {
   mode: Level
   if board(engaged, reversiBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    reversiSeat[pickEdge] = reversiSeat[pickDown] == 0
-    reversiSeat[pickDown] = 1
+    reversiSeat.pickEdge = reversiSeat.pickDown == 0
+    reversiSeat.pickDown = 1
   } else {
-    reversiSeat[pickEdge] = 0
-    reversiSeat[pickDown] = 0
+    reversiSeat.pickEdge = 0
+    reversiSeat.pickDown = 0
   }
   if board(engaged, reversiBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    reversiSeat[aheadEdge] = reversiSeat[aheadDown] == 0
-    reversiSeat[aheadDown] = 1
+    reversiSeat.aheadEdge = reversiSeat.aheadDown == 0
+    reversiSeat.aheadDown = 1
   } else {
-    reversiSeat[aheadEdge] = 0
-    reversiSeat[aheadDown] = 0
+    reversiSeat.aheadEdge = 0
+    reversiSeat.aheadDown = 0
   }
   if board(engaged, reversiBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    reversiSeat[behindEdge] = reversiSeat[behindDown] == 0
-    reversiSeat[behindDown] = 1
+    reversiSeat.behindEdge = reversiSeat.behindDown == 0
+    reversiSeat.behindDown = 1
   } else {
-    reversiSeat[behindEdge] = 0
-    reversiSeat[behindDown] = 0
+    reversiSeat.behindEdge = 0
+    reversiSeat.behindDown = 0
   }
   if board(engaged, reversiBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    reversiSeat[rightEdge] = reversiSeat[rightDown] == 0
-    reversiSeat[rightDown] = 1
+    reversiSeat.rightEdge = reversiSeat.rightDown == 0
+    reversiSeat.rightDown = 1
   } else {
-    reversiSeat[rightEdge] = 0
-    reversiSeat[rightDown] = 0
+    reversiSeat.rightEdge = 0
+    reversiSeat.rightDown = 0
   }
   if board(engaged, reversiBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    reversiSeat[leftEdge] = reversiSeat[leftDown] == 0
-    reversiSeat[leftDown] = 1
+    reversiSeat.leftEdge = reversiSeat.leftDown == 0
+    reversiSeat.leftDown = 1
   } else {
-    reversiSeat[leftEdge] = 0
-    reversiSeat[leftDown] = 0
+    reversiSeat.leftEdge = 0
+    reversiSeat.leftDown = 0
   }
 }
 
@@ -860,43 +861,43 @@ rule "reversi-seat-point" {
   local pointed = board(pointer, reversiBoard, 1)
   when board(engaged, reversiBoard, 1) == 1
   mode: Level
-  if pointed >= 0 and pointed != reversiSeat[pointer] {
-    reversiSeat[cursor] = pointed
+  if pointed >= 0 and pointed != reversiSeat.pointer {
+    reversiSeat.cursor = pointed
   }
-  reversiSeat[pointer] = pointed
+  reversiSeat.pointer = pointed
 }
 
 // A step moves the cursor one cell in the seat's own frame: from the -Z side up the board is +row and right is -column
 // (the camera's right is its forward crossed with up), and each other side turns both a quarter.
 rule "reversi-seat-step" {
-  when (reversiSeat[aheadEdge] - reversiSeat[behindEdge]) != 0 or (reversiSeat[rightEdge] - reversiSeat[leftEdge]) != 0
-  mode: Level
   local seatSide = board(side, reversiBoard, 1)
   local cursorColumn = (
-    reversiSeat[cursor] % reversiSize +
-    (reversiSeat[aheadEdge] - reversiSeat[behindEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    (reversiSeat[rightEdge] - reversiSeat[leftEdge]) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+    reversiSeat.cursor % reversiSize +
+    (reversiSeat.aheadEdge - reversiSeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    (reversiSeat.rightEdge - reversiSeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
   )
   local cursorRow = (
-    reversiSeat[cursor] / reversiSize +
-    (reversiSeat[aheadEdge] - reversiSeat[behindEdge]) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    (reversiSeat[rightEdge] - reversiSeat[leftEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+    reversiSeat.cursor / reversiSize +
+    (reversiSeat.aheadEdge - reversiSeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    (reversiSeat.rightEdge - reversiSeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
   )
-  reversiSeat[cursor] = clamp(cursorRow, 0, reversiSize - 1) * reversiSize + clamp(cursorColumn, 0, reversiSize - 1)
+  when (reversiSeat.aheadEdge - reversiSeat.behindEdge) or (reversiSeat.rightEdge - reversiSeat.leftEdge)
+  mode: Level
+  reversiSeat.cursor = clamp(cursorRow, 0, reversiSize - 1) * reversiSize + clamp(cursorColumn, 0, reversiSize - 1)
 }
 
 rule "reversi-seat-put" {
-  when board(engaged, reversiBoard, 1) == 1 and
-    reversiSeat[pickEdge] == 1 and
+  when (board(engaged, reversiBoard, 1) == 1 and
+    reversiSeat.pickEdge == 1 and
     reversiAiSide != reversiTurn and
     reversiWinner == 0 and
     reversiHold == reversiSettleTicks and
     reversiJudging == 0 and
     reversiPut < 0 and
     reversiSync == 0 and
-    reversiBoard[reversiSeat[cursor]] == 0
+    reversiBoard[reversiSeat.cursor] == 0)
   mode: Level
-  reversiPut = reversiSeat[cursor]
+  reversiPut = reversiSeat.cursor
 }
 
 // The cursor stands on its cell while the seat sits at the table, and rests inside the board otherwise.
@@ -906,7 +907,7 @@ rule "reversi-seat-cursor-shown" {
   poseCell(
     key: `placement:reversiCursor`,
     topology: reversiGrid,
-    expression: reversiSeat[cursor],
+    expression: reversiSeat.cursor,
     offset: [0, 0.004, 0]
   )
 }
@@ -917,7 +918,7 @@ rule "reversi-seat-cursor-parked" {
   poseCell(
     key: `placement:reversiCursor`,
     topology: reversiGrid,
-    expression: reversiSeat[cursor],
+    expression: reversiSeat.cursor,
     offset: [0, -0.035, 0]
   )
 }

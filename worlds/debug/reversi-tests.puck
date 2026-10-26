@@ -70,7 +70,7 @@ test "the computer answers a seated player's move" {
     reversiTurn == 1
     reversiRejected == 0
     reversiIllegal == 0
-    reversiBlack + reversiWhite == 6
+    (reversiBlack + reversiWhite) == 6
   }
 }
 
@@ -98,7 +98,7 @@ test "a disc that brackets nothing is refused and goes back to its tray" {
 test "a one-direction move flips its bracket" {
   given {
     reversiAiSide = 0
-    reversiMove[play] = 19
+    reversiMove.play = 19
   }
   when {
     ticks 3
@@ -119,7 +119,7 @@ test "white's one-direction move flips its bracket" {
   given {
     reversiAiSide = 0
     reversiTurn = 2
-    reversiMove[play] = 20
+    reversiMove.play = 20
   }
   when {
     ticks 3
@@ -142,7 +142,7 @@ test "a two-direction move flips both brackets" {
     reversiAiSide = 0
     reversiBoard[21] = 1
     reversiBoard[29] = 2
-    reversiMove[play] = 37
+    reversiMove.play = 37
   }
   when {
     ticks 3

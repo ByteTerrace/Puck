@@ -19,8 +19,8 @@ test "the stones settle in their trays and the board reads empty" {
     goChangedCount == 0
     goCollisions == 0
     goIllegal == 0
-    goCell[goStone0] == -1
-    goCell[goStone81] == -82
+    goCell.goStone0 == -1
+    goCell.goStone81 == -82
     goHold == 9
   }
 }
@@ -73,14 +73,14 @@ test "a seated player steps the cursor, plays and passes" {
     goSeen[48] == 1
     goTurn == 1
     goPasses == 1
-    goSeat[cursor] == 48
+    goSeat.cursor == 48
   }
 }
 
 test "a lone stone keeps four liberties" {
   given {
     goAiSide = 0
-    goMove[play] = 40
+    goMove.play = 40
   }
   when {
     ticks 3
@@ -104,7 +104,7 @@ test "a stone taking the second-last liberty puts the group in atari" {
     goBoard[39] = 1
     goStoneCount[1] = 2
     goStoneCount[2] = 1
-    goMove[play] = 41
+    goMove.play = 41
   }
   when {
     ticks 3
@@ -132,7 +132,7 @@ test "a stone filling the last liberty captures a whole group" {
     goBoard[49] = 1
     goStoneCount[1] = 5
     goStoneCount[2] = 2
-    goMove[play] = 50
+    goMove.play = 50
   }
   when {
     ticks 3
@@ -158,7 +158,7 @@ test "a stone with no liberty that captures nothing is refused as suicide" {
     goBoard[41] = 1
     goBoard[49] = 1
     goStoneCount[1] = 4
-    goMove[play] = 40
+    goMove.play = 40
   }
   when {
     ticks 3
@@ -169,7 +169,7 @@ test "a stone with no liberty that captures nothing is refused as suicide" {
     goRejected == 1
     goMoves == 0
     goTurn == 2
-    goMove[play] == -1
+    goMove.play == -1
   }
 }
 
@@ -268,7 +268,7 @@ test "the table fills a given position and a captured stone goes back to its tra
     goSeen[49] == 1
     goCaptured == 1
     goChangedCount == 0
-    goCell[goStone81] == -82
+    goCell.goStone81 == -82
   }
 }
 
@@ -293,8 +293,8 @@ test "an arrangement that is not one stone of the side to move is illegal and pu
     goSeen[41] == 0
     goSeen[42] == 0
     goChangedCount == 0
-    goCell[goStone41] == -42
-    goCell[goStone0] == -1
+    goCell.goStone41 == -42
+    goCell.goStone0 == -1
   }
 }
 
