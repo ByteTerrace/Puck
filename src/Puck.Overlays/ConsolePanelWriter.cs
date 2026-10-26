@@ -68,7 +68,7 @@ public sealed class ConsolePanelWriter {
         var theme = m_theme.Current;
         var margin = theme.Space.Space8;
         var pad = theme.Space.Space3;
-        var bandHeight = theme.Space.HeightConsoleHead;
+        var bandHeight = theme.Styles.Console.HeadHeight;
         var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MonoSize);
         var advance = builder.GlyphAdvance(cellHeight: cellHeight);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MicroSize);
@@ -113,7 +113,7 @@ public sealed class ConsolePanelWriter {
 
         // Trailing history above the prompt row, wrapped at the column count: a line takes ceil(length / cols) rows,
         // rows fill from the bottom so the newest lines always show whole, and the oldest line that only partly
-        // fits shows its tail. The echoed input lines ("> ...") keep the sanctioned phosphor voice.
+        // fits shows its tail. The echoed input lines ("> ...") take the console style's echo color.
         var lines = frame.Lines;
         var historyRows = (rows - 1);
         var contentX = (margin + pad);
@@ -161,7 +161,7 @@ public sealed class ConsolePanelWriter {
             var role = (line.Refused
                 ? OverlayColorRole.Danger
                 : (isEcho
-                    ? OverlayColorRole.Phosphor
+                    ? OverlayColorRole.ConsoleEcho
                     : OverlayColorRole.TextPrimary
             ));
 
@@ -197,7 +197,7 @@ public sealed class ConsolePanelWriter {
             alpha: 1f,
             cellHeight: cellHeight,
             maxChars: cols,
-            role: OverlayColorRole.Phosphor,
+            role: OverlayColorRole.ConsoleEcho,
             text: PromptPrefix,
             x: contentX,
             y: promptY
@@ -220,7 +220,7 @@ public sealed class ConsolePanelWriter {
             );
 
             builder.WriteRect(
-                alpha: theme.Chrome.DimQuietAlpha,
+                alpha: theme.Styles.Console.SelectionAlpha,
                 h: cellHeight,
                 radius: 0f,
                 role: OverlayColorRole.TextDim,

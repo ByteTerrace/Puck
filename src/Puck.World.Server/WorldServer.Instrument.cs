@@ -54,7 +54,11 @@ public sealed partial class WorldServer {
             return null;
         }
 
-        foreach (var application in Grants.Applications(principal: Principal.Seat(slot: seatSlot))) {
+        var applications = Grants.Applications(principal: Principal.Seat(slot: seatSlot));
+
+        for (var index = 0; (index < applications.Count); index++) {
+            var application = applications[index];
+
             if (application.Target.Kind == GrantSubjectKind.Screen) {
                 return application.Target.Value;
             }

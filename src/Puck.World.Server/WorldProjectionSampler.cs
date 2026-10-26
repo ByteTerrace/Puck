@@ -39,7 +39,7 @@ public sealed class WorldProjectionSampler {
             m_pendingFieldsFull = true;
         }
         foreach (var delta in snapshot.FieldCells.Span) {
-            var key = (checked((long)delta.Cell) << 8) | delta.Field;
+            var key = (((long)(delta.Row + 1)) << 40) | (((long)delta.Cell) << 8) | delta.Field;
 
             m_pendingFields[key] = delta;
         }
@@ -100,6 +100,9 @@ public sealed class WorldProjectionSampler {
             Array.Sort(
                 array: combined,
                 comparison: static (left, right) => {
+                    var row = left.Row.CompareTo(value: right.Row);
+
+                    if (row != 0) { return row; }
                     return LexicographicOrder.Compare(
                         leftPrimary: left.Cell,
                         leftSecondary: left.Field,

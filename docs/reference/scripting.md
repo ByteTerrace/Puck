@@ -493,6 +493,29 @@ as any other malformed record—the moment a declared ordinal repeats.
 | 11 | `MachineOperation` | Control/Screen; A/B name a UTF-8 JSON envelope up to 2048 bytes, C=0 | One cell: provider status in A; Applied or refusal; the manifest must request Control on the named machine (a narrowing, not authority); the authority is the granted Control on the screen and on the machine instance, which the server checks when it applies the operation |
 | 12 | `MachineStatus` | Observe/Screen; A=B=C=0 | One cell: runtime status in A, completed steps in B |
 | 13 | `BodyPoses` | zero handle fields; A points to packed Observe handles (`u16 index, u16 generation`), B is their count (1–4096), C points to B writable 64-byte records | One cell: `Applied`, record count in A, settled tick in B; each bulk record carries its own authority verdict |
+| 14 | `BindStateCell` | zero handle fields; A points to a cell declaration table, B is its count (1–4096), C=0 | One cell: `Applied` and the table generation in `HandleGeneration` |
+| 15 | `WriteStateCell` | cell table ordinal and generation in the handle fields; A is the raw operand, B=0 Set or 1 Add, C=0 | One cell: `Applied` or refusal |
+| 16 | `WriteStateText` | cell table ordinal and generation in the handle fields; A/B name strict UTF-8 text, C=0 | One cell: `Applied` or refusal |
+
+A cell declaration occupies 16 little-endian bytes: row-name pointer `u32` at 0, key-name pointer `u32` at 4,
+row-name byte length `u16` at 8, key-name byte length `u16` at 10, and four reserved zero bytes.
+Names are copied once, bounded to 244 and 128 bytes. A successful table replacement advances its generation;
+old handles refuse. The first table has generation 1. A guest can bind and write in that batch's order.
+
+Writes run before rules, directly in the arena under a journal scope. They require the manifest's
+`Edit/state:<name>` request, the live grant, its `writes:Set|Add` mask and an explicit edit dispatch budget.
+Each write costs 64 host fuel; text also pays the ordinary UTF-8 charge and the arena's text limit.
+Binding costs 128 host fuel per declaration plus the UTF-8 reads. Names resolve on first use and after an arena
+replacement; every write still checks the live grant. Handles name existing cells. Adding rows or changing their
+shape uses `SubmitMutation`.
+
+Plain cell values travel to local mirrors in snapshots, without replacing the authored document each tick.
+Rules read the arena immediately. Console reads, exports, checkpoints and document edits materialize immutable
+rows when needed. A row consumed by a document value keeps its validation and full publication path.
+An absent mask admits Set and Add. Missing cells, generated or host-owned rows and rule-owned verdict rows refuse.
+Names resolve again after an arena replacement. The published state, exports and checkpoints include these values;
+receipt-pinned replay derives the writes again. They submit no document mutation or narration.
+The JSON mutation door remains for declaration changes and other document edits.
 
 `BodyPoses` reads an observed set in the caller's order, including every observed body when the
 guest supplies all its Observe handles. The host copies the entire handle array before writing
@@ -597,7 +620,7 @@ untaped console provider operations still refuse. `content.insert` reads its con
 operation applies, so a re-driven tape diverges if the folder changed.
 
 `State` asks use the same manifest-before-existence and live grant gates as body reads.
-`ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key.
+`ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key. A state read (`ReadStateCell`, `ReadStateText`) also passes the cell's disclosure for the addon's own principal (`addon:<name>`, listed among a row's or cell's visibility readers to admit it), composed from the live store on every read; a cell its visibility or containing zone withholds answers `NoSuchSubject`, as an absent cell does; a bound cell write (`WriteStateCell`, `WriteStateText`) and a state-cell or state-row mutation by an addon, peer or session pass the same check (`WorldStateDisclosure.CanReadCell`, `CanReadRow`) before they look for the cell or row.
 These additions are prefix growth: the ABI remains 1, smaller request vocabularies still mount,
 and receipts still pin each guest's content and fuel. They add no host imports; content operations use the existing host admission and receipt paths.
 

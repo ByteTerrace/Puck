@@ -16,6 +16,7 @@ public sealed partial class WorldDocument {
     /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
     /// <returns>Whether the mutation applied.</returns>
     internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
+        Host.MaterializeArena();
         m_lastMutationFailureDetail = null;
 
         if (!TryPrepareMutation(
@@ -78,7 +79,7 @@ public sealed partial class WorldDocument {
     /// <returns>Whether the mutation can be installed.</returns>
     internal bool TryPrepareMutation(WorldMutation mutation, WorldDefinition current, ulong tick, ulong engineTick, bool preMetered, out WorldPreparedMutation prepared, out string reason, out bool denied) {
         denied = false;
-        prepared = null!;
+        prepared = default;
 
         // The one admission predicate decides the whole authority question: section hold, the Mutate/section kind
         // mask, the row-scoped Edit hold and its mask, and the untrusted per-tick dispatch budget. Every

@@ -20,7 +20,6 @@ public sealed record WorldConsoleCommand(
     [property: JsonPropertyName("parameters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommandParameter>? Parameters = null,
     [property: JsonPropertyName("lines")] IReadOnlyList<string>? Lines = null
 );
-
 /// <summary>One typed parameter of a <see cref="WorldConsoleCommand"/>.</summary>
 /// <param name="Name">The parameter's name, which a line's <c>{name}</c> placeholder substitutes.</param>
 /// <param name="Kind">What an argument for it must be.</param>
@@ -34,7 +33,6 @@ public sealed record WorldConsoleCommandParameter(
     [property: JsonPropertyName("default"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Default = null,
     [property: JsonPropertyName("values"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Values = null
 );
-
 /// <summary>What an argument for a <see cref="WorldConsoleCommandParameter"/> must be.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldConsoleCommandParameterKind>))]
 public enum WorldConsoleCommandParameterKind {
@@ -53,21 +51,32 @@ public enum WorldConsoleCommandParameterKind {
     /// declared.</summary>
     Spawn,
 }
-
 /// <summary>Compiles a document's <c>commands</c> rows into the set a <see cref="CommandRegistry"/> answers.</summary>
 public static class WorldConsoleCommands {
-    private static readonly ConditionalWeakTable<WorldDefinition, AuthoredCommandSet> Compiled = new();
+    private static readonly ConditionalWeakTable<IReadOnlyList<WorldConsoleCommand>, ConditionalWeakTable<IReadOnlyList<WorldSpawnPoint>, AuthoredCommandSet>> Compiled = new();
+    private static readonly IReadOnlyList<WorldSpawnPoint> ImplicitSpawns = [WorldSpawnPointDefaults.ImplicitOrigin];
 
-    /// <summary>Returns the authored command set of <paramref name="definition"/>, compiled once per document
-    /// instance; a document whose rows do not compile answers the commands that do.</summary>
+    /// <summary>Returns the authored command set of <paramref name="definition"/>, compiled once for its command
+    /// and spawn declarations; a document whose rows do not compile answers the commands that do.</summary>
     /// <param name="definition">The live document.</param>
     /// <returns>The compiled set, empty when the document authors no commands.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static AuthoredCommandSet For(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Compiled.GetValue(key: definition, createValueCallback: static document => Compile(definition: document, errors: []));
+        var rows = definition.Commands;
+
+        if (rows.Count == 0) { return AuthoredCommandSet.Empty; }
+        var spawns = (definition.SpawnPointsRaw ?? ImplicitSpawns);
+        var cache = Compiled.GetValue(rows, static _ => new());
+
+        return (cache.TryGetValue(key: spawns, value: out var commands) ? commands : CompileMissing(cache: cache, definition: definition, spawns: spawns));
     }
+
+    private static AuthoredCommandSet CompileMissing(WorldDefinition definition, IReadOnlyList<WorldSpawnPoint> spawns,
+        ConditionalWeakTable<IReadOnlyList<WorldSpawnPoint>, AuthoredCommandSet> cache) =>
+        cache.GetValue(spawns, _ => Compile(definition: definition, errors: []));
+
     /// <summary>Compiles <paramref name="definition"/>'s <c>commands</c> rows, appending every refusal.</summary>
     /// <param name="definition">The document.</param>
     /// <param name="errors">The list each refusal is appended to, naming the row.</param>
@@ -180,24 +189,27 @@ public static class WorldConsoleCommands {
             WorldConsoleCommandParameterKind.Number => static (string value, out string canonical) => {
                 canonical = value;
 
-                return (CommandArgs.TryParseFloat(text: value, value: out var number) && float.IsFinite(f: number))
+                return ((CommandArgs.TryParseFloat(text: value, value: out var number) && float.IsFinite(f: number))
                     ? null
-                    : "is not a number";
-            },
+                    : "is not a number");
+            }
+            ,
             WorldConsoleCommandParameterKind.Integer => static (string value, out string canonical) => {
                 canonical = value;
 
-                return CommandArgs.TryParseInt(text: value, value: out _)
+                return (CommandArgs.TryParseInt(text: value, value: out _)
                     ? null
-                    : "is not an integer";
-            },
+                    : "is not an integer");
+            }
+            ,
             WorldConsoleCommandParameterKind.Body => static (string value, out string canonical) => {
                 canonical = value;
 
-                return (CommandArgs.TryParseInt(text: value, value: out var body) && (body >= 0) && (body < WorldBodiesLimits.CapacityCeiling))
+                return ((CommandArgs.TryParseInt(text: value, value: out var body) && (body >= 0) && (body < WorldBodiesLimits.CapacityCeiling))
                     ? null
-                    : $"is not a body index (0..{(WorldBodiesLimits.CapacityCeiling - 1)})";
-            },
+                    : $"is not a body index (0..{(WorldBodiesLimits.CapacityCeiling - 1)})");
+            }
+            ,
             WorldConsoleCommandParameterKind.Choice => (string value, out string canonical) => Choose(admitted: values, canonical: out canonical, noun: "choice", value: value),
             WorldConsoleCommandParameterKind.Spawn => (string value, out string canonical) => Choose(admitted: spawns, canonical: out canonical, noun: "spawn point", value: value),
             _ => null,

@@ -394,8 +394,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
     }
     // A screen's mapping reaches the device as its draw form (frame/sdf-environment.hlsli's ScreenMappingData) at its
-    // screen's place, every other screen's rows zero, with the sampler its filter names in the state row; the same
-    // mapping supplied again owes nothing, another filter changes only the sampler, and clearing it zeroes its rows.
+    // screen's place, every other screen's rows zero, with the sampler its filter names and its face in the state row;
+    // the same mapping and face supplied again owe nothing, another filter changes only the sampler, another face only
+    // the face, and clearing it zeroes its rows.
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
@@ -415,7 +416,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var table = new float[((SdfWorldTables.MaxScreenSurfaces * Rows) * 4)];
         // The warp's rows carry the face distance one warped unit spans, the inner width; the image rows the identity,
         // mapped and not letterboxing; then the whole crop, the crop inset by half a pixel, and the state row: unbound,
-        // through the nearest sampler, drawn through the screen glass since the mapping has a warp.
+        // through the nearest sampler, a CRT's face.
         float[] rows = [
             inset.M11, 0f, inset.M13, (1f / inset.M11),
             0f, inset.M22, inset.M23, (1f / inset.M22),
@@ -423,13 +424,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             0f, 1f, 0f, 0f,
             0f, 0f, 1f, 1f,
             (0.5f / 160f), (0.5f / 144f), (1f - (0.5f / 160f)), (1f - (0.5f / 144f)),
-            0f, ((float)GpuSamplerFilter.Nearest), 0f, 1f,
+            0f, ((float)GpuSamplerFilter.Nearest), 0f, ((float)SdfScreenFace.Crt),
         ];
 
         byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));
 
         rig.Warm();
-        rig.Engine.SetScreenMapping(mapping: mapping, screenIndex: Screen);
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Crt, mapping: mapping, screenIndex: Screen);
         rig.Render(time: 0f);
         rows.CopyTo(array: table, index: ((Screen * Rows) * 4));
         Assert.Equal(
@@ -437,11 +438,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: Table()
         );
 
-        rig.Engine.SetScreenMapping(mapping: mapping, screenIndex: Screen);
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Crt, mapping: mapping, screenIndex: Screen);
         rig.Render(time: 0f);
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
 
-        rig.Engine.SetScreenMapping(mapping: (mapping with { Filter = GpuSamplerFilter.Linear }), screenIndex: Screen);
+        var linear = (mapping with { Filter = GpuSamplerFilter.Linear });
+
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Crt, mapping: linear, screenIndex: Screen);
         rig.Render(time: 0f);
         table[((((Screen * Rows) + 6) * 4) + 1)] = ((float)GpuSamplerFilter.Linear);
         Assert.Equal(
@@ -449,7 +452,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: Table()
         );
 
-        rig.Engine.SetScreenMapping(mapping: null, screenIndex: Screen);
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: linear, screenIndex: Screen);
+        rig.Render(time: 0f);
+        table[((((Screen * Rows) + 6) * 4) + 3)] = ((float)SdfScreenFace.Display);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
+            actual: Table()
+        );
+
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: null, screenIndex: Screen);
         rig.Render(time: 0f);
         Assert.Equal(
             expected: new byte[(table.Length * sizeof(float))],
@@ -464,8 +475,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         const int Rows = (7 + SdfScreenRipple.Rows);
         using var rig = new Rig(slots: 4);
 
-        float W(int slot) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)))[(slot * 12) + 3];
-        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)((SdfWorldTables.MaxScreenSurfaces * Rows) * 16))))[(((Screen * Rows) + 7) * 4) + 2];
+        float W(int slot) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)))[((slot * 12) + 3)];
+        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)((SdfWorldTables.MaxScreenSurfaces * Rows) * 16))))[((((Screen * Rows) + 7) * 4) + 2)];
 
         rig.Warm();
         rig.Engine.DebugMode = DebugViewModes.Rates;
@@ -861,7 +872,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
         var big = new SdfMesh(
             indices: new uint[] { 0, 1, 2 },
-            positions: Enumerable.Range(count: BigVertices, start: 0).Select(selector: static index => new Vector3(x: index, y: (index & 1), z: 0f)).ToArray()
+            positions: Enumerable.Range(count: BigVertices, start: 0).Select(selector: static index => new Vector3(x: index, y: index & 1, z: 0f)).ToArray()
         );
         var quad = new SdfMesh(
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
@@ -905,15 +916,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: expected[..records], actual: actual[..records]);
         Assert.Equal(expected: expected[arena..used], actual: actual[arena..used]);
     }
-
     // The mesh region grows to the need plus an eighth, to a 16 MiB granule, and to no more than a region holds. The
     // debug world's region has not reached 2 GiB, so the sizes past it are held by the arithmetic alone.
     [Theory]
-    [InlineData(4UL, 16UL << 20)]
-    [InlineData(16UL << 20, 32UL << 20)]
+    [InlineData(4UL, (16UL << 20))]
+    [InlineData((16UL << 20), (32UL << 20))]
     [InlineData(1_500_000_000UL, 1_694_498_816UL)]
-    [InlineData(2UL << 30, 2_415_919_104UL)]
-    [InlineData(3UL << 30, 3_623_878_656UL)]
+    [InlineData((2UL << 30), 2_415_919_104UL)]
+    [InlineData((3UL << 30), 3_623_878_656UL)]
     public void TheMeshRegionGrowsByAnEighthToAGranule(ulong need, ulong grown) {
         Assert.Equal(
             actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: need),
@@ -929,9 +939,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     public void TheMeshRegionGrowthStopsAtWhatARegionHolds() {
         const ulong Most = SdfWorldTables.MostMeshRegionBytes;
 
-        Assert.Equal(expected: ((ulong)GpuRegion.MaxByteCount), actual: Most);
+        Assert.Equal(actual: Most, expected: ((ulong)GpuRegion.MaxByteCount));
         Assert.True(condition: (Most > (2UL << 30)));
-        Assert.Equal(expected: 0UL, actual: (Most % sizeof(uint)));
+        Assert.Equal(actual: (Most % sizeof(uint)), expected: 0UL);
         Assert.Equal(expected: Most, actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: Most));
         Assert.Equal(expected: Most, actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: (Most - sizeof(uint))));
         Assert.Equal(expected: Most, actual: SdfWorldTables.MeshRegionGrownBytes(needBytes: (3_900_000_000UL)));

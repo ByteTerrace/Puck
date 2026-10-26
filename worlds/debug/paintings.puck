@@ -118,7 +118,16 @@ template wallRing(label, ix, y0, y1, w, depth, slot) {
 // Four bars lying flat round a square canvas of half-extent `ix`, `w` wide, from height `y0` to `y1`.
 template flatRing(label, ix, w, y0, y1, slot) {
   paintBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
-  paintBox(label: $"{label}-south", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: (0 - (ix + w)), z1: (0 - ix), slot: slot)
+  paintBox(
+    label: $"{label}-south",
+    x0: (0 - (ix + w)),
+    x1: (ix + w),
+    y0: y0,
+    y1: y1,
+    z0: (0 - (ix + w)),
+    z1: (0 - ix),
+    slot: slot
+  )
   paintBox(label: $"{label}-east", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
   paintBox(label: $"{label}-west", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
 }
@@ -144,17 +153,71 @@ template wallPainting(label, frame, title, note) {
     scale [(canvasHalfWidth - canvasRim), (canvasHalfHeight - canvasRim), 0.3]
   }
   for width in ((frame.lipWidth > 0) ? [frame.lipWidth] : []) {
-    wallRing(label: "lip", ix: canvasHalfWidth, y0: (canvasCenter - canvasHalfHeight), y1: (canvasCenter + canvasHalfHeight), w: width, depth: 0.08, slot: frame.lip)
+    wallRing(
+      label: "lip",
+      ix: canvasHalfWidth,
+      y0: (canvasCenter - canvasHalfHeight),
+      y1: (canvasCenter + canvasHalfHeight),
+      w: width,
+      depth: 0.08,
+      slot: frame.lip
+    )
   }
   for width in ((frame.matWidth > 0) ? [frame.matWidth] : []) {
-    wallRing(label: "mat", ix: (canvasHalfWidth + frame.lipWidth), y0: (canvasCenter - canvasHalfHeight), y1: (canvasCenter + canvasHalfHeight + frame.lipWidth), w: width, depth: 0.05, slot: frame.mat)
+    wallRing(
+      label: "mat",
+      ix: (canvasHalfWidth + frame.lipWidth),
+      y0: (canvasCenter - canvasHalfHeight),
+      y1: (canvasCenter + canvasHalfHeight + frame.lipWidth),
+      w: width,
+      depth: 0.05,
+      slot: frame.mat
+    )
   }
-  wallRing(label: "border", ix: (canvasHalfWidth + frame.lipWidth + frame.matWidth), y0: (canvasCenter - canvasHalfHeight), y1: (canvasCenter + canvasHalfHeight + frame.lipWidth + frame.matWidth), w: frame.borderWidth, depth: 0.11, slot: frame.border)
+  wallRing(
+    label: "border",
+    ix: (canvasHalfWidth + frame.lipWidth + frame.matWidth),
+    y0: (canvasCenter - canvasHalfHeight),
+    y1: (canvasCenter + canvasHalfHeight + frame.lipWidth + frame.matWidth),
+    w: frame.borderWidth,
+    depth: 0.11,
+    slot: frame.border
+  )
   // The plaque: a cream board on the wall, a hand's width beyond the frame.
-  paintBox(label: "plaque", x0: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15), x1: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15), y0: 1.0, y1: 1.4, z0: 0, z1: 0.025, slot: paintBoard)
+  paintBox(
+    label: "plaque",
+    x0: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15),
+    x1: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15),
+    y0: 1.0,
+    y1: 1.4,
+    z0: 0,
+    z1: 0.025,
+    slot: paintBoard
+  )
   textRuns [
-    { text: title, position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.31, 0.025], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.004, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94 }
-    { text: note, position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.22, 0.025], rotation [0, 0, 0, 1], emHeight: 0.028, depth: 0.003, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94, lineSpacing: 1.15 }
+    {
+      text: title
+      position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.31, 0.025]
+      rotation [0, 0, 0, 1]
+      emHeight: 0.06
+      depth: 0.004
+      mode: "emboss"
+      material: paintInk
+      align: "center"
+      maxWidth: 0.94
+    }
+    {
+      text: note
+      position [(canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65), 1.22, 0.025]
+      rotation [0, 0, 0, 1]
+      emHeight: 0.028
+      depth: 0.003
+      mode: "emboss"
+      material: paintInk
+      align: "center"
+      maxWidth: 0.94
+      lineSpacing: 1.15
+    }
   ]
 }
 
@@ -224,23 +287,131 @@ prototypes {
       schema: "puck.creation.v1"
       palette: wingPalette
       // The partition: x 51 .. 51.3, solid but for the doorway.
-      hallBox(label: "partition-south", x0: 51, x1: wingX0, y0: wingFloor, y1: wingTop, z0: 12.3, z1: doorZ0, slot: wingWall)
-      hallBox(label: "partition-north", x0: 51, x1: wingX0, y0: wingFloor, y1: wingTop, z0: doorZ1, z1: 39.7, slot: wingWall)
-      hallBox(label: "partition-lintel", x0: 51, x1: wingX0, y0: doorTop, y1: wingTop, z0: doorZ0, z1: doorZ1, slot: wingWall)
+      hallBox(
+        label: "partition-south",
+        x0: 51,
+        x1: wingX0,
+        y0: wingFloor,
+        y1: wingTop,
+        z0: 12.3,
+        z1: doorZ0,
+        slot: wingWall
+      )
+      hallBox(
+        label: "partition-north",
+        x0: 51,
+        x1: wingX0,
+        y0: wingFloor,
+        y1: wingTop,
+        z0: doorZ1,
+        z1: 39.7,
+        slot: wingWall
+      )
+      hallBox(
+        label: "partition-lintel",
+        x0: 51,
+        x1: wingX0,
+        y0: doorTop,
+        y1: wingTop,
+        z0: doorZ0,
+        z1: doorZ1,
+        slot: wingWall
+      )
       // The lining over the three outer walls.
-      hallBox(label: "lining-south", x0: wingX0, x1: 69.7, y0: wingFloor, y1: wingTop, z0: 12.3, z1: wingZ0, slot: wingWall)
-      hallBox(label: "lining-north", x0: wingX0, x1: 69.7, y0: wingFloor, y1: wingTop, z0: wingZ1, z1: 39.7, slot: wingWall)
-      hallBox(label: "lining-east", x0: wingX1, x1: 69.7, y0: wingFloor, y1: wingTop, z0: wingZ0, z1: wingZ1, slot: wingWall)
+      hallBox(
+        label: "lining-south",
+        x0: wingX0,
+        x1: 69.7,
+        y0: wingFloor,
+        y1: wingTop,
+        z0: 12.3,
+        z1: wingZ0,
+        slot: wingWall
+      )
+      hallBox(
+        label: "lining-north",
+        x0: wingX0,
+        x1: 69.7,
+        y0: wingFloor,
+        y1: wingTop,
+        z0: wingZ1,
+        z1: 39.7,
+        slot: wingWall
+      )
+      hallBox(
+        label: "lining-east",
+        x0: wingX1,
+        x1: 69.7,
+        y0: wingFloor,
+        y1: wingTop,
+        z0: wingZ0,
+        z1: wingZ1,
+        slot: wingWall
+      )
       // Skirting along the inside of every wall.
-      hallBox(label: "skirting-south", x0: wingX0, x1: wingX1, y0: wingFloor, y1: 0.2, z0: wingZ0, z1: 12.7, slot: wingTrim)
-      hallBox(label: "skirting-north", x0: wingX0, x1: wingX1, y0: wingFloor, y1: 0.2, z0: 39.3, z1: wingZ1, slot: wingTrim)
-      hallBox(label: "skirting-east", x0: 69.3, x1: wingX1, y0: wingFloor, y1: 0.2, z0: wingZ0, z1: wingZ1, slot: wingTrim)
-      hallBox(label: "skirting-west", x0: wingX0, x1: 51.4, y0: wingFloor, y1: 0.2, z0: wingZ0, z1: wingZ1, slot: wingTrim)
+      hallBox(
+        label: "skirting-south",
+        x0: wingX0,
+        x1: wingX1,
+        y0: wingFloor,
+        y1: 0.2,
+        z0: wingZ0,
+        z1: 12.7,
+        slot: wingTrim
+      )
+      hallBox(
+        label: "skirting-north",
+        x0: wingX0,
+        x1: wingX1,
+        y0: wingFloor,
+        y1: 0.2,
+        z0: 39.3,
+        z1: wingZ1,
+        slot: wingTrim
+      )
+      hallBox(
+        label: "skirting-east",
+        x0: 69.3,
+        x1: wingX1,
+        y0: wingFloor,
+        y1: 0.2,
+        z0: wingZ0,
+        z1: wingZ1,
+        slot: wingTrim
+      )
+      hallBox(
+        label: "skirting-west",
+        x0: wingX0,
+        x1: 51.4,
+        y0: wingFloor,
+        y1: 0.2,
+        z0: wingZ0,
+        z1: wingZ1,
+        slot: wingTrim
+      )
       // The board over the doorway, on the partition's west face.
       hallBox(label: "doorboard", x0: 50.97, x1: 51, y0: 3.25, y1: 3.95, z0: 24.2, z1: 27.8, slot: wingBoard)
       textRuns [
-        { text: "PAINTING WING", position [-50.968, 3.72, -26], rotation [0, 0.707107, 0, 0.707107], emHeight: 0.2, depth: 0.004, mode: "emboss", material: wingInk, align: "center" }
-        { text: "walk or jump into a canvas", position [-50.968, 3.46, -26], rotation [0, 0.707107, 0, 0.707107], emHeight: 0.1, depth: 0.003, mode: "emboss", material: wingInk, align: "center" }
+        {
+          text: "PAINTING WING"
+          position [-50.968, 3.72, -26]
+          rotation [0, 0.707107, 0, 0.707107]
+          emHeight: 0.2
+          depth: 0.004
+          mode: "emboss"
+          material: wingInk
+          align: "center"
+        }
+        {
+          text: "walk or jump into a canvas"
+          position [-50.968, 3.46, -26]
+          rotation [0, 0.707107, 0, 0.707107]
+          emHeight: 0.1
+          depth: 0.003
+          mode: "emboss"
+          material: wingInk
+          align: "center"
+        }
       ]
     }
   }
@@ -248,7 +419,12 @@ prototypes {
   for painting in wallPaintings {
     prototype $"painting-{painting.name}" {
       document {
-        wallPainting(label: $"painting-{painting.name}", frame: painting.frame, title: painting.title, note: painting.note)
+        wallPainting(
+          label: $"painting-{painting.name}",
+          frame: painting.frame,
+          title: painting.title,
+          note: painting.note
+        )
       }
     }
   }
@@ -280,8 +456,29 @@ prototypes {
       flatRing(label: "border", ix: (fallHalf + 0.05), w: 0.22, y0: 0, y1: 0.07, slot: paintGilt)
       paintBox(label: "plaque", x0: -0.5, x1: 0.5, y0: 0, y1: 0.02, z0: 1.55, z1: 2.15, slot: paintBoard)
       textRuns [
-        { text: "THE ENDLESS FALL", position [0, 0.02, 1.98], rotation: faceUp, emHeight: 0.07, depth: 0.004, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94 }
-        { text: "Step onto the glass and you fall, out of the ceiling and through the floor again. Backspace or L3 gets you out.", position [0, 0.02, 1.86], rotation: faceUp, emHeight: 0.03, depth: 0.003, mode: "emboss", material: paintInk, align: "center", maxWidth: 0.94, lineSpacing: 1.15 }
+        {
+          text: "THE ENDLESS FALL"
+          position [0, 0.02, 1.98]
+          rotation: faceUp
+          emHeight: 0.07
+          depth: 0.004
+          mode: "emboss"
+          material: paintInk
+          align: "center"
+          maxWidth: 0.94
+        }
+        {
+          text: "Step onto the glass and you fall, out of the ceiling and through the floor again. Backspace or L3 gets you out."
+          position [0, 0.02, 1.86]
+          rotation: faceUp
+          emHeight: 0.03
+          depth: 0.003
+          mode: "emboss"
+          material: paintInk
+          align: "center"
+          maxWidth: 0.94
+          lineSpacing: 1.15
+        }
       ]
     }
   }
@@ -293,14 +490,77 @@ prototypes {
       name: "painting-fall-rail"
       schema: "puck.creation.v1"
       palette: paintingPalette
-      hallBox(label: "north", x0: (fallX - fallHole - railGap), x1: (fallX + fallHole + railGap), y0: galleryFloor[1], y1: railTop, z0: (fallZ + fallHole), z1: (fallZ + fallHole + railGap), slot: paintBlack)
-      hallBox(label: "south", x0: (fallX - fallHole - railGap), x1: (fallX + fallHole + railGap), y0: galleryFloor[1], y1: railTop, z0: (fallZ - fallHole - railGap), z1: (fallZ - fallHole), slot: paintBlack)
-      hallBox(label: "east", x0: (fallX + fallHole), x1: (fallX + fallHole + railGap), y0: galleryFloor[1], y1: railTop, z0: (fallZ - fallHole), z1: (fallZ + fallHole), slot: paintBlack)
-      hallBox(label: "west", x0: (fallX - fallHole - railGap), x1: (fallX - fallHole), y0: galleryFloor[1], y1: railTop, z0: (fallZ - fallHole), z1: (fallZ + fallHole), slot: paintBlack)
-      hallBox(label: "cap", x0: (fallX - fallHole - railGap - 0.03), x1: (fallX + fallHole + railGap + 0.03), y0: railTop, y1: (railTop + 0.05), z0: (fallZ - fallHole - railGap - 0.03), z1: (fallZ + fallHole + railGap + 0.03), slot: paintGilt)
+      hallBox(
+        label: "north",
+        x0: (fallX - fallHole - railGap),
+        x1: (fallX + fallHole + railGap),
+        y0: galleryFloor[1],
+        y1: railTop,
+        z0: (fallZ + fallHole),
+        z1: (fallZ + fallHole + railGap),
+        slot: paintBlack
+      )
+      hallBox(
+        label: "south",
+        x0: (fallX - fallHole - railGap),
+        x1: (fallX + fallHole + railGap),
+        y0: galleryFloor[1],
+        y1: railTop,
+        z0: (fallZ - fallHole - railGap),
+        z1: (fallZ - fallHole),
+        slot: paintBlack
+      )
+      hallBox(
+        label: "east",
+        x0: (fallX + fallHole),
+        x1: (fallX + fallHole + railGap),
+        y0: galleryFloor[1],
+        y1: railTop,
+        z0: (fallZ - fallHole),
+        z1: (fallZ + fallHole),
+        slot: paintBlack
+      )
+      hallBox(
+        label: "west",
+        x0: (fallX - fallHole - railGap),
+        x1: (fallX - fallHole),
+        y0: galleryFloor[1],
+        y1: railTop,
+        z0: (fallZ - fallHole),
+        z1: (fallZ + fallHole),
+        slot: paintBlack
+      )
+      hallBox(
+        label: "cap",
+        x0: (fallX - fallHole - railGap - 0.03),
+        x1: (fallX + fallHole + railGap + 0.03),
+        y0: railTop,
+        y1: (railTop + 0.05),
+        z0: (fallZ - fallHole - railGap - 0.03),
+        z1: (fallZ + fallHole + railGap + 0.03),
+        slot: paintGilt
+      )
       textRuns [
-        { text: "THE ENDLESS FALL", position [(0 - fallX), 5.12, (0 - (fallZ - fallHole - railGap - 0.001))], rotation [0, 0, 0, 1], emHeight: 0.1, depth: 0.004, mode: "emboss", material: paintGilt, align: "center" }
-        { text: "below, in the wing", position [(0 - fallX), 4.95, (0 - (fallZ - fallHole - railGap - 0.001))], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: paintMat, align: "center" }
+        {
+          text: "THE ENDLESS FALL"
+          position [(0 - fallX), 5.12, (0 - (fallZ - fallHole - railGap - 0.001))]
+          rotation [0, 0, 0, 1]
+          emHeight: 0.1
+          depth: 0.004
+          mode: "emboss"
+          material: paintGilt
+          align: "center"
+        }
+        {
+          text: "below, in the wing"
+          position [(0 - fallX), 4.95, (0 - (fallZ - fallHole - railGap - 0.001))]
+          rotation [0, 0, 0, 1]
+          emHeight: 0.05
+          depth: 0.003
+          mode: "emboss"
+          material: paintMat
+          align: "center"
+        }
       ]
     }
   }

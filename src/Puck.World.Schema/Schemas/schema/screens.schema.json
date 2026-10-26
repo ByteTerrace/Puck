@@ -295,6 +295,15 @@
         "additionalProperties": false,
         "default": null,
         "title": "WorldScreenCarry"
+      },
+      "material": {
+        "description": "How the face presents its picture (WorldScreenMaterial): Plain, the default, shows it as its source made it, filling the face; Crt draws it through a cathode-ray tube\u0027s glass, and a pointer hit maps through that glass\u0027s bezel. Refused on a window, which is an opening rather than a display. Omitted from the wire when Plain.",
+        "enum": [
+          "Plain",
+          "Crt"
+        ],
+        "default": "Plain",
+        "title": "WorldScreenMaterial"
       }
     },
     "required": [

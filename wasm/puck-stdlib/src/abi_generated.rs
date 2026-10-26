@@ -232,6 +232,8 @@ pub const CHANNEL_DESCRIPTOR_OFFSET_VERB_COUNT: usize = 2;
 pub const CHANNEL_DESCRIPTOR_OFFSET_VERB_TABLE_PTR: usize = 4;
 
 // `Puck.Scripting.AddonAbi.RequestVerbs` — the Request channel's closed numeric vocabulary.
+/// `AddonAbi.RequestVerbs.BindStateCell` (`14`).
+pub const REQUEST_VERB_BIND_STATE_CELL: usize = 14;
 /// `AddonAbi.RequestVerbs.BodyKinematics` (`3`).
 pub const REQUEST_VERB_BODY_KINEMATICS: usize = 3;
 /// `AddonAbi.RequestVerbs.BodyKinematicsAnswerParts` (`2`).
@@ -242,8 +244,8 @@ pub const REQUEST_VERB_BODY_POSE: usize = 0;
 pub const REQUEST_VERB_BODY_POSE_ANSWER_PARTS: usize = 4;
 /// `AddonAbi.RequestVerbs.BodyPoses` (`13`).
 pub const REQUEST_VERB_BODY_POSES: usize = 13;
-/// `AddonAbi.RequestVerbs.Count` (`14`).
-pub const REQUEST_VERB_COUNT: usize = 14;
+/// `AddonAbi.RequestVerbs.Count` (`17`).
+pub const REQUEST_VERB_COUNT: usize = 17;
 /// `AddonAbi.RequestVerbs.Designate` (`2`).
 pub const REQUEST_VERB_DESIGNATE: usize = 2;
 /// `AddonAbi.RequestVerbs.DesignateAnswerParts` (`1`).
@@ -270,6 +272,10 @@ pub const REQUEST_VERB_READ_STATE_TEXT: usize = 6;
 pub const REQUEST_VERB_SUBMIT_MUTATION: usize = 1;
 /// `AddonAbi.RequestVerbs.SubmitMutationAnswerParts` (`1`).
 pub const REQUEST_VERB_SUBMIT_MUTATION_ANSWER_PARTS: usize = 1;
+/// `AddonAbi.RequestVerbs.WriteStateCell` (`15`).
+pub const REQUEST_VERB_WRITE_STATE_CELL: usize = 15;
+/// `AddonAbi.RequestVerbs.WriteStateText` (`16`).
+pub const REQUEST_VERB_WRITE_STATE_TEXT: usize = 16;
 
 // `Puck.Scripting.AddonAbi.ObservationVerbs` — the host-written disclosure verb vocabulary.
 /// `AddonAbi.ObservationVerbs.EventCollisionBegin` (`5`).

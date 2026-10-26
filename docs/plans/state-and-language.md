@@ -509,8 +509,7 @@ Parser, decompiler guards, completion, hover, and the manual read that
 description. Every construct this programme adds (`module`, `use`, `record`,
 `pool`, `claim`, `release`, `function`, `select`, `world`, `border`, `test`)
 is on the table from its first commit; older constructs move over afterward,
-and a construct is off the hand-wired path when its old code is deleted. The
-`sql { }` dialect is one row, the `sql` keyword delegating to the SQL parser.
+and a construct is off the hand-wired path when its old code is deleted.
 
 **Check:** adding a member to a described construct is one edit and the law,
 completion, and manual follow, shown by a law that adds one in a test
@@ -977,6 +976,26 @@ what it replaces.
 **Check:** each item's before and after compiles every shipped source to the
 same documents where the meaning is unchanged, `puck test worlds/debug
 --reproduce` passes, and the deleted spelling is refused by name.
+
+### S10 — The state review
+
+The work behind [the state review](../decisions/state-and-language.md#the-state-review),
+in order; the language work of S9 continues beside it.
+
+| Step | Delivers |
+|---|---|
+| 1 | Addon reads and change deliveries checked against per-recipient disclosure (a correctness repair, first and independent). |
+| 2 | Charge what is used: the provenance column gone, trait columns reserved only where declared, growth charged, no Cartesian relationship universe, `MoveCell` never materializing an absent column, ordered and evicting rows without whole-row shifts. |
+| 3 | One live store and one write door: journal-driven publication, one reader, atomic batched writes, traits out of the document, responses and deals as projections. |
+| 4 | Hash and checkpoint everything that steers the future, a running addon's continuation included. |
+| 5 | Rewind as a complete continuation bundle. |
+| 6 | Entities as records in pools, with references, seats as entities and the chess pieces migrated. |
+| 7 | Edges as values, versioned facets and explicit rule order; key-name reclamation; rare traits as facets; one deterministic work allowance with measured reports, the reference-cycle model deleted. |
+
+**Check:** each step's before and after in its commit (arena bytes and work
+sheet for the debug world, allocation, `host.frames`), and `puck test
+worlds/debug --reproduce` passing with re-recorded hashes where a step changes
+them.
 
 ## Sequencing
 

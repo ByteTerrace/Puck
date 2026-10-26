@@ -32,8 +32,9 @@ solid placement carrying a wallpaper fold refuses by name.
 worlds delta over, carries the shared values as state rows: a `transforms`
 text row (`identity`, `origin`, `unit`) and a `colors` text row, which
 documents reference as `state.<row>.<key>` instead of restating literals, so
-each standard value has one home. The standard `theme` is its own document,
-`theme.puck`, which a world imports beside its basis.
+each standard value has one home. A world that authors no `theme` draws the
+engine's neutral one; the debug world's look is its own skin, `skin.puck`,
+which a world imports beside its basis.
 
 **Every world stands over a safety net.** The basis places one solid `Plane`
 (`groundPlane`) far below the playable space to catch anything that falls; it

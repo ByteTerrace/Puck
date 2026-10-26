@@ -42,10 +42,11 @@ public static class WorldValueFields {
     private static readonly WorldValueDomain Intensity = new(Maximum: MaxIntensity, Minimum: 0f);
     private static readonly WorldValueDomain Power = new(Maximum: MaxPower, Minimum: 0f);
     private static readonly WorldValueDomain Luminance = new(Maximum: MaxLuminance, Minimum: 0f);
-    private const string TemperatureWhy = "a colour temperature in kelvin, on the black-body locus between a candle's and a blue sky's";
+
     private const string IntensityWhy = "a luminous intensity in candela";
-    private const string PowerWhy = "a luminous power in lumens";
     private const string LuminanceWhy = "a luminance in nits";
+    private const string PowerWhy = "a luminous power in lumens";
+    private const string TemperatureWhy = "a colour temperature in kelvin, on the black-body locus between a candle's and a blue sky's";
 
     /// <summary>Explicit diffuse light admitted to indirect transport.</summary>
     public static WorldValueField IndirectLights { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Lights), WorldValueDomain.Unit);
@@ -218,21 +219,16 @@ public static class WorldValueFields {
     public static WorldValueField NoiseCoverage { get; } = new(typeof(WorldRenderSkyLayer.Noise), nameof(WorldRenderSkyLayer.Noise.Coverage), WorldValueDomain.Unit);
     /// <summary>A panorama's brightness.</summary>
     public static WorldValueField PanoramaIntensity { get; } = new(typeof(WorldRenderSkyLayer.Panorama), nameof(WorldRenderSkyLayer.Panorama.Intensity), WorldValueDomain.NonNegative);
-    /// <summary>A scrim's alpha, at or above the floor its contrast needs.</summary>
-    public static WorldValueField ScrimAlpha { get; } = new(typeof(WorldThemeScrim), nameof(WorldThemeScrim.Alpha), new WorldValueDomain(
-        Maximum: 1f,
-        Minimum: WorldThemeCapacity.ScrimMinAlpha
-    ), Why: "below its floor the guaranteed-AA contrast floor (over both a dark corner and a lit CRT) breaks");
-    /// <summary>The accent bloom's halo alpha.</summary>
-    public static WorldValueField BloomHaloAlpha { get; } = new(typeof(WorldThemeElevation), nameof(WorldThemeElevation.BloomHaloAlpha), WorldValueDomain.Unit);
-    /// <summary>The accent bloom's ring alpha.</summary>
-    public static WorldValueField BloomRingAlpha { get; } = new(typeof(WorldThemeElevation), nameof(WorldThemeElevation.BloomRingAlpha), WorldValueDomain.Unit);
-    /// <summary>The neutral bloom's halo alpha.</summary>
-    public static WorldValueField BloomNeutralHaloAlpha { get; } = new(typeof(WorldThemeElevation), nameof(WorldThemeElevation.BloomNeutralHaloAlpha), WorldValueDomain.Unit);
-    /// <summary>The neutral bloom's ring alpha.</summary>
-    public static WorldValueField BloomNeutralRingAlpha { get; } = new(typeof(WorldThemeElevation), nameof(WorldThemeElevation.BloomNeutralRingAlpha), WorldValueDomain.Unit);
-    /// <summary>The held inset's alpha.</summary>
-    public static WorldValueField BloomHeldInsetAlpha { get; } = new(typeof(WorldThemeElevation), nameof(WorldThemeElevation.BloomHeldInsetAlpha), WorldValueDomain.Unit);
+    /// <summary>A scrim's alpha.</summary>
+    public static WorldValueField ScrimAlpha { get; } = new(typeof(WorldThemeScrim), nameof(WorldThemeScrim.Alpha), WorldValueDomain.Unit);
+    /// <summary>The glow's ring alpha.</summary>
+    public static WorldValueField GlowRingAlpha { get; } = new(typeof(WorldThemeGlowStyle), nameof(WorldThemeGlowStyle.RingAlpha), WorldValueDomain.Unit);
+    /// <summary>The glow's halo alpha.</summary>
+    public static WorldValueField GlowHaloAlpha { get; } = new(typeof(WorldThemeGlowStyle), nameof(WorldThemeGlowStyle.HaloAlpha), WorldValueDomain.Unit);
+    /// <summary>The neutral glow's ring alpha.</summary>
+    public static WorldValueField GlowNeutralRingAlpha { get; } = new(typeof(WorldThemeGlowStyle), nameof(WorldThemeGlowStyle.NeutralRingAlpha), WorldValueDomain.Unit);
+    /// <summary>The neutral glow's halo alpha.</summary>
+    public static WorldValueField GlowNeutralHaloAlpha { get; } = new(typeof(WorldThemeGlowStyle), nameof(WorldThemeGlowStyle.NeutralHaloAlpha), WorldValueDomain.Unit);
     /// <summary>A marker chip's alpha.</summary>
     public static WorldValueField MarkerChipAlpha { get; } = new(typeof(WorldMarkerStyle), nameof(WorldMarkerStyle.ChipAlpha), WorldValueDomain.Unit);
     /// <summary>A marker ring's alpha.</summary>
@@ -338,11 +334,10 @@ public static class WorldValueFields {
         NoiseCoverage,
         PanoramaIntensity,
         ScrimAlpha,
-        BloomHaloAlpha,
-        BloomRingAlpha,
-        BloomNeutralHaloAlpha,
-        BloomNeutralRingAlpha,
-        BloomHeldInsetAlpha,
+        GlowRingAlpha,
+        GlowHaloAlpha,
+        GlowNeutralRingAlpha,
+        GlowNeutralHaloAlpha,
         MarkerChipAlpha,
         MarkerRingAlpha,
         VolumeSoftness,

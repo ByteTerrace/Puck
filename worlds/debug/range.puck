@@ -232,6 +232,8 @@ screens: map(televisions, tv => {
   // An outdoor LED wall's peak, so the picture reads in full sun; a television's 150 nits shows black under the daylight
   // exposure.
   luminance: 10000nit
+  // Each is a tube television: its picture shows through the CRT's glass.
+  material: Crt
   // Nobody plays them: the ball bounces by itself.
   route {
     engageable: false
@@ -273,9 +275,36 @@ prototypes {
           scale [(1.2 * sign.k), (0.6 * sign.k), 0.02]
         }
         textRuns [
-          { text: $"{sign.d} m", position [0, (2.0 * sign.k), 0.02], rotation [0, 0, 0, 1], emHeight: (0.38 * sign.k), depth: 0.01, mode: "emboss", material: rangeInk, align: "center" }
-          { text: $"1280x900 {sign.low}", position [0, (1.7 * sign.k), 0.02], rotation [0, 0, 0, 1], emHeight: (0.16 * sign.k), depth: 0.006, mode: "emboss", material: rangeInk, align: "center" }
-          { text: $"3840x2160 {sign.high}", position [0, (1.45 * sign.k), 0.02], rotation [0, 0, 0, 1], emHeight: (0.16 * sign.k), depth: 0.006, mode: "emboss", material: rangeInk, align: "center" }
+          {
+            text: $"{sign.d} m"
+            position [0, (2.0 * sign.k), 0.02]
+            rotation [0, 0, 0, 1]
+            emHeight: (0.38 * sign.k)
+            depth: 0.01
+            mode: "emboss"
+            material: rangeInk
+            align: "center"
+          }
+          {
+            text: $"1280x900 {sign.low}"
+            position [0, (1.7 * sign.k), 0.02]
+            rotation [0, 0, 0, 1]
+            emHeight: (0.16 * sign.k)
+            depth: 0.006
+            mode: "emboss"
+            material: rangeInk
+            align: "center"
+          }
+          {
+            text: $"3840x2160 {sign.high}"
+            position [0, (1.45 * sign.k), 0.02]
+            rotation [0, 0, 0, 1]
+            emHeight: (0.16 * sign.k)
+            depth: 0.006
+            mode: "emboss"
+            material: rangeInk
+            align: "center"
+          }
         ]
       }
     }
@@ -421,7 +450,13 @@ bindingOverlays [
             id: "base"
             entries [
               { command: "world.rates", id: "ratesToggle", label: "Rates A/B", text: "toggle", sources ["keyboard.f7"] }
-              { command: "world.debug-view", id: "ratesView", label: "Rate tiers", text: "toggle rates", sources ["keyboard.f8"] }
+              {
+                command: "world.debug-view"
+                id: "ratesView"
+                label: "Rate tiers"
+                text: "toggle rates"
+                sources ["keyboard.f8"]
+              }
             ]
           }
         }

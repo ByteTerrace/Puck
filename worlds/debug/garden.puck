@@ -11,7 +11,7 @@ basis: "avatars/moth"
 documentId: "garden"
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
-import "theme"
+import "skin"
 import "controls"
 import "suit"
 import "size"
@@ -251,7 +251,14 @@ render {
   farDistance: 120
   lighting {
     lights [
-      directional(name: "key", direction: [3, 5, -4], color: "#FFC27A", illuminance: 2000lx, shadow: always, angularRadius: 0.2)
+      directional(
+        name: "key",
+        direction: [3, 5, -4],
+        color: "#FFC27A",
+        illuminance: 2000lx,
+        shadow: always,
+        angularRadius: 0.2
+      )
     ]
   }
   sky {

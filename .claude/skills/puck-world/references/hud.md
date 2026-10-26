@@ -42,7 +42,7 @@ them and `0` hides them. A new addon panel takes the same gate.
 `WorldHudSection(Defaults, Panels)`; `WorldHudDefaults(Enabled, Cursor?)` is
 a world-level kill switch plus the drawn pointer cursor's per-world policy —
 `WorldHudCursor(HoverRadius, SizePx, Role, Visible?)` (hover reach in world
-units, ring radius in px, the bare cursor's `WorldHudCursorRole` hue token, an
+units, ring radius in px, the bare cursor's core theme role (`WorldThemeRole`), an
 optional visibility predicate; null draws no cursor at all, since the engine
 has none of its own and the live policy is authored in
 `worlds/debug/controls.puck`; whole-row replace semantics on
@@ -414,6 +414,20 @@ live in `WorldHudCommandModule`, unbindable.
   AD HOC template against the live document (see "Templating" above);
   refuses by name at the first bad placeholder rather than resolving any of
   it.
+- `world.theme [contrast high|normal|toggle]` — `Immediate`, bindable,
+  presentation only (`WorldThemeCommandModule`, a windowed presentation's).
+  Echoes `[world.theme: source=document|engine-default contrast=high|normal]`:
+  whether the world authors or imports a `theme` or draws the engine's neutral
+  `WorldThemeSection.Default`. `contrast high` is the player's high-contrast
+  preference (`WorldThemeResolve.HighContrast`), which raises every scrim to
+  `WorldThemeCapacity.HighContrastScrimAlpha`; the document is untouched.
+
+The theme's core tokens name purposes only; each overlay component's own look is
+its style under `theme.styles` (`glow`, `keycap`, `bar`, `console`, `cursor`,
+`wheel`, `toast`, `hud`), whose colors take a core role (`{ role: Accent }`) or
+their own (`{ color: "#RRGGBB" }`), resolved by `WorldThemeResolve` into the
+token slab's component slots (`OverlayColorRole.ConsoleEcho`, `KeycapBadge`,
+`KeycapBadgeInk`). The debug world's look is `worlds/debug/skin.puck`.
 
 Inline JSON is reconstructed from the raw command text (the tokenizer would
 destroy quotes) and parsed through `WorldJsonPayload.TryParse` against

@@ -1,9 +1,9 @@
 // The on-screen controls of the worlds the Moth walks: the drawn cursor, the icons every badge and action draws, the
 // standard controller bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), its five pages, and the
-// play wheel with its rings. The debug world, the garden and the night field import it beside the theme, so a seat keeps
+// play wheel with its rings. The debug world, the garden and the night field import it beside the skin, so a seat keeps
 // its bar and wheel through the portal:
 //
-//   import "theme"
+//   import "skin"
 //   import "controls"
 //
 // The bar shows the page the seat holds. Nothing held is the Moth's own controls (Move); holding the left trigger (Z) is
@@ -699,17 +699,65 @@ bindingOverlays [
             inherits: "base"
             label: "View"
             entries [
-              { command: "view.override", id: "viewPlay", label: "Chase", text: "layout play", value: neverRead, sources: padUp }
-              { command: "view.override", id: "viewQuarter", label: "Three-quarter", text: "layout three-quarter", value: neverRead, sources: padRight }
-              { command: "view.override", id: "viewFront", label: "Front", text: "layout front", value: neverRead, sources: padDown }
-              { command: "view.override", id: "viewRear", label: "Rear", text: "layout rear", value: neverRead, sources: padLeft }
-              { command: "view.override", id: "viewWide", label: "Wide", text: "layout flight-stage", value: neverRead, sources: padLeftShoulder }
+              {
+                command: "view.override"
+                id: "viewPlay"
+                label: "Chase"
+                text: "layout play"
+                value: neverRead
+                sources: padUp
+              }
+              {
+                command: "view.override"
+                id: "viewQuarter"
+                label: "Three-quarter"
+                text: "layout three-quarter"
+                value: neverRead
+                sources: padRight
+              }
+              {
+                command: "view.override"
+                id: "viewFront"
+                label: "Front"
+                text: "layout front"
+                value: neverRead
+                sources: padDown
+              }
+              {
+                command: "view.override"
+                id: "viewRear"
+                label: "Rear"
+                text: "layout rear"
+                value: neverRead
+                sources: padLeft
+              }
+              {
+                command: "view.override"
+                id: "viewWide"
+                label: "Wide"
+                text: "layout flight-stage"
+                value: neverRead
+                sources: padLeftShoulder
+              }
               // Autorun and autofly: each press switches her walking forward, or flying (flight mode on and climbing), on or
               // off, and the latch outlives the page, so she keeps going with the trigger released.
               { channel: "forward", id: "autorun", label: "Autorun", mode: Toggle, scale: 1, sources: padLeftStick }
               { command: "player.look.recenter", id: "viewRecenter", label: "Recenter", sources: padNorth }
-              { command: "view.isolate", id: "viewIsolate", label: "Jetpack alone", text: "toggle moth pod* nozzle*", sources: padWest }
-              { command: "view.override", id: "viewFace", label: "Face", text: "layout face", value: neverRead, sources: padSouth }
+              {
+                command: "view.isolate"
+                id: "viewIsolate"
+                label: "Jetpack alone"
+                text: "toggle moth pod* nozzle*"
+                sources: padWest
+              }
+              {
+                command: "view.override"
+                id: "viewFace"
+                label: "Face"
+                text: "layout face"
+                value: neverRead
+                sources: padSouth
+              }
               { command: "player.frame", id: "viewFrame", label: "Frame", sources: padEast }
               { command: "player.look.free", id: "viewFreeLook", label: "Free look", sources: padRightShoulder }
               { channel: "rise", id: "autofly", label: "Autofly", mode: Toggle, scale: 1, sources: padRightStick }
@@ -728,11 +776,38 @@ bindingOverlays [
               { command: "world.history", id: "dbgHistory", label: "History on", text: "on", sources: padRight }
               { command: "console", id: "dbgConsole", label: "Console", sources: padDown }
               { command: "world.screenshot", id: "dbgCapture", label: "Capture", sources: padLeft }
-              { command: "world.inspect", id: "dbgInspect", label: "Inspector", text: "toggle", sources: padLeftShoulder }
+              {
+                command: "world.inspect"
+                id: "dbgInspect"
+                label: "Inspector"
+                text: "toggle"
+                sources: padLeftShoulder
+              }
               { command: "world.debug-view", id: "dbgDebugView", label: "Debug view", text: "next", sources: padNorth }
-              { command: "world.compare", id: "dbgHold", label: "Hold frame", text: "hold", value: neverRead, sources: padWest }
-              { command: "world.compare", id: "dbgSplit", label: "Compare", text: "split", value: neverRead, sources: padEast }
-              { command: "world.compare", id: "dbgClear", label: "Clear hold", text: "off", value: neverRead, sources: padRightShoulder }
+              {
+                command: "world.compare"
+                id: "dbgHold"
+                label: "Hold frame"
+                text: "hold"
+                value: neverRead
+                sources: padWest
+              }
+              {
+                command: "world.compare"
+                id: "dbgSplit"
+                label: "Compare"
+                text: "split"
+                value: neverRead
+                sources: padEast
+              }
+              {
+                command: "world.compare"
+                id: "dbgClear"
+                label: "Clear hold"
+                text: "off"
+                value: neverRead
+                sources: padRightShoulder
+              }
               { command: "body.stop", id: "dbgStop", label: "Stop", sources: padRightStick }
             ]
           }
@@ -755,7 +830,13 @@ bindingOverlays [
             inherits: "base"
             label: "Tour"
             entries [
-              { command: "world.toon", id: "tourToon", label: "Toon shading", text: "toggle", sources ["gamepad.back", "keyboard.f6"] }
+              {
+                command: "world.toon"
+                id: "tourToon"
+                label: "Toon shading"
+                text: "toggle"
+                sources ["gamepad.back", "keyboard.f6"]
+              }
             ]
           }
         }

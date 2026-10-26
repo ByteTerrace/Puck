@@ -1,0 +1,131 @@
+// The debug world's skin: the look its console, binding bar, radial wheel, toasts, HUD panels and drawn cursor take —
+// dark surfaces, an orange accent, a green console echo and keycaps whose latched toggles march. A world that imports
+// no theme draws the engine's neutral one instead. The debug world, the garden and the night field import it beside
+// their other modules:
+//
+//   import "skin"
+//
+// Colours are #RRGGBB or #RRGGBBAA; sizes and spacing are pixels; durations are milliseconds, except the keycap's march,
+// which is seconds. A component style's colour is a core role (`{ role: Accent }`) or its own (`{ color: "#RRGGBB" }`).
+// A world overrides any token by authoring the same path in its own `theme` block.
+theme {
+  color {
+    // Surfaces, darkest to lightest, and the translucent scrims panels, strips and chips sit on.
+    surfaceBase: "#0E1013"
+    surfaceRaised: "#1D2126"
+    surfaceInset: "#0B0D0F"
+    scrimPanel {
+      color: "#121519"
+      alpha: 0.9
+    }
+    scrimStrip {
+      color: "#121519"
+      alpha: 0.86
+    }
+    scrimChip {
+      color: "#171B1F"
+      alpha: 0.94
+    }
+
+    // Hairlines and rules.
+    lineHair: "#FFFFFF17"
+    lineSoft: "#FFFFFFB3"
+
+    // Text, the orange accent and the status hues.
+    textPrimary: "#EDEFF2"
+    textDim: "#9BA3AB"
+    textMute: "#5C646C"
+    accent: "#FF6A2B"
+    accentQuiet: "#FF6A2B24"
+    accentInk: "#160A04"
+    positive: "#5BC98C"
+    warning: "#E8B341"
+    danger: "#F2565B"
+  }
+
+  space {
+    space2: 8
+    space3: 12
+    space8: 32
+  }
+
+  radius {
+    radius1: 3
+    radius2: 6
+    radius3: 9
+  }
+
+  type {
+    microSize: 11
+    monoSize: 12
+  }
+
+  stroke {
+    hairline: 1
+  }
+
+  motion {
+    durMed: 180
+  }
+
+  icon {
+    strokeHalfWidth: 0.08
+  }
+
+  styles {
+    // A lit ring and halo blooming round a held or selected control, a toast and a selected wheel piece.
+    glow {
+      haloBlur: 18
+      ringAlpha: 0.55
+      haloAlpha: 0.42
+      neutralRingAlpha: 0.3
+      neutralHaloAlpha: 0.22
+    }
+    // The bar's and the wheel's icon plates: dark badge discs with light glyphs, and a latched toggle's border
+    // marching once every 1.6 seconds.
+    keycap {
+      referenceSize: 40
+      restOpacity: 0.62
+      badge {
+        color: "#0D0D12"
+      }
+      badgeInk {
+        color: "#F5F5FA"
+      }
+      toggleMarch: 1.6
+    }
+    bar {
+      labelAlpha: 0.9
+      hintAlpha: 0.6
+      quietAlpha: 0.7
+    }
+    // The echoed input and the prompt in the console's green.
+    console {
+      echo {
+        color: "#5CFAA0"
+      }
+      headHeight: 38
+      selectionAlpha: 0.7
+    }
+    cursor {
+      alpha: 0.9
+      dotRatio: 0.22
+      dotMaxHalf: 4
+      labelGap: 5
+    }
+    wheel {
+      ringAlpha: 0.55
+      activeRingAlpha: 0.95
+      labelAlpha: 1
+      hubLabelGap: 2
+    }
+    toast {
+      minHeight: 40
+      iconSize: 24
+      railWidth: 2
+    }
+    hud {
+      trackAlpha: 0.7
+    }
+  }
+}

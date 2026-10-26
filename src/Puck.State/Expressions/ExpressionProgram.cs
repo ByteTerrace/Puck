@@ -7,8 +7,8 @@ namespace Puck.State;
 /// affinity evaluates. Each instruction either pushes a value or consumes preceding values; the compiler proves
 /// stack shape and numeric kind before simulation begins.</summary>
 /// <remarks>
-/// <para>The <c>.puck</c> grammar, the SQL dialect, and the infix spelling (<see cref="ExpressionSpelling"/>) are
-/// front ends that parse to this shape; <c>puck.world.definition.v1</c> holds it and nothing else.
+/// <para>The <c>.puck</c> grammar and the infix spelling (<see cref="ExpressionSpelling"/>) are front ends that
+/// parse to this shape; <c>puck.world.definition.v1</c> holds it and nothing else.
 /// <c>puck.cartridge.v1</c> spells a program as infix text instead, through
 /// <see cref="ExpressionSpellingJsonConverter"/>.</para>
 /// <para>A program's own <see cref="Instructions"/> and each of its <see cref="Subprograms"/> are separately bounded

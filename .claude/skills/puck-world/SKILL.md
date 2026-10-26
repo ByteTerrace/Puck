@@ -60,7 +60,7 @@ for capture names and current coverage boundaries.
 
 The World the owner pairs in runs the main
 checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
-tools (in Claude, ToolSearch `select:mcp__puck__puck_worlds,mcp__puck__puck_world_start,mcp__puck__puck_world_stop,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
+tools (in Claude, ToolSearch `select:mcp__puck__puck_adapter,mcp__puck__puck_worlds,mcp__puck__puck_world_start,mcp__puck__puck_world_start_wait,mcp__puck__puck_world_stop,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
 `puck_worlds` lists the running Worlds, and `puck_exec`, `puck_capture_frame`
 and `puck_state_vector_write` take a `world` argument (attachment id or
 process id) that reaches exactly that World; name it whenever more than one
@@ -70,7 +70,12 @@ only when the task allows it, and restore what you changed.
 
 To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
-tool resolves the World build of the checkout's current sources from the same
+call returns `pending` and a `startId` promptly. Poll `puck_world_start_wait`
+with that id (each wait is at most 20 seconds); never repeat the start while
+pending. A cold build continues between calls and across adapter updates.
+`cancel: true` on the wait cancels an unfinished start. A cancelled poll only
+ends that poll. Session shutdown cancels starts and stops its Worlds.
+The tool resolves the World build of the checkout's current sources from the same
 content-keyed store `puck test` and `puck canary` use, building it first when
 no run has built that source state (an unchanged tree reuses its build), so it
 never boots a binary older than the sources and documents you edited; a
@@ -81,7 +86,7 @@ which the default Direct3D 12 build refuses. Its build is not the
 worktree's `bin/Release`, so no manual build is needed first. Never hand-write that boot
 line: the tool passes `--devices none` ([the ruling](#an-agents-world-opens-no-physical-device)),
 a state directory of its own and `--control`, takes and holds the GPU lease
-for a windowed World, and returns the World's `processId`. Name that World on
+for a windowed World. A completed wait returns its `processId`. Name that World on
 every call, read its stdout and stderr with `host.log` (`host.log category
 sdf.mesh-bake`, `host.log since <seq>`, `host.log ticks <from>..<to>`), and end
 it with `puck_world_stop`, which refuses any World the adapter did not start.
@@ -94,6 +99,13 @@ Codex discovers these tools through the session's tool inventory (search for
 Use the tools directly before writing a stdin process wrapper. The headless
 start, named `puck_exec`, `world.wait`, headless capture refusal and stop were
 exercised from a Codex lane's actual MCP tools.
+The hook installs completed CLI builds through the launcher's signed local
+development channel under `.claude/mcp-install`. A persistent front follows
+activated builds without reconnecting the client; earlier backends retain
+their World processes and route their stops until the session ends. Rebuild
+`src/Puck.Cli` to publish adapter changes, then use `puck_adapter` to inspect
+the answering backend's module id and installed directory. No publisher key,
+Azure release or application-copy staging is involved.
 
 `puck_exec.command` also accepts a newline-separated script: at most 64
 nonblank, noncomment lines and 8192 characters total. The entire script reaches

@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using Puck.State;
-using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.Transpiler.Units;
 
@@ -64,8 +63,7 @@ public readonly record struct PuckSemanticToken(int Offset, int Length, PuckSema
 /// <see cref="ExpressionOperators.Infix"/>. The roles are the ones the
 /// VS Code extension's TextMate grammar distinguishes (<c>editors/vscode/README.md</c>'s syntax-colour table).</para>
 /// <para>Brackets, braces, commas, semicolons and member dots carry no token, so an editor's bracket colouring stays
-/// in charge of them. The body of an embedded-language block (<c>sql { … }</c>) carries none either, so the editor's
-/// grammar for that language colours it.</para>
+/// in charge of them.</para>
 /// <para>A classification never fails: text that does not parse is still classified, word by word, since an
 /// editor highlights what the author is typing.</para>
 /// </remarks>
@@ -118,18 +116,15 @@ public static class PuckSemanticTokens {
 
     /// <summary>Classifies <paramref name="source"/>.</summary>
     /// <param name="source">The source text.</param>
-    /// <param name="vocabulary">The vocabulary the source is written in, which names its embedded-language blocks;
-    /// none when omitted.</param>
     /// <returns>Every token, in source order; no two overlap, and each lies inside <paramref name="source"/>.</returns>
-    public static IReadOnlyList<PuckSemanticToken> Classify(string source, IDocumentVocabulary? vocabulary = null) {
+    public static IReadOnlyList<PuckSemanticToken> Classify(string source) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         var tokens = new List<PuckSemanticToken>();
 
         new Classifier(
             source: source,
-            tokens: tokens,
-            vocabulary: vocabulary
+            tokens: tokens
         ).Run(
             end: source.Length,
             expression: false,
@@ -207,7 +202,7 @@ public static class PuckSemanticTokens {
         return data;
     }
 
-    private sealed class Classifier(string source, List<PuckSemanticToken> tokens, IDocumentVocabulary? vocabulary) {
+    private sealed class Classifier(string source, List<PuckSemanticToken> tokens) {
         // The innermost open bracket: '{' (or none) where statements stand, '[' or '(' inside an expression.
         private readonly Stack<char> m_open = new();
 
@@ -418,8 +413,7 @@ public static class PuckSemanticTokens {
                     );
                     new Classifier(
                         source: source,
-                        tokens: tokens,
-                        vocabulary: vocabulary
+                        tokens: tokens
                     ).Run(
                         end: ((close < 0)
                             ? bodyEnd
@@ -611,26 +605,8 @@ public static class PuckSemanticTokens {
             } else if ((previousKeyword is "as" or "shape") && char.IsAsciiLetterUpper(c: word[0])) {
                 role = PuckSemanticRole.Type;
             } else if (head && (following is '{' or '[') && (next > wordEnd)) {
-                if (IsEmbeddedLanguage(word: word) && (following == '{')) {
-                    Emit(
-                        length: length,
-                        offset: start,
-                        role: PuckSemanticRole.Keyword
-                    );
-                    Settle();
-                    return SkipBlock(open: next);
-                }
                 role = PuckSemanticRole.Property;
             } else if ((head || (previousKeyword is "entry" or "export")) && OpensName(at: next)) {
-                if (IsEmbeddedLanguage(word: word)) {
-                    Emit(
-                        length: length,
-                        offset: start,
-                        role: PuckSemanticRole.Keyword
-                    );
-                    Settle();
-                    return EmbeddedBlock(after: next);
-                }
                 role = PuckSemanticRole.Keyword;
                 keyword = word;
             } else if (char.IsAsciiLetterUpper(c: word[0])) {
@@ -649,46 +625,6 @@ public static class PuckSemanticTokens {
             m_previousKeyword = keyword;
 
             return wordEnd;
-        }
-        private bool IsEmbeddedLanguage(string word) => ((vocabulary is not null) && vocabulary.IsEmbeddedLanguage(identifier: word));
-        // `sql "name" { … }`: the name is a string, and the body belongs to the embedded language.
-        private int EmbeddedBlock(int after) {
-            var index = after;
-
-            if (source[index] is '"' or '$') {
-                var close = SourceLexemes.End(
-                    offset: index,
-                    source: source
-                );
-
-                if (close > index) {
-                    Emit(
-                        length: (close - index),
-                        offset: index,
-                        role: PuckSemanticRole.String
-                    );
-                    index = NextSignificantIndex(from: close);
-                }
-            }
-
-            return (((index < source.Length) && (source[index] == '{'))
-                ? SkipBlock(open: index)
-                : index
-            );
-        }
-        // Past the brace that closes the one at `open`, leaving everything inside it unclassified.
-        private int SkipBlock(int open) {
-            var depth = 0;
-
-            for (var index = open; (index < source.Length); ++index) {
-                if (source[index] == '{') {
-                    ++depth;
-                } else if ((source[index] == '}') && (--depth == 0)) {
-                    return (index + 1);
-                }
-            }
-
-            return source.Length;
         }
         private bool OpensName(int at) {
             if (at >= source.Length) {

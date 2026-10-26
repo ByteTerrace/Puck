@@ -230,9 +230,12 @@ public sealed class WorldSessionMirror : IClientSink {
     // thread calling WorldSessionSceneEmitter both live in this SAME process, so a real elapsed-time read between
     // them is an honest measure, not a cross-machine clock assumption.
     private long m_snapshotArrivalTimestamp = Stopwatch.GetTimestamp();
+
     // The last ArrivalHistory snapshot arrival timestamps, a ring under m_snapshotWriteGate (SnapshotArrivalIntervals).
     private const int ArrivalHistory = 64;
+
     private readonly long[] m_arrivals = new long[ArrivalHistory];
+
     private int m_arrivalCount;
 
     /// <summary>Initializes the mirror with an empty placeholder definition — <c>Server.WorldServer.AttachSink</c>
@@ -706,7 +709,7 @@ public sealed class WorldSessionMirror : IClientSink {
             }
         }
 
-        DocumentDelivered?.Invoke(obj: Document);
+        if (!stamp.ArenaValues) { DocumentDelivered?.Invoke(obj: Document); }
     }
 
     // Notes one moved row for the next FollowState to refresh, once however often it moves before then. Called under
@@ -831,9 +834,11 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The epoch.</returns>
     public int PoseEpoch(int index) => m_poseEpoch[index];
+
     /// <summary>Gets the in-place portal crossings each entity has made, which a consumer that latched an entity's
     /// world-space pose carries it through, as <c>WorldClient.Carries</c> does for the local world.</summary>
     public WorldPoseCarries Carries { get; } = new(capacity: EntityCapacity);
+
     /// <summary>The look row an entity wears: the delivered look table indexed by the entity's mirrored look index,
     /// or the implicit single catalog look when the world authors no <c>looks</c> section, and for an index the
     /// delivered table cannot cover. The same resolve <c>WorldClient.Look</c> performs, over this mirror's own
@@ -858,13 +863,13 @@ public sealed class WorldSessionMirror : IClientSink {
         lock (m_snapshotWriteGate) {
             var held = Math.Min(val1: m_arrivalCount, val2: ArrivalHistory);
             var count = Math.Min(val1: Math.Max(val1: (held - 1), val2: 0), val2: milliseconds.Length);
-            var first = (m_arrivalCount - count - 1);
+            var first = ((m_arrivalCount - count) - 1);
 
             for (var index = 0; (index < count); index++) {
                 var from = m_arrivals[((first + index) % ArrivalHistory)];
-                var to = m_arrivals[((first + index + 1) % ArrivalHistory)];
+                var to = m_arrivals[(((first + index) + 1) % ArrivalHistory)];
 
-                milliseconds[index] = Stopwatch.GetElapsedTime(startingTimestamp: from, endingTimestamp: to).TotalMilliseconds;
+                milliseconds[index] = Stopwatch.GetElapsedTime(endingTimestamp: to, startingTimestamp: from).TotalMilliseconds;
             }
 
             return count;

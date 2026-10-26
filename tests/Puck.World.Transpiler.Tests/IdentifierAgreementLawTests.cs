@@ -6,15 +6,13 @@ using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Decompiler;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Sql;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>The document printers held to the one identifier rule, <see cref="IdentifierSpelling"/>, by
 /// <see cref="SpellingLaws"/>: the formatter's property and cell-key names, and every name the decompiler prints —
-/// a state row, a cell key, a rule group, a set, a pattern, a document member's key, and a row it projects into the
-/// <c>sql</c> dialect. A printed name reads back as itself through the compiler, and a printer writes a name bare
+/// a state row, a cell key, a rule group, a set, a pattern and a document member's key. A printed name reads back as itself through the compiler, and a printer writes a name bare
 /// exactly when the compiler reads that bare spelling as the name and the rule, less the position's reservations,
 /// admits it. Each law carries its mutation proof. The state-language printers are held to the same laws in
 /// <c>tests/Puck.State.Tests/IdentifierSpellingLawTests.cs</c>.</summary>
@@ -129,26 +127,21 @@ public sealed class IdentifierAgreementLawTests {
     private const string GroupBody = "state {\n    world {\n        slot flag = 0\n    }\n}\n\nstabilize settle maxPasses(4) {\n    rule \"collapse\" {\n        flag = 0\n    }\n}\n";
     private const string PatternBody = "pattern hand : Int {\n    value: \"face[$token]\"\n    symbols {\n        face = 1..2\n    }\n    match: face*\n}\n";
     private const string SetBody = (TableBody + "\nset lit: board(probe, 0..1)\n");
-    private const string SqlBody = "state {\n    world {\n        slot flag = 0\n    }\n}\n";
 
-    private static string Decompile(string body, Action<JsonObject> rename, bool sql = false) {
+    private static string Decompile(string body, Action<JsonObject> rename) {
         var document = WorldSources.LowerClean(body: body);
 
         rename(obj: document);
 
-        return WorldDecompiler.Decompile(
-            root: document,
-            sql: sql
-        );
+        return WorldDecompiler.Decompile(root: document);
     }
-    private static SpellingPosition Decompiled(string label, Func<string, bool> carries, string body, Action<JsonObject, string> rename, Func<string, string> bare, Func<string, string> barePattern, Func<JsonObject?, string?> read, Func<string, bool> rule, Func<string, bool>? reserved = null, bool sql = false) => new(
+    private static SpellingPosition Decompiled(string label, Func<string, bool> carries, string body, Action<JsonObject, string> rename, Func<string, string> bare, Func<string, string> barePattern, Func<JsonObject?, string?> read, Func<string, bool> rule, Func<string, bool>? reserved = null) => new(
         Bare: bare,
         Carries: carries,
         Label: label,
         Print: name => Decompile(
             body: body,
-            rename: document => rename(arg1: document, arg2: name),
-            sql: sql
+            rename: document => rename(arg1: document, arg2: name)
         ),
         PrintedBare: (name, printed) => HasLine(pattern: $"{barePattern(arg: Regex.Escape(str: name))}\r?$", printed: printed),
         Read: text => read(arg: CompileQuietly(source: text)),
@@ -250,18 +243,6 @@ public sealed class IdentifierAgreementLawTests {
             },
             reserved: PuckPrinter.PropertyKeywords.Contains,
             rule: static name => IdentifierSpelling.IsName(text: name)
-        ),
-        Decompiled(
-            bare: static name => $"{WorldSources.Header}sql {{\n    DECLARE {name} INT DEFAULT 0;\n}}\n",
-            barePattern: static name => $@"^\s*DECLARE {name} .*",
-            body: SqlBody,
-            carries: IsAuthoredCellName,
-            label: "decompiled sql row",
-            read: static document => TextAt(document: document, "state", "world", 0, "name"),
-            rename: static (document, name) => At(node: document, "state", "world", 0)!["name"] = name,
-            reserved: static name => StateSqlLexer.IsReservedWord(word: name),
-            rule: static name => IdentifierSpelling.IsIdentifier(text: name),
-            sql: true
         ),
     ];
 

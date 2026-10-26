@@ -83,7 +83,19 @@ template plinth(label, model) {
     rotation: placardTilt
     scale [0.19, 0.1, 0.012]
   }
-  textRuns [{ text: $"{model}\nGAMING BRICK", position: placardFront, rotation: placardTilt, emHeight: labelEm, depth: labelDepth, mode: "emboss", material: 1, align: "center", maxWidth: 0.36 }]
+  textRuns [
+    {
+      text: $"{model}\nGAMING BRICK"
+      position: placardFront
+      rotation: placardTilt
+      emHeight: labelEm
+      depth: labelDepth
+      mode: "emboss"
+      material: 1
+      align: "center"
+      maxWidth: 0.36
+    }
+  ]
 }
 
 // The Humble Gaming Brick's slots. Its shell is glass (`glass`): atomic-orange acrylic (ior 1.49) whose tint is reached
@@ -723,7 +735,18 @@ prototypes {
         scale [0.06, 0.0095, 0.0665]
         chamfer: 0.002
       }
-      textRuns [{ text: "HUMBLE GAMING DECK", position [0, (deckTop - 0.04), 0.29], rotation [0, 0, 0, 1], emHeight: labelEm, depth: labelDepth, mode: "emboss", material: standLabel, align: "center" }]
+      textRuns [
+        {
+          text: "HUMBLE GAMING DECK"
+          position [0, (deckTop - 0.04), 0.29]
+          rotation [0, 0, 0, 1]
+          emHeight: labelEm
+          depth: labelDepth
+          mode: "emboss"
+          material: standLabel
+          align: "center"
+        }
+      ]
     }
   }
 
@@ -1258,7 +1281,13 @@ let advancedPitch = 0.000255
 // the camera has framed the picture, the window shows it alone, as a desktop emulator does, on the matte its route's
 // `display` fills: black on every device.
 let deviceDisplay = { fill: "#000000" }
-let deviceRoute = { engageable: true, engageRadius: 3, engageChannel: "interact", kit: "devicePad", display: deviceDisplay }
+let deviceRoute = {
+  engageable: true
+  engageRadius: 3
+  engageChannel: "interact"
+  kit: "devicePad"
+  display: deviceDisplay
+}
 
 screens [
   {
@@ -1306,6 +1335,9 @@ screens [
     round: 0
     source: machine(instance: `humble-gaming-deck`, output: "video")
     luminance: 150nit
+    // The television is a tube: its picture shows through the CRT's glass, inset in its bezel. The handhelds' panels
+    // show theirs plainly.
+    material: Crt
     // The deck has two controller ports; an engaged seat plays the first.
     route {
       engageable: true

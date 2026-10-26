@@ -45,7 +45,13 @@ hud {
         ]
       }
       elements [
-        { id: "line", kind: Text, rect { x: 0.03, y: 0, width: 0.94, height: 1 }, style: Danger, "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}" }
+        {
+          id: "line"
+          kind: Text
+          rect { x: 0.03, y: 0, width: 0.94, height: 1 }
+          style: Danger
+          "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}"
+        }
       ]
     }
   ]
@@ -58,7 +64,6 @@ addon "watchdog" {
   enabled: true
   requests: concat(
     [
-      { capability: Mutate, subject: "section:State" }
       { capability: Edit, subject: "state:watchdog" }
       { capability: Edit, subject: "state:watchdogLog" }
     ],
@@ -66,12 +71,14 @@ addon "watchdog" {
   )
 }
 
-// One pose query a tick over each body, its collision begins, and a whole-row write a tick to each of its own rows.
+// Pose reads and collision begins, plus bounded Set writes to the watchdog cells.
 grants: concat(
   [
-    { grantee: "addon:watchdog", capability: Mutate, subject: "section:State", kindMask: "UpsertStateRow", budget: 2 }
-    { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdog" }
-    { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdogLog" }
+    { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdog", budget: 16, writeMask: "Set" }
+    { grantee: "addon:watchdog", capability: Edit, subject: "state:watchdogLog", budget: 16, writeMask: "Set" }
   ],
-  map(watchedBodies, body => { grantee: "addon:watchdog", capability: Observe, subject: $"body:{body}", budget: 1, eventBudget: 8 })
+  map(
+    watchedBodies,
+    body => { grantee: "addon:watchdog", capability: Observe, subject: $"body:{body}", budget: 1, eventBudget: 8 }
+  )
 )
