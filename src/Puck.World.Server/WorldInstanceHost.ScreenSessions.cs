@@ -81,7 +81,7 @@ public sealed class WorldObservationSession {
 }
 public sealed partial class WorldInstanceHost {
     // Each owning instance's observations, and the definition they were reconciled against.
-    private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedDictionary<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedList<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
 
     // Both indexes publish together. Presentation's per-frame lookups use value keys, so reading an existing session
     // does not construct another observation identity.
@@ -106,8 +106,8 @@ public sealed partial class WorldInstanceHost {
 
     // Every authored observation: screens, placement faces and named infinity layers. Their destinations all use the
     // same resolver and the owning authority's principal; presentation never opens an observation itself.
-    private static SortedDictionary<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition) {
-        var declared = new SortedDictionary<WorldObservationSite, WorldScreenSource.Session>();
+    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition) {
+        var declared = new SortedList<WorldObservationSite, WorldScreenSource.Session>();
 
         foreach (var screen in definition.Screens) {
             if (screen.Source is WorldScreenSource.Session session) {
@@ -163,7 +163,7 @@ public sealed partial class WorldInstanceHost {
         key: BootInstanceName,
         value: out var boot
     )
-        ? boot.Server.Definition.Views.NestingDepth
+        ? boot.Server.Configuration.Views.NestingDepth
         : RenderGraphInstanceSet.DefaultNestingDepth);
 
     // Walks the open sessions from every world a presentation shows directly, the boot world and every world a human
@@ -197,7 +197,9 @@ public sealed partial class WorldInstanceHost {
 
             var depth = (m_screenDepths[owner] + 1);
 
-            foreach (var (_, session) in owned.Rows) {
+            for (var index = 0; (index < owned.Rows.Count); index++) {
+                var session = owned.Rows.Values[index];
+
                 if (
                     (session.Observation is { Ended: false }) &&
                     (session.InstanceName is { } observed) &&
@@ -419,7 +421,7 @@ public sealed partial class WorldInstanceHost {
     // Whether an instance takes the live input it is sent: it steps, rather than holding for a pause, a stop, its
     // mirrors or its retirement, and it is not driving its own tape, whose link drops live input.
     private static bool TakesInput(WorldInstance instance) => (
-        (instance.Server.Definition.SimulationRateHz > 0) &&
+        (instance.Server.Configuration.SimulationRateHz > 0) &&
         !instance.IsPaused &&
         !instance.AwaitingMirrors &&
         !instance.Server.IsRetiring &&
@@ -430,10 +432,13 @@ public sealed partial class WorldInstanceHost {
     // tick, or an owner that did not step). Each travels the destination's own link, where its tape records it. A
     // destination that is not taking input (paused, stopped, held, or driving its own tape) is sent nothing, and a
     // release owed to it waits.
-    private void ForwardScreenSessions(WorldInstance owner, SortedDictionary<WorldObservationSite, WorldObservationSession> sessions, bool stepped) {
+    private void ForwardScreenSessions(WorldInstance owner, SortedList<WorldObservationSite, WorldObservationSession> sessions, bool stepped) {
         var engagement = owner.Server.Engagement;
 
-        foreach (var (screen, session) in sessions) {
+        for (var index = 0; (index < sessions.Count); index++) {
+            var screen = sessions.Keys[index];
+            var session = sessions.Values[index];
+
             if (screen is not WorldObservationSite.Screen physical) {
                 continue;
             }
@@ -464,15 +469,19 @@ public sealed partial class WorldInstanceHost {
                 screenIndex: physical.Index
             )
             ) {
-                foreach (var forward in engagement.PortalForwards) {
+                var forwards = engagement.PortalForwards;
+
+                for (var forwardIndex = 0; (forwardIndex < forwards.Count); forwardIndex++) {
+                    var forward = forwards[forwardIndex];
+
                     if (
                         (forward.ScreenIndex == physical.Index) &&
                         TryMapForward(
-                        destination: destination.Server.Definition,
+                        destination: destination.Server.Configuration,
                         face: in face,
                         forward: in forward,
                         mapped: out mapped,
-                        source: owner.Server.Definition
+                        source: owner.Server.Configuration
                     )
                     ) {
                         found = true;
@@ -523,10 +532,10 @@ public sealed partial class WorldInstanceHost {
             key: instance.Name,
             value: out var owned
         )) {
-            owned = (null, new SortedDictionary<WorldObservationSite, WorldObservationSession>());
+            owned = (null, new SortedList<WorldObservationSite, WorldObservationSession>());
         }
 
-        var definition = instance.Server.Definition;
+        var definition = instance.Server.Configuration;
         var changed = false;
 
         if ((owned.Reconciled is null) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
@@ -572,7 +581,10 @@ public sealed partial class WorldInstanceHost {
 
         // A destination that ended a session (a rebuild ends every one) is asked once to admit the observer again,
         // observing into the same mirror; a refusal holds the last image.
-        foreach (var (screen, session) in owned.Rows) {
+        for (var index = 0; (index < owned.Rows.Count); index++) {
+            var screen = owned.Rows.Keys[index];
+            var session = owned.Rows.Values[index];
+
             if (
                 (session.Observation is not { Ended: true } ended) ||
                 session.ReadmissionRefused ||

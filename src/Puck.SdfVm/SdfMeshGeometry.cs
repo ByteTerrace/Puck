@@ -48,11 +48,23 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private const float OwnSlot = -1f;
     private const float OtherSlot = -2f;
 
-    private readonly XxHash128 m_hash = new();
+    // The most hashers sealed builders keep for later ones: every group of a plan takes two, and a program restart plans
+    // thousands.
+    private const int MaxSpareHashers = 8192;
+
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<XxHash128> SpareHashers = new();
+    private static int SpareHasherCount;
+
+    private XxHash128? m_hash = RentHasher();
     // Everything m_hash takes but the poses of other slots and the steps they round to.
-    private readonly XxHash128 m_form = new();
+    private XxHash128? m_form = RentHasher();
+    // The geometry and form Seal fixed.
+    private UInt128 m_sealedHash;
+    private UInt128 m_sealedForm;
     private readonly List<int> m_materials = [];
-    private readonly SortedDictionary<int, DynamicTransform> m_poses = [];
+    // Made by the first kept pose: most static groups keep none.
+    private SortedDictionary<int, DynamicTransform>? m_poses;
+    private static readonly IReadOnlyDictionary<int, DynamicTransform> NoPoses = new Dictionary<int, DynamicTransform>();
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
     private int m_chainSlot = -1;
     // The steps another slot's pose rounds to: PositionSteps and OrientationSteps unless Snap coarsened them.
@@ -75,27 +87,91 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         var steps = new Vector2(x: positionSteps, y: orientationSteps);
 
-        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector2>(reference: in steps)));
+        Hashing().Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector2>(reference: in steps)));
     }
+    /// <summary>Fixes the geometry and form appended so far, which <see cref="Geometry"/> and <see cref="Form"/> then
+    /// answer, and hands the hashers they were taken with to the builders made after it. Nothing is appended after it;
+    /// a second call does nothing.</summary>
+    public void Seal() {
+        if ((m_hash is not { } hash) || (m_form is not { } form)) {
+            return;
+        }
+
+        m_sealedHash = hash.GetCurrentHashAsUInt128();
+        m_sealedForm = form.GetCurrentHashAsUInt128();
+        m_hash = null;
+        m_form = null;
+        ReturnHasher(hasher: hash);
+        ReturnHasher(hasher: form);
+    }
+
+    private static XxHash128 RentHasher() {
+        if (SpareHashers.TryDequeue(result: out var hasher)) {
+            _ = Interlocked.Decrement(location: ref SpareHasherCount);
+
+            return hasher;
+        }
+
+        return new XxHash128();
+    }
+    private static void ReturnHasher(XxHash128 hasher) {
+        if (Interlocked.Increment(location: ref SpareHasherCount) > MaxSpareHashers) {
+            _ = Interlocked.Decrement(location: ref SpareHasherCount);
+
+            return;
+        }
+
+        hasher.Reset();
+        SpareHashers.Enqueue(item: hasher);
+    }
+    // The geometry's hasher, which only an unsealed builder holds.
+    private XxHash128 Hashing() => (m_hash ?? throw new InvalidOperationException(message: "A sealed geometry takes no more appends."));
 
     /// <summary>Gets the materials the appended instances' shapes carry, in the order the geometry numbers them.</summary>
     public IReadOnlyList<int> Materials => m_materials;
     /// <summary>Gets each slot the appended instructions read, with its pose in the group's frame and its lanes as the
     /// geometry hashed them, rounded: the group's own slot at the identity, any other slot where it stood in the frame the
     /// geometry was appended from. A slot the frame held no transform for is absent.</summary>
-    public IReadOnlyDictionary<int, DynamicTransform> Poses => m_poses;
+    public IReadOnlyDictionary<int, DynamicTransform> Poses => ((IReadOnlyDictionary<int, DynamicTransform>?)m_poses ?? NoPoses);
+
+    /// <summary>Writes the poses (<see cref="Poses"/>) into pose rows from a first slot, three rows a slot as the
+    /// dynamic-transform table lays one out: position, orientation, lanes. A slot between two kept ones is left as the
+    /// rows hold it.</summary>
+    /// <param name="rows">The rows, from the first slot's first row.</param>
+    /// <param name="first">The slot the rows start at, at most the lowest kept slot.</param>
+    public void WritePoseRows(Span<Vector4> rows, int first) {
+        if (m_poses is null) { return; }
+
+        foreach (var (slot, pose) in m_poses) {
+            var row = (3 * (slot - first));
+
+            rows[row] = new Vector4(value: pose.Position, w: 0f);
+            rows[(row + 1)] = new Vector4(x: pose.Orientation.X, y: pose.Orientation.Y, z: pose.Orientation.Z, w: pose.Orientation.W);
+            rows[(row + 2)] = pose.Lanes;
+        }
+    }
+    /// <summary>Gets the lowest and highest slot <see cref="Poses"/> holds, or <c>(-1, -1)</c> while it holds none.</summary>
+    public (int First, int Last) PoseSlots => ((m_poses is null) ? (-1, -1) : (m_firstPose, m_lastPose));
+
+    // The lowest and highest slot m_poses holds.
+    private int m_firstPose = int.MaxValue;
+    private int m_lastPose = int.MinValue;
 
     /// <summary>Gets the turn from world axes into the group's frame, as the frame the geometry was appended from held it:
     /// the inverse of its own slot's orientation, the identity for a group in world space. A dynamic bound's center is
     /// an offset along world axes from its slot, which the bake turns by it into the group's frame.</summary>
     public Quaternion BoundTurn { get; private set; } = Quaternion.Identity;
 
+    /// <summary>Gets whether an appended instruction reads a dynamic slot, so the geometry depends on the frame's
+    /// transforms.</summary>
+    public bool ReadsSlots { get; private set; }
+
     /// <summary>Gets the geometry of everything appended so far.</summary>
-    public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: m_hash.GetCurrentHashAsUInt128());
+    public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: ((m_hash is { } hash) ? hash.GetCurrentHashAsUInt128() : m_sealedHash));
     /// <summary>Gets the form of everything appended so far: the geometry without the poses of the slots besides the
     /// group's own, or the steps they round to. Two groups of one form are one creation's shapes standing in different
     /// relative poses, whose skinned mesh carries each member through its own slot (<see cref="SdfMesh.Members"/>).</summary>
-    public UInt128 Form => m_form.GetCurrentHashAsUInt128();
+    public UInt128 Form => ((m_form is { } form) ? form.GetCurrentHashAsUInt128() : m_sealedForm);
 
     /// <summary>Appends one instance of a program: its instructions, each shape's material by its place among the
     /// group's materials, each other slot it reads by that slot's pose in the instance's frame, and its bound.</summary>
@@ -176,6 +252,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                     var slot = ((int)instruction.Data0.X);
 
                     m_chainSlot = slot;
+                    ReadsSlots = true;
                     if (slot == ownSlot) {
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
                         Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
@@ -184,7 +261,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                         var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
-                        m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
+                        Hashing().Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
                         Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
                         Keep(orientationSteps: m_orientationSteps, pose: pose, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
                     }
@@ -215,8 +292,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     }
     // Hashes bytes into the geometry and its form.
     private void Hash(ReadOnlySpan<byte> source) {
-        m_hash.Append(source: source);
-        m_form.Append(source: source);
+        Hashing().Append(source: source);
+        m_form!.Append(source: source);
     }
     // Appends the lanes of the slot the chain rides, which a lane erosion or a morph reads; zero under none.
     private void AppendLanes(IReadOnlyList<DynamicTransform> transforms) {
@@ -228,7 +305,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // so the same rounded components always turn alike, and its lanes rounded as AppendLanes rounds them; the steps are
     // the ones the pose was rounded to. A missing slot is left out.
     private void Keep(int slot, Pose pose, float positionSteps, float orientationSteps, IReadOnlyList<DynamicTransform> transforms) {
-        if ((pose == Pose.Missing) || (slot < 0) || (slot >= transforms.Count) || m_poses.ContainsKey(key: slot)) { return; }
+        if ((pose == Pose.Missing) || (slot < 0) || (slot >= transforms.Count) || (m_poses?.ContainsKey(key: slot) ?? false)) { return; }
 
         var turn = pose.Orientation.Value(steps: orientationSteps);
         var length = Math.Sqrt(d: (((((double)turn.X) * turn.X) + (((double)turn.Y) * turn.Y)) + ((((double)turn.Z) * turn.Z) + (((double)turn.W) * turn.W))));
@@ -239,7 +316,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         var lanes = new Rounded4(steps: PositionSteps, value: transforms[slot].Lanes);
 
-        m_poses.Add(key: slot, value: new DynamicTransform(Lanes: lanes.Value(steps: PositionSteps), Orientation: orientation, Position: new Vector3(x: position.X, y: position.Y, z: position.Z)));
+        (m_poses ??= []).Add(key: slot, value: new DynamicTransform(Lanes: lanes.Value(steps: PositionSteps), Orientation: orientation, Position: new Vector3(x: position.X, y: position.Y, z: position.Z)));
+        m_firstPose = Math.Min(val1: m_firstPose, val2: slot);
+        m_lastPose = Math.Max(val1: m_lastPose, val2: slot);
     }
     // A slot's pose in the frame of the group's own slot (world space under none), rounded: where a sample the bake
     // carries into the group's frame lands in that slot's frame. A slot the frame holds no transform for is Missing.

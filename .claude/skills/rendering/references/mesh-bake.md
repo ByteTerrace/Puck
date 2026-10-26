@@ -272,6 +272,29 @@ laws exercise that boundary.
   it replaces until its own lands, so it counts as drawn already; `Land` and
   `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
   draws stale, or a still group keeps drawing the old mesh.
+- **Every landed mesh is merged into its planar polygons** (`SdfMeshPlanarMerge`,
+  called in `SdfMeshPathBake.Land` before the library stores it), so the store
+  keeps, every pass draws and the irradiance trace reads the merged mesh. A
+  region is a run of triangles across shared edges with one material, one member,
+  one normal bit for bit at every vertex and every vertex within 2^-21 of its
+  plane relative to its coordinates; a vertex only its region names, whose
+  triangles close a ring about it, is removed and its hole ear-clipped again under
+  exact float orientation tests, then flipped toward Delaunay. Every outline vertex
+  stays, a straight run two merged faces share included (dropping it from both
+  sides keeps the geometry but has the rasterizer snap the shared edge from other
+  vertices, for 1.6% of the triangles left). Keep it that way: a change that moves
+  or renormals a vertex, or drops an outline vertex, changes pixels. What a
+  retriangulated face does change is depth interpolation's rounding, so where it
+  meets a separately baked mesh (a plinth's embossed label, a wall's window frame)
+  a pixel at the junction can take the other surface: five pixels in three
+  settled normals captures of the debug world. The merge leaves curved surfaces
+  alone (their vertex normals differ), so it removes about two fifths of the debug
+  world's triangles, and its polygons' triangles are long and thin where a face's
+  outline is dense: a consumer that bounds triangles by their boxes sees looser
+  boxes than the lattice's quads gave, which the trace hierarchy answers by
+  boxing such a triangle in pieces (below). The done line counts `merged=`
+  triangles; `SdfMeshPlanarMergeLawTests` holds the outline, the area per
+  material and normal, and no opened edge.
 
 ## The mesh region
 
@@ -302,7 +325,7 @@ laws exercise that boundary.
   and capped at that ceiling (`SdfWorldTables.MeshRegionGrownBytes`, a pure
   function), so it reads fuller than a doubling would; `world.budget` prints the
   bytes the staged draws use (`MeshRegionUsedBytes`) beside the bytes held and
-  that ceiling. The debug world uses about 1.4 GB of it, and a frame that needs
+  that ceiling. The debug world uses about 1.1 GB of it, and a frame that needs
   more than the ceiling throws `InvalidOperationException` naming the need and
   the ceiling. The ceiling is the whole uints below 4 GiB less the staging
   buffer's header and run table, because a staged region's staging buffer binds
@@ -433,9 +456,9 @@ laws exercise that boundary.
   its value is the key a cache of the store is saved under.
 - **The store keeps whole sets.** Each identity's entries are one set, in a
   directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
-  world's meshes fill about 1.42 GB in about 1,180 entries under one identity
-  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, five
-  such sets), shared by every World and worktree on the machine, a set at a
+  world's meshes fill about 1.02 GB in about 1,410 entries under one identity
+  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, about
+  eight such sets), shared by every World and worktree on the machine, a set at a
   time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
   recently read or written entry's, and a write removes whole sets, least
   recently used first, never its own. A set a World is baking or loading is
@@ -477,12 +500,16 @@ laws exercise that boundary.
   `SdfMeshIrradianceScene`; never route it through the field interpreter. The
   scene is two-level and keyed by each mesh's position and index buffers, which
   its triangle tests read in place (a geometry holds only its hierarchy and the
-  leaf order of its triangles), so a
-  static-draw change builds only geometry new to the previous scene: a slow
-  `[sdf.mesh-gi] scene` line with a large `built-triangles=` means new geometry,
-  not the trace. `puck mesh scene --world <file>` times a build and a one-draw
-  change over the stored meshes with no device, and `world.counters
-  sdf.mesh-gi` counts builds. The
+  leaf order of its triangles), so a static-draw change builds only geometry new
+  to the previous scene: a slow `[sdf.mesh-gi] scene` line with a large
+  `built-triangles=` means new geometry, not the trace. `puck mesh scene --world
+  <file>` times a build and a one-draw change over the stored meshes with no
+  device, and `world.counters sdf.mesh-gi` counts builds. A triangle whose box's
+  surface passes 64 times its area, a long thin one a merged polygon leaves,
+  enters the hierarchy as up to 64 pieces each boxed tight, every piece naming
+  the one triangle: unsplit, the merged debug world's trace took 10.6 CPU seconds
+  a sweep where the unmerged took 6.9, and split it takes 7.3, with the same
+  hits. The
   [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
   owns the technique and its limits.
 

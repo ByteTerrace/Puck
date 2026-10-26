@@ -7284,9 +7284,9 @@ visible receiver. What the cull leaves is the next target:
   fragments into its 4.2 M texels (two to four layers: four slabs and the roof
   stack under the sun), and the far cascade still draws 11 to 37 M triangles,
   most of them static and unchanged from frame to frame.
-- *Tessellation.* The triangle counts are the bake's: a flat face carries a
-  quad per lattice cell, so the hall's shell alone is millions of triangles a
-  handful of rectangles would draw.
+- *Tessellation.* The triangle counts are the bake's: a flat face carried a
+  quad per lattice cell, so the hall's shell alone was millions of triangles a
+  handful of polygons would draw (item 3's first step merges them).
 
 **P20-1, landed: the per-pass cull by box.** Each staged draw carries a world
 box: its mesh's position bounds (computed once per mesh) through its matrix and
@@ -7504,9 +7504,38 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    sphere grown by it, a resolution trade that is a look decision.
 3. **Levels of detail from the bake.** Two steps cut the triangle count at its
    source.
-   - *Step 1:* a lossless merge of each contour's coplanar, same-material,
-     same-member triangles into the polygons they tile. It keeps every vertex
-     shared with an unmerged neighbour, so no T-junction opens a crack.
+   - *Step 1, landed:* a lossless merge of each contour's coplanar,
+     same-material, same-member triangles into the polygons they tile
+     (`SdfMeshPlanarMerge`, in `SdfMeshPathBake.Land`, so the store keeps, every
+     pass draws and the irradiance trace reads it). It removes only a region's
+     interior vertices and keeps every outline vertex, a straight run two merged
+     faces share included, so no T-junction opens a crack and every outline edge
+     and normal is the contour's own. Measured on the debug world, Direct3D 12,
+     the RTX 4070, `world.cadence off`, `world.rates off`, the operator camera
+     posed as in the tables above, triangles as `gpu.vertices` over three:
+
+     | View | Mesh pass | Near cascade | Far cascade |
+     |---|---:|---:|---:|
+     | Lobby | 11.5 → 4.9 M | 28.5 → 17.9 M | 37.9 → 22.8 M |
+     | Level 1 aisle | 16.5 → 8.2 M | 25.0 → 14.3 M | 31.2 → 18.5 M |
+     | Outdoors, facing the hall | 14.2 → 5.1 M | 14.9 → 6.9 M | 46.6 → 28.1 M |
+
+     The world residency bakes 35.4 M triangles where it baked 57.3 M, the mesh
+     region uses 1.11 GB where it used 1.81 GB, and the stored set is 1.02 GB
+     where it was 1.74 GB; the merge leaves curved surfaces alone, whose normals
+     differ. Each pose's frame held 16.67 ms where it alternated 16.7 and
+     33.4 ms, with produce and simulate at 5.8 to 7.7 ms where they took 8.8 to
+     10.4. `puck mesh audit` of the hall's 27 groups reports the same folds,
+     flips, open edges and uncovered surface over 0.8 M triangles where there
+     were 6.3 M. Settled `world.debug-view normals` captures with `world.temporal
+     off`, the same tick and state hash before and after, match pixel for pixel
+     but for the Moth, whose settle rebakes differ from boot to boot, and five
+     pixels where a merged face meets a separately baked mesh (a plinth's label,
+     a wall's frames), whose depth test the face's new rounding turns; every
+     stored mesh is the merge of the one the unmerged bake stored. The trace
+     hierarchy boxes a long thin triangle in pieces, which keeps a probe sweep at
+     7.3 CPU seconds over the merged meshes where the unmerged took 6.9, with the
+     same hits.
    - *Step 2:* two coarser levels derived from that mesh by quadric edge
      collapse, each recording its exact error, with creases and material edges
      simplifying last. This is a simplification of the one contour, not a

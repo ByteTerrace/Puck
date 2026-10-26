@@ -430,17 +430,18 @@ parsers read, so `1 << 2 + 3` groups the same way in a `let` as in a rule. From 
 
 Binary operators associate to the left. Bitwise operators bind tighter than comparisons:
 `x & 1 == 0` means `(x & 1) == 0`. They read signed 64-bit integers; a shift counts 0 to 63.
-`a ?? b` reads `b` only when `a` is absent.
+`a ?? b` yields `a` when it is present, otherwise `b`.
 
 A world gate (`when`, `if`, `expect`) is an ordinary expression. Zero and absence are false;
 nonzero Int and Fixed values are true. `and`, `or`, and `not` yield Int 0 or 1. `and` skips
 its right operand when the left is false; `or` skips it when the left is true. A skipped
-operand neither reads state nor faults, but must still be well-typed. Other arithmetic
+operand neither reads state nor faults, but must still be well-typed. Logical operands may read different
+numeric kinds; arithmetic requires matching kinds. Other arithmetic
 propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write `and`, not `&&`.
 
 Kinds come from state declarations and earlier locals. Numeric literals take their expression's
-kind; an unconstrained integer expression is Int, while a decimal literal such as `1.0` selects
-Fixed. There is no implicit conversion between Int and Fixed state reads. A gate needs no
+kind; an unconstrained integer expression is Int, while an unconstrained decimal expression selects
+Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. There is no implicit conversion between Int and Fixed state reads. A gate needs no
 `: Int` or `as Int` suffix, and a Boolean expression needs no `== 1` wrapper. The emitter chooses
 `compareState` or `compareValue` from the expression.
 A comparison yields `1` or `0`, never a JSON boolean—the rule language has no boolean either, so

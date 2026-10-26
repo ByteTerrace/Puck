@@ -2,14 +2,185 @@ using System.Diagnostics.CodeAnalysis;
 using System.Collections.Immutable;
 using Puck.Abstractions.Counting;
 using Puck.Maths;
+using Puck.Commands;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The server's columnar store: the arena is the authoritative state during a tick, and the installed
-/// document is the arena's export at the end of it.</summary>
+/// <summary>The result of a typed arena write through the live edit grant.</summary>
+public enum WorldCellWriteVerdict {
+    /// <summary>The value was stored.</summary>
+    Applied,
+    /// <summary>The address no longer belongs to this arena.</summary>
+    StaleAddress,
+    /// <summary>The live grant refused the write.</summary>
+    Denied,
+    /// <summary>The grant's Set/Add mask refused the operation.</summary>
+    Masked,
+    /// <summary>The edit dispatch allowance is spent or missing.</summary>
+    BudgetExhausted,
+    /// <summary>The arena refused the operand.</summary>
+    Rejected,
+}
+/// <summary>The server's authoritative columnar store. Bound plain values stream through snapshots; an immutable
+/// document export is materialized for document edits, checkpoints and explicit definition reads.</summary>
 /// <remarks>Construction, document installation, and checkpoint restoration validate the complete state section.
 /// Pool storage is admitted through its typed snapshot; ordinary rows use <see cref="StateArena.TryLoad"/>.</remarks>
 public sealed partial class WorldServer {
+    private bool m_tickInProgress;
+    private bool m_arenaExportOwed;
+
+    private bool[] m_streamedRows = [];
+    private bool[] m_streamedPending = [];
+    private ulong[] m_streamedVersions = [];
+    private ulong[] m_typedVersions = [];
+
+    internal void EnterArenaTick() {
+        m_tickInProgress = true;
+        Array.Clear(array: m_streamedPending);
+    }
+    internal void LeaveArenaTick() => m_tickInProgress = false;
+    internal WorldDefinition MaterializeArena() {
+        if (m_arenaExportOwed) {
+            var publication = ProposePublication();
+
+            m_document.CacheArenaExport(definition: publication.Definition);
+            MarkPublished();
+            m_publishEveryRow = false;
+            m_arenaExportOwed = false;
+        }
+        return m_document.Definition;
+    }
+
+    private bool StreamArena() {
+        if ((m_arena.Journal.Length != 0) || m_publishEveryRow) { return false; }
+        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
+            var version = m_arena.RowVersion(rowOrdinal: ordinal);
+
+            if ((m_publishedVersions[ordinal] != version) &&
+                (!m_streamedRows[ordinal] || (m_typedVersions[ordinal] != version))) { return false; }
+        }
+        var moved = false;
+
+        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
+            var version = m_arena.RowVersion(rowOrdinal: ordinal);
+
+            if (!m_streamedRows[ordinal] || (m_streamedVersions[ordinal] == version)) { continue; }
+            m_streamedVersions[ordinal] = version;
+            m_streamedPending[ordinal] = true;
+            NoteMovedRow(ordinal: ordinal, rowCount: m_documentRowCount);
+            moved = true;
+        }
+        if (moved) {
+            m_arenaExportOwed = true;
+            m_document.MarkStateDeliveryPending();
+        }
+        return true;
+    }
+
+    internal int StreamedCellCount(bool full) {
+        var count = 0;
+
+        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
+            if (m_streamedRows[ordinal] && (full || m_streamedPending[ordinal])) { count += m_arena.CellCount(rowOrdinal: ordinal); }
+        }
+        return count;
+    }
+    internal void CopyStreamedCells(Span<FieldCellDelta> cells, bool full) {
+        var next = 0;
+
+        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
+            if (!m_streamedRows[ordinal] || (!full && !m_streamedPending[ordinal])) { continue; }
+            var count = m_arena.CellCount(rowOrdinal: ordinal);
+
+            for (var cell = 0; (cell < count); cell++) {
+                m_arena.TryReadAt(position: cell, rowOrdinal: ordinal, value: out var value);
+                cells[next++] = new FieldCellDelta(Cell: cell, Field: 0, Raw: 0, Row: ordinal, Value: value);
+            }
+        }
+    }
+
+    private bool CanStreamRow(int ordinal) {
+        var declared = m_document.Definition.AuthoredState[ordinal];
+
+        if (declared.GatesDrive || declared.IsRuleWritten || (declared.Advance is not null) ||
+            (declared.Cycle is not null) || (declared.Dynamics is not null) || (declared.Field is not null) ||
+            (declared.Inverse is not null) || (declared.ValuesFrom is not null) || DocumentValueRows().Contains(item: declared.Name.Value)) { return false; }
+        var cells = declared.Cells;
+
+        if (cells is null) { return false; }
+        for (var i = 0; (i < cells.Count); i++) {
+            if ((cells[i].Advance is not null) || (cells[i].Cycle is not null) || (cells[i].Dynamics is not null)) { return false; }
+        }
+        return true;
+    }
+
+    internal bool StreamsArenaValues => m_arenaExportOwed;
+
+    private readonly Dictionary<(Principal Principal, GrantSubject Subject), int> m_cellWriteCounts = [];
+
+    /// <summary>Writes an existing cell during the authoritative tick, under the caller's live edit grant,
+    /// Set/Add mask and dispatch allowance. Rules see it immediately; the tick publishes it with its other writes.</summary>
+    /// <param name="principal">The stamped actor.</param>
+    /// <param name="row">The resolved document row.</param>
+    /// <param name="key">The resolved arena key.</param>
+    /// <param name="operand">Raw numeric bits.</param>
+    /// <param name="write">Set or Add.</param>
+    /// <param name="text">Text for a Text row, or null for a numeric write.</param>
+    /// <returns>The live admission or storage verdict. A refusal changes no cell.</returns>
+    public WorldCellWriteVerdict WriteStateCell(Principal principal, StateHandle row, CellKey key, long operand,
+        WorldDocumentWriteKind write = WorldDocumentWriteKind.Set, string? text = null) {
+        if (!m_arena.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: row) || (descriptor.Lane != StateLane.Document)) {
+            return WorldCellWriteVerdict.StaleAddress;
+        }
+        var subject = GrantSubject.State(name: descriptor.Name);
+
+        if (!m_grants.Allows(capability: WorldCapability.Edit, principal: principal, subject: subject).IsAllowed) {
+            return WorldCellWriteVerdict.Denied;
+        }
+        if (m_grants.TryGetWriteMask(capability: WorldCapability.Edit, grantee: principal, mask: out var mask, subject: subject) && !mask.Contains(kind: write)) {
+            return WorldCellWriteVerdict.Masked;
+        }
+        if (!WorldGrants.IsTrusted(principal: principal)) {
+            var meter = (principal, subject);
+
+            m_cellWriteCounts.TryGetValue(key: meter, value: out var count);
+            if (!m_grants.TryGetBudget(budget: out var budget, capability: WorldCapability.Edit, principal: principal, subject: subject) || (count >= budget)) {
+                return WorldCellWriteVerdict.BudgetExhausted;
+            }
+            m_cellWriteCounts[meter] = (count + 1);
+        }
+        if ((write is not (WorldDocumentWriteKind.Set or WorldDocumentWriteKind.Add)) ||
+            ((text is not null) && (write != WorldDocumentWriteKind.Set)) || descriptor.Generated || descriptor.HostOwned ||
+            m_document.Definition.AuthoredState[descriptor.LaneOrdinal].IsRuleWritten) {
+            return WorldCellWriteVerdict.Rejected;
+        }
+        var mark = m_arena.BeginScope();
+        var applied = ((text is not null)
+            ? m_arena.TryWriteText(row.Ordinal, key, text, out _)
+            : m_arena.TryWriteLive(row.Ordinal, key, operand, ((StateWriteKind)write), DeliveryTime, out _));
+
+        if (applied && !m_arena.Journal.OverCeiling) {
+            if (DocumentValueRows().Contains(item: descriptor.Name)) {
+                var publication = ProposePublication();
+
+                if ((publication.RefreshRefusal is not null) ||
+                    !WorldDefinitionValidator.TryValidateLocally(definition: publication.Definition, reason: out _)) {
+                    m_arena.Rewind(mark: mark);
+                    return WorldCellWriteVerdict.Rejected;
+                }
+            }
+            m_arena.Commit(mark: mark);
+            if (!m_streamedRows[row.Ordinal]) { m_streamedRows[row.Ordinal] = CanStreamRow(ordinal: row.Ordinal); }
+            m_typedVersions[row.Ordinal] = m_arena.RowVersion(rowOrdinal: row.Ordinal);
+            return WorldCellWriteVerdict.Applied;
+        }
+        m_arena.Rewind(mark: mark);
+        return WorldCellWriteVerdict.Rejected;
+    }
+
+    internal void BeginCellWriteTick() => m_cellWriteCounts.Clear();
+
     // The arena's and the search's counters as the World registers them: the instance behind each is replaced when a
     // definition install adopts a new arena, and the forwarder carries the retired one's totals so neither goes down.
     private readonly ForwardingWorkCounterSource m_arenaWork = new(
@@ -154,6 +325,11 @@ public sealed partial class WorldServer {
         m_arenaCatalog = definition.StateCatalog;
         m_drawSites = WorldDrawSites.Of(catalog: m_arenaCatalog);
         m_documentRowCount = m_arenaCatalog.Lane(lane: StateLane.Document).Count;
+        m_streamedRows = new bool[m_documentRowCount];
+        m_streamedPending = new bool[m_documentRowCount];
+        m_streamedVersions = new ulong[m_documentRowCount];
+        m_typedVersions = new ulong[m_documentRowCount];
+        m_arenaExportOwed = false;
         m_publishedVersions = new ulong[m_arena.Layout.RowCount];
         MarkPublished();
         m_publishEveryRow = true;
@@ -275,6 +451,7 @@ public sealed partial class WorldServer {
     }
     // The document and the arena agree on every row as they stand.
     private void MarkPublished() {
+        m_arenaExportOwed = false;
         var rows = m_arena.Layout.RowCount;
 
         if (m_publishedVersions.Length < rows) {
@@ -416,10 +593,14 @@ public sealed partial class WorldServer {
     /// middle of a firing leaves that owed, and the publication that ends the tick settles it whether or not
     /// anything moved in between.</param>
     /// <returns><see langword="true"/> when a row was published.</returns>
-    public bool PublishArena(bool reconcile = true) => AdoptPublication(
-        publication: ProposePublication(),
-        reconcile: reconcile
-    );
+    public bool PublishArena(bool reconcile = true) {
+        if (reconcile && StreamArena()) { return m_arenaExportOwed; }
+        m_arenaExportOwed = false;
+        var applied = AdoptPublication(publication: ProposePublication(), reconcile: reconcile);
+
+        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) { m_streamedVersions[ordinal] = m_arena.RowVersion(rowOrdinal: ordinal); }
+        return applied;
+    }
     /// <summary>Installs a proposal as the publication it describes.</summary>
     /// <param name="publication">A proposal taken from the arena as it stands now. One taken inside a scope that
     /// has since committed, with nothing written between, qualifies: the arena holds what it proposed.</param>

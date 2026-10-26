@@ -28,7 +28,8 @@ public interface IClientSink {
     /// <param name="definition">The world definition now live on the server.</param>
     /// <param name="version">The version of <paramref name="definition"/>, as <see cref="DeliverDefinition"/> carries it.</param>
     /// <param name="stamp">The tick the values hold as of and the rows whose values moved since the previous
-    /// delivery.</param>
+    /// delivery. When <see cref="WorldStateStamp.ArenaValues"/> is true, the declaration stays fixed and the following
+    /// snapshot carries the changed cell values.</param>
     void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp);
     /// <summary>Delivers an accepted LIVE window-composition override for the client to apply to its composer (the
     /// <c>view.override layout</c>/<c>view.override camera</c> path).</summary>

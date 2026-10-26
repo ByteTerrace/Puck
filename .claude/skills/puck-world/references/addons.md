@@ -8,7 +8,11 @@ The ABI itself (cell layouts, exports, mount steps, determinism posture) is
 owned by `docs/reference/scripting.md` (`src/Puck.Scripting/README.md` links it) — read it before touching the guest
 boundary; this file carries the World-relevant surface.
 
-The addon system is improved as it is used (the owner's ruling). A lane that
+The addon system exists for player-built mods (the owner's ruling). The debug
+world's addons (watchdog, guide, fuzzer, traversal, scope, machine debugger)
+are stress tests of that platform, chosen to exercise it, so judge a change by
+what a mod author and an untrusted mod need: authoring, safety, budgets,
+determinism and cost. The addon system is improved as it is used (the owner's ruling). A lane that
 finds a meaningful gap or refinement while writing or running a guest (a
 missing event, query or mutation kind, an awkward authoring path, a diagnostic
 it lacked) fixes it in the same change or records it in
@@ -288,7 +292,11 @@ and the per-mount `EventGap` overflow summary.
 Ask resolution gates on the manifest BEFORE subject inspection — an
 unrequested or out-of-range ask answers `AttenuatedToEmpty`, never
 `NoSuchSubject` (which would be a body-enumeration oracle). Query order:
-resolve handle → `IsRequested` → `Allows` → budget → dispatch.
+resolve handle → `IsRequested` → `Allows` → budget → dispatch. A state read
+(`ReadStateCell`, `ReadStateText`) dispatches through `TryReadDisclosed`, which asks
+`WorldStateDisclosure.CanRead` for the addon's own principal (`addon:<name>`) against the live store on every
+read, so a cell hidden by row, cell or containing-zone visibility answers `NoSuchSubject` exactly like an absent
+one; list `addon:<name>` among the readers to admit a mod. No bound address caches that decision.
 `AddonVerdict`: `None`, `HeldConcrete`, `HeldWildcard`, `HeldAsReserver`,
 `NoHold`, `BeatenByReserver`, `AttenuatedToEmpty`, `NoSuchSubject`,
 `QuotaExhausted`, `StaleHandle`, `Applied`, `MalformedPayload`,

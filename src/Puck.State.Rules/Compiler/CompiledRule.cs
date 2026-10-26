@@ -36,7 +36,8 @@ public readonly record struct GateToken(CompiledValueSource LeftSource, Expressi
 /// <param name="Board">The compiled topology and direction of a board token.</param>
 /// <param name="Fold">The compiled row and per-cell body of a fold token.</param>
 /// <param name="Call">The compiled subprogram of a <see cref="ExpressionOp.Call"/> token.</param>
-public readonly record struct CompiledExpressionToken(ExpressionOp Operation, long Constant = 0L, IRuleOperand? Operand = null, BoardQuery? Board = null, CompiledFold? Fold = null, CompiledSubprogram? Call = null);
+/// <param name="CarrierKind">The numeric kind this instruction reads, or null for a caller-supplied carrier.</param>
+public readonly record struct CompiledExpressionToken(ExpressionOp Operation, long Constant = 0L, IRuleOperand? Operand = null, BoardQuery? Board = null, CompiledFold? Fold = null, CompiledSubprogram? Call = null, CellKind? CarrierKind = null);
 /// <summary>A compiled fold: the one row whose cells are reduced, and the body evaluated once per cell the row holds.</summary>
 /// <param name="Operation">All, Any, Count, or Sum.</param>
 /// <param name="RowOrdinal">The folded row's catalog ordinal, the one row the fold reads.</param>
@@ -60,7 +61,7 @@ public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressi
 /// <param name="Name">The authored name.</param>
 /// <param name="Kind">The kind of value the expression leaves and the evaluator stores in this binding.</param>
 /// <param name="Expression">The compiled postfix program.</param>
-/// <param name="CarrierKind">The numeric carrier its program uses for arithmetic and literal conversion. It can be
+/// <param name="CarrierKind">The default carrier for literals and tokens without their own kind. It can be
 /// <see cref="CellKind.Fixed"/> when <paramref name="Kind"/> is <see cref="CellKind.Int"/> because comparison and
 /// sign expressions leave an integer after consuming exact fixed operands.</param>
 public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpressionToken[] Expression, CellKind CarrierKind);

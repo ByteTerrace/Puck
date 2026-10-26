@@ -17,6 +17,34 @@ namespace Puck.World.Server.Tests;
 /// a keyless token naming a keyed row joins the manifest as a row read.
 /// </summary>
 public sealed class WorldStateMirrorRowLawTests {
+    [Fact]
+    public void SnapshotValuesCopyIntoTheMirrorWithoutChangingTheAuthoredDocument() {
+        var definition = Board(third: 3);
+        var view = new WorldDocumentStateView(definition: () => definition);
+        var mirror = new WorldStateMirror(view: view);
+        var slot = mirror.Bind(binding: new StateBinding(Key: null, Row: "tiles", Target: false), conversion: WorldStateConversion.Row);
+
+        mirror.Install(tick: 0, engineTick: 0);
+        FieldCellDelta[] cells = [new(Cell: 1, Field: 0, Raw: 0, Row: 0, Value: CellValue.Int(value: 99))];
+        var snapshot = new WorldSnapshot(Tick: 1, Revision: 0, StepTicks: 1680, Entries: default,
+            FieldCells: cells, EngineTick: 1680);
+        var encoded = WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot);
+
+        Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: encoded, failure: out _, snapshot: out var decoded));
+        mirror.Refresh(new WorldStateStamp(ArenaValues: true, EngineTick: 1680, Everything: false, MovedRows: new[] { 0 }, Tick: 1));
+        Assert.Equal(3d, mirror.RowValues(slot: slot)[2]);
+        Span<int> moved = stackalloc int[WorldFieldCapacity.MaxFields];
+        var borrowed = decoded.FieldCells.ToArray();
+
+        view.ApplyFieldCells(deltas: borrowed, moved: moved);
+        mirror.Advance(engineTick: 1680, tick: 1);
+        Assert.Equal(99d, mirror.RowValues(slot: slot)[2]);
+        Assert.Equal(3L, definition.State[0].Cells![1].Value.Raw);
+        borrowed[0] = borrowed[0] with { Value = CellValue.Int(value: 17) };
+        Assert.True(condition: view.TryRead(engineTick: 1680, key: "2", ordinal: 0, sample: out var retained, target: false, tick: 1));
+        Assert.Equal(99L, retained.Value.Raw);
+    }
+
     private const int Capacity = 6;
 
     private static WorldDefinition Board(long third) => Fixtures.BuildDocument().WithWorldState(rows: [

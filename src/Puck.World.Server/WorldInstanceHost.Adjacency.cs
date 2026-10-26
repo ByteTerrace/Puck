@@ -45,7 +45,7 @@ public sealed partial class WorldInstanceHost {
             : transfer.Border
         );
         var onUnavailable = WorldDefinitionRows.FindAdjacency(
-            adjacencies: instance.Server.Definition.Adjacencies,
+            adjacencies: instance.Server.Configuration.Adjacencies,
             name: adjacencyName
         )?.OnUnavailable;
 
@@ -126,7 +126,7 @@ public sealed partial class WorldInstanceHost {
 
         endpoint = new WorldAuthorityEndpoint(
             identity: instance.Name,
-            definition: () => instance.Server.Definition,
+            definition: () => instance.Server.Configuration,
             submissions: instance.Link,
             observe: instance.Server.AttachSink,
             adjacencies: () => instance.Server.Adjacencies,
@@ -173,7 +173,7 @@ public sealed partial class WorldInstanceHost {
     // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
     private void ScanInstanceAdjacencies(WorldInstance instance) {
-        if (instance.Server.Definition.Adjacencies is not { Count: > 0 }) {
+        if (instance.Server.Configuration.Adjacencies is not { Count: > 0 }) {
             return;
         }
 
@@ -267,12 +267,14 @@ public sealed partial class WorldInstanceHost {
         }
     }
     private void ScanInstanceBoundaries(WorldInstance instance) {
-        instance.Server.ExecuteAuthorityOperation(operation: () => ScanInstanceBoundariesCore(instance: instance));
+        instance.Server.ExecuteAuthorityAction(state: (Host: this, Instance: instance),
+            operation: static state => state.Host.ScanInstanceBoundariesCore(instance: state.Instance));
     }
     private void ScanInstanceBoundariesCore(WorldInstance instance) {
         ScanInstanceAdjacencies(instance: instance);
         ScanInstancePortals(instance: instance);
     }
+
     // One instance's own portal scan: every placement's every portal-carrying face, against every body that can
     // travel (TryTraveller, the set the seam scan reads). Placement/face iteration order is the document's own declared
     // order; body order is ascending 0..Capacity-1 — deterministic within one process run, though this scan's queue
@@ -292,15 +294,14 @@ public sealed partial class WorldInstanceHost {
     private void ScanInstancePortals(WorldInstance instance) {
         SeedFederatedArrivalOccupancy(instance: instance);
 
-        var definition = instance.Server.Definition;
+        var definition = instance.Server.Configuration;
         var population = instance.Server.Population;
         var catalog = WorldFaceCatalog.For(definition: definition);
-        var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
         // Every tick scans every instance, so the per-body winners reuse one buffer; a scan entered from inside
         // another takes a fresh one.
-        var winners = ((m_portalWinners is { } held) && (held.Length >= population.Capacity))
+        var winners = (((m_portalWinners is { } held) && (held.Length >= population.Capacity))
             ? held
-            : new PortalEdgeHit?[population.Capacity];
+            : new PortalEdgeHit?[population.Capacity]);
 
         m_portalWinners = null;
         Array.Clear(
@@ -309,7 +310,12 @@ public sealed partial class WorldInstanceHost {
             length: population.Capacity
         );
 
-        foreach (var placement in definition.Placements) {
+        // Indexed loops: this runs every tick, and enumerating the lists through their interfaces allocates.
+        var placements = definition.Placements;
+
+        for (var row = 0; (row < placements.Count); row++) {
+            var placement = placements[row];
+
             if (
                 (placement is null) ||
                 (placement.FaceSources is not { Count: > 0 } faces)
@@ -317,18 +323,16 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            foreach (var face in faces) {
+            for (var index = 0; (index < faces.Count); index++) {
+                var face = faces[index];
+
                 if (
                     (face.Portal is not { } portal) ||
-                    !catalog.TryFind(
-                    placementId: placement.Id,
-                    faceName: face.Face,
-                    out var row
-                ) ||
-                    !WorldFacePortalPolicy.TryAperture(
+                    !catalog.TryFindAperture(
                     aperture: out var aperture,
-                    crossingFloor: crossingFloor,
-                    row: in row
+                    definition: definition,
+                    faceName: face.Face,
+                    placementId: placement.Id
                 )
                 ) {
                     // A face with no aperture mapping is refused by name at validation, so reaching here means the
@@ -462,7 +466,7 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        var rateHz = instance.Server.Definition.SimulationRateHz;
+        var rateHz = instance.Server.Configuration.SimulationRateHz;
         var stopped = (rateHz <= 0);
 
         status = new WorldInstanceRateStatus(

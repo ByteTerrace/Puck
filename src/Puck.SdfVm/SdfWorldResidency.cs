@@ -154,6 +154,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_width = width;
         Name = name;
         MeshPathBake = new SdfMeshPathBake { Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
+        // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
+        // frames before it, which a restart at another plans again.
+        frameSource.ObserveBuilds(built: (program, transforms) => {
+            if (Volatile.Read(location: ref m_frame) is { } latest) {
+                MeshPathBake.PlanAhead(farDistance: latest.FarDistance, program: program, transforms: transforms);
+            }
+        });
     }
 
     /// <summary>Gets the residency's name.</summary>
@@ -409,6 +416,20 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     // The frame's one preparation, whose answer Prepare repeats for the rest of the frame.
+    // Binds one screen slot's glyph-cell grid, or clears the slot when its provider shows no dense text this frame.
+    private static void BindScreenDecal(SdfWorldTables tables, int screenIndex, Func<SdfScreenDecalFrame?> provider) {
+        if (provider() is { } decal) {
+            tables.SetScreenDecal(
+                screenIndex: screenIndex,
+                columns: decal.Columns,
+                rows: decal.Rows,
+                distanceRange: decal.DistanceRange,
+                cellWords: decal.Cells.Span
+            );
+        } else {
+            tables.ClearScreenDecal(screenIndex: screenIndex);
+        }
+    }
     private bool PrepareOnce(in FrameContext context) {
         if (
             ((m_pendingFrame ?? m_frame) is not { } frame) ||
@@ -449,19 +470,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
         // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path.
-        if (m_frameSource.ScreenDecals is { } screenDecals) {
+        // A dictionary is walked through its own enumerator, which the interface's would box every frame.
+        if (m_frameSource.ScreenDecals is Dictionary<int, Func<SdfScreenDecalFrame?>> decals) {
+            foreach (var (screenIndex, provider) in decals) {
+                BindScreenDecal(provider: provider, screenIndex: screenIndex, tables: tables);
+            }
+        } else if (m_frameSource.ScreenDecals is { } screenDecals) {
             foreach (var (screenIndex, provider) in screenDecals) {
-                if (provider() is { } decal) {
-                    tables.SetScreenDecal(
-                        screenIndex: screenIndex,
-                        columns: decal.Columns,
-                        rows: decal.Rows,
-                        distanceRange: decal.DistanceRange,
-                        cellWords: decal.Cells.Span
-                    );
-                } else {
-                    tables.ClearScreenDecal(screenIndex: screenIndex);
-                }
+                BindScreenDecal(provider: provider, screenIndex: screenIndex, tables: tables);
             }
         }
 

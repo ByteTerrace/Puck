@@ -20,6 +20,29 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Same(expected: baked, actual: Assert.Single(collection: draws).Mesh);
         Assert.False(condition: bake.Pending);
     }
+    // A program its build planned ahead (PlanAhead) at the transforms it was emitted under restarts from that plan in the
+    // frame that first draws it, with the member standing elsewhere by then: the group keeps its mesh and nothing bakes,
+    // as when the frame plans the program itself.
+    [Fact]
+    public void AProgramPlannedAheadRestartsFromItsPlanAndKeepsTheGroup() {
+        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "ahead" };
+        var index = 0L;
+
+        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
+        var program = SettleProgram(groups: 1);
+        var drawn = SettleFrame(groups: 1, offset: 0.353f, program: program, time: 0.2f);
+
+        bake.PlanAhead(
+            farDistance: drawn.FarDistance,
+            program: program,
+            transforms: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0.15f).DynamicTransforms
+        );
+        var draws = bake.Dress(frame: drawn).MeshDraws;
+
+        Assert.Same(expected: baked, actual: Assert.Single(collection: draws).Mesh);
+        Assert.False(condition: bake.Pending);
+    }
     // A program rebuilt without a palette registered ahead of a skinned group's (a body leaving the world) numbers the
     // group's material another id while its member stands off the baked pose: the group keeps its mesh, renumbered place
     // for place, and nothing bakes, where planning it afresh would key another geometry and bake it.

@@ -102,7 +102,7 @@ public static class RuleExpressions {
                     absent[top] = fact.IsAbsent;
                     stack[top++] = (fact.IsAbsent
                         ? 0L
-                        : fact.ToRaw(kind: kind)
+                        : fact.ToRaw(kind: token.CarrierKind ?? kind)
                     );
 
                     continue;
@@ -326,14 +326,14 @@ public static class RuleExpressions {
                     if (
                         !ExpressionArithmetic.FunctionAdmits(
                         token.Operation,
-                        kind
+                        token.CarrierKind ?? kind
                     ) ||
                         !ExpressionArithmetic.TryValidatedFunction(
                         arguments: stack.Slice(
                             length: functionArity,
                             start: top
                         ),
-                        kind: kind,
+                        kind: token.CarrierKind ?? kind,
                         operation: token.Operation,
                         value: out var applied
                     )
@@ -350,7 +350,7 @@ public static class RuleExpressions {
                 if (ExpressionArithmetic.IsUnary(operation: token.Operation)) {
                     if (!ExpressionArithmetic.TryUnary(
                         token.Operation,
-                        kind,
+                        token.CarrierKind ?? kind,
                         stack[(top - 1)],
                         out var unary
                     )) {
@@ -371,7 +371,7 @@ public static class RuleExpressions {
                 // semantics are preserved without allocating an exception per evaluation.
                 if (!ExpressionArithmetic.TryBinary(
                     token.Operation,
-                    kind,
+                    token.CarrierKind ?? kind,
                     left,
                     right,
                     out var result

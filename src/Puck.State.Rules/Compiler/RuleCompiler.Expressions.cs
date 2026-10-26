@@ -54,9 +54,9 @@ public static partial class RuleCompiler {
         );
     }
 
-    // A local with no declared kind still has to choose one numeric carrier for its operands, but comparisons and
-    // Sign leave an Int result even when those operands are Fixed. Its binding records that result kind, whereas
-    // destination expressions continue to require the authored destination kind above.
+    // Unconstrained literals start in the caller's carrier. Reads retain their declared kinds and
+    // arithmetic matches its operands; comparisons and truth operations can leave an Int result.
+    // A destination still requires its declared result kind, while a local infers that result.
     private static CompiledExpressionToken[] CompileExpression(ExpressionProgram? expression, CellKind kind, string ruleName, string verb, RuleCompileContext context, CellKind? resultKind, out CellKind result) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
@@ -186,6 +186,8 @@ public static partial class RuleCompiler {
         var literalAt = new int[authored.Count];
         var literals = new decimal[authored.Count];
         var tokens = new CompiledExpressionToken[authored.Count];
+        var inferLiterals = resultKind is null || authored.Any(static instruction =>
+            instruction?.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not);
 
         for (var index = 0; (index < authored.Count); index++) {
             var instruction = (authored[index] ?? throw Malformed(detail: "contains a null instruction"));
@@ -224,10 +226,7 @@ public static partial class RuleCompiler {
         if (depth != 1) {
             throw Malformed(detail: $"leaves {depth} values on the postfix stack instead of exactly one");
         }
-        if ((resultKind is { } required)
-            ? (kinds[0] != required)
-            : ((kinds[0] != kind) && (kinds[0] != CellKind.Int))
-        ) {
+        if (resultKind is { } required && kinds[0] != required) {
             throw Malformed(detail: $"leaves a kind={StateSpelling.Kind(kind: kinds[0])} value where kind={StateSpelling.Kind(kind: (resultKind ?? kind))} is required");
         }
 
@@ -252,6 +251,7 @@ public static partial class RuleCompiler {
                 arity: 2,
                 operation: ExpressionOp.Coalesce
             );
+            MatchLiterals(arity: 2);
             if (kinds[(depth - 2)] != kinds[(depth - 1)]) {
                 throw Malformed(detail: $"instruction 'Coalesce' arms disagree: kind={StateSpelling.Kind(kind: kinds[(depth - 2)])} against kind={StateSpelling.Kind(kind: kinds[(depth - 1)])}");
             }
@@ -265,6 +265,7 @@ public static partial class RuleCompiler {
                 arity: 2,
                 operation: operation
             );
+            MatchLiterals(arity: 2);
             if (kinds[(depth - 2)] != kinds[(depth - 1)]) {
                 throw Malformed(detail: $"instruction '{operation}' compares kind={StateSpelling.Kind(kind: kinds[(depth - 2)])} against kind={StateSpelling.Kind(kind: kinds[(depth - 1)])}");
             }
@@ -278,7 +279,7 @@ public static partial class RuleCompiler {
             depth--;
             kinds[(depth - 1)] = CellKind.Int;
 
-            return new CompiledExpressionToken(Operation: operation);
+            return new CompiledExpressionToken(Operation: operation, CarrierKind: compared);
         }
         IReadOnlyList<int> Entering(int subprogram) {
             if (calling.Contains(value: subprogram)) {
@@ -335,23 +336,40 @@ public static partial class RuleCompiler {
         CompiledExpressionToken Push(CompiledExpressionToken token, CellKind pushed) {
             kinds[depth++] = pushed;
 
-            return token;
+            return token with { CarrierKind = pushed };
+        }
+        CellKind MatchLiterals(int arity) {
+            var first = depth - arity;
+            var carrier = kinds[first];
+            for (var slot = first; slot < depth; slot++) {
+                if (literalAt[slot] < 0) { carrier = kinds[slot]; break; }
+            }
+            for (var slot = first; slot < depth; slot++) {
+                if (literalAt[slot] >= 0 && kinds[slot] != carrier) {
+                    tokens[literalAt[slot]] = tokens[literalAt[slot]] with {
+                        Constant = LiteralToRaw(carrier, literals[slot], ruleName, verb), CarrierKind = carrier,
+                    };
+                    kinds[slot] = carrier;
+                }
+            }
+            return carrier;
         }
         CompiledExpressionToken PushConstant(InstructionPayload.Constant constant, int index) {
             literalAt[depth] = index;
             literals[depth] = constant.Value;
+            var literalKind = inferLiterals && HasFixedSpelling(constant.Value) ? CellKind.Fixed : kind;
 
             return Push(
                 new CompiledExpressionToken(
                     Constant: LiteralToRaw(
-                        kind: kind,
+                        kind: literalKind,
                         literal: constant.Value,
                         ruleName: ruleName,
                         verb: verb
                     ),
                     Operation: ExpressionOp.Constant
                 ),
-                kind
+                literalKind
             );
         }
         void Require(ExpressionOp operation, int arity) {
@@ -361,7 +379,11 @@ public static partial class RuleCompiler {
         }
         void RequireKind(ExpressionOp operation, int slot, CellKind required) {
             if (kinds[slot] != required) {
-                throw Malformed(detail: $"instruction '{operation}' needs a kind={StateSpelling.Kind(kind: required)} operand but found kind={StateSpelling.Kind(kind: kinds[slot])}");
+                throw new RuleException(
+                    detail: $"'{verb}' instruction '{operation}' needs a kind={StateSpelling.Kind(kind: required)} operand but found kind={StateSpelling.Kind(kind: kinds[slot])}",
+                    refusal: RuleRefusal.EffectSourceKindMismatch,
+                    ruleName: ruleName
+                );
             }
         }
         CompiledExpressionToken ResolveArgument(InstructionPayload.Argument argument) {
@@ -567,25 +589,25 @@ public static partial class RuleCompiler {
             if (descriptor.Signature == ExpressionSignature.Coalesce) {
                 return Coalesce();
             }
-            if (!descriptor.Admits(kind: kind)) {
-                throw Malformed(detail: $"instruction '{operation}' is admitted in kind={descriptor.Signature} expressions only");
-            }
-
             Require(
                 arity: descriptor.Arity,
                 operation: operation
             );
+            var carrier = MatchLiterals(descriptor.Arity);
+            if (!descriptor.Admits(kind: carrier)) {
+                throw Malformed(detail: $"instruction '{operation}' is admitted in kind={descriptor.Signature} expressions only");
+            }
             for (var slot = (depth - descriptor.Arity); (slot < depth); slot++) {
                 RequireKind(
                     operation: operation,
-                    required: kind,
+                    required: carrier,
                     slot: slot
                 );
             }
 
             depth -= (descriptor.Arity - 1);
 
-            return new CompiledExpressionToken(Operation: operation);
+            return new CompiledExpressionToken(Operation: operation, CarrierKind: carrier);
         }
         CompiledExpressionToken ResolveState(InstructionPayload.State state) {
             var site = new OperandSite(
@@ -601,12 +623,10 @@ public static partial class RuleCompiler {
                 site: in site
             );
 
-            // A Bool cell reads as the 0 or 1 it stores, so it is an Int operand. It stays refused in a Fixed
-            // expression, where 0 or 1 raw is 0 or 2^-16 rather than zero or one.
-            if (
-                (resolved.ValueKind != kind) &&
-                !((kind == CellKind.Int) && (resolved.ValueKind == CellKind.Bool))
-            ) {
+            // Reads retain their own encoding. Arithmetic checks matching kinds; truth conversion
+            // can consume Int and Fixed subexpressions independently without coercing either.
+            var readKind = resolved.ValueKind == CellKind.Bool ? CellKind.Int : resolved.ValueKind;
+            if (readKind is not (CellKind.Int or CellKind.Fixed)) {
                 throw new RuleException(
                     detail: $"'{verb}' expression reads '{state.Name}' as kind={StateSpelling.Kind(kind: resolved.ValueKind)} into a kind={StateSpelling.Kind(kind: kind)} destination",
                     refusal: RuleRefusal.EffectSourceKindMismatch,
@@ -619,7 +639,7 @@ public static partial class RuleCompiler {
                     Operand: resolved.Operand,
                     Operation: ExpressionOp.Operand
                 ),
-                kind
+                readKind
             );
         }
         CompiledExpressionToken ResolveVectorCall(ExpressionOp operation, InstructionPayload.Vector call) {
@@ -660,6 +680,7 @@ public static partial class RuleCompiler {
                 required: CellKind.Int,
                 slot: (depth - 3)
             );
+            MatchLiterals(arity: 2);
             if (kinds[(depth - 2)] != kinds[(depth - 1)]) {
                 throw Malformed(detail: $"instruction 'Select' branches disagree: kind={StateSpelling.Kind(kind: kinds[(depth - 2)])} against kind={StateSpelling.Kind(kind: kinds[(depth - 1)])}");
             }
@@ -713,9 +734,10 @@ public static partial class RuleCompiler {
                 throw Malformed(detail: "instruction 'Sign' needs a numeric operand");
             }
 
+            var carrier = kinds[(depth - 1)];
             kinds[(depth - 1)] = CellKind.Int;
 
-            return new CompiledExpressionToken(Operation: ExpressionOp.Sign);
+            return new CompiledExpressionToken(Operation: ExpressionOp.Sign, CarrierKind: carrier);
         }
     }
 }

@@ -109,10 +109,11 @@ public sealed partial class WorldAddonRuntime {
                     : GrantSubject.All
                 );
             } else if (ask.SubjectKind == AddonSubjectKind.Screen) {
-                inRange = ask.SubjectIndex is >= 0 and <= int.MaxValue;
-                subject = inRange ? GrantSubject.Screen((int)ask.SubjectIndex) : GrantSubject.All;
+                inRange = (ask.SubjectIndex is >= 0 and <= int.MaxValue);
+                subject = (inRange ? GrantSubject.Screen(index: ((int)ask.SubjectIndex)) : GrantSubject.All);
             } else if (ask.SubjectKind is AddonSubjectKind.Section or AddonSubjectKind.State) {
                 string sectionName;
+
                 if (ask.SubjectKind == AddonSubjectKind.State) {
                     if (!TryReadUtf8(addon, ask.SubjectIndex, ask.NameLength, AddonAbi.MaxSectionNameBytes, out sectionName, out var refusal)) {
                         QueueAnswer(addon, ask.Ordinal, refusal);
@@ -303,20 +304,24 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
+                if (query.Verb is AddonAbi.RequestVerbs.BindStateCell or AddonAbi.RequestVerbs.WriteStateCell or AddonAbi.RequestVerbs.WriteStateText) {
+                    continue;
+                }
+
                 if (query.Verb == AddonAbi.RequestVerbs.BodyPoses) {
-                    ResolveBodyPoses(addon, in query, tick);
+                    ResolveBodyPoses(addon: addon, query: in query, tick: tick);
                     continue;
                 }
                 if (query.Verb >= AddonAbi.RequestVerbs.ReadStateText) {
-                    ResolveDebuggerQuery(addon, in query, tick);
+                    ResolveDebuggerQuery(addon: addon, query: in query, tick: tick);
                     continue;
                 }
                 if (query.Verb == AddonAbi.RequestVerbs.Log) {
-                    ResolveLog(addon, in query);
+                    ResolveLog(addon: addon, query: in query);
                     continue;
                 }
                 if (query.Verb == AddonAbi.RequestVerbs.ReadStateCell) {
-                    ResolveStateRead(addon, in query);
+                    ResolveStateRead(addon: addon, query: in query);
                     continue;
                 }
 
@@ -516,14 +521,15 @@ public sealed partial class WorldAddonRuntime {
                 }
 
                 if (query.Verb == AddonAbi.RequestVerbs.BodyKinematics) {
-                    if (!ChargeHostFuel(addon, 64)) {
+                    if (!ChargeHostFuel(addon: addon, cost: 64)) {
                         QueueAnswer(addon, query.Ordinal, AddonVerdict.QuotaExhausted);
                         continue;
                     }
                     var kinematicsVerdict = WorldAddonWire.FromRule(rule: verdict.Rule);
+
                     QueuePart(addon, query.Ordinal, kinematicsVerdict, 0, body.FixedPosition.Y.Value, body.ApproximateWorldVelocity().Y.Value);
-                    QueuePart(addon, query.Ordinal, kinematicsVerdict, 1, (long)body.Facts,
-                        (long)(uint)body.ContactCount | (body.LastObstructionNormal != Puck.Maths.FixedVector3.Zero ? 2L : 0L));
+                    QueuePart(addon, query.Ordinal, kinematicsVerdict, 1, ((long)body.Facts),
+                        ((long)((uint)body.ContactCount)) | ((body.LastObstructionNormal != Puck.Maths.FixedVector3.Zero) ? 2L : 0L));
                     continue;
                 }
 

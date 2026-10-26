@@ -5,10 +5,12 @@ namespace Puck.Hosting;
 
 /// <summary>Private local-control wire limits. These bound transport memory, not simulation values.</summary>
 public static class ControlLimits {
+    /// <summary>Maximum nonblank, noncomment lines in one console script.</summary>
+    public const int ScriptLines = 64;
     /// <summary>Maximum completed PNG file size, in bytes.</summary>
     public const int ImageBytes = ((16 * 1024) * 1024);
     /// <summary>Maximum console output length, in UTF-16 code units. Output up to this length is delivered whole; longer
-    /// output is cut to it with a truncation marker (<see cref="ControlResponse.Bounded"/>). JSON escapes a code unit to
+    /// output is cut to it with a truncation marker (<see cref="ControlResponse.Bounded()"/>). JSON escapes a code unit to
     /// at most six bytes, so the largest output encodes to 6 MiB, inside <see cref="ResponseBytes"/>.</summary>
     public const int OutputCharacters = (1024 * 1024);
     /// <summary>Maximum UTF-8 request JSON payload, in bytes, excluding the shared frame prefix.</summary>
@@ -21,12 +23,26 @@ public static class ControlLimits {
 /// <summary>A single request. IDs increase strictly within one connection; operations are exec or capture.</summary>
 /// <param name="Id">Positive decimal sequence, starting at one.</param>
 /// <param name="Operation">The operation discriminator.</param>
-/// <param name="Command">One console line for exec; null for capture.</param>
+/// <param name="Command">A console line or newline-separated script for exec; null for capture.</param>
 /// <param name="TimeoutMilliseconds">Deadline on the serving host's clock, from one through the transport ceiling.</param>
 /// <param name="Capture">How a capture reads the frame, or <see langword="null"/> for one settled frame; always
 /// <see langword="null"/> for exec.</param>
 public sealed record ControlRequest(long Id, string Operation, string? Command, int TimeoutMilliseconds,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ControlCapture? Capture = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ControlCapture? Capture = null) {
+    internal (int Line, string Command)[] ReadCommands() {
+        List<(int, string)> commands = [];
+        using var reader = new StringReader(s: (Command ?? string.Empty));
+        var number = 0;
+
+        while (reader.ReadLine() is { } line) {
+            number++;
+            if (!string.IsNullOrWhiteSpace(value: line) && !line.AsSpan().TrimStart().StartsWith(value: "#")) {
+                commands.Add(item: (number, line));
+            }
+        }
+        return [.. commands];
+    }
+}
 /// <summary>How a capture request reads the render chain's frames.</summary>
 /// <param name="Mode"><c>settled</c>: one still, holding presentation while temporal views converge over it.
 /// <c>presented</c>: the frames the display shows next, read as presented, holding and settling nothing.</param>
@@ -69,9 +85,9 @@ public sealed record ControlCapture(string Mode, int Frames = 1,
         if (Region is { } region) {
             return ((region.Length != 4)
                 ? "Capture region must be four numbers: x, y, width, height."
-                : (Abstractions.Presentation.FrameCaptureRegion.RefusalOf(height: region[3], width: region[2], x: region[0], y: region[1]) is { } refusal)
+                : ((Abstractions.Presentation.FrameCaptureRegion.RefusalOf(height: region[3], width: region[2], x: region[0], y: region[1]) is { } refusal)
                     ? $"Capture region: {refusal}."
-                    : null);
+                    : null));
         }
 
         return null;
@@ -87,26 +103,34 @@ public sealed record ControlCapture(string Mode, int Frames = 1,
 /// <param name="Truncated">Whether <paramref name="Output"/> is the head of a longer console output, cut to
 /// <see cref="ControlLimits.OutputCharacters"/> and ending in a marker that names the full length. The status still
 /// reports the command's own outcome.</param>
+/// <param name="Commands">Per-line answers for a multiline script, otherwise null.</param>
 public sealed record ControlResponse(long Id, string Status, string Output, bool IsError = false, bool ClearTranscript = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] byte[]? Png = null, bool Truncated = false) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] byte[]? Png = null, bool Truncated = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ControlCommandResult[]? Commands = null) {
     /// <summary>Returns this response with output that fits <see cref="ControlLimits.OutputCharacters"/>: the response
     /// itself when its output fits, otherwise a copy whose output is the longest head that fits beside a marker naming
     /// the full length, marked <see cref="Truncated"/>. A long result is a completed read, never an unknown outcome, so
     /// the status, error flag and transcript request are kept.</summary>
     /// <returns>A response whose output is within the limit.</returns>
-    public ControlResponse Bounded() {
+    public ControlResponse Bounded() => BoundedTo(maximumCharacters: ControlLimits.OutputCharacters);
+
+    // A script shares the output budget across its lines, reserving room for the remaining truncation markers.
+    internal ControlResponse BoundedTo(int maximumCharacters) {
         if (
             (Output is null) ||
-            (Output.Length <= ControlLimits.OutputCharacters)
+            (Output.Length <= maximumCharacters)
         ) {
             return this;
         }
 
+        var budget = ((maximumCharacters == ControlLimits.OutputCharacters)
+            ? $"the {ControlLimits.OutputCharacters}-character limit"
+            : $"the remaining script output budget of {maximumCharacters} characters");
         var marker = string.Create(
             provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"\n[control: output truncated; its {Output.Length} characters exceed the {ControlLimits.OutputCharacters}-character limit. Narrow the command to read the rest, such as help <prefix> or a counter source.]"
+            handler: $"\n[control: output truncated; its {Output.Length} characters exceed {budget}. Narrow the command to read the rest, such as help <prefix> or a counter source.]"
         );
-        var kept = (ControlLimits.OutputCharacters - marker.Length);
+        var kept = (maximumCharacters - marker.Length);
 
         // A cut between the halves of a surrogate pair would leave an unpaired surrogate that JSON cannot carry.
         if (char.IsHighSurrogate(c: Output[(kept - 1)])) {
@@ -115,10 +139,15 @@ public sealed record ControlResponse(long Id, string Status, string Output, bool
 
         return (this with { Output = string.Concat(str0: Output.AsSpan(length: kept, start: 0), str1: marker), Truncated = true });
     }
+
     /// <summary>Checks correlation, outcome semantics and bounded image/output data before exposing a host result.</summary>
     /// <param name="request">The admitted request that produced this response.</param>
     /// <returns>Whether the response satisfies the control contract.</returns>
     public bool IsValidFor(ControlRequest request) => ((Id == request.Id) && (Output is not null) && (Output.Length <= ControlLimits.OutputCharacters) &&
+        ((Commands is null) || ((request.Operation == "exec") && (Commands.Length is > 0 and <= ControlLimits.ScriptLines) &&
+            Commands.All(predicate: static line => ((line is not null) && (line.Line > 0) && (line.Command is not null) && (line.Output is not null) &&
+                (line.IsError ? (line.Status == "refused") : (line.Status is "completed" or "submitted")))) &&
+            (Commands.Sum(selector: static line => ((long)line.Output.Length)) <= ControlLimits.OutputCharacters))) &&
         (IsError
         ? (Status is "refused" or "unknown")
         : (Status is "completed" or "submitted")) &&
@@ -126,6 +155,15 @@ public sealed record ControlResponse(long Id, string Status, string Output, bool
         ? ((request.Operation != "capture") || IsError || (request.Capture is { IsBurst: true }))
         : ((request.Operation == "capture") && (request.Capture is not { IsBurst: true }) && !IsError && (Status == "completed") && !ClearTranscript && !Truncated && (Png.Length is > 0 and <= ControlLimits.ImageBytes))));
 }
+/// <summary>One executed script line's settled answer. Blank and comment lines have no entry.</summary>
+/// <param name="Line">One-based line number in the submitted script.</param>
+/// <param name="Command">The submitted console line.</param>
+/// <param name="Status">Completed, submitted or refused.</param>
+/// <param name="Output">The line's bounded output.</param>
+/// <param name="IsError">Whether the line was refused.</param>
+/// <param name="ClearTranscript">Whether the line requested a cleared transcript.</param>
+/// <param name="Truncated">Whether the line's output exceeded its remaining script budget.</param>
+public sealed record ControlCommandResult(int Line, string Command, string Status, string Output, bool IsError, bool ClearTranscript, bool Truncated);
 /// <summary>One authenticated connection's host operations. Calls are serial; disposal closes only this ingress.</summary>
 public interface IControlSession : IDisposable {
     /// <summary>Runs one bounded request. Cancellation may leave already-dispatched work with an unknown outcome.</summary>

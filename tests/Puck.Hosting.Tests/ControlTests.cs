@@ -319,8 +319,6 @@ public sealed class ControlTests {
     [InlineData("")]
     [InlineData(" \t")]
     [InlineData(" #comment")]
-    [InlineData("help\nquit")]
-    [InlineData("help\rquit")]
     [InlineData("help\0")]
     [Theory]
     public void DroppedLinesCannotStrandAReply(string line) => Assert.True(condition: LocalControlServer.Validate(request: new(
@@ -329,6 +327,13 @@ public sealed class ControlTests {
         Operation: "exec",
         TimeoutMilliseconds: 1000
     ))?.IsError);
+    [Fact]
+    public void ScriptAdmissionBoundsTheWholeRequestBeforeItQueues() {
+        Assert.Null(@object: LocalControlServer.Validate(request: new(1, "exec", string.Join(separator: '\n', values: Enumerable.Repeat(count: ControlLimits.ScriptLines, element: "help")), 1000)));
+        Assert.True(condition: LocalControlServer.Validate(request: new(1, "exec", string.Join(separator: '\n', values: Enumerable.Repeat(count: (ControlLimits.ScriptLines + 1), element: "help")), 1000))!.IsError);
+        Assert.True(condition: LocalControlServer.Validate(request: new(1, "exec", new string(c: 'x', count: 8193), 1000))!.IsError);
+        Assert.Null(@object: LocalControlServer.Validate(request: new(1, "exec", "# comment\r\nhelp\rhelp\n", 1000)));
+    }
     [Fact]
     public async Task IndependentSessionsRetainConsoleAuthorityAndCaptureCompletion() {
         var held = true;

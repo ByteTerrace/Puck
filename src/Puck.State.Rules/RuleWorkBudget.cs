@@ -130,7 +130,7 @@ public static partial class RuleWorkBudget {
                 default:
                     cost += OperationCost(
                         board: token.Board,
-                        kind: kind,
+                        kind: token.CarrierKind ?? kind,
                         operation: token.Operation
                     );
 

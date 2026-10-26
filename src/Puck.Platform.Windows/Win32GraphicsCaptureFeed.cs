@@ -595,13 +595,13 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         var resize = false;
         var contentSize = default(SizeInt32);
-        var frame = sender.TryGetNextFrame();
+        var frame = FrameAbi.TryGetNextFrame(pool: ((IWinRTObject)sender).NativeObject.ThisPtr);
 
-        if (frame is null) {
+        if (frame == 0) {
             return;
         }
         try {
-            contentSize = frame.ContentSize;
+            contentSize = FrameAbi.ContentSize(frame: frame);
             // Minimized/occluded windows may transiently report no drawable content. That is an unavailable frame,
             // not an ended capture item; target closure is reported separately by GraphicsCaptureItem.Closed.
             if (
@@ -620,14 +620,14 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                 ProcessCurrentSizeFrame(frame: frame);
             }
         } finally {
-            CloseFrameAndRelease(frame: frame);
+            FrameAbi.CloseAndRelease(frame: frame);
         }
 
         if (resize) {
             RecreateForSourceSize(size: contentSize);
         }
     }
-    private void ProcessCurrentSizeFrame(Direct3D11CaptureFrame frame) {
+    private void ProcessCurrentSizeFrame(nint frame) {
         if (m_device!.TryReadCompleted(
             destination: m_workingPixels,
             targetHeight: m_targetHeight,
@@ -650,39 +650,27 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             m_nextCaptureTicks = (now + m_refreshPeriodTicks);
         }
 
-        var surface = frame.Surface;
+        var texture = FrameAbi.Texture(frame: frame);
 
         try {
-            var access = surface.As<IDirect3DDxgiInterfaceAccess>();
+            var runCpuReadback = true;
+            var gpuTargets = m_gpuTargets;
 
-            try {
-                var texture = access.GetInterface(iid: ID3D11Texture2D.IID_Guid);
+            if (gpuTargets is not null) {
+                PublishGpuFrame(
+                    gpuTargets: gpuTargets,
+                    sourceTexture: texture
+                );
+                // With GPU mode active, throttle the CPU readback to every Nth tick (or off entirely). The
+                // divisor keeps the glow and probe fed without paying the full staging-readback cost each frame.
+                runCpuReadback = ShouldRunCpuReadback(divisor: gpuTargets.CpuReadbackDivisor);
+            }
 
-                try {
-                    var runCpuReadback = true;
-                    var gpuTargets = m_gpuTargets;
-
-                    if (gpuTargets is not null) {
-                        PublishGpuFrame(
-                            gpuTargets: gpuTargets,
-                            sourceTexture: texture
-                        );
-                        // With GPU mode active, throttle the CPU readback to every Nth tick (or off entirely). The
-                        // divisor keeps the glow and probe fed without paying the full staging-readback cost each frame.
-                        runCpuReadback = ShouldRunCpuReadback(divisor: gpuTargets.CpuReadbackDivisor);
-                    }
-
-                    if (runCpuReadback) {
-                        _ = m_device.TryQueueReadback(sourceTexture: texture);
-                    }
-                } finally {
-                    _ = Marshal.Release(pUnk: texture);
-                }
-            } finally {
-                _ = Marshal.ReleaseComObject(o: access);
+            if (runCpuReadback) {
+                _ = m_device.TryQueueReadback(sourceTexture: texture);
             }
         } finally {
-            ((IWinRTObject)surface).NativeObject.Dispose();
+            _ = Marshal.Release(pUnk: texture);
         }
     }
     // Copies the captured frame into a slot no consumer holds and publishes it with the fence value the copy signals. A
@@ -885,13 +873,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             ReleaseProjection(value: value);
         }
     }
-    private static void CloseFrameAndRelease(Direct3D11CaptureFrame frame) {
-        try {
-            frame.Dispose();
-        } finally {
-            ReleaseProjection(value: frame);
-        }
-    }
     private static GraphicsCaptureItem CreateCaptureItem(CaptureTargetKind targetKind, nint targetHandle) {
         var interop = GraphicsCaptureItem.As<IGraphicsCaptureItemInterop>();
         var itemPointer = ((targetKind == CaptureTargetKind.Monitor)
@@ -973,12 +954,91 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         nint CreateForWindow(nint window, in Guid iid);
         nint CreateForMonitor(nint monitor, in Guid iid);
     }
-    [ComImport]
-    [ComVisible(true)]
-    [Guid("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IDirect3DDxgiInterfaceAccess {
-        nint GetInterface(in Guid iid);
+    // Each frame through its raw ABI. A projection of a frame or its surface is a finalizable runtime wrapper, and one a
+    // frame survives a collection to its finalizer, so the feed's frame rate in projections fills the older generation
+    // with garbage. Slots after IInspectable's six: IDirect3D11CaptureFramePool TryGetNextFrame 7;
+    // IDirect3D11CaptureFrame Surface 6, ContentSize 8; IClosable Close 6. IDirect3DDxgiInterfaceAccess is an IUnknown:
+    // GetInterface 3.
+    private static unsafe class FrameAbi {
+        private static readonly Guid ClosableIid = new("30D5A829-7FA4-4026-83BB-D75BAE4EA99E");
+        private static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
+
+        // The pool's next frame with a reference the caller releases, or zero when none is ready.
+        public static nint TryGetNextFrame(nint pool) {
+            nint frame;
+
+            Marshal.ThrowExceptionForHR(errorCode: ((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(
+                instance: pool,
+                slot: 7
+            ))(pool, &frame));
+
+            return frame;
+        }
+        public static SizeInt32 ContentSize(nint frame) {
+            SizeInt32 size;
+
+            Marshal.ThrowExceptionForHR(errorCode: ((delegate* unmanaged[Stdcall]<nint, SizeInt32*, int>)Slot(
+                instance: frame,
+                slot: 8
+            ))(frame, &size));
+
+            return size;
+        }
+        // The frame's Direct3D 11 texture with a reference the caller releases.
+        public static nint Texture(nint frame) {
+            nint surface;
+
+            Marshal.ThrowExceptionForHR(errorCode: ((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(
+                instance: frame,
+                slot: 6
+            ))(frame, &surface));
+
+            try {
+                Marshal.ThrowExceptionForHR(errorCode: Marshal.QueryInterface(
+                    iid: in DxgiInterfaceAccessIid,
+                    pUnk: surface,
+                    ppv: out var access
+                ));
+
+                try {
+                    var textureIid = ID3D11Texture2D.IID_Guid;
+                    nint texture;
+
+                    Marshal.ThrowExceptionForHR(errorCode: ((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Slot(
+                        instance: access,
+                        slot: 3
+                    ))(access, &textureIid, &texture));
+
+                    return texture;
+                } finally {
+                    _ = Marshal.Release(pUnk: access);
+                }
+            } finally {
+                _ = Marshal.Release(pUnk: surface);
+            }
+        }
+        // Closes the frame, returning its buffer to the pool, and releases the caller's reference.
+        public static void CloseAndRelease(nint frame) {
+            try {
+                if (Marshal.QueryInterface(
+                    iid: in ClosableIid,
+                    pUnk: frame,
+                    ppv: out var closable
+                ) >= 0) {
+                    try {
+                        _ = ((delegate* unmanaged[Stdcall]<nint, int>)Slot(
+                            instance: closable,
+                            slot: 6
+                        ))(closable);
+                    } finally {
+                        _ = Marshal.Release(pUnk: closable);
+                    }
+                }
+            } finally {
+                _ = Marshal.Release(pUnk: frame);
+            }
+        }
+        private static void* Slot(nint instance, int slot) => (*(void***)instance)[slot];
     }
 }
 
