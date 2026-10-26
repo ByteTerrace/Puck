@@ -115,27 +115,25 @@ public static class WorldStateDisclosure {
 
         return false;
     }
-    /// <summary>Determines whether the recipient may read a named row, from the document's own rows: the row's
-    /// visibility admits the recipient by its reader list or by the cells of its live reader row as the document
-    /// holds them.</summary>
-    /// <param name="definition">The document, for the row declarations and the reader row.</param>
+    /// <summary>Determines whether the recipient may read a named row, evaluating its reader list against the
+    /// arena on every call.</summary>
+    /// <param name="arena">The live store and its declarations.</param>
     /// <param name="rowName">The name of the row.</param>
     /// <param name="recipient">The recipient.</param>
     /// <returns><see langword="true"/> when the document declares the row and its visibility admits the recipient.</returns>
-    public static bool CanReadRow(WorldDefinition definition, string rowName, Principal recipient) {
-        foreach (var row in definition.State) {
-            if (string.Equals(
-                a: row.Name.Value,
-                b: rowName,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((row.Visibility is null) || row.Visibility.Allows(
-                    recipient: recipient.Describe(),
-                    rows: definition.State
-                ));
-            }
-        }
+    public static bool CanReadRow(StateArena arena, string rowName, Principal recipient) =>
+        arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) &&
+        Allows(arena: arena, policy: arena.Rows[handle.Ordinal].Visibility, recipient: recipient.Describe());
 
+    private static bool Allows(StateArena arena, StateVisibility? policy, string? recipient) {
+        if ((policy is null) || policy.Allows(recipient: recipient)) { return true; }
+        if ((recipient is null) || (policy.ReadersFrom is null) ||
+            !arena.Catalog.TryResolve(lane: StateLane.Document, name: policy.ReadersFrom, handle: out var readers)) { return false; }
+        var cursor = 0;
+        while (arena.TryNextCell(rowOrdinal: readers.Ordinal, cursor: ref cursor, key: out var key)) {
+            if (arena.TryRead(rowOrdinal: readers.Ordinal, key: key, value: out var value) &&
+                (value.Kind == CellKind.Text) && string.Equals(value.AsText, recipient, StringComparison.Ordinal)) { return true; }
+        }
         return false;
     }
     /// <summary>Projects the rows and cells with explicit observation policies, and every row in
@@ -687,55 +685,7 @@ public static class WorldStateDisclosure {
         public string? Name { get; }
 
         // A restriction the store holds for the recipient's own token, or one a live text row lists it in.
-        public bool Allows(StateVisibility? policy) {
-            if (
-                (policy is null) ||
-                m_unrestricted
-            ) {
-                return true;
-            }
-            if (policy.Allows(recipient: Name)) {
-                return true;
-            }
-            if (
-                (Name is null) ||
-                (policy.ReadersFrom is null) ||
-                !m_definition.StateCatalog.TryResolve(
-                handle: out var handle,
-                lane: StateLane.Document,
-                name: policy.ReadersFrom
-            )
-            ) {
-                return false;
-            }
-
-            var readers = handle.Ordinal;
-            var cursor = 0;
-
-            while (m_arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: readers
-            )) {
-                if (
-                    m_arena.TryRead(
-                    key: key,
-                    rowOrdinal: readers,
-                    value: out var value
-                ) &&
-                    (value.Kind == CellKind.Text) &&
-                    string.Equals(
-                    a: value.AsText,
-                    b: Name,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        public bool Allows(StateVisibility? policy) => m_unrestricted || WorldStateDisclosure.Allows(arena: m_arena, policy: policy, recipient: Name);
         public bool AnyCellRestricted(int rowOrdinal) {
             var cursor = 0;
 

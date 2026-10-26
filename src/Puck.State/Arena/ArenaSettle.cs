@@ -80,7 +80,7 @@ public sealed partial class StateArena {
         );
         var newBehavior = BehaviorAt(
             name: name,
-            row: row,
+            rowOrdinal: rowOrdinal,
             slot: slot
         );
         var epoch = unchecked((long)time.Tick);

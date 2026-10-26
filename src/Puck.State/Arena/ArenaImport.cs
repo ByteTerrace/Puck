@@ -308,7 +308,7 @@ public sealed partial class StateArena {
 
         var behavior = BehaviorAt(
             name: name,
-            row: declared,
+            rowOrdinal: rowOrdinal,
             slot: slot
         );
 

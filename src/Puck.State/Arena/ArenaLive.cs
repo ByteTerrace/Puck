@@ -64,7 +64,7 @@ public sealed partial class StateArena {
 
         return BehaviorAt(
             name: name,
-            row: DocumentRow(rowOrdinal: rowOrdinal),
+            rowOrdinal: rowOrdinal,
             slot: slot
         );
     }
@@ -140,7 +140,7 @@ public sealed partial class StateArena {
 
         if (layout.HasTraits && m_keys.TryGetName(key: key, name: out var name)) {
             var row = DocumentRow(rowOrdinal: rowOrdinal);
-            var behavior = BehaviorAt(name: name, row: row, slot: slot);
+            var behavior = BehaviorAt(name: name, rowOrdinal: rowOrdinal, slot: slot);
 
             if (!behavior.IsNone) {
                 raw = LiveNumber(baseValue: raw, behavior: in behavior, row: row, slot: slot, time: in time);
@@ -204,7 +204,7 @@ public sealed partial class StateArena {
         var behavior = (layout.HasTraits
             ? BehaviorAt(
                 name: name,
-                row: row,
+                rowOrdinal: rowOrdinal,
                 slot: slot
             )
             : EffectiveBehavior.None
@@ -317,40 +317,10 @@ public sealed partial class StateArena {
         return true;
     }
 
-    private EffectiveBehavior BehaviorAt(StateRow row, CellName name, int slot) {
-        var overridden = ((m_behaviors is null)
-            ? StateCellBehavior.Inherit
-            : ((StateCellBehavior)m_behaviors[slot])
-        );
-        var isSlotCell = (name == StateRow.SlotKey);
-
-        if (
-            !isSlotCell &&
-            (overridden == StateCellBehavior.None)
-        ) {
-            return EffectiveBehavior.None;
-        }
-
-        var cell = StateRows.FindCell(
-            cells: row.Cells,
-            key: name
-        );
-
-        // The arena's own column carries the live override, so an authored record that disagrees with it — a cell
-        // whose opt-out was written away — resolves against the column.
-        if (
-            !isSlotCell &&
-            (cell is not null) &&
-            (cell.Behavior != overridden)
-        ) {
-            cell = (cell with { Behavior = overridden });
-        }
-
-        return EffectiveBehavior.Resolve(
-            cell: cell,
-            row: row
-        );
-    }
+    private EffectiveBehavior BehaviorAt(int rowOrdinal, CellName name, int slot) => m_catalog.Behavior(
+        rowOrdinal: rowOrdinal,
+        key: name,
+        behavior: (m_behaviors is null ? StateCellBehavior.Inherit : (StateCellBehavior)m_behaviors[slot]));
     private bool HasClock(int slot) => (ReadNumberRaw(
         column: ArenaColumn.ClockSet,
         index: slot

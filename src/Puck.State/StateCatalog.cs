@@ -108,6 +108,8 @@ public sealed class StateCatalog {
     private readonly CellKey[] m_ringKeys;
     private readonly int[] m_poolSlotsByKeyOrdinal;
     private readonly IReadOnlyList<int>[] m_containingZones;
+    private readonly EffectiveBehavior[] m_defaultBehaviors;
+    private readonly Dictionary<CellName, EffectiveBehavior>?[] m_cellBehaviors;
 
     private StateCatalog(
         object identity,
@@ -143,6 +145,17 @@ public sealed class StateCatalog {
         m_readOnlyFamilies = Array.AsReadOnly(array: families);
         m_rowEnums = rowEnums;
         m_rows = Array.AsReadOnly(array: rows);
+        m_defaultBehaviors = new EffectiveBehavior[rows.Length];
+        m_cellBehaviors = new Dictionary<CellName, EffectiveBehavior>?[rows.Length];
+        for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
+            var row = rows[ordinal];
+            m_defaultBehaviors[ordinal] = EffectiveBehavior.Resolve(row: row, cell: null);
+            foreach (var cell in row.Cells ?? []) {
+                if ((cell.Key == StateRow.SlotKey) || ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null))) { continue; }
+                (m_cellBehaviors[ordinal] ??= []).TryAdd(key: cell.Key,
+                    value: EffectiveBehavior.Resolve(row: row, cell: cell with { Behavior = StateCellBehavior.Inherit }));
+            }
+        }
         var zonesByDomain = new Dictionary<CellName, List<int>>();
         for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
             if (rows[ordinal].EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) {
@@ -191,6 +204,31 @@ public sealed class StateCatalog {
     public IReadOnlyList<RowFamily> Families => m_readOnlyFamilies;
     /// <summary>Gets the complete document lane, including catalog-generated pool storage rows.</summary>
     public IReadOnlyList<StateRow> Rows => m_rows;
+    /// <summary>Resolves a compiled trait declaration and the cell's current behavior override without reading seed cells.</summary>
+    /// <param name="rowOrdinal">The document row ordinal.</param>
+    /// <param name="key">The cell name.</param>
+    /// <param name="behavior">The live override.</param>
+    /// <returns>The declared cell trait or row default, unless the live override disables it.</returns>
+    public EffectiveBehavior Behavior(int rowOrdinal, CellName key, StateCellBehavior behavior) {
+        if (key != StateRow.SlotKey) {
+            if (behavior == StateCellBehavior.None) { return EffectiveBehavior.None; }
+            if ((m_cellBehaviors[rowOrdinal] is { } cells) && cells.TryGetValue(key: key, value: out var declared)) { return declared; }
+        }
+        return m_defaultBehaviors[rowOrdinal];
+    }
+    private bool MatchesBehaviors(int rowOrdinal, StateRow row) {
+        static bool Same(EffectiveBehavior a, EffectiveBehavior b) =>
+            (a.Advance == b.Advance) && (a.Cycle == b.Cycle) && (a.Dynamics == b.Dynamics);
+        if (!Same(m_defaultBehaviors[rowOrdinal], EffectiveBehavior.Resolve(row: row, cell: null))) { return false; }
+        var count = 0;
+        foreach (var cell in row.Cells ?? []) {
+            if ((cell.Key == StateRow.SlotKey) || ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null))) { continue; }
+            count++;
+            if ((m_cellBehaviors[rowOrdinal] is not { } cells) || !cells.TryGetValue(key: cell.Key, value: out var previous) ||
+                !Same(previous, EffectiveBehavior.Resolve(row: row, cell: cell with { Behavior = StateCellBehavior.Inherit }))) { return false; }
+        }
+        return count == (m_cellBehaviors[rowOrdinal]?.Count ?? 0);
+    }
     /// <summary>Gets the ordered-zone ordinals whose membership can restrict cells of the supplied row.</summary>
     /// <param name="rowOrdinal">The source row's catalog ordinal.</param>
     /// <returns>The zones over the row's token domain, or an empty list.</returns>
@@ -1100,7 +1138,7 @@ public sealed class StateCatalog {
                 (left.Generated != right.Generated) ||
                 (left.HostOwned != right.HostOwned) ||
                 (left.LaneOrdinal != right.LaneOrdinal) ||
-                ((left.Lane == StateLane.Document) && (ArenaLayout.ColumnsOf(row: m_rows[left.LaneOrdinal]) != ArenaLayout.ColumnsOf(row: other.m_rows[right.LaneOrdinal])))
+                ((left.Lane == StateLane.Document) && ((ArenaLayout.ColumnsOf(row: m_rows[left.LaneOrdinal]) != ArenaLayout.ColumnsOf(row: other.m_rows[right.LaneOrdinal])) || !MatchesBehaviors(rowOrdinal: left.LaneOrdinal, row: other.m_rows[right.LaneOrdinal])))
             ) {
                 return false;
             }
@@ -1182,7 +1220,7 @@ public sealed class StateCatalog {
 
         for (var index = 0; (index < rows.Count); index++) {
             if (
-                (rows[index] is not { } row) || row.Generated ||
+                (rows[index] is not { } row) || row.Generated || !MatchesBehaviors(rowOrdinal: index, row: row) ||
                 (ArenaLayout.ColumnsOf(row: row) != ArenaLayout.ColumnsOf(row: m_rows[index])) ||
                 !Match(
                 name: row.Name,

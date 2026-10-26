@@ -205,6 +205,11 @@ is the live one. How each trait
 computes its value is explained in [Row and cell behavior](traits.md). Pool rows
 aren't read positionally; they're read through instance handles.
 
+The catalog compiles row defaults and per-key trait declarations once. A live
+read combines that lookup with the arena's behavior override; it does not scan
+the seed cells. Retuning a trait replaces the catalog, while changing a stored
+value or its live override keeps bound handles valid.
+
 `StateReader` is the (row, key) → value computation over a list of `StateRow`
 records, the installed document's rows, instead of the arena's columns. It
 applies the same traits, adds the eased read (`TryReadEased`) a presentation
