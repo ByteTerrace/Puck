@@ -333,8 +333,12 @@ laws exercise that boundary.
   carries the largest such distance it inherited, so a collapse cannot cut a
   triangle through a thin rod the samples straddle. On the debug world's stored
   set it keeps 11% of the triangles at the first level and 6% at the second, for
-  9% more stored and region bytes and about 208 s of CPU over the whole set,
-  which `Land`'s tasks spread across cores. The done line counts `levelled=` meshes and
+  9% more stored and region bytes. Conservative triangle-box distance bounds
+  skip exact measurements that cannot improve the result, and the old fan's
+  coordinates are cached per proposal: the same 1,406 meshes take 206.1 CPU
+  seconds instead of 215.7 with identical indices, materials and recorded errors,
+  spread across `Land`'s tasks. Glass skips collapse because its pass uses only
+  level zero. The done line counts `levelled=` pieces and
   the triangles every mesh draws at `level1=` and `level2=`;
   `SdfMeshCollapseLawTests` measures each level's contract by brute force.
 
