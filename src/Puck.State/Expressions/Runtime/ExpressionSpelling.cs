@@ -10,7 +10,7 @@ namespace Puck.State;
 /// <list type="bullet">
 /// <item><c>+ - * / %</c>, <c>&amp; | ^ ~</c>, <c>&lt;&lt; &gt;&gt; &gt;&gt;&gt;</c>, <c>== != &lt; &lt;= &gt; &gt;=</c>,
 /// unary <c>-</c> and <c>~</c>, and <c>condition ? whenTrue : whenFalse</c> (<see cref="ExpressionOp.Select"/>), with
-/// C precedence.</item>
+/// the precedence in <see cref="ExpressionOperators"/>, including <c>and</c>, <c>or</c>, and <c>not</c>.</item>
 /// <item>Named forms as calls, spelled as <see cref="ExpressionOperators.Calls"/> keys them: among them
 /// <c>minimum(a, b)</c>, <c>maximum</c>, <c>clamp(value, lower, upper)</c>, <c>absolute</c>, <c>sign</c>,
 /// <c>setBitCount</c>, <c>leadingZeroCount</c>, <c>trailingZeroCount</c>, <c>lowestSetBit</c>,

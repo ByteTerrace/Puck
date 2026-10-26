@@ -1175,7 +1175,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (resolvedSpace is not null) {
-            var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
+            var effectiveCapacity = (row.IsSlot ? 1 : row.InitialCellCapacity);
             var rowVectorBytes = checked((((long)effectiveCapacity) * resolvedSpace.Identity.Dimensions));
 
             if (rowVectorBytes > StateCapacity.MaxVectorRowBytes) {
@@ -1305,7 +1305,7 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 if (vectorSpace is not null) {
-                    var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
+                    var effectiveCapacity = (row.IsSlot ? 1 : row.InitialCellCapacity);
 
                     totalVectorBytes += checked((((long)effectiveCapacity) * vectorSpace.Identity.Dimensions));
                 }
@@ -1665,12 +1665,6 @@ public static partial class WorldDefinitionValidator {
                 );
             }
 
-            if (
-                (cell.Provenance is { } provenance) &&
-                (provenance.Length > StateCapacity.MaxProvenanceLength)
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
-            }
 
             if (row.Kind == CellKind.Vector) {
                 if ((resolvedSpace is not null) && (cell.Value.AsVector.Length != resolvedSpace.Identity.Dimensions)) {

@@ -22,7 +22,7 @@ it. `coins` sits in the Int slot column, `pieceCell` in the Int keyed column,
 `hand` in the Int ordered column, and `board` in the Int lattice column. Beside
 those value columns, the arena keeps a column for every piece of runtime state a
 cell can carry: a presence bit, the key that occupies a slot, clock epochs,
-provenance, a visibility restriction, and so on. `ArenaColumn` names each of
+a visibility restriction, and so on. `ArenaColumn` names each of
 them.
 
 Every row belongs to one of three **lanes**:
@@ -42,6 +42,15 @@ A row whose `HostOwned` mark is set gets a descriptor and no columns. The arena
 answers `false` to every read of it and refuses every write, because a host
 facet serves that row instead. For the row shapes and cell kinds themselves, see
 [Rows, cells, and values](data-model.md).
+
+Keyed and ordered rows keep their order in links between stable cell slots.
+Removing a member changes its neighbors and clears that slot. A FIFO eviction
+reuses the victim's slot for the appended member. Neither operation copies the
+other cells' values or metadata. Positional reads use a derived view of the links;
+key reads keep their direct slot index. Pools retain their fixed identity slots. A pair pool reserves `MaxLive` slots and
+stores the two endpoint slots beside each live pair; it never reserves the
+Cartesian product of the endpoint capacities. Claims choose the lowest free
+storage slot, refuse duplicate endpoints, and journal endpoint membership.
 
 ## From declarations to storage
 
@@ -66,9 +75,24 @@ check a write uses. If the document authors a value that no write could store,
 construction fails, and the reason names the row and cell. `ToRows` reads the
 columns back out as the row list a section serializes.
 
-Layout is a function of the catalog and the authored rows alone. Two hosts that
+The initial layout is a function of the catalog and the authored rows. Optional columns
+reserve storage only on rows declaring their trait, including traits on seed
+cells. A metadata write cannot introduce a trait that the row does not hold;
+changing that declaration requires a relayout. Two hosts that
 load the same document lay it out identically, which is what lets a hash folded
 in layout order compare across machines.
+
+A keyed row without an explicit capacity reserves its seed count, including zero.
+When a mint needs more room, the arena proposes twice the current room (one from
+zero), up to the row's cell ceiling. Memory, retained-journal storage, and the
+world's repriced work sheet must all admit the proposal before a key or cell
+changes. The work allowance also charges the copy and a possible rollback.
+`forEach` and reductions use the admitted room. Reservation changes are journaled,
+so a refused firing or rewind restores them. Exports carry `reservedCapacity` for
+growable rows so a checkpoint preserves the same reservation and future admission.
+Exports also carry `cellSlots` when members occupy different physical slots than
+their logical positions, so retained undo resumes over the same addresses.
+Growth invalidates borrowed vector views; carry their values before reserving room.
 
 ### The catalog and its descriptors
 
@@ -169,7 +193,7 @@ row ordinal and `rook` to a key once, then reads.
 | `TryReadRawAt(row, position, out long)` | The stored number at one position, for a ring slot or a board cell, which no trait can govern. |
 | `TryReadBoard(row, Span<long>)` | Every cell of a lattice row by cell ordinal, with the row's `Empty` value for absent cells. |
 | `ReadWord(row, …)` | A row's values as the word a pattern walks. |
-| `CellCount(row)`, `TryNextCell(row, ref cursor, out key)` | How many cells a row holds, and each held cell in storage-slot order. |
+| `CellCount(row)`, `TryNextCell(row, ref cursor, out key)` | How many cells a row holds, and each held cell in member order (storage-slot order for boards, rings, and pools). |
 
 A live read applies `StateAdvance` and `StateCycle` and never eases a
 `StateDynamics` cell, so rules and search read stored truth. Every read a rule,
@@ -487,13 +511,13 @@ the two side by side.
 
 `ArenaLayout.Bytes` is the reservation the layout makes up front:
 
-- every column at its full width, plus an eight-byte change stamp and a flag
-  per position for version settling;
+- each column over the rows that declare it, plus an eight-byte change stamp
+  and a flag per reserved position for version settling; optional columns and
+  their settle arrays allocate separately for each row when first written;
 - the row, key-to-slot, and pool-occupancy indexes, and a fixed allowance per
   row for its layout record, counters, and key map;
 - vector components;
-- a provenance string for every cell slot at its 256-character ceiling, and a
-  text for every slot of a `Text` row at its 1,024-character ceiling.
+- a text for every slot of a `Text` row at its 1,024-character ceiling.
 
 `StateArena.Bytes` adds what the arena retains beyond the layout:
 
@@ -560,8 +584,6 @@ For the reasoning behind this design, see
   depend on the tick or on a host facet.
 - Exported rows don't carry orphan key names. A checkpoint that omits the key
   ledger restores to a different hash.
-- Every cell slot reserves room for a full-length provenance string, so wide
-  rows spend the byte budget quickly even when they store small numbers.
 
 ## Key types
 

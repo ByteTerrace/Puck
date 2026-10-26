@@ -30,8 +30,6 @@ public static class TransformWork {
     private const long TableTickPeriod = 65_536L;
     // A live store into a traited row also rebases the cell's six clock lanes (StateArena.WriteClockAt).
     private const long ClockEntries = 6L;
-    // The per-cell columns StateArena.CellColumns lists; a member move reads and writes every one of them.
-    private const long CellLanes = 14L;
 
     /// <summary>Returns the work one board cell store costs.</summary>
     public static long BoardWrite => (Door + BoardEntries);
@@ -59,53 +57,34 @@ public static class TransformWork {
             rowOrdinal: rowOrdinal
         );
 
-        return (2L * (CellLanes + ((dimensions > 0L)
-            ? (1L + dimensions)
-            : 0L
-        )));
+        var lanes = 3L; // number, presence and member key
+        if (context.FindRowAt(rowOrdinal: rowOrdinal) is { } row) {
+            var columns = ArenaLayout.ColumnsOf(row: row);
+            foreach (var column in new[] { ArenaColumn.Text, ArenaColumn.ClockEpochTick, ArenaColumn.ClockEpochEngineTick,
+                ArenaColumn.ClockY0, ArenaColumn.ClockV0, ArenaColumn.ClockSubstepTicks, ArenaColumn.ClockSet,
+                ArenaColumn.Behavior, ArenaColumn.Visibility, ArenaColumn.Observation }) {
+                if ((columns & (1UL << (int)column)) != 0UL) { lanes++; }
+            }
+        } else { lanes += 10L; }
+        return 2L * (lanes + (dimensions > 0L ? 1L + dimensions : 0L));
     }
-    /// <summary>Returns the work a reorder of one row costs: the permutation checks, a swap of two cells per
-    /// displaced position, and the membership rebuild.</summary>
-    /// <param name="context">The compile context the row resolves against.</param>
-    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="members">The most members the row holds.</param>
-    /// <returns>The work units.</returns>
-    public static long Reorder(RuleCompileContext context, int rowOrdinal, long members) => (((6L * members) + ((2L * members) * Cell(
-        context: context,
-        rowOrdinal: rowOrdinal
-    ))) + Membership(
-        context: context,
-        members: members,
-        rowOrdinal: rowOrdinal
-    ));
-    /// <summary>Returns the work moving one member from one row to another costs beyond the cells either row shifts to
-    /// make or close its gap: the key lookups, the carried vector, the admission, the vacated tail's clear, the stored
-    /// cell, both member counts, and both membership rebuilds. A transfer refuses a full destination before it
-    /// removes anything, so nothing is evicted.</summary>
-    /// <param name="context">The compile context the rows resolve against.</param>
-    /// <param name="fromOrdinal">The source row's catalog ordinal.</param>
-    /// <param name="fromMembers">The most members the source holds.</param>
-    /// <param name="toOrdinal">The destination row's catalog ordinal.</param>
-    /// <param name="toMembers">The most members the destination holds.</param>
-    /// <returns>The work units.</returns>
-    public static long Move(RuleCompileContext context, int fromOrdinal, long fromMembers, int toOrdinal, long toMembers) => (((((((3L * Door) + Dimensions(
-        context: context,
-        rowOrdinal: fromOrdinal
-    )) + Cell(
-        context: context,
-        rowOrdinal: fromOrdinal
-    )) + Cell(
-        context: context,
-        rowOrdinal: toOrdinal
-    )) + 2L) + Membership(
-        context: context,
-        members: fromMembers,
-        rowOrdinal: fromOrdinal
-    )) + Membership(
-        context: context,
-        members: toMembers,
-        rowOrdinal: toOrdinal
-    ));
+    /// <summary>Prices permutation checks, the positional view, two links per member and the row endpoints.</summary>
+    /// <param name="context">The compile context.</param>
+    /// <param name="rowOrdinal">The row ordinal.</param>
+    /// <param name="members">The admitted member room.</param>
+    public static long Reorder(RuleCompileContext context, int rowOrdinal, long members) =>
+        (8L * members) + 2L + Membership(context: context, rowOrdinal: rowOrdinal, members: members);
+
+    /// <summary>Prices one stable-slot removal and insertion, including link edits, payloads and derived boards.</summary>
+    /// <param name="context">The compile context.</param>
+    /// <param name="fromOrdinal">The source row.</param>
+    /// <param name="fromMembers">The admitted source room.</param>
+    /// <param name="toOrdinal">The destination row.</param>
+    /// <param name="toMembers">The admitted destination room.</param>
+    public static long Move(RuleCompileContext context, int fromOrdinal, long fromMembers, int toOrdinal, long toMembers) =>
+        (3L * Door) + Dimensions(context: context, rowOrdinal: fromOrdinal) + Cell(context: context, rowOrdinal: fromOrdinal) +
+        Cell(context: context, rowOrdinal: toOrdinal) + 10L + ((toMembers + 63L) / 64L) +
+        Membership(context: context, rowOrdinal: fromOrdinal, members: fromMembers) + Membership(context: context, rowOrdinal: toOrdinal, members: toMembers);
     /// <summary>Returns the work drawing up to <paramref name="samples"/> samples from one site's stream costs: the
     /// open's cursor and mask reads and its one seek, each sample, and the close's cursor and mask stores and the
     /// recorded sample. The site's seed was folded when the host was built, so no term here reads the instance's
@@ -180,7 +159,7 @@ public static class TransformWork {
 
         return units;
     }
-    // A membership change reindexes the row's keys and rebuilds every board derived from it, each cell of which scans
+    // A membership change may rebuild a positional view and every board derived from it, each cell of which scans
     // the board's token row and stores two lanes.
     private static long Membership(RuleCompileContext context, int rowOrdinal, long members) {
         var name = Name(

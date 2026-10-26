@@ -97,10 +97,7 @@ public static partial class RuleWorkBudget {
 
                     break;
                 case { Fold: { } fold }:
-                    cost += (Math.Max(
-                        val1: 1L,
-                        val2: fold.Cells
-                    ) * ExpressionCost(
+                    cost += 1L + (context.RowCapacity(rowOrdinal: fold.RowOrdinal) * ExpressionCost(
                         context: context,
                         kind: fold.MemberKind,
                         priced: priced,

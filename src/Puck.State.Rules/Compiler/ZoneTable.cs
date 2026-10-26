@@ -11,14 +11,12 @@ public sealed class ZoneTable {
     /// <param name="ordinals">Each entry's catalog ordinal; <c>-1</c> at a gap.</param>
     /// <param name="tokenDomain">The token domain every zone in the table is ordered over.</param>
     /// <param name="kind">The cell kind every zone in the table shares.</param>
-    /// <param name="capacity">The widest entry's cell capacity, for pricing a live read.</param>
     /// <param name="indices">The non-gap indices spelled as interned cell keys, for a <c>forEach</c> over the table.</param>
-    public ZoneTable(IReadOnlyList<string> names, int[] ordinals, string tokenDomain, CellKind kind, int capacity, CellKey[] indices) {
+    public ZoneTable(IReadOnlyList<string> names, int[] ordinals, string tokenDomain, CellKind kind, CellKey[] indices) {
         ArgumentNullException.ThrowIfNull(argument: names);
         ArgumentNullException.ThrowIfNull(argument: ordinals);
         ArgumentNullException.ThrowIfNull(argument: indices);
 
-        Capacity = capacity;
         Indices = indices;
         Kind = kind;
         Names = names;
@@ -26,8 +24,6 @@ public sealed class ZoneTable {
         m_ordinals = ordinals;
     }
 
-    /// <summary>Gets the widest entry's cell capacity.</summary>
-    public int Capacity { get; }
     /// <summary>Gets the non-gap indices spelled as interned cell keys, in index order.</summary>
     public CellKey[] Indices { get; }
     /// <summary>Gets the cell kind every zone in the table shares.</summary>
@@ -126,10 +122,20 @@ public sealed class LiveRow {
     /// <summary>Gets the live index indirection.</summary>
     public CompiledCellRef Index { get; }
     /// <summary>Gets the widest row this reference can select, for pricing a live read.</summary>
-    public int SelectionCapacity => ((Table is { } table)
-        ? table.Capacity
-        : StateCapacity.MaxCellsPerRow
-    );
+    /// <param name="context">The admitted row reservations.</param>
+    public long SelectionCapacity(IRuleCostContext context) {
+        var capacity = 0L;
+        if (Table is { } table) {
+            foreach (var ordinal in table.Ordinals) {
+                if (ordinal >= 0) { capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: ordinal)); }
+            }
+        } else {
+            foreach (var ordinal in m_family.Ordinals()) {
+                capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: ordinal));
+            }
+        }
+        return capacity;
+    }
     /// <summary>Gets the authored spelling.</summary>
     public string Spelling { get; }
     /// <summary>Gets the rule's zone table, or <see langword="null"/> for a family selection.</summary>

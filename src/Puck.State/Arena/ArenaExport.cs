@@ -116,7 +116,7 @@ public sealed partial class StateArena {
         if ((previous is not null) && (previous.Key == name) && (previous.Value == value) &&
             (previous.Advance == authored?.Advance) && (previous.Cycle == authored?.Cycle) && (previous.Dynamics == authored?.Dynamics) &&
             (previous.Behavior == behavior) && (previous.Observation == m_observations?[slot]) &&
-            (previous.Provenance == m_provenance?[slot]) && (previous.Visibility == m_visibilities?[slot]) && sameClock) {
+            (previous.Visibility == m_visibilities?[slot]) && sameClock) {
             return previous;
         }
 
@@ -155,7 +155,6 @@ public sealed partial class StateArena {
             Dynamics: authored?.Dynamics,
             Key: name,
             Observation: m_observations?[slot],
-            Provenance: m_provenance?[slot],
             // An export owns its data, so a vector is copied out of the arena where ValueAt aliases it.
             Value: ((layout.Kind == CellKind.Vector)
                 ? CellValue.Vector(components: VectorSpan(slot: slot).ToArray())
@@ -181,7 +180,7 @@ public sealed partial class StateArena {
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
             var old = (((prior is not null) && (index < prior.Count)) ? prior[index] : null);
             var cell = ExportCell(layout: in layout, name: m_keys[key],
-                slot: ((layout.CellStart + cursor) - 1), traits: traits, previous: old);
+                slot: CellSlotAt(layout: layout, position: (cursor - 1)), traits: traits, previous: old);
 
             if ((cells is null) && !ReferenceEquals(objA: cell, objB: old)) {
                 cells = ImmutableArray.CreateBuilder<StateCell>();
@@ -247,7 +246,23 @@ public sealed partial class StateArena {
 
         return masks;
     }
+    private IReadOnlyList<int>? ExportCellSlots(in ArenaRowLayout layout) {
+        if (!UsesLinks(layout: layout)) { return null; }
+        var count = (int)m_memberCounts[layout.Ordinal];
+        int[]? slots = null;
+        for (var position = 0; position < count; position++) {
+            var slot = CellSlotAt(layout: layout, position: position) - layout.CellStart;
+            if (slots is null && slot != position) {
+                slots = new int[count];
+                for (var prior = 0; prior < position; prior++) { slots[prior] = prior; }
+            }
+            if (slots is not null) { slots[position] = slot; }
+        }
+        return slots;
+    }
     private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) => (row with {
+        CellSlots = ExportCellSlots(layout: layout),
+        ReservedCapacity = ((row.Capacity is null) && UsesLinks(layout: layout)) ? layout.CellCapacity : null,
         Cells = ExportCells(
         layout: layout,
         previous: previous,
