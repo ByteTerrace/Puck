@@ -88,7 +88,7 @@ public sealed partial class WorldPopulation {
     public IReadOnlyList<DurableStateOutput> DurableStateOutputs => m_durableStateOutputs;
     /// <summary>Number of pairs admitted to narrow phase by the most recently completed broadphase.</summary>
     public int DynamicContactNarrowPairs { get; private set; }
-    /// <summary>Number of x-overlapping sweep candidates inspected by the latest dynamic-body solve.</summary>
+    /// <summary>Number of box-overlapping sweep candidates inspected by the latest dynamic-body solve.</summary>
     public int DynamicContactCandidates { get; private set; }
     /// <summary>Number of solid bodies whose latest sweep search exhausted its candidate budget.</summary>
     public int DynamicContactLimitedBodies { get; private set; }

@@ -10,9 +10,13 @@ namespace Puck.Cli;
 /// <summary>Composes the CLI's machine vocabulary through the same extension composition as runtime hosts. The CLI's
 /// tooling verbs compose its built-in Gaming Brick and Gaming Deck forges only; they discover no installed extensions.</summary>
 public static class CliWorldVocabulary {
-    // Every verb that reads a world resolves a document with a .puck source to that source, as the game does.
+    // Every verb that reads a world resolves a document with a .puck source to that source, as the game does, and
+    // wires the Schema vocabulary hooks before any document load can parse a mask or binding.
     [System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance);
+    internal static void InstallDocumentSource() {
+        WorldSchemaVocabularyHooks.Install(probeKindCheck: WorldProbeKinds.IsShipped);
+        WorldDefinitionFileSource.UseLocalDocuments(source: Puck.World.Transpiler.Composition.PuckDocumentComposer.Instance);
+    }
 
     /// <summary>Creates an independent catalog and installs the CLI's schema validation hooks.</summary>
     /// <returns>The immutable catalog selected for this invocation.</returns>

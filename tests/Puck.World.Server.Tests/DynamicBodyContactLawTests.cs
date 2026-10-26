@@ -176,4 +176,71 @@ public sealed class DynamicBodyContactLawTests {
             actual: fixture.Server.Population.DynamicContactResolvedPairs
         );
     }
+    [Fact]
+    public void ThirtyTwoBodiesAlignedOnOneXIntervalAllCollideWithTheirNeighbours() {
+        const int Count = 32;
+        var source = Fixtures.BuildDocument();
+        var definition = source with {
+            PopulationRaw = source.Population with {
+                CapacityRaw = (source.Population.LocalSeats + Count),
+                NetworkPlayers = Count,
+            },
+            CollisionRaw = source.Collision with {
+                BodyContactsRaw = new WorldBodyContactPolicy(
+                    CandidateBudget: 4,
+                    MaxPairsPerBody: 2
+                ),
+            },
+            KitRowsRaw = [
+                source.Kits[0] with {
+                    BodyContact = WorldBodyContactMode.Solid,
+                    Collider = new WorldCollider.Sphere(Radius: 0.5f),
+                },
+            ],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var population = fixture.Server.Population;
+
+        Assert.Equal(
+            actual: population.SetSimulatedCount(count: Count),
+            expected: Count
+        );
+
+        var firstBody = population.LocalSeatCount;
+        const float SpacingZ = 0.75f;
+
+        // Fold Z order across body indices (slot 0 -> body 0, slot 1 -> body 31, slot 2 -> body 1, ...) so early
+        // bodies in X-sweep order must scan past up to 30 non-overlapping bodies sharing the same X interval to
+        // reach their immediate Z neighbours.
+        for (var slot = 0; (slot < Count); slot++) {
+            var ordinal = (((slot & 1) == 0)
+                ? (slot / 2)
+                : ((Count - 1) - (slot / 2)));
+
+            fixture.Server.Body(index: (firstBody + ordinal))!.Pose(
+                pitchRadians: 0f,
+                rollRadians: 0f,
+                x: 10f,
+                y: 5f,
+                yawRadians: 0f,
+                z: (slot * SpacingZ)
+            );
+        }
+
+        fixture.Step();
+
+        Assert.Equal(
+            actual: population.DynamicContactLimitedBodies,
+            expected: 0
+        );
+        Assert.Equal(
+            actual: population.DynamicContactResolvedPairs,
+            expected: (Count - 1)
+        );
+        Assert.InRange(
+            actual: population.DynamicContactCandidates,
+            low: (Count - 1),
+            high: (Count * 4)
+        );
+    }
 }

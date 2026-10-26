@@ -888,7 +888,6 @@ public sealed partial class WorldPopulation {
                 var leftContact = contacts[leftOrdinal];
                 var leftIndex = leftContact.Index;
                 var left = m_entries[leftIndex].Body!;
-                var leftCollider = left.Collider!.Value;
 
                 if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                     continue;
@@ -897,20 +896,9 @@ public sealed partial class WorldPopulation {
                 var inspected = 0;
 
                 for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
-                    if (inspected >= m_bodyContactPolicy.CandidateBudget) {
-                        DynamicContactLimitedBodies++;
-                        break;
-                    }
-                    inspected++;
-                    DynamicContactCandidates++;
                     var rightContact = contacts[rightOrdinal];
                     var rightIndex = rightContact.Index;
-
-                    if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
-                        continue;
-                    }
                     var right = m_entries[rightIndex].Body!;
-                    var rightCollider = right.Collider!.Value;
                     var radius = (leftContact.Radius + rightContact.Radius);
                     var delta = (left.FixedPosition - right.FixedPosition);
 
@@ -918,6 +906,16 @@ public sealed partial class WorldPopulation {
                         (FixedQ4816.Abs(value: delta.Y) > radius) ||
                         (FixedQ4816.Abs(value: delta.Z) > radius)
                     ) {
+                        continue;
+                    }
+                    if (inspected >= m_bodyContactPolicy.CandidateBudget) {
+                        DynamicContactLimitedBodies++;
+                        break;
+                    }
+                    inspected++;
+                    DynamicContactCandidates++;
+
+                    if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                         continue;
                     }
 

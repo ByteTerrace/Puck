@@ -96,6 +96,56 @@ public sealed class RuleGroupEvaluationLawTests {
             expected: default
         );
     }
+    [Fact]
+    public void AFixpointFloodPast256PassesRunsToCompletion() {
+        var (host, evaluator, rules, groups, state, latch) = Arrange(
+            groups: [new RuleGroupDeclaration(
+                    Name: RulesFixture.Name(value: "flood"),
+                    Passes: 362,
+                    Shape: RuleGroupShape.Fixpoint,
+                    Steps: [new RuleGroupStep(Rule: RulesFixture.Name(value: "step"))]
+                )],
+            rules: [new Rule(
+                    Name: RulesFixture.Name(value: "step"),
+                    Effects: [EvaluatorFixture.Add(
+                            row: "score",
+                            value: 1m
+                        )],
+                    Gate: EvaluatorFixture.Compare(
+                        comparison: ExpressionOp.Less,
+                        row: "score",
+                        value: 361m
+                    )
+                )]
+        );
+
+        for (var tick = 0UL; (tick < 362UL); tick++) {
+            host.Advance(
+                engineTick: tick,
+                tick: tick
+            );
+            _ = evaluator.EvaluateGroups(
+                groups: groups,
+                latch: latch,
+                rules: rules,
+                state: state,
+                stepTicks: 1UL
+            );
+        }
+
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            ),
+            expected: 361L
+        );
+        Assert.Empty(collection: evaluator.Diagnostics());
+        Assert.Equal(
+            actual: state.Progress(name: "flood"),
+            expected: default
+        );
+    }
     // One member clears the row and the next rebuilds it: every pass moves the row's version twice, and leaves it as
     // it found it, which is no progress.
     [Fact]

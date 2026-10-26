@@ -116,10 +116,10 @@ public class DeclaredFamilyTests {
             Code: PuckDiagnosticCodes.RuleGroupShapeInadmissible,
             Needle: "step act"
         ) { Alone = true, Mentions = "twice" },
-        ["PUCK099: maxPasses above the group ceiling"] = new(
-            Body: "state {\n    world {\n        slot board = 1\n    }\n}\n\nstabilize settle maxPasses(999) {\n    rule \"collapse\" {\n        board = 0\n    }\n}\n",
+        ["PUCK099: non-positive maxPasses"] = new(
+            Body: "state {\n    world {\n        slot board = 1\n    }\n}\n\nstabilize settle maxPasses(0) {\n    rule \"collapse\" {\n        board = 0\n    }\n}\n",
             Code: PuckDiagnosticCodes.RuleGroupShapeInadmissible,
-            Needle: "stabilize settle maxPasses(999)"
+            Needle: "stabilize settle maxPasses(0)"
         ) { Alone = true, Mentions = "maxPasses" },
     };
 

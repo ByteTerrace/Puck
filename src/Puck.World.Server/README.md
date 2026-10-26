@@ -1006,7 +1006,7 @@ begin budget. `maxPairsPerBody: 0` disables pair events without disabling
 world contact. Saturation deliberately omits lower-priority new event pairs.
 
 `collision.bodyContacts` is the separate physical-depenetration budget for two
-`solid` kits. Its per-body candidate budget (default 16, maximum 32) and
+`solid` kits. Its per-body box-overlapping candidate budget (default 32, maximum 256) and
 resolved-pair degree (default 8, maximum 16) bound a fully coincident crowd;
 stable population order decides which later pairs are omitted. The counters
 `DynamicContactCandidates`, `DynamicContactNarrowPairs`,

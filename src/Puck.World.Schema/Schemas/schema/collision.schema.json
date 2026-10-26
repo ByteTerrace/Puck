@@ -72,9 +72,9 @@
       ],
       "properties": {
         "candidateBudget": {
-          "description": "The most sweep candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
+          "description": "The most box-overlapping candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
           "type": "integer",
-          "default": 16
+          "default": 32
         },
         "maxPairsPerBody": {
           "description": "The most physical pair corrections incident to one body in a tick.",
