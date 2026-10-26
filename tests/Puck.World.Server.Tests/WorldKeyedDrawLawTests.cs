@@ -113,7 +113,7 @@ public sealed class WorldKeyedDrawLawTests {
         );
 
         var dice = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "dice"
         );
         var after = dice.Cells!.Select(selector: c => c.Value).ToArray();
@@ -149,7 +149,7 @@ public sealed class WorldKeyedDrawLawTests {
         Assert.Equal(
             after,
             Find(
-                document: twin.Server.Definition,
+                document: twin.Server.ExportDefinition(),
                 row: "dice"
             ).Cells!.Select(selector: c => c.Value)
         );
@@ -166,7 +166,7 @@ public sealed class WorldKeyedDrawLawTests {
         Assert.Equal(
             12L,
             Find(
-                document: fixture.Server.Definition,
+                document: fixture.Server.ExportDefinition(),
                 row: "dice"
             ).DrawCursor
         );
@@ -182,7 +182,7 @@ public sealed class WorldKeyedDrawLawTests {
         Assert.Equal(
             12L,
             Find(
-                document: fixture.Server.Definition,
+                document: fixture.Server.ExportDefinition(),
                 row: "dice"
             ).DrawCursor
         );

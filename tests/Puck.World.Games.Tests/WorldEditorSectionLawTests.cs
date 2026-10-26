@@ -52,7 +52,7 @@ public sealed class WorldEditorSectionLawTests : IDisposable {
                 ),
             });
             var written = WorldDefinitionSerialization.Serialize(definition: authored);
-            var read = WorldDefinitionSerialization.Deserialize(utf8Json: written);
+            var read = WorldDefinitionSerialization.Deserialize(utf8Json: written, documentDirectory: definition.DocumentDirectory);
 
             Assert.Equal(expected: authored.EditorRaw, actual: read.EditorRaw);
             Assert.Equal(expected: written, actual: WorldDefinitionSerialization.Serialize(definition: read));

@@ -27,6 +27,7 @@ internal static class ClientFixtures {
     /// <param name="engineTick">The engine tick the values hold as of.</param>
     /// <returns>The installed mirror.</returns>
     public static WorldStateMirror StateMirror(WorldDefinition definition, ulong tick = 0UL, ulong engineTick = 0UL) {
+        definition = WorldStateReader.Export(definition);
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
 
         mirror.Install(

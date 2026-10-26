@@ -18,7 +18,7 @@ namespace Puck.World.Games.Tests;
 public sealed class ModuleExportsLawTests {
     private static long Cell(WorldFixture fixture, string row, string key) {
         var found = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         );
 

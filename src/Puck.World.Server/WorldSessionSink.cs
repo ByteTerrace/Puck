@@ -375,7 +375,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (m_withheld) {
                 m_withheld = false;
                 inner.DeliverDefinition(
-                    definition: definition,
+                    definition: Disclose(definition)!,
                     version: version
                 );
                 FollowObserverDetach();
@@ -383,8 +383,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 return;
             }
 
+            if (stamp.ArenaValues && !stamp.PlacementProjection) { return; }
             inner.DeliverState(
-                definition: definition,
+                definition: Disclose(definition)!,
                 stamp: in stamp,
                 version: version
             );

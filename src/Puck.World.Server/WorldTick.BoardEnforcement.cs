@@ -16,8 +16,8 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
     // IWorldPersistedSection<WorldBoardEnforcementCheckpoint>.
     private readonly Dictionary<string, long> m_boardVerdictLatch = new(comparer: StringComparer.Ordinal);
 
-    private bool TryReadSlotValue(WorldStateRow? row, out long value) => TryReadKeyedCell(row, StateRow.SlotKey.Value, out value);
-    private bool TryReadKeyedCell(WorldStateRow? row, string key, out long value) {
+    private bool TryReadSlotValue(StateRow? row, out long value) => TryReadKeyedCell(row, StateRow.SlotKey.Value, out value);
+    private bool TryReadKeyedCell(StateRow? row, string key, out long value) {
         value = 0;
         return row is not null && Host.Arena.Catalog.TryResolve(StateLane.Document, row.Name, out var handle) &&
             CellName.TryParse(key, out var name, out _) && Host.Arena.Keys.TryResolve(name, out var cell) &&
@@ -27,7 +27,7 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
     // FirePoseEffect (WorldServer.RuleHost.cs) already uses for a rule-authored pose. Height rides the body's own
     // current Y and yaw rides its own current heading; pitch/roll reset upright, the resting attitude a settled
     // board piece already carries.
-    private void ReturnBoardMove(WorldPlacementBoard board, WorldStateRow moveRow) {
+    private void ReturnBoardMove(WorldPlacementBoard board, StateRow moveRow) {
         if (
             !TryReadKeyedCell(
             row: moveRow,

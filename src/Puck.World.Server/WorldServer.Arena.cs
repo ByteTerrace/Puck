@@ -91,7 +91,7 @@ public sealed partial class WorldServer {
         }
         if ((write is not (WorldDocumentWriteKind.Set or WorldDocumentWriteKind.Add)) ||
             ((text is not null) && (write != WorldDocumentWriteKind.Set)) || descriptor.Generated || descriptor.HostOwned ||
-            m_document.Definition.AuthoredState[descriptor.LaneOrdinal].IsRuleWritten) {
+            m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true }) {
             return WorldCellWriteVerdict.Rejected;
         }
         if (!WorldGrants.IsTrusted(principal: principal) && !WorldStateDisclosure.CanReadCell(definition: m_document.Definition,
@@ -245,6 +245,7 @@ public sealed partial class WorldServer {
         m_snapshotRows = new bool[m_documentRowCount];
         m_publishedVersions = new ulong[m_arena.Layout.RowCount];
         MarkPublished();
+        m_arena.CopyChangedRows(m_publicationRows, clear: true);
         m_movedEverything = true;
         m_population.BindActionStateLane(
             arena: m_arena,

@@ -89,7 +89,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             95,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -193,7 +193,7 @@ public sealed partial class PlacementDealLawTests {
         var commitTick = fixture.Server.NextInputTick;
 
         Assert.True(condition: WorldStateReader.TryRead(
-            fixture.Server.Definition,
+            fixture.Server.ExportDefinition(),
             "credits",
             null,
             commitTick,
@@ -205,7 +205,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(proposal!.Mutation);
         fixture.Step();
         Assert.True(condition: WorldStateReader.TryRead(
-            fixture.Server.Definition,
+            fixture.Server.ExportDefinition(),
             "credits",
             null,
             commitTick,
@@ -258,8 +258,8 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
             Principal.Console,
             b with {
-                Deal = fixture.Server.Definition.Placements[0].Deal,
-                Distribution = fixture.Server.Definition.Placements[0].Distribution,
+                Deal = fixture.Server.ExportDefinition().Placements[0].Deal,
+                Distribution = fixture.Server.ExportDefinition().Placements[0].Distribution,
             }
         ));
         fixture.Step();
@@ -311,7 +311,7 @@ public sealed partial class PlacementDealLawTests {
             ? 5
             : 0)),
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -350,7 +350,7 @@ public sealed partial class PlacementDealLawTests {
         ));
         fixture.Step();
         Assert.Contains(
-            collection: fixture.Server.Definition.Placements,
+            collection: fixture.Server.ExportDefinition().Placements,
             filter: p => (p.Id == "chair")
         );
         fixture.Server.EnqueueMutation(proposal!.Mutation);
@@ -463,7 +463,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             95,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -493,7 +493,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             95,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -515,7 +515,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             100,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -545,7 +545,7 @@ public sealed partial class PlacementDealLawTests {
 
         fixture.Step();
         var before = fixture.Server.Population.DescribeNavigation();
-        var template = fixture.Server.Definition.Placements[0];
+        var template = fixture.Server.ExportDefinition().Placements[0];
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
             Principal.Console,
@@ -565,7 +565,7 @@ public sealed partial class PlacementDealLawTests {
                 y: 1,
                 z: 30
             ),
-            fixture.Server.Definition.PlacementFrames[Child(
+            fixture.Server.ExportDefinition().PlacementFrames[Child(
                 fixture.Server,
                 "a"
             ).Id].Position
@@ -580,7 +580,7 @@ public sealed partial class PlacementDealLawTests {
             actualString: after,
             expectedSubstring: "origin=(20,3,30)"
         );
-        using var rebuilt = Fixtures.FreshServer(fixture.Server.Definition);
+        using var rebuilt = Fixtures.FreshServer(fixture.Server.ExportDefinition());
 
         Assert.Equal(
             after,
@@ -662,7 +662,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             100,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -784,7 +784,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             95,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -823,13 +823,13 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             100,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
         Assert.Equal(
             before.Placements,
-            fixture.Server.Definition.Placements
+            fixture.Server.ExportDefinition().Placements
         );
     }
     [Fact]

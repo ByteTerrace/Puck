@@ -1309,7 +1309,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
     }
 
     private static long SeenSlot(WorldFixture fixture) => StateRows.FindCell(
-        cells: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "seen")!.Cells,
+        cells: WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "seen")!.Cells,
         key: WorldStateRow.SlotKey
     )!.Value.AsInt;
     // Two seats driving the one owned identity, a rule writing seat 0's fact when its `armed` fact is 1, and a rule that

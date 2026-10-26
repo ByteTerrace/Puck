@@ -1320,7 +1320,7 @@ public sealed partial class NavigationLawTests {
 
         Assert.Equal(
             expected: 1L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == observed)).Cells![0].Value.Raw
+            actual: fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == observed)).Cells![0].Value.Raw
         );
     }
 }

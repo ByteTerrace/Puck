@@ -27,6 +27,10 @@ public sealed class RuleWrittenCellDeliveryLawTests {
             )]
         )]);
 
+        document = document with {
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(
+                Fog: new WorldRenderFog(Density: new BindableScalar(binding: "state.tally"))))
+        };
         return (rule
             ? (document with {
                 Rules = [new WorldRule(
@@ -56,21 +60,21 @@ public sealed class RuleWrittenCellDeliveryLawTests {
         using var lease = fixture.Server.AttachSink(sink: client);
 
         Assert.Equal(
-            actual: Tally(definition: client.Definition),
+            actual: (long)client.StateMirror.Scalar(new BindableScalar(binding: "state.tally"), float.NaN),
             expected: 0L
         );
 
         fixture.Step();
         fixture.Step();
 
-        var served = Tally(definition: fixture.Server.Definition);
+        var served = Tally(definition: fixture.Server.ExportDefinition());
 
         Assert.True(
             condition: (served > 0L),
             userMessage: "the rule never wrote the row on the server, so the delivery claim is untested"
         );
         Assert.Equal(
-            actual: Tally(definition: client.Definition),
+            actual: (long)client.StateMirror.Scalar(new BindableScalar(binding: "state.tally"), float.NaN),
             expected: served
         );
     }
@@ -92,11 +96,11 @@ public sealed class RuleWrittenCellDeliveryLawTests {
         fixture.Step();
 
         Assert.Equal(
-            actual: Tally(definition: fixture.Server.Definition),
+            actual: Tally(definition: fixture.Server.ExportDefinition()),
             expected: 7L
         );
         Assert.Equal(
-            actual: Tally(definition: client.Definition),
+            actual: (long)client.StateMirror.Scalar(new BindableScalar(binding: "state.tally"), float.NaN),
             expected: 7L
         );
     }

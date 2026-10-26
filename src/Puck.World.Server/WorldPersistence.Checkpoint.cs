@@ -93,7 +93,7 @@ public sealed partial class WorldPersistence {
         );
         var keep = (Host.Document.Journal.Count - drop);
 
-        var candidate = Host.Document.Base;
+        var candidate = Host.Tick.ProjectDealsForEdit(Host.Document.Base, previous: null);
         var kept = new List<WorldJournalEntry>(capacity: keep);
 
         for (var index = 0; (index < keep); index++) {
@@ -152,7 +152,7 @@ public sealed partial class WorldPersistence {
                 );
             }
 
-            candidate = next;
+            candidate = Host.Tick.ProjectDealsForEdit(next, previous: candidate);
             kept.Add(item: entry);
         }
 
@@ -251,6 +251,7 @@ public sealed partial class WorldPersistence {
                 definition: candidate,
                 rebuildPopulation: true
             );
+            Host.Tick.PrimeDealProjection();
             Host.RepaintChangedLatticeDraws(
                 current: candidate,
                 previous: previousDefinition
@@ -373,7 +374,7 @@ public sealed partial class WorldPersistence {
             }
 
             var excess = (Host.Document.Journal.Count - depth);
-            var candidate = Host.Document.Base;
+            var candidate = Host.Tick.ProjectDealsForEdit(Host.Document.Base, previous: null);
 
             for (var index = 0; (index < excess); index++) {
                 var entry = Host.Document.Journal[index];
@@ -394,7 +395,7 @@ public sealed partial class WorldPersistence {
                     return;
                 }
 
-                candidate = next;
+                candidate = Host.Tick.ProjectDealsForEdit(next, previous: candidate);
             }
 
             Host.Document.AdoptBase(
@@ -943,7 +944,6 @@ public sealed partial class WorldPersistence {
             }
         }
 
-        Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
         Host.InputHold.Restore(checkpoint: checkpoint.InputHold);
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
         if (restoreOwnedIdentities) {
@@ -974,6 +974,7 @@ public sealed partial class WorldPersistence {
             );
         }
         Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation, arena: restoredArena);
+        Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }

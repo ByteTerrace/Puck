@@ -432,6 +432,7 @@ public static partial class WorldFederationCodec {
         // The document being encoded is whatever the caller holds — a traveller's destination world as often as
         // this authority's own — so its store is loaded here through the one import door rather than borrowed from
         // a server that may not own it.
+        if (arena is null) { WorldStateReader.TryBoundArena(definition, out arena); }
         if ((arena is null) && !StateArena.TryCreate(
             arena: out arena,
             catalog: definition.StateCatalog,

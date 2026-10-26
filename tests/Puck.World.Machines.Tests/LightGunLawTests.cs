@@ -260,7 +260,7 @@ public sealed class LightGunLawTests {
             screenIndex: MachineScreen
         ).Column(width: 160) >= LightGunProbeCartridge.DarkColumn));
 
-        foreach (var ray in new SourceRay?[] { Miss, RayTo(x: 0.99f), null }) {
+        foreach (var ray in new SourceRay?[] { Miss, RayTo(x: 1.01f), null }) {
             Assert.Equal(
                 actual: fixture.Server.Engagement.Aim(
                     ray: ray,

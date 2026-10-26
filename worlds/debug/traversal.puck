@@ -131,8 +131,22 @@ grants [
     kindMask: "UpsertPlacement"
     budget: 2
   }
-  { grantee: "addon:traversal", capability: Edit, subject: "state:traversal", budget: 8, writeMask: "Set,Add", kindMask: "UpsertStateCell" }
+  {
+    grantee: "addon:traversal"
+    capability: Edit
+    subject: "state:traversal"
+    budget: 8
+    writeMask: "Set,Add"
+    kindMask: "UpsertStateCell"
+  }
   { grantee: "addon:traversal", capability: Edit, subject: "state:traversalFailures", kindMask: "UpsertStateCell" }
   { grantee: "addon:traversal", capability: Edit, subject: "state:traversalFalls", kindMask: "UpsertStateCell" }
-  { grantee: "addon:traversal", capability: Edit, subject: "state:liftCall", budget: 1, writeMask: "Set", kindMask: "UpsertStateCell" }
+  {
+    grantee: "addon:traversal"
+    capability: Edit
+    subject: "state:liftCall"
+    budget: 1
+    writeMask: "Set"
+    kindMask: "UpsertStateCell"
+  }
 ]

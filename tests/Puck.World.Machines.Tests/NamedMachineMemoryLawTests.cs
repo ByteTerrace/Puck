@@ -43,7 +43,7 @@ public sealed class NamedMachineMemoryLawTests {
         "mirror",
         Address: WideAddress
     );
-    private static long Value(WorldFixture fixture) => fixture.Server.Definition.State[0].Cells![0].Value.AsInt;
+    private static long Value(WorldFixture fixture) => fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt;
     private static WorldMachineMemory Write() => Read() with { Direction = WorldMachineMemoryDirection.Write, Access = "patch" };
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class NamedMachineMemoryLawTests {
             0x12345678UL,
             direct.Value
         );
-        Assert.Empty(collection: fixture.Server.Definition.Screens);
+        Assert.Empty(collection: fixture.Server.ExportDefinition().Screens);
     }
     [Fact]
     public void AReplacementReceivesTheFirstWriteEvenWhenWorldStateDidNotChange() {
@@ -128,7 +128,7 @@ public sealed class NamedMachineMemoryLawTests {
 
         fixture.Step();
         var oldGeneration = fixture.Server.Machines.InstanceState(name: "device")!.Value.Generation;
-        var replacement = fixture.Server.Definition.Machines[0] with { Configuration = Configuration(seed: 1) };
+        var replacement = fixture.Server.ExportDefinition().Machines[0] with { Configuration = Configuration(seed: 1) };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
             Principal.Console,
@@ -193,7 +193,7 @@ public sealed class NamedMachineMemoryLawTests {
                 machine: "device"
             )!.Value.Status
         );
-        var declaration = fixture.Server.Definition.Machines[0] with { Memory = [binding with { Conversion = "truncate" }] };
+        var declaration = fixture.Server.ExportDefinition().Machines[0] with { Memory = [binding with { Conversion = "truncate" }] };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
             Principal.Console,
@@ -298,7 +298,7 @@ public sealed class NamedMachineMemoryLawTests {
             engines: [engine]
         );
         var before = fixture.Server.Machines.InstanceState(name: "device")!.Value.Generation;
-        var declaration = fixture.Server.Definition.Machines[0] with {
+        var declaration = fixture.Server.ExportDefinition().Machines[0] with {
             Memory = [Write(), Write() with { Name = "overlap", Address = (WideAddress + 1), Format = "u8" }],
         };
 
@@ -307,7 +307,7 @@ public sealed class NamedMachineMemoryLawTests {
             declaration
         ));
         fixture.Step();
-        Assert.Single(collection: fixture.Server.Definition.Machines[0].Memory!);
+        Assert.Single(collection: fixture.Server.ExportDefinition().Machines[0].Memory!);
         Assert.Equal(
             before,
             fixture.Server.Machines.InstanceState(name: "device")!.Value.Generation

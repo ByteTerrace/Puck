@@ -11,6 +11,8 @@ public static class WorldStateReader {
 
     /// <summary>Binds a runtime projection to its sole gameplay store.</summary>
     public static void Bind(WorldDefinition definition, StateArena arena) => Live.AddOrUpdate(definition, arena);
+    /// <summary>Finds the arena already bound to a runtime projection.</summary>
+    public static bool TryBoundArena(WorldDefinition definition, [NotNullWhen(true)] out StateArena? arena) => Live.TryGetValue(definition, out arena);
     /// <summary>Resolves the sole arena of a runtime projection, or materializes declaration seeds.</summary>
     public static StateArena Arena(WorldDefinition definition) => ReadArena(definition);
 

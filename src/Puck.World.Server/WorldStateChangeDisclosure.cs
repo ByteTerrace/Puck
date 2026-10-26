@@ -7,6 +7,7 @@ namespace Puck.World.Server;
 public static class WorldStateChangeDisclosure {
     /// <summary>Composes disclosed row replacements from changed positions. No audience decision is retained.</summary>
     public static ReadOnlyMemory<FieldCellDelta> Filter(WorldServer server, Principal? recipient, ReadOnlyMemory<FieldCellDelta> changes, bool rows) {
+        if (changes.IsEmpty) { return ReadOnlyMemory<FieldCellDelta>.Empty; }
         var arena = server.Arena;
         var result = new List<FieldCellDelta>();
         var changed = new HashSet<int>();

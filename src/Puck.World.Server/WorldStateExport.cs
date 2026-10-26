@@ -7,11 +7,11 @@ namespace Puck.World.Server;
 /// <summary>The canonical JSON rendering of a live server's state substrate — the same lanes
 /// <see cref="WorldStateHashComposition"/> folds, written out as readable, diffable values instead of a digest.</summary>
 /// <remarks>
-/// <para>The document carries five members. <c>state</c> is the live <see cref="WorldDefinition.StateRaw"/> section
+/// <para>The document carries five members. <c>state</c> is the arena export of the <see cref="WorldDefinition.StateRaw"/> section
 /// serialized through <see cref="WorldDefinitionSerialization"/>, so every stored row and cell field the hash walks
 /// — kind, envelope, capacity, overflow, <c>gatesDrive</c>, <c>evicts</c>, domain, <c>valuesFrom</c>,
 /// <c>phaseOf</c>, inverse, knowledge, visibility, the advance/draw/dynamics/field/cycle traits, the draw and
-/// history cursors, the phase sequence, the drawn masks, and each cell's key, value, observation, text, provenance,
+/// history cursors, the phase sequence, the drawn masks, and each cell's key, value, observation, text,
 /// behavior, clock and vector — is present verbatim, in declaration order, with no second walk to keep in step.
 /// The discrete and physical topologies the hash normalizes live in the same section as <c>state.lattices</c>.
 /// <c>resolved</c> carries the value and text each cell RESOLVES to at the export's tick, which the hash folds

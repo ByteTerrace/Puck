@@ -4,8 +4,7 @@ using System.Numerics;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // What the last deal of one template read: the template row, its resolved offsets, and a copy of the dealt and
-    // variant rows' cells. A tick on which none of it moved skips the template without reading its children.
+    // What the last deal read: its template, derived offsets, arena identity, and input row versions. A tick on which none of it moved skips the template without reading its children.
     private sealed class DealMemo {
         public WorldDistribution? Distribution;
         public Vector3[] Offsets = [];
@@ -16,7 +15,7 @@ public sealed partial class WorldTick {
         public WorldPlacement? Template;
         public ulong WorldSeed;
     }
-    // What one template's deal moved this tick, narrated once the tick's single deal mutation has landed or failed.
+    // What one template projection moved this tick, narrated after installation.
     private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow);
 
     private readonly Dictionary<string, DealMemo> m_dealMemos = new(comparer: StringComparer.Ordinal);
@@ -239,6 +238,7 @@ public sealed partial class WorldTick {
             }
 
             Deal(
+                definition: Host.Document.Definition, arena: arena,
                 deal: deal,
                 memo: memo,
                 rowOrdinal: rowOrdinal,
@@ -280,7 +280,7 @@ public sealed partial class WorldTick {
 
 
     }
-    private void Deal(WorldPlacement template, WorldPlacementDeal deal, int rowOrdinal, int variantOrdinal, DealMemo memo, ulong worldSeed) {
+    private void Deal(WorldDefinition definition, StateArena arena, WorldPlacement template, WorldPlacementDeal deal, int rowOrdinal, int variantOrdinal, DealMemo memo, ulong worldSeed) {
         if (
             !memo.Swept ||
             (memo.WorldSeed != worldSeed) ||
@@ -322,7 +322,7 @@ public sealed partial class WorldTick {
 
         var firstMutation = m_dealChanges.Count;
 
-        foreach (var candidate in Host.Document.Definition.Placements) {
+        foreach (var candidate in definition.Placements) {
             if (!WorldPlacementDeal.IsChild(
                 parent: template,
                 placement: candidate
@@ -352,7 +352,7 @@ public sealed partial class WorldTick {
 
         m_dealtKeys.Clear();
         var cursor = 0;
-        if (rowOrdinal >= 0) { while (Host.Arena.TryNextCell(rowOrdinal, ref cursor, out var cellKey)) { m_dealtKeys.Add(Host.Arena.Keys[cellKey]); } }
+        if (rowOrdinal >= 0) { while (arena.TryNextCell(rowOrdinal, ref cursor, out var cellKey)) { m_dealtKeys.Add(arena.Keys[cellKey]); } }
         var cells = m_dealtKeys;
         var replaced = 0;
 
@@ -380,7 +380,7 @@ public sealed partial class WorldTick {
             }
 
             var child = m_dealChildren[childIndex];
-            var prototype = ResolveDealPrototype(deal: deal, variantOrdinal: variantOrdinal,
+            var prototype = ResolveDealPrototype(arena: arena, deal: deal, variantOrdinal: variantOrdinal,
                 key: key,
                 templatePrototype: template.PrototypeId
             );
@@ -448,7 +448,7 @@ public sealed partial class WorldTick {
                 ? ReconcileChild(
                         m_dealChildren[existing],
                         template,
-                        ResolveDealPrototype(deal: deal, variantOrdinal: variantOrdinal,
+                        ResolveDealPrototype(arena: arena, deal: deal, variantOrdinal: variantOrdinal,
                             key: key,
                             templatePrototype: template.PrototypeId
             ),
@@ -464,7 +464,7 @@ public sealed partial class WorldTick {
                             )),
                         offset: offsets[slot],
                         slot: slot,
-                        prototype: ResolveDealPrototype(deal: deal, variantOrdinal: variantOrdinal,
+                        prototype: ResolveDealPrototype(arena: arena, deal: deal, variantOrdinal: variantOrdinal,
                             key: key,
                             templatePrototype: template.PrototypeId
             ),
@@ -492,9 +492,9 @@ public sealed partial class WorldTick {
         memo.Template = template;
         memo.Swept = true;
     }
-    private string ResolveDealPrototype(WorldPlacementDeal deal, int variantOrdinal, string key, string templatePrototype) {
+    private static string ResolveDealPrototype(StateArena arena, WorldPlacementDeal deal, int variantOrdinal, string key, string templatePrototype) {
         if (variantOrdinal < 0 || deal.Variants?.Map is not { } map || !CellName.TryParse(key, out var name, out _) ||
-            !Host.Arena.Keys.TryResolve(name, out var cell) || !Host.Arena.TryRead(variantOrdinal, cell, out var value)) { return templatePrototype; }
+            !arena.Keys.TryResolve(name, out var cell) || !arena.TryRead(variantOrdinal, cell, out var value)) { return templatePrototype; }
         if (value.Kind == CellKind.Text) { return map.TryGetValue(value.AsText, out var selected) ? selected : templatePrototype; }
         foreach (var (spelling, prototype) in map) {
             if (long.TryParse(spelling, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw) && raw == value.Raw) { return prototype; }
