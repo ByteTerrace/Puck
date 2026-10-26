@@ -193,8 +193,25 @@ public sealed partial class SdfWorldPassesLawTests {
     }
 
     // The counted indirect draws the mesh pass recorded over three frames of the given frame.
-    private static int IndirectDrawsOf(SdfFrame frame) {
-        var gpu = new FakeGpuDevice(countCalls: true);
+    private static int IndirectDrawsOf(SdfFrame frame) => Produced(frame: frame).Calls.GetValueOrDefault(key: "IGpuRecorder.DrawIndirectCount");
+    // A forced level draws each mesh's triangles of that level, pushing the level above the draw for the vertex stage to
+    // start at the level's first triangle; the choice by error draws a level whose error shows at the mesh's own.
+    [Fact]
+    public void AForcedLevelDrawsItsTrianglesAndPushesItsLevel() {
+        var drawn = DrawnFrame();
+        var mesh = new SdfMesh(indices: new uint[] { 0, 1, 2, 0, 2, 1 }, positions: drawn.MeshDraws[0].Mesh.Positions) {
+            Levels = [new SdfMeshLevel(Error: 1000f, Indices: new uint[] { 0, 1, 2 }, TriangleMaterials: default)],
+        };
+        var levelled = drawn with { MeshCull = SdfMeshCullLevel.Frustum, MeshDraws = [drawn.MeshDraws[0] with { Mesh = mesh }] };
+        var forced = Produced(frame: levelled with { MeshDetail = SdfMeshDetailLevel.Level1 }).Draws!;
+        var chosen = Produced(frame: levelled).Draws!;
+
+        Assert.NotEmpty(collection: chosen);
+        Assert.All(collection: forced, action: static draw => Assert.Equal(expected: (0u, 3u, SdfKernelInterfaces.MeshPushedIndex(draw: 0u, level: 1u)), actual: (draw.Parameters.FirstVertex, draw.Parameters.VertexCount, draw.Pushed)));
+        Assert.All(collection: chosen, action: static draw => Assert.Equal(expected: (0u, 6u, 0u), actual: (draw.Parameters.FirstVertex, draw.Parameters.VertexCount, draw.Pushed)));
+    }
+    private static FakeGpuDevice Produced(SdfFrame frame) {
+        var gpu = new FakeGpuDevice(countCalls: true) { Draws = [] };
         var pipelines = SdfTestPipelines.Cache();
         using var view = new SdfTestView(
             device: gpu,
@@ -234,7 +251,7 @@ public sealed partial class SdfWorldPassesLawTests {
             _ = view.Produce(context: in context);
         }
 
-        return gpu.Calls.GetValueOrDefault(key: "IGpuRecorder.DrawIndirectCount");
+        return gpu;
     }
 
     // The occlusion test draws what the box cull keeps in two phases; a draw wholly behind the camera leaves it nothing

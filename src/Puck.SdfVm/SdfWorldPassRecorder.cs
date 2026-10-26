@@ -107,6 +107,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once.
     private readonly bool[] m_targetsWritten = [];
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
+    // A raster part's draws as this frame stages them: whether its cull keeps each (SdfMeshCull), the level it chose for
+    // each (SdfMeshDetail) and the vertices it draws of it; the level stands for the next frame with the mesh it was of,
+    // which the view's choice keeps until its error shows past SdfMeshDetail.FinerPixels.
+    private bool[] m_kept = [];
+    private uint[] m_vertexCounts = [];
+    private uint[] m_levels = [];
+    private SdfMesh?[] m_levelMeshes = [];
 
     private bool m_disposed;
     // What made the latest views render read external content, or null when nothing did.
@@ -526,18 +533,29 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }], texels: cascades.Texels);
         }
         if (IsMesh) {
+            var cascade = m_part switch {
+                SdfWorldPackage.Parts.ShadowNear => 0,
+                SdfWorldPackage.Parts.ShadowFar => 1,
+                _ => 2,
+            };
+
             RecordMesh(
                 cascadeTexels: cascades.Texels,
                 occlude: (frame.MeshCull == SdfMeshCullLevel.Occlusion),
                 cull: ((frame.MeshCull == SdfMeshCullLevel.Off)
                     ? SdfMeshCull.None
                     : (IsShadowCascade
-                        ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[m_part switch {
-                            SdfWorldPackage.Parts.ShadowNear => 0,
-                            SdfWorldPackage.Parts.ShadowFar => 1,
-                            _ => 2,
-                        }], far: frame.FarDistance, height: recording.RenderHeight, texels: cascades.Texels, width: recording.RenderWidth)
+                        ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[cascade], far: frame.FarDistance, height: recording.RenderHeight, texels: cascades.Texels, width: recording.RenderWidth)
                         : SdfMeshCull.Of(camera: frame.Views[view].Camera, far: frame.FarDistance, height: height, width: width))),
+                // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
+                detail: (IsGlass
+                    ? SdfMeshDetail.Finest
+                    : (frame.MeshDetail switch {
+                        SdfMeshDetailLevel.Auto => (IsShadowCascade
+                            ? SdfMeshDetail.Of(cascade: cascades[cascade], texels: cascades.Texels)
+                            : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
+                        _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
+                    })),
                 recording: in recording,
                 tables: tables
             );
@@ -726,9 +744,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // a set never rewrites what it binds once written.
     private static int MeshSetOf(int slot, SdfWorldTables tables) =>
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, bool occlude) {
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude) {
         var draws = tables.MeshDraws;
         var count = ((draws is null) ? 0u : tables.MeshDrawCount);
+
+        if (count > 0) {
+            Choose(boxes: tables.MeshDrawBoxes, count: count, cull: in cull, detail: in detail, draws: draws!, held: tables.HoldsFrame);
+        }
         var slot = recording.Slot;
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
@@ -784,7 +806,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[meshSet], boundTarget: ref m_meshSetTargets[meshSet], first: 0, set: set, tables: tables);
 
             if (occlusion is not null) {
-                occlusion.Stage(boxes: tables.MeshDrawBoxes, count: count, cull: in cull, draws: draws!, height: recording.Height, slot: slot, width: recording.Width);
+                occlusion.Stage(boxes: tables.MeshDrawBoxes, count: count, height: recording.Height, kept: m_kept, levels: m_levels, slot: slot, vertexCounts: m_vertexCounts, width: recording.Width);
                 for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
                     var index = ((meshSet * OcclusionSetsPerMesh) + phase);
                     var occlusionSet = m_occlusionSets[index];
@@ -820,11 +842,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             occlusion.RecordDraws(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder);
         } else if (count > 0) {
             RecordMeshDraws(
-                boxes: tables.MeshDrawBoxes,
                 commandBuffer: commandBuffer,
                 count: count,
-                cull: in cull,
-                draws: draws!,
                 pipeline: pipeline,
                 recorder: recorder,
                 set: set
@@ -861,13 +880,41 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
     }
-    // Draws one staged draw from the host, pushed by its index in the staged list.
-    private void RecordMeshDraw(uint draw, IReadOnlyList<SdfMeshDraw> draws, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer) {
+    // Marks the draws the part's cull keeps and chooses each one's level and the vertices it draws of it
+    // (SdfMeshRegion.LevelOf): the level the draw took last frame stands while its error shows within the view's band,
+    // except in a frame held for a settled capture, whose still owes nothing to earlier frames.
+    private void Choose(IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, uint count, in SdfMeshCull cull, in SdfMeshDetail detail, bool held) {
+        if (m_kept.Length < count) {
+            var capacity = (int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: count);
+
+            Array.Resize(array: ref m_kept, newSize: capacity);
+            Array.Resize(array: ref m_vertexCounts, newSize: capacity);
+            Array.Resize(array: ref m_levels, newSize: capacity);
+            Array.Resize(array: ref m_levelMeshes, newSize: capacity);
+        }
+
+        for (var draw = 0; (draw < count); draw++) {
+            var item = draws[draw];
+
+            m_kept[draw] = ((item.Glass == IsGlass) && cull.Keeps(box: in boxes[draw]));
+            if (!m_kept[draw]) { continue; }
+
+            var previous = ((!held && ReferenceEquals(objA: m_levelMeshes[draw], objB: item.Mesh)) ? (int)m_levels[draw] : -1);
+            var level = detail.LevelOf(box: in boxes[draw], mesh: item.Mesh, previous: previous);
+
+            m_levels[draw] = (uint)level;
+            m_levelMeshes[draw] = item.Mesh;
+            m_vertexCounts[draw] = (uint)(3 * SdfMeshRegion.LevelOf(level: level, mesh: item.Mesh).TriangleCount);
+        }
+    }
+    // Draws one staged draw from the host at its chosen level, pushed by its index in the staged list with the level above
+    // it; the vertex stage starts at the level's first triangle.
+    private void RecordMeshDraw(uint draw, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer) {
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: m_meshPushedIndex,
             value: SdfKernelInterfaces.MeshPushedIndex(
                 draw: draw,
-                view: 0u
+                level: m_levels[draw]
             )
         );
         recorder.PushConstants(
@@ -882,21 +929,19 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             commandBufferHandle: commandBuffer,
             parameters: new GpuDrawParameters(
                 instanceCount: 1,
-                vertexCount: ((uint)draws[((int)draw)].Mesh.Indices.Length)
+                vertexCount: m_vertexCounts[draw]
             )
         );
     }
-    // Binds a pipeline and the pass set, then draws every draw of the part's kind the pass's cull keeps: the glass pass
-    // the glass draws, every other raster part the opaque ones, each pushed by its index in the staged list.
-    private void RecordMeshDraws(uint count, IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, in SdfMeshCull cull, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
+    // Binds a pipeline and the pass set, then draws every draw Choose kept: the glass pass the glass draws, every other
+    // raster part the opaque ones, each pushed by its index in the staged list.
+    private void RecordMeshDraws(uint count, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
         BindMesh(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
 
         for (var draw = 0u; (draw < count); draw++) {
-            if ((draws[((int)draw)].Glass != IsGlass) || !cull.Keeps(box: in boxes[((int)draw)])) {
-                continue;
+            if (m_kept[draw]) {
+                RecordMeshDraw(commandBuffer: commandBuffer, draw: draw, pipeline: pipeline, recorder: recorder);
             }
-
-            RecordMeshDraw(commandBuffer: commandBuffer, draw: draw, draws: draws, pipeline: pipeline, recorder: recorder);
         }
     }
     // Writes the slot's counter buffer into its pass set when it is not the one the set binds, compared by the buffer

@@ -1,8 +1,9 @@
 // The mesh pass's and the surface and views passes' reads of the mesh region, SdfMeshRegion's raw word layout: one
-// forty-four-word record a draw (its row-vector object-to-world matrix row by row, its material, the word its first
+// record a draw (its row-vector object-to-world matrix row by row, its material, the word its first
 // index sits at, its index count, the word its first vertex sits at, its attribute flags, the word its first triangle
 // material sits at, its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, the dynamic-transform
-// slot whose frame its mesh is stored in, or -1, the word its mesh's members sit at, its carry and its clip plane), then the vertices, six words
+// slot whose frame its mesh is stored in, or -1, the word its mesh's members sit at, its carry, its clip plane and the
+// first triangle of each coarser level), then the vertices, six words
 // each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
 // flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
 // sdfDynamicTransforms: sdf-world and sdf-mesh both do.
@@ -11,12 +12,18 @@
 #include "../field/sdf-quaternion.hlsli"
 #include "../isa/sdf-render.hlsli"
 
-// The bits below the view (SDF_MESH_VIEW_SHIFT) in the index a mesh draw call pushes: the draw.
-static const uint SdfMeshDrawMask = ((1u << SDF_MESH_VIEW_SHIFT) - 1u);
+// The bits below the level of detail (SDF_MESH_LEVEL_SHIFT) in the index a mesh draw call pushes: the draw.
+static const uint SdfMeshDrawMask = ((1u << SDF_MESH_LEVEL_SHIFT) - 1u);
 
 // The first word of a draw's record.
 uint sdfMeshRecord(uint draw) {
     return (draw * SDF_MESH_DRAW_WORDS);
+}
+// The first index of a draw's level of detail: zero for its mesh's own triangles, otherwise three times the level's first
+// triangle among the mesh's levelled triangles (SDF_MESH_LEVEL_TRIANGLE_WORD). A draw of the level adds it to its vertex
+// id, which counts from zero on every backend, so the triangle a vertex names is the level's.
+uint sdfMeshLevelIndex(uint record, uint level) {
+    return ((level == 0u) ? 0u : (3u * sdfMeshRegion[((record + SDF_MESH_LEVEL_TRIANGLE_WORD) + min(level, 2u)) - 1u]));
 }
 
 // The material a draw's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh

@@ -299,7 +299,7 @@ public static class SdfIsaHlsl {
         declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
         declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfVisibility.NormalScale);
         declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
-        declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the view shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshViewShift).");
+        declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).");
         declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
         declarations.Count(name: "SDF_MESH_MATERIAL_WORD", value: SdfMeshRecord.MaterialWord);
         declarations.Count(name: "SDF_MESH_INDEX_WORD", value: SdfMeshRecord.IndexWord);
@@ -314,12 +314,13 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_CARRY_TRANSLATION_WORD", value: SdfMeshRecord.CarryTranslationWord);
         declarations.Count(name: "SDF_MESH_CARRY_SCALE_WORD", value: SdfMeshRecord.CarryScaleWord);
         declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
+        declarations.Count(name: "SDF_MESH_LEVEL_TRIANGLE_WORD", value: SdfMeshRecord.LevelTriangleWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
         declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
-        declarations.Count(name: "SDF_MESH_VIEW_SHIFT", value: SdfKernelInterfaces.MeshViewShift);
+        declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHTS_WORD", value: SdfMeshIrradianceProbe.LightsWord);

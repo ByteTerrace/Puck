@@ -2132,6 +2132,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A frame held for a settled capture renders free of earlier frames' visible set and rated updates, so a
             // still of a tick is the same image whatever frames preceded it.
             MeshCull = CullOf(cull: m_settings.Cull, settles: SettlesCapture),
+            MeshDetail = m_settings.Detail,
             UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
             TickLocked = TickLocked,
             RateCounts = m_settings.RateCounts,

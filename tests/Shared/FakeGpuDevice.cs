@@ -125,6 +125,11 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets each wrapped member's call count, keyed <c>Interface.Member</c>; empty unless the device counts
     /// calls.</summary>
     public Dictionary<string, int> Calls { get; } = new(comparer: StringComparer.Ordinal);
+    /// <summary>Gets or sets the list every host draw the device records is added to, in order, with the first word the
+    /// recorder pushed before it (a mesh draw's index), or <see langword="null"/>, the default, to keep none.</summary>
+    public List<(GpuDrawParameters Parameters, uint Pushed)>? Draws { get; set; }
+
+    private uint m_pushed;
 
     public GpuDeviceCapabilities? Capabilities => null;
 
@@ -253,11 +258,19 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.EndRenderPass(nint commandBufferHandle) => Hit(key: "IGpuRecorder.EndRenderPass");
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => Hit(key: "IGpuRecorder.BindPipeline");
     void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => Hit(key: "IGpuRecorder.BindDescriptorSet");
-    void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) => Hit(key: "IGpuRecorder.PushConstants");
+    void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        if ((Draws is not null) && (data.Length >= sizeof(uint))) {
+            m_pushed = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: data);
+        }
+        Hit(key: "IGpuRecorder.PushConstants");
+    }
     void IGpuRecorder.BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => Hit(key: "IGpuRecorder.BindVertexBuffer");
     void IGpuRecorder.BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => Hit(key: "IGpuRecorder.BindIndexBuffer");
     void IGpuRecorder.SetScissor(nint commandBufferHandle, GpuPixelRect rect) => Hit(key: "IGpuRecorder.SetScissor");
-    void IGpuRecorder.Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => Hit(key: "IGpuRecorder.Draw");
+    void IGpuRecorder.Draw(nint commandBufferHandle, in GpuDrawParameters parameters) {
+        Draws?.Add(item: (parameters, m_pushed));
+        Hit(key: "IGpuRecorder.Draw");
+    }
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) => Hit(key: "IGpuRecorder.DrawIndexed");
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         Hit(key: "IGpuRecorder.Dispatch");

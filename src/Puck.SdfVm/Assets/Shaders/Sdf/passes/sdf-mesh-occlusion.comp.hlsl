@@ -1,6 +1,6 @@
 // The mesh pass's occlusion: a two-phase test of each draw's world box against a conservative depth pyramid of the
 // view's own first phase, so a draw hidden behind what the view drew is skipped and nothing that shows is (SdfMeshOcclusion
-// records it). The pushed index names the step from bit SDF_MESH_VIEW_SHIFT up and, for the pyramid, the level below it:
+// records it). The pushed index names the step from bit SDF_MESH_LEVEL_SHIFT up and, for the pyramid, the level below it:
 //
 // - early: one invocation a candidate. A candidate the visible set holds, or one with no host box, is drawn by the first
 //   phase's counted indirect draw.
@@ -75,8 +75,9 @@ void sdfOcclusionCount(uint draws, uint vertices) {
 }
 // Writes a candidate's command into a phase's list at the candidate's own record, so each phase draws in the order the
 // host staged its draws, as the box cull alone does: depth ties resolve alike. A candidate the phase does not draw gets
-// an empty command.
-void sdfOcclusionEmit(uint phase, uint candidate, uint draw, uint vertices, bool emit) {
+// an empty command. The identity is the draw with the level the host chose for it from bit SDF_MESH_LEVEL_SHIFT up, which
+// the vertex stage reads its level's first triangle by.
+void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, bool emit) {
     uint words;
     uint stride;
 
@@ -87,11 +88,11 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint draw, uint vertices, bool
     if (candidate < capacity) {
         uint word = (((phase * capacity) + candidate) * SdfOcclusionCommandWords);
 
-        sdfMeshOcclusionDrawsRW[word] = draw;
+        sdfMeshOcclusionDrawsRW[word] = identity;
         sdfMeshOcclusionDrawsRW[(word + 1u)] = (emit ? vertices : 0u);
         sdfMeshOcclusionDrawsRW[(word + 2u)] = (emit ? 1u : 0u);
         sdfMeshOcclusionDrawsRW[(word + 3u)] = 0u;
-        sdfMeshOcclusionDrawsRW[(word + 4u)] = draw;
+        sdfMeshOcclusionDrawsRW[(word + 4u)] = identity;
     }
 }
 
@@ -154,7 +155,7 @@ bool sdfOcclusionMaySee(float3 center, float3 halfX, float3 halfY, float3 halfZ,
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    uint step = (pushedIndex.index >> SDF_MESH_VIEW_SHIFT);
+    uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
 
     if (step == SdfOcclusionDepth) {
         ViewportData view = worldView();
@@ -192,7 +193,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint4 a = sdfMeshOcclusionCandidates[(1u + (4u * id.x))];
         uint draw = a.x;
         uint4 d = sdfMeshOcclusionCandidates[(4u + (4u * id.x))];
-        // A draw with no host box (its flag in the candidate's fifteenth word) is visible, and drawn by the first phase.
+        // A draw with no host box (its flag in the candidate's fifteenth word) is visible, and drawn by the first phase;
+        // the sixteenth word is the level the host chose for it.
         bool unboxed = ((d.z & SdfOcclusionUnboxed) != 0u);
         bool was = (unboxed || (sdfMeshOcclusionVisibleRW[draw] != 0u));
         bool emit = was;
@@ -211,7 +213,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             emit = (visible && !was);
             sdfMeshOcclusionVisibleRW[draw] = (visible ? 1u : 0u);
         }
-        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, draw, a.y, emit);
+        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (d.w << SDF_MESH_LEVEL_SHIFT)), a.y, emit);
         draws = (emit ? 1u : 0u);
         vertices = (emit ? a.y : 0u);
     }
