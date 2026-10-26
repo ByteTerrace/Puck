@@ -12,7 +12,7 @@ public static class SdfMeshChunks {
 
     /// <summary>Merges and levels a static union in spatial pieces when it spans more than one chunk.</summary>
     /// <param name="mesh">The contour, with its actual bake cell.</param>
-    /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell dimension divided by 128.</param>
+    /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell dimension divided by 8.</param>
     /// <returns>The merged mesh, holding independently levelled chunks when larger than one chunk.</returns>
     public static SdfMesh Bake(SdfMesh mesh, bool preserveFeatures = false) {
         ArgumentNullException.ThrowIfNull(mesh);
