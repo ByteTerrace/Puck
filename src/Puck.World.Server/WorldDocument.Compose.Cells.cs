@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -288,6 +289,18 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        if (IsWithheldFromWriter(
+            arena: arena,
+            key: cellKey,
+            principal: mutation.Principal,
+            row: mutation.Row,
+            working: working
+        )) {
+            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is not writable by {mutation.Principal.Describe()}";
+
+            return false;
+        }
+
         if (!arena.Catalog.TryResolve(
             handle: out var handle,
             lane: StateLane.Document,
@@ -554,6 +567,20 @@ public sealed partial class WorldDocument {
             )
         );
     }
+    // An addon's cell write is refused for a cell its principal may not read, before the write looks at whether the
+    // cell exists, so the refusal of a hidden cell is the one an absent cell gets and a mod cannot probe for it. Every
+    // other principal writes under its grants alone. WorldAddonRuntime's bound cell write asks the same
+    // WorldStateDisclosure.CanReadCell.
+    private static bool IsWithheldFromWriter(StateArena arena, WorldDefinition working, Principal principal, string row, CellName key) => (
+        (principal.Kind == PrincipalKind.Addon) &&
+        !WorldStateDisclosure.CanReadCell(
+        arena: arena,
+        definition: working,
+        key: key,
+        recipient: principal,
+        rowName: row
+    )
+    );
     // Composes one cell removal onto the row it names, on the same terms as TryApplyCellUpsert.
     private static bool TryApplyCellRemove(StateArena arena, WorldDefinition working, WorldMutation.RemoveStateCell mutation, out string reason) {
         reason = string.Empty;
@@ -589,6 +616,13 @@ public sealed partial class WorldDocument {
             candidate: mutation.Key,
             name: out var cellKey,
             reason: out _
+        ) ||
+            IsWithheldFromWriter(
+            arena: arena,
+            key: cellKey,
+            principal: mutation.Principal,
+            row: mutation.Row,
+            working: working
         ) ||
             !arena.Keys.TryResolve(
             key: out var key,

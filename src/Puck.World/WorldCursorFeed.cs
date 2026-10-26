@@ -306,14 +306,6 @@ internal sealed partial class WorldCursorFeed {
 
         return point;
     }
-    // The world-authored role token mapped onto the overlay's concrete color role (Puck.World.Schema cannot reference
-    // Puck.Overlays, so the document speaks its own closed token set and this is the one mapping).
-    private static OverlayColorRole RoleOf(WorldHudCursorRole role) => role switch {
-        WorldHudCursorRole.TextDim => OverlayColorRole.TextDim,
-        WorldHudCursorRole.Accent => OverlayColorRole.Accent,
-        WorldHudCursorRole.Phosphor => OverlayColorRole.Phosphor,
-        _ => OverlayColorRole.TextPrimary,
-    };
 
     /// <summary>Recomposes the shared inspection route and this frame's optional drawn cursor.</summary>
     public void Tick() {
@@ -392,7 +384,7 @@ internal sealed partial class WorldCursorFeed {
                     min: 1f,
                     max: CursorWriter.MaxSizePx
                 ),
-                Role: RoleOf(role: policy.Role)
+                Role: WorldThemeResolve.RoleOf(role: policy.Role)
             );
         } else {
             // A hidden cursor carries no label: clear the cache so re-showing over the same spot re-resolves fresh.

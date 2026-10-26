@@ -27,7 +27,6 @@ public readonly record struct WorldSliceRequest(SdfAxis Axis, float Offset, Vect
     /// <summary>Gets the bands a square holds across its half side when the request names no spacing.</summary>
     public const float DefaultBandsPerHalf = 10f;
 }
-
 /// <summary>
 /// <c>world.slice</c>: cuts the World's own residency's field on an axis-aligned plane through the mesh bake's field
 /// sampler (<see cref="SdfFieldSlice"/>) and writes the distance diagnostic to a PNG: iso-distance bands with the sign and
@@ -43,7 +42,6 @@ public readonly record struct WorldSliceRequest(SdfAxis Axis, float Offset, Vect
 public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRenderProbe renderProbe, WorldDefinitionSource source) : ICommandModule {
     /// <summary>The folder under the booted document's package that <c>world.slice.save</c> writes into.</summary>
     public const string FolderName = "slices";
-
     /// <summary>The placement token <c>world.slice.save</c> reads as the placement of the spawn point nearest the
     /// calling seat's body.</summary>
     public const string NearToken = "near";
@@ -98,11 +96,11 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 return false;
             }
 
-            var position = (Vector3)placement.Position;
+            var position = ((Vector3)placement.Position);
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
             var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
 
-            half = (WorldSliceRequest.PlacementMargin * reach * MathF.Abs(x: placement.Scale));
+            half = ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: placement.Scale));
             if (!float.IsFinite(f: half) || !(half > 0f)) {
                 refusal = $"{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {Verb} <x|y|z> <offset> <u> <v> <half> <path.png>";
                 return false;
@@ -142,7 +140,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             }
             next += 2;
         }
-        if (!path.EndsWith(value: ".png", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (!path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".png")) {
             refusal = $"{Verb}: the path must name a .png file, got '{path}'";
             return false;
         }
@@ -161,18 +159,17 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         try {
             if (System.IO.Path.GetDirectoryName(path: path) is { Length: > 0 } directory) { _ = Directory.CreateDirectory(path: directory); }
             PngEncoder.Write(height: slice.Resolution, path: path, rgba: slice.Render(), width: (2 * slice.Resolution));
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return $"[{Verb}] failed to write {path}: {exception.Message}";
         }
         return $"[{Verb}] {slice.Describe()} -> {path}";
     }
-
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: Verb,
-            description: $"Cuts the World's field on an axis-aligned plane and writes the SDF distance diagnostic to a PNG: world.slice {Form}. The explicit form names the plane (x|y|z = offset) and the square on it by its centre (u, v) and half side, where (u, v) is (Z, Y) on an x cut, (X, Z) on a y cut and (X, Y) on a z cut; the placement form cuts through a placement's position (plus offset along the axis) over a square reaching {WorldSliceRequest.PlacementMargin} times its creation's reach. bands sets the iso-distance spacing in metres (default a tenth of the half side), res the samples a side ({SdfFieldSlice.MinResolution}..{SdfFieldSlice.MaxResolution}, default {WorldSliceRequest.DefaultResolution}). The mesh bake's sampler (the one field walk) reads the program at every sample with its tetrahedral gradient, one frame's bake share at a time, before any pending bake group. The image is two panels: on the left the distance, warm outside, cool inside, a thin line every band and a white surface line, so bands that bunch or spread show a field that is not the distance; on the right |grad d|, white within {SdfFieldSlice.GradientTolerance * 100f}% of one (exact), blue below (a bound underestimates), red above (an overestimate), the surface black; grey answers no shape. Where the answered field stops rising away from the surface (at least {SdfFieldSlice.ClipShare * 100f}% of the outside samples rise slower than {SdfFieldSlice.ClipGradient}), the samples from that ceiling up are clipped: dull magenta on both panels and left out of the statistics. Echoes the armed slice on stdout; the written file and the statistics (the field's range, the inside share, clipped= and its ceiling, world= the share the unowned segments answered, then |grad d| min, mean, max and the share off one, overall and near-surface within three pixels of the surface) land on stderr as [world.slice] ... -> <path>; world.wait bakes <seconds> holds a script until it lands. One slice at a time. Refused with no renderer.",
+            description: $"Cuts the World's field on an axis-aligned plane and writes the SDF distance diagnostic to a PNG: world.slice {Form}. The explicit form names the plane (x|y|z = offset) and the square on it by its centre (u, v) and half side, where (u, v) is (Z, Y) on an x cut, (X, Z) on a y cut and (X, Y) on a z cut; the placement form cuts through a placement's position (plus offset along the axis) over a square reaching {WorldSliceRequest.PlacementMargin} times its creation's reach. bands sets the iso-distance spacing in metres (default a tenth of the half side), res the samples a side ({SdfFieldSlice.MinResolution}..{SdfFieldSlice.MaxResolution}, default {WorldSliceRequest.DefaultResolution}). The mesh bake's sampler (the one field walk) reads the program at every sample with its tetrahedral gradient, one frame's bake share at a time, before any pending bake group. The image is two panels: on the left the distance, warm outside, cool inside, a thin line every band and a white surface line, so bands that bunch or spread show a field that is not the distance; on the right |grad d|, white within {(SdfFieldSlice.GradientTolerance * 100f)}% of one (exact), blue below (a bound underestimates), red above (an overestimate), the surface black; grey answers no shape. Where the answered field stops rising away from the surface (at least {(SdfFieldSlice.ClipShare * 100f)}% of the outside samples rise slower than {SdfFieldSlice.ClipGradient}), the samples from that ceiling up are clipped: dull magenta on both panels and left out of the statistics. Echoes the armed slice on stdout; the written file and the statistics (the field's range, the inside share, clipped= and its ceiling, world= the share the unowned segments answered, then |grad d| min, mean, max and the share off one, overall and near-surface within three pixels of the surface) land on stderr as [world.slice] ... -> <path>; world.wait bakes <seconds> holds a script until it lands. One slice at a time. Refused with no renderer.",
             handler: (_, args) => {
                 var tokens = new string[args.Count];
 
@@ -230,8 +227,8 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         );
     }
 
-    // The placement sharing its id with the spawn point nearest the body (a gallery exhibit's spawn stands before it,
-    // named after it), or null when the body is inactive or no such spawn point names a placement.
+    // The placement sharing its id with the spawn point nearest the body (a world that names a spawn point after the
+    // placement it stands before), or null when the body is inactive or no such spawn point names a placement.
     private string? NearestSpawnedPlacement(int body) {
         if (server.Body(index: body) is not { } subject) {
             return null;
@@ -261,19 +258,18 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     private static float PlacementReach(CreationDocument document) {
         var reach = CreationGeometry.Reach(document: document);
 
-        return (float.IsFinite(f: reach) || !CreationStampEmitter.RequiresScope(document: document))
+        return ((float.IsFinite(f: reach) || !CreationStampEmitter.RequiresScope(document: document))
             ? reach
-            : CreationStampEmitter.RenderReach(document: document, scale: 1f, fontFor: null, composeBlends: true);
+            : CreationStampEmitter.RenderReach(document: document, scale: 1f, fontFor: null, composeBlends: true));
     }
     private static bool IsFileToken(string token) =>
         ((token.Length is > 0 and <= 96) && token.All(predicate: static c => (char.IsAsciiLetterOrDigit(c: c) || (c is '-' or '_' or '.'))) && (token is not ("." or "..")));
-
     private static bool TryAxis(string token, out SdfAxis axis) {
         axis = token.ToLowerInvariant() switch {
             "x" => SdfAxis.X,
             "y" => SdfAxis.Y,
             "z" => SdfAxis.Z,
-            _ => (SdfAxis)uint.MaxValue,
+            _ => ((SdfAxis)uint.MaxValue),
         };
         return (axis <= SdfAxis.Z);
     }

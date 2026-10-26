@@ -28,14 +28,27 @@
               "type": "number"
             },
             "role": {
-              "description": "The bare cursor\u0027s palette role; hover lights the accent tier regardless.",
+              "description": "The bare cursor\u0027s core color role; hover lights the accent tier regardless, so Accent here makes the bare cursor and its hover indistinguishable.",
               "enum": [
+                "SurfaceBase",
+                "SurfaceRaised",
+                "SurfaceInset",
+                "ScrimPanel",
+                "ScrimStrip",
+                "ScrimChip",
+                "LineHair",
+                "LineSoft",
                 "TextPrimary",
                 "TextDim",
+                "TextMute",
                 "Accent",
-                "Phosphor"
+                "AccentQuiet",
+                "AccentInk",
+                "Positive",
+                "Warning",
+                "Danger"
               ],
-              "title": "WorldHudCursorRole"
+              "title": "WorldThemeRole"
             },
             "visible": {
               "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",

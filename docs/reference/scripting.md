@@ -620,7 +620,7 @@ untaped console provider operations still refuse. `content.insert` reads its con
 operation applies, so a re-driven tape diverges if the folder changed.
 
 `State` asks use the same manifest-before-existence and live grant gates as body reads.
-`ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key. A state read (`ReadStateCell`, `ReadStateText`) also passes the cell's disclosure for the addon's own principal (`addon:<name>`, listed among a row's or cell's visibility readers to admit it), composed from the live store on every read; a cell its visibility or containing zone withholds answers `NoSuchSubject`, as an absent cell does; a bound cell write (`WriteStateCell`, `WriteStateText`) passes the same check before it looks for the cell.
+`ReadStateCell` spends the row's `Observe` dispatch budget before looking up the key. A state read (`ReadStateCell`, `ReadStateText`) also passes the cell's disclosure for the addon's own principal (`addon:<name>`, listed among a row's or cell's visibility readers to admit it), composed from the live store on every read; a cell its visibility or containing zone withholds answers `NoSuchSubject`, as an absent cell does; a bound cell write (`WriteStateCell`, `WriteStateText`) and an addon's `UpsertStateCell`/`RemoveStateCell` mutation pass the same check (`WorldStateDisclosure.CanReadCell`) before they look for the cell.
 These additions are prefix growth: the ABI remains 1, smaller request vocabularies still mount,
 and receipts still pin each guest's content and fuel. They add no host imports; content operations use the existing host admission and receipt paths.
 

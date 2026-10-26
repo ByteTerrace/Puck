@@ -154,7 +154,7 @@ public abstract record WorldScreenSource {
     /// font atlas at shade time — the dense-text sibling of a creation's <c>textRuns</c>, which stamp marched
     /// <c>Glyph</c> geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a
     /// text run. Requires the world to declare a text font catalog (<see cref="WorldDefinition.Text"/>); the decal
-    /// bypasses the CRT image pipeline, so no image source competes with it on the slot.</summary>
+    /// bypasses the screen image pipeline, so no image source competes with it on the slot.</summary>
     /// <param name="Lines">The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar
     /// per cell — no kerning or shaping on this tier).</param>
     /// <param name="Font">The text catalog font name; <see langword="null"/> selects the catalog's default font.</param>
@@ -476,6 +476,10 @@ public sealed record WorldScreenCarry(string Look, string Pose, string Shape, [p
 /// <param name="Carry">The body that carries the screen's picture while it holds the device (see
 /// <see cref="WorldScreenCarry"/>), or <see langword="null"/> for a screen that stays where it is authored. Omitted from
 /// the wire when null.</param>
+/// <param name="Material">How the face presents its picture (<see cref="WorldScreenMaterial"/>): <c>Plain</c>, the
+/// default, shows it as its source made it, filling the face; <c>Crt</c> draws it through a cathode-ray tube's glass, and
+/// a pointer hit maps through that glass's bezel. Refused on a window, which is an opening rather than a display. Omitted
+/// from the wire when <c>Plain</c>.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -491,5 +495,15 @@ public sealed record WorldScreen(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldScreenMaterial Material = WorldScreenMaterial.Plain
 );
+/// <summary>How a display's face presents its picture. A display is plain unless it opts into a material.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldScreenMaterial>))]
+public enum WorldScreenMaterial : byte {
+    /// <summary>The picture as its source made it, filling the face edge to edge.</summary>
+    Plain,
+    /// <summary>A cathode-ray tube's glass: the picture inset in a bezel three hundredths of the face wide on every side,
+    /// with faint scanlines, an aperture grille and a bright-pixel bloom, which a seat framing the screen fades out.</summary>
+    Crt,
+}

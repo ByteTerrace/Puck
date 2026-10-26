@@ -2314,7 +2314,7 @@
                     "name"
                   ],
                   "additionalProperties": false,
-                  "description": "One screen face a creation declares \u2014 a surface on the creation (backed by one of its shapes) that shows a feed. The robot\u0027s CRT face is one of these: it shows the named host emotes feed by default, and is wirable to any camera feed (a creation camera\u0027s named feed, another creation\u0027s feed, a world camera) purely by naming a different default source. No robot-specific channel exists \u2014 a face is just a screen surface with a default wire, and the wiring model does the rest."
+                  "description": "One screen face a creation declares \u2014 a surface on the creation (backed by one of its shapes) that shows a feed: by default the source it names (a host feed such as emotes), and wirable to any camera feed (a creation camera\u0027s named feed, another creation\u0027s feed, a world camera) purely by naming a different default source. No feature-specific channel exists \u2014 a face is just a screen surface with a default wire, and the wiring model does the rest."
                 },
                 "description": "The declared screen faces (null = none). A creation with a face shows a feed on its body; the face\u0027s default source is pure data, wirable to any camera feed."
               },

@@ -15,7 +15,7 @@ public interface IWorldScreenImages {
     bool TryExtent(int screen, out int width, out int height);
 }
 /// <summary>
-/// The mapping every screen publishes (<see cref="WorldScreenMappings.Of"/>, with the screen glass's bezel as its warp)
+/// The mapping every screen publishes (<see cref="WorldScreenMappings.Of"/>, with a CRT's bezel as its warp)
 /// for the source it shows — its row's, or the source a live presentation verb bound over the row — named by the handle
 /// of the instance that source is: a producer, machine or probe source by its source instance
 /// (<see cref="WorldSourceInstances"/>, <c>source$&lt;producer&gt;$&lt;digest&gt;</c>), a view by its camera's

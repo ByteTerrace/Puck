@@ -4,7 +4,7 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The toast writer: renders the latest <see cref="IOverlayToastSource"/> echo as a transient Tier-1 chip
-/// (mid-right) — scrim-chip fill, bloom ring + halo and a 2px state rail in the [OK]/[ERR] hue, an inset icon
+/// (mid-right) — scrim-chip fill, the glow's ring + halo and a state rail in the [OK]/[ERR] hue, an inset icon
 /// square, and the message WORD-WRAPPED across up to <see cref="MaxMessageLines"/> lines, the chip growing
 /// vertically to hold them. Expires on the CONTENT tick (~3 seconds equivalent, never wall clock) with a trailing
 /// <c>dur.med</c> opacity-only fade (text never translates — motion stays calm per the token spec). Pure record
@@ -117,16 +117,16 @@ public sealed class ToastWriter {
         return count;
     }
 
-    /// <summary>Emits this frame's toast, when one is live and the theme authors a chip: a theme with no chip height
-    /// (a world with no <c>theme</c> section resolves to <see cref="OverlayThemeValues.Zero"/>) composes no chrome, so
-    /// it shows no toast; every echo still reaches stderr and the console panel.</summary>
+    /// <summary>Emits this frame's toast, when one is live and the toast style has a height: a style whose least
+    /// height is zero (or the unpublished <see cref="OverlayThemeValues.Zero"/>) shows no toast; every echo still
+    /// reaches stderr and the console panel.</summary>
     /// <param name="builder">The frame builder.</param>
     /// <param name="renderTicks">The frame's continuous content clock (<c>FrameContext.RenderTicks</c>).</param>
     public void Emit(OverlayFrameBuilder builder, ulong renderTicks) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
         if (
-            (m_theme.Current.Space.HeightChip <= 0f) ||
+            (m_theme.Current.Styles.Toast.MinHeight <= 0f) ||
             !m_source.TrySnapshot(frame: out var toast) ||
             (toast.Message.Length == 0)
         ) {
@@ -181,10 +181,11 @@ public sealed class ToastWriter {
             );
         }
 
-        var icon = theme.Space.HeightBadge;
+        var toastStyle = theme.Styles.Toast;
+        var icon = toastStyle.IconSize;
         var textHeight = (lineCount * monoCell);
         var panelHeight = MathF.Max(
-            x: theme.Space.HeightChip,
+            x: toastStyle.MinHeight,
             y: (textHeight + (2f * theme.Space.Space2))
         );
         var panelWidth = ((((theme.Space.Space3 + icon) + theme.Space.Space2) + builder.TextWidth(
@@ -205,14 +206,13 @@ public sealed class ToastWriter {
             x: x,
             y: y
         );
-        // The 2px state rail hugging the left edge, inset past the corner radius (the edge-width law's third
-        // sanctioned 2px signal).
+        // The state rail hugging the left edge, inset past the corner radius.
         builder.WriteRect(
             alpha: alpha,
             h: (panelHeight - (2f * theme.Radius.Radius2)),
             radius: 0f,
             role: stateRole,
-            w: theme.Elevation.RingStatusWidth,
+            w: toastStyle.RailWidth,
             x: x,
             y: (y + theme.Radius.Radius2)
         );

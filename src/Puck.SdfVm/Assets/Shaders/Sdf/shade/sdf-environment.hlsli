@@ -1,14 +1,18 @@
-// The screen surfaces' shading: the CRT glass, the glyph decals, the bounded volumes and the screen sources a screen hit
-// samples.
+// The screen surfaces' shading: the screen materials, the glyph decals, the bounded volumes and the screen sources a
+// screen hit samples.
 #ifndef SHADE_SDF_ENVIRONMENT_HLSLI
 #define SHADE_SDF_ENVIRONMENT_HLSLI
 #include "../frame/sdf-environment.hlsli"
 
 #ifdef SDF_SCREEN_SOURCES
-// CRT glass-face knobs. The glass's warp, the bezel's width among it, is each screen's published mapping
-// (ScreenMappingData); these are its look: near-square corners, a crisp dark bezel edge, faint aperture-grille stripes,
-// subtle native-line scanlines, and a soft bright-pixel bloom knee, so a game on it looks almost exactly like a real
-// handheld panel scaled up. The bezel's mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
+// The face kinds ScreenMappingData.state.w carries — KEEP IN SYNC with Puck.SdfVm.SdfScreenFace: 0 an opening, which
+// shows the world beyond it; 1 a display, which shows its picture as its source made it, filling the face; 2 a CRT
+// display, which draws it through the tube's glass below.
+static const float SdfScreenFaceCrt = 2.0;
+// The CRT material's knobs, which only a screen that opts into the material reaches. The glass's warp, the bezel's
+// width among it, is the screen's published mapping (ScreenMappingData); these are its look: near-square corners, a
+// crisp dark bezel edge, faint aperture-grille stripes, subtle native-line scanlines, and a soft bright-pixel bloom
+// knee. The bezel's mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
 //
 // The two knobs at 0 (vignette, glint) are live and free: DXC emits `fmul fast`, so each zero folds and its whole
 // chain, the glint's cross, normalize and pow included, is eliminated on both backends. Raising one brings the effect it
@@ -201,10 +205,11 @@ float4 sampleScreenSource(uint screenIndex, float2 uv, float2 footprint, out flo
 // overload), resolves the surface UV at the hit and shades it. Two tiers, decal-first: a screen slot carrying a GLYPH
 // DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no bound source needed — a decal
 // terminal has no bound image); otherwise, when a source is bound and mapped this frame, draws it from the screen's
-// mapping through the CRT glass and the sampler its row names. outColor is valid only when this returns true; the
-// caller falls back to the unbound glass otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
+// mapping, through its material (untreated, or a CRT's glass), and the sampler its row names. outColor is valid only
+// when this returns true; the caller falls back to the unbound glass otherwise (the plain sentinel, or a declared surface
+// with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
-// `picture` is the share of the face the picture covers rather than the bezel: zero over the glass's bezel band, so the
+// `picture` is the share of the face the picture covers rather than a CRT's bezel: zero over the bezel band, so the
 // face's own edge, which the temporal jitter moves, is never part of a reactive screen.
 bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor, out float picture) {
     outColor = float3(0.0, 0.0, 0.0);
@@ -251,8 +256,8 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         }
     }
 
-    // The glass's warp: the face point the glass samples. The image fills the area inside the bezel rather than being
-    // masked by it, so a bezel frames a screen and never eats picture.
+    // The mapping's warp: the face point the picture samples, the identity on all but a CRT's glass. The image fills
+    // the area inside a CRT's bezel rather than being masked by it, so a bezel frames a screen and never eats picture.
     float3 face = float3(imageUv, 1.0);
     float2 image = float2(dot(mapping.warpU.xyz, face), dot(mapping.warpV.xyz, face));
 
@@ -287,11 +292,22 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         return true;
     }
 
+    // A plain display shows its picture untreated: its mapping has no warp, so the picture fills the face. With no
+    // bezel band, the pixel or so along the face's own edge, which the temporal jitter moves, is kept out of `picture`.
+    if (mapping.state.w < SdfScreenFaceCrt) {
+        float2 edge = ((min(uv, (1.0 - uv)) * 2.0) * float2(surface.right.w, surface.up.w));
+
+        outColor = sampled;
+        picture = saturate(((min(edge.x, edge.y) / max(footprintDiameter, 1.0e-6)) - 1.0));
+
+        return true;
+    }
+
     // How many source texels the pixel's footprint spans along each axis.
     float2 footprintTexels = (footprint * sourceSize);
-    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the glass's treatment below: at
-    // one the picture's pixels leave exactly as sampled and the bezel band is a hard edge, which a framed seat's matte
-    // hides, so a framed screen shows its source as a desktop emulator does; at zero the glass is the in-world CRT.
+    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the CRT glass's treatment below:
+    // at one the picture's pixels leave exactly as sampled and the bezel band is a hard edge, which a framed seat's matte
+    // hides, so a framed screen shows its source as a desktop emulator does; at zero the glass is the in-world tube.
     float treatment = (1.0 - saturate(passGroup.screenFidelity));
     bool inPicture = all(image >= 0.0) && all(image <= 1.0);
 

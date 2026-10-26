@@ -297,11 +297,14 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
 /// <param name="Filter">How the face's screen samples its source's image, as a screen row's
 /// <see cref="WorldScreen.Filter"/> does: <c>Nearest</c>, the default, keeps each source pixel crisp; <c>Linear</c>
 /// blends between source pixels. Omitted from the wire when <c>Nearest</c>.</param>
+/// <param name="Material">How the face's screen presents its picture, as a screen row's <see cref="WorldScreen.Material"/>
+/// does: <c>Plain</c>, the default, or <c>Crt</c>. Refused on a window. Omitted from the wire when <c>Plain</c>.</param>
 public sealed record WorldPlacementFace(
     string Face,
     WorldScreenSource Source,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPortal? Portal = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldScreenMaterial Material = WorldScreenMaterial.Plain
 );
 /// <summary>A placement's region facet — a named volume row, not a trigger system: any placement may carry one,
 /// turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see

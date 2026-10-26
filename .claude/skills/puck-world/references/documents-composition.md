@@ -319,7 +319,8 @@ Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 **Shared content is authored, never an engine default.** The live debug world
 and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
-`theme.puck` (the standard theme) and `controls.puck` (cursor, key hints, icons,
+`skin.puck` (the debug world's skin; a world that imports none draws the
+engine's neutral theme) and `controls.puck` (cursor, key hints, icons,
 binding bar, play wheel) as documents, as the Moth imports `quality.puck`;
 `skies.puck`, `shapes.puck` and `studio.puck` beside them are module libraries
 whose templates the importing file expands. The quarantined

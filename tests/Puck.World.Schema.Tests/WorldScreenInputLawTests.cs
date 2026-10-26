@@ -8,17 +8,18 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>Laws for a screen row's input destination: a document that declares passthrough refuses by name, a
-/// simulation screen's mapping comes from the row alone, the screen glass's bezel maps to no pixel, and a
-/// <c>$pointer</c> read maps its ray without allocating whether it hits, lands on the bezel or misses.</summary>
+/// simulation screen's mapping comes from the row alone and follows its material (a CRT's bezel maps to no pixel, a
+/// plain face's picture fills it), and a <c>$pointer</c> read maps its ray without allocating whether it hits, lands on
+/// the bezel or misses.</summary>
 public sealed class WorldScreenInputLawTests {
-    // The face coordinate the screen glass shows image coordinate `image` at: its inverse, run backwards.
+    // The face coordinate the CRT glass shows image coordinate `image` at: its inverse, run backwards.
     private static double FaceOf(double image) {
-        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.Glass.Inverse!);
+        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.CrtGlass.Inverse!);
 
         return ((image - glass.M13) / glass.M11);
     }
-    // A screen facing +z at (1, 2, 3), two units wide and one and a half tall.
-    private static WorldScreen Screen(SourceDestination? input) => new(
+    // A CRT screen (unless another material is named) facing +z at (1, 2, 3), two units wide and one and a half tall.
+    private static WorldScreen Screen(SourceDestination? input, WorldScreenMaterial material = WorldScreenMaterial.Crt) => new(
         HalfDepth: 0.1f,
         HalfHeight: 0.75f,
         HalfWidth: 1f,
@@ -36,7 +37,8 @@ public sealed class WorldScreenInputLawTests {
             Input: input
         ),
         Source: new WorldScreenSource.None(),
-        Up: new DocumentVector3(value: Vector3.UnitY)
+        Up: new DocumentVector3(value: Vector3.UnitY),
+        Material: material
     );
     // A ray straight down −z onto the face point (u, v).
     private static SourceRay RayAt(double u, double v) => new(
@@ -121,6 +123,7 @@ public sealed class WorldScreenInputLawTests {
             ScrollSpeed: 12f,
             Speed: 0.5f
         );
+
         WorldScreen Driven(WorldScreenPadPointer padPointer, bool engageable = true, WorldScreenSource? source = null) => (Screen(input: null) with {
             Route = new WorldScreenRoute(
                 EngageRadius: 3f,
@@ -207,6 +210,29 @@ public sealed class WorldScreenInputLawTests {
                 v: 0.5
             )).Outcome
         );
+
+        // A plain screen's picture fills its face: an image point sits at its own face point, and the band a CRT's
+        // bezel would cover is picture.
+        var plain = WorldScreenMappings.Of(
+            screen: Screen(input: SourceDestination.Simulation, material: WorldScreenMaterial.Plain),
+            source: SourceHandle.Producer(name: "cabinet"),
+            sourceHeight: 144,
+            sourceWidth: 160
+        );
+        var plainHit = plain.MapRay(ray: RayAt(
+            u: (40.5 / 160),
+            v: (100.5 / 144)
+        ));
+
+        Assert.Null(@object: plain.Warp);
+        Assert.Equal(
+            expected: (40L, 100L),
+            actual: (plainHit.PixelX, plainHit.PixelY)
+        );
+        Assert.True(condition: plain.MapRay(ray: RayAt(
+            u: (FaceOf(image: 0.0) / 2),
+            v: 0.5
+        )).IsOnSource);
     }
     [Fact]
     public void APointerReadMapsItsRayWithoutAllocating() {

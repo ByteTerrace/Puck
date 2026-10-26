@@ -10928,7 +10928,7 @@
                 "title": "WorldScreenSourceSession"
               },
               {
-                "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+                "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the screen image pipeline, so no image source competes with it on the slot.",
                 "properties": {
                   "$type": {
                     "const": "text"
@@ -11300,7 +11300,7 @@
                       "title": "WorldScreenSourceSession"
                     },
                     {
-                      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+                      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the screen image pipeline, so no image source competes with it on the slot.",
                       "properties": {
                         "$type": {
                           "const": "text"
@@ -11447,6 +11447,15 @@
             "additionalProperties": false,
             "default": null,
             "title": "WorldScreenCarry"
+          },
+          "material": {
+            "description": "How the face presents its picture (WorldScreenMaterial): Plain, the default, shows it as its source made it, filling the face; Crt draws it through a cathode-ray tube\u0027s glass, and a pointer hit maps through that glass\u0027s bezel. Refused on a window, which is an opening rather than a display. Omitted from the wire when Plain.",
+            "enum": [
+              "Plain",
+              "Crt"
+            ],
+            "default": "Plain",
+            "title": "WorldScreenMaterial"
           }
         },
         "required": [
@@ -25666,7 +25675,7 @@
                       "title": "WorldScreenSourceSession"
                     },
                     {
-                      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+                      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the screen image pipeline, so no image source competes with it on the slot.",
                       "properties": {
                         "$type": {
                           "const": "text"
@@ -25808,6 +25817,15 @@
                   ],
                   "default": "Nearest",
                   "title": "GpuSamplerFilter"
+                },
+                "material": {
+                  "description": "How the face\u0027s screen presents its picture, as a screen row\u0027s Material does: Plain, the default, or Crt. Refused on a window. Omitted from the wire when Plain.",
+                  "enum": [
+                    "Plain",
+                    "Crt"
+                  ],
+                  "default": "Plain",
+                  "title": "WorldScreenMaterial"
                 }
               },
               "required": [
@@ -29189,14 +29207,27 @@
                   "type": "number"
                 },
                 "role": {
-                  "description": "The bare cursor\u0027s palette role; hover lights the accent tier regardless.",
+                  "description": "The bare cursor\u0027s core color role; hover lights the accent tier regardless, so Accent here makes the bare cursor and its hover indistinguishable.",
                   "enum": [
+                    "SurfaceBase",
+                    "SurfaceRaised",
+                    "SurfaceInset",
+                    "ScrimPanel",
+                    "ScrimStrip",
+                    "ScrimChip",
+                    "LineHair",
+                    "LineSoft",
                     "TextPrimary",
                     "TextDim",
+                    "TextMute",
                     "Accent",
-                    "Phosphor"
+                    "AccentQuiet",
+                    "AccentInk",
+                    "Positive",
+                    "Warning",
+                    "Danger"
                   ],
-                  "title": "WorldHudCursorRole"
+                  "title": "WorldThemeRole"
                 },
                 "visible": {
                   "description": "The drawn cursor\u0027s visibility condition, or null for always.",

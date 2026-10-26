@@ -5,13 +5,10 @@
   ],
   "properties": {
     "color": {
-      "description": "The semantic color roles.",
+      "description": "The core color roles.",
       "type": "object",
       "properties": {
         "surfaceBase": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "surfacePanel": {
           "$ref": "./common.schema.json#/$defs/BindableColor"
         },
         "surfaceRaised": {
@@ -35,12 +32,6 @@
         "lineSoft": {
           "$ref": "./common.schema.json#/$defs/BindableColor"
         },
-        "lineStrong": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "lineInset": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
         "textPrimary": {
           "$ref": "./common.schema.json#/$defs/BindableColor"
         },
@@ -56,9 +47,6 @@
         "accentQuiet": {
           "$ref": "./common.schema.json#/$defs/BindableColor"
         },
-        "accentLine": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
         "accentInk": {
           "$ref": "./common.schema.json#/$defs/BindableColor"
         },
@@ -70,26 +58,10 @@
         },
         "danger": {
           "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "phosphor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "phosphorDim": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "phosphorCyan": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "badgeDark": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "badgeLight": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
         }
       },
       "required": [
         "surfaceBase",
-        "surfacePanel",
         "surfaceRaised",
         "surfaceInset",
         "scrimPanel",
@@ -97,97 +69,40 @@
         "scrimChip",
         "lineHair",
         "lineSoft",
-        "lineStrong",
-        "lineInset",
         "textPrimary",
         "textDim",
         "textMute",
         "accent",
         "accentQuiet",
-        "accentLine",
         "accentInk",
         "positive",
         "warning",
-        "danger",
-        "phosphor",
-        "phosphorDim",
-        "phosphorCyan",
-        "badgeDark",
-        "badgeLight"
+        "danger"
       ],
       "additionalProperties": false,
       "title": "WorldThemeColor"
     },
     "space": {
-      "description": "The spacing grid and component heights.",
+      "description": "The spacing steps.",
       "type": "object",
       "properties": {
-        "space0": {
-          "type": "number"
-        },
-        "space1": {
-          "type": "number"
-        },
         "space2": {
+          "description": "Two steps (8px in the default theme).",
           "type": "number"
         },
         "space3": {
-          "type": "number"
-        },
-        "space4": {
-          "type": "number"
-        },
-        "space5": {
-          "type": "number"
-        },
-        "space6": {
+          "description": "Three steps.",
           "type": "number"
         },
         "space8": {
-          "type": "number"
-        },
-        "heightBadge": {
-          "type": "number"
-        },
-        "heightBindBar": {
-          "type": "number"
-        },
-        "heightChip": {
-          "type": "number"
-        },
-        "heightConsoleHead": {
-          "type": "number"
-        },
-        "heightModeRow": {
-          "type": "number"
-        },
-        "heightPromptRow": {
-          "type": "number"
-        },
-        "heightTrackerBar": {
-          "type": "number"
-        },
-        "heightTrackerCell": {
+          "description": "Eight steps (the stage margin).",
           "type": "number"
         }
       },
       "required": [
-        "space0",
-        "space1",
         "space2",
         "space3",
-        "space4",
-        "space5",
-        "space6",
-        "space8",
-        "heightBadge",
-        "heightBindBar",
-        "heightChip",
-        "heightConsoleHead",
-        "heightModeRow",
-        "heightPromptRow",
-        "heightTrackerBar",
-        "heightTrackerCell"
+        "space8"
       ],
       "additionalProperties": false,
       "title": "WorldThemeSpace"
@@ -215,373 +130,51 @@
       "title": "WorldThemeRadius"
     },
     "type": {
-      "description": "The type scale.",
+      "description": "The type sizes.",
       "type": "object",
       "properties": {
-        "bodySize": {
-          "type": "number"
-        },
-        "bodyLine": {
-          "type": "number"
-        },
-        "bodyWeight": {
-          "type": "integer"
-        },
-        "labelSize": {
-          "type": "number"
-        },
-        "labelLine": {
-          "type": "number"
-        },
-        "labelTracking": {
-          "type": "number"
-        },
-        "labelWeight": {
-          "type": "integer"
-        },
         "microSize": {
+          "description": "The small label size.",
           "type": "number"
-        },
-        "microLine": {
-          "type": "number"
-        },
-        "microTracking": {
-          "type": "number"
-        },
-        "microWeight": {
-          "type": "integer"
         },
         "monoSize": {
+          "description": "The monospace body size.",
           "type": "number"
-        },
-        "monoLine": {
-          "type": "number"
-        },
-        "monoTracking": {
-          "type": "number"
-        },
-        "monoWeight": {
-          "type": "integer"
-        },
-        "monoBadgeSize": {
-          "type": "number"
-        },
-        "monoReadoutSize": {
-          "type": "number"
-        },
-        "titleSize": {
-          "type": "number"
-        },
-        "titleLine": {
-          "type": "number"
-        },
-        "titleTracking": {
-          "type": "number"
-        },
-        "titleWeight": {
-          "type": "integer"
         }
       },
       "required": [
-        "bodySize",
-        "bodyLine",
-        "bodyWeight",
-        "labelSize",
-        "labelLine",
-        "labelTracking",
-        "labelWeight",
         "microSize",
-        "microLine",
-        "microTracking",
-        "microWeight",
-        "monoSize",
-        "monoLine",
-        "monoTracking",
-        "monoWeight",
-        "monoBadgeSize",
-        "monoReadoutSize",
-        "titleSize",
-        "titleLine",
-        "titleTracking",
-        "titleWeight"
+        "monoSize"
       ],
       "additionalProperties": false,
       "title": "WorldThemeType"
     },
-    "elevation": {
-      "description": "The two-tier elevation recipe.",
+    "stroke": {
+      "description": "The stroke widths.",
       "type": "object",
       "properties": {
-        "bloomHaloBlur": {
-          "type": "number"
-        },
-        "bloomHaloSpread": {
-          "type": "number"
-        },
-        "bloomHaloAlpha": {
-          "$ref": "./common.schema.json#/$defs/BindableScalar"
-        },
-        "bloomRingWidth": {
-          "type": "number"
-        },
-        "bloomRingAlpha": {
-          "$ref": "./common.schema.json#/$defs/BindableScalar"
-        },
-        "bloomNeutralHaloAlpha": {
-          "$ref": "./common.schema.json#/$defs/BindableScalar"
-        },
-        "bloomNeutralRingAlpha": {
-          "$ref": "./common.schema.json#/$defs/BindableScalar"
-        },
-        "bloomHeldInsetBlur": {
-          "type": "number"
-        },
-        "bloomHeldInsetSpread": {
-          "type": "number"
-        },
-        "bloomHeldInsetAlpha": {
-          "$ref": "./common.schema.json#/$defs/BindableScalar"
-        },
-        "bloomAccent": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
-        },
-        "bloomPositive": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
-        },
-        "bloomWarning": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
-        },
-        "bloomDanger": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
-        },
-        "bloomNeutral": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
-        },
-        "pressHeldGlowBlur": {
-          "type": "number"
-        },
-        "pressHeldGlowSpread": {
-          "type": "number"
-        },
-        "pressHeldGlowColor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "pressHeldShadowBlur": {
-          "type": "number"
-        },
-        "pressHeldShadowOffsetY": {
-          "type": "number"
-        },
-        "pressHeldTranslateY": {
-          "type": "number"
-        },
-        "pressHeldShadowColor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "shadowSeatBlur": {
-          "type": "number"
-        },
-        "shadowSeatOffsetY": {
-          "type": "number"
-        },
-        "shadowSeatSpread": {
-          "type": "number"
-        },
-        "shadowSeatStripSpread": {
-          "type": "number"
-        },
-        "shadowSeatColor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "shadowSeatStripColor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "catchlightOffsetY": {
-          "type": "number"
-        },
-        "catchlightColor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "chipRestOpacity": {
-          "type": "number"
-        },
-        "edgeHairlineWidth": {
-          "type": "number"
-        },
-        "ringStatusWidth": {
-          "type": "number"
-        },
-        "ringStatusAlpha": {
+        "hairline": {
+          "description": "The hairline outline width.",
           "type": "number"
         }
       },
       "required": [
-        "bloomHaloBlur",
-        "bloomHaloSpread",
-        "bloomHaloAlpha",
-        "bloomRingWidth",
-        "bloomRingAlpha",
-        "bloomNeutralHaloAlpha",
-        "bloomNeutralRingAlpha",
-        "bloomHeldInsetBlur",
-        "bloomHeldInsetSpread",
-        "bloomHeldInsetAlpha",
-        "bloomAccent",
-        "bloomPositive",
-        "bloomWarning",
-        "bloomDanger",
-        "bloomNeutral",
-        "pressHeldGlowBlur",
-        "pressHeldGlowSpread",
-        "pressHeldGlowColor",
-        "pressHeldShadowBlur",
-        "pressHeldShadowOffsetY",
-        "pressHeldTranslateY",
-        "pressHeldShadowColor",
-        "shadowSeatBlur",
-        "shadowSeatOffsetY",
-        "shadowSeatSpread",
-        "shadowSeatStripSpread",
-        "shadowSeatColor",
-        "shadowSeatStripColor",
-        "catchlightOffsetY",
-        "catchlightColor",
-        "chipRestOpacity",
-        "edgeHairlineWidth",
-        "ringStatusWidth",
-        "ringStatusAlpha"
+        "hairline"
       ],
       "additionalProperties": false,
-      "title": "WorldThemeElevation"
-    },
-    "diegetic": {
-      "description": "The diegetic material recipe.",
-      "type": "object",
-      "properties": {
-        "plateTop": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "plateMid": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "plateBottom": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "plateStripeColor": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "embossFill": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "engraveFill": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "embossShadowDropAlpha": {
-          "type": "number"
-        },
-        "embossShadowDropBlur": {
-          "type": "number"
-        },
-        "embossShadowDropOffsetY": {
-          "type": "number"
-        },
-        "embossShadowLitAlpha": {
-          "type": "number"
-        },
-        "embossShadowLitOffsetY": {
-          "type": "number"
-        },
-        "engraveShadowLipAlpha": {
-          "type": "number"
-        },
-        "engraveShadowLipOffsetY": {
-          "type": "number"
-        },
-        "engraveShadowRecessAlpha": {
-          "type": "number"
-        },
-        "engraveShadowRecessBlur": {
-          "type": "number"
-        },
-        "engraveShadowRecessOffsetY": {
-          "type": "number"
-        },
-        "screenWellOuter": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "screenWellInner": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "bezelOuter": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "bezelInner": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "bezelEdge": {
-          "$ref": "./common.schema.json#/$defs/BindableColor"
-        },
-        "phosphorGlowBlur": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "plateTop",
-        "plateMid",
-        "plateBottom",
-        "plateStripeColor",
-        "embossFill",
-        "engraveFill",
-        "embossShadowDropAlpha",
-        "embossShadowDropBlur",
-        "embossShadowDropOffsetY",
-        "embossShadowLitAlpha",
-        "embossShadowLitOffsetY",
-        "engraveShadowLipAlpha",
-        "engraveShadowLipOffsetY",
-        "engraveShadowRecessAlpha",
-        "engraveShadowRecessBlur",
-        "engraveShadowRecessOffsetY",
-        "screenWellOuter",
-        "screenWellInner",
-        "bezelOuter",
-        "bezelInner",
-        "bezelEdge",
-        "phosphorGlowBlur"
-      ],
-      "additionalProperties": false,
-      "title": "WorldThemeDiegetic"
+      "title": "WorldThemeStroke"
     },
     "motion": {
-      "description": "The motion recipe.",
+      "description": "The durations.",
       "type": "object",
       "properties": {
-        "caretBlink": {
-          "type": "number"
-        },
-        "durFast": {
-          "type": "number"
-        },
         "durMed": {
+          "description": "The medium duration (a transient\u0027s fade).",
           "type": "number"
-        },
-        "durPanel": {
-          "type": "number"
-        },
-        "easeStd": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeCubicBezier"
-        },
-        "easeOut": {
-          "$ref": "./common.schema.json#/$defs/WorldThemeCubicBezier"
         }
       },
       "required": [
-        "caretBlink",
-        "durFast",
-        "durMed",
-        "durPanel",
-        "easeStd",
-        "easeOut"
+        "durMed"
       ],
       "additionalProperties": false,
       "title": "WorldThemeMotion"
@@ -601,90 +194,235 @@
       "additionalProperties": false,
       "title": "WorldThemeIcon"
     },
-    "chrome": {
-      "description": "The CPU writers\u0027 own opacity/px chrome.",
+    "styles": {
+      "description": "The component styles.",
       "type": "object",
       "properties": {
-        "dimQuietAlpha": {
-          "description": "The one quiet-dim opacity every writer reaches for: an unbound bar slot, an unheld modifier indicator, a gauge track, a console selection band.",
-          "type": "number"
+        "glow": {
+          "type": "object",
+          "properties": {
+            "haloBlur": {
+              "description": "The halo\u0027s reach, px.",
+              "type": "number"
+            },
+            "ringAlpha": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The ring\u0027s alpha."
+            },
+            "haloAlpha": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The halo\u0027s alpha."
+            },
+            "neutralRingAlpha": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The neutral tier\u0027s ring alpha."
+            },
+            "neutralHaloAlpha": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The neutral tier\u0027s halo alpha."
+            }
+          },
+          "required": [
+            "haloBlur",
+            "ringAlpha",
+            "haloAlpha",
+            "neutralRingAlpha",
+            "neutralHaloAlpha"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeGlowStyle"
         },
-        "barLabelAlpha": {
-          "description": "The binding bar\u0027s page-name opacity.",
-          "type": "number"
+        "keycap": {
+          "type": "object",
+          "properties": {
+            "referenceSize": {
+              "description": "The plate height the theme\u0027s px tokens are measured at, px: a plate of another size scales its hairline, radius and glow by its own size over this one.",
+              "type": "number"
+            },
+            "restOpacity": {
+              "description": "A resting plate\u0027s opacity.",
+              "type": "number"
+            },
+            "badge": {
+              "$ref": "./common.schema.json#/$defs/WorldThemeStyleColor",
+              "description": "The badge disc\u0027s backing."
+            },
+            "badgeInk": {
+              "$ref": "./common.schema.json#/$defs/WorldThemeStyleColor",
+              "description": "The badge\u0027s glyph."
+            },
+            "toggleMarch": {
+              "description": "The seconds one march of a latched toggle\u0027s border takes around the plate; 0 draws the border still.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "referenceSize",
+            "restOpacity",
+            "badge",
+            "badgeInk",
+            "toggleMarch"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeKeycapStyle"
         },
-        "barHintAlpha": {
-          "description": "The binding bar\u0027s chord-hint opacity.",
-          "type": "number"
+        "bar": {
+          "type": "object",
+          "properties": {
+            "labelAlpha": {
+              "description": "The page name\u0027s opacity.",
+              "type": "number"
+            },
+            "hintAlpha": {
+              "description": "A chord hint\u0027s opacity.",
+              "type": "number"
+            },
+            "quietAlpha": {
+              "description": "An unbound slot\u0027s and an unheld modifier\u0027s opacity.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "labelAlpha",
+            "hintAlpha",
+            "quietAlpha"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeBarStyle"
         },
-        "cursorAlpha": {
-          "description": "The drawn cursor\u0027s ring opacity.",
-          "type": "number"
+        "console": {
+          "type": "object",
+          "properties": {
+            "echo": {
+              "$ref": "./common.schema.json#/$defs/WorldThemeStyleColor",
+              "description": "The color of an echoed input line and of the prompt."
+            },
+            "headHeight": {
+              "description": "The title band\u0027s height, px.",
+              "type": "number"
+            },
+            "selectionAlpha": {
+              "description": "The selected input\u0027s highlight opacity.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "echo",
+            "headHeight",
+            "selectionAlpha"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeConsoleStyle"
         },
-        "cursorDotRatio": {
-          "description": "The cursor\u0027s center-dot half-extent, as a fraction of the ring radius.",
-          "type": "number"
+        "cursor": {
+          "type": "object",
+          "properties": {
+            "alpha": {
+              "description": "The ring\u0027s opacity.",
+              "type": "number"
+            },
+            "dotRatio": {
+              "description": "The center dot\u0027s half-extent, as a fraction of the ring radius.",
+              "type": "number"
+            },
+            "dotMaxHalf": {
+              "description": "The center dot\u0027s half-extent ceiling, px.",
+              "type": "number"
+            },
+            "labelGap": {
+              "description": "The hover label\u0027s clearance outside the ring, px.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "alpha",
+            "dotRatio",
+            "dotMaxHalf",
+            "labelGap"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeCursorStyle"
         },
-        "cursorDotMaxHalf": {
-          "description": "The cursor center dot\u0027s half-extent ceiling, px.",
-          "type": "number"
+        "wheel": {
+          "type": "object",
+          "properties": {
+            "ringAlpha": {
+              "description": "A non-active ring\u0027s and the active ring label\u0027s opacity.",
+              "type": "number"
+            },
+            "activeRingAlpha": {
+              "description": "The active ring\u0027s and the hub\u0027s opacity.",
+              "type": "number"
+            },
+            "labelAlpha": {
+              "description": "The hovered sector label\u0027s opacity.",
+              "type": "number"
+            },
+            "hubLabelGap": {
+              "description": "The gap between the hub\u0027s two labels, px.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "ringAlpha",
+            "activeRingAlpha",
+            "labelAlpha",
+            "hubLabelGap"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeWheelStyle"
         },
-        "cursorLabelGap": {
-          "description": "The hover label\u0027s clearance outside the ring, px.",
-          "type": "number"
+        "toast": {
+          "type": "object",
+          "properties": {
+            "minHeight": {
+              "description": "The chip\u0027s least height, px; zero shows no toast.",
+              "type": "number"
+            },
+            "iconSize": {
+              "description": "The status square\u0027s side, px.",
+              "type": "number"
+            },
+            "railWidth": {
+              "description": "The status rail\u0027s width, px.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "minHeight",
+            "iconSize",
+            "railWidth"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeToastStyle"
         },
-        "wheelRingAlpha": {
-          "description": "A non-active wheel ring\u0027s stroke and label opacity.",
-          "type": "number"
-        },
-        "wheelActiveRingAlpha": {
-          "description": "The active wheel ring\u0027s stroke opacity.",
-          "type": "number"
-        },
-        "wheelActiveRingOffset": {
-          "description": "The second (heavier-shell) stroke\u0027s radial offset, px.",
-          "type": "number"
-        },
-        "wheelLabelAlpha": {
-          "description": "The hub dot\u0027s, marker\u0027s, and active-ring labels\u0027 opacity.",
-          "type": "number"
-        },
-        "wheelHubDotHalf": {
-          "description": "The wheel hub dot\u0027s half-extent, px.",
-          "type": "number"
-        },
-        "wheelMarkerHalf": {
-          "description": "The hovered-sector marker dot\u0027s half-extent, px.",
-          "type": "number"
-        },
-        "wheelMarkerGapRatio": {
-          "description": "The marker\u0027s clearance outside the ring, as a multiple of the cell height.",
-          "type": "number"
-        },
-        "wheelHubLabelGap": {
-          "description": "The active-ring label\u0027s clearance below the hub dot, px.",
-          "type": "number"
+        "hud": {
+          "type": "object",
+          "properties": {
+            "trackAlpha": {
+              "description": "A gauge track\u0027s opacity.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "trackAlpha"
+          ],
+          "additionalProperties": false,
+          "title": "WorldThemeHudStyle"
         }
       },
       "required": [
-        "dimQuietAlpha",
-        "barLabelAlpha",
-        "barHintAlpha",
-        "cursorAlpha",
-        "cursorDotRatio",
-        "cursorDotMaxHalf",
-        "cursorLabelGap",
-        "wheelRingAlpha",
-        "wheelActiveRingAlpha",
-        "wheelActiveRingOffset",
-        "wheelLabelAlpha",
-        "wheelHubDotHalf",
-        "wheelMarkerHalf",
-        "wheelMarkerGapRatio",
-        "wheelHubLabelGap"
+        "glow",
+        "keycap",
+        "bar",
+        "console",
+        "cursor",
+        "wheel",
+        "toast",
+        "hud"
       ],
       "additionalProperties": false,
-      "title": "WorldThemeChrome"
+      "title": "WorldThemeStyles"
     }
   },
   "required": [
@@ -692,11 +430,10 @@
     "space",
     "radius",
     "type",
-    "elevation",
-    "diegetic",
+    "stroke",
     "motion",
     "icon",
-    "chrome"
+    "styles"
   ],
   "additionalProperties": false,
   "default": null,
