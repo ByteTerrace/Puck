@@ -56,7 +56,6 @@ metadata {
 // it whole.
 admission [
   {
-    algorithm: ""
     disclosure: Replica
     domain: "*"
     grants [
@@ -72,8 +71,6 @@ admission [
       }
     ]
     mode: FederatedAuthority
-    publicKey: ""
-    subject: null
   }
 ]
 

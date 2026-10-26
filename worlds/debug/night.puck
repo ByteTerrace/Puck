@@ -28,7 +28,6 @@ metadata {
 // A traveller from the debug world arrives here, and the debug world's window onto the night field observes it whole.
 admission [
   {
-    algorithm: ""
     disclosure: Replica
     domain: "*"
     grants [
@@ -44,8 +43,6 @@ admission [
       }
     ]
     mode: FederatedAuthority
-    publicKey: ""
-    subject: null
   }
 ]
 

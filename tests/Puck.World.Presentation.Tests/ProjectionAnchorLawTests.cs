@@ -53,7 +53,6 @@ public sealed partial class ProjectionAnchorLawTests {
 
         return (document with {
             Admission = [new WorldAdmissionEntry(
-                Algorithm: string.Empty,
                 Disclosure: WorldDisclosureTier.Presentation,
                 Domain: WorldAdmissionEntry.AnyAuthority,
                 Grants: [new WorldAdmissionGrant(
@@ -61,9 +60,7 @@ public sealed partial class ProjectionAnchorLawTests {
                     Capability: WorldCapability.Observe,
                     Subject: GrantSubject.All
                 )],
-                Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                PublicKey: string.Empty,
-                Subject: null
+                Mode: WorldAdmissionTrustMode.FederatedAuthority
             )],
             DynamicsRaw = [new DynamicsRow(Damping: 0.6f, Frequency: 1.5f, Name: "chase", Response: 0f)],
             RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: Density))),

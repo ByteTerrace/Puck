@@ -12,24 +12,20 @@ public sealed class OAuthAdmissionLawTests {
     public void DelegatedPeersKeepDistinctIdentitiesAndOnlyTheirOwnGrants(float graceSeconds) {
         WorldAdmissionEntry[] entries = [
             new(
-                Issuer,
-                "alice",
-                WorldAdmissionTrustMode.OAuth,
-                "",
-                "",
-                [new(
+                Disclosure: WorldDisclosureTier.Replica,
+                Domain: Issuer,
+                Grants: [new(
                         WorldCapability.Control,
                         GrantSubject.All
                     )],
-                WorldDisclosureTier.Replica
+                Mode: WorldAdmissionTrustMode.OAuth,
+                Subject: "alice"
             ),
             new(
-                Algorithm: "",
                 Disclosure: WorldDisclosureTier.Replica,
                 Domain: Issuer,
                 Grants: [],
                 Mode: WorldAdmissionTrustMode.OAuth,
-                PublicKey: "",
                 Subject: "bob"
             ),
         ];
@@ -130,12 +126,10 @@ public sealed class OAuthAdmissionLawTests {
     [Fact]
     public void IssuerSubjectAndTrustModeAreAllRequired() {
         var entry = new WorldAdmissionEntry(
-            Algorithm: "",
             Disclosure: WorldDisclosureTier.Replica,
             Domain: Issuer,
             Grants: [],
             Mode: WorldAdmissionTrustMode.OAuth,
-            PublicKey: "",
             Subject: "alice"
         );
 
@@ -187,12 +181,10 @@ public sealed class OAuthAdmissionLawTests {
     [Fact]
     public void OAuthPolicyRejectsAmbiguousOrUnboundedIdentityConfiguration() {
         var row = new WorldAdmissionEntry(
-            Algorithm: "",
             Disclosure: WorldDisclosureTier.Replica,
             Domain: Issuer,
             Grants: [],
             Mode: WorldAdmissionTrustMode.OAuth,
-            PublicKey: "",
             Subject: "alice"
         );
         var document = Fixtures.BuildDocument() with { Admission = [row] };

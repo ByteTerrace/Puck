@@ -855,7 +855,6 @@ public sealed class WorldScreenBinderLawTests {
         // The fixture world, admitting a viewer's session with its whole-world view.
         private static WorldDefinition Admitting(WorldDefinition definition) => (definition with {
             Admission = [new WorldAdmissionEntry(
-                Algorithm: string.Empty,
                 Disclosure: WorldDisclosureTier.Replica,
                 Domain: WorldAdmissionEntry.AnyAuthority,
                 Grants: [new WorldAdmissionGrant(
@@ -863,9 +862,7 @@ public sealed class WorldScreenBinderLawTests {
                     Capability: WorldCapability.Observe,
                     Subject: GrantSubject.All
                 )],
-                Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                PublicKey: string.Empty,
-                Subject: null
+                Mode: WorldAdmissionTrustMode.FederatedAuthority
             )],
         });
         // A world that names ephemeral destinations, each its own document beside it.
