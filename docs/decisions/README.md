@@ -30,7 +30,8 @@ contracts belong in the subsystem guides; proposed changes belong in
 - [Rendering](rendering.md): fixtures before features, attachment ownership,
   the hybrid resolve, the persistence boundary, distribution, P6's experiments
   in scope, hardware- and environment-only checks run once at the programme's
-  close, and
+  close, [limits that price the mesh pipeline](rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter),
+  and
   [how worlds reach the GPU](rendering.md#how-worlds-reach-the-gpu) — the pass
   interface and its generated declarations, one binding contract grouped by
   update frequency, HLSL through the pinned DXC, the state mirror at
