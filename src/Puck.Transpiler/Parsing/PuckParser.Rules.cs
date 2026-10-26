@@ -508,12 +508,7 @@ public static partial class PuckParser {
             buffer: context.Scanner.Buffer,
             offset: opStart
         );
-        var text = ScanOperandSpan(
-            context,
-            stopKeywords: null,
-            stopAtComparator: false,
-            out _
-        );
+        var text = ScanOperandSpan(context, stopKeywords: null);
         var span = new SourceSpan(
             opStart,
             (cursor.Offset - opStart),
@@ -872,12 +867,7 @@ public static partial class PuckParser {
                 buffer: context.Scanner.Buffer,
                 offset: opStart
             );
-            var text = ScanOperandSpan(
-                context,
-                stopKeywords: null,
-                stopAtComparator: false,
-                out _
-            );
+            var text = ScanOperandSpan(context, stopKeywords: null);
             var span = new SourceSpan(
                 opStart,
                 (cursor.Offset - opStart),
@@ -1925,12 +1915,7 @@ public static partial class PuckParser {
             buffer: context.Scanner.Buffer,
             offset: opStart
         );
-        var opText = ScanOperandSpan(
-            context,
-            stopKeywords: null,
-            stopAtComparator: false,
-            out _
-        );
+        var opText = ScanOperandSpan(context, stopKeywords: null);
         var opSpan = new SourceSpan(
             opStart,
             (cursor.Offset - opStart),

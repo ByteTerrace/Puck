@@ -29,7 +29,7 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
         var start = cursor.Offset;
         var (line, column) = GetLineAndColumn(context.Scanner.Buffer, start);
-        var text = ScanOperandSpan(context, stopKeywords: null, stopAtComparator: false, out _);
+        var text = ScanOperandSpan(context, stopKeywords: null);
         var operand = ValidatedOperand(diagnostics: diagnostics, span: new SourceSpan(start, cursor.Offset - start, line, column), text: text);
         if (operand.Syntax is not null) { return CreateGate(operand); }
         return new ComparisonPredicateNode(operand, "!=", CreateOperand(text: "0", form: DocumentValueForm.Expression));

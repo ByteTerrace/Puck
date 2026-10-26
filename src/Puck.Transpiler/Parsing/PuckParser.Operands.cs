@@ -11,26 +11,18 @@ namespace Puck.Transpiler.Parsing;
 // (AGENTS.md rule 7): the scanner assigns no meaning to the characters it passes over, only tracking bracket/backquote depth
 // and the handful of stop conditions §1.2 names.
 public static partial class PuckParser {
-    private static readonly string[] ComparatorPunctuation = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">"];
-    private static readonly HashSet<string> ComparisonStopOperators = new(comparer: StringComparer.Ordinal) { "==", "!=", "<=", ">=", "<", ">" };
-
     /// <summary>Scans one contiguous span of opaque operand text: brackets and parentheses are tracked as one
     /// combined depth counter, a backquoted span and a string literal are passed through uninterpreted, and scanning always stops
     /// (without consuming) at a top-level ')', ',', ';', '{', '}', a comment opener ('//' or '/*'), or
     /// end of input. A newline ends the span unless the preceding token is an operator. When <paramref
-    /// name="stopKeywords"/> names a bare word found at a word boundary, scanning also stops there. When <paramref
-    /// name="stopAtComparator"/>, a top-level comparison operator (from <see cref="ComparisonStopOperators"/>) also
-    /// stops the scan without being consumed — <paramref name="sawComparator"/> reports whether that happened, so a
-    /// second stop of this kind (chained comparisons) is diagnosable by the caller.</summary>
-    private static string ScanOperandSpan(ParseContext context, IReadOnlySet<string>? stopKeywords, bool stopAtComparator, out bool sawComparator) {
+    /// name="stopKeywords"/> names a bare word found at a word boundary, scanning also stops there.</summary>
+    private static string ScanOperandSpan(ParseContext context, IReadOnlySet<string>? stopKeywords) {
         var cursor = context.Scanner.Cursor;
         var buffer = context.Scanner.Buffer;
 
         SkipWhiteSpace(context: context);
         var start = cursor.Offset;
         var depth = 0;
-
-        sawComparator = false;
 
         while (!cursor.Eof) {
             var c = cursor.Current;
@@ -97,23 +89,6 @@ public static partial class PuckParser {
                 (buffer[(cursor.Offset + 1)] is '/' or '*')
             ) {
                 break;
-            }
-
-            if (stopAtComparator) {
-                var matched = LongestMatchingPunctuation(
-                    buffer,
-                    cursor.Offset,
-                    ComparatorPunctuation
-                );
-
-                if (matched is not null) {
-                    if (ComparisonStopOperators.Contains(item: matched)) {
-                        sawComparator = true;
-                        break;
-                    }
-                    cursor.Advance(count: matched.Length);
-                    continue;
-                }
             }
 
             if (
@@ -360,12 +335,7 @@ public static partial class PuckParser {
             buffer: context.Scanner.Buffer,
             offset: start
         );
-        var text = ScanOperandSpan(
-            context,
-            stopKeywords,
-            stopAtComparator: false,
-            out _
-        );
+        var text = ScanOperandSpan(context, stopKeywords);
 
         if (text.Length == 0) {
             rowRef = null;

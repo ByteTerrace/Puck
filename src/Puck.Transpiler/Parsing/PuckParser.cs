@@ -1614,7 +1614,7 @@ public static partial class PuckParser {
             var start = cursor.Offset;
 
             var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: start);
-            var text = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+            var text = ScanOperandSpan(context: context, stopKeywords: null);
 
             if (text.Length == 0) {
                 throw CreateException(context: context, message: $"Expected a value for '{resolved}' in call to '{callName}'");
@@ -1682,7 +1682,7 @@ public static partial class PuckParser {
         cursor.ResetPosition(position: position);
 
         var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: position.Offset);
-        var held = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+        var held = ScanOperandSpan(context: context, stopKeywords: null);
 
         var operand = CreateOperand(column: column, form: DocumentValueForm.Unclassified, length: (cursor.Offset - position.Offset), line: line, offset: position.Offset, text: held);
 
