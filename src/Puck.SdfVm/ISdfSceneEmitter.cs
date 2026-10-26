@@ -3,20 +3,8 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>The per-call context an <see cref="ISdfSceneEmitter"/> emits against: whether this is the one worst-case
-/// capacity probe (never rendered — see <see cref="ISdfSceneEmitter.Emit"/>) or a live frame, the presentation clock,
-/// where "no render-relative offset" sits (most emitters ignore it today — every current host anchors render-relative
-/// space at its spawn cell, so this is <see cref="Vector3.Zero"/> in practice; it exists so a future emitter that does
-/// author render-relative geometry has a seam without a contract change), where a hidden/parked dynamic slot should
-/// sit (far outside the camera's reach), and the emitter's own assigned dynamic-transform slot range base (see
-/// <see cref="ISdfSceneEmitter.DynamicSlotCount"/>).</summary>
-/// <param name="Probe">
-/// <see langword="true"/> for the one construction-time capacity probe (see <see cref="SdfCompositionFrameSource"/>):
-/// the emitter must take its largest legal form — every optional shape present, every modifier at its worst-case
-/// value — so the probed dynamic-transform envelope is a true ceiling no live rebuild can exceed, and the probed
-/// program-word and instance counts size the engine's initial reserve.
-/// <see langword="false"/> for an ordinary live frame (the emitter's actual current state).
-/// </param>
+/// <summary>The presentation context and live transform range used to compose field geometry.</summary>
+/// <param name="Probe">An offline diagnostic emission; ordinary composition never probes a worst-case scene.</param>
 /// <param name="Time">The presentation clock (seconds), for time-based emission (a hover bob, an eased glow) —
 /// never simulation state; a static emitter ignores it.</param>
 /// <param name="RenderOrigin">The render-relative origin an emitter authoring render-relative geometry should
@@ -29,9 +17,7 @@ namespace Puck.SdfVm;
 /// <see cref="ISdfSceneEmitter.DynamicSlotCount"/>) — every slot this emitter writes in
 /// <see cref="ISdfSceneEmitter.PackDynamicTransforms"/>, and every <see cref="SdfProgramBuilder.TransformDynamic"/>/
 /// <see cref="SdfProgramBuilder.BeginInstanceDynamic"/> slot it bakes in <see cref="ISdfSceneEmitter.Emit"/>, must fall
-/// in <c>[SlotBase, SlotBase + DynamicSlotCount)</c>. Assigned contiguously by the composition host at construction
-/// (accumulating each registered emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/> in list order), so it is
-/// stable for the emitter's whole lifetime.</param>
+/// in <c>[SlotBase, SlotBase + DynamicSlotCount)</c>. Assigned contiguously after PrepareFrame; a changed encoded layout rebuilds the program.</param>
 /// <param name="InterpolationAlpha">The fraction in <c>[0, 1)</c> toward the current fixed simulation tick — the same
 /// value <see cref="ISdfFrameSource.CaptureFrame"/> received this call, threaded down so an emitter that needs to
 /// pose anchor-driven content (a camera rig following a live body, a smoothed pose read straight from sim state
@@ -48,22 +34,7 @@ public readonly record struct SdfEmitContext(
     int SlotBase,
     float InterpolationAlpha = 0f
 );
-/// <summary>One composable content source for an SDF world program — a room's fixed geometry, a sculpted scene, an
-/// authoring pool, a debug takeover, or (later) an RTS terrain/unit layer. <see cref="SdfCompositionFrameSource"/>
-/// holds a fixed list of these and rebuilds one shared <see cref="SdfProgramBuilder"/> from them, so a host composes a
-/// world program by picking a list of emitters instead of hand-writing one 2000-line <c>BuildProgram</c> method.
-/// <para>
-/// The probe contract (load-bearing — see <see cref="SdfEmitContext.Probe"/>): every emitter's <see cref="Emit"/> must
-/// have a branch that, when <c>context.Probe</c> is <see langword="true"/>, takes its largest legal form — every
-/// optional shape emitted, every modifier at its worst-case magnitude, every dynamic slot present — so the one
-/// construction-time probe <see cref="SdfCompositionFrameSource"/> runs (combining every emitter's probe form into a
-/// single program) sizes the engine's dynamic-transform capacity, which never grows, and the initial program-word and
-/// instance reserve, which <see cref="SdfWorldTables.UploadProgram"/> grows on demand. A new optional emission an
-/// emitter grows must grow its own probe branch in the same change: a live rebuild that needs more dynamic-transform
-/// slots than the probe reserved makes <see cref="SdfWorldTables.UploadProgram"/> throw
-/// <see cref="ArgumentException"/>. The probe branch of each emitter must dominate its live branch on its own — never
-/// reason about it across the whole composed program.
-/// </para></summary>
+/// <summary>A world geometry source. PrepareFrame reconciles its live state, Emit builds its field assets, and PackDynamicTransforms poses them. Rigid mesh copies do not enter the program.</summary>
 public interface ISdfSceneEmitter {
     /// <summary>Reconciles live instances before the composition reads revisions and slot counts.</summary>
     void PrepareFrame() { }
@@ -83,10 +54,7 @@ public interface ISdfSceneEmitter {
     /// range.</param>
     void Emit(SdfProgramBuilder builder, in SdfEmitContext context);
 
-    /// <summary>Gets the number of dynamic-transform slots this emitter owns (0 = none, the default — a purely static
-    /// emitter). Read once by the composition host to assign <see cref="SdfEmitContext.SlotBase"/> ranges contiguously;
-    /// must stay constant for the emitter's lifetime (it is never re-read mid-session to reshuffle already-assigned
-    /// bases).</summary>
+    /// <summary>Gets the actual encoded transform count after PrepareFrame. The host recomputes the live layout each frame.</summary>
     int DynamicSlotCount => 0;
 
     /// <summary>Packs this frame's moved dynamic transforms into <paramref name="slots"/> — the shared table every

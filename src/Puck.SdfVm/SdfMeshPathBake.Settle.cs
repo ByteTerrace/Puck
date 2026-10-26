@@ -108,6 +108,7 @@ public sealed partial class SdfMeshPathBake {
             positionSteps: SdfMeshSettle.PositionSteps,
             program: frame.Program,
             slot: old.Slot,
+            instance: old.FirstInstance,
             transforms: frame.DynamicTransforms
         )!;
 

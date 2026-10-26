@@ -682,23 +682,4 @@ public sealed class ShapeTrimLawTests {
             program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PopField))
         );
     }
-    // The pool's probe: every slot reserves MaxTrims worst-case forms unconditionally, so a live trimmed slot never
-    // outgrows the envelope.
-    [Fact]
-    public void ThePoolProbeDominatesALiveTrimmedSlot() {
-        var host = Shape(
-            SdfSolidPrimitive.Box,
-            PlateScale,
-            name: "host",
-            trims: [Trim],
-            id: 1
-        );
-        var probe = CreationFixtures.PoolProbe;
-        var live = EmitPool(shapes: [Cutter(), host]);
-
-        Assert.True(
-            condition: (probe.Words.Length >= live.Words.Length),
-            userMessage: $"the pool probe reserves {probe.Words.Length} words; a live trimmed Box emits {live.Words.Length}."
-        );
-    }
 }

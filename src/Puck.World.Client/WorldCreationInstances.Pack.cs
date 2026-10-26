@@ -257,9 +257,6 @@ public sealed partial class WorldCreationInstances {
                         shapeCount: shapeCount,
                         transforms: transforms
                     );
-                    if (TextApart(document)) {
-                        transforms[rootSlot + live.Motion.SlotCount] = transforms[rootSlot];
-                    }
                     if (live.BodyIndex is not null) {
                         m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
                         RecordPose(deltaSeconds: deltaSeconds, live: live);

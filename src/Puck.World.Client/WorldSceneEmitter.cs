@@ -13,29 +13,7 @@ namespace Puck.World.Client;
 /// instances. It owns what geometry
 /// exists; <see cref="WorldFramePresenter"/> owns how a frame presents it (views, cameras, gizmos, audio).
 /// </summary>
-/// <remarks>
-/// <para>
-/// The probe branch (the contract in <see cref="ISdfSceneEmitter"/>): <see cref="Emit"/> under
-/// <see cref="SdfEmitContext.Probe"/> emits the largest rig in every detailed body slot and one coarse capsule in
-/// every remaining crowd slot, plus the worst-case animated pool, the boot placements' stamp reservation, and the
-/// authoring headroom <see cref="WorldSceneEnvelope"/> froze (screens and per-shape instances) that sizes the buffers
-/// for live editing. Admission is not this type's: the render-capacity oracle counts a candidate through
-/// <see cref="WorldSceneEnvelope"/>, which counts the same parts this probe emits.
-/// </para>
-/// <para>
-/// The rebuild cadence is a set of numbers, never a time the host queries: <see cref="WriteRevision"/> reports the
-/// client watch and the continuum watch side by side rather than combined — see <see cref="WriteRevision"/> for why
-/// any sum on this path could silently cancel.
-/// </para>
-/// <para>
-/// Slot layout: this emitter's declared range (<see cref="DynamicSlotCount"/>) is the frozen avatar catalog followed by
-/// the creation-stamp pool, both addressed from the base the host assigns
-/// (<see cref="SdfEmitContext.SlotBase"/>). Standing condition: two readers outside this emitter —
-/// <see cref="WorldEntityPartResolver"/> and the audio director's entity-part resolution — index the shared buffer
-/// absolutely, so they are correct only while this emitter's base is 0. It is today (it is the composition's only
-/// emitter); registering another emitter ahead of it must re-base those two readers in the same change.
-/// </para>
-/// </remarks>
+/// <remarks>Live catalog slots precede articulated creation slots and shared asset templates. Composition appends rigid-copy roots. Every anchor resolves through the published slot mapping.</remarks>
 public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The per-seat perception anchor: the crowd soft-shadow centers resolve each seat's body index through it, so a
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates

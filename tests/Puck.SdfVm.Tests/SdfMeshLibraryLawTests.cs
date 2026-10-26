@@ -5,6 +5,42 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed class SdfMeshLibraryLawTests {
+    [Fact]
+    public void BakeGroupsKeepTheirOwnDetailWhileSharingOneMotionSlot() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+        for (var index = 0; index < 2; index++) {
+            builder.BeginInstanceDynamic(3, new Vector3(index * 10, 0, 0), 1, detail: index == 0 ? 0.002f : 0, separateBake: true);
+            builder.ResetPoint().TransformDynamic(3).Translate(new Vector3(index * 10, 0, 0)).Sphere(material: material, radius: 0.5f);
+            builder.EndInstance();
+        }
+        var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 4).ToArray();
+        var program = builder.Build();
+        var groups = SdfMeshBakeGroup.Plan(program, transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic));
+        Assert.Equal(2, groups.Count);
+        Assert.All(groups, group => Assert.Equal(3, group.Slot));
+        Assert.NotEqual(groups[0].Selector, groups[1].Selector);
+        Assert.Equal(0.002f, groups[0].Detail);
+        Assert.Equal(0, groups[1].Detail);
+        Assert.True(groups[0].High.X < groups[1].Low.X);
+        var bake = new SdfMeshPathBake();
+        bake.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
+        Assert.True(bake.TryTakeForFrame(0, out var batch));
+        Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
+    }
+
+    [Fact]
+    public void AnUnrepresentableSkinIsRefusedBeforeAnyBakeIsQueued() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+        builder.BeginInstanceDynamic(0, Vector3.Zero, 1);
+        for (var slot = 1; slot <= 256; slot++) { builder.ResetPoint().TransformDynamic(slot).Sphere(material: material, radius: 0.01f); }
+        builder.EndInstance();
+        var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 257).ToArray();
+        var refusal = Assert.Throws<InvalidOperationException>(() => SdfMeshBakeGroup.Plan(builder.Build(), transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+        Assert.Contains("instance 0", refusal.Message);
+        Assert.Contains("256 skin members", refusal.Message);
+    }
     private static readonly Vector2[] Triangle = [new(x: 0f, y: 0.5f), new(x: 0.5f, y: -0.5f), new(x: -0.5f, y: -0.5f)];
 
     [Fact]
@@ -12,8 +48,10 @@ public sealed class SdfMeshLibraryLawTests {
         var library = new SdfMeshLibrary(byteBudget: 512);
         static SdfMeshGeometry Key(float x) {
             var builder = new SdfMeshGeometryBuilder(dynamic: false);
-            var program = new SdfProgramBuilder().ResetPoint().Translate(new Vector3(x, 0, 0)).Sphere(0, 1).Build();
-            for (var index = 0; index < program.Instructions.Count; index++) { builder.AppendInstruction(index, program, []); }
+            var field = new SdfProgramBuilder();
+            var material = field.AddMaterial(new SdfMaterial(Vector3.One));
+            var program = field.ResetPoint().Translate(new Vector3(x, 0, 0)).Sphere(material: material, radius: 1).Build();
+            for (var index = 0; index < program.Instructions.Count; index++) { builder.AppendInstruction(index: index, program: program, transforms: []); }
             return builder.Geometry;
         }
         var first = Key(0); var recent = Key(1); var incoming = Key(2);

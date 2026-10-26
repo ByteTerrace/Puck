@@ -88,44 +88,6 @@ public sealed class WorldCatalogAllocationLawTests {
         );
     }
     [Fact]
-    public void CoarseCullBoundEnclosesItsGroundedCapsuleThroughAnyRootOrientation() {
-        var body = (WorldBodiesLimits.CapacityCeiling - 1);
-        var program = Emit(
-            WorldBodiesLimits.CapacityCeiling,
-            0,
-            index => (index == body),
-            scale: 1.7f
-        );
-        var instance = Assert.Single(collection: program.Instances);
-        var instructions = program.Instructions
-            .Skip(count: instance.First)
-            .Take(count: (instance.End - instance.First))
-            .ToArray();
-        var translation = instructions.Single(predicate: instruction => (instruction.Op == SdfOp.Translate)).Data0;
-        var capsule = instructions.Single(predicate: instruction => (instruction.Shape == ((byte)SdfShapeType.Capsule)));
-        var required = ((new Vector3(
-            x: translation.X,
-            y: translation.Y,
-            z: translation.Z
-        ).Length()
-            + new Vector3(
-            x: capsule.Data0.X,
-            y: capsule.Data0.Y,
-            z: capsule.Data0.Z
-        ).Length())
-            + capsule.Data0.W);
-
-        Assert.True(
-            condition: (required <= (instance.Radius + 0.0001f)),
-            userMessage: $"Coarse capsule reaches {required} from its root but its cull bound is only {instance.Radius}."
-        );
-        Assert.Equal(
-            0f,
-            (translation.Y - capsule.Data0.W),
-            precision: 5
-        );
-    }
-    [Fact]
     public void FreshAppearanceSelectionRemainsValidAcrossThousandsOfDistinctBodySlots() {
         for (var index = 0; (index < 4096); index++) {
             var selected = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
@@ -342,10 +304,10 @@ public sealed class WorldCatalogAllocationLawTests {
         );
 
         Assert.Equal(
-            4,
+            WorldRigCatalog.InstructionCount(Rig),
             program.Instructions.Count
         );
-        Assert.Single(collection: program.Instances);
+        Assert.True(program.Instances.Count > 1);
         Assert.All(
             program.Instances,
             instance => Assert.InRange(

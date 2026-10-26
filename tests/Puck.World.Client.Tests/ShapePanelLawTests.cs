@@ -85,6 +85,7 @@ public sealed class ShapePanelLawTests {
         shapes: shapes
     );
     private static SdfProgram EmitPool(Vector3 scale, ShapePanelDocument? panel, float bodyScale = 1f) => CreationFixtures.EmitPool(
+        articulated: false,
         bodyScale: bodyScale,
         name: PrototypeId,
         palette: CreationFixtures.GreyAndBlue,

@@ -10,32 +10,7 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
-/// <summary>
-/// The creation-stamp pool: the reserved dynamic-transform pool a creation renders through as per-shape dynamic
-/// instances, or one scoped instance when text couples the creation's operands. It is presentation-only (never
-/// simulation state). Three root sources share the one pool and its one reserved
-/// slot budget:
-/// <list type="bullet">
-/// <item><description>an animated placement (a creation carrying timeline frames) roots on the placement's static
-/// stamped transform and replays its frames hold-style at the fixed cadence
-/// (<see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>);</description></item>
-/// <item><description>a body-rooted stamp (an inhabited placement's body, or a crowd body wearing a creation look)
-/// roots on the client's interpolated body pose, so an inhabited creation walks its authored walk cycle while its body
-/// moves — that is the entire visual change over a static stamp.</description></item>
-/// <item><description>an attached placement (<see cref="WorldPlacementAttach"/>) roots on the client's interpolated
-/// body pose composed with the facet's local offset/yaw, so the row rides that body. It keys by placement id like an
-/// animated row (a body may carry several attached rows, and the body keeps its own avatar), and its authored
-/// transform is inert — <see cref="WorldPlacementStamper.IsStaticStamp"/> already skipped it.</description></item>
-/// </list>
-/// Reconciliation diffs delivered registrations by stable key against live ones (the same pattern camera reconciliation
-/// uses): a pose/scale edit is a cheap property write (the replay clock survives), a creation-content change releases +
-/// recreates (the clock resets), and a departed registration releases its pool slot at the delivery boundary (the
-/// symmetric-release rule).
-/// A body-rooted stamp whose look names a root <c>dynamics</c> row (<see cref="WorldLookMotion.Dynamics"/>) rides a
-/// second-order follower instead of the raw interpolated body pose (<see cref="Puck.SdfVm.Views.SecondOrderFollower3"/>/
-/// <c>Follower4</c>); a part named in <see cref="WorldLookMotion.PartDynamics"/> gets its own position-only follower
-/// chasing the composed (already-followed) root — a secondary lag on top of the root's.
-/// </summary>
+/// <summary>Live creation presentation: articulated instances retain animation state and actual motion-owner transforms; rigid bodies share local geometry assets and own only a root pose. Animated, attached and inhabited placements use the same pose and anchor machinery.</summary>
 /// <remarks>Articulated instances allocate their actual root and motion-owner slots. Rigid bodies share local geometry through <see cref="WorldRigidAssets"/>.</remarks>
 public sealed partial class WorldCreationInstances {
     private int[] m_catalogSlots = [];
@@ -126,7 +101,7 @@ public sealed partial class WorldCreationInstances {
 
         // The dynamic-transform slots the registration's pool index reserves (SlotsAt), set when it takes the index.
         public CreationMotionPlan Motion = new(document);
-        public int Slots => Motion.SlotCount + ((document.TextRuns is { Count: > 0 }) ? 1 : 0);
+        public int Slots => Motion.SlotCount;
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[document.Shapes?.Count ?? 0];
 
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
@@ -1167,9 +1142,7 @@ public sealed partial class WorldCreationInstances {
         }
     }
 
-    // A volume rides the slot of the shape its parent names (the shape's own live frame, so the volume's authored
-    // offset is shape-local) or the root slot; a parent past the animated shape-slot budget has no slot and falls
-    // back to the root. The list is capped at the engine's volume ceiling; later registrations' volumes are dropped.
+    // Volumes follow the root or motion owner with the authored parent frame composed in. Overflow refuses by name.
     private void AppendVolumes(Registration live, CreationDocument document, float placementScale, int rootSlot, int shapeCount, bool[]? hidden) {
         if (document.Volumes is not { Count: > 0 } volumes) {
             return;

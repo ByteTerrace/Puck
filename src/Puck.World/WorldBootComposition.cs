@@ -64,6 +64,7 @@ public static class WorldBootComposition {
     // so world.counters can register it, and read it, before the presenter exists.
     private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
         probe.Transforms.Retarget(target: presenter.MovedTransforms);
+        probe.ProgramBuildsSource = () => presenter.Composed.ProgramBuilds;
 
         return presenter;
     }

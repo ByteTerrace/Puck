@@ -107,7 +107,7 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (row + 48), value: ((uint)batch.PoseBase(lattice: index)));
             WriteUInt32(block: block, offset: (row + 52), value: ((uint)poseFirst));
             WriteUInt32(block: block, offset: (row + 56), value: ((uint)(poseRows.Length / 3)));
-            WriteUInt32(block: block, offset: (row + 60), value: 0u);
+            WriteUInt32(block: block, offset: (row + 60), value: unchecked((uint)lattice.FrameSlot));
             first += ((uint)lattice.Samples);
         }
     }

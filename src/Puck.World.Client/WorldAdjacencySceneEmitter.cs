@@ -140,7 +140,23 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     }
 
     /// <inheritdoc/>
-    public int DynamicSlotCount => (m_bandCount * WorldRigCatalog.DynamicTransformCapacity);
+    private int[] m_liveSlots = [];
+    private int m_liveSlotCount;
+    public void PrepareFrame() {
+        if (m_liveSlots.Length != m_emittedEntities.Length) { m_liveSlots = new int[m_emittedEntities.Length]; }
+        Array.Fill(m_liveSlots, -1);
+        m_liveSlotCount = 0;
+        var visuals = m_source.Visuals();
+        for (var band = 0; band < Math.Min(visuals.Count, m_bandCount); band++) {
+            SelectBand(visuals[band], m_polledEntities);
+            for (var body = 0; body < m_polledEntities.Length; body++) {
+                if (!m_polledEntities[body]) { continue; }
+                m_liveSlots[band * WorldBodiesLimits.CapacityCeiling + body] = m_liveSlotCount;
+                m_liveSlotCount += WorldRigCatalog.TransformSlotsPerBody;
+            }
+        }
+    }
+    public int DynamicSlotCount => m_liveSlotCount;
     /// <inheritdoc/>
     public bool OwnsMaterialScope => false;
     /// <inheritdoc/>
@@ -290,6 +306,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             probeWorstCase: false,
             slotBase: slotBase,
             rigFor: index => m_emittedRigs[(appearanceBase + index)],
+            slotFor: index => m_liveSlots[appearanceBase + index],
             scaleFor: index => m_emittedScales[(appearanceBase + index)]
         );
     }
@@ -402,16 +419,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         ArgumentNullException.ThrowIfNull(argument: builder);
-
-        if (context.Probe) {
-            EmitReservation(
-                bandCount: m_bandCount,
-                builder: builder,
-                slotBase: context.SlotBase
-            );
-
-            return;
-        }
 
         var meshDraws = new List<SdfMeshDraw>();
 
@@ -529,42 +536,9 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     builder: builder,
                     projection: projection,
                     bandIndex: bandIndex,
-                    slotBase: (slotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity))
+                    slotBase: slotBase
                 );
             }
-        }
-    }
-    /// <summary>Emits the whole per-band reservation — the one declaration of what adjacency composition may spend,
-    /// shared by this emitter's own construction probe and by the candidate measurer the render-capacity oracle
-    /// admits scene mutations against, so the two can never disagree about the room a border holds.</summary>
-    /// <param name="builder">The shared program builder under construction.</param>
-    /// <param name="bandCount">The projections to reserve for
-    /// (<see cref="WorldAdjacencyBands.ProjectionCapacity(WorldDefinition)"/>).</param>
-    /// <param name="slotBase">The owning emitter's first dynamic-transform slot.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
-    public static void EmitReservation(SdfProgramBuilder builder, int bandCount, int slotBase) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        for (var band = 0; (band < bandCount); band++) {
-            var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-            var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-
-            // The palette a live band adds — one body plus one accent per rendered body. Reserved because AddMaterial
-            // never dedupes, so an unreserved live palette would spend program words nothing measured.
-            for (var entity = 0; (entity < MaxEntitiesPerBand); entity++) {
-                bodyMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-                accentMaterials[entity] = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-            }
-
-            WorldRigCatalog.Emit(
-                builder: builder,
-                isActive: static _ => true,
-                bodyMaterials: bodyMaterials,
-                accentMaterials: accentMaterials,
-                probeAvatarLimit: MaxEntitiesPerBand,
-                probeWorstCase: true,
-                slotBase: (slotBase + (band * WorldRigCatalog.DynamicTransformCapacity))
-            );
         }
     }
     /// <inheritdoc/>
@@ -575,7 +549,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
         foreach (var projection in m_emittedProjections) {
             var neighbour = projection.Neighbour;
-            var bandBase = (context.SlotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity));
+            var bandBase = context.SlotBase;
             var alpha = neighbour.InterpolationAlpha;
 
             var bound = Math.Min(
@@ -637,6 +611,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_motionOwners.Settle(
                     deltaSeconds: 1f,
                     moved: WorldTransformOwners.PackBody(
+                    firstSlot: m_liveSlots[motionIndex],
                     avatar: entity,
                     catalogBase: bandBase,
                     gaitPhase: (m_gaitPhases[motionIndex] * m_emittedGaitAmplitudes[motionIndex]),

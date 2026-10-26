@@ -3,6 +3,7 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
+    private bool m_openInstanceBakesSeparately;
     /// <summary>Reads a registered material while composing local material frames.</summary>
     public SdfMaterial MaterialAt(int index) => m_materials[index];
     /// <summary>Adds a material to the program palette.</summary>
@@ -179,7 +180,8 @@ public sealed partial class SdfProgramBuilder {
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
     /// non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f) {
+    /// <param name="separateBake">Keep this geometry's lattice separate from other instances on its motion slot.</param>
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -194,6 +196,7 @@ public sealed partial class SdfProgramBuilder {
             slot: slot
         );
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
+        m_openInstanceBakesSeparately = separateBake;
 
         return this;
     }
@@ -273,9 +276,10 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ));
+        ) { BakesSeparately = m_openInstanceBakesSeparately });
 
         m_openInstanceFirst = -1;
+        m_openInstanceBakesSeparately = false;
 
         return this;
     }

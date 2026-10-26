@@ -18,8 +18,7 @@ namespace Puck.World.Client.Tests;
 public sealed class WorldCreationInstancesLiveRigEditLawTests {
     private const float FrameSeconds = (1f / 60f);
 
-    // The body's registration takes the pool's first entry; its shape slots follow its root.
-    private static int ArmSlot => (WorldRigCatalog.DynamicTransformCapacity + 2);
+    private static int ArmSlot => 1; // authored shape ordinal, independent of motion-slot packing
 
     private static ShapeDocument Arm(string? parent = null, IReadOnlyList<ShapeSwingDocument>? swings = null) => new(
         Id: 1,
@@ -192,12 +191,12 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
         public float Travel(int slot) {
             Frame();
 
-            var start = m_dresser.Transforms[slot].Position;
+            var start = Drawn(slot);
             var travel = 0f;
 
             for (var frame = 0; (frame < 120); frame++) {
                 Frame();
-                travel = MathF.Max(x: travel, y: Vector3.Distance(value1: start, value2: m_dresser.Transforms[slot].Position));
+                travel = MathF.Max(x: travel, y: Vector3.Distance(value1: start, value2: Drawn(slot)));
             }
 
             return travel;
@@ -206,7 +205,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
         public WorldClient Client => m_client;
 
         // The position the last frame drew the slot at.
-        public Vector3 Drawn(int slot) => m_dresser.Transforms[slot].Position;
+        public Vector3 Drawn(int slot) => Pool.BodyShapePose(0, slot).Position;
         public void Frame() {
             m_client.DeliverSnapshot(snapshot: new WorldSnapshot(
                 Authority: "a",

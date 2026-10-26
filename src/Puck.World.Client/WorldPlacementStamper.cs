@@ -208,6 +208,7 @@ public static class WorldPlacementStamper {
     }
     // Material layers authored in the old winning shape frame are composed into its motion owner's frame.
     internal static int MaterialForShape(SdfProgramBuilder builder, int material, ShapeDocument shape, float scale, bool rigid = false) {
+        if (material >= SdfProgramBuilder.ScreenMaterialId) { return material; }
         var source = builder.MaterialAt(material);
         if (source.Inset is null && source.Paints is not { Count: > 0 }) { return material; }
         var rotation = shape.Rotation.Value;

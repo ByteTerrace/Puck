@@ -18,6 +18,8 @@ namespace Puck.SdfVm;
 /// <param name="Gradients">Whether the sampler measures the field's gradient at each sample: a points lattice's, at the
 /// samples of the final lattice its contour reads one at.</param>
 public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (int X, int Y, int Z) Dims, int Selector, bool Gradients) {
+    /// <summary>Gets the lattice's local frame, independently of the instances selected by its mask.</summary>
+    public int FrameSlot { get; init; } = Selector >= 0 ? Selector : -1;
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => ((Dims.X * Dims.Y) * Dims.Z);
     /// <summary>Gets the field evaluations the dispatch makes: five a sample that measures the gradient, one
@@ -891,7 +893,7 @@ public sealed partial class SdfMeshPathBake {
         var dims = (X: Samples(length: extent.X), Y: Samples(length: extent.Y), Z: Samples(length: extent.Z));
         var cell = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
 
-        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances };
+        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances, FrameSlot = group.Dynamic ? group.Slot : -1 };
     }
     // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
     private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
@@ -1042,7 +1044,7 @@ public sealed partial class SdfMeshPathBake {
             if (detail > 0f) { detailed = MathF.Min(x: detailed, y: detail); }
         }
 
-        var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances };
+        var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances, FrameSlot = group.Dynamic ? group.Slot : -1 };
 
         return new FinalLattice(lattice: lattice) {
             Factor = ((regions.Count > 0) ? Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / target))), min: 2, max: (float.IsFinite(f: detailed) ? MaxDetailRefinement : MaxRefinement)) : 0),
@@ -1175,6 +1177,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Clamp(value: (FrameTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
+            FrameSlot = group.Dynamic ? group.Slot : -1,
             Instances = group.Instances,
             Points = final.Points.AsMemory(length: count, start: final.Answered),
         };
@@ -1281,6 +1284,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (FrameTaps / 5));
 
         return new SdfMeshBakeRequest(Cell: group.CreaseSpacing, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
+            FrameSlot = group.Dynamic ? group.Slot : -1,
             Instances = group.Instances,
             Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
         };
@@ -1364,6 +1368,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: FrameTaps);
 
         return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
+            FrameSlot = group.Dynamic ? group.Slot : -1,
             Instances = group.Instances,
             Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
         };

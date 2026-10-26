@@ -8,11 +8,7 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 /// <summary>
-/// The deterministic appearance catalog used by the World population. Each catalog entry is a distinct
-/// 12..20-leaf humanoid rig (60..100 VM instructions), chosen through Puck.Maths low-discrepancy sequences.
-/// Appearance indices are independent of body indices. The lowest-index detailed band reserves one maximum-sized
-/// transform range per body; the remaining crowd band reserves one stable root slot per body and renders a coarse
-/// capsule. Activating or restyling one body never moves another body's transform slots.
+/// The procedural appearance catalog. Body identity never selects a lower-detail substitute; only live looks emit, and raster detail follows projected size.
 /// </summary>
 public static class WorldRigCatalog {
     private const int InstructionsPerLeaf = 5;
@@ -127,9 +123,9 @@ public static class WorldRigCatalog {
         Reach = reach;
     }
 
-    /// <summary>The compact dynamic-transform lane: full ranges for the detailed band, then one root per coarse body.</summary>
+    /// <summary>The compact dynamic-transform lane of the procedural catalog.</summary>
     public static int DynamicTransformCapacity => WorldBodiesLimits.CapacityCeiling * MaxLeafCount;
-    /// <summary>The maximum authored VM instruction total for the hybrid detailed/coarse population representation.</summary>
+    /// <summary>The maximum authored VM instruction total for the procedural catalog representation.</summary>
     public static int InstructionCapacity => WorldBodiesLimits.CapacityCeiling * MaxInstructionCount;
     /// <summary>Gets the maximum leaf-cull-instance count of one active catalog body.</summary>
     public static int MaxInstancesPerAvatar => MaxLeafCount;

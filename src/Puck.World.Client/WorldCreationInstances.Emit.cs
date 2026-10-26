@@ -118,6 +118,7 @@ public sealed partial class WorldCreationInstances {
 
         if (ownInstance) {
             _ = builder.BeginInstanceDynamic(
+                    separateBake: true,
             slot: boundSlot,
             boundOffset: boundOffset,
             boundRadius: boundRadius,
@@ -297,6 +298,7 @@ public sealed partial class WorldCreationInstances {
             if (round == 1) {
                 if (!coupled) { break; }
                 _ = builder.BeginInstanceDynamic(
+                    separateBake: true,
                     slot: rootSlot,
                     boundOffset: Vector3.Zero,
                     boundRadius: ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin),
@@ -398,6 +400,7 @@ public sealed partial class WorldCreationInstances {
     
                 if (ownInstance) {
                     _ = builder.BeginInstanceDynamic(
+                    separateBake: true,
                     slot: slot,
                     boundOffset: hasDomain ? Vector3.Zero : placed!.Position.Value * placementScale,
                     boundRadius: boundRadius,
@@ -515,10 +518,11 @@ public sealed partial class WorldCreationInstances {
         if (hasText) {
             // Apart, the text rides its own slot, which holds the root's pose, so its group holds the glyphs alone (a blend
             // group riding the root would otherwise bake with them at its own spacing), bounded by their reach.
-            var textSlot = (textApart ? (rootSlot + live!.Motion.SlotCount) : rootSlot);
+            var textSlot = rootSlot;
 
             if (textApart) {
                 _ = builder.BeginInstanceDynamic(
+                    separateBake: true,
                     slot: textSlot,
                     boundOffset: Vector3.Zero,
                     boundRadius: (CreationStampEmitter.TextReach(document: document!, fontFor: textCatalog!.Resolve, scale: placementScale, textLayouts: textLayouts) + GroupBoundMargin),

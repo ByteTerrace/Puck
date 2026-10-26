@@ -60,9 +60,12 @@ public sealed class BodyStampLookLawTests {
         StepTicks: 1680UL,
         Tick: tick
     );
-    // The packed height of the stamp's shape: the pool's first registration sits past the avatar catalog's slots, and
-    // its first shape one slot past its root.
-    private static float ShapeHeight(SdfFrame frame) => frame.DynamicTransforms[(WorldRigCatalog.DynamicTransformCapacity + 1)].Position.Y;
+    private static float ShapeHeight(SdfFrame frame) {
+        var copy = Assert.Single(frame.MeshInstances);
+        var target = Assert.IsType<WorldPickTarget>(copy.Identity);
+        var shape = Document().Creations.Single(creation => creation.Id == target.Prototype).EngineDocument.Shapes![0];
+        return Vector3.Transform(shape.Position.Value, copy.Matrix).Y;
+    }
 
     [Fact]
     public void ASnapshotsMovedLookReLatchesTheBodysStamp() {
@@ -93,6 +96,7 @@ public sealed class BodyStampLookLawTests {
             expected: 1f,
             tolerance: 1e-4f
         );
+        Assert.Equal(1, source.ProgramBuilds);
 
         session.DeliverSnapshot(snapshot: Snapshot(look: 1, revision: 2, tick: 2UL));
 

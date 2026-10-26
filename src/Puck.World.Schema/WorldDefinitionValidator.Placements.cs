@@ -1480,14 +1480,6 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        // The stamp-pool charge: every row that renders through Client.WorldCreationInstances's reserved registrations rather
-        // than as a static stamp — an ANIMATED row (a creation with frames or drivers) or an ATTACHED one (rooted on a live body).
-
-        // The document-global dynamic-instance total (WorldDynamicGeometryCeilings.MaxContributedDynamicInstances):
-        // every animated placement's single replay instance plus every inhabited placement's declared body count,
-        // summed across the whole document — ValidateInhabit only bounds one row's count to the peer capacity, never
-        // totals across rows. The runtime entity table separately caps actual occupancy at population capacity.
-
         var staticPlacementInstanceCount = 0L;
         var solidPlacementColliderCount = 0L;
         // The BOARD facet carries a tabletop's frame; a topology admits at most one carrying placement (see

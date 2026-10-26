@@ -192,7 +192,7 @@ forwards their authored blends; ungrouped shapes use Union defaults. A group
 opens a shared scope when needed, and grouped shapes cannot carry panel, trims,
 or cells. Static emission ignores `group` and walks the list in order, so a
 group cannot keep a subtraction off its siblings on a static placement. The VM
-admits two scope levels. [composition](references/composition.md) has the
+admits four scope levels. [composition](references/composition.md) has the
 formulas, folds, groups, panels, trims and shared-clamp diagnostics.
 
 ## Bake work and residency

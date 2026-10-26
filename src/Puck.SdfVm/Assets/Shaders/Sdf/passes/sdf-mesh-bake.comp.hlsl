@@ -75,9 +75,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 slotPosition = float3(0.0, 0.0, 0.0);
         float4 slotOrientation = float4(0.0, 0.0, 0.0, 1.0);
 
-        if (selector >= 0) {
-            slotPosition = sdfDynamicTransformRow(3u * (uint)selector).xyz;
-            slotOrientation = sdfDynamicTransformRow((3u * (uint)selector) + 1u);
+        int latticeFrame = asint(poses.w);
+        if (latticeFrame >= 0) {
+            slotPosition = sdfDynamicTransformRow(3u * (uint)latticeFrame).xyz;
+            slotOrientation = sdfDynamicTransformRow((3u * (uint)latticeFrame) + 1u);
         }
         // The segments no instance owns form a group of their own (the selector SdfMeshBakeGroup.WorldSelector, whose
         // mask selects no instance); every other group samples its instances without them.

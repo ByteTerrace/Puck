@@ -8,11 +8,12 @@ namespace Puck.SdfVm;
 /// is stored in, the geometry it is keyed by (<see cref="SdfMeshGeometryBuilder"/>) and the box its first lattice covers.
 /// <see cref="SdfMeshPathBake"/> bakes the groups this plans, and the mesh audit (<see cref="SdfMeshAudit"/>) plans the same
 /// groups to find their stored meshes and the field each was sampled from.
-/// <para>A dynamic group is every instance riding one slot, in that slot's frame; a static group is one instance, or the
+/// <para>A dynamic group is the instances riding one slot, in that slot's frame; instances marked
+/// <see cref="SdfInstanceRange.BakesSeparately"/> keep their own group while sharing that frame. A static group is one instance, or the
 /// run of static instances that bake with the first (<see cref="SdfInstanceRange.BakesWithPrevious"/>), in world space; the
 /// world group (<see cref="IsWorld"/>) is every segment no instance owns.</para>
 /// </summary>
-/// <param name="selector">The dynamic slot the group rides when non-negative; <c>-(index + 1)</c> of its first static
+/// <param name="selector">The dynamic slot the group rides when non-negative; <c>-(index + 1)</c> of its first separate
 /// instance otherwise; <see cref="WorldSelector"/> for the world group.</param>
 /// <param name="dynamic">Whether the group bakes in its slot's frame.</param>
 public class SdfMeshBakeGroup(int selector, bool dynamic) {
@@ -22,7 +23,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     private readonly List<int> m_instances = [];
 
-    /// <summary>Gets the group's selector: its slot, <c>-(index + 1)</c> of its first static instance, or
+    /// <summary>Gets the group's selector: its slot, <c>-(index + 1)</c> of its first separate instance, or
     /// <see cref="WorldSelector"/>.</summary>
     public int Selector { get; } = selector;
     /// <summary>Gets whether the group bakes in its slot's frame rather than in world space.</summary>
@@ -31,7 +32,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets whether the group is the program's segments no instance owns.</summary>
     public bool IsWorld => (Selector == WorldSelector);
     /// <summary>Gets the slot a dynamic group rides.</summary>
-    public int Slot => Selector;
+    public int Slot { get; private set; } = selector;
 
     /// <summary>Gets the instances a static group's run holds, from <c>-(Selector + 1)</c> on.</summary>
     public int Instances { get; internal set; } = 1;
@@ -173,9 +174,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         var planned = PlanGroups(create: create, farDistance: farDistance, program: program, slots: slots, snap: null, transforms: transforms);
         var bySlot = new Dictionary<int, T>(capacity: planned.Count);
 
-        foreach (var group in planned) { bySlot[group.Slot] = group; }
+        foreach (var group in planned) { bySlot[group.Selector] = group; }
         for (var index = 0; (index < groups.Count); index++) {
-            if (groups[index].Dynamic && bySlot.TryGetValue(key: groups[index].Slot, value: out var group)) {
+            if (groups[index].Dynamic && bySlot.TryGetValue(key: groups[index].Selector, value: out var group)) {
                 groups[index] = group;
                 refreshed++;
             }
@@ -224,7 +225,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <paramref name="create"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative, or a step count is not
     /// positive.</exception>
-    public static T? PlanSlot<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int slot, float positionSteps, float orientationSteps, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    /// <param name="instance">The particular instance on a shared motion slot, or null for its first group.</param>
+    public static T? PlanSlot<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int slot, float positionSteps, float orientationSteps, Func<int, bool, T> create, int? instance = null) where T : SdfMeshBakeGroup {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: create);
@@ -234,7 +236,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         var groups = PlanGroups(create: create, farDistance: farDistance, program: program, slots: new HashSet<int> { slot }, snap: (positionSteps, orientationSteps), transforms: transforms);
 
-        return ((groups.Count > 0) ? groups[0] : null);
+        return instance is { } first ? groups.FirstOrDefault(group => group.FirstInstance == first) : groups.FirstOrDefault();
     }
 
     private static float Reach(float farDistance) => MathF.Max(x: 1f, y: farDistance);
@@ -267,7 +269,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             var glass = program.IsGlassRange(end: instance.End, first: instance.First);
             T group;
 
-            if (instance.IsDynamic) {
+            if (instance.IsDynamic && instance.BakesSeparately) {
+                group = create(-(index + 1), true);
+                group.Slot = instance.Slot;
+                if (snap is { } steps) { group.Geometry.Snap(orientationSteps: steps.Orientation, positionSteps: steps.Position); }
+                group.Low = center - new Vector3(radius);
+                group.High = center + new Vector3(radius);
+                group.Glass = glass;
+                groups.Add(group);
+            } else if (instance.IsDynamic) {
                 if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
                     group = create(arg1: instance.Slot, arg2: true);
                     if (snap is { } steps) { group.Geometry.Snap(orientationSteps: steps.Orientation, positionSteps: steps.Position); }
@@ -369,6 +379,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     // Seals the group: its geometry, its materials, and the pose rows its lattices read.
     private void Seal() {
+        if (Dynamic && Geometry.Poses.Keys.Count(slot => slot != Slot) is var members && members > SdfMesh.MaxMembers) {
+            throw new InvalidOperationException($"Mesh group at instance {FirstInstance} needs {members} skin members; the representation holds {SdfMesh.MaxMembers}.");
+        }
         Geometry.Seal();
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;

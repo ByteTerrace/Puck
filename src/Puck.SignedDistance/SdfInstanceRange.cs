@@ -39,4 +39,7 @@ public readonly record struct SdfInstanceRange(
     bool Active = true,
     bool BakesWithPrevious = false,
     float Detail = 0f
-);
+) {
+    /// <summary>Gets whether this instance has its own bake while sharing its motion owner's transform.</summary>
+    public bool BakesSeparately { get; init; }
+}

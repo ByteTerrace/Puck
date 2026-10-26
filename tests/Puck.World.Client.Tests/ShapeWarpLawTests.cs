@@ -280,16 +280,6 @@ public sealed class ShapeWarpLawTests {
             precision: 6
         );
     }
-    // The probe reserves every warp form on every slot whatever a body authors, so a live flared, sheared, or bumped
-    // shape never outgrows the envelope.
-    [InlineData(SdfOp.AxialProfile)]
-    [InlineData(SdfOp.GaussianPush)]
-    [InlineData(SdfOp.Shear)]
-    [Theory]
-    public void ThePoolProbeReservesEveryWarpFormWithoutAnyAuthored(SdfOp op) => Assert.Contains(
-        collection: CreationFixtures.PoolProbe.Instructions,
-        filter: i => (i.Op == op)
-    );
     [Fact]
     public void TheStaticPathEmitsOneGaussianPushPerBump() {
         var program = EmitStatic(

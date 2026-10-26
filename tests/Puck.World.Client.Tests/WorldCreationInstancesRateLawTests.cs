@@ -128,7 +128,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 9UL); tick++) {
             phases.Add(item: Walk(client: client, pool: pool, tick: tick, transforms: transforms));
             roots.Add(item: transforms[0].Position);
-            offsets.Add(item: (transforms[2].Position - transforms[0].Position));
+            offsets.Add(item: (pool.BodyShapePose(0, 1).Position - transforms[0].Position));
         }
 
         // The first frame packs, the next three hold, the fifth packs the four frames' time at once, and so on.
@@ -162,7 +162,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 9UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
             roots.Add(item: transforms[0].Position);
-            offsets.Add(item: (transforms[2].Position - transforms[0].Position));
+            offsets.Add(item: (pool.BodyShapePose(0, 1).Position - transforms[0].Position));
         }
 
         Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
@@ -247,8 +247,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 5UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
             codes.Add(item: (SdfUpdateRateCode)pool.SlotRateCodes.Span[0]);
-            Assert.Equal(expected: pool.SlotRateCodes.Span[0], actual: pool.SlotRateCodes.Span[2]);
-            Assert.Equal(expected: ((byte)SdfUpdateRateCode.None), actual: pool.SlotRateCodes.Span[3]);
+            Assert.Single(pool.SlotRateCodes.ToArray());
         }
 
         var posed = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true);

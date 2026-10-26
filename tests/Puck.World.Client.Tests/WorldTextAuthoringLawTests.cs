@@ -60,14 +60,14 @@ public sealed class WorldTextAuthoringLawTests {
         var (box, text) = (program.Instances[0], program.Instances[1]);
 
         Assert.True(condition: (box.IsDynamic && text.IsDynamic));
-        // The box rides its shape slot after the root, the text the slot after the shapes', which the pack poses as the
-        // root: a group of its own, whatever blend group rides the root.
-        Assert.Equal(expected: (box.Slot + 1), actual: text.Slot);
+        // The box has independent timeline motion; text uses the existing root, without an extra transform.
+        Assert.Equal(expected: 0, actual: text.Slot);
+        Assert.Equal(expected: 1, actual: box.Slot);
+        Assert.True(box.BakesSeparately && text.BakesSeparately);
         var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);
-        Assert.Equal(expected: transforms[(box.Slot - 1)], actual: transforms[text.Slot]);
-        Assert.NotEqual(expected: transforms[(text.Slot + 1)].Position, actual: transforms[text.Slot].Position);
+        Assert.Equal(2, transforms.Length);
         Assert.Equal(expected: 0f, actual: box.Detail);
         // The thinner of the run's 0.02 relief and a tenth of its 0.25 em, at the body's scale of 2.
         Assert.Equal(expected: 0.04f, actual: text.Detail, tolerance: 1e-6f);
@@ -136,7 +136,7 @@ public sealed class WorldTextAuthoringLawTests {
         Fonts: [new TextFontDefinition(
                 Name: "body",
                 Source: source,
-                Hash: "sha256-64/0123456789abcdef",
+                Hash: "sha256/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
                 CodePointRanges: ["U+0020-U+007E"]
             )]
     );

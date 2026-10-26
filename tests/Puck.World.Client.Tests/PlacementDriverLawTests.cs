@@ -151,7 +151,7 @@ public sealed class PlacementDriverLawTests {
             transforms: transforms
         );
         var root = transforms[0];
-        var initial = transforms[1];
+        Assert.True(pool.TryShapePosition("grass", 0, client, out var initial));
 
         for (ulong tick = 2; (tick <= 31); tick++) {
             CreationDomainParentLawTests.Advance(
@@ -169,10 +169,8 @@ public sealed class PlacementDriverLawTests {
             root.Orientation,
             transforms[0].Orientation
         );
-        var movement = Vector3.Distance(
-            value1: initial.Position,
-            value2: transforms[1].Position
-        );
+        Assert.True(pool.TryShapePosition("grass", 0, client, out var current));
+        var movement = Vector3.Distance(initial, current);
 
         if (requireGrounded) {
             // The fixture has a grounded body, but this placement does not ride it.

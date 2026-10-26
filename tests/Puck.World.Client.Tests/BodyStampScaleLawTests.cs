@@ -44,9 +44,7 @@ public sealed class BodyStampScaleLawTests {
         StepTicks: 1680UL,
         Tick: tick
     );
-    // The packed height of the stamp's shape: the pool's first registration sits past the avatar catalog's slots, and
-    // its first shape one slot past its root.
-    private static float ShapeHeight(SdfFrame frame) => frame.DynamicTransforms[(WorldRigCatalog.DynamicTransformCapacity + 1)].Position.Y;
+    private static float ShapeHeight(SdfFrame frame) => Vector3.Transform(Vector3.UnitY, Assert.Single(frame.MeshInstances).Matrix).Y;
     private static int[] Revision(ISdfSceneEmitter emitter) {
         var revision = new int[emitter.RevisionComponentCount];
 
@@ -104,18 +102,15 @@ public sealed class BodyStampScaleLawTests {
 
         var moved = Revision(emitter: emitter);
 
-        Assert.NotEqual(
+        Assert.Equal(
             actual: moved,
             expected: settled
-        );
-        Assert.Equal(
-            actual: moved[..3],
-            expected: settled[..3]
         );
         Assert.Equal(
             actual: ShapeHeight(frame: Frame()),
             expected: 0.5f,
             tolerance: 1e-4f
         );
+        Assert.Equal(1, source.ProgramBuilds);
     }
 }

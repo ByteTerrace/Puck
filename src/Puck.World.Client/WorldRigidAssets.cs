@@ -15,6 +15,7 @@ public sealed class WorldRigidAssets {
     private readonly List<int> m_slots = [];
     private readonly List<int> m_offsets = [];
     private readonly List<int> m_materials = [];
+    private readonly List<float> m_reaches = [];
     private int m_slotCount;
     private readonly List<SdfVolume> m_volumes = [];
     private readonly List<(int Copy, SdfVolume Volume)> m_rootVolumes = [];
@@ -67,11 +68,13 @@ public sealed class WorldRigidAssets {
         m_assets.Clear();
         m_indices.Clear();
         m_offsets.Clear();
+        m_reaches.Clear();
         m_slotCount = 0;
         foreach (var creation in creations) {
             if (!used.Contains(creation.Id) || !IsRigid(creation)) { continue; }
             m_indices.Add(creation.Id, m_assets.Count);
             m_assets.Add(creation);
+            m_reaches.Add(CreationStampEmitter.RenderReach(creation.EngineDocument, 1, null, composeBlends: true));
             m_offsets.Add(m_slotCount);
             var shapes = creation.EngineDocument.Shapes ?? [];
             m_slotCount += shapes.Any(shape => creation.EngineDocument.IsGlassShape(shape)) && shapes.Any(shape => !creation.EngineDocument.IsGlassShape(shape)) ? 2 : 1;
@@ -160,7 +163,7 @@ public sealed class WorldRigidAssets {
                 OtherAssetSlots = endSlot > firstSlot + 1 ? new[] { firstSlot + 1 } : [],
                 Mesh = body.Creation.Mesh is { } mesh ? WorldPlacementStamper.MeshOf(mesh) : null,
                 Material = asset < m_materials.Count ? m_materials[asset] : 0,
-                Clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: CreationGeometry.Reach(body.Creation.EngineDocument) * body.Scale, firstSlot: 0, slotCount: 1)
+                Clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: m_reaches[asset] * body.Scale, firstSlot: 0, slotCount: 1)
             };
             if (!m_copies[index].SamePose(copy)) { m_copies[index] = copy; }
             foreach (var volume in body.Creation.EngineDocument.Volumes ?? []) {

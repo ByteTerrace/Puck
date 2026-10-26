@@ -955,10 +955,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         return m_bakedColors;
     }
 
-    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized catalog ranges for the detailed
-    /// band and one root slot per remaining crowd body — the same hybrid worst case
-    /// <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own avatar range, sized off the engine-wide
-    /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
+    /// <summary>Gets the actual catalog, articulation and local-template transform count.</summary>
     public int DynamicSlotCount => (m_catalogSlotCount + m_pool.DynamicSlotCount);
     /// <inheritdoc/>
     public int RevisionComponentCount => 5;

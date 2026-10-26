@@ -169,7 +169,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
     }
 
-    // Holds a geometry's first mesh for the run, emptying the library past its capacity, and makes it its form's latest;
+    // Holds a geometry's first mesh within the byte budget and makes it its form's latest;
     // false when it held one already.
     private bool Hold(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128? form) {
         lock (m_gate) {
