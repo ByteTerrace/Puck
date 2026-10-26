@@ -235,14 +235,15 @@ even when only its startup is measured. Use
 [`verification`](../verification/SKILL.md#what-uses-the-gpu) for GPU work
 classification and execution.
 
-Plan the number of lanes against the machine's memory before launching them,
-not after. Each implementing lane builds the solution, runs suites and replays
-the debug world, so on the 32 GB lead machine run at most two such lanes at
-once, the lead's own landing checks counted among them, plus a GPU World; give
-a lane's replay check `--jobs 1` when another heavy job is running. Above that,
-Claude Code reaps every background command when memory runs critically low: it
-did at seven and again at three; their worktrees survive and Codex lanes resume
-by session id, but nothing restarts until the owner says so.
+A brief's finish line follows [the integration lane](#coding-lanes-and-the-integration-lane):
+a coding lane's brief names its touched projects and focused tests, never a
+whole-solution build, a full suite or a debug-world replay, which the
+integration lane (or the lead acting as it) runs one at a time. Writing the
+landing bar into every coding brief turns each lane into an integration lane:
+heavy jobs then run side by side and Claude Code reaps every background command
+when memory runs critically low, as it did twice in one session at seven and at
+three concurrent heavy jobs. Their worktrees survive and Codex lanes resume by
+session id, but nothing restarts until the owner says so.
 
 Run a load governor on any machine that hosts many agents, through
 `puck host load`, which samples the machine's load and names its state. Under a
