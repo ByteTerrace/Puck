@@ -7,16 +7,16 @@ using Puck.World.Protocol;
 namespace Puck.World.Client;
 
 public sealed partial class WorldStampPool {
-    private readonly WorldTransformOwners m_owners = new(capacity: WorldPlacementPolicy.MaxStampRegistrations);
+    private readonly WorldTransformOwners m_owners = new(capacity: RegistrationCount);
     // The registration each pool entry was last packed for: a swapped registration repacks and parks its unused slots.
-    private readonly Registration?[] m_packedRegistrations = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
+    private readonly Registration?[] m_packedRegistrations = new Registration?[RegistrationCount];
     // A registration's slots as they stood before its repack, which the moved set compares the repack against.
     private readonly DynamicTransform[] m_previousSlots = new DynamicTransform[SlotsPerPlacement];
     // Each pool entry's mesh draw as the last pack posed it (null for none), and the one list they compose, rewritten
     // in place under a new revision only in a pack that changed an entry: a pool at rest hands the engine what it already
     // packed, and a moving one allocates nothing once the list has grown to its stamps.
-    private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[WorldPlacementPolicy.MaxStampRegistrations];
-    private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: WorldPlacementPolicy.MaxStampRegistrations);
+    private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[RegistrationCount];
+    private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: RegistrationCount);
     private WorldPickTarget?[] m_pickMeshTargets = [];
 
     /// <summary>Gets the immutable mesh identities in draw order, replaced only when membership changes.</summary>
@@ -133,7 +133,8 @@ public sealed partial class WorldStampPool {
         m_pendingDeltaSeconds = 0f;
 
         for (var index = 0; (index < m_pool.Length); index++) {
-            var rootSlot = (slotBase + (index * SlotsPerPlacement));
+            var rootSlot = (slotBase + RootSlotOffset(index: index));
+            var slots = SlotsAt(index: index);
             var live = m_pool[index];
 
             // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
@@ -161,7 +162,7 @@ public sealed partial class WorldStampPool {
                     owner: index
                 )) {
                     WorldTransformOwners.Park(
-                        count: SlotsPerPlacement,
+                        count: slots,
                         moved: moved,
                         parkPosition: parkPosition,
                         start: rootSlot,
@@ -192,7 +193,7 @@ public sealed partial class WorldStampPool {
             )
             ) {
                 WorldTransformOwners.Park(
-                    count: (SlotsPerPlacement - packedSlots),
+                    count: (slots - packedSlots),
                     moved: moved,
                     parkPosition: parkPosition,
                     start: (rootSlot + packedSlots),
@@ -299,12 +300,12 @@ public sealed partial class WorldStampPool {
                     doors: doors,
                     firstSlot: rootSlot,
                     radius: (ReachOf(live: live) * placementScale),
-                    slotCount: SlotsPerPlacement
+                    slotCount: slots
                 ) is not null) &&
                 (WorldPortalStraddle.Clip(
                     doors: doors,
                     firstSlot: rootSlot,
-                    slotCount: SlotsPerPlacement,
+                    slotCount: slots,
                     spheres: m_partSpheres.AsSpan(start: 0, length: PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: shapeCount, transforms: transforms))
                 ) is { } clip)
             ) {

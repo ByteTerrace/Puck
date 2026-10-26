@@ -167,7 +167,7 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
-    /// <summary>Places a body upright at a live cell of an anchored topology, plus an authored offset.</summary>
+    /// <summary>Places a body at a live cell of an anchored topology, plus an authored offset, upright or rolled.</summary>
     /// <param name="Key">A body reference, including placement:$each.</param>
     /// <param name="Topology">The declared topology.</param>
     /// <param name="Expression">The integer cell ordinal evaluated when the effect fires.</param>
@@ -175,8 +175,11 @@ public static class WorldEffect {
     /// <param name="Glide">Whether the body moves there as continuous motion, which a client interpolates and which
     /// keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them.
     /// For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.</param>
+    /// <param name="RollDegrees">The roll a teleport stands the body at, about its forward axis: 180 lays it upside
+    /// down, as a rule turning a two-faced piece over does. A glide keeps the body's attitude and ignores it.</param>
     public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false) : ActionEffect;
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
         StateChannelRef Key,

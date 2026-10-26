@@ -421,9 +421,11 @@ that deep.
 
 In Puck.World, the document compiler derives these prices. It takes what
 `RuleCapacity.MaxWorkUnitsPerTick` leaves after the rules' own work sheet, subtracts
-one fold of every row (the stamp below), and divides the rest equally among
-the jobs. A job doesn't borrow another's remainder, and unspent allowance
-doesn't carry to the next step. One judge run is priced by the same work sheet
+one fold of every row (the stamp below), and the rest is every job's allowance:
+`ArenaSearch.Step` advances one job a step, of those with work to do (enabled,
+and its inputs moved, its walk open or its answer not yet landed), the step's
+tick choosing which when several have it, so a job alone steps every tick and
+several take turns. Unspent allowance doesn't carry to the next step. One judge run is priced by the same work sheet
 the tick budget uses, over the job's scoped judge rules. `nodes` defaults to
 4,096 (`SearchCapacity.MaxNodesPerTick`) and may only lower that.
 

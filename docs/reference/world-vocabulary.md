@@ -64,7 +64,7 @@ kind.
 | `draw` | `rule` | statement | `rules[].effects[][transformState]` | Moves one token from the front of an ordered zone to another. |
 | `for each` | `rule` | block | `rules[].effects[][forEachPool]` | Visits every live instance in ascending slot order. |
 | `if` | `rule` | block | `rules[].effects[][if]` | A conditional effect. |
-| `local` | `rule` | statement | `rules[].locals[]` | One working value the rule computes before its effects. |
+| `local` | `rule` | statement | `rules[].locals[]` | One working value declared before the rule's gate and effects; later declarations are refused. |
 | `push` | `rule` | statement | `rules[].effects[][pushState]` | Appends a value to a history ring, overwriting the oldest slot when the ring is full. |
 | `release` | `rule` | statement | `rules[].effects[][release]` | Releases the instance named by a lexical pool binding. |
 | `remove` | `rule` | statement | `rules[].effects[][removeStateCell]` | Drops a cell from its row; a later read of that key reads zero. |
@@ -311,7 +311,7 @@ Never printed back; the printer produces the statements its expansion produced i
 ### `rule`
 
 ```puck
-rule "name" { [when Gate] [mode: …] [forEach: …] [local …] [decision { … }] <effect>* }
+rule "name" { [local …]* [when Gate] [mode: …] [forEach: …] [decision { … }] <effect>* }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
@@ -672,8 +672,8 @@ local name = <operand>
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `name` (required) | header | name | — | `name` | — | The local's name, read bare in every operand after it. |
-| `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, once per firing, before any effect runs. |
+| `name` (required) | header | name | — | `name` | — | The local's lexical name, read bare in later expressions and bracket indices. Function names are functions only in calls. |
+| `expression` (required) | header | operand | — | `expression` | — | What the local evaluates to, in declaration order before the gate and effects. |
 
 Printed back as `local` when the node carries `expression`, `name`; otherwise the explicit `locals` array. Every field of the node the description does not name prints as an ordinary property.
 
@@ -769,14 +769,14 @@ Printed back as `transform` when the node carries `transform`, and its target ro
 ### `when`
 
 ```puck
-when Operand cmp Operand [: Int|Fixed] | when Gate and|or Gate | when not Gate | when (Gate)
+when <expression>
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `gate` (required) | header | gate | — | `gate` | — | The predicate; a second `when` in one rule or option is refused. |
+| `gate` (required) | header | gate | — | `gate` | — | The condition expression; a second `when` in one rule or option is refused. |
 
-Printed back as `when` when the node carries `gate`, and no `compareValue` in it opens its left operand with `(` and no `all`/`any` in it carries fewer than two children; otherwise `gate: <call-form>`, an ordinary rule-body property. Every field of the node the description does not name prints as an ordinary property.
+Printed back as `when` when the node carries `gate`, and its predicates have an expression spelling that preserves their document shape; otherwise `gate: <call-form>`, an ordinary rule-body property. Every field of the node the description does not name prints as an ordinary property.
 
 ### `space`
 
@@ -994,6 +994,7 @@ One body entry carries `advance`, `behavior`, `key`, `value` and nothing else.
 | `import` | Core grammar: the module surface, described by `Puck.Transpiler`. |
 | `let` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
 | `module` | Core grammar: a typed compile-time module, expanded before this vocabulary sees a statement. |
+| `op=` | Compound assignment: `-=` adds a negated operand; the other operators set an expression, resolving a computed destination key once at the effect. |
 | `schema` | Core grammar: a document header this vocabulary does not interpret. |
 | `template` | Core grammar: the compile-time layer, evaluated away before this vocabulary sees a statement. |
 | `use` | Core grammar: a module instantiation, expanded before this vocabulary sees a statement. |

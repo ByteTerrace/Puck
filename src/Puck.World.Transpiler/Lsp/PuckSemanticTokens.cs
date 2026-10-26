@@ -595,6 +595,8 @@ public static class PuckSemanticTokens {
                 modifiers = PuckSemanticModifiers.Declaration;
             } else if ((following == ':') && !IsDoubleColon(at: next) && !((previousKeyword is not null) && AnnotatesName.Contains(item: previousKeyword))) {
                 role = PuckSemanticRole.Property;
+            } else if (ExpressionOperators.TryFindSymbol(word, out var wordOperator) && wordOperator!.Binding > 0) {
+                role = PuckSemanticRole.Operator;
             } else if (Reserved.Contains(item: word)) {
                 role = PuckSemanticRole.Keyword;
                 keyword = word;

@@ -34,8 +34,8 @@ public class OperandTreeLawTests {
     }
 
     [InlineData("amount + Choice.Second")]
-    [InlineData("values[amount] + amount")]
-    [InlineData("values[(selected)] + amount")]
+    [InlineData("values.amount + amount")]
+    [InlineData("values[selected] + amount")]
     [InlineData("values[$\"amount\"] + $\"{amount}\"")]
     [Theory]
     public void SugarCallsAndBlockMembersBindTheSameTree(string expression) {
@@ -66,12 +66,12 @@ public class OperandTreeLawTests {
     }
     [Fact]
     public void ARewriteReachesParsedNamesAndPreservesLiteralKeys() {
-        var source = (Prefix + "rule r { result = values[amount] + amount }");
+        var source = (Prefix + "rule r { result = values.amount + amount }");
         var tree = PuckParser.ParseDocument(source, vocabulary: WorldDocumentVocabulary.Instance);
         var rewritten = new RenameOperand().Rewrite(document: tree);
         var printed = Puck.Transpiler.Formatting.PuckPrinter.Print(document: rewritten);
 
-        Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "values[amount]");
+        Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "values.amount");
         Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "+ 7");
         var result = Compile(source: printed)["rules"]![0]!["effects"]![0]!["expression"]!;
 
@@ -85,7 +85,7 @@ public class OperandTreeLawTests {
         Assert.DoesNotContain(collection: used, filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.LintUnusedLet));
         var unused = new DiagnosticBag();
 
-        PuckLinter.Lint(PuckParser.ParseDocument((Prefix + "rule r { result = values[amount] }"), vocabulary: WorldDocumentVocabulary.Instance), unused);
+        PuckLinter.Lint(PuckParser.ParseDocument((Prefix + "rule r { result = values.amount }"), vocabulary: WorldDocumentVocabulary.Instance), unused);
         Assert.Contains(collection: unused, filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.LintUnusedLet));
     }
     [InlineData("clamp(1, 2)")]
@@ -116,7 +116,7 @@ public class OperandTreeLawTests {
                 state { world { slot result = 0
                     table values { amount = 8 }
                 } }
-                rule r { result = values[amount] + amount }
+                rule r { result = values.amount + amount }
             }
             """);
         var path = Path.Combine(path1: directory.RootPath, path2: "root.puck");

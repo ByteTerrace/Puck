@@ -540,6 +540,14 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   (`SdfMeshPathBake.PlanAhead`), and the first frame that draws it re-plans only
   the groups it cannot keep (`SdfMeshBakeGroup.Refresh`). Editing either file
   changes the bake identity: check `puck mesh identity` before booting.
+- **Static placement emissions survive program rebuilds.** `WorldStaticPalettes`
+  keeps each immutable row's `SdfProgramBuilder.Emission`: instructions and
+  profile tables, plus its volumes and mesh draws. A response emits the swapped
+  rows alone. The cache also checks the prototype, palette ids and extent,
+  resolved frame, text catalog and isolation mask. Retained recolor windows
+  bind to the new builder's material scope; never retain the old builder through
+  a scope. A same-sized mesh draw list stages changed records even when meshes
+  swap, while the arena leaves existing mesh addresses standing.
 
 ## Seeing a change
 

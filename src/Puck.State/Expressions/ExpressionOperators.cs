@@ -19,6 +19,8 @@ public enum ExpressionSignature : byte {
     Absence,
     /// <summary>Reads an operand that may be absent and a fallback of the same kind, and yields that kind.</summary>
     Coalesce,
+    /// <summary>Converts numeric values or absence to truth and yields Int zero or one.</summary>
+    Truth,
     /// <summary>Reduces a family through a subprogram; Count, All, and Any yield Int, Sum the family's kind.</summary>
     Fold,
     /// <summary>Consumes nothing from the stack and pushes what its payload addresses.</summary>
@@ -35,10 +37,9 @@ public enum ExpressionSignature : byte {
 /// <param name="Function">Whether the operation evaluates through
 /// <see cref="ExpressionArithmetic.TryValidatedFunction"/> rather than the unary or binary entry.</param>
 /// <param name="Payload">Which <see cref="InstructionPayload"/> case its instruction must carry.</param>
-/// <param name="Binding">How tightly its infix <paramref name="Symbol"/> holds its operands, in C's order: a higher
-/// binding groups first, and every infix operator associates to the left. Zero for a row with no infix symbol. The
-/// rule operand and the document value, the two expression languages, parse and print their infix operators from
-/// this column.</param>
+/// <param name="Binding">How tightly its operator <paramref name="Symbol"/> holds its operands: a higher
+/// binding groups first, and every infix operator associates to the left. Zero for a row with no operator symbol.
+/// Rule operands and document values parse and print operators from this column.</param>
 public sealed record ExpressionOperator(ExpressionOp Operation, int Arity, ExpressionSignature Signature,
     long Cost, string? Name, string? Symbol, bool Function, PayloadShape Payload, int Binding) {
     /// <summary>Returns a value indicating whether the operation is defined over a numeric kind.</summary>
@@ -124,13 +125,16 @@ public static class ExpressionOperators {
             static entry => entry.Name!,
             StringComparer.Ordinal
         );
-        Infix = [.. Entries.Where(predicate: static entry => (entry.Binding > 0)).OrderByDescending(keySelector: static entry => entry.Symbol!.Length)];
+        Infix = [.. Entries.Where(predicate: static entry => (entry.Binding > 0 && entry.Arity == 2)).OrderByDescending(keySelector: static entry => entry.Symbol!.Length)];
     }
 
     private static readonly ExpressionOperator[] Entries = [
+        Define(ExpressionOp.Or, 2, ExpressionSignature.Truth, 1L, null, "or", false, PayloadShape.None, binding: 2),
+        Define(ExpressionOp.And, 2, ExpressionSignature.Truth, 1L, null, "and", false, PayloadShape.None, binding: 3),
+        Define(ExpressionOp.Not, 1, ExpressionSignature.Truth, 1L, null, "not", false, PayloadShape.None, binding: 4),
         Define(
             arity: 2,
-            binding: 9,
+            binding: 11,
             cost: 1L,
             function: false,
             name: null,
@@ -141,7 +145,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 9,
+            binding: 11,
             cost: 1L,
             function: false,
             name: null,
@@ -152,7 +156,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 10,
+            binding: 12,
             cost: 3L,
             function: false,
             name: null,
@@ -163,7 +167,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 10,
+            binding: 12,
             cost: 16L,
             function: false,
             name: null,
@@ -194,7 +198,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 10,
+            binding: 12,
             cost: 16L,
             function: false,
             name: null,
@@ -215,7 +219,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 5,
+            binding: 9,
             cost: 1L,
             function: false,
             name: null,
@@ -226,7 +230,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 3,
+            binding: 7,
             cost: 1L,
             function: false,
             name: null,
@@ -237,7 +241,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 4,
+            binding: 8,
             cost: 1L,
             function: false,
             name: null,
@@ -248,7 +252,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 8,
+            binding: 10,
             cost: 1L,
             function: false,
             name: null,
@@ -259,7 +263,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 8,
+            binding: 10,
             cost: 1L,
             function: false,
             name: null,
@@ -270,7 +274,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 8,
+            binding: 10,
             cost: 1L,
             function: false,
             name: null,
@@ -291,7 +295,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 6,
+            binding: 5,
             cost: 1L,
             function: false,
             name: null,
@@ -302,7 +306,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 6,
+            binding: 5,
             cost: 1L,
             function: false,
             name: null,
@@ -313,7 +317,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 7,
+            binding: 6,
             cost: 1L,
             function: false,
             name: null,
@@ -324,7 +328,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 7,
+            binding: 6,
             cost: 1L,
             function: false,
             name: null,
@@ -335,7 +339,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 7,
+            binding: 6,
             cost: 1L,
             function: false,
             name: null,
@@ -346,7 +350,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
-            binding: 7,
+            binding: 6,
             cost: 1L,
             function: false,
             name: null,

@@ -809,7 +809,8 @@ transform is charged the insertion sort it runs; a transaction is charged the
 costlier of its two paths.
 
 Search spends a `SearchWork` allowance: what the sheet and one fold of every
-row leave, divided equally among the jobs, unspent and unshared. Every unit of
+row leave, the whole of it each job's, since a tick steps one job with work to
+do. Every unit of
 the walk is priced, the costliest is reserved before any runs, replay and
 restart come out of the same allowance, and a share that cannot cover a
 restart, a full replay and one unit is refused by that sum. A chance ply is a
@@ -887,13 +888,14 @@ clears one line; the corpus inventory counts every claimed construct.
 
 ### G1 — Go
 
-**Status:** implemented as [games/go.puck](../../experimental/src/Puck.World/Assets/worlds/games/go.puck)
-at 19x19. Its `test` blocks show an atari, a single and a group capture, a
-suicide refusal, a ko refusal and the exchange that lifts it, the area count,
-and one CPU move, each in the export, and reproduce byte for byte. The
-`go-capture` canary plays into a capture and the CPU's reply through the real
-`Puck.World`, and `GoMoveLawTests` pins the work by counters. The package
-exposed four engine faults, each fixed with laws: a tree search judged every
+**Status:** implemented at 19x19 as a headless game, and now played at 9x9 on
+the debug world's Go table ([go.md](../../worlds/debug/go.md)), whose rules
+are the same move door under a physical table of stones.
+[go-tests.puck](../../worlds/debug/go-tests.puck) shows an atari, a group
+capture, a suicide refusal, a ko refusal and the exchange that lifts it, the
+area count, a capture taken off the table and one CPU move, and reproduces
+byte for byte. The 19x19 package exposed four engine faults, each fixed with
+laws: a tree search judged every
 candidate of a node when it expanded, so a 19x19 pool filled after about
 twenty expansions (it now grows one node an iteration under progressive
 widening); the canonical fingerprint folds mirror images, so the ko check
@@ -903,7 +905,7 @@ a memoized local; and an assignment target could not take the `$"…"` key a
 read takes. Capture is `clearEnclosed`, the placement's own liberty flood. The
 CPU's score is material alone.
 
-**Owns:** `games/go.puck`, its host fixture, baselines. Constructs:
+**Owns:** `worlds/debug/go.puck` and its tests. Constructs:
 `clearEnclosed`, `writeSet`, `board(component, …)`, `board(boundary, …)`,
 `board(enclosedAt, …)`, `boardCombine`, `stabilize`, `history(row, age)` for ko, UCT
 search. A 19×19 board (after C2); capture by liberty fixpoint; ko refusal
@@ -1023,7 +1025,7 @@ After the landing a package branches from `main` and lands as its own squash.
 C2 serves Go at 19×19 (G1), and C3 to C6 serve Rulepush (G16); Tetromino (G4)
 needs none of them and proves the same substrate the landed games already
 exercise. All five capabilities and all three games are implemented, each game
-verified by its own `test` blocks and its canary: `go-capture` for Go,
+verified by its own `test` blocks and its canary: the debug world's `go-tests.puck` for Go,
 `rulepush-undo` and `rulepush-overworld` for Rulepush (with `push-ray` for C4),
 and `tetromino-clear` for Tetromino.
 

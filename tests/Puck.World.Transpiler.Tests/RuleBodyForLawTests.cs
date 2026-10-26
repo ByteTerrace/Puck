@@ -29,7 +29,7 @@ public class RuleBodyForLawTests {
                 rule "fill" {
                   when total == 0
                   for i in range(0, 3) {
-                    board[(i)] = i + 1
+                    board[i] = i + 1
                   }
                   total = 1
                 }
@@ -37,9 +37,9 @@ public class RuleBodyForLawTests {
             Written: """
                 rule "fill" {
                   when total == 0
-                  board[(0)] = 0 + 1
-                  board[(1)] = 1 + 1
-                  board[(2)] = 2 + 1
+                  board[0] = 0 + 1
+                  board[1] = 1 + 1
+                  board[2] = 2 + 1
                   total = 1
                 }
                 """
@@ -47,18 +47,18 @@ public class RuleBodyForLawTests {
         ["locals named per iteration"] = (
             Looped: """
                 rule "read" {
-                  when total == 0
                   for (cell, i) in [3, 1] {
-                    local $"at{i}" = board[(cell)] ?? 7
+                    local $"at{i}" = (board[cell] ?? 7)
                   }
+                  when total == 0
                   seen = at0 * 10 + at1
                 }
                 """,
             Written: """
                 rule "read" {
+                  local at0 = (board[3] ?? 7)
+                  local at1 = (board[1] ?? 7)
                   when total == 0
-                  local at0 = board[(3)] ?? 7
-                  local at1 = board[(1)] ?? 7
                   seen = at0 * 10 + at1
                 }
                 """
@@ -69,13 +69,13 @@ public class RuleBodyForLawTests {
                   when total == 0
                   if seen == 0 {
                     for i in range(0, 2) {
-                      if board[(i)] == 0 {
-                        board[(i)] = 5
+                      if board[i] == 0 {
+                        board[i] = 5
                       }
                     }
                   } else {
                     for i in [3] {
-                      board[(i)] = 1
+                      board[i] = 1
                     }
                   }
                 }
@@ -84,14 +84,14 @@ public class RuleBodyForLawTests {
                 rule "branch" {
                   when total == 0
                   if seen == 0 {
-                    if board[(0)] == 0 {
-                      board[(0)] = 5
+                    if board[0] == 0 {
+                      board[0] = 5
                     }
-                    if board[(1)] == 0 {
-                      board[(1)] = 5
+                    if board[1] == 0 {
+                      board[1] = 5
                     }
                   } else {
-                    board[(3)] = 1
+                    board[3] = 1
                   }
                 }
                 """
@@ -102,7 +102,7 @@ public class RuleBodyForLawTests {
                   when total == 0
                   transaction {
                     for i in range(0, 2) {
-                      board[(i)] = 9
+                      board[i] = 9
                     }
                   } onFailure {
                     for i in [1] {
@@ -115,8 +115,8 @@ public class RuleBodyForLawTests {
                 rule "atomic" {
                   when total == 0
                   transaction {
-                    board[(0)] = 9
-                    board[(1)] = 9
+                    board[0] = 9
+                    board[1] = 9
                   } onFailure {
                     total = 1
                   }
@@ -129,7 +129,7 @@ public class RuleBodyForLawTests {
                   when total == 0
                   for i in range(0, 2) {
                     for j in range(0, 2) {
-                      board[(i * 2 + j)] = i + j
+                      board[(i * 2) + j] = i + j
                     }
                   }
                 }
@@ -137,10 +137,10 @@ public class RuleBodyForLawTests {
             Written: """
                 rule "pairs" {
                   when total == 0
-                  board[(0 * 2 + 0)] = 0 + 0
-                  board[(0 * 2 + 1)] = 0 + 1
-                  board[(1 * 2 + 0)] = 1 + 0
-                  board[(1 * 2 + 1)] = 1 + 1
+                  board[(0 * 2) + 0] = 0 + 0
+                  board[(0 * 2) + 1] = 0 + 1
+                  board[(1 * 2) + 0] = 1 + 0
+                  board[(1 * 2) + 1] = 1 + 1
                 }
                 """
         ),
@@ -149,8 +149,10 @@ public class RuleBodyForLawTests {
                 workflow turn {
                   step fill {
                     for i in range(0, 2) {
-                      local $"was{i}" = board[(i)] ?? 0
-                      board[(i)] = 4
+                      local $"was{i}" = (board[i] ?? 0)
+                    }
+                    for i in range(0, 2) {
+                      board[i] = 4
                     }
                     seen = was0 + was1
                   }
@@ -159,10 +161,10 @@ public class RuleBodyForLawTests {
             Written: """
                 workflow turn {
                   step fill {
-                    local was0 = board[(0)] ?? 0
-                    board[(0)] = 4
-                    local was1 = board[(1)] ?? 0
-                    board[(1)] = 4
+                    local was0 = (board[0] ?? 0)
+                    local was1 = (board[1] ?? 0)
+                    board[0] = 4
+                    board[1] = 4
                     seen = was0 + was1
                   }
                 }

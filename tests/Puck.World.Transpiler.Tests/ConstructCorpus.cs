@@ -112,8 +112,6 @@ internal static class ConstructCorpus {
         ["comparison/Greater"] = Gate(gate: "hp > 1"),
         ["comparison/GreaterOrEqual"] = Gate(gate: "hp >= 1"),
 
-        ["comparisonKind/Int"] = Gate(gate: "(hp == flag : Int)"),
-        ["comparisonKind/Fixed"] = Gate(gate: "(hp == flag : Fixed)"),
     };
 
     private static string Topology(string call) => Document(body: $"state {{\n    lattices [\n        {call}\n    ]\n}}");

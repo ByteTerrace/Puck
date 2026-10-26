@@ -3243,6 +3243,7 @@ public static partial class WorldModelShape {
                 M("expression", typeof(global::Puck.State.ExpressionProgram), typeof(global::Puck.World.WorldEffect.PoseCell), "Expression", Read | Write, static value => ((global::Puck.World.WorldEffect.PoseCell)value).Expression),
                 M("offset", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.WorldEffect.PoseCell), "Offset", Read | Write, static value => ((global::Puck.World.WorldEffect.PoseCell)value).Offset),
                 M("glide", typeof(global::System.Boolean), typeof(global::Puck.World.WorldEffect.PoseCell), "Glide", Read | Write, static value => ((global::Puck.World.WorldEffect.PoseCell)value).Glide),
+                M("rollDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldEffect.PoseCell), "RollDegrees", Read | Write, static value => ((global::Puck.World.WorldEffect.PoseCell)value).RollDegrees),
             ],
             []),
         T(typeof(global::Puck.World.WorldEffect.RemoveHudPanel), true, JsonTypeInfoKind.Object, null,

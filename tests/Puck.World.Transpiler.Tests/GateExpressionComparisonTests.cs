@@ -156,7 +156,7 @@ public class GateExpressionComparisonTests {
 
         Assert.Contains(
             collection: diagnostics,
-            filter: d => (d.Code == "PUCK001")
+            filter: d => (d.Code == "PUCK002")
         );
     }
 }

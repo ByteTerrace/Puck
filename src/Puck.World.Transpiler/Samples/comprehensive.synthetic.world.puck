@@ -202,16 +202,16 @@ placements {
 
 // Rules: an infix `when` gate, effect statements, and a decision with one scored option.
 rule "advance-round" {
-  when tableState[activeRound] < 8 and not tableState[locked] == 1
+  local remainingRounds = 8 - tableState.activeRound
+  when tableState.activeRound < 8 and not tableState.locked == 1
   mode: Edge
-  local remainingRounds = 8 - tableState[activeRound]
-  tableState[activeRound] += 1
-  schedule tableState[settle] in 0.25s
+  tableState.activeRound += 1
+  schedule tableState.settle in 0.25s
   transaction {
-    tableState[busy] = 1
-    tableText[status] = "dealing"
+    tableState.busy = 1
+    tableText.status = "dealing"
   } onFailure {
-    tableState[busy] = 0
+    tableState.busy = 0
   }
 }
 
@@ -222,9 +222,9 @@ rule "choose-seat" {
     commitmentSeconds: 3s
     seed: 11
     option "hold" {
-      when tableState[activeRound] >= 1
+      when tableState.activeRound >= 1
       score: 2.0
-      tableState[choice] = 1
+      tableState.choice = 1
     }
   }
 }

@@ -43,7 +43,7 @@ public static partial class ExpressionSpelling {
         ((ScanBareName(
             start: 0,
             text: name
-        ) == name.Length) && (name.Length > 0) && !IsReservedName(name: name));
+        ) == name.Length) && (name.Length > 0) && name is not ("not" or "and" or "or"));
     /// <summary>Whether a name can be spelled at all: a name the bare form cannot carry is backquoted, and the
     /// backquoted form has no escape, so a name is spelled exactly when it is nonempty and holds no backquote. Every
     /// <see cref="CellName"/> is one; an expression operand naming anything else is refused where it is built.</summary>
@@ -54,11 +54,10 @@ public static partial class ExpressionSpelling {
 
         return ((name.Length > 0) && !name.Contains(value: '`'));
     }
-    /// <summary>Whether this spelling reserves a name as a bare word: a function's name, a fold, a vector function, or
-    /// a board query, each of which the parser reads as a call before it considers a row. A reserved name reads as a
-    /// row only backquoted. Inside brackets no name is reserved, since a bare name there is a literal key.</summary>
+    /// <summary>Whether this name belongs to a function, fold, vector function, or board query in call position.
+    /// Without parentheses the same name resolves as a value.</summary>
     /// <param name="name">The name.</param>
-    /// <returns><see langword="true"/> when the bare name reads as something other than a row.</returns>
+    /// <returns><see langword="true"/> when the name identifies an expression function.</returns>
     public static bool IsReservedName(string name) => (Calls.ContainsKey(key: name) || IsReservedCallName(name: name));
 
     // A row name printed bare re-parses through ParsePrimary's own dot-access split, not through ParseKey (which

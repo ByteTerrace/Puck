@@ -17,7 +17,8 @@ namespace Puck.Cli.Mesh;
 /// <param name="Origin">The body's world position.</param>
 /// <param name="Scale">The look's uniform render scale.</param>
 /// <param name="RootSlot">The body's root transform slot.</param>
-public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Origin, float Scale, int RootSlot) {
+/// <param name="SlotCount">The transform slots its stamp registration reserves from the root.</param>
+public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Origin, float Scale, int RootSlot, int SlotCount) {
     /// <summary>Returns a world point in the creation's author frame: about the body, unscaled, then turned a half turn
     /// about up (<see cref="Puck.World.Authoring.CreationFrame"/>).</summary>
     /// <param name="world">The world point, in metres.</param>
@@ -119,13 +120,13 @@ public sealed class RestScene {
         var bodies = new List<RestBody>();
 
         foreach (var entry in entries) {
-            if (!pool.TryBodyTransformSlot(bodyIndex: entry.Index, transformSlot: out var root)) { continue; }
+            if (!pool.TryBodyTransformSlot(bodyIndex: entry.Index, transformSlot: out var root, slotCount: out var slots)) { continue; }
 
             var look = looks[entry.Look];
             var prototype = ((WorldLookSource.Creation)look.Source).PrototypeId.Value;
 
             if (definition.Creations.FirstOrDefault(predicate: creation => string.Equals(a: creation.Id, b: prototype, comparisonType: StringComparison.Ordinal)) is not { } creation) { continue; }
-            bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale));
+            bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale, SlotCount: slots));
         }
 
         return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms);
@@ -187,7 +188,7 @@ public sealed class RestScene {
         ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: (uint)(instance + 1))) is WorldPickTarget { Placement: { } placement } target)
             ? $" {placement} ({target.Prototype})"
             : string.Empty);
-    private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + WorldStampPool.SlotsPerPlacement))));
+    private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + body.SlotCount))));
     private static string SlotName(RestBody owner, int slot) {
         var shapes = (owner.Creation.EngineDocument.Shapes ?? []);
         var index = ((slot - owner.RootSlot) - 1);

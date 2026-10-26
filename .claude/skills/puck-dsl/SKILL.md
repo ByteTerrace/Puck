@@ -62,6 +62,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   statements read each local by its resolved name, and each is priced like a
   hand-written local. A `for` reads any compile-time array: a `let`, a
   literal, or a builtin's result.
+  World locals precede every gate and effect and evaluate in declaration
+  order. A late declaration is refused; move it before the first gate or
+  effect to make its pre-effect read explicit.
   A rule has one gate and one decision, so a `when`, `decision` or nested
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.
@@ -82,8 +85,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   alternative: a rule already runs once per matching subject, so iterate with
   the rule's `forEach`; a fixed count unrolls with a compile-time `for`, or
   folds into one effect (`x += 3`). A world rule carries `=` (`setState`) and
-  `+=` (`addState`); any other compound operator is **PUCK039**, written out as
-  `x = x - …`. A call-form gate where only comparisons are legal is
+  `+=` and `-=` (`addState`, negating subtraction's operand). Other compound
+  operators lower to `setState` over an expression; a computed destination key
+  is evaluated once when that effect runs. A cartridge-only `key(...)` gate in a world is
   **PUCK038**. Cartridge rules admit `if`, `repeat`, `break`, `key(...)` gates
   and compound assignment.
 - **A `test`'s `expect` reads one world, or names the document it reads.** A line
@@ -93,8 +97,17 @@ A document's `schema:` field selects its vocabulary, never the filename.
   when nothing crossed. An absent body reads every register as 0, so a claim of
   `0` there also claims presence
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
-- A `: Kind`/`as Kind` comparison-kind suffix binds only to the one comparison
-  it follows; wrap it in parentheses beside `and`/`or`.
+- Gates (`when`, `if`, `expect`) accept ordinary expressions. Zero and absence
+  are false; nonzero numeric values are true. `and` and `or` short-circuit;
+  `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise
+  `&`/`|` bind above comparisons. Kind suffixes are retired: write the expression
+  directly. `compareState(...)` and `compareValue(...)` in a source gate are
+  refused by name; write a comparison such as `left == right`.
+- **One bracket rule.** `row.key` names a literal key; `row[expression]`
+  evaluates. Names in brackets resolve lexically, so an unknown bare word is
+  an error. Use `row["key"]` for a quoted literal key. Read a local as `name`,
+  never `local(name)`; use `row[x]`, never `row[(x)]` or `row[slot[$value]]`.
+  Functions are recognized only in call position, so a local may be named `sign`.
 
 [references/grammar.md](references/grammar.md) has the full grammar with
 examples; [references/diagnostics.md](references/diagnostics.md) the codes
@@ -170,6 +183,10 @@ puck test <path-or-dir>               # boots each test block headless, one verd
 - `puck lsp` serves completion, hover, symbols, formatting and diagnostics.
 - `puck migrate <name> <path> [--check]` applies one registered source rewrite
   and proves each rewritten source compiles to the document it did before.
+  A syntax migration must also visit retained write-target operands
+  (`RowRefNode.Operand`), including keys nested inside them. Compile the
+  composed entry document after migrating modules: isolated module checks can
+  miss a literal key accidentally resolving to another module's row.
 - `puck embed <path>` resolves authored `embed(...)` text into committed
   `.embeddings.json` lock files.
 - `puck vocabulary [--check]` regenerates the world vocabulary page.

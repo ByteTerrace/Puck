@@ -320,7 +320,7 @@ public static partial class RuleCompiler {
 
         context.Needs.Add(facet: FacetRef.Of<ILiveBodies>());
     }
-    private static bool IsFractionalConstantExpression(ExpressionProgram? expression) {
+    private static bool IsFixedConstantExpression(ExpressionProgram? expression) {
         if (expression is null) {
             return false;
         }
@@ -331,9 +331,14 @@ public static partial class RuleCompiler {
             !instructions.Any(predicate: static instruction => (instruction.Payload is InstructionPayload.State)) &&
             instructions.Any(predicate: static instruction => (
                 (instruction.Payload is InstructionPayload.Constant constant) &&
-                (decimal.Truncate(d: constant.Value) != constant.Value)
+                HasFixedSpelling(constant.Value)
             ))
         );
+    }
+    private static bool HasFixedSpelling(decimal value) {
+        Span<int> bits = stackalloc int[4];
+        _ = decimal.GetBits(value, bits);
+        return (bits[3] & 0x00FF0000) != 0;
     }
     private static void CompileLocal(List<CompiledRuleLocal> compiled, RuleCompileContext context, RuleLocal? local, Rule rule) {
         var name = (local?.Name.Value ?? string.Empty);
@@ -345,14 +350,13 @@ public static partial class RuleCompiler {
                 ruleName: rule.Name
             );
         }
-        // The engine mints the implicit binding a computed key needs onto this same list as `$key<n>`, so an
-        // authored local under the reserved prefix could shadow one.
+        // Authored locals cannot shadow reserved runtime channels.
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: StateRow.ReservedNamePrefix
         )) {
             throw new RuleException(
-                detail: $"local '{name}' carries the reserved '{StateRow.ReservedNamePrefix}' prefix — the engine names the key bindings it mints '{StateRow.ReservedNamePrefix}key<n>'",
+                detail: $"local '{name}' carries the reserved '{StateRow.ReservedNamePrefix}' prefix; choose a name without it",
                 refusal: RuleRefusal.NameReserved,
                 ruleName: rule.Name
             );
@@ -378,16 +382,12 @@ public static partial class RuleCompiler {
             }
         }
 
-        // A computed key inside the expression mints its own local on this same list before the declared one
-        // lands, so the ceiling is priced here, after them, over declared and implicit locals together.
-        // Every numeric operand shares one carrier kind, so a row or local selects it. Constants alone compile under
-        // either, where an Int reading rounds a fraction away, so a fraction there starts the binding under Fixed.
+        // Reads retain their declared kinds. Unconstrained constants start in Int, or Fixed when
+        // a decimal spelling asks for it; each operation records the carrier its operands require.
         // The expression can still *leave* Int: comparisons and Sign consume exact Fixed operands but return a
         // Boolean-like or sign value. The binding therefore records the compiler's result kind, not its carrier.
-        // An expression that compiles under neither is refused for the reason its first reading gave. A key binding
-        // the first attempt minted stays: a key expression is Int under either kind, and the second attempt reads it
-        // back through the key-expression cache by the ordinal it holds.
-        var kind = (local.Kind ?? (IsFractionalConstantExpression(expression: local.Expression)
+        // An expression that compiles under neither is refused for the reason its first reading gave.
+        var kind = (local.Kind ?? (IsFixedConstantExpression(expression: local.Expression)
             ? CellKind.Fixed
             : CellKind.Int
         ));
@@ -427,7 +427,7 @@ public static partial class RuleCompiler {
 
         if (compiled.Count >= RuleCapacity.MaxLocalsPerRule) {
             throw new RuleException(
-                detail: $"local '{name}' would be local {(compiled.Count + 1)}, exceeding the {RuleCapacity.MaxLocalsPerRule}-local ceiling (declared and implicit key locals together)",
+                detail: $"local '{name}' would be local {(compiled.Count + 1)}, exceeding the {RuleCapacity.MaxLocalsPerRule}-local ceiling",
                 refusal: RuleRefusal.EffectKindInadmissible,
                 ruleName: rule.Name
             );

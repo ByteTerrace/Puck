@@ -344,8 +344,8 @@ public class AuthoringSugarTests {
         var transform = Assert.IsType<JsonObject>(@object: eff["transform"]);
 
         Assert.Equal("transfer", transform["$type"]?.ToString());
-        Assert.Equal("tableau[from]", transform["from"]?.ToString());
-        Assert.Equal("tableau[to]", transform["to"]?.ToString());
+        Assert.Equal("tableau[(from)]", transform["from"]?.ToString());
+        Assert.Equal("tableau[(to)]", transform["to"]?.ToString());
     }
     [Fact]
     public void ConstantFamilyIndexLowersDirectly() {

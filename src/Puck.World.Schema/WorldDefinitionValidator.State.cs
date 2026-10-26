@@ -1175,7 +1175,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (resolvedSpace is not null) {
-            var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
+            var effectiveCapacity = (row.IsSlot ? 1 : row.InitialCellCapacity);
             var rowVectorBytes = checked((((long)effectiveCapacity) * resolvedSpace.Identity.Dimensions));
 
             if (rowVectorBytes > StateCapacity.MaxVectorRowBytes) {
@@ -1305,7 +1305,7 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 if (vectorSpace is not null) {
-                    var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
+                    var effectiveCapacity = (row.IsSlot ? 1 : row.InitialCellCapacity);
 
                     totalVectorBytes += checked((((long)effectiveCapacity) * vectorSpace.Identity.Dimensions));
                 }

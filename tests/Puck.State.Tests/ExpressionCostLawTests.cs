@@ -120,7 +120,11 @@ public sealed class ExpressionCostLawTests {
         foreach (var operation in Enum.GetValues<ExpressionOp>()) {
             // A price is answerable only where the manifest records evidence for it; the heuristic weight beside it
             // is never that answer.
-            var coefficient = registered[operation.ToString()];
+            if (!registered.TryGetValue(operation.ToString(), out var coefficient)) {
+                Assert.True(ReferenceSchedule.OperationCostBound(operation, CellKind.Int).IsUnmodeled);
+                Assert.True(ReferenceSchedule.OperationCostBound(operation, CellKind.Fixed).IsUnmodeled);
+                continue;
+            }
 
             foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
                 var bound = ReferenceSchedule.OperationCostBound(kind: kind, operation: operation);

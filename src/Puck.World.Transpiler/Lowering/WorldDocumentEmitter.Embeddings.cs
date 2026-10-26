@@ -558,14 +558,14 @@ public static partial class WorldDocumentEmitter {
 
         foreach (var arg in call.Arguments) {
             if (string.Equals(a: arg.Name, b: "into", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                into = (GetStringOrIdent(expr: arg.Value, scope: scope) ?? "");
+                into = FormatTransformOperand(expr: arg.Value, scope: scope);
             } else if (string.Equals(a: arg.Name, b: "terms", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 termsExpr = arg.Value;
             }
         }
 
         if (string.IsNullOrEmpty(value: into) && (call.Arguments.Count > 0)) {
-            into = (GetStringOrIdent(expr: call.Arguments[0].Value, scope: scope) ?? "");
+            into = FormatTransformOperand(expr: call.Arguments[0].Value, scope: scope);
         }
         if ((termsExpr is null) && (call.Arguments.Count > 1)) {
             termsExpr = call.Arguments[1].Value;
@@ -806,11 +806,9 @@ public static partial class WorldDocumentEmitter {
             }
         }
 
-        // A term the compile-time grammar parsed (`stance[$each]`) is an operand, read as the text it prints to.
-        return (GetStringOrIdent(expr: expr, scope: scope) ?? (GetStringOrIdent(
-            expr: Puck.Transpiler.Parsing.PuckParser.CreateOperand(column: expr.Column, form: DocumentValueForm.Expression, length: expr.Length, line: expr.Line, offset: expr.Offset, text: Puck.Transpiler.Formatting.PuckPrinter.PrintExpression(expression: expr)),
-            scope: scope
-        ) ?? ""));
+        if (expr is LiteralExpressionNode { Value: string literalText }) { return literalText; }
+        var operand = Puck.Transpiler.Parsing.PuckParser.CreateOperand(expr, DocumentValueForm.Expression);
+        return BindOperand(operand, scope);
     }
     private static string? GetStringOrIdent(ExpressionNode? expr, DocumentScope scope) => expr switch {
         LiteralExpressionNode { Value: string s } => s,

@@ -64,8 +64,8 @@ public class FormatterSugarTests {
         Assert.Equal(formatted, PuckFormat.Format(source: formatted));
     }
     [Fact]
-    public void FormattingIsIdempotentOnAGateWithMixedChannelsAndKindSuffix() {
-        var source = "rule \"r\" {\n    when solitaireFreecell[from] != solitaireFreecell[to] : Int\n}\n";
+    public void FormattingIsIdempotentOnAGateWithMixedChannels() {
+        var source = "rule \"r\" {\n    when solitaireFreecell[from] != solitaireFreecell[to]\n}\n";
         var pass1 = PuckFormat.Format(source: source);
         var pass2 = PuckFormat.Format(source: pass1);
 

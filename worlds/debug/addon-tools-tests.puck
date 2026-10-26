@@ -8,9 +8,9 @@ test "development tools start idle and the scope stays empty" {
     ticks 12
   }
   expect {
-    fuzzer[steps] == 0
-    traversal[done] == 0
-    scope[samples] == 0
+    fuzzer.steps == 0
+    traversal.done == 0
+    scope.samples == 0
   }
 }
 
@@ -22,9 +22,9 @@ test "the fuzzer drives a bounded seeded pass and switches itself off" {
     ticks 20
   }
   expect {
-    fuzzer[steps] == 4
-    fuzzer[draw] == 3444695176
-    fuzzer[enabled] == 0
+    fuzzer.steps == 4
+    fuzzer.draw == 3444695176
+    fuzzer.enabled == 0
     bodyPosition(body, 44, x) > 52 and bodyPosition(body, 44, x) < 65
     bodyPosition(body, 44, z) > -45 and bodyPosition(body, 44, z) < -30
   }
@@ -39,8 +39,8 @@ test "the traversal bot reports a deliberately unreachable waypoint" {
     ticks 30
   }
   expect {
-    traversal[done] == 1
-    traversal[missed] == 1
+    traversal.done == 1
+    traversal.missed == 1
     traversalFailures[0] > 0
   }
 }
@@ -55,10 +55,10 @@ test "a traversal pass starts at the selected route entry" {
     ticks 30
   }
   expect {
-    traversal[done] == 1
-    traversal[missed] == 1
+    traversal.done == 1
+    traversal.missed == 1
     traversalFailures[0] == 0
-    traversal[reached] == 0
+    traversal.reached == 0
   }
 }
 
@@ -69,7 +69,7 @@ test "the scope samples its selected stand-in into the history rows" {
     ticks 24
   }
   expect {
-    scope[samples] > 12
+    scope.samples > 12
     scopeTicks[0] > 0
     scopeFacts[0] > 0
   }

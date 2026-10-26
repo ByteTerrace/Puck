@@ -67,37 +67,6 @@ public sealed class RuleCompilerLawTests {
         );
     }
     [Fact]
-    public void AGateNestsAllAnyAndNotIntoOnePostfixProgram() {
-        var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
-            gate: new ActionPredicate.All(Predicates: [
-                new ActionPredicate.CompareState(
-                    Comparison: ExpressionOp.Greater,
-                    State: "score",
-                    Value: 0m
-                ),
-                new ActionPredicate.Not(Predicate: new ActionPredicate.CompareState(
-                    Comparison: ExpressionOp.Equal,
-                    State: "score",
-                    Value: 9m
-                )),
-            ]),
-            name: "nested"
-        ));
-
-        Assert.Equal(
-            actual: compiled.Gate.Length,
-            expected: 4
-        );
-        Assert.Equal(
-            actual: compiled.Gate[^1].Op,
-            expected: GateOp.All
-        );
-        Assert.Equal(
-            actual: compiled.Gate[^1].Arity,
-            expected: 2
-        );
-    }
-    [Fact]
     public void AKeyedRowReadWithoutAKeyIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
@@ -122,10 +91,9 @@ public sealed class RuleCompilerLawTests {
         )),
         expected: RuleRefusal.StateCellUndeclared
     );
-    // The evaluator holds a rule's bound values in one fixed buffer, so the ceiling prices every binding that lands in
-    // it: the declared ones and the one each computed key inside a declared binding's expression mints.
+    // Computed keys evaluate at their use and consume no slot in the declared-local buffer.
     [Fact]
-    public void DeclaredBindingsAndTheKeysTheirExpressionsMintArePricedTogether() {
+    public void ComputedKeysDoNotConsumeDeclaredLocalSlots() {
         RuleLocal Bind(string name, string text) => new(
             Expression: RulesFixture.Program(text: text),
             Kind: CellKind.Int,
@@ -152,15 +120,12 @@ public sealed class RuleCompilerLawTests {
             Name: RulesFixture.Name(value: "crowded")
         );
 
-        // One declared value, the one key every later binding reads through, and two fewer declared bindings than
-        // the ceiling fill the buffer exactly.
         Assert.Equal(
-            actual: RulesFixture.Compile(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 2))).Locals!.Length,
+            actual: RulesFixture.Compile(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 1))).Locals!.Length,
             expected: RuleCapacity.MaxLocalsPerRule
         );
-        // One more declared binding still passes the authored count, and the shared key puts it one past the ceiling.
         Assert.Equal(
-            actual: RulesFixture.Refusal(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 1))),
+            actual: RulesFixture.Refusal(rule: Declaring(computed: RuleCapacity.MaxLocalsPerRule)),
             expected: RuleRefusal.EffectKindInadmissible
         );
     }
@@ -317,7 +282,7 @@ public sealed class RuleCompilerLawTests {
         );
     }
     [Fact]
-    public void AnExpressionKeyBecomesAnImplicitBindingTheCellReferenceReadsBack() {
+    public void AnExpressionKeyIsEvaluatedAtTheWrite() {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             effects: [new ActionEffect.SetState(
                 Key: "$expr:score + 0",
@@ -329,10 +294,10 @@ public sealed class RuleCompilerLawTests {
         var effect = Assert.IsType<WriteEffect>(@object: compiled.Effects[0]);
 
         Assert.NotNull(@object: effect.KeyFrom);
-        Assert.IsType<LocalKeyFact>(@object: effect.KeyFrom!.Value.Custom);
+        Assert.IsType<EffectKeyFact>(@object: effect.KeyFrom!.Value.Custom);
         Assert.Equal(
             actual: (compiled.Locals?.Length ?? 0),
-            expected: 1
+            expected: 0
         );
     }
     [Fact]

@@ -264,7 +264,11 @@ public sealed partial class ArenaLayout {
             return true;
         }
 
-        foreach (var cell in (row.Cells ?? [])) {
+        var cells = row.Cells;
+
+        for (var index = 0; (index < (cells?.Count ?? 0)); index++) {
+            var cell = cells![index];
+
             if (
                 (cell is not null) &&
                 ((cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null) || (cell.Behavior != StateCellBehavior.Inherit))
@@ -285,25 +289,41 @@ public sealed partial class ArenaLayout {
     /// <summary>Returns the optional columns declared by a row and its seed cells.</summary>
     /// <param name="row">The declaration.</param>
     public static ulong ColumnsOf(StateRow row) {
+        var clock = ((row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null));
+        var behavior = clock;
+        var visibility = (row.Visibility is not null);
+        var observation = (row.Knowledge is not null);
+        var cells = row.Cells;
+        // Each cell's declaration contributes to the row's storage once. Interface enumeration here used to
+        // allocate once per clock column, then again for behavior, visibility and observation on every value write.
+        for (var index = 0; (index < (cells?.Count ?? 0)); index++) {
+            var cell = cells![index];
+
+            clock = (clock || (cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null));
+            behavior = (behavior || ((cell is not null) && ((cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null) || (cell.Behavior != StateCellBehavior.Inherit))));
+            visibility = (visibility || (cell!.Visibility is not null));
+            observation = (observation || (cell!.Observation is not null));
+        }
         var columns = 0UL;
+
         foreach (var column in ArenaColumns.All) {
             var held = column switch {
-                ArenaColumn.CellCapacity => (row.Capacity is null) && (row.Shape is RowShape.Keyed or RowShape.Ordered),
-                ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot => row.Shape is RowShape.Keyed or RowShape.Ordered,
-                ArenaColumn.Text => row.Kind == CellKind.Text,
-                ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => (row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null) || (row.Cells ?? []).Any(static cell => (cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)),
-                ArenaColumn.Behavior => HasTraits(row: row),
-                ArenaColumn.Visibility => (row.Visibility is not null) || (row.Cells ?? []).Any(static cell => cell.Visibility is not null),
-                ArenaColumn.Observation => (row.Knowledge is not null) || (row.Cells ?? []).Any(static cell => cell.Observation is not null),
-                ArenaColumn.DrawCursor => row.Draw is not null,
-                ArenaColumn.PhaseSequence => row.Phase is not null,
+                ArenaColumn.CellCapacity => ((row.Capacity is null) && (row.Shape is RowShape.Keyed or RowShape.Ordered)),
+                ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot => (row.Shape is RowShape.Keyed or RowShape.Ordered),
+                ArenaColumn.Text => (row.Kind == CellKind.Text),
+                ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => clock,
+                ArenaColumn.Behavior => behavior,
+                ArenaColumn.Visibility => visibility,
+                ArenaColumn.Observation => observation,
+                ArenaColumn.DrawCursor => (row.Draw is not null),
+                ArenaColumn.PhaseSequence => (row.Phase is not null),
                 _ => false,
             };
-            if (held) { columns |= (1UL << (int)column); }
+
+            if (held) { columns |= (1UL << ((int)column)); }
         }
         return columns;
     }
-
     /// <summary>Returns whether a row holds a column; optional columns require their declared trait.</summary>
     /// <param name="row">The catalog ordinal.</param>
     /// <param name="column">The column.</param>

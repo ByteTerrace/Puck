@@ -173,10 +173,11 @@ public sealed partial class SdfWorldTables {
             staged = m_meshLanded;
         }
 
-        // A list naming the meshes the last one named, in order, after a staging that staged that whole list, owes only
-        // the draws that changed: every other record, box and motion row stands as it was staged.
+        // While existing mesh addresses stand, a same-sized list owes only its changed draws, including draws
+        // that swapped meshes. Every other record, box and motion row stands as it was staged.
         if (
-            m_meshArena.Unchanged &&
+            !m_meshArena.Relocated &&
+            (m_meshArena.Moved.Count == 0) &&
             m_stagedWhole &&
             ReferenceEquals(objA: staged, objB: draws) &&
             (staged.Count == m_stagedCount) &&
@@ -236,8 +237,8 @@ public sealed partial class SdfWorldTables {
         m_meshStaged = ReferenceEquals(objA: staged, objB: draws);
         m_stagedWhole = m_meshStaged;
     }
-    // Stages the draws of a list that changed since the draws last staged at their indices, which the list matches in
-    // count and meshes: each changed draw's record, box and motion row, and the region's words for each run of them.
+    // Stages changed draws at their indices while existing mesh addresses stand: each changed record, box and motion
+    // row, and the region's words for each run of them.
     private void StageChangedDraws(IReadOnlyList<SdfMeshDraw> draws) {
         var records = m_meshDrawWords.AsSpan(length: (draws.Count * SdfMeshRecord.DrawWords), start: 0);
         // The records as the region last held them, which a moved matrix is compared against before it is written.

@@ -69,25 +69,25 @@ test "every machine passes the six checks on bundled diagnostic cartridges" {
     ticks 100
   }
   expect {
-    machineDebugger0[alive] == 1
-    machineDebugger0[responsive] == 1
-    machineDebugger0[rewind] == 1
-    machineDebugger0[deterministic] == 1
-    machineDebugger0[swap] == 1
-    machineDebugger0[eject] == 1
-    machineDebugger1[alive] == 1
-    machineDebugger1[responsive] == 1
-    machineDebugger1[rewind] == 1
-    machineDebugger1[deterministic] == 1
-    machineDebugger1[swap] == 1
-    machineDebugger1[eject] == 1
-    machineDebugger2[alive] == 1
-    machineDebugger2[responsive] == 1
-    machineDebugger2[rewind] == 1
-    machineDebugger2[deterministic] == 1
-    machineDebugger2[swap] == 1
-    machineDebugger2[eject] == 1
-    machineDebuggerViolations[count] == 0
+    machineDebugger0.alive == 1
+    machineDebugger0.responsive == 1
+    machineDebugger0.rewind == 1
+    machineDebugger0.deterministic == 1
+    machineDebugger0.swap == 1
+    machineDebugger0.eject == 1
+    machineDebugger1.alive == 1
+    machineDebugger1.responsive == 1
+    machineDebugger1.rewind == 1
+    machineDebugger1.deterministic == 1
+    machineDebugger1.swap == 1
+    machineDebugger1.eject == 1
+    machineDebugger2.alive == 1
+    machineDebugger2.responsive == 1
+    machineDebugger2.rewind == 1
+    machineDebugger2.deterministic == 1
+    machineDebugger2.swap == 1
+    machineDebugger2.eject == 1
+    machineDebuggerViolations.count == 0
   }
 }
 
@@ -105,15 +105,15 @@ test "withholding input fails responsive while the other checks pass" {
     ticks 100
   }
   expect {
-    machineDebugger2[alive] == 1
-    machineDebugger2[responsive] == -1
-    machineDebugger2[rewind] == 1
-    machineDebugger2[deterministic] == 1
-    machineDebugger2[swap] == 1
-    machineDebugger2[eject] == 1
-    machineDebugger2[changed] == 0
-    machineDebuggerViolations[count] == 1
-    machineDebuggerViolations[first] > 30
+    machineDebugger2.alive == 1
+    machineDebugger2.responsive == -1
+    machineDebugger2.rewind == 1
+    machineDebugger2.deterministic == 1
+    machineDebugger2.swap == 1
+    machineDebugger2.eject == 1
+    machineDebugger2.changed == 0
+    machineDebuggerViolations.count == 1
+    machineDebuggerViolations.first > 30
   }
 }
 
@@ -130,9 +130,9 @@ test "the runtime input program plays every segment then releases the body" {
     ticks 25
   }
   expect {
-    machineDebugger2[driven] == 5
-    machineDebugger2[phase] == 99
-    machineDebuggerViolations[count] == 0
+    machineDebugger2.driven == 5
+    machineDebugger2.phase == 99
+    machineDebuggerViolations.count == 0
   }
 }
 
@@ -151,10 +151,10 @@ test "the seeded fuzzer consumes the reproducible PCG stream for its window" {
     ticks 35
   }
   expect {
-    machineDebugger2[driven] == 12
-    machineDebugger2[randomState] != 0
-    machineDebugger2[phase] == 99
-    machineDebuggerViolations[count] == 0
+    machineDebugger2.driven == 12
+    machineDebugger2.randomState
+    machineDebugger2.phase == 99
+    machineDebuggerViolations.count == 0
   }
 }
 
@@ -171,16 +171,16 @@ test "an out-of-reach driver reports unknown checks with ticks" {
     ticks 20
   }
   expect {
-    machineDebugger2[alive] == 0
-    machineDebugger2[responsive] == 0
-    machineDebugger2[rewind] == 0
-    machineDebugger2[deterministic] == 0
-    machineDebugger2[swap] == 0
-    machineDebugger2[eject] == 0
-    machineDebugger2[aliveTick] > 30
-    machineDebugger2[ejectTick] > 30
-    machineDebugger2[phase] == 99
-    machineDebuggerViolations[count] == 0
+    machineDebugger2.alive == 0
+    machineDebugger2.responsive == 0
+    machineDebugger2.rewind == 0
+    machineDebugger2.deterministic == 0
+    machineDebugger2.swap == 0
+    machineDebugger2.eject == 0
+    machineDebugger2.aliveTick > 30
+    machineDebugger2.ejectTick > 30
+    machineDebugger2.phase == 99
+    machineDebuggerViolations.count == 0
   }
 }
 
@@ -198,9 +198,9 @@ test "switching off cancels and publishes the input program" {
     ticks 5
   }
   expect {
-    machineDebugger2[driven] > 0 and machineDebugger2[driven] < 25
-    machineDebugger2[phase] == 99
-    machineDebugger2[tick] > 30
-    machineDebuggerViolations[count] == 0
+    machineDebugger2.driven > 0 and machineDebugger2.driven < 25
+    machineDebugger2.phase == 99
+    machineDebugger2.tick > 30
+    machineDebuggerViolations.count == 0
   }
 }

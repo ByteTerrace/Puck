@@ -8,6 +8,24 @@ namespace Puck.State.Tests;
 /// <see cref="ArenaCapacity.MaxBytes"/> is refused at the row that crossed, before anything is allocated for it; and
 /// the journal reads over its ceiling exactly while the record it holds is past it.</summary>
 public sealed class ArenaByteCeilingLawTests {
+    [Fact]
+    public void VectorGrowthRefusesBeforeChangingTheReservation() {
+        var section = new StateSection(
+            Rows: [new StateRow(Name: ArenaFixture.Name("vectors"), Kind: CellKind.Vector, Space: "space", Domain: StateDomain.Keys.Instance)],
+            Spaces: [new StateSpace(name: ArenaFixture.Name("space"), model: "model", revision: "r1", dimensions: 1024)]
+        );
+        var catalog = StateCatalog.Compile(section: section);
+        var arena = new StateArena(catalog: catalog, options: null, section: section, time: ArenaTime.Origin);
+        Assert.True(arena.TryReserveCells(rowOrdinal: 0, required: 64, reason: out var reason), reason);
+        var layout = arena.Layout;
+        var bytes = arena.Bytes;
+
+        Assert.False(arena.TryReserveCells(rowOrdinal: 0, required: 65, reason: out reason));
+        Assert.Contains("vector", reason, StringComparison.Ordinal);
+        Assert.Same(layout, arena.Layout);
+        Assert.Equal(bytes, arena.Bytes);
+    }
+
     private static StateSection Rings(int count) => new(Rows: [.. Enumerable.Range(
             count: count,
             start: 0

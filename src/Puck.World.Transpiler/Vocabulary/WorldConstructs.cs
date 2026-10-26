@@ -12,6 +12,7 @@ public static partial class WorldConstructs {
     // core grammar the vocabulary never interprets, or a shape with no keyword to key on.
     private static IReadOnlyList<WorldConstructExclusion> Excluded() => [
         new(Keyword: "+=", Reason: "An assignment, so there is no keyword for a reader, a diagnostic or this table to key on; lowers to `addState`."),
+        new(Keyword: "op=", Reason: "Compound assignment: `-=` adds a negated operand; the other operators set an expression, resolving a computed destination key once at the effect."),
         new(Keyword: "=", Reason: "An assignment, so there is no keyword for a reader, a diagnostic or this table to key on; lowers to `setState`."),
         new(Keyword: "basis", Reason: "Core grammar: a document header this vocabulary does not interpret."),
         new(Keyword: "export", Reason: "Core grammar: the module surface, described by `Puck.Transpiler`."),

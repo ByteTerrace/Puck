@@ -351,38 +351,6 @@ public class EmitterSugarTests {
         );
     }
     [Fact]
-    public void ExplicitKindSuffixForcesCompareValueEvenForTwoSimpleStateReads() {
-        var rule = FirstRule(body: """
-            rule "r" {
-                when solitaireFreecell[from] != solitaireFreecell[to] : Int
-                effectRow = 1
-            }
-            """);
-
-        var gate = Assert.IsType<JsonObject>(@object: rule["gate"]);
-
-        Assert.Equal(
-            "compareValue",
-            gate["$type"]?.ToString()
-        );
-        Assert.Equal(
-            "NotEqual",
-            gate["comparison"]?.ToString()
-        );
-        Assert.Equal(
-            "Int",
-            gate["kind"]?.ToString()
-        );
-        Assert.Equal(
-            "solitaireFreecell[from]",
-            WorldExpressionJson.Text(node: gate["left"])
-        );
-        Assert.Equal(
-            "solitaireFreecell[to]",
-            WorldExpressionJson.Text(node: gate["right"])
-        );
-    }
-    [Fact]
     public void KnownFieldWithWrongUnitReportsPuck025() => WorldSources.AssertRefused(
         label: nameof(KnownFieldWithWrongUnitReportsPuck025),
         refusal: new(
@@ -402,7 +370,7 @@ public class EmitterSugarTests {
     public void LiveZoneBracketSelectorPassesThroughAsOneOpaqueOperand() {
         var rule = FirstRule(body: """
             rule "r" {
-                when $zones[solitaireFreecell[from]][solitaireFreecell[card]] == 1
+                when $zones[solitaireFreecell.from][solitaireFreecell.card] == 1
                 effectRow = 1
             }
             """);

@@ -925,15 +925,21 @@ public sealed partial class RuleEvaluator {
                     break;
                 }
             default: {
-                    if (!TryReadValue(
-                        effect: effect,
-                        firing: in firing,
-                        kind: kind,
-                        raw: out raw,
-                        refused: out var refused,
-                        source: ((IValueSourcedEffect)write).Source
-                    )) {
-                        return !refused;
+                    var previousWriteKey = m_host.Scratch.WriteKey;
+                    m_host.Scratch.WriteKey = key;
+                    try {
+                        if (!TryReadValue(
+                            effect: effect,
+                            firing: in firing,
+                            kind: kind,
+                            raw: out raw,
+                            refused: out var refused,
+                            source: ((IValueSourcedEffect)write).Source
+                        )) {
+                            return !refused;
+                        }
+                    } finally {
+                        m_host.Scratch.WriteKey = previousWriteKey;
                     }
 
                     break;

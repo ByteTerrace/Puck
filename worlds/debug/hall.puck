@@ -8,13 +8,15 @@
 //   x 10 .. 20, z 12 .. 35   the lobby on level 0 (the map board, the entrance) and the landing on each level above
 //   x 20 .. 70                the exhibition halls, the gallery's rows running along +X (shapes.md lists them)
 //   x 51 .. 69.7, level 0     the painting wing (paintings.puck); level 1's slab is holed over it at (66, 22.6)
+//   x 51 .. 69.7, level 2     the board game room (boardroom.puck): the chess, Go and Reversi tables
 //
 // Every piece of the shell is a box: walls with door and window openings and floors with stair and shaft holes are
 // unions of boxes, never a subtraction, because the analytic contact provider collides a carved shape as its whole
 // bounding box. The shell, floors, stairs and shaft are solid, so the Moth walks the floors and climbs the stairs (each
 // riser 0.25 m, under her 0.3 m step height) and the chase camera's clearance keeps the eye inside the rooms. The
 // ceiling light strips are emissive and not solid. The debug world imports this file after companion.puck and before
-// chess.puck: the companion takes the highest slot, then the lift car, chess cursor and pieces. `galleryPopulation`
+// chess.puck: below the board game room's stones and discs (go.puck, reversi.puck), which take the population's top
+// slots, and the companion, the lift car takes the next slot, then the chess cursor and pieces. `galleryPopulation`
 // also sets debug.puck's population capacity. shapes.md says how to get around and what each level shows.
 //
 // Creation shapes are authored in a frame turned 180 degrees about up from the world's, so a shape at author
@@ -237,20 +239,47 @@ let carPanelZ = (liftZ + 1.395)
 // variant, so its ceiling strips stop glowing, and darkens the fixtures that level owns (`hallLamps`); the lift
 // car's lamp rides the car whatever its level. A level's switch stands on the west wall at z = switchZ, 1.1 to 1.46 m
 // over the floor, south of the stairs and clear of the device row's engage radius; the context button (`interact`,
-// E or RB on a pad) flips it while seat 1's body stands in the switch's reach box before it.
+// E or RB on a pad) flips it while seat 1's body stands in the switch's reach box before it. The board game room on
+// level 2 has a second plate for level 2's lights inside its doorway, on the partition's east face north of the door:
+// two switches on one circuit, as a room with two doors has.
 let switchZ = 32.5
-let switchReach = map(
-  range(0, 4),
-  k => {
-    level: k
-    x0: 10.3
-    x1: 11.8
-    z0: (switchZ - 0.6)
-    z1: (switchZ + 0.6)
-    y0: (galleryFloor[k] - 0.5)
-    y1: (galleryFloor[k] + 1)
-  }
+let switchPlates = [{ name: "hall-switch", x: 10.3, z: switchZ }, { name: "boardroom-switch", x: 51.3, z: 29.5 }]
+let switchReach = concat(
+  map(
+    range(0, 4),
+    k => {
+      rule: $"hall-switch-{k}"
+      level: k
+      x0: 10.3
+      x1: 11.8
+      z0: (switchZ - 0.6)
+      z1: (switchZ + 0.6)
+      y0: (galleryFloor[k] - 0.5)
+      y1: (galleryFloor[k] + 1)
+    }
+  ),
+  [
+    {
+      rule: "boardroom-switch"
+      level: 2
+      x0: 51.3
+      x1: 52.8
+      z0: 28.9
+      z1: 30.1
+      y0: (galleryFloor[2] - 0.5)
+      y1: (galleryFloor[2] + 1)
+    }
+  ]
 )
+// The board game room (level 2, x 51 .. 69.7): a partition in the hall's wall finish at x 51 .. 51.3, from level 2's
+// floor to the slab above, with a 2.95 m doorway at z 24 .. 28, the painting wing's on level 0 one floor up. The room
+// keeps the hall's window band, blinds, strips and level 2's switch; a section board hangs before the doorway, facing
+// the landing down the hall. chess.puck, go.puck and reversi.puck stand its tables.
+let roomFloor = galleryFloor[2]
+let roomTop = 13.25
+let roomDoorZ0 = 24
+let roomDoorZ1 = 28
+let roomDoorTop = (roomFloor + 2.95)
 // On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
 let hallSwitchStates = [
   { name: "on", indicator: "#FFC46B", glow: 300 }
@@ -342,10 +371,11 @@ let hallLampLevels = concat(
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
 // ceiling, each a neutral spot casting down in a 50-degree cone. Level 3's strips hang only beside its skylights, so
-// with the skylights' blinds down its downlights also run in three rows across the skylights' frames, over its motion
+// with the skylights' blinds down its downlights also run in three rows across the skylights' frames, over its
 // rows. Level 0's columns stop short of the painting wing's partition at x 51 (paintings.puck), which would swallow a
-// fixture on it; the wing hangs its own.
-let hallDownlightColumns = [[27, 39, 49], [27, 39, 51, 63], [27, 39, 51, 63], [27, 39, 51, 63]]
+// fixture on it; the wing hangs its own. Level 2's stop short of the board game room's partition at x 51 too
+// (boardroom.puck), and the room's two columns stand over its tables (x 56.5 and 65), on level 2's switch.
+let hallDownlightColumns = [[27, 39, 49], [27, 39, 51, 63], [27, 39, 49, 56.5, 65], [27, 39, 51, 63]]
 let hallDownlightAisles = concat(hallLightAisles, [[15, 21, 26, 31, 37]])
 let hallDownlights = reduce(
   range(0, 4),
@@ -558,64 +588,106 @@ prototypes {
     }
   }
 
-  // A floor's light switch, on the west wall's inner face beside the stairs, its plate facing +X into the landing:
-  // Its boxes take world bounds over the floor, so one prototype serves every level's placement. A warm indicator is
-  // on; a green locator glow (findable in the dark) is off.
-  for state in hallSwitchStates {
-    prototype $"hall-switch-{state.name}" {
-      document {
-        name: $"hall-switch-{state.name}"
-        schema: "puck.creation.v1"
-        palette [
-          { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
-          { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
-          { color: state.indicator, roughness: 0.4, emissive: state.glow }
-        ]
-        hallBox(
-          label: "plate",
-          x0: 10.3,
-          x1: 10.34,
-          y0: 1.1,
-          y1: 1.46,
-          z0: (switchZ - 0.13),
-          z1: (switchZ + 0.13),
-          slot: 0
-        )
-        hallBox(
-          label: "rocker",
-          x0: 10.34,
-          x1: 10.39,
-          y0: 1.24,
-          y1: 1.32,
-          z0: (switchZ - 0.035),
-          z1: (switchZ + 0.035),
-          slot: 1
-        )
-        hallBox(
-          label: "indicator",
-          x0: 10.34,
-          x1: 10.355,
-          y0: 1.39,
-          y1: 1.42,
-          z0: (switchZ - 0.02),
-          z1: (switchZ + 0.02),
-          slot: 2
-        )
-        textRuns [
-          {
-            text: "LIGHTS"
-            position [-10.302, 1.53, (0 - switchZ)]
-            rotation [0, -0.707107, 0, 0.707107]
-            emHeight: 0.06
-            depth: 0.004
-            mode: "emboss"
-            material: 1
-            align: "center"
-          }
-        ]
+  // A floor's light switch, on a wall's west face with its plate facing +X: the west wall's beside the stairs, and the
+  // board game room's partition beside its door. Its boxes take world bounds over the floor, so one prototype serves
+  // every level's placement. A warm indicator is on; a green locator glow (findable in the dark) is off.
+  for plate in switchPlates {
+    for state in hallSwitchStates {
+      prototype $"{plate.name}-{state.name}" {
+        document {
+          name: $"{plate.name}-{state.name}"
+          schema: "puck.creation.v1"
+          palette [
+            { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
+            { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
+            { color: state.indicator, roughness: 0.4, emissive: state.glow }
+          ]
+          hallBox(
+            label: "plate",
+            x0: plate.x,
+            x1: (plate.x + 0.04),
+            y0: 1.1,
+            y1: 1.46,
+            z0: (plate.z - 0.13),
+            z1: (plate.z + 0.13),
+            slot: 0
+          )
+          hallBox(
+            label: "rocker",
+            x0: (plate.x + 0.04),
+            x1: (plate.x + 0.09),
+            y0: 1.24,
+            y1: 1.32,
+            z0: (plate.z - 0.035),
+            z1: (plate.z + 0.035),
+            slot: 1
+          )
+          hallBox(
+            label: "indicator",
+            x0: (plate.x + 0.04),
+            x1: (plate.x + 0.055),
+            y0: 1.39,
+            y1: 1.42,
+            z0: (plate.z - 0.02),
+            z1: (plate.z + 0.02),
+            slot: 2
+          )
+          textRuns [
+            {
+              text: "LIGHTS"
+              position [(0 - (plate.x + 0.002)), 1.53, (0 - plate.z)]
+              rotation [0, -0.707107, 0, 0.707107]
+              emHeight: 0.06
+              depth: 0.004
+              mode: "emboss"
+              material: 1
+              align: "center"
+            }
+          ]
+        }
       }
     }
   }
+
+  // The board game room's partition, a union of boxes round its doorway, and its section board.
+  prototype "boardroom-shell" {
+    document {
+      name: "boardroom-shell"
+      schema: "puck.creation.v1"
+      palette: hallPalette
+      hallBox(
+        label: "partition-south",
+        x0: 51,
+        x1: 51.3,
+        y0: roomFloor,
+        y1: roomTop,
+        z0: 12.3,
+        z1: roomDoorZ0,
+        slot: hallWall
+      )
+      hallBox(
+        label: "partition-north",
+        x0: 51,
+        x1: 51.3,
+        y0: roomFloor,
+        y1: roomTop,
+        z0: roomDoorZ1,
+        z1: 39.7,
+        slot: hallWall
+      )
+      hallBox(
+        label: "partition-lintel",
+        x0: 51,
+        x1: 51.3,
+        y0: roomDoorTop,
+        y1: roomTop,
+        z0: roomDoorZ0,
+        z1: roomDoorZ1,
+        slot: hallWall
+      )
+    }
+  }
+  sectionSign(name: "boardroom-sign", title: "BOARD GAMES", what: "chess, Go, Reversi: sit at a table with E")
 
   // Each lowered blind board, a creation of its own, so each bakes as one flat group.
   for blind in hallBlindBoards {
@@ -1072,6 +1144,26 @@ placements {
       ]
     }
   }
+  placement "boardroom-switch" {
+    prototype: "boardroom-switch-on"
+    position [0, roomFloor, 0]
+    respond [
+      {
+        when: state(state: hallLights, key: `level2`, comparison: Equal, value: 0)
+        prototypeId: "boardroom-switch-off"
+      }
+    ]
+  }
+  placement "boardroom-shell" {
+    prototype: "boardroom-shell"
+    position [0, 0, 0]
+    solid
+  }
+  placement "boardroom-sign" {
+    prototype: "boardroom-sign"
+    position [50.3, roomFloor, ((roomDoorZ0 + roomDoorZ1) / 2)]
+    yawDegrees: 90
+  }
   // A level's blinds are down while its `hallBlinds` cell is Down and rolled up while it is Up.
   for blind in hallBlindBoards {
     placement $"hall-blind-{blind.level}-{blind.name}" {
@@ -1397,7 +1489,12 @@ spawnPoints: concat(
   map(
     galleryLevels,
     level => { id: $"hall-switch-{level.level}", position [11.1, galleryFloor[level.level], switchZ], yawDegrees: 90 }
-  )
+  ),
+  // Inside the board game room's doorway, facing in (+X), and before its light switch, facing it.
+  [
+    { id: "boardroom", position [53, roomFloor, ((roomDoorZ0 + roomDoorZ1) / 2)], yawDegrees: 270 }
+    { id: "boardroom-switch", position [52.1, roomFloor, 29.5], yawDegrees: 90 }
+  ]
 )
 
 // The car's kit: a sphere of radius 0.1 m that touches nothing in the cab or shaft, with no gravity, so it stands wherever
@@ -1577,13 +1674,13 @@ for k in range(0, 4) {
 // The context button on a landing's CALL plate calls the car there; only seat 1's body (the Moth) presses.
 for pad in liftPads {
   rule $"lift-pad-{pad.level}" {
-    when channel(1, interact) >= 1 and
+    when (channel(1, interact) >= 1 and
       bodyPosition(body, 0, x) > pad.x0 and
       bodyPosition(body, 0, x) < pad.x1 and
       bodyPosition(body, 0, z) > pad.z0 and
       bodyPosition(body, 0, z) < pad.z1 and
       bodyPosition(body, 0, y) > pad.y0 and
-      bodyPosition(body, 0, y) < pad.y1
+      bodyPosition(body, 0, y) < pad.y1)
     mode: Edge
     liftHall[$"level{pad.level}"] = 1
   }
@@ -1592,44 +1689,44 @@ for pad in liftPads {
 // The same press in the car, at the button the body stands before: only a body on the car's floor counts.
 for pad in filter(carPads, p => p.slot < 4) {
   rule $"lift-car-pad-{pad.slot}" {
-    when channel(1, interact) >= 1 and
+    when (channel(1, interact) >= 1 and
       bodyPosition(body, 0, x) > pad.x0 and
       bodyPosition(body, 0, x) < pad.x1 and
       bodyPosition(body, 0, z) > pad.z0 and
       bodyPosition(body, 0, z) < pad.z1 and
       bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
     mode: Edge
     liftCarCall[$"level{pad.slot}"] = 1
   }
 }
 for pad in filter(carPads, p => p.slot == 4) {
   rule "lift-car-pad-open" {
-    when channel(1, interact) >= 1 and
+    when (channel(1, interact) >= 1 and
       bodyPosition(body, 0, x) > pad.x0 and
       bodyPosition(body, 0, x) < pad.x1 and
       bodyPosition(body, 0, z) > pad.z0 and
       bodyPosition(body, 0, z) < pad.z1 and
       bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
     mode: Edge
-    liftLamp[open] = 1
-    schedule liftClock[pulse] in 0.4s
+    liftLamp.open = 1
+    schedule liftClock.pulse in 0.4s
     liftOpenReq = 1
   }
 }
 for pad in filter(carPads, p => p.slot == 5) {
   rule "lift-car-pad-close" {
-    when channel(1, interact) >= 1 and
+    when (channel(1, interact) >= 1 and
       bodyPosition(body, 0, x) > pad.x0 and
       bodyPosition(body, 0, x) < pad.x1 and
       bodyPosition(body, 0, z) > pad.z0 and
       bodyPosition(body, 0, z) < pad.z1 and
       bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
     mode: Edge
-    liftLamp[close] = 1
-    schedule liftClock[pulse] in 0.4s
+    liftLamp.close = 1
+    schedule liftClock.pulse in 0.4s
     liftCloseReq = 1
   }
 }
@@ -1651,9 +1748,9 @@ for k in range(0, 4) {
     when liftAt == (k * liftCells) and liftTarget == liftAt and liftOpenReq == 1
     mode: Level
     liftLevel = k
-    liftDoors[car] = 1
+    liftDoors.car = 1
     liftDoors[$"level{k}"] = 1
-    schedule liftClock[dwell] in 4s
+    schedule liftClock.dwell in 4s
     liftOpenReq = 0
   }
 }
@@ -1667,11 +1764,11 @@ rule "lift-open-moving" {
 rule "lift-shut" {
   when liftCloseReq == 1 and liftTarget == liftAt
   mode: Level
-  liftDoors[car] = 0
+  liftDoors.car = 0
   for k in range(0, 4) {
     liftDoors[$"level{k}"] = 0
   }
-  liftClock[dwell] = $tick
+  liftClock.dwell = $tick
   liftCloseReq = 0
 }
 rule "lift-shut-moving" {
@@ -1684,7 +1781,7 @@ rule "lift-shut-moving" {
 // and then, if none, the nearest below, turning round; going down it does the reverse.
 template liftPick(f, k, dir, lo, hi) {
   rule $"lift-pick-{lo}-{dir}-{f}-{k}" {
-    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock[dwell] and liftOpenReq == 0 and (
+    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and (
         liftHall[$"level{k}"] + liftCarCall[$"level{k}"]
       ) > 0 and liftDir >= lo and liftDir <= hi
     mode: Level
@@ -1716,7 +1813,7 @@ for f in range(0, 4) {
 
 // A stopped car with its dwell over and nothing to serve has no direction.
 rule "lift-idle" {
-  when liftTarget == liftAt and $tick >= liftClock[dwell] and liftOpenReq == 0 and liftDir != 0
+  when liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and liftDir
   mode: Level
   liftDir = 0
 }
@@ -1742,13 +1839,13 @@ for k in map(range(0, 4), i => 3 - i) {
 }
 
 rule "lift-rise" {
-  when liftTarget > liftAt and liftDoors[car] == 0
+  when liftTarget > liftAt and liftDoors.car == 0
   mode: Level
   liftAt += 1
 }
 
 rule "lift-fall" {
-  when liftTarget < liftAt and liftDoors[car] == 0
+  when liftTarget < liftAt and liftDoors.car == 0
   mode: Level
   liftAt = liftAt - 1
 }
@@ -1763,7 +1860,7 @@ rule "lift-ride" {
 rule "lift-close" {
   when liftTarget != liftAt
   mode: Level
-  liftDoors[car] = 0
+  liftDoors.car = 0
   for k in range(0, 4) {
     liftDoors[$"level{k}"] = 0
   }
@@ -1771,10 +1868,10 @@ rule "lift-close" {
 
 // The door buttons' lamps go out after a moment.
 rule "lift-lamps-out" {
-  when $tick >= liftClock[pulse] and liftLamp[open] + liftLamp[close] > 0
+  when $tick >= liftClock.pulse and (liftLamp.open + liftLamp.close) > 0
   mode: Level
-  liftLamp[open] = 0
-  liftLamp[close] = 0
+  liftLamp.open = 0
+  liftLamp.close = 0
 }
 
 // The displays show the level the car is at or last passed (going down, the level it has not yet reached below), and
@@ -1782,7 +1879,7 @@ rule "lift-lamps-out" {
 rule "lift-floor-down" {
   when liftDir < 0
   mode: Level
-  liftFloor = ((liftAt + liftCells) - 1) / liftCells
+  liftFloor = (liftAt + liftCells - 1) / liftCells
 }
 rule "lift-floor" {
   when liftDir >= 0
@@ -1803,14 +1900,14 @@ rule "lift-arrow-down" {
 // A press of the context button inside a switch's reach box flips that level's lights; the reach box stands before the
 // plate, so standing there puts the plate ahead of the body. The edge fires once a press.
 for reach in switchReach {
-  rule $"hall-switch-{reach.level}" {
-    when channel(1, interact) >= 1 and
+  rule $"{reach.rule}" {
+    when (channel(1, interact) >= 1 and
       bodyPosition(body, 0, x) > reach.x0 and
       bodyPosition(body, 0, x) < reach.x1 and
       bodyPosition(body, 0, z) > reach.z0 and
       bodyPosition(body, 0, z) < reach.z1 and
       bodyPosition(body, 0, y) > reach.y0 and
-      bodyPosition(body, 0, y) < reach.y1
+      bodyPosition(body, 0, y) < reach.y1)
     mode: Edge
     hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
   }

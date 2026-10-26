@@ -109,7 +109,7 @@ kits {
 // Keeps every body's `form` the suit register plus two while noclip is on. Rules run before the tick's kit selection,
 // so a toggle moves her kit the tick it lands.
 rule "noclip-form" {
-  when bodyState(each, form) != bodyState(each, suit) + 2 * bodyState(each, noclip)
+  when bodyState(each, form) != (bodyState(each, suit) + 2 * bodyState(each, noclip))
   mode: Level
   forEach: $bodies
   setBodyState(key: $each, state: "form", expression: bodyState(each, suit) + 2 * bodyState(each, noclip))

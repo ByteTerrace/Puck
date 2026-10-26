@@ -1136,6 +1136,17 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Unexpected end of file while expecting expression");
         }
 
+        if (cursor.Current == '`') {
+            if (!TryReadBackquotedName(context, out var quoted)) {
+                throw CreateException(context, "Expected a nonempty backquoted name");
+            }
+            var length = cursor.Offset - startOffset;
+            SkipWhiteSpace(context);
+            return cursor.Current == '('
+                ? ParseCallExpression(context, quoted, startOffset, line, col)
+                : new IdentifierExpressionNode(Name: $"`{quoted}`", Offset: startOffset, Length: length, Line: line, Column: col);
+        }
+
         if (TryMatchKeyword(context: context, keyword: "asset")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var path)) {
@@ -1628,7 +1639,7 @@ public static partial class PuckParser {
             var start = cursor.Offset;
 
             var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: start);
-            var text = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+            var text = ScanOperandSpan(context: context, stopKeywords: null);
 
             if (text.Length == 0) {
                 throw CreateException(context: context, message: $"Expected a value for '{resolved}' in call to '{callName}'");
@@ -1696,7 +1707,7 @@ public static partial class PuckParser {
         cursor.ResetPosition(position: position);
 
         var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: position.Offset);
-        var held = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+        var held = ScanOperandSpan(context: context, stopKeywords: null);
 
         var operand = CreateOperand(column: column, form: DocumentValueForm.Unclassified, length: (cursor.Offset - position.Offset), line: line, offset: position.Offset, text: held);
 

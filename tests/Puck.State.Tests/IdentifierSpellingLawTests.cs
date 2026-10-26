@@ -70,7 +70,7 @@ public sealed class IdentifierSpellingLawTests {
                 ? state.Name.Spelling
                 : null
             ),
-            reserved: ExpressionSpelling.IsReservedName,
+            reserved: static name => name is "and" or "or" or "not",
             rule: static name => (LayeredByExpression(name: name)
                 ? null
                 : IdentifierSpelling.IsName(text: name)

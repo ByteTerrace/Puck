@@ -21,11 +21,11 @@ test "the lift carries a standing Moth from level 0 to level 2" {
     bodyPosition(body, 0, y) > 9
     bodyPosition(body, 0, y) < 9.15
     fact(body, 0, Grounded) == 1
-    liftDoors[car] == 1
-    liftDoors[level0] == 0
-    liftDoors[level1] == 0
-    liftDoors[level2] == 1
-    liftDoors[level3] == 0
+    liftDoors.car == 1
+    liftDoors.level0 == 0
+    liftDoors.level1 == 0
+    liftDoors.level2 == 1
+    liftDoors.level3 == 0
   }
 }
 
@@ -37,11 +37,11 @@ test "a travelling lift closes its car and every landing" {
   expect {
     liftAt > 0
     liftAt < 216
-    liftDoors[car] == 0
-    liftDoors[level0] == 0
-    liftDoors[level1] == 0
-    liftDoors[level2] == 0
-    liftDoors[level3] == 0
+    liftDoors.car == 0
+    liftDoors.level0 == 0
+    liftDoors.level1 == 0
+    liftDoors.level2 == 0
+    liftDoors.level3 == 0
   }
 }
 
@@ -55,9 +55,9 @@ test "the wall call button brings the car to its landing" {
   expect {
     liftAt == 72
     liftLevel == 1
-    liftDoors[car] == 1
-    liftDoors[level0] == 0
-    liftDoors[level1] == 1
+    liftDoors.car == 1
+    liftDoors.level0 == 0
+    liftDoors.level1 == 1
   }
 }
 
@@ -73,11 +73,11 @@ test "a landing call lights its button until the car arrives" {
     ticks 10
   }
   expect {
-    liftHall[level2] == 1
+    liftHall.level2 == 1
     liftDir == 1
     liftArrow == 1
     liftAt > 0
-    liftDoors[car] == 0
+    liftDoors.car == 0
   }
 }
 
@@ -90,9 +90,9 @@ test "the car serves a landing call, clears its light and shows the level" {
   }
   expect {
     liftAt == 144
-    liftHall[level2] == 0
-    liftDoors[level2] == 1
-    liftDoors[car] == 1
+    liftHall.level2 == 0
+    liftDoors.level2 == 1
+    liftDoors.car == 1
     liftFloor == 2
     liftArrow == 1
   }
@@ -109,7 +109,7 @@ test "a car with nothing left to serve loses its direction once its dwell is ove
     liftAt == 144
     liftDir == 0
     liftArrow == 0
-    liftDoors[level2] == 1
+    liftDoors.level2 == 1
   }
 }
 
@@ -121,7 +121,7 @@ test "a floor button in the car lights while its floor is pending and the car ca
     ticks 10
   }
   expect {
-    liftCarCall[level2] == 1
+    liftCarCall.level2 == 1
     liftAt > 0
   }
 }
@@ -135,7 +135,7 @@ test "the Moth rides to the floor she chose" {
   }
   expect {
     liftAt == 144
-    liftCarCall[level2] == 0
+    liftCarCall.level2 == 0
     liftLevel == 2
     bodyPosition(body, 0, y) > 9
     bodyPosition(body, 0, y) < 9.15
@@ -151,10 +151,10 @@ test "door close shuts the doors and door open reopens them" {
     ticks 10
   }
   expect {
-    liftDoors[car] == 0
-    liftDoors[level0] == 0
+    liftDoors.car == 0
+    liftDoors.level0 == 0
     liftAt == 0
-    liftLamp[close] == 1
+    liftLamp.close == 1
   }
 }
 
@@ -170,10 +170,10 @@ test "door open after door close brings the doors back and the lamp goes out" {
     ticks 30
   }
   expect {
-    liftDoors[car] == 1
-    liftDoors[level0] == 1
-    liftLamp[open] == 0
-    liftLamp[close] == 0
+    liftDoors.car == 1
+    liftDoors.level0 == 1
+    liftLamp.open == 0
+    liftLamp.close == 0
   }
 }
 
@@ -189,7 +189,7 @@ test "door close sends the car off before its dwell is over" {
   }
   expect {
     liftAt > 72
-    liftDoors[car] == 0
+    liftDoors.car == 0
   }
 }
 
@@ -205,8 +205,8 @@ test "door open holds the car at a floor past its dwell" {
   }
   expect {
     liftAt == 72
-    liftDoors[car] == 1
-    liftHall[level3] == 1
+    liftDoors.car == 1
+    liftHall.level3 == 1
   }
 }
 
@@ -219,9 +219,9 @@ test "a stop ahead of the car is taken on the way up" {
   }
   expect {
     liftAt == 72
-    liftDoors[level1] == 1
-    liftHall[level1] == 0
-    liftHall[level3] == 1
+    liftDoors.level1 == 1
+    liftHall.level1 == 0
+    liftHall.level3 == 1
   }
 }
 
@@ -235,8 +235,8 @@ test "the car goes on to the higher call once it has served the lower one" {
   expect {
     liftAt == 216
     liftLevel == 3
-    liftHall[level3] == 0
-    liftDoors[level3] == 1
+    liftHall.level3 == 0
+    liftDoors.level3 == 1
   }
 }
 
@@ -251,9 +251,9 @@ test "the car serves its direction first and then turns round" {
   }
   expect {
     liftAt == 72
-    liftHall[level2] == 1
-    liftHall[level0] == 1
-    liftHall[level1] == 0
+    liftHall.level2 == 1
+    liftHall.level0 == 1
+    liftHall.level1 == 0
   }
 }
 
@@ -268,8 +268,8 @@ test "after the upper call it comes back down for the one behind it" {
   }
   expect {
     liftAt == 144
-    liftDoors[level2] == 1
-    liftHall[level0] == 1
+    liftDoors.level2 == 1
+    liftHall.level0 == 1
     liftDir == 1
   }
 }
@@ -286,10 +286,10 @@ test "then it turns round and ends at the lowest level" {
   expect {
     liftAt == 0
     liftLevel == 0
-    liftHall[level0] == 0
-    liftHall[level1] == 0
-    liftHall[level2] == 0
-    liftDoors[level0] == 1
+    liftHall.level0 == 0
+    liftHall.level1 == 0
+    liftHall.level2 == 0
+    liftDoors.level0 == 1
     liftDir == 0
   }
 }
@@ -301,9 +301,9 @@ test "a call at the level the car is standing at only reopens and holds its door
   }
   expect {
     liftAt == 0
-    liftHall[level0] == 0
-    liftDoors[car] == 1
-    liftDoors[level0] == 1
+    liftHall.level0 == 0
+    liftDoors.car == 1
+    liftDoors.level0 == 1
   }
 }
 
@@ -312,12 +312,12 @@ test "the lobby starts dark and the levels above lit" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 0
-    hallLights[level1] == 1
-    hallLights[level2] == 1
-    hallLights[level3] == 1
-    hallLamps[level0] == 0
-    hallLamps[stairs] == 800
+    hallLights.level0 == 0
+    hallLights.level1 == 1
+    hallLights.level2 == 1
+    hallLights.level3 == 1
+    hallLamps.level0 == 0
+    hallLamps.stairs == 800
   }
 }
 
@@ -329,9 +329,9 @@ test "the context button at the lobby switch turns its lights on" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 1
-    hallLamps[level0] == 5000
-    hallLights[level1] == 1
+    hallLights.level0 == 1
+    hallLamps.level0 == 5000
+    hallLights.level1 == 1
   }
 }
 
@@ -345,8 +345,8 @@ test "a second press turns them off again" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 0
-    hallLamps[level0] == 0
+    hallLights.level0 == 0
+    hallLamps.level0 == 0
   }
 }
 
@@ -358,8 +358,8 @@ test "the context button away from a switch changes nothing" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 0
-    hallLights[level1] == 1
+    hallLights.level0 == 0
+    hallLights.level1 == 1
   }
 }
 
@@ -371,10 +371,10 @@ test "the level 2 switch flips only level 2" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 0
-    hallLights[level1] == 1
-    hallLights[level2] == 0
-    hallLights[level3] == 1
+    hallLights.level0 == 0
+    hallLights.level1 == 1
+    hallLights.level2 == 0
+    hallLights.level3 == 1
   }
 }
 
@@ -385,10 +385,10 @@ test "writing a level's cell, as gallery.lights does, switches it" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 1
-    hallLamps[level0] == 5000
-    hallLights[level1] == 0
-    hallLamps[stairs] == 0
+    hallLights.level0 == 1
+    hallLamps.level0 == 5000
+    hallLights.level1 == 0
+    hallLamps.stairs == 0
   }
 }
 
@@ -403,8 +403,8 @@ test "the lobby's blinds start down and stop the sight line through a window" {
     ticks 30
   }
   expect {
-    hallBlinds[level0] == 1
-    hallBlinds[level3] == 1
+    hallBlinds.level0 == 1
+    hallBlinds.level3 == 1
     los(body, 0, body, 8) == 0
   }
 }
@@ -420,8 +420,8 @@ test "the lobby switch leaves its blinds down" {
     ticks 30
   }
   expect {
-    hallLights[level0] == 1
-    hallBlinds[level0] == 1
+    hallLights.level0 == 1
+    hallBlinds.level0 == 1
     los(body, 0, body, 8) == 0
   }
 }
@@ -434,8 +434,8 @@ test "raising the lobby's blinds, as gallery.blinds does, opens the sight line" 
     ticks 30
   }
   expect {
-    hallBlinds[level0] == 0
-    hallBlinds[level1] == 1
+    hallBlinds.level0 == 0
+    hallBlinds.level1 == 1
     los(body, 0, body, 8) == 1
   }
 }
@@ -450,7 +450,7 @@ test "lowering them again stops it" {
     ticks 30
   }
   expect {
-    hallBlinds[level0] == 1
+    hallBlinds.level0 == 1
     los(body, 0, body, 8) == 0
   }
 }

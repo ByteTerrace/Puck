@@ -66,8 +66,9 @@ export and play always validate.
 
 - **Cartridge rules admit what world rules refuse.** `repeat <n> as <name> { }`
   with `break`, call-form gates (`key(<button>, held|pressed|released)`) and
-  every compound assignment are legal in a cartridge rule; in a world document
-  they are **PUCK037**, **PUCK038** and **PUCK039**. `key(...)` is a gate only,
+  every compound assignment are legal in a cartridge rule. World rules also
+  admit compound assignment; loops and cartridge call-form gates are
+  **PUCK037** and **PUCK038** there. `key(...)` is a gate only,
   not an operand. A `repeat` index name must be a declared variable.
 - **Rule bodies are step trees** (`set`/`if`/`repeat`/`break`/`map`/`blit`/
   `play`/`stop`/`save`/`load`). An operand is a `Puck.State.ExpressionProgram`;

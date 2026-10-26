@@ -2286,7 +2286,7 @@ export type ShapeNonNullable8 = {
   name: string;
 };
 
-export type ShapeNonNullable9 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
+export type ShapeNonNullable9 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member" | "And" | "Or" | "Not";
 
 /**
  * One numeric key of a Sort, in its declared precedence order.
@@ -5256,7 +5256,7 @@ export type WorldEffectPose = {
 };
 
 /**
- * Places a body upright at a live cell of an anchored topology, plus an authored offset.
+ * Places a body at a live cell of an anchored topology, plus an authored offset, upright or rolled.
  */
 export type WorldEffectPoseCell = {
   $type?: "poseCell";
@@ -5280,6 +5280,10 @@ export type WorldEffectPoseCell = {
    * Whether the body moves there as continuous motion, which a client interpolates and which keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.
    */
   glide?: boolean;
+  /**
+   * The roll a teleport stands the body at, about its forward axis: 180 lays it upside down, as a rule turning a two-faced piece over does. A glide keeps the body's attitude and ignores it.
+   */
+  rollDegrees?: number;
 };
 
 /**

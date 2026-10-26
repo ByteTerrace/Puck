@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>The infix spelling is syntax over the IR: C precedence parses to the instructions an author would write
+/// <summary>The infix spelling is syntax over the IR: shared operator precedence parses to the instructions an author would write
 /// by hand, and every instruction prints to a spelling that parses back to itself with only the parentheses
 /// precedence needs. The world document's converter and schema facts live in <c>tests/Puck.World.Schema.Tests</c>.</summary>
 public sealed class ExpressionSpellingLawTests {
@@ -28,17 +28,15 @@ public sealed class ExpressionSpellingLawTests {
         _ => (char.ToLowerInvariant(c: token.Operation.ToString()[0]) + token.Operation.ToString()[1..]),
     };
 
-    // Printing is the inverse of parsing even where a name would bind differently bare: a row sharing the fold
-    // binder's name, and a row named like a function the parser reads before it considers a row.
+    // A row sharing the fold binder's name stays quoted; function names bind as ordinary values outside calls.
     [Theory]
     [InlineData("sum(samples, x -> `x`)")]
     [InlineData("sum(samples, x -> `x`[k] + x)")]
-    [InlineData("`sum` + 1")]
-    [InlineData("`count` * `any`")]
-    [InlineData("`dot` - `boardShift`")]
+    [InlineData("minimum + sign")]
+    [InlineData("sum(samples, count -> count)")]
     // A vector literal keyword opens a literal only before a parenthesis, so a row named like one prints bare.
     [InlineData("vector + embed")]
-    public void ANameThatWouldBindDifferentlyBareKeepsItsBackquotes(string text) {
+    public void NamesPrintWithOnlyTheQuotesBindingNeeds(string text) {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
@@ -72,12 +70,11 @@ public sealed class ExpressionSpellingLawTests {
             expected: program.Subprograms.Select(selector: static subprogram => subprogram.Instructions)
         );
     }
-    // A fold binder is one plain variable: the parser refuses a dotted, reserved, or function-named one, and the
+    // A fold binder is one plain variable: the parser refuses a dotted or reserved one, and the
     // printer refuses a program carrying one rather than print text the parser would reject.
     [Theory]
     [InlineData("sum(samples, a.b -> a.b)")]
-    [InlineData("sum(samples, count -> 1)")]
-    [InlineData("sum(samples, minimum -> 1)")]
+    [InlineData("sum(samples, and -> 1)")]
     public void ABinderTheParserWouldRefuseNeitherParsesNorPrints(string text) {
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out var error,
@@ -449,11 +446,11 @@ public sealed class ExpressionSpellingLawTests {
     [InlineData("(a + b) * c", "a", "b", "add", "c", "multiply")]
     [InlineData("a - b - c", "a", "b", "subtract", "c", "subtract")]
     [InlineData("a << 2 & b", "a", "2", "shiftLeft", "b", "bitAnd")]
-    [InlineData("a == b | c", "a", "b", "equal", "c", "bitOr")]
+    [InlineData("a == b | c", "a", "b", "c", "bitOr", "equal")]
     [InlineData("a >>> 1 ^ b", "a", "1", "shiftRightLogical", "b", "bitXor")]
     [InlineData("a % 3 >= b", "a", "3", "remainder", "b", "greaterOrEqual")]
     [Theory]
-    public void PrecedenceFollowsC(string text, params string[] expected) {
+    public void PrecedenceFollowsTheOperatorTable(string text, params string[] expected) {
         Assert.Equal(
             expected,
             Parse(text: text).Select(selector: Spell)

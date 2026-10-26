@@ -263,7 +263,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case CallExpressionNode call: {
-                        m_builder.Append(value: call.Name);
+                        m_builder.Append(value: call.Name == "not" ? "`not`" : call.Name);
                         ArgumentList(
                             arguments: call.Arguments,
                             level: level,
@@ -322,6 +322,7 @@ public static partial class PuckPrinter {
                     }
                 case UnaryExpressionNode unary: {
                         m_builder.Append(value: unary.Operator);
+                        if (unary.Operator == "not") { m_builder.Append(value: ' '); }
                         Operand(
                             level: level,
                             operand: unary.Operand,
@@ -345,7 +346,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case OperandExpressionNode operand: {
-                        m_builder.Append(value: OperandKeys(text: operand.Text));
+                        m_builder.Append(value: operand.Text);
 
                         break;
                     }

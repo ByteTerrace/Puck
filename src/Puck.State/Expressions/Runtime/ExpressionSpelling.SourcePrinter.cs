@@ -17,7 +17,7 @@ public static partial class ExpressionSpelling {
         Write(depth: 0, node: syntax);
         return into.ToString();
 
-        void Write(SyntaxNode node, int depth) {
+        void Write(SyntaxNode node, int depth, int parentLevel = 0) {
             if (depth > MaxNesting) { throw new ArgumentException(message: "The source tree exceeds the nesting bound.", paramName: nameof(syntax)); }
             switch (node) {
                 case Literal literal: into.Append(value: literal.Value.ToString(provider: CultureInfo.InvariantCulture)); break;
@@ -33,13 +33,26 @@ public static partial class ExpressionSpelling {
                 case SourceAccess access:
                     Write(access.Target, (depth + 1)); into.Append(value: '.').Append(value: access.Member); break;
                 case Unary unary:
-                    into.Append(value: unary.Operator).Append(value: '('); Write(unary.Operand, (depth + 1)); into.Append(value: ')'); break;
+                    var groupedNot = unary.Operator == "not" && Level(symbol: "not") < parentLevel;
+                    if (groupedNot) { into.Append(value: '('); }
+                    into.Append(value: unary.Operator);
+                    if (unary.Operator == "not") { into.Append(value: ' '); }
+                    Write(unary.Operand, (depth + 1), unary.Operator == "not" ? Level(symbol: "not") : PrimaryLevel);
+                    if (groupedNot) { into.Append(value: ')'); }
+                    break;
                 case Binary binary:
-                    into.Append(value: '('); Write(binary.Left, (depth + 1)); into.Append(value: ' ').Append(value: binary.Operator).Append(value: ' ');
-                    Write(binary.Right, (depth + 1)); into.Append(value: ')'); break;
+                    var binding = Level(symbol: binary.Operator);
+                    if (binding < parentLevel) { into.Append(value: '('); }
+                    Write(binary.Left, (depth + 1), binding); into.Append(value: ' ').Append(value: binary.Operator).Append(value: ' ');
+                    Write(binary.Right, (depth + 1), binding + 1);
+                    if (binding < parentLevel) { into.Append(value: ')'); }
+                    break;
                 case Ternary ternary:
-                    into.Append(value: '('); Write(ternary.Condition, (depth + 1)); into.Append(value: " ? "); Write(ternary.WhenTrue, (depth + 1));
-                    into.Append(value: " : "); Write(ternary.WhenFalse, (depth + 1)); into.Append(value: ')'); break;
+                    if (parentLevel > 0) { into.Append(value: '('); }
+                    Write(ternary.Condition, (depth + 1), 1); into.Append(value: " ? "); Write(ternary.WhenTrue, (depth + 1));
+                    into.Append(value: " : "); Write(ternary.WhenFalse, (depth + 1));
+                    if (parentLevel > 0) { into.Append(value: ')'); }
+                    break;
                 case SourceCall call:
                     into.Append(value: call.Name).Append(value: '(');
                     for (var index = 0; (index < call.Arguments.Count); index++) {

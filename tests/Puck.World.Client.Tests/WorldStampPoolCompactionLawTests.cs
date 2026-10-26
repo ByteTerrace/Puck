@@ -367,6 +367,52 @@ public sealed class WorldStampPoolCompactionLawTests {
             group.Slot
         );
     }
+    // A small creation takes a compact registration and a creation past the compact shape count a full one, after every
+    // compact range; once every compact registration is taken a small creation takes a full one too; and a body whose
+    // creation grows past the compact shape count leaves its compact registration for a full one.
+    [Fact]
+    public void SmallCreationsTakeCompactRegistrationsFirstAndLargeOnesFullOnes() {
+        var small = Creation(Shape(id: 0));
+        var large = Creation(shapes: Enumerable.Range(start: 0, count: (WorldPlacementPolicy.MaxCompactStampShapes + 1)).Select(selector: id => Shape(id: id)).ToArray()) with { Id = "large" };
+        var firstFull = (SlotBase + WorldStampPool.RootSlotOffset(index: WorldPlacementPolicy.MaxCompactStampRegistrations));
+
+        Assert.True(condition: WorldStampPool.FitsCompact(document: small.EngineDocument));
+        Assert.False(condition: WorldStampPool.FitsCompact(document: large.EngineDocument));
+        Assert.Equal(expected: (WorldPlacementPolicy.MaxCompactStampRegistrations * WorldStampPool.CompactSlotsPerPlacement), actual: (firstFull - SlotBase));
+        Assert.Equal(
+            expected: ((WorldPlacementPolicy.MaxCompactStampRegistrations * WorldStampPool.CompactSlotsPerPlacement) + (WorldPlacementPolicy.MaxStampRegistrations * WorldStampPool.SlotsPerPlacement)),
+            actual: WorldStampPool.DynamicSlotCount
+        );
+
+        var pool = new WorldStampPool();
+
+        pool.Reconcile(
+            placements: [],
+            creations: [small, large],
+            dynamics: [],
+            bodyStamps: [
+                new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: small, Scale: 1f, Look: WorldLook.Implicit),
+                new WorldStampPool.BodyStamp(BodyIndex: 1, Creation: large, Scale: 1f, Look: WorldLook.Implicit),
+            ]
+        );
+        var slots = Emit(pool: pool).Instances.Select(selector: instance => instance.Slot).ToArray();
+
+        Assert.Equal(expected: (SlotBase + 1), actual: slots[0]);
+        Assert.Equal(expected: (firstFull + 1), actual: slots[1]);
+
+        // Every compact registration taken, the next small body takes the first full one.
+        var crowd = new WorldStampPool();
+
+        Reconcile(crowd, small, Enumerable.Range(start: 0, count: (WorldPlacementPolicy.MaxCompactStampRegistrations + 1)).ToArray());
+        Assert.Equal(expected: (firstFull + 1), actual: Emit(pool: crowd).Instances[^1].Slot);
+
+        // A body whose creation grows past the compact shape count takes a full registration.
+        var growing = new WorldStampPool();
+
+        Reconcile(growing, small, 0);
+        Reconcile(growing, large, 0);
+        Assert.Equal(expected: (firstFull + 1), actual: Emit(pool: growing).Instances[0].Slot);
+    }
     [Fact]
     public void RemovingAnEarlierBodyKeepsTheSurvivorsTransformAddress() {
         var pool = new WorldStampPool();
@@ -387,7 +433,7 @@ public sealed class WorldStampPoolCompactionLawTests {
         var survivorSlot = before.Instances[1].Slot;
 
         Assert.Equal(
-            ((SlotBase + WorldStampPool.SlotsPerPlacement) + 1),
+            ((SlotBase + WorldStampPool.CompactSlotsPerPlacement) + 1),
             survivorSlot
         );
 

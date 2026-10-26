@@ -18,6 +18,8 @@ public static partial class ExpressionArithmetic {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
         switch (operation) {
+            case ExpressionOp.And: value = left != 0L && right != 0L ? 1L : 0L; return true;
+            case ExpressionOp.Or: value = left != 0L || right != 0L ? 1L : 0L; return true;
             case ExpressionOp.Add:
                 return Narrow(
                 value: out value,
@@ -206,6 +208,7 @@ public static partial class ExpressionArithmetic {
                 if (operand == long.MinValue) { return false; }
                 value = Math.Abs(value: operand); return true;
             case ExpressionOp.Sign: value = Math.Sign(value: operand); return true;
+            case ExpressionOp.Not: value = operand == 0L ? 1L : 0L; return true;
         }
         if (kind != CellKind.Int) { return false; }
         var bits = ((ulong)operand);

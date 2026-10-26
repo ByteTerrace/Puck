@@ -36,6 +36,6 @@ state {
 rule "understand" {
   forEach: saidStatus
   mode: Edge
-  when saidStatus[$each] == 3
-  transform nearest(from: intentVectors, query: saidVectors[$each], into: heard, k: 1, threshold: 0.6)
+  when saidStatus.$each == 3
+  transform nearest(from: intentVectors, query: saidVectors.$each, into: heard, k: 1, threshold: 0.6)
 }

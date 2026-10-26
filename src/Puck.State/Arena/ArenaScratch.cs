@@ -16,6 +16,9 @@ namespace Puck.State;
 /// exports, or checkpoints it. It is not thread-safe; it serves the one evaluation its owner has in flight.</para>
 /// </remarks>
 public sealed class ArenaScratch {
+    /// <summary>Gets or sets the destination key while a state write evaluates its value.</summary>
+    public CellKey WriteKey { get; set; }
+
     private static int SlotCount;
 
     private object?[] m_pools = new object?[8];

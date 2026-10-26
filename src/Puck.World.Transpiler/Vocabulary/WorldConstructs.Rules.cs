@@ -56,7 +56,7 @@ public static partial class WorldConstructs {
     private static IReadOnlyList<WorldConstruct> Rules() => [
         new(
             DocumentMember: "rules[]",
-            Grammar: "rule \"name\" { [when Gate] [mode: …] [forEach: …] [local …] [decision { … }] <effect>* }",
+            Grammar: "rule \"name\" { [local …]* [when Gate] [mode: …] [forEach: …] [decision { … }] <effect>* }",
             Keyword: "rule",
             Members: [
                 QuotedName(key: "name", summary: "The rule's name, which a group claims it by and a trace reports."),
@@ -208,7 +208,7 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "rules[].gate",
             Enclosing: "rule",
-            Grammar: "when Operand cmp Operand [: Int|Fixed] | when Gate and|or Gate | when not Gate | when (Gate)",
+            Grammar: "when <expression>",
             Keyword: "when",
             Members: [
                 new(
@@ -217,13 +217,13 @@ public static partial class WorldConstructs {
                     Name: "gate",
                     Position: WorldMemberPosition.Header,
                     Required: true,
-                    Summary: "The predicate; a second `when` in one rule or option is refused."
+                    Summary: "The condition expression; a second `when` in one rule or option is refused."
                 ),
             ],
             Shape: WorldConstructShape.Statement,
             Snippet: "when ${1:condition}",
             Sugar: new(
-                Condition: "no `compareValue` in it opens its left operand with `(` and no `all`/`any` in it carries fewer than two children",
+                Condition: "its predicates have an expression spelling that preserves their document shape",
                 Open: true,
                 Fallback: "`gate: <call-form>`, an ordinary rule-body property"
             ),
@@ -235,20 +235,20 @@ public static partial class WorldConstructs {
             Grammar: "local name = <operand>",
             Keyword: "local",
             Members: [
-                RowName(summary: "The local's name, read bare in every operand after it."),
+                RowName(summary: "The local's lexical name, read bare in later expressions and bracket indices. Function names are functions only in calls."),
                 new(
                     DocumentKeys: ["expression"],
                     Kind: WorldMemberKind.Operand,
                     Name: "expression",
                     Position: WorldMemberPosition.Header,
                     Required: true,
-                    Summary: "What the local evaluates to, once per firing, before any effect runs."
+                    Summary: "What the local evaluates to, in declaration order before the gate and effects."
                 ),
             ],
             Shape: WorldConstructShape.Statement,
             Snippet: "local ${1:name} = ${2:expression}",
             Sugar: new(AdmittedKeys: ["kind"], Fallback: "the explicit `locals` array", Open: true),
-            Summary: "One working value the rule computes before its effects."
+            Summary: "One working value declared before the rule's gate and effects; later declarations are refused."
         ),
         new(
             DocumentMember: "rules[].decision",

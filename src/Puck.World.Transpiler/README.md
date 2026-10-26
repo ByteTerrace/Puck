@@ -222,9 +222,12 @@ grammar's own quoting, which has no escape: a state row or cell key cannot hold 
 holding one is written as an interpolated string instead.
 
 A bare expression or a computed key resolves compile-time bindings before it names rows, so a `let` that
-shares a row's name shadows the row: give the binding another name. One bare word that is a key, as a member's
-whole value or as the whole of a bracket, is that key and reads no binding; a key a binding computes is an atom,
-`deck[$"{card}"]`, and an index a binding computes is an expression, `deck[(card)]`. One bare word in a name's
+shares a row's name shadows the row: give the binding another name. `row.key` names a literal cell key;
+`row[expression]` evaluates its expression. Thus `deck[card]` reads the lexical value `card`, and an unknown
+bare name is an error. A string names a literal key: `deck["card"]`. Read a local by its name, including
+inside brackets; a function name denotes a function only when followed by a call. The old `local(name)`,
+`row[(expression)]` wrapper and `row[slot[$value]]` workaround are refused with their replacements.
+One bare word in a name's
 position reads a binding only where
 the binding holds a name or a list of names, and a word an enumeration member admits is that word even where a
 binding shares it. `d["name"]` over a compile-time binding is a compile-time read whose value is the operand.
@@ -249,27 +252,15 @@ per element, rather than n hand-written blocks. They are the core's, not this vo
 
 ### `when` gates
 
-```puck
-when Operand cmp Operand [ (":"|"as") (Int|Fixed) ]     // cmp: == != < <= > >=
-when Gate and Gate and Gate                              // -> one flat `all`
-when Gate or Gate                                         // -> one flat `any`
-when not Gate
-when (Gate)                                                // one opaque child; never flattened into its parent
-```
+`when`, `if`, and `expect` take ordinary expressions. Numeric zero and absence are false;
+nonzero values are true. `and`, `or`, and `not` return Int 0/1; `and` and `or` skip an
+unneeded right operand. Their precedence is below comparisons, while bitwise operators
+bind above comparisons. See the [operator table](../../docs/reference/dsl.md#comparisons-are-1-or-0).
 
-`and`/`or`/`not`/`as`/`when` are reserved only inside a gate. An `Operand` is opaque text handed whole to
-`Puck.State.ExpressionSpelling`—the DSL never re-implements that grammar; `row`/`row[key]`/`row.key` reads,
-`$name:segment` reserved channels, and a `$zones[...]`-folded selector all pass through untouched. A bare comparison between two
-single state reads lowers to `compareState`; anything else, or an explicit `: Int`/`: Fixed`/`as Int`/`as Fixed`
-suffix (which always forces it, even for two simple reads), lowers to `compareValue`. The suffix binds to the one
-comparison it follows, never to an enclosing `and`/`or` chain—but printed bare at the end of a chain it reads as
-though it scoped the whole thing, so wrap the annotated comparison in its own `(Operand cmp Operand : Kind)` (the
-generic `when (Gate)` grouping above) whenever it sits beside `and`/`or`. An unsuffixed comparison lowers with no
-`kind`, and the engine infers one the way it infers a local's: `Int`, unless both sides are constants and one holds a
-fraction. `WorldDecompiler` prints a declared kind wrapped, `(left cmp right : Kind)`, and a kindless comparison bare;
-a kindless `compareValue` over two plain row reads has no bare spelling, since that text lowers to `compareState`,
-so it prints call-form.
-
+The emitter chooses `compareState` for a simple state comparison and `compareValue` for
+an expression comparison. Numeric kinds are inferred; `: Int` and `as Int` are refused.
+The decompiler prints expressions, retaining the document call form only where sugar
+would change the document's structure.
 ### Rules
 
 A rule's own spelling, the effect statements its body admits, and the decision block's members are rows of
@@ -286,8 +277,10 @@ decompiles the same way a single branch does, with no separate case anywhere. A 
 
 A compile-time `for` inside a rule or step body, or inside any effect list, is unrolled before the body lowers
 (`DocumentLowering.ExpandBody`): the rule carries the locals and effects each iteration produced, lowered under that
-iteration's bindings, so the rule compiler and the work sheet see only ordinary statements. A local declared in a
-loop takes an interpolated name (`local $"fit{t}"`) and is read by its resolved name anywhere in the rule. A
+iteration's bindings, so the rule compiler and the work sheet see only ordinary statements. Locals evaluate in
+declaration order before the gate and effects. A local after a gate or effect is refused; move the declaration
+before the first gate or effect. A local declared in a loop takes an interpolated name (`local $"fit{t}"`) and
+later statements read its resolved name. A
 `when`, a `decision` or a nested `rule` inside such a loop is PUCK114.
 
 `row[key]` (a *row reference*) is read as one span—a name plus zero or more adjacent `[...]` groups—and
@@ -300,6 +293,11 @@ the `s` unit (`ValueSeconds`), or opaque operand text the lowering stage classif
 `FromState`+`FromKey` / a verbatim `Expression`.
 
 ### Decisions
+
+Compound assignment is admitted in world rules. `-=` adds the negated operand,
+preserving `+=`'s envelope behavior. `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`
+and `>>=` set the corresponding expression's value. A computed destination key
+is evaluated once when that effect runs, after all preceding effects.
 
 `decision`, `option`, `interrupt` and `onNoChoice` are rows of
 [the construct table](../../docs/reference/world-vocabulary.md). `periodSeconds` and each option's `score` are
@@ -721,7 +719,7 @@ no text that recompiles to a null comparand.
 ## Diagnostics
 
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
-state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word on a comparison), PUCK006 (never
+state read), PUCK005 (an unknown declared kind), PUCK006 (never
 emitted: a `local`'s kind is inferred, never required), PUCK007 (`local` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
 on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
@@ -730,8 +728,7 @@ name or a missing `score`), PUCK014 (`onFailure` used more than once on one `tra
 flag and an explicit `solid { }`), PUCK029 (`decision` missing `periodSeconds`), PUCK035 (basis/import composition
 refused), PUCK036 (a statement inside `prototypes`/`placements` that the section's grammar cannot carry), PUCK037
 (`repeat`/`break`—not `if`, which lowers to the conditional effect above—has nothing to lower onto in this
-vocabulary's straight-line rule body), PUCK039 (a compound-assignment operator; this vocabulary carries only
-`setState`/`addState`), PUCK100 (a rule whose name position is a bound template parameter's own identifier, so
+vocabulary's straight-line rule body), PUCK100 (a rule whose name position is a bound template parameter's own identifier, so
 every instantiation would mint the same name — write `rule $"…{param}"` instead), PUCK103 (a `transform` written
 with a result label; the destination is the call's own argument, so write `transform call(...)`), PUCK104 (a
 `test` declaration's own shape — a body member that is not `given`/`when`/`expect`, one of those twice or out of
@@ -950,8 +947,8 @@ back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) sp
 line that would pass `PuckPrinter.LineWidth` (120) broken after its operators or inside its brackets — except for what the parse
 carries in as trivia: every comment keeps its line, a run of blank lines keeps its length, an array, object or
 argument list keeps the line breaks and the line-end commas its author wrote, a numeric literal keeps its base, and
-a name keeps its bare-or-quoted spelling. A cell key prints through `Puck.State`'s own fold, so an effect target
-reads the way the gate above it does. One comment moves: one written inside a construct's header, between its
+a name keeps its bare-or-quoted spelling. Indexed targets retain their parsed operands, so printing never
+reinterprets a bracket expression as a literal key. One comment moves: one written inside a construct's header, between its
 first word and its `{`, since a `//` left in place would swallow the brace — it prints above the statement, and a
 `/* */` written after the header's name prints right after the first word. A document that does not parse has no tree to
 print, so the editor keeps what is being typed and `puck format` reports the failure rather than writing a file.
