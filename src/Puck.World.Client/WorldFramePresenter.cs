@@ -1630,7 +1630,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
-        var probeDressStart = System.Diagnostics.Stopwatch.GetTimestamp();
         m_transforms = transforms;
         AdoptStaticField(wait: TickLocked);
 
@@ -1668,7 +1667,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         // The authored `markers` section's candidate instances, resolved once for every seat's own cull below.
         ComposeMarkerCandidates(definition: m_client.Definition);
-        var probeHead = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var quality = ViewQuality();
 
@@ -2064,7 +2062,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
         // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
         m_viewports.PublishFirstView(camera: m_views[0].Camera);
-        var probeFilm = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // The camera views film this frame as views of it after its own, so they render from the world's residency.
         m_frameViews.Clear();
@@ -2100,8 +2097,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             transforms: transforms
         );
 
-        var probeEnv = System.Diagnostics.Stopwatch.GetTimestamp();
-        try {
         var lighting = m_environment.Resolve(
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
@@ -2174,14 +2169,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
 
         return m_dressedFrame;
-        } finally {
-            var probeEnd = System.Diagnostics.Stopwatch.GetTimestamp();
-            var envMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeEnv, endingTimestamp: probeEnd).TotalMilliseconds;
-            var allMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeDressStart, endingTimestamp: probeEnd).TotalMilliseconds;
-            var filmMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeFilm, endingTimestamp: probeEnv).TotalMilliseconds;
-            var headMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeDressStart, endingTimestamp: probeHead).TotalMilliseconds;
-            if (allMs > 4.0) { Console.Error.WriteLine($"[probe.pdress] all={allMs:0.0} head={headMs:0.0} filmToEnv={filmMs:0.0} envAndTail={envMs:0.0}"); }
-        }
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {

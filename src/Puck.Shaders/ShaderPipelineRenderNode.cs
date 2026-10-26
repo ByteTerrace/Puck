@@ -1628,13 +1628,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         // A reload, a row upsert, a resize or a recount replaces the graph; it is not a step, so a paused frame builds and
         // installs it too, rendering nothing.
         m_advances++;
-        var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
         EnsureBuild();
-        var probeEnsure = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeStart).TotalMilliseconds;
         InstallPending();
         InstallPendingPreview();
-        var probeInstall = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeStart).TotalMilliseconds;
-        if (probeInstall > 2.0) { Console.Error.WriteLine($"[probe.node] {m_name} ensure={probeEnsure:0.0} install={probeInstall:0.0}"); }
         // Nothing is installed yet: the first graph, or the installed pipeline rebuilt after a device loss, is building.
         if (
             (m_pipeline is null) ||
@@ -1708,7 +1704,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var exportWritten = false;
         var exportValue = 0UL;
 
-        var probeRender = System.Diagnostics.Stopwatch.GetTimestamp();
         try {
             return RenderFrame(
                 context: in context,
@@ -1717,8 +1712,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 exported: exported
             );
         } finally {
-            var probeMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeRender).TotalMilliseconds;
-            if (probeMs > 4.0) { Console.Error.WriteLine($"[probe.render] {m_name} {probeMs:0.0}"); }
             if (exported is not null) {
                 m_export!.EndWrite(
                     image: exported,

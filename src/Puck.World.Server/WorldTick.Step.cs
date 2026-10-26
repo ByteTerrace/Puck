@@ -581,10 +581,7 @@ public sealed partial class WorldTick {
         SweepDeadlines(tick: tick);
         // Placement response sweep — AFTER StepFields, so a response condition reads this tick's own lattice writes;
         // a state-driven prototype swap for a placement carrying a Respond trait (see WorldPlacementResponse).
-        var probeSweep = System.Diagnostics.Stopwatch.GetTimestamp();
         SweepPlacementResponses(tick: tick);
-        var probeSweepMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeSweep).TotalMilliseconds;
-        if (probeSweepMs > 2.0) { Host.Output.Narrate(channel: "probe", text: $"[probe.sweep] {probeSweepMs:0.0}"); }
         // Placement deal sweep — after the rule frame has folded, so a cell a rule wrote this tick deals on this
         // tick; each dealt template's children follow its row (see WorldPlacementDeal).
         SweepPlacementDeals(tick: tick);

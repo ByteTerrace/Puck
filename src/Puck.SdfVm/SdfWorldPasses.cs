@@ -391,19 +391,13 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         foreach (var residency in m_residencies.Keys) {
             if (!residency.IsReleased) {
-                var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 Begin(residency: residency);
-                var probeMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeStart).TotalMilliseconds;
-                if (probeMs > 5.0) { Console.Error.WriteLine($"[probe.res] begin {residency.Name} {probeMs:0.0}"); }
             }
         }
         // A routed residency captures its host while preparing, so every residency must start before any is prepared.
         foreach (var residency in m_residencies.Keys) {
             if (!residency.IsReleased) {
-                var probeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 _ = residency.Prepare(context: in context);
-                var probeMs = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: probeStart).TotalMilliseconds;
-                if (probeMs > 5.0) { Console.Error.WriteLine($"[probe.res] prepare {residency.Name} {probeMs:0.0}"); }
             }
         }
 
