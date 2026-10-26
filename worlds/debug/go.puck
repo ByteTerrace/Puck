@@ -1,0 +1,1067 @@
+import "inputs"
+import "shapes"
+// Physical Go on a 9x9 board: 82 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
+// settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
+// world imports this file whole. The table stands north of the chess table, its board's centre at (56.5, 9.905, 30.6)
+// on level 2; Black sits at its -Z edge and White at its +Z edge, each with a tray of 41 stones at their right-hand end.
+// go.md beside this file says how to play, read the game and set the opponent.
+//
+// The game has two layers. The rules of Go are a move door over the logical board `goBoard`, as a headless game has
+// them: a request names the point the move token `goMove[play]` is moved to, and the door plays it when the point is
+// empty and the stone either captures or keeps a liberty (no suicide), refusing a move that remakes the position one
+// full turn back (simple ko). Two passes in a row end the game, scored by area. Over it lies the physical layer: each
+// stone body is a token whose point (`goCell`) is read off the board whenever the physics has rested. A settled table
+// that differs from the accepted position by one stone of the side to move on an empty point is a request through the
+// door; any other change is recorded as illegal (`goIllegal`). Either way the table is then put back to the position:
+// a refused or stray stone goes back to its tray, as the stones a move captures do, and a point the table lacks is
+// filled from its colour's tray.
+
+// The table's placement (its creation's floor 0.5 m under its origin on level 2's floor), the ticks the physics must
+// stay at rest before an arrangement is judged (0.3 s at 30 Hz), the board's side and its point count. A point's
+// ordinal is 9 * row + column: its column runs along +X and its row along +Z, so point 0 is the -X, -Z corner, the
+// corner at Black's right hand.
+let goTable = [56.5, 8.55, 30.6]
+let goSettleTicks = 9
+let goSize = 9
+let goPoints = (goSize * goSize)
+let goLastPoint = (goPoints - 1)
+let goCellSize = 0.15
+// The goban's playing surface over the table's origin; the tabletop's own top is at 1.3.
+let goSurface = 1.355
+let goCorner = (0 - ((goSize * goCellSize) / 2))
+
+// Point values: an empty point, a black stone, a white stone. A stone's value is also the turn of the side that owns
+// it.
+let goEmpty = 0
+let goBlack = 1
+let goWhite = 2
+
+// White's compensation for moving second, in half points: 7, Chinese rules' usual komi on a 9x9 board.
+let goKomiHalves = 14
+
+// Why the last request was refused: its point was occupied, it would have left its own group without a liberty, or it
+// would have remade the position a full turn back.
+let goOccupied = 1
+let goSuicide = 2
+let goKoRefused = 3
+
+// The stones: 41 a side, Black's goStone0 .. goStone40 and White's goStone41 .. goStone81. Each has a spot in its
+// side's tray, a 6 by 7 grid of 0.14 m cells at the end of the table on its owner's right (Black's at -X, White's at
+// +X), which the `goTrays` topology lays out in world coordinates: columns 0 to 5 are Black's, 18 to 23 White's.
+let goPerSide = 41
+let goStones = (2 * goPerSide)
+let goTrayLow = (0 - goStones)
+let goTrayPitch = 0.14
+let goTrayColumns = 24
+let goTrayWide = 6
+let goTrayDeep = 7
+let goTrayOrigin = [(goTable[0] - ((goTrayColumns * goTrayPitch) / 2)), (goTable[1] + 1.304), (goTable[2] - ((goTrayDeep * goTrayPitch) / 2))]
+let goHome = map(range(0, goStones), i => (((i < goPerSide) ? i : (i - goPerSide)) / goTrayWide) * goTrayColumns + ((i < goPerSide) ? 0 : (goTrayColumns - goTrayWide)) + (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide))
+let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
+
+// The bodies: debug.puck imports this file first, so its cursor and stones take the population's top slots (shapes.puck's
+// goBodies): the cursor is the highest body and stone i the one `1 + i` below it. Seat 1 drives each stone, so a seat's
+// `body.pose` may set one on a point (go.md).
+let goTop = ((galleryPopulation + 2 + boardRoomBodies) - 1)
+grants: map(range(0, goStones), i => { capability: Drive, grantee: "seat1", subject: $"body:{goTop - 1 - i}" })
+
+looks {
+  rows: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: name
+    scale: 1
+    source: creation(prototypeId: name)
+  }
+  )
+}
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.06, 0.024, 0.06], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "goStone"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.6
+        linearDamping: 0.05
+        mass: 0.05
+        restitution: 0.05
+        rollingFriction: 0.2
+      }
+    }
+  ]
+}
+
+placements {
+  placement "goTable" {
+    prototype: "goTable"
+    board {
+      occupancy: "goBoard"
+      topology: "goBan"
+      turn: "goTurn"
+      verdict: "goVerdict"
+      // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera
+      // looks down on the board from the seat's side and the pointer picks points 2 cm over the board's face.
+      engage {
+        channel: "interact"
+        radius: 2.5
+        pitch: 62
+        margin: 0.12
+        surface: 0.02
+      }
+    }
+    position: goTable
+    solid
+  }
+
+  // The point cursor a seated player moves, before the stones so it takes the highest of the game's bodies: the rules
+  // pose it on the cursor's point while the seat sits at the table and park it inside the board otherwise.
+  placement "goCursor" {
+    prototype: "goCursor"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "boardCursor"
+      look: "goCursor"
+      source: "Idle"
+    }
+    parent: "goTable"
+    position [0, 1.33, 0]
+  }
+
+  // Each stone starts 6 cm over its tray spot and drops onto it.
+  for i in range(0, goStones) {
+    placement $"goStone{i}" {
+      prototype: (i < goPerSide) ? "goStoneBlack" : "goStoneWhite"
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "goStone"
+        look: (i < goPerSide) ? "goStoneBlack" : "goStoneWhite"
+        source: "Idle"
+      }
+      parent: "goTable"
+      position [(((goHome[i] % goTrayColumns) + 0.5) * goTrayPitch - ((goTrayColumns * goTrayPitch) / 2)), 1.37, (((goHome[i] / goTrayColumns) + 0.5) * goTrayPitch - ((goTrayDeep * goTrayPitch) / 2))]
+    }
+  }
+
+  // The goban's face: an 8 by 8 grid of kaya tiles over a dark base, so the centimetre between neighbouring tiles
+  // reads as the board's lines and each point is where four tiles' corners meet.
+  for r in range(0, (goSize - 1)) {
+    for c in range(0, (goSize - 1)) {
+      placement $"goTile-{r * (goSize - 1) + c}" {
+        prototype: "goTile"
+        parent: "goTable"
+        position [(goCorner + (goCellSize * (c + 1))), (goSurface - 0.0075), (goCorner + (goCellSize * (r + 1)))]
+      }
+    }
+  }
+  // The nine star points of a 9x9 board's five: the four 3-3 points and the centre.
+  for at in [[2, 2], [2, 6], [6, 2], [6, 6], [4, 4]] {
+    placement $"goStar-{at[0] * goSize + at[1]}" {
+      prototype: "goStar"
+      parent: "goTable"
+      position [(goCorner + (goCellSize * (at[1] + 0.5))), goSurface, (goCorner + (goCellSize * (at[0] + 0.5)))]
+    }
+  }
+}
+
+// At Black's edge of the table, 1.6 m from the board's centre and facing it, inside the engage radius: the context
+// button sits her down.
+spawnPoints [
+  { id: "go", position [goTable[0], galleryFloor[2], (goTable[2] - 1.6)], yawDegrees: 180 }
+]
+
+let goWood = 0
+let goLine = 1
+let goLid = 2
+prototypes {
+  prototype "goTable" {
+    document {
+      name: "goTable"
+      palette [
+        { color: "#8A6A45" }
+        { color: "#1E1A16", roughness: 0.7 }
+        { color: "#4A3526", roughness: 0.8, specular: 0.05 }
+        { color: "#D9B26F", roughness: 0.6, specular: 0.12 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top" {
+        material: goWood
+        position [0, 1.25, 0]
+        scale [1.75, 0.05, 0.85]
+      }
+      for x in [-1.1, 1.1] {
+        // The two pedestals stand on the floor 0.5 m under the creation's origin.
+        shape Cylinder $"leg-{x}" {
+          material: goWood
+          position [x, 0.855, 0]
+          scale [0.08, 0.355, 0.08]
+        }
+        shape Cylinder $"foot-{x}" {
+          material: goWood
+          position [x, 0.52, 0]
+          scale [0.35, 0.02, 0.35]
+        }
+      }
+      // The goban: a dark base the lines show through, inside a kaya rim flush with the tiles' faces.
+      shape Box "base" {
+        material: goLine
+        position [0, 1.32, 0]
+        scale [0.61, 0.02, 0.61]
+      }
+      shape Box "rim-north" {
+        material: 3
+        position [0, 1.3275, 0.665]
+        scale [0.72, 0.0275, 0.055]
+      }
+      shape Box "rim-south" {
+        material: 3
+        position [0, 1.3275, -0.665]
+        scale [0.72, 0.0275, 0.055]
+      }
+      shape Box "rim-east" {
+        material: 3
+        position [0.665, 1.3275, 0]
+        scale [0.055, 0.0275, 0.61]
+      }
+      shape Box "rim-west" {
+        material: 3
+        position [-0.665, 1.3275, 0]
+        scale [0.055, 0.0275, 0.61]
+      }
+      // The trays: a walnut lid under each side's stones.
+      shape Box "lid-west" {
+        material: goLid
+        position [-1.26, 1.302, 0]
+        scale [0.44, 0.002, 0.5]
+      }
+      shape Box "lid-east" {
+        material: goLid
+        position [1.26, 1.302, 0]
+        scale [0.44, 0.002, 0.5]
+      }
+    }
+  }
+
+  prototype "goTile" {
+    document {
+      name: "goTile"
+      palette [{ color: "#D9B26F", roughness: 0.6, specular: 0.12 }]
+      schema: "puck.creation.v1"
+      shape Box "tile" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.07, 0.0075, 0.07]
+      }
+    }
+  }
+
+  prototype "goStar" {
+    document {
+      name: "goStar"
+      palette [{ color: "#1E1A16", roughness: 0.7 }]
+      schema: "puck.creation.v1"
+      shape Cylinder "dot" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.014, 0.0015, 0.014]
+      }
+    }
+  }
+
+  // A stone: a lens of slate or shell.
+  for stone in [{ name: "goStoneBlack", color: "#1A1B1E", roughness: 0.35, specular: 0.3 }, { name: "goStoneWhite", color: "#EEECE6", roughness: 0.3, specular: 0.35 }] {
+    prototype $"{stone.name}" {
+      document {
+        name: stone.name
+        palette [{ color: stone.color, roughness: stone.roughness, specular: stone.specular }]
+        schema: "puck.creation.v1"
+        shape Sphere "lens" {
+          material: 0
+          position [0, 0, 0]
+          scale [0.068, 0.024, 0.068]
+        }
+      }
+    }
+  }
+
+  // A point's outline: four flat bars round the point the cursor stands on, outside a stone's edge.
+  prototype "goCursor" {
+    document {
+      name: "goCursor"
+      palette [{ color: "#3FA9F5", roughness: 0.4, specular: 0.3 }]
+      schema: "puck.creation.v1"
+      shape Box "near" {
+        material: 0
+        position [0, 0, -0.072]
+        scale [0.08, 0.003, 0.008]
+      }
+      shape Box "far" {
+        material: 0
+        position [0, 0, 0.072]
+        scale [0.08, 0.003, 0.008]
+      }
+      shape Box "left" {
+        material: 0
+        position [-0.072, 0, 0]
+        scale [0.008, 0.003, 0.08]
+      }
+      shape Box "right" {
+        material: 0
+        position [0.072, 0, 0]
+        scale [0.008, 0.003, 0.08]
+      }
+    }
+  }
+}
+
+// ---- Reading the board -------------------------------------------------------------------------------------------
+// Whenever the physics has rested for goSettleTicks, the rules read each stone's point off the board and compare the
+// arrangement with the accepted position.
+
+rule "go-settle-hold-advance" {
+  when physics(quiescent) == 1 and goHold < goSettleTicks
+  mode: Level
+  goHold += 1
+}
+
+rule "go-settle-hold-reset" {
+  when physics(quiescent) != 1
+  mode: Level
+  goHold = 0
+}
+
+// The table is read point by point, not stone by stone: stones of one colour are alike, so what an arrangement says is
+// the board it shows (`goSeen`, each stone's colour on the point it stands on) against the accepted one. The points
+// where the two differ (`goDiff`) decide: one point holding a stone of the side to move where the position is empty
+// is a move; anything else is put right. A stone the position does not hold goes back to its tray, and a point the
+// position holds that the table lacks is filled from its colour's tray (`goGap`), one point a reading. A stone's cell
+// is the point it stands on, or `-1 - ordinal` off the board, so the lowest-numbered stone a tray holds is the
+// greatest of its colour's cells there. The search's hypothetical plies never read the table: they try the door alone.
+set goChanged: (board(goSeen, 1..1) & ~board(goBoard, 1..1)) | (board(goBoard, 1..1) & ~board(goSeen, 1..1)) | (board(goSeen, 2..2) & ~board(goBoard, 2..2)) | (board(goBoard, 2..2) & ~board(goSeen, 2..2))
+set goMissing: (board(goBoard, 1..1) & ~board(goSeen, 1..1)) | (board(goBoard, 2..2) & ~board(goSeen, 2..2))
+
+rules "" when goHold == goSettleTicks and search(ply) == 0 {
+  mode: "Edge"
+  rule "go-read-stones" {
+    forEach: goCode
+    goCell[$each] = (board(cellOf, goBoard, placement, $each) >= 0) ? board(cellOf, goBoard, placement, $each) : (-1 - goOrdinal[$each])
+  }
+
+  // Each set's points are found by walking every row of the board both ways from its ends (a ray never reads the
+  // point it starts from), keeping the greatest: the one point when the set holds one.
+  rule "go-read-board" {
+    transform boardCombine(row: goDiff, operation: Clear)
+    transform writeSet(row: goDiff, set: goChanged, value: 1)
+    transform boardCombine(row: goGap, operation: Clear)
+    transform writeSet(row: goGap, set: goMissing, value: 1)
+    goChangedCount = count(goDiff, c -> c != 0)
+    goCollisions = count(goCell, atLeast: 0, atMost: goLastPoint) - count(goSeen, c -> c != 0)
+    goNewCell = -1
+    goFix = -1
+    for r in range(0, goSize) {
+      goNewCell = maximum(goNewCell, maximum(match(goRayEmpty, goDiff, E, cell)[goSize * r], match(goRayEmpty, goDiff, W, cell)[goSize * r + goSize - 1]))
+      goFix = maximum(goFix, maximum(match(goRayEmpty, goGap, E, cell)[goSize * r], match(goRayEmpty, goGap, W, cell)[goSize * r + goSize - 1]))
+    }
+  }
+
+  // One stone of the side to move, come onto an empty point and alone on it, with nothing else changed: a request
+  // through the door.
+  rule "go-read-request" {
+    when physics(quiescent) == 1 and goChangedCount == 1 and goCollisions == 0 and goNewCell >= 0 and goOver == 0 and goBoard[goNewCell[$value]] == 0 and goSeen[goNewCell[$value]] == goTurn
+    goMove[play] = goNewCell
+  }
+
+  // Anything else that changed is illegal, and is put right below.
+  rule "go-read-illegal" {
+    when (goChangedCount > 0 or goCollisions > 0) and goMove[play] == goPlaced
+    goIllegal += 1
+  }
+
+  rule "go-read-sync" {
+    when goChangedCount > 0
+    goSync = 1
+  }
+
+  // A point the table lacks is filled once the strays are back in their trays; a request takes the turn instead.
+  rule "go-read-fill" {
+    when goFix >= 0 and goMove[play] == goPlaced
+    goPut = goFix
+  }
+
+  rule "go-read-done" {
+    goJudging = 0
+  }
+}
+
+// A ray of empty points: what a reading walks to find the first point of a set.
+pattern goRayEmpty: Int {
+  symbols {
+    vacant = 0
+  }
+  match: vacant*
+}
+
+// ---- The rules of Go -----------------------------------------------------------------------------------------------
+
+// The position the game opens on is the first the ko check can be sent back to.
+rule "go-open" {
+  when goOpened == 0
+  mode: Level
+  push goPositions = board(fingerprint, goBoard)
+  goOpened = 1
+}
+
+// One side's move door. The request is the point the move token was moved to. The door admits it when that point is
+// empty and the stone either captures or keeps a liberty of its own: its capture is clearEnclosed sweeping every
+// opposing group the stone leaves without a liberty. Only a move that takes exactly one stone can remake the position
+// the mover left a full turn ago, so that move alone is first tried on the probe board, and refused when its fingerprint
+// is the one the history ring holds a turn back (ko). Every other request is refused by name here and answered below.
+template goPlay(colour, foe) {
+  rule $"go-play-{colour}" {
+    when goMove[play] != goPlaced and goMove[play] >= 0 and goOver == 0 and goTurn == colour
+    local taken = board(enclosedAt, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[goMove[play]]
+    local breath = board(boundaryAt, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goMove[play]]
+    mode: Level
+    goKo = 0
+    if taken == 1 {
+      transform boardCombine(row: goProbe, operation: Copy, left: goBoard)
+      goProbe[goMove[play]] = colour
+      transform clearEnclosed(row: goProbe, from: cell(goMove, play), lower: foe, upper: foe)
+      goKo = board(fingerprint, goProbe) == history(goPositions, 1)
+    }
+    if taken >= 0 and (taken > 0 or breath > 0) and goKo == 0 {
+      goBoard[goMove[play]] = colour
+      if taken > 0 {
+        transform clearEnclosed(row: goBoard, from: cell(goMove, play), lower: foe, upper: foe)
+      }
+      goStoneCount[$"{colour}"] += 1
+      goStoneCount[$"{foe}"] = goStoneCount[$"{foe}"] - taken
+      goPrisoners[$"{colour}"] += taken
+      goCaptured = taken
+      push goPositions = board(fingerprint, goBoard)
+      goPlaced = goMove[play]
+      goMoves += 1
+      goPasses = 0
+      goRefusal = 0
+      goAiRevision += 1
+      goVerdict = 1
+      goAccepted = 1
+      goTurn = foe
+    } else {
+      goRefusal = (taken < 0) ? goOccupied : ((goKo == 1) ? goKoRefused : goSuicide)
+    }
+  }
+}
+
+goPlay(colour: goBlack, foe: goWhite)
+goPlay(colour: goWhite, foe: goBlack)
+
+// A request neither door admitted: an occupied point, a suicide, a ko, or a stone after the game. The token goes back to
+// the last stone played, so the next request is a fresh one.
+rule "go-refuse" {
+  when goMove[play] != goPlaced
+  mode: Level
+  goRejected += 1
+  goVerdict = 0
+  goMove[play] = goPlaced
+  goSync = 1
+}
+
+// A pass. Two in a row end the game.
+rule "go-pass" {
+  when goPassRequest != goPassApplied and goOver == 0
+  mode: Level
+  goPassApplied = goPassRequest
+  goPasses += 1
+  push goPositions = board(fingerprint, goBoard)
+  goAiRevision += 1
+  goTurn = 3 - goTurn
+  goOver = goPasses >= 2
+}
+
+// What the last stone did: the size and the liberties of the group it joined, and whether it left an opposing group
+// beside it in atari, with one liberty. The search never reads these, so its judge never pays for them.
+template goReport(colour, foe) {
+  rule $"go-report-{colour}" {
+    when goReported != goMoves and goBoard[goPlaced[$value]] == colour
+    local north = board(neighbour, goBoard, N)[goPlaced[$value]]
+    local east = board(neighbour, goBoard, E)[goPlaced[$value]]
+    local south = board(neighbour, goBoard, S)[goPlaced[$value]]
+    local west = board(neighbour, goBoard, W)[goPlaced[$value]]
+    mode: Level
+    goReported = goMoves
+    goGroup = board(component, goBoard, colour, colour, goPoints)[goPlaced[$value]]
+    goLiberties = board(boundary, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goPlaced[$value]]
+    goAtari = (((goBoard[local(north)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(north)] ?? 0) == 1)) | (((goBoard[local(east)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(east)] ?? 0) == 1)) | (((goBoard[local(south)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(south)] ?? 0) == 1)) | (((goBoard[local(west)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(west)] ?? 0) == 1))
+  }
+}
+
+goReport(colour: goBlack, foe: goWhite)
+goReport(colour: goWhite, foe: goBlack)
+
+// ---- Scoring --------------------------------------------------------------------------------------------------------
+// Area scoring: a side's score is its stones plus the empty points that reach its stones and never the other side's.
+// Once the game is over each side's reach is flooded outward from its stones through empty points, one step in every
+// direction a pass, until a pass reaches nothing new.
+
+set goOpen: board(goBoard, 0..0)
+set goBlacks: board(goBoard, 1..1)
+set goWhites: board(goBoard, 2..2)
+set goBlackArea: board(goBlackReach, 1..1) & ~board(goWhiteReach, 1..1) & board(goBoard, 0..0)
+set goWhiteArea: board(goWhiteReach, 1..1) & ~board(goBlackReach, 1..1) & board(goBoard, 0..0)
+
+rule "go-score-open" {
+  when goOver == 1 and goScoring == 0
+  mode: Level
+  transform boardCombine(row: goBlackReach, operation: Copy, left: goBlacks)
+  transform boardCombine(row: goWhiteReach, operation: Copy, left: goWhites)
+  goScoring = 1
+  goGrowing = 1
+}
+
+// One side's reach taking one step each way: its members shifted, kept where the point is empty, and added back.
+template goGrow(reach) {
+  rule $"go-{reach}" {
+    for direction in ["N", "E", "S", "W"] {
+      transform boardCombine(row: goFrontier, operation: Shift, left: reach, direction: direction)
+      transform boardCombine(row: goFrontier, operation: And, left: goFrontier, right: goOpen)
+      transform boardCombine(row: reach, operation: Or, left: reach, right: goFrontier)
+    }
+  }
+}
+
+stabilize goFlood maxPasses(2) until goScoring != 1 {
+  goGrow(reach: goBlackReach)
+  goGrow(reach: goWhiteReach)
+
+  rule "go-measure" {
+    local reach = count(goBlackReach, c -> c != 0) + count(goWhiteReach, c -> c != 0)
+    goGrowing = reach != goReached
+    goReached = reach
+  }
+}
+
+rule "go-score-tally" {
+  when goScoring == 1 and goGrowing == 0
+  mode: Level
+  transform boardCombine(row: goOwner, operation: Clear)
+  transform writeSet(row: goOwner, set: goBlackArea, value: goBlack)
+  transform writeSet(row: goOwner, set: goWhiteArea, value: goWhite)
+  goTerritory[1] = count(goOwner, c -> c == 1)
+  goTerritory[2] = count(goOwner, c -> c == 2)
+  goWinner = (2 * (goStoneCount[1] + goTerritory[1]) > 2 * (goStoneCount[2] + goTerritory[2]) + goKomiHalves) ? goBlack : goWhite
+  goScoring = 2
+}
+
+// ---- Keeping the table to the position ---------------------------------------------------------------------------------
+
+// A new game: `go.reset` writes goReset, the position empties, and every stone goes back to its tray. Black moves first.
+rule "go-reset" {
+  when goReset == 1
+  mode: Level
+  transform boardCombine(row: goBoard, operation: Clear)
+  goTurn = goBlack
+  goMove[play] = -1
+  goPlaced = -1
+  goPasses = 0
+  goOver = 0
+  goScoring = 0
+  goWinner = 0
+  goMoves = 0
+  goReported = 0
+  goStoneCount[1] = 0
+  goStoneCount[2] = 0
+  goPrisoners[1] = 0
+  goPrisoners[2] = 0
+  goTerritory[1] = 0
+  goTerritory[2] = 0
+  goOpened = 0
+  goAiRevision += 1
+  goAccepted = 1
+  goReset = 0
+}
+
+// Once the door has answered, every stone standing on a point the position does not give its colour goes back to its
+// tray: a refused stone, a stray, and the stones a move captured.
+rule "go-accept-done" {
+  when goAccepted == 1
+  mode: Level
+  goAccepted = 0
+  goSync = 1
+}
+
+rule "go-sync" {
+  when goSync == 1 and search(ply) == 0 and goCell[$each] >= 0 and goBoard[goCell[$each]] != goCode[$each]
+  mode: Level
+  forEach: goCode
+  poseCell(key: `placement:$each`, topology: goTrays, expression: goHomeCell[$each], offset: [0, 0.05, 0])
+}
+
+rule "go-sync-done" {
+  when goSync == 1
+  mode: Level
+  goSync = 0
+}
+
+// ---- Putting a stone down ---------------------------------------------------------------------------------------------
+// A put (`goPut`, a point) takes the lowest-numbered stone still in its tray and drops it 6 cm onto the point: of the
+// side to move onto an empty point, of the position's colour onto a point the table lacks. The settled board is then
+// read as ever. The seated player, the computer and a reading that fills a gap all play this way.
+rule "go-put-pick" {
+  when goPut >= 0
+  mode: Level
+  local colour = (goBoard[goPut[$value]] != 0) ? goBoard[goPut[$value]] : goTurn
+  goPick = -1 - ((colour == goBlack) ? max(goCell, where: goIsBlack, atLeast: goTrayLow, atMost: -1) : max(goCell, where: goIsWhite, atLeast: goTrayLow, atMost: -1))
+}
+
+rule "go-put-pose" {
+  when goPut >= 0 and search(ply) == 0 and goOrdinal[$each] == goPick
+  mode: Level
+  forEach: goCode
+  poseCell(key: `placement:$each`, topology: goBan, expression: goPut, offset: [0, 0.06, 0])
+}
+
+rule "go-put-done" {
+  when goPut >= 0
+  mode: Level
+  goJudging = goPick >= 0
+  goPut = -1
+}
+
+// ---- The opponent ----------------------------------------------------------------------------------------------------
+// goAiSide 2 (the default) plays White, 1 plays Black and 0 leaves both sides to people. On its turn, once the table has
+// rested and matches the position, the search job below grows a tree over the door's answers, and its move is put down
+// on the table as a player's is.
+rule "go-ai-enable" {
+  mode: Level
+  goAiEnabled = (physics(quiescent) == 1) & (goAiSide == goTurn) & (goOver == 0) & (goHold == goSettleTicks) & (goJudging == 0) & (goPut < 0) & (goSync == 0)
+}
+
+rule "go-ai-play" {
+  when physics(quiescent) == 1 and goAiEnabled == 1 and goAiBest[revision] == goAiRevision and goAiBest[to] >= 0 and search(ply) == 0
+  mode: Level
+  goPut = goAiBest[to]
+  goAiEnabled = 0
+}
+
+rule "go-ai-pass" {
+  when physics(quiescent) == 1 and goAiEnabled == 1 and goAiBest[revision] == goAiRevision and goAiBest[to] < 0 and search(ply) == 0
+  mode: Level
+  goPassRequest += 1
+  goAiEnabled = 0
+}
+
+search {
+  jobs [
+    {
+      name: "goAI"
+      tokens: goMove
+      board: goBoard
+      turn: goTurn
+      verdict: goVerdict
+      enabled: goAiEnabled
+      revision: goAiRevision
+      best: goAiBest
+      method: MonteCarlo
+      iterations: 256
+      depth: 3
+      shapes [drop(), relocate(displace: false)]
+      // The side that just moved is the one goTurn no longer names: its stones less the other side's.
+      "score": (2 * goTurn - 3) * (goStoneCount[1] - goStoneCount[2]) * 100
+    }
+  ]
+}
+
+// ---- Playing at the table --------------------------------------------------------------------------------------------
+// Seat 1 sits down with the context button (the board's engage block) and plays with the board page chess.puck
+// declares: the cursor follows the pointer, the movement keys, the d-pad or the stick, one point a press, up the board
+// being away from the side the seat sits on. The pick button puts a stone of the side to move on the cursor's point,
+// and the cancel button passes. Either acts only on the seat's own turn, once the table has rested and matches the
+// position.
+
+// The seated seat's buttons this tick, each 1 while held past half way.
+rule "go-seat-buttons" {
+  mode: Level
+  goSeat[pickNow] = 0
+  goSeat[cancelNow] = 0
+  goSeat[aheadNow] = 0
+  goSeat[behindNow] = 0
+  goSeat[rightNow] = 0
+  goSeat[leftNow] = 0
+  if board(engaged, goBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
+    goSeat[pickNow] = 1
+  }
+  if board(engaged, goBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
+    goSeat[cancelNow] = 1
+  }
+  if board(engaged, goBoard, 1) == 1 and channel(1, forward) >= 0.5 {
+    goSeat[aheadNow] = 1
+  }
+  if board(engaged, goBoard, 1) == 1 and channel(1, forward) <= -0.5 {
+    goSeat[behindNow] = 1
+  }
+  if board(engaged, goBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
+    goSeat[rightNow] = 1
+  }
+  if board(engaged, goBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
+    goSeat[leftNow] = 1
+  }
+}
+
+// The press images: each binary is this tick's press on a rising edge, and each step is +1 or -1 on a rising edge.
+rule "go-seat-edges" {
+  mode: Level
+  local pick = goSeat[pickNow]
+  local cancel = goSeat[cancelNow]
+  local ahead = goSeat[aheadNow]
+  local behind = goSeat[behindNow]
+  local rightward = goSeat[rightNow]
+  local leftward = goSeat[leftNow]
+  goSeat[pickEdge] = pick & (goSeat[pickDown] == 0)
+  goSeat[cancelEdge] = cancel & (goSeat[cancelDown] == 0)
+  goSeat[stepAhead] = (ahead & (goSeat[aheadDown] == 0)) - (behind & (goSeat[behindDown] == 0))
+  goSeat[stepRight] = (rightward & (goSeat[rightDown] == 0)) - (leftward & (goSeat[leftDown] == 0))
+  goSeat[pickDown] = pick
+  goSeat[cancelDown] = cancel
+  goSeat[aheadDown] = ahead
+  goSeat[behindDown] = behind
+  goSeat[rightDown] = rightward
+  goSeat[leftDown] = leftward
+}
+
+// The pointer moves the cursor whenever it moves onto another point.
+rule "go-seat-point" {
+  local pointed = board(pointer, goBoard, 1)
+  when board(engaged, goBoard, 1) == 1
+  mode: Level
+  if pointed >= 0 and pointed != goSeat[pointer] {
+    goSeat[cursor] = pointed
+  }
+  goSeat[pointer] = pointed
+}
+
+// A step moves the cursor one point in the seat's own frame: from the -Z side up the board is +row and right is
+// -column (the camera's right is its forward crossed with up), and each other side turns both a quarter.
+rule "go-seat-step" {
+  when goSeat[stepAhead] != 0 or goSeat[stepRight] != 0
+  mode: Level
+  local seatSide = board(side, goBoard, 1)
+  local cursorColumn = goSeat[cursor] % goSize + goSeat[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + goSeat[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  local cursorRow = goSeat[cursor] / goSize + goSeat[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + goSeat[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  goSeat[cursor] = clamp(cursorRow, 0, goSize - 1) * goSize + clamp(cursorColumn, 0, goSize - 1)
+}
+
+// The seat's turn, once the table has rested and matches the position.
+rule "go-seat-ready" {
+  mode: Level
+  goSeat[ready] = (board(engaged, goBoard, 1) == 1) & (goAiSide != goTurn) & (goOver == 0) & (goHold == goSettleTicks) & (goJudging == 0) & (goPut < 0) & (goSync == 0)
+}
+
+rule "go-seat-put" {
+  when board(engaged, goBoard, 1) == 1 and goSeat[pickEdge] == 1 and goSeat[ready] == 1 and goBoard[goSeat[cursor]] == 0
+  mode: Level
+  goPut = goSeat[cursor]
+}
+
+rule "go-seat-pass" {
+  when board(engaged, goBoard, 1) == 1 and goSeat[cancelEdge] == 1 and goSeat[ready] == 1
+  mode: Level
+  goPassRequest += 1
+}
+
+// The cursor stands on its point while the seat sits at the table, and rests inside the board otherwise.
+rule "go-seat-cursor-shown" {
+  when board(engaged, goBoard, 1) == 1
+  mode: Level
+  poseCell(key: `placement:goCursor`, topology: goBan, expression: goSeat[cursor], offset: [0, 0.004, 0])
+}
+
+rule "go-seat-cursor-parked" {
+  when board(engaged, goBoard, 1) == 0
+  mode: Level
+  poseCell(key: `placement:goCursor`, topology: goBan, expression: goSeat[cursor], offset: [0, -0.035, 0])
+}
+
+commands [
+  {
+    name: "go.reset"
+    help: "Starts a new game at the Go table: the board empties, every stone goes back to its tray and Black moves first."
+    lines [
+      "world.state.cell.set goReset $value 1"
+    ]
+  }
+  {
+    name: "go.opponent"
+    help: "Gives the Go table's computer a side: 2 White (the default), 1 Black, or 0 to leave both sides to people."
+    parameters [
+      { name: "side", kind: Choice, values ["0", "1", "2"], default: "2" }
+    ]
+    lines [
+      "world.state.cell.set goAiSide $value {side}"
+    ]
+  }
+]
+
+state {
+  lattices [
+    grid(band: 0.12, cellSize: goCellSize, depth: goSize, width: goSize, origin: [goCorner, goSurface, goCorner], name: "goBan", wrap: None, directions: [
+      { name: "N", x: 0, y: -1, z: 0 }
+      { name: "E", x: 1, y: 0, z: 0 }
+      { name: "S", x: 0, y: 1, z: 0 }
+      { name: "W", x: -1, y: 0, z: 0 }
+    ]
+    )
+    // The two trays' spots, in world coordinates over the table's lids.
+    grid(cellSize: goTrayPitch, depth: goTrayDeep, width: goTrayColumns, origin: goTrayOrigin, name: "goTrays", wrap: None)
+  ]
+
+  world {
+    // The play board, the accepted position: 0 empty, 1 black, 2 white.
+    row {
+      name: "goBoard"
+      kind: "Int"
+      capacity: goPoints
+      min: goEmpty
+      max: goWhite
+      domain: cellsOf(topology: goBan)
+    }
+
+    // A scratch board a capturing move is tried on first, so the ko check reads the position the move would make before
+    // the board takes it.
+    row {
+      name: "goProbe"
+      kind: "Int"
+      capacity: goPoints
+      min: goEmpty
+      max: goWhite
+      domain: cellsOf(topology: goBan)
+    }
+
+    // Scoring's boards: each side's reach, the step a flood pass takes, and the owner of every point.
+    for name in ["goBlackReach", "goWhiteReach", "goFrontier", "goOwner"] {
+      row {
+        name: name
+        kind: "Int"
+        capacity: goPoints
+        min: goEmpty
+        max: goWhite
+        domain: cellsOf(topology: goBan)
+      }
+    }
+
+    // What the table shows: each stone's colour on the point it stands on, derived from the stones' cells.
+    row {
+      name: "goSeen"
+      kind: "Int"
+      capacity: goPoints
+      min: goEmpty
+      max: goWhite
+      domain: cellsOf(topology: goBan)
+      inverse {
+        tokens: "goCell"
+        codes: "goCode"
+      }
+    }
+
+    // The position after every move and pass, newest first: history(goPositions, 1) is the position the side to move
+    // left one full turn ago.
+    row {
+      name: "goPositions"
+      kind: "Int"
+      domain: ring(capacity: 8, empty: 0)
+    }
+
+    // The move token: the point the last stone was played on, and the point a request moves it to. It is the search
+    // job's one token.
+    table goMove bounds(-1..goPoints - 1) {
+      play = -1
+    }
+
+    table goStoneCount bounds(0..goPoints) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table goPrisoners bounds(0..) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table goTerritory bounds(0..goPoints) {
+      "1" = 0
+      "2" = 0
+    }
+
+    slot goPlaced = -1 bounds(-1..goPoints - 1)
+    slot goTurn = 1 bounds(1..2)
+    slot goVerdict = 0 bounds(0..1)
+    slot goKo = 0 bounds(0..1)
+    slot goRefusal = 0 bounds(0..3)
+    slot goCaptured = 0 bounds(0..goPoints)
+    slot goGroup = 0 bounds(0..goPoints)
+    slot goLiberties = 0 bounds(0..goPoints)
+    slot goAtari = 0 bounds(0..1)
+    slot goMoves = 0 bounds(0..)
+    slot goReported = 0 bounds(0..)
+    slot goRejected = 0 bounds(0..)
+    slot goPasses = 0 bounds(0..2)
+    slot goPassRequest = 0 bounds(0..)
+    slot goPassApplied = 0 bounds(0..)
+    slot goOpened = 0 bounds(0..1)
+    slot goOver = 0 bounds(0..1)
+    slot goScoring = 0 bounds(0..2)
+    slot goGrowing = 0 bounds(0..1)
+    slot goReached = 0 bounds(0..2 * goPoints)
+    slot goWinner = 0 bounds(0..2)
+    slot goAiRevision = 0 bounds(0..)
+    slot goAiSide = 2 bounds(0..2)
+    slot goAiEnabled = 0 bounds(0..1)
+    slot goReset = 0 bounds(0..1)
+
+    table goAiBest {
+      token = -1
+      to = -1
+      score = 0
+      revision = -1
+    }
+
+    // The stones: each one's colour and its colour as a filter (goIsBlack, goIsWhite), its ordinal, its tray spot (a
+    // `goTrays` cell), the point it was last read on (-1 off the board or knocked over), and its place in the accepted
+    // position: a point, or `-1 - ordinal` in its tray.
+    row {
+      name: "goCode"
+      kind: "Int"
+      capacity: goStones
+      min: goBlack
+      max: goWhite
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: goCodes[i] })
+    }
+    row {
+      name: "goIsBlack"
+      kind: "Int"
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: (i < goPerSide) ? 1 : 0 })
+    }
+    row {
+      name: "goIsWhite"
+      kind: "Int"
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: (i < goPerSide) ? 0 : 1 })
+    }
+    row {
+      name: "goOrdinal"
+      kind: "Int"
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: i })
+    }
+    row {
+      name: "goHomeCell"
+      kind: "Int"
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: goHome[i] })
+    }
+    row {
+      name: "goCell"
+      kind: "Int"
+      capacity: goStones
+      min: goTrayLow
+      max: goLastPoint
+      cells: map(range(0, goStones), i => { key: $"goStone{i}", value: (-1 - i) })
+    }
+
+    // The points where the table and the accepted position differ, and the points it holds that the table lacks, as
+    // the last reading found them.
+    for name in ["goDiff", "goGap"] {
+      row {
+        name: name
+        kind: "Int"
+        capacity: goPoints
+        min: 0
+        max: 1
+        domain: cellsOf(topology: goBan)
+      }
+    }
+
+    // The table: the ticks it has rested, what the last reading found (how many points differ from the position, how
+    // many stones share a point, the point a stone came onto and the point the table lacks), the arrangements refused,
+    // whether the stones are to be set to the position this tick, whether the door has accepted a move, the point a put
+    // drops a stone on and the stone it picked (-1 for none), and whether a put awaits its reading.
+    slot goHold = 0 bounds(0..goSettleTicks)
+    slot goChangedCount = 0 bounds(0..goPoints)
+    slot goCollisions = 0 bounds(0..goStones)
+    slot goNewCell = -1 bounds(-1..goLastPoint)
+    slot goFix = -1 bounds(-1..goLastPoint)
+    slot goIllegal = 0 bounds(0..50400)
+    slot goSync = 0 bounds(0..1)
+    slot goAccepted = 0 bounds(0..1)
+    slot goPut = -1 bounds(-1..goLastPoint)
+    slot goPick = -1 bounds(-1..goStones)
+    slot goJudging = 0 bounds(0..1)
+
+    // Seat 1 at the table: the cursor's point, the last pointed point, this tick's presses (the *Edge and step keys),
+    // last tick's buttons (*Down), and whether the seat may act.
+    table goSeat {
+      cursor = 40
+      pointer = -1
+      pickNow = 0
+      cancelNow = 0
+      aheadNow = 0
+      behindNow = 0
+      rightNow = 0
+      leftNow = 0
+      pickEdge = 0
+      cancelEdge = 0
+      stepAhead = 0
+      stepRight = 0
+      pickDown = 0
+      cancelDown = 0
+      aheadDown = 0
+      behindDown = 0
+      rightDown = 0
+      leftDown = 0
+      ready = 0
+    }
+  }
+}

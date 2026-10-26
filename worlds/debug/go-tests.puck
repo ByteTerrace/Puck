@@ -1,0 +1,352 @@
+// The Go table's scenarios (go.puck), each booted in the whole debug world: `puck test worlds/debug/go-tests.puck`.
+// Points are named by ordinal, 9 * row + column, column along +X and row along +Z: the centre point is 40, with 31 on
+// its -Z side, 49 on its +Z side, 39 on its -X side and 41 on its +X side. A position given on `goBoard` is the accepted
+// position; the table fills it from the trays, one point a reading, and a scenario that moves stones waits for that.
+// Every scenario but the opponent's own leaves both sides to the steps (goAiSide 0).
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "go-tests"
+
+test "the stones settle in their trays and the board reads empty" {
+  given {
+    goAiSide = 0
+  }
+  when {
+    ticks 150
+  }
+  expect {
+    goChangedCount == 0
+    goCollisions == 0
+    goIllegal == 0
+    goCell[goStone0] == -1
+    goCell[goStone81] == -82
+    goHold == 9
+  }
+}
+
+// Seat 1 stands at Black's edge, sits down with the context button and plays the centre point with the pick button
+// (the cursor starts there); the computer, playing White, answers with a stone of its own.
+test "a seated player plays the centre and the computer answers" {
+  when {
+    seat1: body.pose 56.5 9.25 29 0 0 0 0
+    ticks 150
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press confirm
+    ticks 400
+  }
+  expect {
+    goBoard[40] == 1
+    goSeen[40] == 1
+    goMoves == 2
+    goTurn == 1
+    goStoneCount[1] == 1
+    goStoneCount[2] == 1
+    goIllegal == 0
+    goChangedCount == 0
+    board(engaged, goBoard, 1) == 1
+  }
+}
+
+// The seated player steps the cursor one point up the board (+Z from Black's side) and one to the right (-X), and the
+// cancel button passes; a second pass, from the console, ends the game.
+test "a seated player steps the cursor, plays and passes" {
+  given {
+    goAiSide = 0
+  }
+  when {
+    seat1: body.pose 56.5 9.25 29 0 0 0 0
+    ticks 150
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press forward 1
+    ticks 4
+    seat1: body.press strafe 1
+    ticks 4
+    seat1: body.press confirm
+    ticks 150
+    seat1: body.press cancel
+    ticks 10
+  }
+  expect {
+    goBoard[48] == 1
+    goSeen[48] == 1
+    goTurn == 1
+    goPasses == 1
+    goSeat[cursor] == 48
+  }
+}
+
+test "a lone stone keeps four liberties" {
+  given {
+    goAiSide = 0
+    goMove[play] = 40
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    goBoard[40] == 1
+    goGroup == 1
+    goLiberties == 4
+    goAtari == 0
+    goMoves == 1
+    goTurn == 2
+  }
+}
+
+// White at 40 has black on its -Z and -X sides; black's stone on its +X side leaves it one liberty, 49.
+test "a stone taking the second-last liberty puts the group in atari" {
+  given {
+    goAiSide = 0
+    goBoard[40] = 2
+    goBoard[31] = 1
+    goBoard[39] = 1
+    goStoneCount[1] = 2
+    goStoneCount[2] = 1
+    goMove[play] = 41
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    goBoard[41] == 1
+    goBoard[40] == 2
+    goAtari == 1
+    goLiberties == 3
+    goCaptured == 0
+  }
+}
+
+// White's two stones at 40 and 41 share their liberties; black's stone at 50 takes the last one and the whole group
+// comes off.
+test "a stone filling the last liberty captures a whole group" {
+  given {
+    goAiSide = 0
+    goBoard[40] = 2
+    goBoard[41] = 2
+    goBoard[31] = 1
+    goBoard[32] = 1
+    goBoard[39] = 1
+    goBoard[42] = 1
+    goBoard[49] = 1
+    goStoneCount[1] = 5
+    goStoneCount[2] = 2
+    goMove[play] = 50
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    goBoard[40] == 0
+    goBoard[41] == 0
+    goCaptured == 2
+    goPrisoners[1] == 2
+    goStoneCount[2] == 0
+    goGroup == 2
+    goLiberties == 6
+  }
+}
+
+// Black surrounds 40 on every side; a white stone there would have no liberty and takes nothing.
+test "a stone with no liberty that captures nothing is refused as suicide" {
+  given {
+    goAiSide = 0
+    goTurn = 2
+    goBoard[31] = 1
+    goBoard[39] = 1
+    goBoard[41] = 1
+    goBoard[49] = 1
+    goStoneCount[1] = 4
+    goMove[play] = 40
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    goBoard[40] == 0
+    goRefusal == 2
+    goRejected == 1
+    goMoves == 0
+    goTurn == 2
+    goMove[play] == -1
+  }
+}
+
+// The ko shape: black's stone at 41 sits in a white mouth whose one opening is 40, and black guards 40 from -Z, -X and
+// +Z. White takes at 40; black taking straight back at 41 would remake the position the game opened on, which the
+// history ring still holds one turn back.
+test "retaking a ko at once is refused" {
+  given {
+    goAiSide = 0
+    goTurn = 2
+    goBoard[31] = 1
+    goBoard[39] = 1
+    goBoard[49] = 1
+    goBoard[41] = 1
+    goBoard[32] = 2
+    goBoard[42] = 2
+    goBoard[50] = 2
+    goStoneCount[1] = 4
+    goStoneCount[2] = 3
+  }
+  when {
+    ticks 2
+    seat1: world.state.cell.set goMove play 40
+    ticks 2
+    seat1: world.state.cell.set goMove play 41
+    ticks 2
+  }
+  expect {
+    goBoard[40] == 2
+    goBoard[41] == 0
+    goRefusal == 3
+    goRejected == 1
+    goMoves == 1
+    goTurn == 1
+  }
+}
+
+// The same ko, with one exchange elsewhere first: the position a turn back is no longer the one the retake makes, so
+// the retake stands.
+test "a ko may be retaken after an exchange elsewhere" {
+  given {
+    goAiSide = 0
+    goTurn = 2
+    goBoard[31] = 1
+    goBoard[39] = 1
+    goBoard[49] = 1
+    goBoard[41] = 1
+    goBoard[32] = 2
+    goBoard[42] = 2
+    goBoard[50] = 2
+    goStoneCount[1] = 4
+    goStoneCount[2] = 3
+  }
+  when {
+    ticks 2
+    seat1: world.state.cell.set goMove play 40
+    ticks 2
+    seat1: world.state.cell.set goMove play 0
+    ticks 2
+    seat1: world.state.cell.set goMove play 80
+    ticks 2
+    seat1: world.state.cell.set goMove play 41
+    ticks 2
+  }
+  expect {
+    goBoard[41] == 1
+    goBoard[40] == 0
+    goCaptured == 1
+    goRejected == 0
+    goMoves == 4
+  }
+}
+
+// A position given on the board is set on the table from the trays; black then plays 49 with a put, capturing the white
+// stone at 40, which goes back to White's tray.
+test "the table fills a given position and a captured stone goes back to its tray" {
+  given {
+    goAiSide = 0
+    goBoard[40] = 2
+    goBoard[31] = 1
+    goBoard[39] = 1
+    goBoard[41] = 1
+    goStoneCount[1] = 3
+    goStoneCount[2] = 1
+  }
+  when {
+    ticks 400
+    seat1: world.state.cell.set goPut $value 49
+    ticks 200
+  }
+  expect {
+    goBoard[49] == 1
+    goBoard[40] == 0
+    goSeen[40] == 0
+    goSeen[31] == 1
+    goSeen[49] == 1
+    goCaptured == 1
+    goChangedCount == 0
+    goCell[goStone81] == -82
+  }
+}
+
+// A stone put on a point while it is White's turn, and a stray stone put beside it as Black's: the reading sees two new
+// stones, records the arrangement illegal, and puts both back in their trays.
+test "an arrangement that changes more than one point is illegal and put right" {
+  given {
+    goAiSide = 0
+  }
+  when {
+    ticks 150
+    seat1: world.state.cell.set goPut $value 40
+    seat1: world.state.cell.set goPut $value 41
+    ticks 200
+  }
+  expect {
+    goIllegal >= 1
+    goMoves == 0
+    goSeen[40] == 0
+    goSeen[41] == 0
+    goChangedCount == 0
+  }
+}
+
+// The computer plays Black on an empty board: the search judges every point, grows its tree over several ticks within
+// each tick's work allowance, and puts its stone down on the table as a player's is.
+test "the computer plays one move" {
+  given {
+    goAiSide = 1
+  }
+  when {
+    ticks 400
+  }
+  expect {
+    goMoves == 1
+    goStoneCount[1] == 1
+    goTurn == 2
+    goRejected == 0
+    goIllegal == 0
+    goChangedCount == 0
+  }
+}
+
+// Each side walls off a three-by-three corner with seven stones; the open middle reaches both walls and counts for
+// neither. Areas tie at nine, and komi gives the game to White.
+test "the game ends on two passes and is scored by area" {
+  given {
+    goAiSide = 0
+    goBoard[3] = 1
+    goBoard[12] = 1
+    goBoard[21] = 1
+    goBoard[27] = 1
+    goBoard[28] = 1
+    goBoard[29] = 1
+    goBoard[30] = 1
+    goBoard[77] = 2
+    goBoard[68] = 2
+    goBoard[59] = 2
+    goBoard[53] = 2
+    goBoard[52] = 2
+    goBoard[51] = 2
+    goBoard[50] = 2
+    goStoneCount[1] = 7
+    goStoneCount[2] = 7
+  }
+  when {
+    ticks 2
+    seat1: world.state.cell.set goPassRequest $value 1
+    ticks 2
+    seat1: world.state.cell.set goPassRequest $value 2
+    ticks 120
+  }
+  expect {
+    goOver == 1
+    goScoring == 2
+    goTerritory[1] == 9
+    goTerritory[2] == 9
+    goWinner == 2
+  }
+}

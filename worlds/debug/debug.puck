@@ -23,6 +23,10 @@ import "controls"
 import "pad"
 import "devices"
 import "desktop"
+// The board game room's Go and Reversi tables, ahead of every other population so their stones and discs take the
+// population's top slots (shapes.puck's boardRoomBodies) and every body below keeps its index.
+import "go"
+import "reversi"
 import "fuzzer"
 import "traversal"
 import "kinematics-scope"
@@ -150,12 +154,13 @@ spawnPoints: concat([
 
 commands: galleryCommands
 
-// The development fuzzer and traversal bot take bodies 44 and 43; the companion keeps 42. The gallery hall and
-// chess imports keep their existing indices. Each import names its population; this body settles the total.
-// The rate range's six walkers, imported last, take the free slots below the pieces (range.puck).
-// Each body's size is its `size` register (size.puck).
+// The board game room's Go and Reversi bodies take the top slots (go.puck, reversi.puck); below them the development
+// fuzzer and traversal bot take bodies 44 and 43 and the companion keeps 42. The gallery hall and chess imports keep
+// their existing indices. Each import names its population; this body settles the total. The rate range's six
+// walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
+// (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2)
+  capacity: (galleryPopulation + 2 + boardRoomBodies)
 }
 
 placements {

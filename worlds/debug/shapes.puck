@@ -6,8 +6,9 @@
 //
 //   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved
 //   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
-//   level 2  form and surface: parameter forms, palette channels and wear, warps II
-//   level 3  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames
+//   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
+//            board game room fills its east end (boardroom.puck)
+//   level 3  form and surface: parameter forms, palette channels and wear, glass
 //
 // A sign hangs over the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
 // and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
@@ -19,6 +20,12 @@
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
 let galleryPopulation = 43
+// The board game room's bodies (boardroom.puck): Go's cursor and 82 stones (go.puck), then Reversi's cursor and 64
+// discs (reversi.puck). debug.puck imports both ahead of every other population, so they take the population's top
+// slots and every body below them keeps its index.
+let goBodies = 83
+let reversiBodies = 65
+let boardRoomBodies = (goBodies + reversiBodies)
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 let galleryMapDirections = "stairs and lift north-west: press CALL, or gallery.lift <level>"
 
@@ -57,17 +64,20 @@ let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend",
 let warpRow = ["shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere", "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"]
 
 let foldZ = 33
-let surfaceZ = 25
-let motionZB = 30
+let motionLevel = 2
+let motionZ = 17
+let motionZB = 25
 let warpZ = 33
+let surfaceLevel = 3
+let surfaceZ = 25
 let glassZ = 37
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
   { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
   { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
-  { level: 2, title: "LEVEL 2  FORM AND SURFACE", what: "forms, surfaces, warps II" }
-  { level: 3, title: "LEVEL 3  MOTION AND GLASS", what: "motion through the stamp pool, glass" }
+  { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, warps II, the board game room" }
+  { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, glass" }
 ]
 
 // Every row, in walking order: its sign's title, its level, the z it stands on, its exhibit names and what it shows.
@@ -79,12 +89,12 @@ let galleryRows = [
   { title: "SWEEPS AND FACETS", level: 1, z: 17, names: facetRow, what: "sweeps, rounding, shells, warps, relief" }
   { title: "BLENDS", level: 1, z: 25, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
   { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
-  { title: "FORMS", level: 2, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
-  { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
+  { title: "MOTION", level: motionLevel, z: motionZ, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
+  { title: "MOTION II", level: motionLevel, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
   { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
-  { title: "MOTION", level: 3, z: 20, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
-  { title: "MOTION II", level: 3, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
-  { title: "GLASS", level: 3, z: glassZ, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost" }
+  { title: "FORMS", level: surfaceLevel, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
+  { title: "SURFACES", level: surfaceLevel, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
+  { title: "GLASS", level: surfaceLevel, z: glassZ, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost" }
 ]
 
 // A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
@@ -126,32 +136,38 @@ template exhibit(label, extra = [], runs = [], note = "") {
   )
 }
 
+// A section board hanging on two rods from the ceiling over a level's floor, its lower edge 2.6 m up: a row's sign,
+// and the board game room's over its doorway (boardroom.puck). Its placement's yaw turns the text's face.
+template sectionSign(name, title, what) {
+  prototype name {
+    document {
+      name: name
+      schema: "puck.creation.v1"
+      palette: galleryPalette
+      for x in [-0.75, 0.75] {
+        shape Box $"hanger-{x}" {
+          material: 1
+          position [x, 3.66, 0]
+          scale [0.025, 0.54, 0.025]
+        }
+      }
+      shape Box "board" {
+        material: 2
+        position [0, 2.9, 0]
+        scale [1.05, 0.3, 0.04]
+      }
+      textRuns [
+        { text: title, position [0, 2.99, 0.04], rotation [0, 0, 0, 1], emHeight: 0.14, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
+        { text: what, position [0, 2.75, 0.04], rotation [0, 0, 0, 1], emHeight: 0.065, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
+      ]
+    }
+  }
+}
+
 // The hanging boards face down the hall toward the landing (-X); plinth labels still face -Z.
 template signPrototypes() {
   for (row, index) in galleryRows {
-    prototype $"gallery-sign-{index}" {
-      document {
-        name: $"gallery-sign-{index}"
-        schema: "puck.creation.v1"
-        palette: galleryPalette
-        for x in [-0.75, 0.75] {
-          shape Box $"hanger-{x}" {
-            material: 1
-            position [x, 3.66, 0]
-            scale [0.025, 0.54, 0.025]
-          }
-        }
-        shape Box "board" {
-          material: 2
-          position [0, 2.9, 0]
-          scale [1.05, 0.3, 0.04]
-        }
-        textRuns [
-          { text: row.title, position [0, 2.99, 0.04], rotation [0, 0, 0, 1], emHeight: 0.14, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
-          { text: row.what, position [0, 2.75, 0.04], rotation [0, 0, 0, 1], emHeight: 0.065, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
-        ]
-      }
-    }
+    sectionSign(name: $"gallery-sign-{index}", title: row.title, what: row.what)
   }
   // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
   prototype "gallery-map" {
@@ -177,7 +193,7 @@ template signPrototypes() {
         map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
         map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
         [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
-        [{ text: "PAINTING WING east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
+        [{ text: "PAINTING WING east   BOARD GAMES level 2 east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
       ), run => { text: run.text, position [run.position[0], (run.position[1] + 0.7), run.position[2]], rotation: run.rotation, emHeight: run.emHeight, depth: run.depth, mode: run.mode, material: run.material, align: run.align, maxWidth: 1.36 }
       )
     }
@@ -313,7 +329,7 @@ template galleryState() {
 
   table galleryInputs {
     probe = "[0.3, 1.35, 0.05]"
-    reach = $"[{reachX + 0.35}, {galleryFloor[3] + 1.45}, {motionZB - 0.25}]"
+    reach = $"[{reachX + 0.35}, {galleryFloor[motionLevel] + 1.45}, {motionZB - 0.25}]"
     tint = "#D9822B"
   }
 
@@ -958,9 +974,9 @@ template formPrototypes() {
 }
 
 // The static paint's world-space plane: a static placement shares one palette and draws an unparented paint in world
-// space, so the stripe names its own exhibit's place in the surface row (index 12, on level 2).
+// space, so the stripe names its own exhibit's place in the surface row (index 12, on level 3).
 let paintX = (galleryX + (gallerySpacing * 12))
-let paintY = (galleryFloor[2] + 1.2)
+let paintY = (galleryFloor[surfaceLevel] + 1.2)
 
 // Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
 // colour, each on slot 3.
