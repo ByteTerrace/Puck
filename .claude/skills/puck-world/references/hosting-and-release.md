@@ -103,8 +103,7 @@ session's `InvokeAsync` barrier and the exact render request's completion, with 
 artifact cleanup. Host deadlines remain enforced even when an injected session ignores cancellation; invalid
 host results are `unknown`. A console answer is delivered whole up to `ControlLimits.OutputCharacters` (1 Mi UTF-16
 code units) and cut past it to a head ending in a marker, flagged `truncated`, under the command's own status
-(`ControlResponse.Bounded`); a long read is never an unknown outcome. MCP results carry the same schema-backed metadata as JSON text and structured
-content; invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
+(`ControlResponse.Bounded`); a long read is never an unknown outcome. MCP results carry schema-backed metadata in `structuredContent` with a short status in `content[0].text` (omitting null and false fields with defaults); invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
 closes both stdio streams on shutdown; malformed input or stalled output exits with failure.
 Cancellation/EOF close ingress without stopping World or its recordings. The local adapter outlives Worlds: each
 call attaches on demand (pinned `--attach` file, or the newest answering World), a call with nothing to attach is

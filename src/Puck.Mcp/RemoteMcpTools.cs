@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
@@ -11,7 +12,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
 
     private static readonly JsonElement DetachInput = JsonElement.Parse($$$"""{"type":"object","properties":{"attachmentId":{"type":"string","description":"{{{AttachmentIdDescription}}}"}},"required":["attachmentId"],"additionalProperties":false}""");
     private static readonly JsonElement AttachInput = JsonElement.Parse("""{"type":"object","additionalProperties":false}""");
-    private static readonly JsonElement AttachmentOutput = JsonElement.Parse("""{"type":"object","properties":{"attachmentId":{"type":["string","null"]},"idleTimeoutSeconds":{"type":"integer"},"output":{"type":"string"},"isError":{"type":"boolean"}},"required":["attachmentId","idleTimeoutSeconds","output","isError"],"additionalProperties":false}""");
+    private static readonly JsonElement AttachmentOutput = JsonElement.Parse("""{"type":"object","properties":{"attachmentId":{"type":"string"},"idleTimeoutSeconds":{"type":"integer"},"output":{"type":"string"},"isError":{"type":"boolean","default":false}},"required":["idleTimeoutSeconds","output"],"additionalProperties":false}""");
     private static readonly JsonElement ExecInput = AttachmentSchema(source: OperatorMcpServer.ExecTool());
     private static readonly JsonElement CaptureInput = AttachmentSchema(source: OperatorMcpServer.CaptureTool());
     private static readonly JsonElement VectorWriteInput = AttachmentSchema(source: RemoteMcpHost.StateVectorWriteTool);
@@ -129,7 +130,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
             OperatorMcpJson.Default.RemoteAttachmentMetadata
         );
 
-        return new() { IsError = error, StructuredContent = metadata, Content = [new TextContentBlock { Text = metadata.GetRawText() }] };
+        return new() { IsError = error, StructuredContent = metadata, Content = [new TextContentBlock { Text = ((id is not null) ? $"attached {id}" : output) }] };
     }
     private static JsonElement AttachmentSchema(Tool source) {
         var schema = JsonNode.Parse(source.InputSchema.GetRawText())!.AsObject();
@@ -283,4 +284,4 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
         OutputSchema = RemoteMcpHost.StateVectorWriteTool.OutputSchema,
     };
 }
-internal readonly record struct RemoteAttachmentMetadata(string? AttachmentId, int IdleTimeoutSeconds, string Output, bool IsError);
+internal readonly record struct RemoteAttachmentMetadata(string? AttachmentId, int IdleTimeoutSeconds, string Output, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsError);
