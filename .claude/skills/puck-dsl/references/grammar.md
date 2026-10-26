@@ -28,7 +28,7 @@ syntax rather than a statement.
 ## Names
 
 One rule, `Puck.State.IdentifierSpelling`, for every Puck language (document
-grammar, expression spelling, pattern/cell-set/state spellings, `sql { }`):
+grammar, expression spelling, pattern/cell-set/state spellings):
 
 | Class | Characters |
 |---|---|
@@ -40,7 +40,7 @@ grammar, expression spelling, pattern/cell-set/state spellings, `sql { }`):
 - Any other name is quoted: `"seat-1"` in the document grammar, `` `seat-1` ``
   in an expression. Non-ASCII names (`"größe"`) are quoted too.
 - A position's reservations (statement keywords, reserved call names, pattern
-  words `any`/`empty`/`except`/`none`, SQL keywords, dotted paths, `$x:seg`
+  words `any`/`empty`/`except`/`none`, dotted paths, `$x:seg`
   continuations) layer on the rule as that position's own set. They never add
   a character class.
 - Every printer prints a name bare exactly when the bare spelling reads back as
@@ -72,29 +72,6 @@ bare-identifier reference (`pile`'s `of tokenRow`), zero or more
 is the owning vocabulary's answer. `puck.world.definition.v1`'s `state.world` is the one vocabulary use today —
 grammar, lowering, defaults, and PUCK049–PUCK066 refusals are in
 [`Puck.World.Transpiler/README.md`](../../../../src/Puck.World.Transpiler/README.md#state-declarations).
-
-## State SQL dialect: `sql { ... }`
-
-```sql
-sql {
-    CREATE TABLE characters (
-        id   TEXT PRIMARY KEY,
-        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
-        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
-    ) CAPACITY 32;
-
-    INSERT INTO characters (id, hp, mana) VALUES
-        ('hero', 80, 50);
-
-    DECLARE turnCount INT DEFAULT 0;
-
-    CREATE RULE healHero ON ENTER AS
-        UPDATE characters SET hp = hp + 10 WHERE id = 'hero';
-}
-```
-
-Embedded hermetic SQL state dialect compiling to native Puck state rows and rules.
-Refusals PUCK070–PUCK076 enforce type safety, non-empty primary keys, and exact arithmetic.
 
 ## `let`, `template`, `import`/`export`
 

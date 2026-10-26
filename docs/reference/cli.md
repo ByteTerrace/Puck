@@ -3028,7 +3028,7 @@ Writes `docs/reference/world-vocabulary.md` from
 `puck.world.definition.v1`'s surface—its keyword, the members it carries with
 their kinds and defaults, the document member it lowers to, and what the printer
 requires before it may print a document node back as that construct. The
-parser's embedded-language test, the decompiler's sugar guards, and the language
+parser's bare-modifier test, the decompiler's sugar guards, and the language
 server's completion and hover read the same table, so the file cannot describe a
 construct the code spells differently.
 
@@ -3346,7 +3346,7 @@ formatter for every source kind.
 
 ```text
 puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--strict] [--watch] [--update-assets]
-puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
+puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
 puck lint <path> [--strict]
@@ -3609,8 +3609,12 @@ The `puck` pass parses each `.puck` source and prints it back through
 `PuckPrinter`, the printer the language server's formatting request also uses,
 so the editor and the command line write identical text. A source has one
 layout: `PuckPrinter.IndentWidth` (2) spaces a level, each block body on its own
-lines, and each array or object keeping the line breaks its author gave it.
-There is no indentation or tab option, and the language server ignores an
+lines, and each array or object keeping the line breaks its author gave it. A
+line that would pass `PuckPrinter.LineWidth` (120) columns breaks: a call's
+arguments, an array's elements and an object's properties take a line each (a
+list of scalars fills its lines instead), an operator or conditional chain
+breaks after its operators, and a gate after `and` or `or`. A string, a comment
+and a cell key never break. There is no width, indentation or tab option, and the language server ignores an
 editor's `tabSize` and `insertSpaces`. Every comment, blank-line run, numeric
 base, raw fence, and bare-or-quoted name survives; see
 [the printer's description](../../src/Puck.World.Transpiler/README.md#editor-tooling) for what it keeps. A source that

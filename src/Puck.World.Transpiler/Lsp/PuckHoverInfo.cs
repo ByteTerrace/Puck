@@ -76,20 +76,6 @@ internal static class PuckHoverInfo {
         }
         for (var index = (path.Count - 1); (index >= 0); --index) {
             switch (path[index]) {
-                case EmbeddedBlockNode eb when string.Equals(
-                    a: eb.Language,
-                    b: "sql",
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                ):
-                    if (PuckSqlLsp.GetSqlHoverCard(
-                        offset: offset,
-                        resolver: resolver,
-                        text: source,
-                        word: word
-                    ) is { } sqlCard) {
-                        return sqlCard;
-                    }
-                    break;
                 case LambdaExpressionNode lambda when lambda.Parameters.Contains(value: word):
                     return Card(
                         $"{word} — lambda parameter",

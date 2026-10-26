@@ -578,23 +578,6 @@ public static partial class WorldDocumentEmitter {
                     break;
                 }
 
-            case EmbeddedBlockNode embeddedBlock: {
-                    if (string.Equals(a: embeddedBlock.Language, b: "sql", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                        LowerStateSqlBlock(
-                            block: embeddedBlock,
-                            parent: target,
-                            scope: scope
-                        );
-                    } else {
-                        scope.Diagnostics.ReportError(
-                            code: PuckDiagnosticCodes.UnrecognizedSectionStatement,
-                            message: $"Unrecognized embedded language '{embeddedBlock.Language}'",
-                            span: embeddedBlock.Span
-                        );
-                    }
-                    break;
-                }
-
             case BlockNode blockNode: {
                     if (RefusesRawGraphParameters(name: blockNode.Identifier, scope: scope, span: blockNode.Span)) {
                         break;

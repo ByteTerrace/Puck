@@ -208,20 +208,6 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK066: a <c>grid</c> reusing a topology name already declared by another <c>grid</c> or an
     /// explicitly authored <c>state.lattices</c> entry.</summary>
     public const string StateDeclarationDuplicateTopologyName = "PUCK066";
-    /// <summary>PUCK070: a SQL column or slot type the dialect does not admit; a floating-point one (<c>REAL</c>, <c>FLOAT</c>, <c>DOUBLE</c>) is told state holds no floats, use <c>FIXED</c>.</summary>
-    public const string SqlUnsupportedType = "PUCK070";
-    /// <summary>PUCK071: a composite <c>PRIMARY KEY (a, b)</c> in a SQL table declaration — a state cell has exactly one key.</summary>
-    public const string SqlCompositePrimaryKey = "PUCK071";
-    /// <summary>PUCK072: a <c>CHECK</c> constraint shape outside <c>BETWEEN a AND b</c>, <c>&gt;= a</c>, or <c>&lt;= b</c>.</summary>
-    public const string SqlInvalidCheckShape = "PUCK072";
-    /// <summary>PUCK073: an unsupported SQL clause or construct (<c>GROUP BY</c>, <c>HAVING</c>, <c>WINDOW</c>, <c>LIMIT</c>, cross-key <c>JOIN</c>, <c>UNION</c>, <c>TRIGGER</c>, etc.).</summary>
-    public const string SqlUnsupportedClause = "PUCK073";
-    /// <summary>PUCK074: a set-based <c>UPDATE</c> reading a column it writes at other keys — self-referential multi-key updates are refused.</summary>
-    public const string SqlSelfReferentialSetUpdate = "PUCK074";
-    /// <summary>PUCK075: an inserted row missing a <c>NOT NULL</c> column that declares no default value.</summary>
-    public const string SqlMissingRequiredColumn = "PUCK075";
-    /// <summary>PUCK076: a syntax or grammatical refusal inside a <c>sql { ... }</c> block.</summary>
-    public const string SqlSyntaxError = "PUCK076";
     /// <summary>PUCK077: a space is malformed: an unknown or missing field, dimensions out of range, a duplicate name, or over the space limit.</summary>
     public const string EmbeddingSpaceInvalid = "PUCK077";
     /// <summary>PUCK078: a Vector row names no space and there is no default, names an undeclared space, or a non-Vector row names a space.</summary>

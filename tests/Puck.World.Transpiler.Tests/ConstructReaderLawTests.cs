@@ -1,12 +1,11 @@
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Lsp;
 using Puck.World.Transpiler.Vocabulary;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>The readers read the description: the parser's embedded-language test, the language server's
+/// <summary>The readers read the description: the parser's bare-modifier test, the language server's
 /// completion and hover, and the manual's vocabulary tables all come from the one construct table.</summary>
 public class ConstructReaderLawTests {
     private const string GeneratedDocument = "docs/reference/world-vocabulary.md";
@@ -68,16 +67,6 @@ public class ConstructReaderLawTests {
                 ? $"{GeneratedDocument}:{(line + 1)}: {expected[line]}"
                 : "")
         );
-    }
-    [Fact]
-    public void TheVocabularyDelegatesItsEmbeddedLanguagesToTheTable() {
-        foreach (var keyword in WorldConstructs.Table.Keywords.Concat(second: ["mysql", "python", ""])) {
-            Assert.Equal(
-                actual: WorldDocumentVocabulary.Instance.IsEmbeddedLanguage(identifier: keyword),
-                expected: WorldConstructs.Table.IsEmbeddedLanguage(identifier: keyword)
-            );
-        }
-        Assert.True(condition: WorldDocumentVocabulary.Instance.IsEmbeddedLanguage(identifier: "SQL"));
     }
     [MemberData(nameof(Described))]
     [Theory]
