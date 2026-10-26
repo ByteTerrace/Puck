@@ -567,16 +567,31 @@ public sealed partial class WorldDocument {
             )
         );
     }
-    // An addon's cell write is refused for a cell its principal may not read, before the write looks at whether the
-    // cell exists, so the refusal of a hidden cell is the one an absent cell gets and a mod cannot probe for it. Every
-    // other principal writes under its grants alone. WorldAddonRuntime's bound cell write asks the same
-    // WorldStateDisclosure.CanReadCell.
+    // A write by a principal that reads through disclosure (an addon, a peer or a session) is refused for a cell or row
+    // it may not read, before the write looks at whether the cell or row exists, so the refusal of a hidden one is the
+    // one an absent one gets and a mod cannot probe for it. The console, the seats and the world's own program write
+    // under their grants alone. WorldAddonRuntime's bound cell write asks the same WorldStateDisclosure.CanReadCell.
+    private static bool ReadsThroughDisclosure(Principal principal) =>
+        (principal.Kind is PrincipalKind.Addon or PrincipalKind.Peer or PrincipalKind.Session);
     private static bool IsWithheldFromWriter(StateArena arena, WorldDefinition working, Principal principal, string row, CellName key) => (
-        (principal.Kind == PrincipalKind.Addon) &&
+        ReadsThroughDisclosure(principal: principal) &&
         !WorldStateDisclosure.CanReadCell(
         arena: arena,
         definition: working,
         key: key,
+        recipient: principal,
+        rowName: row
+    )
+    );
+    // A row the document declares and the principal may not read; an undeclared row is absent, not withheld.
+    private static bool IsRowWithheldFromWriter(WorldDefinition definition, Principal principal, string row) => (
+        ReadsThroughDisclosure(principal: principal) &&
+        (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: row
+        ) is not null) &&
+        !WorldStateDisclosure.CanReadRow(
+        definition: definition,
         recipient: principal,
         rowName: row
     )
