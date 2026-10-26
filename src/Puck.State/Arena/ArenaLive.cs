@@ -121,11 +121,11 @@ public sealed partial class StateArena {
         RequirePositionalRow(rowOrdinal: rowOrdinal);
         if (
             TryRowLayout(layout: out var layout, rowOrdinal: rowOrdinal) &&
-            (((uint)position) < ((uint)layout.CellCapacity)) &&
+            (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
             (layout.Kind is not (CellKind.Text or CellKind.Vector)) &&
-            Bit(index: (layout.CellStart + position), words: m_presence)
+            Bit(index: CellSlotAt(layout: layout, position: position), words: m_presence)
         ) {
-            value = LiveNumberAtSlot(rowOrdinal: rowOrdinal, slot: (layout.CellStart + position), time: in time);
+            value = LiveNumberAtSlot(rowOrdinal: rowOrdinal, slot: CellSlotAt(layout: layout, position: position), time: in time);
             return true;
         }
         value = 0L;

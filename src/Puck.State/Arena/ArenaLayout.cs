@@ -272,9 +272,11 @@ public sealed class ArenaLayout {
         return false;
     }
 
+    internal const ulong LinkColumns = (1UL << (int)ArenaColumn.NextSlot) | (1UL << (int)ArenaColumn.PreviousSlot) | (1UL << (int)ArenaColumn.HeadSlot) | (1UL << (int)ArenaColumn.TailSlot);
+
     /// <summary>Returns whether a column is reserved only by rows declaring its trait.</summary>
     /// <param name="column">The column.</param>
-    public static bool IsOptional(ArenaColumn column) => column is ArenaColumn.Text or ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence;
+    public static bool IsOptional(ArenaColumn column) => column is ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot or ArenaColumn.Text or ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence;
 
     /// <summary>Returns the optional columns declared by a row and its seed cells.</summary>
     /// <param name="row">The declaration.</param>
@@ -282,6 +284,7 @@ public sealed class ArenaLayout {
         var columns = 0UL;
         foreach (var column in ArenaColumns.All) {
             var held = column switch {
+                ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot => row.Shape is RowShape.Keyed or RowShape.Ordered,
                 ArenaColumn.Text => row.Kind == CellKind.Text,
                 ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => (row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null) || (row.Cells ?? []).Any(static cell => (cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)),
                 ArenaColumn.Behavior => HasTraits(row: row),
@@ -305,6 +308,7 @@ public sealed class ArenaLayout {
         var bytes = (vectorBytes + columnArrayBytes);
 
         bytes += (textSlots * TextBytesPerTextSlot);
+        bytes += (declaredPositions[(int)ArenaColumn.NextSlot] * sizeof(int));
 
         foreach (var column in ArenaColumns.All) {
             var size = (IsOptional(column: column) ? declaredPositions[(int)column] : (ArenaColumns.Space(column: column) switch {
@@ -506,6 +510,7 @@ public sealed class ArenaLayout {
                             }
 
                             rowColumns[ordinal] = ColumnsOf(row: row);
+                            if (catalog.IsPoolRow(rowOrdinal: ordinal)) { rowColumns[ordinal] &= ~LinkColumns; }
                             foreach (var optional in ArenaColumns.All) {
                                 if (IsOptional(column: optional) && ((rowColumns[ordinal] & (1UL << (int)optional)) != 0UL)) {
                                     columnArrayBytes += (3L * ArrayOverheadBytes);

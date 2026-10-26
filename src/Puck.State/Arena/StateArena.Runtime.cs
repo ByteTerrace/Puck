@@ -421,12 +421,12 @@ public sealed partial class StateArena {
             layout: out var layout,
             rowOrdinal: rowOrdinal
         ) ||
-            (((uint)position) >= ((uint)layout.CellCapacity))
+            (((uint)position) >= ((uint)HashCellExtent(layout: layout)))
         ) {
             return false;
         }
 
-        slot = (layout.CellStart + position);
+        slot = CellSlotAt(layout: layout, position: position);
 
         return Bit(
             index: slot,

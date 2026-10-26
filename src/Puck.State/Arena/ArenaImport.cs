@@ -429,6 +429,7 @@ public sealed partial class StateArena {
                 index: rowOrdinal,
                 value: members
             );
+            InitializeMemberLinks(rowOrdinal: rowOrdinal, count: members);
             Reindex(
                 layout: layout,
                 rowOrdinal: rowOrdinal
@@ -666,6 +667,7 @@ public sealed partial class StateArena {
             return false;
         }
         foreach (var column in ArenaColumns.All) {
+            if (IsLinkColumn(column: column)) { continue; }
             if (((ArenaLayout.ColumnsOf(row: row) & (1UL << (int)column)) != 0UL) && !m_layout.HasColumn(row: rowOrdinal, column: column)) {
                 reason = $"row '{row.Name.Value}' declares no '{column}' column; changing its traits requires a relayout";
                 return false;

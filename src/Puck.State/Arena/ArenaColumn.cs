@@ -8,6 +8,14 @@ public enum ArenaColumn : byte {
     /// <summary>A cell's numeric payload: an <see cref="CellKind.Int"/> value, a <see cref="CellKind.Fixed"/> row's
     /// raw bits, or a <see cref="CellKind.Bool"/> row's 0/1 encoding.</summary>
     Number = 0,
+    /// <summary>The next physical member slot, plus one.</summary>
+    NextSlot,
+    /// <summary>The preceding physical member slot, plus one.</summary>
+    PreviousSlot,
+    /// <summary>The first member slot, plus one.</summary>
+    HeadSlot,
+    /// <summary>The last member slot, plus one.</summary>
+    TailSlot,
 
     /// <summary>A <see cref="CellKind.Text"/> cell's text.</summary>
     Text,
@@ -93,6 +101,10 @@ public static class ArenaColumns {
     /// <summary>Every declared column, in the order a layout lays them out and a hash folds them.</summary>
     public static ReadOnlySpan<ArenaColumn> All => [
         ArenaColumn.Number,
+        ArenaColumn.NextSlot,
+        ArenaColumn.PreviousSlot,
+        ArenaColumn.HeadSlot,
+        ArenaColumn.TailSlot,
         ArenaColumn.Text,
         ArenaColumn.Vector,
         ArenaColumn.Presence,
@@ -119,7 +131,7 @@ public static class ArenaColumns {
     /// <param name="column">The column to classify.</param>
     /// <returns>The column's index space.</returns>
     public static ArenaIndexSpace Space(ArenaColumn column) => (column switch {
-        ArenaColumn.MemberCount or ArenaColumn.HistoryCursor or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence => ArenaIndexSpace.Row,
+        ArenaColumn.HeadSlot or ArenaColumn.TailSlot or ArenaColumn.MemberCount or ArenaColumn.HistoryCursor or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence => ArenaIndexSpace.Row,
         ArenaColumn.DrawnMaskWord => ArenaIndexSpace.MaskWord,
         ArenaColumn.LaneNumber => ArenaIndexSpace.LaneSlot,
         ArenaColumn.LaneRoster => ArenaIndexSpace.LaneRoster,
@@ -134,7 +146,7 @@ public static class ArenaColumns {
     public static long StorageBytes(ArenaColumn column, long size) => (column switch {
         ArenaColumn.Presence or ArenaColumn.LaneRoster => (((size + 63L) / 64L) * sizeof(ulong)),
         ArenaColumn.Vector => 0L,
-        ArenaColumn.MemberKey => (size * sizeof(int)),
+        ArenaColumn.MemberKey or ArenaColumn.NextSlot or ArenaColumn.PreviousSlot => (size * sizeof(int)),
         ArenaColumn.Behavior or ArenaColumn.ClockSet => size,
         _ => (size * sizeof(long)),
     });

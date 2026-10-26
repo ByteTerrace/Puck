@@ -43,6 +43,12 @@ answers `false` to every read of it and refuses every write, because a host
 facet serves that row instead. For the row shapes and cell kinds themselves, see
 [Rows, cells, and values](data-model.md).
 
+Keyed and ordered rows keep their order in links between stable cell slots.
+Removing a member changes its neighbors and clears that slot. A FIFO eviction
+reuses the victim's slot for the appended member. Neither operation copies the
+other cells' values or metadata. Positional reads use a derived view of the links;
+key reads keep their direct slot index. Pools retain their fixed identity slots.
+
 ## From declarations to storage
 
 The arena is built in three steps: compile the section into a catalog, lay out
@@ -172,7 +178,7 @@ row ordinal and `rook` to a key once, then reads.
 | `TryReadRawAt(row, position, out long)` | The stored number at one position, for a ring slot or a board cell, which no trait can govern. |
 | `TryReadBoard(row, Span<long>)` | Every cell of a lattice row by cell ordinal, with the row's `Empty` value for absent cells. |
 | `ReadWord(row, …)` | A row's values as the word a pattern walks. |
-| `CellCount(row)`, `TryNextCell(row, ref cursor, out key)` | How many cells a row holds, and each held cell in storage-slot order. |
+| `CellCount(row)`, `TryNextCell(row, ref cursor, out key)` | How many cells a row holds, and each held cell in member order (storage-slot order for boards, rings, and pools). |
 
 A live read applies `StateAdvance` and `StateCycle` and never eases a
 `StateDynamics` cell, so rules and search read stored truth. Every read a rule,

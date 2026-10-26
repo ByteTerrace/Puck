@@ -34,8 +34,15 @@ public sealed partial class StateArena {
     private readonly ArenaJournal m_journal;
 
     private ArenaLayout m_layout;
-
     private sbyte[] m_carried = [];
+    private ArenaColumnBuffer<int> m_nextSlots;
+    private ArenaColumnBuffer<int> m_previousSlots;
+    private ArenaColumnBuffer<int> m_headSlots;
+    private ArenaColumnBuffer<int> m_tailSlots;
+    private int[][] m_positions;
+    private ulong[] m_positionVersions;
+
+
     private int[] m_reorderAt = [];
     private int[] m_reorderWhich = [];
 
@@ -146,6 +153,12 @@ public sealed partial class StateArena {
         m_laneNumbers = new long[layout.LaneSlotCount];
         m_laneRoster = new ulong[((layout.LaneRosterCount + 63) / 64)];
         m_layout = layout;
+        m_nextSlots = new(layout: layout, column: ArenaColumn.NextSlot);
+        m_previousSlots = new(layout: layout, column: ArenaColumn.PreviousSlot);
+        m_headSlots = new(layout: layout, column: ArenaColumn.HeadSlot);
+        m_tailSlots = new(layout: layout, column: ArenaColumn.TailSlot);
+        m_positions = new int[layout.RowCount][];
+        m_positionVersions = new ulong[layout.RowCount];
         m_memberCounts = new long[layout.RowCount];
         m_memberKeys = new int[layout.CellSlotCount];
         m_numbers = new long[layout.CellSlotCount];
@@ -199,6 +212,7 @@ public sealed partial class StateArena {
 
         for (var ordinal = 0; (ordinal < layout.RowCount); ordinal++) {
             m_slotOfKey[ordinal] = new ArenaSlotMap();
+            InitializeMemberLinks(rowOrdinal: ordinal, count: 0);
         }
 
         m_poolMutationDepth++;

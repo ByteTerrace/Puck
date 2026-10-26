@@ -173,6 +173,13 @@ public sealed partial class StateArena {
         m_laneNumbers = source.m_laneNumbers;
         m_laneRoster = source.m_laneRoster;
         m_layout = source.m_layout;
+        m_carried = source.m_carried;
+        m_nextSlots = source.m_nextSlots;
+        m_previousSlots = source.m_previousSlots;
+        m_headSlots = source.m_headSlots;
+        m_tailSlots = source.m_tailSlots;
+        m_positions = source.m_positions;
+        m_positionVersions = source.m_positionVersions;
         m_maskWords = source.m_maskWords;
         m_memberCounts = source.m_memberCounts;
         m_memberKeys = source.m_memberKeys;

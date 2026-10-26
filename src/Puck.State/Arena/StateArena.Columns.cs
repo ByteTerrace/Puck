@@ -53,6 +53,10 @@ public sealed partial class StateArena {
     });
     private long ReadNumberRaw(ArenaColumn column, int index) => (column switch {
         ArenaColumn.Number => m_numbers[index],
+        ArenaColumn.NextSlot => m_nextSlots[index],
+        ArenaColumn.PreviousSlot => m_previousSlots[index],
+        ArenaColumn.HeadSlot => m_headSlots[index],
+        ArenaColumn.TailSlot => m_tailSlots[index],
         ArenaColumn.Presence => (Bit(
         index: index,
         words: m_presence
@@ -94,6 +98,10 @@ public sealed partial class StateArena {
     });
     private void WriteNumberRaw(ArenaColumn column, int index, long value) {
         switch (column) {
+            case ArenaColumn.NextSlot: m_nextSlots[index] = (int)value; break;
+            case ArenaColumn.PreviousSlot: m_previousSlots[index] = (int)value; break;
+            case ArenaColumn.HeadSlot: m_headSlots[index] = (int)value; break;
+            case ArenaColumn.TailSlot: m_tailSlots[index] = (int)value; break;
             case ArenaColumn.Number:
                 m_numbers[index] = value;
 

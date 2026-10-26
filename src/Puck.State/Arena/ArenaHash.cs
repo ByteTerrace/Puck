@@ -80,17 +80,19 @@ public sealed partial class StateArena {
         }
 
         foreach (var column in ArenaColumns.All) {
+            if (IsLinkColumn(column: column)) { continue; }
             hash.Add(value: ((ulong)((byte)column)));
 
             switch (ArenaColumns.Space(column: column)) {
                 case ArenaIndexSpace.Cell:
                     if (layout.IsStored) {
-                        for (var position = 0; (position < layout.CellCapacity); position++) {
+                        hash.Add(value: (ulong)layout.CellCapacity);
+                for (var position = 0; (position < HashCellExtent(layout: layout)); position++) {
                             FoldCell(
                                 column: column,
                                 hash: ref hash,
                                 layout: layout,
-                                slot: (layout.CellStart + position)
+                                slot: CellSlotAt(layout: layout, position: position)
                             );
                         }
                     }
@@ -132,6 +134,7 @@ public sealed partial class StateArena {
     }
 
     private void FoldColumn(ref Fnv1aHash hash, ArenaColumn column) {
+        if (IsLinkColumn(column: column)) { return; }
         if (ArenaColumns.Space(column: column) != ArenaIndexSpace.Cell) {
             var size = m_layout.Size(column: column);
 
@@ -171,12 +174,13 @@ public sealed partial class StateArena {
                     continue;
                 }
 
-                for (var position = 0; (position < layout.CellCapacity); position++) {
+                hash.Add(value: (ulong)layout.CellCapacity);
+                for (var position = 0; (position < HashCellExtent(layout: layout)); position++) {
                     FoldCell(
                         column: column,
                         hash: ref hash,
                         layout: layout,
-                        slot: (layout.CellStart + position)
+                        slot: CellSlotAt(layout: layout, position: position)
                     );
                 }
             }

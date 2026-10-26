@@ -180,7 +180,7 @@ public sealed partial class StateArena {
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
             var old = (((prior is not null) && (index < prior.Count)) ? prior[index] : null);
             var cell = ExportCell(layout: in layout, name: m_keys[key],
-                slot: ((layout.CellStart + cursor) - 1), traits: traits, previous: old);
+                slot: CellSlotAt(layout: layout, position: (cursor - 1)), traits: traits, previous: old);
 
             if ((cells is null) && !ReferenceEquals(objA: cell, objB: old)) {
                 cells = ImmutableArray.CreateBuilder<StateCell>();

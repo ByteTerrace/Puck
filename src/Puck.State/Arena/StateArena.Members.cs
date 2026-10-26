@@ -81,7 +81,9 @@ public sealed partial class StateArena {
             : position
         );
 
+        var reusableSlot = -1;
         if (count >= layout.CellCapacity) {
+            reusableSlot = CellSlotAt(layout: layout, position: 0);
             if (!TryRemoveAt(
                 position: 0,
                 reason: out reason,
@@ -104,15 +106,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        for (var position2 = count; (position2 > at); position2--) {
-            MoveCell(
-                from: (layout.CellStart + (position2 - 1)),
-                rowOrdinal: rowOrdinal,
-                to: (layout.CellStart + position2)
-            );
-        }
-
-        var slot = (layout.CellStart + at);
+        var slot = InsertMemberSlot(rowOrdinal: rowOrdinal, position: at, reusableSlot: reusableSlot);
 
         ClearCell(
             rowOrdinal: rowOrdinal,
@@ -133,10 +127,7 @@ public sealed partial class StateArena {
             slot: slot,
             value: admitted
         );
-        Reindex(
-            layout: layout,
-            rowOrdinal: rowOrdinal
-        );
+        m_slotOfKey[rowOrdinal][key.Ordinal] = slot;
         RecomputeMembership(rowOrdinal: rowOrdinal);
 
         reason = string.Empty;
@@ -415,8 +406,8 @@ public sealed partial class StateArena {
             return false;
         }
 
-        return TryRemoveAt(
-            position: (slot - layout.CellStart),
+        return RemoveMemberSlot(
+            slot: slot,
             reason: out reason,
             rowOrdinal: rowOrdinal
         );
@@ -661,33 +652,16 @@ public sealed partial class StateArena {
             which[source] = position;
         }
 
-        // at[member] is where the member that started at that position now sits; which[position] is which member
-        // sits there, so one swap keeps both maps true without re-scanning.
-        for (var position = 0; (position < count); position++) {
-            at[position] = position;
-            which[position] = position;
+        for (var position = 0; position < count; position++) {
+            at[position] = CellSlotAt(layout: layout, position: position) - layout.CellStart;
         }
-        for (var position = 0; (position < count); position++) {
-            var source = at[order[position]];
-
-            if (source == position) {
-                continue;
-            }
-
-            SwapCells(
-                left: (layout.CellStart + position),
-                right: (layout.CellStart + source),
-                rowOrdinal: rowOrdinal
-            );
-
-            var moved = which[position];
-            var displaced = which[source];
-
-            which[position] = displaced;
-            which[source] = moved;
-            at[displaced] = position;
-            at[moved] = source;
+        for (var position = 0; position < count; position++) {
+            var slot = layout.CellStart + at[order[position]];
+            WriteNumber(column: ArenaColumn.PreviousSlot, index: slot, value: (position == 0 ? 0 : at[order[position - 1]] + 1));
+            WriteNumber(column: ArenaColumn.NextSlot, index: slot, value: (position + 1 == count ? 0 : at[order[position + 1]] + 1));
         }
+        WriteNumber(column: ArenaColumn.HeadSlot, index: rowOrdinal, value: (count == 0 ? 0 : at[order[0]] + 1));
+        WriteNumber(column: ArenaColumn.TailSlot, index: rowOrdinal, value: (count == 0 ? 0 : at[order[count - 1]] + 1));
 
         Reindex(
             layout: layout,
@@ -733,118 +707,6 @@ public sealed partial class StateArena {
             );
         }
     }
-    private void MoveCell(int rowOrdinal, int from, int to) {
-        Visit(lanes: (CellColumns.Length + m_layout[rowOrdinal].Dimensions));
-        foreach (var column in CellColumns) {
-            if (!IsMaterialized(column: column, row: rowOrdinal)) {
-                continue;
-            }
-            if (ArenaColumns.IsReference(column: column)) {
-                WriteReference(
-                    column: column,
-                    index: to,
-                    value: ReadReferenceRaw(
-                        column: column,
-                        index: from
-                    )
-                );
-            } else {
-                WriteNumber(
-                    column: column,
-                    index: to,
-                    value: ReadNumberRaw(
-                        column: column,
-                        index: from
-                    )
-                );
-            }
-        }
-
-        ref readonly var layout = ref m_layout[rowOrdinal];
-
-        if (layout.Dimensions > 0) {
-            WriteVectorSlot(
-                components: VectorSpan(slot: from),
-                layout: layout,
-                slot: to
-            );
-        }
-    }
-    private void SwapCells(int rowOrdinal, int left, int right) {
-        foreach (var column in CellColumns) {
-            if (!IsMaterialized(column: column, row: rowOrdinal)) {
-                continue;
-            }
-            Visit(lanes: 2L);
-            if (ArenaColumns.IsReference(column: column)) {
-                var carried = ReadReferenceRaw(
-                    column: column,
-                    index: left
-                );
-
-                WriteReference(
-                    column: column,
-                    index: left,
-                    value: ReadReferenceRaw(
-                        column: column,
-                        index: right
-                    )
-                );
-                WriteReference(
-                    column: column,
-                    index: right,
-                    value: carried
-                );
-            } else {
-                var carried = ReadNumberRaw(
-                    column: column,
-                    index: left
-                );
-
-                WriteNumber(
-                    column: column,
-                    index: left,
-                    value: ReadNumberRaw(
-                        column: column,
-                        index: right
-                    )
-                );
-                WriteNumber(
-                    column: column,
-                    index: right,
-                    value: carried
-                );
-            }
-        }
-
-        ref readonly var layout = ref m_layout[rowOrdinal];
-
-        if (layout.Dimensions <= 0) {
-            return;
-        }
-        if (m_carried.Length < layout.Dimensions) {
-            m_carried = new sbyte[layout.Dimensions];
-        }
-
-        Visit(lanes: (2L * layout.Dimensions));
-
-        var scratch = m_carried.AsSpan(
-            length: layout.Dimensions,
-            start: 0
-        );
-
-        VectorSpan(slot: left).CopyTo(destination: scratch);
-        WriteVectorSlot(
-            components: VectorSpan(slot: right),
-            layout: layout,
-            slot: left
-        );
-        WriteVectorSlot(
-            components: scratch,
-            layout: layout,
-            slot: right
-        );
-    }
     private void Reindex(int rowOrdinal, in ArenaRowLayout layout) {
         var resolved = m_slotOfKey[rowOrdinal];
 
@@ -855,7 +717,7 @@ public sealed partial class StateArena {
         }
         Visit(lanes: m_memberCounts[rowOrdinal]);
         for (var position = 0; (position < m_memberCounts[rowOrdinal]); position++) {
-            var slot = (layout.CellStart + position);
+            var slot = CellSlotAt(layout: layout, position: position);
             var ordinal = m_memberKeys[slot];
 
             if (ordinal >= 0) {
@@ -1046,27 +908,22 @@ public sealed partial class StateArena {
             return false;
         }
 
-        for (var next = (position + 1); (next < count); next++) {
-            MoveCell(
-                from: (layout.CellStart + next),
-                rowOrdinal: rowOrdinal,
-                to: (layout.CellStart + (next - 1))
-            );
-        }
-
-        ClearCell(
-            rowOrdinal: rowOrdinal,
-            slot: (layout.CellStart + (count - 1))
-        );
-        WriteNumber(
-            column: ArenaColumn.MemberCount,
-            index: rowOrdinal,
-            value: (count - 1)
-        );
-        Reindex(
-            layout: layout,
-            rowOrdinal: rowOrdinal
-        );
+        return RemoveMemberSlot(rowOrdinal: rowOrdinal, slot: CellSlotAt(layout: layout, position: position), reason: out reason);
+    }
+    private bool RemoveMemberSlot(int rowOrdinal, int slot, out string reason) {
+        ref readonly var layout = ref m_layout[rowOrdinal];
+        var previous = m_previousSlots[slot];
+        var next = m_nextSlots[slot];
+        if (previous == 0) { WriteNumber(column: ArenaColumn.HeadSlot, index: rowOrdinal, value: next); }
+        else { WriteNumber(column: ArenaColumn.NextSlot, index: layout.CellStart + previous - 1, value: next); }
+        if (next == 0) { WriteNumber(column: ArenaColumn.TailSlot, index: rowOrdinal, value: previous); }
+        else { WriteNumber(column: ArenaColumn.PreviousSlot, index: layout.CellStart + next - 1, value: previous); }
+        var key = m_memberKeys[slot];
+        m_slotOfKey[rowOrdinal].Remove(key: key);
+        ClearCell(rowOrdinal: rowOrdinal, slot: slot);
+        WriteNumber(column: ArenaColumn.PreviousSlot, index: slot, value: 0);
+        WriteNumber(column: ArenaColumn.NextSlot, index: slot, value: 0);
+        WriteNumber(column: ArenaColumn.MemberCount, index: rowOrdinal, value: m_memberCounts[rowOrdinal] - 1);
         RecomputeMembership(rowOrdinal: rowOrdinal);
 
         reason = string.Empty;

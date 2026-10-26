@@ -390,6 +390,10 @@ public sealed partial class StateArena {
             reason = $"carries a noncanonical number for column '{entry.Column}'";
             return false;
         }
+        if (IsLinkColumn(column: entry.Column) && ((entry.Number < 0L) || (entry.Number > layout.CellCapacity))) {
+            reason = "carries a member link outside its row";
+            return false;
+        }
         if (entry.Column == ArenaColumn.Number) {
             var declaration = m_rows[row];
             StateEnum? symbols = null;
@@ -592,6 +596,8 @@ public sealed partial class StateArena {
         var poolFieldRow = catalog.IsPoolFieldRow(rowOrdinal: row);
 
         return (column switch {
+            ArenaColumn.NextSlot or ArenaColumn.PreviousSlot => layout.CellCapacity,
+            ArenaColumn.HeadSlot or ArenaColumn.TailSlot => 1,
             ArenaColumn.Number => ((layout.Kind is (CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? layout.CellCapacity : 0),
             ArenaColumn.Text => ((layout.Kind == CellKind.Text) ? layout.CellCapacity : 0),
             ArenaColumn.Vector => ((layout.Kind == CellKind.Vector) ? layout.CellCapacity : 0),
