@@ -1844,6 +1844,12 @@ disconnects instead of blocking the simulation. Disposing the client lease cance
 observation, and consumer disconnect detaches the server subscription even when
 the world is paused.
 
+Each session or federation sink owns a `WorldStateChangeDisclosure` workspace.
+Its filtered cell memory is borrowed until the next delivery; consumers copy what
+they retain. Only the buffers are reused: row, cell, zone and live reader-list
+policies are checked again for every delivery. Public reads do not format a
+principal token.
+
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
 silently reassign or deactivate a connected human's body—see "The entity

@@ -116,7 +116,14 @@ public sealed partial class WorldTick {
 
             if (holding == placement.Holding) {
                 if (skippable) {
-                    m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray(), holding);
+                    // A changing comparand need not change the mask. Keep its memo storage across such ticks.
+                    if (m_responseObservedValues.TryGetValue(key: placement.Id, value: out var cached) && (cached.Values.Length == count)) {
+                        values[..count].CopyTo(destination: cached.Values);
+                        present[..count].CopyTo(destination: cached.Present);
+                        m_responseObservedValues[placement.Id] = (cached.Values, cached.Present, holding);
+                    } else {
+                        m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray(), holding);
+                    }
                 } else if (m_responseObservedValues.Count > 0) {
                     m_responseObservedValues.Remove(key: placement.Id);
                 }

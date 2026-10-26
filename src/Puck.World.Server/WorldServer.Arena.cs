@@ -30,28 +30,29 @@ public sealed partial class WorldServer {
     private bool[] m_publicationRows = [];
     private bool[] m_snapshotRows = [];
 
-    internal void EnterArenaTick() { Array.Clear(m_snapshotRows); }
+    internal void EnterArenaTick() { Array.Clear(array: m_snapshotRows); }
     internal void LeaveArenaTick() { }
-
     // Explicit export/edit boundary. The installed definition retains declarations and seeds.
     internal WorldDefinition MaterializeArena() => WorldStateReader.Export(m_document.Definition, m_arena);
-
     internal int PublishedCellCount(bool full) {
         var count = 0;
-        for (var row = 0; row < m_documentRowCount; row++) {
-            if (full || m_snapshotRows[row]) { count += 1 + m_arena.CellCount(rowOrdinal: row); }
+
+        for (var row = 0; (row < m_documentRowCount); row++) {
+            if (full || m_snapshotRows[row]) { count += (1 + m_arena.CellCount(rowOrdinal: row)); }
         }
         return count;
     }
     internal void CopyPublishedCells(Span<FieldCellDelta> cells, bool full) {
         var next = 0;
-        for (var row = 0; row < m_documentRowCount; row++) {
+
+        for (var row = 0; (row < m_documentRowCount); row++) {
             if (!full && !m_snapshotRows[row]) { continue; }
             cells[next++] = new FieldCellDelta(Cell: -1, Field: 0, Raw: m_arena.CellCount(rowOrdinal: row), Row: row);
             var cursor = 0;
             var position = 0;
-            while (m_arena.TryNextCell(rowOrdinal: row, cursor: ref cursor, key: out var key)) {
-                cells[next++] = new FieldCellDelta(Cell: position++, Field: 0, Raw: 0L, Row: row, Image: m_arena.ReadCellImage(rowOrdinal: row, key: key));
+
+            while (m_arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: row)) {
+                cells[next++] = new FieldCellDelta(Cell: position++, Field: 0, Raw: 0L, Row: row, Image: m_arena.ReadCellImage(key: key, rowOrdinal: row));
             }
         }
     }
@@ -91,7 +92,7 @@ public sealed partial class WorldServer {
         }
         if ((write is not (WorldDocumentWriteKind.Set or WorldDocumentWriteKind.Add)) ||
             ((text is not null) && (write != WorldDocumentWriteKind.Set)) || descriptor.Generated || descriptor.HostOwned ||
-            m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true }) {
+            (m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true })) {
             return WorldCellWriteVerdict.Rejected;
         }
         if (!WorldGrants.IsTrusted(principal: principal) && !WorldStateDisclosure.CanReadCell(definition: m_document.Definition,
@@ -395,30 +396,31 @@ public sealed partial class WorldServer {
     /// preflight judges is what the commit installs.</remarks>
     /// <returns>The proposal.</returns>
     public WorldArenaPublication ProposePublication() {
-        Array.Clear(m_publicationRows);
+        Array.Clear(array: m_publicationRows);
         m_arena.CopyChangedRows(rows: m_publicationRows);
         if (m_arena.Journal.Scopes != 0) { m_arena.FlagOpenRows(rows: m_publicationRows); }
         var moved = false;
         var drive = false;
-        for (var row = 0; row < m_documentRowCount; row++) {
+
+        for (var row = 0; (row < m_documentRowCount); row++) {
             if (!m_publicationRows[row]) { continue; }
             moved = true;
-            drive |= m_arena.Rows[row] is WorldStateRow { GatesDrive: true };
+            drive |= (m_arena.Rows[row] is WorldStateRow { GatesDrive: true });
         }
         return new WorldArenaPublication(Definition: m_document.Definition, Moved: moved, DriveGate: drive, RefreshRefusal: null);
     }
-
     /// <summary>Publishes committed changed positions to every live consumer, without exporting document rows.</summary>
     public bool PublishArena(bool reconcile = true) {
         var proposal = ProposePublication();
+
         if (proposal.Moved) {
-            m_arena.CopyChangedRows(rows: m_publicationRows, clear: true);
-            for (var row = 0; row < m_documentRowCount; row++) {
+            m_arena.CopyChangedRows(clear: true, rows: m_publicationRows);
+            for (var row = 0; (row < m_documentRowCount); row++) {
                 if (!m_publicationRows[row]) { continue; }
                 m_snapshotRows[row] = true;
                 NoteMovedRow(ordinal: row, rowCount: m_documentRowCount);
                 m_publishedVersions[row] = m_arena.RowVersion(rowOrdinal: row);
-                m_fieldsOwed |= m_arena.Rows[row] is WorldStateRow { Field: not null };
+                m_fieldsOwed |= (m_arena.Rows[row] is WorldStateRow { Field: not null });
             }
             m_document.MarkStateDeliveryPending();
             m_driveGateOwed |= proposal.DriveGate;
@@ -427,7 +429,6 @@ public sealed partial class WorldServer {
         if (reconcile) { SettleStateConsumers(); }
         return proposal.Moved;
     }
-
     /// <summary>Publishes a committed firing's positions; edit proposals materialize only at their edit boundary.</summary>
     public bool AdoptPublication(WorldArenaPublication publication, bool reconcile = true) => PublishArena(reconcile: reconcile);
 
@@ -435,12 +436,13 @@ public sealed partial class WorldServer {
         if (!m_consumersOwed) { return; }
         var driveGate = m_driveGateOwed;
         var fields = m_fieldsOwed;
+
         m_consumersOwed = false; m_driveGateOwed = false; m_fieldsOwed = false;
         m_document.ReconcileStateConsumers(definition: m_document.Definition, driveGate: driveGate, fields: fields);
     }
-
     private void BindArenaDocument() {
         var projected = WorldStateDocumentValues.BindLive(definition: m_document.Definition, arena: m_arena, clock: () => m_ruleHost.Time);
+
         m_document.AdoptDefinition(definition: projected);
     }
     // Every search job is one resolved plan and one judge over this server's own arena, admitted at install: a
@@ -497,11 +499,18 @@ public sealed partial class WorldServer {
     }
 
     // The placement ordinal a 'placement:<id>'/'placement:$each' reference resolves to: the id's index in the
-    // document's own placements list, rebuilt when the list is a new reference.
+    // document's own placements list, rebuilt for a new list unless a mask-only response carried it across.
     private IReadOnlyList<WorldPlacement>? m_placementOrdinalsFrom;
 
     private Dictionary<string, int> m_placementOrdinals = [];
 
+    // A response changes masks, never ids or row order. Keep the resolved addresses instead of rebuilding the
+    // whole dictionary on the following tick's first placement read.
+    internal void CarryPlacementOrdinals(WorldDefinition previous, WorldDefinition definition) {
+        if (ReferenceEquals(objA: m_placementOrdinalsFrom, objB: previous.Placements)) {
+            m_placementOrdinalsFrom = definition.Placements;
+        }
+    }
     internal int PlacementOrdinalOf(string id) {
         var placements = m_document.Definition.Placements;
 
