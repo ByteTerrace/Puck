@@ -23,6 +23,7 @@ public static class MeshSceneCommand {
     // many rays as a High-tier probe as far as the debug world's far distance.
     private const int Rays = 128;
     private const float Reach = 200f;
+
     private static readonly (int X, int Y, int Z) Window = (48, 16, 48);
 
     /// <summary>Creates the <c>scene</c> subverb.</summary>
@@ -50,6 +51,7 @@ public static class MeshSceneCommand {
 
         return command;
     }
+
     private static int Run(string world, string? change, string? cacheRoot, string? build, string? identityText, string backend) {
         var extension = backend switch {
             "directx" => ".dxil",
@@ -91,6 +93,7 @@ public static class MeshSceneCommand {
                 missing++;
                 continue;
             }
+            if (mesh is null) { continue; }
             draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity));
             labels.Add(item: scene.Label(group: group, owner: null));
         }
@@ -104,7 +107,7 @@ public static class MeshSceneCommand {
         for (var index = 0; (index < draws.Count); index++) {
             var selected = ((change is null)
                 ? ((changed < 0) || (draws[index].Mesh.TriangleCount > draws[changed].Mesh.TriangleCount))
-                : (labels[index].Contains(value: change, comparisonType: StringComparison.Ordinal) && ((changed < 0) || (draws[index].Mesh.TriangleCount > draws[changed].Mesh.TriangleCount))));
+                : (labels[index].Contains(comparisonType: StringComparison.Ordinal, value: change) && ((changed < 0) || (draws[index].Mesh.TriangleCount > draws[changed].Mesh.TriangleCount))));
 
             if (selected) { changed = index; }
         }
@@ -119,23 +122,23 @@ public static class MeshSceneCommand {
         var moved = new List<SdfMeshDraw>(collection: draws) { [changed] = target with { ObjectToWorld = (target.ObjectToWorld * Matrix4x4.CreateTranslation(position: new Vector3(x: 0f, y: 0.001f, z: 0f))) } };
         var center = Center(mesh: target.Mesh);
         var output = Console.Out;
-        var triangles = draws.Sum(selector: static draw => (long)draw.Mesh.TriangleCount);
+        var triangles = draws.Sum(selector: static draw => ((long)draw.Mesh.TriangleCount));
 
         output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"mesh scene: {CliPaths.ToDisplay(fullPath: fullPath)}, {draws.Count} static draw(s) with stored meshes ({missing} without), {triangles} triangles; store {meshes}, bake identity {identity:x32}"));
         output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  change: {labels[changed]}, {target.Mesh.TriangleCount} triangles, probes about ({center.X:0.0}, {center.Y:0.0}, {center.Z:0.0})"));
 
         var full = Timed(label: "build", build: () => SdfMeshIrradianceScene.Build(draws: draws), output: output);
 
-        Trace(scene: full, center: center, label: "trace", output: output);
+        Trace(center: center, label: "trace", output: output, scene: full);
 
         var swapped = Timed(label: "new geometry", build: () => SdfMeshIrradianceScene.Build(draws: replaced, previous: full), output: output);
 
-        Trace(scene: swapped, center: center, label: "trace", output: output);
+        Trace(center: center, label: "trace", output: output, scene: swapped);
 
         var shifted = Timed(label: "move", build: () => SdfMeshIrradianceScene.Build(draws: moved, previous: swapped), output: output);
         var back = Timed(label: "back", build: () => SdfMeshIrradianceScene.Build(draws: draws, previous: shifted), output: output);
 
-        Trace(scene: back, center: center, label: "trace", output: output);
+        Trace(center: center, label: "trace", output: output, scene: back);
         output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  working set: {(Environment.WorkingSet / (1 << 20))} MiB, peak {(Process.GetCurrentProcess().PeakWorkingSet64 / (1 << 20))} MiB"));
         return 0;
     }
@@ -151,7 +154,7 @@ public static class MeshSceneCommand {
     // sphere, and from each front-facing hit a shadow ray toward a sun. It reports the rays, the hits, the mean hit
     // distance and the lit hits, which two scenes of the same geometry answer alike.
     private static void Trace(SdfMeshIrradianceScene scene, Vector3 center, string label, TextWriter output) {
-        var low = new Vector3(x: (MathF.Floor(center.X) - (Window.X / 2)), y: (MathF.Floor(center.Y) - (Window.Y / 2)), z: (MathF.Floor(center.Z) - (Window.Z / 2)));
+        var low = new Vector3(x: (MathF.Floor(x: center.X) - (Window.X / 2)), y: (MathF.Floor(x: center.Y) - (Window.Y / 2)), z: (MathF.Floor(x: center.Z) - (Window.Z / 2)));
         var probes = new List<Vector3>();
         var sun = Vector3.Normalize(value: new Vector3(x: 0.4f, y: 0.8f, z: 0.3f));
 
@@ -171,7 +174,7 @@ public static class MeshSceneCommand {
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: probes.Count, body: probe => {
             for (var ray = 0; (ray < Rays); ray++) {
-                var direction = Fibonacci(index: ray, count: Rays);
+                var direction = Fibonacci(count: Rays, index: ray);
 
                 if (!scene.Intersect(origin: probes[probe], direction: direction, maximum: Reach, distance: out var distance, material: out _, normal: out var normal)) { continue; }
                 hits[probe]++;
@@ -182,10 +185,10 @@ public static class MeshSceneCommand {
             }
         });
 
-        var total = ((long)probes.Count * Rays);
-        var hit = hits.Sum(selector: static count => (long)count);
+        var total = (((long)probes.Count) * Rays);
+        var hit = hits.Sum(selector: static count => ((long)count));
 
-        output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {label}: probes={probes.Count} rays={total} hits={hit} lit={lit.Sum(selector: static count => (long)count)} mean-distance={((hit == 0) ? 0d : (distances.Sum() / hit)):0.000000} seconds={clock.Elapsed.TotalSeconds:0.000} cpu-seconds={(Processor() - cpu):0.000}"));
+        output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {label}: probes={probes.Count} rays={total} hits={hit} lit={lit.Sum(selector: static count => ((long)count))} mean-distance={((hit == 0) ? 0d : (distances.Sum() / hit)):0.000000} seconds={clock.Elapsed.TotalSeconds:0.000} cpu-seconds={(Processor() - cpu):0.000}"));
     }
     // The processor time the process has spent, in seconds: on a loaded machine a fairer measure of the work than the
     // wall clock.
@@ -209,9 +212,9 @@ public static class MeshSceneCommand {
     private static Vector3 Fibonacci(int index, int count) {
         const float GoldenAngle = 2.39996323f;
         var z = (1f - (((2f * index) + 1f) / count));
-        var radius = MathF.Sqrt(MathF.Max(0f, (1f - (z * z))));
+        var radius = MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (z * z))));
         var angle = (index * GoldenAngle);
 
-        return new Vector3(x: (radius * MathF.Cos(angle)), y: z, z: (radius * MathF.Sin(angle)));
+        return new Vector3(x: (radius * MathF.Cos(x: angle)), y: z, z: (radius * MathF.Sin(x: angle)));
     }
 }

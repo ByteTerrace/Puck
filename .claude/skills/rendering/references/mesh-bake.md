@@ -351,15 +351,23 @@ laws exercise that boundary.
   retain their magnitudes. Indices use 16 bits through 65,536 vertices and materials use bytes when
   their values fit. Delta-predicted attribute byte planes are zlib-compressed. Decode reads planes
   directly from the decompressed payload into the CPU arrays, avoiding per-plane byte copies.
-  Both backends draw six-float vertices and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
+  Both backends draw six floats per vertex and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
+  `SdfMeshLibrary.TryLoad` coalesces a set entry's decode across groups and keeps its result with the
+  library's bounded meshes. A failed read is removed so a later derivation can be loaded.
+  Sound entries can also record that a bake found no surface: a successful store read with a null
+  mesh is an empty result, not a miss. `StoreEmpty` persists it under the bake identity so fully warm
+  boots need no bake dispatch or bake-pipeline creation. Offline consumers skip its absent surface.
   The owner's mesh-compact correction: warm decode must be no slower than the old load, and a
   smaller GPU region is welcome only when mesh and cascade GPU passes are no slower. Measure
   repeated `world.gpu-timing` windows at the same pose; do not infer speed from region bytes.
+  Record the presentation target and GPU clocks beside an A/B: the device can downclock at 60 Hz,
+  so compare both variants at the same target and frequency range. Keep ordinary-target readings too.
 
 - **Glyph-bearing groups retain their outlines at every distance.**
   `SdfMeshGeometryBuilder.ContainsGlyph` recognizes `ShapeBlend/Glyph` in static, dynamic and unowned
-  world groups. `SdfMeshCollapse` fixes crease and material-edge places in those groups while
-  simplifying face interiors; a mesh without detectable features retains its base surface.
+  world groups. `SdfMeshCollapse` caps crease and material-edge error in those groups at the largest
+  bake-cell dimension divided by 8 while face interiors use the ordinary level budget; a mesh
+  without detectable features retains its base surface. Corners and open edges stay fixed.
   Whole-group collapse exclusion also prevents large scenery sharing a glyph group from coarsening,
   so its cascade cost must be measured before choosing it. A geometric distance budget alone does
   not protect text counters and thin strokes: the lift's lit zero lost its hole near 21 m.
@@ -511,6 +519,8 @@ laws exercise that boundary.
   keeps every entry, and worktrees of one bake share one set. Code the bake
   reaches only through reflection or a runtime callback on a type it does not
   construct is outside the walk: add a root to `SdfMeshBakeClosure` for it.
+  Finish formatting before measuring a new cold set: argument ordering can change IL and therefore
+  the computed bake identity even when the source rewrite preserves semantics.
 - **A miss names its cause.** Each identity's parts and code members are
   recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
   and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity
@@ -528,8 +538,8 @@ laws exercise that boundary.
   recently read or written entry's, and a write removes whole sets, least
   recently used first, never its own. A set a World is baking or loading is
   never cut short by another lane's writes, so concurrent lanes on different
-  identities keep each other's complete sets until five newer ones displace
-  them, and a set larger than the cap alone keeps its most recently used
+  identities keep each other's complete sets until newer sets fill the capacity,
+  and a set larger than the cap alone keeps its most recently used
   entries. An entry left directly in the directory is a set of its own and ages
   out first. A boot that bakes nothing shows `done … loaded=N` with
   `dispatches=0`. A program that arrives while groups are pending and takes

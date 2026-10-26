@@ -110,7 +110,7 @@ public static class MeshCommand {
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
         var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: scene.Program, transforms: scene.Transforms);
         var store = new SdfMeshStore(directory: meshes);
-        var options = new SdfMeshAuditOptions { Clusters = Math.Max(request.Top, request.Worst) };
+        var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst) };
         var results = new Outcome?[groups.Count];
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
         var baked = (request.Cpu
@@ -134,7 +134,7 @@ public static class MeshCommand {
         var considered = results.Count(predicate: static result => (result is not null));
         var output = new StringBuilder();
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh audit: {CliPaths.ToDisplay(fullPath: fullPath)}, {considered} group(s) of {groups.Count}: {audited} audited, {considered - stored} with no stored mesh, {stored - audited} refused\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh audit: {CliPaths.ToDisplay(fullPath: fullPath)}, {considered} group(s) of {groups.Count}: {audited} audited, {(considered - stored)} with no stored mesh, {(stored - audited)} refused\n");
         output.Append(value: (request.Cpu
             ? "  baked offline on the CPU through the field evaluator\n"
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"  store {meshes}, bake identity {identity:x32} ({((request.Identity is null) ? $"{request.Backend}, build {buildDirectory}" : "named")})\n")));
@@ -166,6 +166,7 @@ public static class MeshCommand {
 
         return 0;
     }
+
     /// <summary>Resolves the bake identity stored meshes are read under: the one named, or the identity of the build in
     /// <paramref name="buildDirectory"/>; a refusal is written to the error stream under the verb's name.</summary>
     /// <param name="named">The identity named (32 hex digits), or <see langword="null"/> to read the build's.</param>
@@ -187,7 +188,7 @@ public static class MeshCommand {
         try {
             identity = BuildIdentity(buildDirectory: buildDirectory, extension: extension).Value;
             return true;
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"{verb}: cannot read the bake identity of the build in '{buildDirectory}' — {exception.Message}");
             identity = default;
             return false;
@@ -201,14 +202,15 @@ public static class MeshCommand {
     /// <returns>The identity.</returns>
     internal static SdfMeshBakeIdentity BuildIdentity(string buildDirectory, string extension) => SdfMeshBakeIdentity.Of(
         code: SdfMeshBakeClosure.Of(directory: buildDirectory),
-        kernels: SdfKernelSet.Load(bytecodeExtension: extension, directory: SdfKernelSet.PassesDirectory(tree: Path.Combine(buildDirectory, "Assets", "Shaders", "Sdf")))
+        kernels: SdfKernelSet.Load(bytecodeExtension: extension, directory: SdfKernelSet.PassesDirectory(tree: Path.Combine(path1: buildDirectory, path2: "Assets", path3: "Shaders", path4: "Sdf")))
     );
+
     // Whether the request selects a group: by the prototype its body wears and by its label.
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);
 
-        return ((request.Prototype is null) || ((owner is not null) && string.Equals(a: owner.Creation.Id, b: request.Prototype, comparisonType: StringComparison.Ordinal)))
-            && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal));
+        return (((request.Prototype is null) || ((owner is not null) && string.Equals(a: owner.Creation.Id, b: request.Prototype, comparisonType: StringComparison.Ordinal)))
+            && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
     private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked) {
@@ -237,7 +239,7 @@ public static class MeshCommand {
             return new Outcome(Field: field, Label: label, Mesh: null, Owner: owner, Refusal: (refusal ?? "no stored mesh"), Report: null, Stored: (refusal is not null), ToWorld: toWorld);
         }
 
-        return new Outcome(Field: field, Label: label, Mesh: mesh, Owner: owner, Refusal: null, Report: SdfMeshAudit.Audit(field: field, mesh: mesh, options: options, shapes: shapes), Stored: true, ToWorld: toWorld);
+        return new Outcome(Field: field, Label: label, Mesh: mesh, Owner: owner, Refusal: null, Report: ((mesh is null) ? null : SdfMeshAudit.Audit(field: field, mesh: mesh, options: options, shapes: shapes)), Stored: true, ToWorld: toWorld);
     }
     // Every stored mesh of the group's materials whose vertices lie on its field, whatever identity stored it, oldest
     // first: the bakes of one geometry by each build that baked it.
@@ -245,7 +247,7 @@ public static class MeshCommand {
         var bakes = new List<(DateTime Written, string Name, SdfMeshAuditReport Report)>();
 
         foreach (var path in store.EntryPaths()) {
-            if (!SdfMeshStore.TryReadFile(materials: out var materials, mesh: out var mesh, path: path) || !materials.AsSpan().SequenceEqual(other: group.MaterialOrder) || !LiesOn(field: field, mesh: mesh)) { continue; }
+            if (!SdfMeshStore.TryReadFile(materials: out var materials, mesh: out var mesh, path: path) || (mesh is null) || !materials.AsSpan().SequenceEqual(other: group.MaterialOrder) || !LiesOn(field: field, mesh: mesh)) { continue; }
             bakes.Add(item: (File.GetCreationTimeUtc(path: path), Path.GetFileNameWithoutExtension(path: path), SdfMeshAudit.Audit(field: field, mesh: mesh, options: options, shapes: [])));
         }
 
@@ -260,7 +262,7 @@ public static class MeshCommand {
 
         if (positions.IsEmpty) { return false; }
 
-        var step = Math.Max(1, (positions.Length / HistorySamples));
+        var step = Math.Max(val1: 1, val2: (positions.Length / HistorySamples));
         var near = 0;
         var count = 0;
 
@@ -282,8 +284,8 @@ public static class MeshCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds, {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered\n");
-        for (var rank = 0; (rank < Math.Min(top, report.Clusters.Count)); rank++) {
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {rank + 1}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
+        for (var rank = 0; (rank < Math.Min(val1: top, val2: report.Clusters.Count)); rank++) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {(rank + 1)}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
         }
     }
     // The worst clusters across every group, each with its image when a directory is named.
@@ -301,9 +303,9 @@ public static class MeshCommand {
             var (ordinal, cluster) = clusters[rank];
             var outcome = results[ordinal]!;
 
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {rank + 1,2}. group {ordinal} {outcome.Label}: {Describe(cluster: cluster, outcome: outcome)}\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {(rank + 1),2}. group {ordinal} {outcome.Label}: {Describe(cluster: cluster, outcome: outcome)}\n");
             if ((images is not null) && (outcome is { Mesh: { } mesh, Field: { } field, Report: { } report })) {
-                var path = Path.Combine(path1: Path.GetFullPath(path: images), path2: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{rank + 1:00}-group{ordinal}.png"));
+                var path = Path.Combine(path1: Path.GetFullPath(path: images), path2: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(rank + 1):00}-group{ordinal}.png"));
 
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
                 // The window spans eight cells either way of the worst sample, so a few cells of the defect and the surface
@@ -333,8 +335,8 @@ public static class MeshCommand {
         return builder.ToString();
     }
     private static string Statistic(SdfMeshAuditStatistic statistic, float scale) =>
-        string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {statistic.P50 * scale:0.00} p99 {statistic.P99 * scale:0.00} max {statistic.Max * scale:0.00} over {statistic.Over}/{statistic.Count}");
-    private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{metres * 1000f:0.0}");
+        string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {(statistic.P50 * scale):0.00} p99 {(statistic.P99 * scale):0.00} max {(statistic.Max * scale):0.00} over {statistic.Over}/{statistic.Count}");
+    private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(metres * 1000f):0.0}");
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 

@@ -16,10 +16,43 @@ public sealed class SdfMeshStoreLawTests {
     private static readonly UInt128 Identity = 7;
 
     [Fact]
+    public void AnEmptyBakeSurvivesAFreshLibraryWithoutBakingAgain() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var writer = new SdfMeshLibrary(store: store);
+
+        writer.StoreEmpty(geometry: Geometry, identity: Identity);
+        Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out var palette, mesh: out var stored, refusal: out var refusal));
+        Assert.Null(@object: stored);
+        Assert.Null(@object: refusal);
+        Assert.Empty(collection: palette);
+        var reader = new SdfMeshLibrary(store: store);
+
+        Assert.True(condition: reader.TryLoad(Identity, Geometry, [4, 9], out var loaded, out _));
+        Assert.Null(@object: loaded);
+        Assert.True(condition: reader.HoldsEmpty(geometry: Geometry));
+        Assert.False(condition: reader.TryLoad((Identity + 1), Geometry, [], out _, out _));
+        _ = Assert.Throws<ArgumentException>(testCode: () => store.Write(geometry: Geometry, identity: Identity, materials: [4], mesh: null));
+    }
+    [Fact]
+    public void ARepeatedLibraryLoadSharesItsDecodeAndRetriesAMiss() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var library = new SdfMeshLibrary(store: store);
+
+        Assert.False(condition: library.TryLoad(Identity, Geometry, [4, 9], out _, out _));
+        Assert.True(condition: store.Write(Identity, Geometry, Mesh(), [4, 9]));
+        Assert.True(condition: library.TryLoad(Identity, Geometry, [4, 9], out var first, out _));
+        File.Delete(path: Entry(geometry: Geometry, store: store));
+        Assert.True(condition: library.TryLoad(Identity, Geometry, [4, 9], out var again, out _));
+        Assert.Same(actual: again, expected: first);
+        Assert.False(condition: library.TryLoad((Identity + 1), Geometry, [4, 9], out _, out _));
+    }
+    [Fact]
     public void AWrittenMeshReadsBackExactlyUnderItsIdentityAndGeometryAlone() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
-        var mesh = Mesh() with { BakeCell = new Vector3(0.01f, 0.02f, 0.03f), Levels = [Level()] };
+        var mesh = Mesh() with { BakeCell = new Vector3(x: 0.01f, y: 0.02f, z: 0.03f), Levels = [Level()] };
 
         // An empty store holds nothing and has made no directory.
         Assert.False(condition: store.Contains(geometry: Geometry, identity: Identity));
@@ -30,7 +63,8 @@ public sealed class SdfMeshStoreLawTests {
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [4, 9], mesh: mesh));
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
         Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out var materials, mesh: out var read, refusal: out _));
-        Assert.Equal(expected: [4, 9], actual: materials);
+        Assert.NotNull(@object: read);
+        Assert.Equal(actual: materials, expected: [4, 9]);
         Assert.Equal(expected: mesh.Positions.ToArray(), actual: read.Positions.ToArray());
         Assert.Equal(expected: mesh.Normals.ToArray(), actual: read.Normals.ToArray());
         Assert.Equal(expected: mesh.Indices.ToArray(), actual: read.Indices.ToArray());
@@ -57,15 +91,15 @@ public sealed class SdfMeshStoreLawTests {
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [4, 9], mesh: Mesh()));
         Assert.True(condition: store.Write(geometry: other, identity: Identity, materials: [], mesh: Mesh()));
 
-        var path = Entry(store: store, geometry: Geometry);
+        var path = Entry(geometry: Geometry, store: store);
         var sound = File.ReadAllBytes(path: path);
 
         // Each damage the store meets, with the refusal it names.
         (string Refusal, byte[] Bytes)[] damages = [
             ("is truncated", sound[..20]),
-            ("fails its checksum", Flip(bytes: sound, at: 60)),
+            ("fails its checksum", Flip(at: 60, bytes: sound)),
             ("is not a mesh entry of this format", Resealed(bytes: sound, edit: static body => body[0] ^= 1)),
-            ("holds another geometry's mesh", File.ReadAllBytes(path: Entry(store: store, geometry: other))),
+            ("holds another geometry's mesh", File.ReadAllBytes(path: Entry(geometry: other, store: store))),
             ("holds invalid compressed mesh data", Resealed(bytes: sound, edit: static body => BinaryPrimitives.WriteInt32LittleEndian(destination: body[24..], value: -1))),
             ("holds invalid compressed mesh data", Resealed(bytes: sound, edit: static body => BinaryPrimitives.WriteInt32LittleEndian(destination: body[24..], value: int.MaxValue))),
             ("holds invalid compressed mesh data", Resealed(bytes: sound, edit: static body => body[28..].Clear())),
@@ -75,7 +109,7 @@ public sealed class SdfMeshStoreLawTests {
             File.WriteAllBytes(bytes: bytes, path: path);
 
             Assert.False(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out _, refusal: out var why));
-            Assert.Contains(expectedSubstring: refusal, actualString: why);
+            Assert.Contains(actualString: why, expectedSubstring: refusal);
             Assert.False(condition: File.Exists(path: path));
         }
 
@@ -83,7 +117,7 @@ public sealed class SdfMeshStoreLawTests {
         _ = Directory.CreateDirectory(path: path);
 
         Assert.False(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out _, refusal: out var unreadable));
-        Assert.Contains(expectedSubstring: "cannot read", actualString: unreadable);
+        Assert.Contains(actualString: unreadable, expectedSubstring: "cannot read");
         // Nor will it write there; the store is a cache, and says so rather than throwing.
         Assert.False(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
         Assert.True(condition: Directory.Exists(path: path));
@@ -92,23 +126,26 @@ public sealed class SdfMeshStoreLawTests {
     public void CompactStreamsPreserveTopologySkinAndBakeErrorAcrossChunks() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
-        var positions = Enumerable.Range(0, 300).Select(index => new Vector3(index * 0.017123f, MathF.Sin(index) * 0.43f, MathF.Cos(index) * 0.37f)).ToArray();
-        var normals = positions.Select(position => Vector3.Normalize(position + new Vector3(0.2f))).ToArray();
-        var indices = Enumerable.Range(0, 300).Select(index => (uint)index).ToArray();
-        var palette = Enumerable.Range(0, 100).Select(index => (uint)(index % 3)).ToArray();
+        var positions = Enumerable.Range(count: 300, start: 0).Select(selector: index => new Vector3(x: (index * 0.017123f), y: (MathF.Sin(x: index) * 0.43f), z: (MathF.Cos(x: index) * 0.37f))).ToArray();
+        var normals = positions.Select(selector: position => Vector3.Normalize(value: (position + new Vector3(value: 0.2f)))).ToArray();
+        var indices = Enumerable.Range(count: 300, start: 0).Select(selector: index => ((uint)index)).ToArray();
+        var palette = Enumerable.Range(count: 100, start: 0).Select(selector: index => ((uint)(index % 3))).ToArray();
         var mesh = new SdfMesh(positions, indices, normals, palette,
-            new SdfMeshMember[] { new(2, new Vector3(0.3f), Quaternion.Identity) },
-            Enumerable.Range(0, 300).Select(index => index % 2 == 0 ? (byte)0 : SdfMesh.NoMember).ToArray()) {
-            BakeCell = new Vector3(0.1f),
-            Levels = [new SdfMeshLevel(indices.AsMemory(0, 30), palette.AsMemory(0, 10), 0.2f)],
+            new SdfMeshMember[] { new(2, new Vector3(value: 0.3f), Quaternion.Identity) },
+            Enumerable.Range(count: 300, start: 0).Select(selector: index => (((index % 2) == 0) ? (byte)0 : SdfMesh.NoMember)).ToArray()) {
+            BakeCell = new Vector3(value: 0.1f),
+            Levels = [new SdfMeshLevel(indices.AsMemory(length: 30, start: 0), palette.AsMemory(length: 10, start: 0), 0.2f)],
         };
-        foreach (var cell in new[] { new Vector3(0.1f), new Vector3(0.0001f), Vector3.Zero }) {
+
+        foreach (var cell in new[] { new Vector3(value: 0.1f), new Vector3(value: 0.0001f), Vector3.Zero }) {
             var source = mesh with { BakeCell = cell };
-            Assert.True(store.Write(Identity, Geometry, source, [3, 7]));
-            Assert.True(store.TryRead(Identity, Geometry, out var decoded, out _, out _));
-            for (var index = 0; index < positions.Length; index++) {
-                Assert.InRange(Vector3.Distance(positions[index], decoded.Positions.Span[index]), 0f, cell.Length() / 1024f);
-                Assert.InRange(Vector3.Distance(normals[index], decoded.Normals.Span[index]), 0f, 0.0001f);
+
+            Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [3, 7], mesh: source));
+            Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out var decoded, refusal: out _));
+            Assert.NotNull(@object: decoded);
+            for (var index = 0; (index < positions.Length); index++) {
+                Assert.InRange(Vector3.Distance(value1: positions[index], value2: decoded.Positions.Span[index]), 0f, (cell.Length() / 1024f));
+                Assert.InRange(Vector3.Distance(value1: normals[index], value2: decoded.Normals.Span[index]), 0f, 0.0001f);
             }
             Assert.Equal(indices, decoded.Indices.ToArray());
             Assert.Equal(palette, decoded.TriangleMaterials.ToArray());
@@ -116,54 +153,62 @@ public sealed class SdfMeshStoreLawTests {
             Assert.Equal(mesh.VertexMembers.ToArray(), decoded.VertexMembers.ToArray());
             Assert.Equal(mesh.Levels[0].Indices.ToArray(), decoded.Levels[0].Indices.ToArray());
         }
-        var authored = new SdfMesh(positions.AsMemory(0, 3), new uint[] { 0, 2, 1 },
-            new Vector3[] { Vector3.Zero, new(2, 3, 4), Vector3.UnitX }, new uint[] { uint.MaxValue });
-        var chunks = SdfMeshChunks.Join([authored, authored]);
-        Assert.True(store.Write(Identity, Geometry, chunks, []));
-        Assert.True(store.TryRead(Identity, Geometry, out var joined, out _, out _));
+        var authored = new SdfMesh(positions.AsMemory(length: 3, start: 0), new uint[] { 0, 2, 1 },
+            new Vector3[] { Vector3.Zero, new(x: 2, y: 3, z: 4), Vector3.UnitX }, new uint[] { uint.MaxValue });
+        var chunks = SdfMeshChunks.Join(chunks: [authored, authored]);
+
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: chunks));
+        Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out var joined, refusal: out _));
+        Assert.NotNull(@object: joined);
         Assert.Equal(2, joined.Chunks.Count);
         Assert.Equal(authored.Normals.ToArray(), joined.Chunks[0].Normals.ToArray());
         Assert.Equal(authored.TriangleMaterials.ToArray(), joined.Chunks[1].TriangleMaterials.ToArray());
     }
-    [Theory]
     [InlineData(0.1f)]
     [InlineData(0.0001f)]
     [InlineData(0f)]
+    [Theory]
     public void ChunkSeamsUseOneGridWithinEveryPiecesBudget(float secondCell) {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
-        var shared = new Vector3(0.371234f, -0.219876f, 0.517293f);
+        var shared = new Vector3(x: 0.371234f, y: -0.219876f, z: 0.517293f);
         // The common vertex is not a bound on either piece. Independently rounded grids disagree here.
-        var first = new SdfMesh(new Vector3[] { new(-1f), new(2f), shared }, new uint[] { 0, 1, 2 }) { BakeCell = new Vector3(0.1f) };
-        var second = new SdfMesh(new Vector3[] { new(-2f), new(3f), shared }, new uint[] { 0, 1, 2 }) { BakeCell = new Vector3(secondCell) };
-        var source = SdfMeshChunks.Join([first, second]);
-        Assert.True(store.Write(Identity, Geometry, source, []));
-        Assert.True(store.TryRead(Identity, Geometry, out var decoded, out _, out _));
+        var first = new SdfMesh(new Vector3[] { new(value: -1f), new(value: 2f), shared }, new uint[] { 0, 1, 2 }) { BakeCell = new Vector3(value: 0.1f) };
+        var second = new SdfMesh(new Vector3[] { new(value: -2f), new(value: 3f), shared }, new uint[] { 0, 1, 2 }) { BakeCell = new Vector3(value: secondCell) };
+        var source = SdfMeshChunks.Join(chunks: [first, second]);
+
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: source));
+        Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out var decoded, refusal: out _));
+        Assert.NotNull(@object: decoded);
         Assert.Equal(decoded.Chunks[0].Positions.Span[2], decoded.Chunks[1].Positions.Span[2]);
-        for (var chunk = 0; chunk < source.Chunks.Count; chunk++) {
+        for (var chunk = 0; (chunk < source.Chunks.Count); chunk++) {
             var original = source.Chunks[chunk];
             var read = decoded.Chunks[chunk];
+
             Assert.Equal(original.Indices.ToArray(), read.Indices.ToArray());
-            for (var vertex = 0; vertex < original.Positions.Length; vertex++) {
-                Assert.InRange(Vector3.Distance(original.Positions.Span[vertex], read.Positions.Span[vertex]), 0f, original.BakeCell.Length() / 1024f);
+            for (var vertex = 0; (vertex < original.Positions.Length); vertex++) {
+                Assert.InRange(Vector3.Distance(value1: original.Positions.Span[vertex], value2: read.Positions.Span[vertex]), 0f, (original.BakeCell.Length() / 1024f));
             }
         }
     }
-    [Theory]
     [InlineData(65536)]
     [InlineData(65537)]
+    [Theory]
     public void IndexWidthsPreserveTheirBoundaryVertex(int vertices) {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var positions = new Vector3[vertices];
+
         positions[^1] = Vector3.UnitY;
-        var mesh = new SdfMesh(positions, new uint[] { 0, 1, (uint)(vertices - 1) });
-        Assert.True(store.Write(Identity, Geometry, mesh, []));
-        Assert.True(store.TryRead(Identity, Geometry, out var read, out _, out _));
+        var mesh = new SdfMesh(positions, new uint[] { 0, 1, ((uint)(vertices - 1)) });
+
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: mesh));
+        Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out var read, refusal: out _));
+        Assert.NotNull(@object: read);
         Assert.Equal(mesh.Indices.ToArray(), read.Indices.ToArray());
         Assert.Equal(positions, read.Positions.ToArray());
-        Assert.Empty(read.Normals.ToArray());
-        Assert.Empty(read.TriangleMaterials.ToArray());
+        Assert.Empty(collection: read.Normals.ToArray());
+        Assert.Empty(collection: read.TriangleMaterials.ToArray());
     }
     [Fact]
     public void AWritePastTheCapacityRemovesTheLeastRecentlyUsedEntries() {
@@ -212,10 +257,10 @@ public sealed class SdfMeshStoreLawTests {
         }
 
         // The active set's oldest entry is older than either of the idle set's, but one of its entries was just read.
-        Place(set: active, name: "a.mesh", minutesAgo: 60);
-        Place(set: active, name: "b.mesh", minutesAgo: 1);
-        Place(set: idle, name: "c.mesh", minutesAgo: 30);
-        Place(set: idle, name: "d.mesh", minutesAgo: 20);
+        Place(minutesAgo: 60, name: "a.mesh", set: active);
+        Place(minutesAgo: 1, name: "b.mesh", set: active);
+        Place(minutesAgo: 30, name: "c.mesh", set: idle);
+        Place(minutesAgo: 20, name: "d.mesh", set: idle);
 
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
@@ -248,18 +293,18 @@ public sealed class SdfMeshStoreLawTests {
     }
     [Fact]
     public void ABakesIdentityMovesWithItsKernelsAndNothingElse() {
-        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [(byte)kernel])).ToArray();
+        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [((byte)kernel)])).ToArray();
         var identity = SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bytes));
         var views = bytes.ToArray();
         var bake = bytes.ToArray();
         var mask = bytes.ToArray();
 
-        views[(int)SdfKernel.Views] = new byte[] { 200 };
-        bake[(int)SdfKernel.MeshBake] = new byte[] { 200 };
-        mask[(int)SdfKernel.MeshBakeMask] = new byte[] { 200 };
+        views[((int)SdfKernel.Views)] = new byte[] { 200 };
+        bake[((int)SdfKernel.MeshBake)] = new byte[] { 200 };
+        mask[((int)SdfKernel.MeshBakeMask)] = new byte[] { 200 };
 
         Assert.True(condition: identity.HasParts);
-        Assert.Equal(expected: "PUCKMSH8", actual: SdfMeshStore.EntryVersion);
+        Assert.Equal(expected: "PUCKMSH9", actual: SdfMeshStore.EntryVersion);
         Assert.Equal(expected: SdfMeshStore.EntryVersion, actual: identity.EntryVersion);
         Assert.Equal(expected: string.Empty, actual: new SdfMeshBakeIdentity(value: 5).EntryVersion);
         Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: identity.Code);
@@ -275,7 +320,7 @@ public sealed class SdfMeshStoreLawTests {
     public void AMissNamesThePartOfTheIdentityThatChanged() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
-        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [(byte)kernel])).ToArray();
+        var bytes = SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [((byte)kernel)])).ToArray();
         var kernels = new SdfKernelSet(bytecode: bytes);
         var first = SdfMeshStore.IdentityOf(kernels: kernels);
 
@@ -299,7 +344,7 @@ public sealed class SdfMeshStoreLawTests {
             if (string.Equals(a: Path.GetFileName(path: dll), b: "Puck.SdfVm.dll", comparisonType: StringComparison.Ordinal)) {
                 var image = File.ReadAllBytes(path: dll);
                 var oldVersion = System.Text.Encoding.ASCII.GetBytes(s: SdfMeshStore.EntryVersion);
-                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: "PUCKMSH9");
+                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: "PUCKMSHA");
                 var replaced = 0;
 
                 for (var index = 0; (index <= (image.Length - oldVersion.Length)); index++) {
@@ -317,13 +362,13 @@ public sealed class SdfMeshStoreLawTests {
 
         var bumped = SdfMeshBakeIdentity.Of(code: SdfMeshBakeClosure.Of(directory: bumpedBuild), kernels: kernels);
 
-        Assert.Equal(expected: "PUCKMSH9", actual: bumped.EntryVersion);
+        Assert.Equal(expected: "PUCKMSHA", actual: bumped.EntryVersion);
         Assert.NotEqual(expected: first.Value, actual: bumped.Value);
         Assert.False(condition: store.TryRead(geometry: Geometry, identity: bumped.Value, materials: out _, mesh: out _, refusal: out var bumpedRefusal));
         Assert.Null(@object: bumpedRefusal);
         Assert.True(condition: store.Contains(geometry: Geometry, identity: first.Value));
         Assert.Equal(
-            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> PUCKMSH9) changed",
+            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> PUCKMSHA) changed",
             actual: store.ExplainMisses(identity: bumped)
         );
         File.Delete(path: Path.Combine(path1: store.Directory, path2: (bumped.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));
@@ -331,28 +376,27 @@ public sealed class SdfMeshStoreLawTests {
         // Another bake kernel is named as the bake kernel, against the identity it shares the code and mask with.
         var rebaked = bytes.ToArray();
 
-        rebaked[(int)SdfKernel.MeshBake] = new byte[] { 200 };
+        rebaked[((int)SdfKernel.MeshBake)] = new byte[] { 200 };
 
         var kernelChange = store.ExplainMisses(identity: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: rebaked)));
 
-        Assert.Contains(expectedSubstring: "the bake kernel's bytecode changed", actualString: kernelChange);
-        Assert.DoesNotContain(expectedSubstring: "mask", actualString: kernelChange);
+        Assert.Contains(actualString: kernelChange, expectedSubstring: "the bake kernel's bytecode changed");
+        Assert.DoesNotContain(actualString: kernelChange, expectedSubstring: "mask");
 
         // A recorded identity whose code differs names the code's changed members by assembly: here every member, since
         // the earlier record holds none of them, and a file of another format is passed over.
-        var path = Path.Combine(path1: store.Directory, path2: ("0".PadLeft(totalWidth: 32, paddingChar: '0') + SdfMeshStore.IdentityExtension));
+        var path = Path.Combine(path1: store.Directory, path2: ("0".PadLeft(paddingChar: '0', totalWidth: 32) + SdfMeshStore.IdentityExtension));
 
         File.WriteAllText(contents: $"puck.mesh-identity.v1\nversion {first.EntryVersion}\ncode {(first.Code + 1):x32}\nmask {first.MaskKernel:x32}\nbake {first.BakeKernel:x32}\n{0:x32} Puck.Gone!Gone.Member`0()Void\n", path: path);
-        File.WriteAllText(contents: "another format\n", path: Path.Combine(path1: store.Directory, path2: ("1".PadLeft(totalWidth: 32, paddingChar: '0') + SdfMeshStore.IdentityExtension)));
+        File.WriteAllText(contents: "another format\n", path: Path.Combine(path1: store.Directory, path2: ("1".PadLeft(paddingChar: '0', totalWidth: 32) + SdfMeshStore.IdentityExtension)));
         File.Delete(path: Path.Combine(path1: store.Directory, path2: (first.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));
 
         var codeChange = store.ExplainMisses(identity: first);
 
-        Assert.Contains(expectedSubstring: "the code,", actualString: codeChange);
-        Assert.Contains(expectedSubstring: "Puck.SdfVm", actualString: codeChange);
-        Assert.Contains(expectedSubstring: "Puck.Gone 1", actualString: codeChange);
+        Assert.Contains(actualString: codeChange, expectedSubstring: "the code,");
+        Assert.Contains(actualString: codeChange, expectedSubstring: "Puck.SdfVm");
+        Assert.Contains(actualString: codeChange, expectedSubstring: "Puck.Gone 1");
     }
-
     [Fact]
     public void APeekLeavesTheStoreAsItIsAndAnEntryReadsUnderAnyKey() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
@@ -366,16 +410,17 @@ public sealed class SdfMeshStoreLawTests {
 
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: stamped, path: path);
         Assert.True(condition: store.TryPeek(geometry: Geometry, identity: Identity, materials: out var materials, mesh: out var mesh, refusal: out _));
-        Assert.Equal(expected: [4, 9], actual: materials);
+        Assert.NotNull(@object: mesh);
+        Assert.Equal(actual: materials, expected: [4, 9]);
         Assert.Equal(expected: Mesh().Positions.ToArray(), actual: mesh.Positions.ToArray());
         Assert.Equal(expected: stamped, actual: File.GetLastWriteTimeUtc(path: path));
         Assert.True(condition: SdfMeshStore.TryReadFile(materials: out var any, mesh: out _, path: path));
-        Assert.Equal(expected: [4, 9], actual: any);
+        Assert.Equal(actual: any, expected: [4, 9]);
 
         // A damaged entry is refused and stays where it was, and a file that is no entry reads as none.
         File.WriteAllBytes(bytes: File.ReadAllBytes(path: path)[..20], path: path);
         Assert.False(condition: store.TryPeek(geometry: Geometry, identity: Identity, materials: out _, mesh: out _, refusal: out var why));
-        Assert.Contains(expectedSubstring: "is truncated", actualString: why);
+        Assert.Contains(actualString: why, expectedSubstring: "is truncated");
         Assert.True(condition: File.Exists(path: path));
         Assert.False(condition: SdfMeshStore.TryReadFile(materials: out _, mesh: out _, path: path));
         Assert.False(condition: SdfMeshStore.TryReadFile(materials: out _, mesh: out _, path: scratch.PathOf(name: "absent.mesh")));
@@ -387,13 +432,13 @@ public sealed class SdfMeshStoreLawTests {
 
         Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: closure.Hash);
         // The bake's own code, the contouring it calls, and the maths that calls into: each a member, and its layouts.
-        Assert.Contains(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshPathBake.", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: members, filter: static member => member.StartsWith(value: "Puck.SignedDistance!Puck.SignedDistance.Baking.SdfDualContouring.", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: members, filter: static member => member.EndsWith(value: " [layout]", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: members, filter: static member => member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.SdfVm!Puck.SdfVm.SdfMeshPathBake."));
+        Assert.Contains(collection: members, filter: static member => member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.SignedDistance!Puck.SignedDistance.Baking.SdfDualContouring."));
+        Assert.Contains(collection: members, filter: static member => member.EndsWith(comparisonType: StringComparison.Ordinal, value: " [layout]"));
         // What holds meshes rather than makes them, and the renderer's other passes, are not.
-        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshLibrary", comparisonType: StringComparison.Ordinal));
-        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshIrradiance", comparisonType: StringComparison.Ordinal));
-        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.Abstractions!Puck.Abstractions.CacheRetention", comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.SdfVm!Puck.SdfVm.SdfMeshLibrary"));
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.SdfVm!Puck.SdfVm.SdfMeshIrradiance"));
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.Abstractions!Puck.Abstractions.CacheRetention"));
 
         var edited = closure.Members.ToDictionary();
         var first = members.First();
@@ -416,6 +461,7 @@ public sealed class SdfMeshStoreLawTests {
         positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY },
         triangleMaterials: new uint[] { 4u, 9u }
     );
+
     private static SdfMeshLevel Level() => new(Error: 0.25f, Indices: new uint[] { 0, 1, 2 }, TriangleMaterials: new uint[] { 9u });
     // The file an entry is kept in: the name a write of it to a store of its own takes.
     private static string Entry(SdfMeshStore store, SdfMeshGeometry geometry) {
@@ -453,5 +499,6 @@ public sealed class SdfMeshStoreLawTests {
 
         return resealed;
     }
+
     private delegate void SpanAction(Span<byte> body);
 }

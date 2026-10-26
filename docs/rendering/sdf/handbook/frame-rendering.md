@@ -1148,10 +1148,10 @@ for the second: every merged vertex to a level triangle of its material whose
 interpolated normal there is within 2 or 6 degrees of its own, every crease and
 material edge vertex and edge midpoint to that line as the level draws it, and
 every new triangle's centroid and edge midpoints to the surface it replaces. The
-level records the largest (`SdfMeshLevel.Error`). Glyph-bearing groups keep their crease and
-material-edge vertices fixed while their face interiors simplify, preserving counters and thin-stroke
-outlines even when glyph and housing share a material. Without detectable features they retain the
-merged surface. The region lays each level's
+level records the largest (`SdfMeshLevel.Error`). Glyph-bearing groups limit crease and material-edge
+error to the largest bake-cell dimension divided by 8 while face interiors use the ordinary budget,
+preserving counters and thin-stroke outlines even when glyph and housing share a
+material. Without detectable features they retain the merged surface. The region lays each level's
 indices after the merged triangles', and a raster pass chooses each draw's level
 beside its box cull (`SdfMeshDetail`): a view the coarsest level whose error,
 scaled by the draw and projected over the nearest depth of its box at the
@@ -1171,9 +1171,9 @@ A body straddling a portal whose counterpart stands in the same world is drawn
 on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding
 the body's slots is clipped to the front of the glass it straddles, and gains a
 copy carried through the pair's rigid motion and clipped to the front of the
-counterpart's glass. The draw record ends with that carry, a rotation
-quaternion and a translation every resolved world position and normal goes
-through last (words 33 to 39), and the world-space clip plane (words 40 to 43,
+counterpart's glass. The draw record carries that rotation quaternion,
+translation and uniform scale (words 33 to 40), which every resolved world position and normal goes
+through last, and the world-space clip plane (words 41 to 44,
 `dot(n, x) + d`, all zeros for none), which the mesh and shadow vertex stages
 write to `SV_ClipDistance0`. Vulkan devices are created with
 `shaderClipDistance` for it. Only stamp-pool bodies are covered: a catalog

@@ -47,23 +47,27 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // What a transform's slot lane hashes as: the group's own slot, or any other, whose pose is hashed beside it.
     private const float OwnSlot = -1f;
     private const float OtherSlot = -2f;
-
     // The most hashers sealed builders keep for later ones: every group of a plan takes two, and a program restart plans
     // thousands.
     private const int MaxSpareHashers = 8192;
 
     private static readonly System.Collections.Concurrent.ConcurrentQueue<XxHash128> SpareHashers = new();
+
     private static int SpareHasherCount;
 
     private XxHash128? m_hash = RentHasher();
     // Everything m_hash takes but the poses of other slots and the steps they round to.
     private XxHash128? m_form = RentHasher();
+
     // The geometry and form Seal fixed.
     private UInt128 m_sealedHash;
     private UInt128 m_sealedForm;
+
     private readonly List<int> m_materials = [];
+
     // Made by the first kept pose: most static groups keep none.
     private SortedDictionary<int, DynamicTransform>? m_poses;
+
     private static readonly IReadOnlyDictionary<int, DynamicTransform> NoPoses = new Dictionary<int, DynamicTransform>();
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
     private int m_chainSlot = -1;
@@ -132,7 +136,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <summary>Gets each slot the appended instructions read, with its pose in the group's frame and its lanes as the
     /// geometry hashed them, rounded: the group's own slot at the identity, any other slot where it stood in the frame the
     /// geometry was appended from. A slot the frame held no transform for is absent.</summary>
-    public IReadOnlyDictionary<int, DynamicTransform> Poses => ((IReadOnlyDictionary<int, DynamicTransform>?)m_poses ?? NoPoses);
+    public IReadOnlyDictionary<int, DynamicTransform> Poses => (((IReadOnlyDictionary<int, DynamicTransform>?)m_poses) ?? NoPoses);
 
     /// <summary>Writes the poses (<see cref="Poses"/>) into pose rows from a first slot, three rows a slot as the
     /// dynamic-transform table lays one out: position, orientation, lanes. A slot between two kept ones is left as the
@@ -150,6 +154,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             rows[(row + 2)] = pose.Lanes;
         }
     }
+
     /// <summary>Gets the lowest and highest slot <see cref="Poses"/> holds, or <c>(-1, -1)</c> while it holds none.</summary>
     public (int First, int Last) PoseSlots => ((m_poses is null) ? (-1, -1) : (m_firstPose, m_lastPose));
 
@@ -165,11 +170,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <summary>Gets whether an appended instruction reads a dynamic slot, so the geometry depends on the frame's
     /// transforms.</summary>
     public bool ReadsSlots { get; private set; }
-
-    /// <summary>Gets whether an appended shape samples a glyph. Such groups keep their crease and material-edge
-    /// vertices fixed at every distance: a geometric collapse budget alone does not preserve counters and thin strokes.</summary>
+    /// <summary>Gets whether an appended shape samples a glyph. Such groups use a tighter crease and material-edge
+    /// error budget at every distance to protect counters and thin strokes while simplifying face interiors.</summary>
     public bool ContainsGlyph { get; private set; }
-
     /// <summary>Gets the geometry of everything appended so far.</summary>
     public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: ((m_hash is { } hash) ? hash.GetCurrentHashAsUInt128() : m_sealedHash));
     /// <summary>Gets the form of everything appended so far: the geometry without the poses of the slots besides the
@@ -248,7 +251,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // Appends an instruction: a transform into the group's own slot by that role and into another slot with that slot's
     // pose in the group's frame, a lane erosion with the lanes it reads, and a side-table entry's values for its offset.
     private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms) {
-        ContainsGlyph |= instruction.Op == SdfOp.ShapeBlend && instruction.Shape == (uint)SdfShapeType.Glyph;
+        ContainsGlyph |= ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)));
         switch (instruction.Op) {
             case SdfOp.ResetPoint:
                 m_chainSlot = -1;

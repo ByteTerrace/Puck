@@ -29,9 +29,9 @@ public sealed class SdfMeshStore {
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";
 
-    private const ulong Magic = SdfMeshStoreCodec.Magic;
-    private const int HeaderBytes = SdfMeshStoreCodec.HeaderBytes;
     private const int ChecksumBytes = 16;
+    private const int HeaderBytes = SdfMeshStoreCodec.HeaderBytes;
+    private const ulong Magic = SdfMeshStoreCodec.Magic;
     // The most sets a store keeps, past any machine's builds many times over: its bytes bound it first.
     private const int MaxSets = 4_096;
 
@@ -97,11 +97,11 @@ public sealed class SdfMeshStore {
     /// deleted.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The group's geometry.</param>
-    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="mesh">The mesh, or null when a sound entry records that the bake found no surface.</param>
     /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
-    public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, out string? refusal) {
+    public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) {
         var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity));
 
         if (!TryReadEntry(damaged: out var damaged, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal)) {
@@ -118,13 +118,12 @@ public sealed class SdfMeshStore {
     /// is: an entry it refuses stays, and a read stamps nothing, so a tool may read a store a running World owns.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The group's geometry.</param>
-    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="mesh">The mesh, or null when a sound entry records that the bake found no surface.</param>
     /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
-    public bool TryPeek(UInt128 identity, SdfMeshGeometry geometry, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, out string? refusal) =>
+    public bool TryPeek(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) =>
         TryReadEntry(damaged: out _, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal);
-
     /// <summary>Returns the files of the entries the store holds, whatever bake identity wrote them, in ordinal order of
     /// their paths.</summary>
     /// <returns>The entries' paths; none when the directory does not exist.</returns>
@@ -146,12 +145,12 @@ public sealed class SdfMeshStore {
     /// meshes several builds stored for one geometry reads them this way, since no key reaches another build's
     /// entries.</summary>
     /// <param name="path">The entry's file (<see cref="EntryPaths"/>).</param>
-    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="mesh">The mesh, or null when a sound entry records that the bake found no surface.</param>
     /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the file holds a sound entry.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white
     /// space.</exception>
-    public static bool TryReadFile(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials) {
+    public static bool TryReadFile(string path, out SdfMesh? mesh, out int[] materials) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
         mesh = null;
@@ -161,14 +160,15 @@ public sealed class SdfMeshStore {
 
         try {
             bytes = File.ReadAllBytes(path: path);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return false;
         }
 
         return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes.AsSpan(start: 8)), materials: out materials, mesh: out mesh, refusal: out _));
     }
+
     // Reads an entry, answering whether a held entry's bytes were refused (damaged) rather than unreadable.
-    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged) {
+    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged) {
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
         byte[] bytes;
@@ -180,9 +180,9 @@ public sealed class SdfMeshStore {
 
         try {
             bytes = File.ReadAllBytes(path: path);
-        } catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException) {
+        } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
             return false;
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             refusal = $"cannot read {Path.GetFileName(path: path)}: {exception.Message}";
 
             return false;
@@ -197,29 +197,31 @@ public sealed class SdfMeshStore {
 
         return true;
     }
+
     /// <summary>Writes a geometry's mesh into its identity's set (<see cref="SetDirectoryOf"/>), replacing any entry it
     /// had, then holds the store to <see cref="CapacityBytes"/> a set at a time, keeping this entry's set whole. A write
     /// the file system refuses leaves the store as it was: the store is a cache.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The group's geometry.</param>
-    /// <param name="mesh">The mesh.</param>
+    /// <param name="mesh">The mesh, or null for an empty bake.</param>
     /// <param name="materials">The group's material ids, in the order the geometry numbers them.</param>
     /// <returns><see langword="true"/> when the entry was written.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> or <paramref name="materials"/> is
+    /// <exception cref="ArgumentNullException"><paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
-    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh mesh, int[] materials) {
-        ArgumentNullException.ThrowIfNull(argument: mesh);
+    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) {
         ArgumentNullException.ThrowIfNull(argument: materials);
+        if ((mesh is null) && (materials.Length != 0)) { throw new ArgumentException(message: "An empty bake carries no materials.", paramName: nameof(materials)); }
 
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
         var bytes = Encode(key: key, materials: materials, mesh: mesh);
+
         if (!Quietly(action: () => Puck.Assets.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
             bound: new Puck.Abstractions.CacheBound(MaxBytes: CapacityBytes, MaxEntries: MaxSets),
             directory: Directory,
             inUse: path,
-            isEntry: static file => file.Name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal)
+            isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: Extension)
         );
 
         return true;
@@ -257,7 +259,7 @@ public sealed class SdfMeshStore {
             bound: Puck.Abstractions.CacheBound.Entries(maxEntries: RecordedIdentities),
             directory: Directory,
             inUse: path,
-            isEntry: static file => file.Name.EndsWith(value: IdentityExtension, comparisonType: StringComparison.Ordinal)
+            isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: IdentityExtension)
         );
     }
     /// <summary>Returns why a bake under an identity found no entry for some of its groups, in one line, and records the
@@ -298,12 +300,12 @@ public sealed class SdfMeshStore {
                 var changed = ChangedMembers(identity: identity, path: nearest.Path);
 
                 if (nearest.Version != identity.EntryVersion) {
-                    changed = [.. changed.Where(predicate: static member => !(member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStore.", comparisonType: StringComparison.Ordinal) || member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStoreCodec.", comparisonType: StringComparison.Ordinal)))];
+                    changed = [.. changed.Where(predicate: static member => !(member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStore.") || member.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStoreCodec.")))];
                 }
                 if (changed.Count > 0) {
-                    var byAssembly = changed.GroupBy(keySelector: static member => member[..Math.Max(0, member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal))], comparer: StringComparer.Ordinal).Select(selector: static group => $"{group.Key} {group.Count()}");
+                    var byAssembly = changed.GroupBy(keySelector: static member => member[..Math.Max(val1: 0, val2: member.IndexOf(comparisonType: StringComparison.Ordinal, value: '!'))], comparer: StringComparer.Ordinal).Select(selector: static group => $"{group.Key} {group.Count()}");
 
-                    parts.Add(item: $"the code, {changed.Count} member{((changed.Count == 1) ? string.Empty : "s")} ({string.Join(separator: ", ", values: byAssembly)}: {string.Join(separator: ", ", values: changed.Take(count: 3).Select(selector: static member => member[(member.IndexOf(value: '!', comparisonType: StringComparison.Ordinal) + 1)..].Split(separator: '`')[0]))}{((changed.Count > 3) ? ", ..." : string.Empty)})");
+                    parts.Add(item: $"the code, {changed.Count} member{((changed.Count == 1) ? string.Empty : "s")} ({string.Join(separator: ", ", values: byAssembly)}: {string.Join(separator: ", ", values: changed.Take(count: 3).Select(selector: static member => member[(member.IndexOf(comparisonType: StringComparison.Ordinal, value: '!') + 1)..].Split(separator: '`')[0]))}{((changed.Count > 3) ? ", ..." : string.Empty)})");
                 }
             }
             reason = $"identity {value} new since {Path.GetFileNameWithoutExtension(path: nearest.Path)}: {string.Join(separator: "; ", values: parts)} changed";
@@ -318,6 +320,7 @@ public sealed class SdfMeshStore {
     public const string IdentityExtension = ".identity";
     /// <summary>The most recorded identities a store keeps, least recently used out.</summary>
     public const int RecordedIdentities = 64;
+
     // The first line of a recorded identity's file: its format.
     private const string IdentityFormat = "puck.mesh-identity.v1";
 
@@ -335,7 +338,7 @@ public sealed class SdfMeshStore {
         foreach (var file in new DirectoryInfo(path: Directory).GetFiles(searchPattern: ("*" + IdentityExtension))) {
             if (string.Equals(a: file.FullName, b: own, comparisonType: StringComparison.OrdinalIgnoreCase) || (ReadParts(path: file.FullName) is not { } parts)) { continue; }
 
-            var changed = (((parts.Version != identity.EntryVersion) ? 1 : 0) + ((parts.Code != identity.Code) ? 1 : 0) + ((parts.Mask != identity.MaskKernel) ? 1 : 0) + ((parts.Bake != identity.BakeKernel) ? 1 : 0));
+            var changed = (((((parts.Version != identity.EntryVersion) ? 1 : 0) + ((parts.Code != identity.Code) ? 1 : 0)) + ((parts.Mask != identity.MaskKernel) ? 1 : 0)) + ((parts.Bake != identity.BakeKernel) ? 1 : 0));
 
             if ((changed < nearestChanged) || ((changed == nearestChanged) && (file.LastWriteTimeUtc > nearestUsed))) {
                 nearest = (file.FullName, parts.Version, parts.Code, parts.Mask, parts.Bake);
@@ -352,12 +355,12 @@ public sealed class SdfMeshStore {
 
         _ = Quietly(action: () => head = File.ReadLines(path: path).Take(count: 5).ToArray());
 
-        return ((head.Length == 5) && (head[0] == IdentityFormat) && head[1].StartsWith(value: "version ", comparisonType: StringComparison.Ordinal) && (head[1].Length > "version ".Length) && TryPart(line: head[2], name: "code ", value: out var code) && TryPart(line: head[3], name: "mask ", value: out var mask) && TryPart(line: head[4], name: "bake ", value: out var bake)) ? (head[1]["version ".Length..], code, mask, bake) : null;
+        return (((head.Length == 5) && (head[0] == IdentityFormat) && head[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "version ") && (head[1].Length > "version ".Length) && TryPart(line: head[2], name: "code ", value: out var code) && TryPart(line: head[3], name: "mask ", value: out var mask) && TryPart(line: head[4], name: "bake ", value: out var bake)) ? (head[1]["version ".Length..], code, mask, bake) : null);
     }
     private static bool TryPart(string line, string name, out UInt128 value) {
         value = default;
 
-        return (line.StartsWith(value: name, comparisonType: StringComparison.Ordinal) && UInt128.TryParse(s: line.AsSpan(start: name.Length), style: System.Globalization.NumberStyles.HexNumber, provider: null, result: out value));
+        return (line.StartsWith(comparisonType: StringComparison.Ordinal, value: name) && UInt128.TryParse(s: line.AsSpan(start: name.Length), style: System.Globalization.NumberStyles.HexNumber, provider: null, result: out value));
     }
     // The code members an identity changed, added or removed against a recorded identity's file; every member when the
     // file is gone.
@@ -378,13 +381,13 @@ public sealed class SdfMeshStore {
 
         BinaryPrimitives.WriteUInt128LittleEndian(destination: key, value: identity);
         BinaryPrimitives.WriteUInt128LittleEndian(destination: key[16..], value: geometry.Hash);
-        key[32] = (byte)(geometry.Dynamic ? 1 : 0);
+        key[32] = ((byte)(geometry.Dynamic ? 1 : 0));
 
         return XxHash128.HashToUInt128(source: key);
     }
     private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
-    private static byte[] Encode(UInt128 key, SdfMesh mesh, int[] materials) => SdfMeshStoreCodec.Encode(key, mesh, materials);
-    private static bool TryDecode(byte[] bytes, UInt128 key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal) => SdfMeshStoreCodec.TryDecode(bytes, key, out mesh, out materials, out refusal);
+    private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
+    private static bool TryDecode(byte[] bytes, UInt128 key, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal) => SdfMeshStoreCodec.TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out refusal);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.
@@ -393,7 +396,7 @@ public sealed class SdfMeshStore {
             action();
 
             return true;
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return false;
         }
     }

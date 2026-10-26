@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using System.Collections.Concurrent;
 
 namespace Puck.SdfVm;
 
@@ -25,6 +26,8 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     private readonly Dictionary<SdfMeshGeometry, List<Variant>> m_meshes = [];
     // The geometry the latest mesh of each dynamic form was held under (TryTakeForm).
     private readonly Dictionary<UInt128, SdfMeshGeometry> m_forms = [];
+    // Groups sharing geometry also share its disk decode; the variants below hold only material renumberings.
+    private readonly ConcurrentDictionary<(UInt128 Identity, SdfMeshGeometry Geometry), Lazy<StoredMesh>> m_reads = new();
 
     /// <summary>Gets the store the library keeps its meshes in between runs, or <see langword="null"/>.</summary>
     public SdfMeshStore? Disk { get; } = store;
@@ -55,7 +58,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
-        if (Hold(geometry: geometry, materials: materials, mesh: mesh, form: form)) {
+        if (Hold(form: form, geometry: geometry, materials: materials, mesh: mesh)) {
             _ = Disk?.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh);
         }
     }
@@ -84,14 +87,20 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
         return TryTake(geometry: geometry, materials: materials, mesh: out mesh);
     }
     /// <summary>Records that a geometry's bake found no surface, so a later group of it, in another program or residency,
-    /// finishes with no mesh rather than baking again. The record lasts the run and empties with the meshes.</summary>
+    /// finishes with no mesh rather than baking again. Supplying the bake identity also persists it between runs.</summary>
     /// <param name="geometry">The geometry that meshed nothing.</param>
-    public void StoreEmpty(SdfMeshGeometry geometry) {
+    /// <param name="identity">The bake identity to persist the empty result under; null keeps it for this run alone.</param>
+    public void StoreEmpty(SdfMeshGeometry geometry, UInt128? identity = null) {
         lock (m_gate) {
             if (m_meshes.ContainsKey(key: geometry)) { return; }
-            if (m_meshes.Count >= Capacity) { m_meshes.Clear(); }
+            if (m_meshes.Count >= Capacity) {
+                m_meshes.Clear();
+                m_forms.Clear();
+                m_reads.Clear();
+            }
             m_meshes.Add(key: geometry, value: []);
         }
+        if (identity is { } value) { _ = Disk?.Write(geometry: geometry, identity: value, materials: [], mesh: null); }
     }
     /// <summary>Returns whether a geometry's bake found no surface (<see cref="StoreEmpty"/>).</summary>
     /// <param name="geometry">The geometry.</param>
@@ -105,23 +114,38 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     /// <returns><see langword="true"/> when the store holds an entry for it.</returns>
     public bool Holds(UInt128 identity, SdfMeshGeometry geometry) => (Disk?.Contains(geometry: geometry, identity: identity) ?? false);
     /// <summary>Takes a geometry's mesh from <see cref="Disk"/> for a group whose shapes carry <paramref name="materials"/>,
-    /// holding it for the run as <see cref="Store"/> would, then taking it as <see cref="TryTake"/> does.</summary>
+    /// holding it for the run as <see cref="Store"/> would, then taking it as <see cref="TryTake"/> does. Groups share
+    /// one decode per identity and geometry until the library empties; a failed read is retried next time.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The geometry.</param>
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
-    /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="mesh">The mesh, or null for a sound entry whose bake found no surface.</param>
     /// <param name="refusal">Why the store refused the entry it held, or <see langword="null"/>.</param>
     /// <param name="form">The form of the dynamic group loading it, as <see cref="Store"/> takes it, or
     /// <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public bool TryLoad(UInt128 identity, SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out string? refusal, UInt128? form = null) {
+    public bool TryLoad(UInt128 identity, SdfMeshGeometry geometry, int[] materials, out SdfMesh? mesh, out string? refusal, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         mesh = null;
         refusal = null;
-        if ((Disk is null) || !Disk.TryRead(geometry: geometry, identity: identity, materials: out var stored, mesh: out var read, refusal: out refusal)) { return false; }
-        _ = Hold(geometry: geometry, materials: stored, mesh: read, form: form);
+        if (Disk is null) { return false; }
+        var key = (Identity: identity, Geometry: geometry);
+        var pending = m_reads.GetOrAdd(key, static (key, disk) => new Lazy<StoredMesh>(valueFactory: () => {
+            var loaded = disk.TryRead(geometry: key.Geometry, identity: key.Identity, materials: out var stored, mesh: out var read, refusal: out var why);
+
+            return new StoredMesh(Found: loaded, Materials: stored, Mesh: read, Refusal: why);
+        }), Disk);
+        var result = pending.Value;
+
+        refusal = result.Refusal;
+        if (!result.Found) {
+            _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
+            return false;
+        }
+        if (result.Mesh is null) { StoreEmpty(geometry: geometry); return true; }
+        _ = Hold(geometry: geometry, materials: result.Materials, mesh: result.Mesh, form: form);
 
         return TryTake(geometry: geometry, materials: materials, mesh: out mesh);
     }
@@ -165,6 +189,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
             if (m_meshes.Count >= Capacity) {
                 m_meshes.Clear();
                 m_forms.Clear();
+                m_reads.Clear();
                 if (form is { } kept) { m_forms[kept] = geometry; }
             }
             m_meshes.Add(key: geometry, value: [new Variant(Materials: materials, Mesh: mesh)]);
@@ -175,7 +200,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
     // list reaches keeps its id. The geometry's equality makes the two lists the same length.
     private static SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {
-        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(mesh.Chunks.Select(chunk => Renumber(chunk, from, to)).ToArray()); }
+        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => Renumber(from: from, mesh: chunk, to: to)).ToArray()); }
         var levels = new SdfMeshLevel[mesh.Levels.Count];
 
         for (var level = 0; (level < levels.Length); level++) {
@@ -197,4 +222,5 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     }
 
     private sealed record Variant(int[] Materials, SdfMesh Mesh);
+    private sealed record StoredMesh(bool Found, SdfMesh? Mesh, int[] Materials, string? Refusal);
 }
