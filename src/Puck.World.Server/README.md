@@ -1904,6 +1904,10 @@ private back-reference; `WorldServer.Tick` reaches it, and `Step`, `Advance`,
 `DrainAdministrative`, `DispatchServerEvent`, the transfer surface and the
 `Describe*` read-backs stay on the server as forwarders.
 
+An administrative drain that applies edits also emits a snapshot at the
+unchanged completed tick. Replica sessions receive arena cell replacements
+there while paused or stopped; they do not wait for simulation to resume.
+
 ## The document pipeline (`WorldDocument*.cs`)
 
 `WorldDocument` is the document facade of `WorldServer`: the live

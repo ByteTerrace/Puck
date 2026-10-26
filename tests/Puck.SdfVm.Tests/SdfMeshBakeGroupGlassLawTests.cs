@@ -77,6 +77,6 @@ public sealed class SdfMeshBakeGroupGlassLawTests {
 
         Assert.False(condition: SdfMeshIrradianceScene.IsStatic(draw: new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Glass = true }));
         Assert.True(condition: SdfMeshIrradianceScene.IsStatic(draw: new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity)));
-        Assert.Null(@object: SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Glass = true }]));
+        Assert.Equal(expected: 0, actual: SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Glass = true }]).TriangleCount);
     }
 }

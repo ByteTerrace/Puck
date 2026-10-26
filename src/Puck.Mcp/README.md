@@ -111,10 +111,14 @@ completed build through the same release chain and opens a backend through the
 stub when the activated version changes. The client keeps its connection and
 receives a tool-list notification. Earlier backends retain their own Worlds,
 process streams and leases; stops are routed to the backend that started the
-named World. Session shutdown drains every backend and stops those Worlds.
+named World. The front checks superseded backends once a second and disposes one
+after its in-flight calls, live Worlds and pending starts end; completed start
+answers remain available in the front's bounded cache. Session shutdown drains
+every remaining backend and stops those Worlds.
 No process from the build output is held open. `puck_adapter` reports the
-serving backend's module id, PID and installed directory so an agent can verify
-which build answered. Use a `world` selector to preserve the target across
+serving backend's module id, PID, installed directory, live `ownedWorlds` and
+`pendingStarts`, so an agent can verify which build answered and what it owns.
+Use a `world` selector to preserve the target across
 activated versions; each backend has its own current attachment.
 The configurations allow ten minutes for that first
 start: `MCP_TIMEOUT` under `env` in `.claude/settings.json` and
@@ -386,7 +390,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 
 | Tool | Arguments | Result |
 |---|---|---|
-| `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId` and installed `directory`. |
+| `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId`, installed `directory`, live `ownedWorlds` (process/attachment IDs) and `pendingStarts` (start IDs). |
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, and `current` or `started` when true. |
 | `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–1800, default 900). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
 | `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–20000, default 20000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId` while pending, `world`, `processId`, `stdoutLog` and `stderrLog` once started, and `output`, `isError: true` (plus `checkout`, `build`, `stateDirectory`, logs and exit fields if launched) when refused. Completed results repeat. |

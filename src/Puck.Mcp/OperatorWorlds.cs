@@ -71,6 +71,21 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     /// <param name="processId">The World's process id.</param>
     /// <returns><see langword="true"/> for a World this adapter started that has not been stopped.</returns>
     public bool Owns(int processId) => m_started.ContainsKey(key: processId);
+
+    // The front asks the owning backend rather than inferring liveness from a tool response it may never receive.
+    internal JsonObject Ownership() {
+        // A successful start registers its World before completing its task. Sample tasks first, so a start that
+        // completes between the two reads is represented by its pending id, its live World, or both, never neither.
+        var pending = new JsonArray([.. m_starts.Where(predicate: static start => !start.Value.Work.IsCompleted)
+            .Select(selector: static start => ((JsonNode)JsonValue.Create(start.Key)!))]);
+
+        return new() {
+            ["ownedWorlds"] = new JsonArray([.. m_started.Values.Where(predicate: static started => !started.Process.HasExited)
+                .Select(selector: static started => ((JsonNode)new JsonObject { ["processId"] = started.Process.Id, ["attachmentId"] = started.AttachmentId }))]),
+            ["pendingStarts"] = pending,
+        };
+    }
+
     /// <summary>Stops every World this adapter started: each is asked to quit, then its process tree is killed.</summary>
     public void Dispose() {
         m_shutdown.Cancel();

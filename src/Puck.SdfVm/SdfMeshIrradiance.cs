@@ -497,7 +497,7 @@ public sealed class SdfMeshIrradiance {
         // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
         // the scene while this frame traces it. The lockstep caller resolves this frame again after it lands.
         if (m_build is { IsCompleted: false }) { return m_build; }
-        if ((key == m_sceneKey) || (draws == 0)) { return null; }
+        if (key == m_sceneKey) { return null; }
         if (key == m_buildingKey) { return m_build; }
 
         return StartSceneBuild(draws: draws, frame: frame, key: key);

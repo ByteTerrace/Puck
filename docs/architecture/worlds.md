@@ -857,7 +857,10 @@ destination that ended a session to admit its observer again and stops a destina
 neither an observer nor anyone in it, as it stops one whose admission it just refused. These
 sessions follow the boot world's nesting depth, including worlds a traveller stands in and worlds
 they observe through another session. A paused or stopped world keeps its sessions in step with its
-definition and occupants, but forwards nothing. Presentation reads `ScreenSession` or
+definition and occupants, but forwards no input. An applied administrative edit
+also broadcasts a snapshot at the unchanged tick, so Replica sessions receive
+arena cell changes immediately while simulation is paused or stopped.
+Presentation reads `ScreenSession` or
 `InfinitySession` and renders that session's disclosed mirror. Only physical portal faces forward
 input; an infinity layer opens no control route.
 

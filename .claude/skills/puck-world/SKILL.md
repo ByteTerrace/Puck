@@ -113,7 +113,9 @@ exercised from a Codex lane's actual MCP tools.
 The hook installs completed CLI builds through the launcher's signed local
 development channel under `.claude/mcp-install`. A persistent front follows
 activated builds without reconnecting the client; earlier backends retain
-their World processes and route their stops until the session ends. Rebuild
+their World processes and route their stops until those Worlds and pending
+starts end, then retire once their in-flight calls finish. Session shutdown
+drains every remaining backend. Rebuild
 `src/Puck.Cli` to publish adapter changes, then use `puck_adapter` to inspect
 the answering backend's module id and installed directory. No publisher key,
 Azure release or application-copy staging is involved. The main checkout's

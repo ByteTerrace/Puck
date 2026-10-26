@@ -73,9 +73,10 @@ public sealed partial class SdfMeshIrradianceScene {
     /// <param name="draws">The frame's mesh draws.</param>
     /// <param name="previous">The scene the draws change, whose geometries the new scene takes rather than builds, or
     /// <see langword="null"/> to build every geometry.</param>
-    /// <returns>The scene, or <see langword="null"/> when no static draw holds a triangle.</returns>
+    /// <returns>The scene, empty when no static draw holds a triangle. An empty scene has no occluders and can still
+    /// supply measured sky irradiance; it is distinct from a scene not built yet.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
-    public static SdfMeshIrradianceScene? Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null) {
+    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null) {
         ArgumentNullException.ThrowIfNull(argument: draws);
 
         var geometries = new Dictionary<GeometryKey, Geometry>();
@@ -121,8 +122,6 @@ public sealed partial class SdfMeshIrradianceScene {
                 }
             }
         }
-        if (instances.Count == 0) { return null; }
-
         var order = materials.ToArray();
 
         Array.Sort(array: order);
@@ -190,7 +189,9 @@ public sealed partial class SdfMeshIrradianceScene {
             }
         }
 
-        var (nodes, order, _) = Hierarchy.Build(braid: 0, highs: [.. highs], leaf: 1, lows: [.. lows]);
+        var (nodes, order, _) = ((entries.Count == 0)
+            ? (Array.Empty<Node>(), Array.Empty<int>(), Array.Empty<int>())
+            : Hierarchy.Build(braid: 0, highs: [.. highs], leaf: 1, lows: [.. lows]));
 
         m_instances = [.. instances];
         m_entries = new Entry[entries.Count];
@@ -260,7 +261,7 @@ public sealed partial class SdfMeshIrradianceScene {
 
         distance = maximum;
         bakeHalfDiagonal = 0;
-        if (Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
+        if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
             Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0);
         }
         if (nearest.Instance < 0) {
@@ -286,7 +287,7 @@ public sealed partial class SdfMeshIrradianceScene {
         var any = new DrawLeaves(any: true, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin);
         var distance = maximum;
 
-        if (Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
+        if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
             Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: m_nodes, origin: origin, start: 0);
         }
         return (any.Instance < 0);

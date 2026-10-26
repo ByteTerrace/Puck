@@ -516,6 +516,8 @@ laws exercise that boundary.
   `dispatches=0`. A program that arrives while groups are pending and takes
   every group from the library reports the started bake `done` at once
   (`SdfMeshPathBake.Restart`), since no landing follows to report it.
+  Any replaced group invalidates the dressed draw list, including a cache hit
+  with the same group count: no later bake callback will repair a stale draw.
 
 ## Shadows and indirect light
 

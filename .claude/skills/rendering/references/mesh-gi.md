@@ -62,6 +62,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   the previous exposure, local-adaptation meter and sky visibility. The authored
   EV is only the initial value before a reading. `world.exposure` distinguishes `probes`,
   `camera-trace`, `held` and `initial`; the last two report `meter=none`.
+- A settled frame with no opaque static draws installs an empty scene and
+  retraces its probes against open space. Empty is known geometry, distinct from
+  a scene not built yet; removing the last draw must discard its occlusion and
+  bounce light, even when dynamic or glass draws remain.
 - A lighting change or scene rebuild advances a generation, never clears the
   cache. The tracer counts only that generation's sweeps; bounce reads use its
   intermediate samples while metering and filtering keep the previous completed

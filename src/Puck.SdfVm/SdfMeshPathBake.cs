@@ -721,8 +721,7 @@ public sealed partial class SdfMeshPathBake {
         // a group whose geometry moved bakes again (Keeps).
         var rebaked = 0;
         var loading = 0;
-        var renumbered = 0;
-        var formed = 0;
+        var replaced = (previous.Count != m_groups.Count);
 
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
@@ -731,6 +730,7 @@ public sealed partial class SdfMeshPathBake {
                 Replace(group: old, index: index);
                 continue;
             }
+            replaced = true;
             // A dynamic group whose shapes only took other material ids, because a palette registered before them came
             // or went (a body leaving or entering the world), keeps its mesh renumbered by place, as a mesh taken from
             // the library is.
@@ -741,7 +741,6 @@ public sealed partial class SdfMeshPathBake {
             ) {
                 old.Renumber(materials: group.MaterialOrder, mesh: renumber);
                 Replace(group: old, index: index);
-                renumbered++;
                 continue;
             }
             // Geometry the library holds a mesh of, baked at another index or slot, in an earlier program (a body that left
@@ -767,7 +766,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Done = true;
                 group.Stored = true;
                 group.Watch(baked: shaped);
-                formed++;
                 continue;
             }
 
@@ -815,7 +813,8 @@ public sealed partial class SdfMeshPathBake {
         if (m_clock.IsRunning) { Finish(); }
         // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
         // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        if (((rebaked + loading + renumbered + formed) > 0) || (previous.Count != m_groups.Count)) {
+        // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
+        if (replaced) {
             m_drawnMeshes = -1;
         }
     }
