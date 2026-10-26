@@ -8,6 +8,10 @@ namespace Puck.World;
 public static class WorldStateReader {
     private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Seeds = new();
     private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Live = new();
+    private static readonly ConditionalWeakTable<StateRow, WorldStateRow> RowMetadata = new();
+
+    private static WorldStateRow WorldRow(StateRow row) => row as WorldStateRow ??
+        RowMetadata.GetValue(row, static declaration => new WorldStateRow(declaration, false, null));
 
     /// <summary>Binds a runtime projection to its sole gameplay store.</summary>
     public static void Bind(WorldDefinition definition, StateArena arena) => Live.AddOrUpdate(definition, arena);
@@ -38,7 +42,7 @@ public static class WorldStateReader {
         [NotNullWhen(true)] out WorldStateRow? row, out long? rawValue, out string? text, StateArena? arena = null) {
         var resolved = StateReader.TryRead(arena: arena ?? ReadArena(definition), rowName: rowName, key: key, tick: tick,
             engineTick: engineTick, row: out var found, rawValue: out rawValue, text: out text);
-        row = found is null ? null : found as WorldStateRow ?? WorldDefinitionRows.FindStateRow(definition.State, found.Name);
+        row = found is null ? null : WorldRow(found);
         return resolved;
     }
 
@@ -56,7 +60,7 @@ public static class WorldStateReader {
         bool eased, [NotNullWhen(true)] out WorldStateRow? row, out CellValue value) {
         value = default;
         if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle)) { row = null; return false; }
-        row = arena.Rows[handle.Ordinal] as WorldStateRow ?? WorldDefinitionRows.FindStateRow(definition.State, rowName)!;
+        row = WorldRow(arena.Rows[handle.Ordinal]);
         if (!CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out _) ||
             !arena.Keys.TryResolve(name: name, key: out var cell)) { return true; }
         var time = Time(definition, tick, engineTick);
@@ -80,7 +84,7 @@ public static class WorldStateReader {
         [NotNullWhen(true)] out WorldStateRow? row, out long? rawValue, out string? text, StateArena? arena = null) {
         var resolved = StateReader.TryReadHandle(arena: arena ?? ReadArena(definition), catalog: catalog, handle: handle, key: key, tick: tick,
             engineTick: engineTick, row: out var found, rawValue: out rawValue, text: out text);
-        row = (WorldStateRow?)found;
+        row = found is null ? null : WorldRow(found);
         return resolved;
     }
 

@@ -220,6 +220,20 @@ public sealed class WorldStateCatalogLawTests {
             text: out _,
             tick: 0UL
         ));
+
+        // Pool backing declarations are core rows. Their World reads must still return the live field value.
+        var record = CellName.Parse("actor");
+        var pooled = new WorldDefinition(StateRaw: new WorldStateSection(
+            Records: [new StateRecord(record, [new StatePoolField(CellName.Parse("score"), Default: CellValue.Int(7))])],
+            Pools: [new StatePool(CellName.Parse("actors"), record, 2, Initial: [new StatePoolSeed(0)])]));
+        var arena = WorldStateReader.Seed(pooled);
+        Assert.True(arena.TryResolvePoolSlot(0, 0, out var actor));
+        Assert.True(arena.TryWrite(actor, 0, CellValue.Int(9), out var reason), reason);
+        Assert.True(arena.Catalog.TryResolve(StateLane.Document, "$pool$actors$field$score", out var field));
+        Assert.True(WorldStateReader.TryReadHandle(pooled, arena.Catalog, field, "0", 0, 0,
+            out var generated, out var live, out _, arena));
+        Assert.True(generated.Generated);
+        Assert.Equal(9, live);
     }
     [Fact]
     public void WorldDefinition_StateCatalog_RecompilesWhenAWithExpressionReplacesState() {
