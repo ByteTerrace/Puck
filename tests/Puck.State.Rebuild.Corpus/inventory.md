@@ -159,7 +159,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `ArgumentNode` | 5625 | 49 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 26 more |
 | `ArrayExpressionNode` | 8423 | 16 | `debug/addon-hud`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 32 more |
 | `BinaryExpressionNode` | 1590 | 1 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 10 more |
-| `BlockNode` | 4385 | 33 | `debug/addon-hud`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 30 more |
+| `BlockNode` | 4388 | 33 | `debug/addon-hud`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 30 more |
 | `CallExpressionNode` | 2279 | 9 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 26 more |
 | `ColorExpressionNode` | 0 | 2 |  |
 | `ComparisonPredicateNode` | 654 | 9 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/chess`, `debug/chess-tests` and 13 more |
@@ -171,14 +171,14 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `ExpressionStatementNode` | 1162 | 2 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 13 more |
 | `FlagStatementNode` | 29 | 1 | `debug/avatars/moth`, `debug/camera-course`, `debug/chess`, `debug/debug`, `debug/desktop` and 6 more |
 | `ForStatementNode` | 139 | 0 | `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess`, `debug/debug` and 9 more |
-| `IdentifierExpressionNode` | 6473 | 32 | `debug/addon-hud`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 33 more |
+| `IdentifierExpressionNode` | 6475 | 32 | `debug/addon-hud`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 33 more |
 | `IfStatementNode` | 29 | 1 | `debug/chess` |
 | `ImportNode` | 38 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/garden`, `debug/night` and 2 more |
 | `IndexExpressionNode` | 315 | 2 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 7 more |
 | `InterpolatedStringNode` | 399 | 0 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 21 more |
 | `LambdaExpressionNode` | 371 | 0 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 12 more |
 | `LetNode` | 749 | 8 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 21 more |
-| `LiteralExpressionNode` | 37857 | 162 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 41 more |
+| `LiteralExpressionNode` | 37758 | 162 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 41 more |
 | `LocalStatementNode` | 84 | 1 | `debug/chess` |
 | `MemberAccessExpressionNode` | 13 | 0 | `debug/guide`, `debug/hall` |
 | `NotPredicateNode` | 1 | 1 | `debug/chess` |
@@ -188,7 +188,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `OrPredicateNode` | 6 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/devices` |
 | `PatternDeclarationNode` | 1 | 0 | `debug/chess` |
 | `PatternSymbolDeclarationNode` | 1 | 0 | `debug/chess` |
-| `PropertyNode` | 23744 | 114 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 41 more |
+| `PropertyNode` | 23647 | 114 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 41 more |
 | `PushStatementNode` | 5 | 0 | `debug/chess` |
 | `RangeExpressionNode` | 37 | 3 | `debug/chess`, `debug/hall` |
 | `RhsOperandNode` | 245 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/devices`, `debug/hall` and 3 more |

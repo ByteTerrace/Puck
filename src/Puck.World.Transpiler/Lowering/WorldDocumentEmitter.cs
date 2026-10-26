@@ -627,7 +627,7 @@ public static partial class WorldDocumentEmitter {
             (block.Name is null) &&
             (block.Target is null) &&
             (block.NameExpression is null) &&
-            (block.Statements is [PropertyNode { Name: WorldSectionRows.Member }]) &&
+            (block.Statements is [PropertyNode { Name: WorldSectionRows.Member, Value: ArrayExpressionNode or CallExpressionNode }]) &&
             (DocumentLowering.MemberContext(scope: scope) is Type holder) &&
             (WorldSectionRows.SectionOf(holder: holder, member: id) is not null)
         ) {
