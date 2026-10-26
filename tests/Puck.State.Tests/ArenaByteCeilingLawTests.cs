@@ -26,7 +26,11 @@ public sealed class ArenaByteCeilingLawTests {
             Capacity: capacity,
             Cells: [new StateCell(
                     Key: ArenaFixture.Name(value: "a"),
-                    Value: CellValue.Int(value: 1L)
+                    Value: CellValue.Int(value: 1L),
+                    Clock: new StateCellClock(),
+                    Behavior: StateCellBehavior.None,
+                    Visibility: new StateVisibility(Readers: []),
+                    Observation: new StateObservation(Tick: 0L, Visible: false)
                 )]
         ),
         new StateRow(
@@ -67,11 +71,6 @@ public sealed class ArenaByteCeilingLawTests {
                 substepTicks: 7L,
                 v0: 6L,
                 y0: 5L
-            ));
-            Assert.True(condition: arena.TryWriteProvenance(
-                key: a,
-                provenance: "issuer",
-                rowOrdinal: 0
             ));
             Assert.True(condition: arena.TryWriteBehavior(
                 behavior: StateCellBehavior.None,
@@ -128,9 +127,10 @@ public sealed class ArenaByteCeilingLawTests {
         );
         var catalog = StateCatalog.Compile(section: section);
         var layout = ArenaLayout.Build(catalog: catalog, options: null, section: section);
-        var allocated = AllocationWindow.Measure(window: () => _ = new StateArena(catalog: catalog, layout: layout, section: section, time: ArenaTime.Origin));
+        var measured = 0L;
+        var allocated = AllocationWindow.Measure(window: () => measured = new StateArena(catalog: catalog, layout: layout, section: section, time: ArenaTime.Origin).Bytes);
 
-        return (allocated, layout.Bytes);
+        return (allocated, measured);
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public sealed class ArenaByteCeilingLawTests {
                 Value: CellValue.Text(value: string.Empty)
             ))]
         )]);
-    // What an arena allocates once every cell holds a text and a provenance at their length ceilings, the strings
+    // What an arena allocates once every cell holds a text at their length ceilings, the strings
     // themselves included, against what the layout measured.
     private static (long Allocated, long Measured) TextFootprint(int capacity) {
         var section = Labels(capacity: capacity);
@@ -193,14 +193,6 @@ public sealed class ArenaByteCeilingLawTests {
                         count: StateCapacity.MaxTextValueLength
                     )
                 ));
-                Assert.True(condition: arena.TryWriteProvenance(
-                    key: keys[index],
-                    provenance: new string(
-                        c: 'p',
-                        count: StateCapacity.MaxProvenanceLength
-                    ),
-                    rowOrdinal: 0
-                ));
             }
 
             measured = arena.Bytes;
@@ -219,49 +211,6 @@ public sealed class ArenaByteCeilingLawTests {
         Assert.True(
             condition: ((large.Allocated - small.Allocated) <= (large.Measured - small.Measured)),
             userMessage: $"allocated {(large.Allocated - small.Allocated)} bytes for cells the layout measured at {(large.Measured - small.Measured)}"
-        );
-    }
-    [Fact]
-    public void AProvenancePastItsLengthCeilingIsRefusedAtBothDoors() {
-        var section = Labels(capacity: 4);
-        var catalog = StateCatalog.Compile(section: section);
-        var arena = new StateArena(
-            catalog: catalog,
-            options: null,
-            section: section,
-            time: ArenaTime.Origin
-        );
-        var overlong = new string(
-            c: 'p',
-            count: (StateCapacity.MaxProvenanceLength + 1)
-        );
-
-        Assert.False(condition: arena.TryWriteProvenance(
-            key: ArenaFixture.Key(
-                catalog: catalog,
-                value: "k0"
-            ),
-            provenance: overlong,
-            rowOrdinal: 0
-        ));
-        Assert.Null(@object: arena.Provenance(
-            key: ArenaFixture.Key(
-                catalog: catalog,
-                value: "k0"
-            ),
-            rowOrdinal: 0
-        ));
-
-        var row = section.Rows![0];
-
-        Assert.False(condition: (arena.TryLoad(
-            reason: out var reason,
-            rows: [(row with { Cells = [(row.Cells![0] with { Provenance = overlong })] })],
-            time: ArenaTime.Origin
-        ) && (reason.Length == 0)));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: $"past the {StateCapacity.MaxProvenanceLength}-character limit"
         );
     }
     [Fact]

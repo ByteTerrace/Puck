@@ -37,7 +37,7 @@ public sealed partial class StateArena {
         var cursor = 0;
 
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
-            var slot = ((layout.CellStart + cursor) - 1);
+            var slot = CellSlotAt(layout: layout, position: (cursor - 1));
             var name = m_keys[key];
 
             SettleSlot(
@@ -186,14 +186,6 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal,
             slot: slot,
             stored: stored
-        );
-        WriteClockAt(
-            epochEngineTick: engineEpoch,
-            epochTick: epoch,
-            slot: slot,
-            substepTicks: 0L,
-            v0: 0L,
-            y0: 0L
         );
     }
     // The write-side counterpart of the read's dynamics sample: the follower keeps chasing from wherever it actually

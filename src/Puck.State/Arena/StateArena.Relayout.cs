@@ -173,6 +173,13 @@ public sealed partial class StateArena {
         m_laneNumbers = source.m_laneNumbers;
         m_laneRoster = source.m_laneRoster;
         m_layout = source.m_layout;
+        m_carried = source.m_carried;
+        m_nextSlots = source.m_nextSlots;
+        m_previousSlots = source.m_previousSlots;
+        m_headSlots = source.m_headSlots;
+        m_tailSlots = source.m_tailSlots;
+        m_positions = source.m_positions;
+        m_positionVersions = source.m_positionVersions;
         m_maskWords = source.m_maskWords;
         m_memberCounts = source.m_memberCounts;
         m_memberKeys = source.m_memberKeys;
@@ -184,7 +191,6 @@ public sealed partial class StateArena {
         m_poolAddresses = source.m_poolAddresses;
         m_presence = source.m_presence;
         m_clockSet = source.m_clockSet;
-        m_provenance = source.m_provenance;
         m_reindexRow = source.m_reindexRow;
         m_reindexStamp = source.m_reindexStamp;
         m_rowChangeStamp = source.m_rowChangeStamp;
@@ -199,8 +205,9 @@ public sealed partial class StateArena {
         m_visibilityBytes = source.m_visibilityBytes;
         m_keys.SetByteBudget(budget: KeyByteBudget);
 
-        m_changeDiffers = [];
-        m_changeStamp = [];
+        m_changeDiffers = new ArenaColumnBuffer<bool>?[ArenaColumns.All.Length];
+        m_changeStamp = new ArenaColumnBuffer<long>?[ArenaColumns.All.Length];
+        Array.Clear(array: m_windowStamp);
         m_reindexCount = 0;
         m_touchedCount = 0;
 

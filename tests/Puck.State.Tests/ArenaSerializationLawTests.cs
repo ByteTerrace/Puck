@@ -451,7 +451,6 @@ public sealed class ArenaSerializationLawTests {
                 Cells: [new StateCell(
                         Key: ArenaFixture.Name(value: "a"),
                         Value: CellValue.Int(value: 3L),
-                        Provenance: "issuer",
                         Behavior: StateCellBehavior.None,
                         Clock: new StateCellClock(
                             EpochEngineTick: 4L,
@@ -517,10 +516,6 @@ public sealed class ArenaSerializationLawTests {
         Assert.Equal(
             actual: actual.Advance,
             expected: expected.Advance
-        );
-        Assert.Equal(
-            actual: actual.Provenance,
-            expected: expected.Provenance
         );
         Assert.Equal(
             actual: actual.Dynamics,
@@ -743,11 +738,6 @@ public sealed class ArenaSerializationLawTests {
             v0: 6L,
             y0: 5L
         ), userMessage: reason);
-        Assert.True(condition: arena.TryWriteProvenance(
-            key: a,
-            provenance: "issuer",
-            rowOrdinal: ArenaFixture.Tokens
-        ));
         Assert.True(condition: arena.TryWriteBehavior(
             behavior: StateCellBehavior.None,
             key: a,

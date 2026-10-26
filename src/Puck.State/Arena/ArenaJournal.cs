@@ -135,7 +135,7 @@ public sealed class ArenaJournal {
     }
 
     // What an overwritten reference keeps alive for as long as the record holds it: nothing else refers to a
-    // replaced text or provenance, so its payload is the record's. An object is counted at a header and its fields,
+    // replaced text or so its payload is the record's. An object is counted at a header and its fields,
     // a string at a header and two bytes a UTF-16 code unit.
     private static long RetainedBytes(object? reference) {
         const long ObjectBytes = 32L;
@@ -202,7 +202,10 @@ public sealed class ArenaJournal {
     }
 
     // Shortens the record, clearing the discarded entries so a closed scope keeps no reference to the text,
-    // visibility, observation, or provenance it once recorded; the buffer itself stays for reuse.
+    // visibility or observation it once recorded; the buffer itself stays for reuse.
+    internal void RemapLayout(ArenaLayout previous, ArenaLayout next, int count) {
+        for (var index = 0; index < count; index++) { m_entries[index] = previous.Remap(entry: m_entries[index], next: next); }
+    }
     private void Discard(int from) {
         if (from == 0) {
             m_referenceBytes = 0L;

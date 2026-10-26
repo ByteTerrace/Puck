@@ -37,7 +37,7 @@ A few rules apply to every limit on this page:
 |---|---|---|---|
 | Rows per section, after pools expand | 1,024 | `StateCapacity.MaxRows` | [Rows, cells, and values](data-model.md) |
 | Cells per row | 4,096 | `StateCapacity.MaxCellsPerRow` | [Rows, cells, and values](data-model.md#cell-ceilings) |
-| Room for a slot or keyed row with no declared capacity | 128 cells | `StateCapacity.DefaultCellRoom` | [Rows, cells, and values](data-model.md#cell-ceilings) |
+| Initial room for a keyed row with no declared capacity | Its seed count, including zero | `StateRow.InitialCellCapacity` | [The state arena](arena.md#from-declarations-to-storage) |
 | Text value length | 1,024 UTF-16 code units | `StateCapacity.MaxTextValueLength` | [Rows, cells, and values](data-model.md) |
 | Enums per section | 256 | `StateCapacity.MaxEnums` | [Rows, cells, and values](data-model.md#enums) |
 | Members per enum | 1,024 | `StateCapacity.MaxEnumMembers` | [Rows, cells, and values](data-model.md#enums) |
@@ -45,7 +45,6 @@ A few rules apply to every limit on this page:
 | Identifier length | 244 characters | `SafeName.MaxLength` | [Rows, cells, and values](data-model.md#names) |
 | Visibility readers per policy | 32 | `StateCapacity.MaxVisibilityReaders` | [Row and cell behavior](traits.md#control-what-observers-learn) |
 | Length of one visibility reader | 256 characters | `StateCapacity.MaxVisibilityReaderLength` | [Row and cell behavior](traits.md#control-what-observers-learn) |
-| Provenance text per cell | 256 characters | `StateCapacity.MaxProvenanceLength` | [The state arena](arena.md#byte-accounting) |
 
 ## Storage
 
@@ -62,7 +61,7 @@ A few rules apply to every limit on this page:
 
 | Limit | Value | Constant | Explained in |
 |---|---|---|---|
-| Identity universe of one pool (a pair pool's is left capacity times right capacity) | 4,096 | `StateCapacity.MaxCellsPerRow` | [Records, pools, and handles](records-and-pools.md#identity-universe-and-live-capacity) |
+| Storage slots in one pool (a pair pool reserves its `MaxLive` slots) | 4,096 | `StateCapacity.MaxCellsPerRow` | [Records, pools, and handles](records-and-pools.md#identity-universe-and-live-capacity) |
 | Live pool bindings in one rule | 32 | `StateCapacity.MaxInstanceBindings` | [Records, pools, and handles](records-and-pools.md#bindings-and-atomic-claims) |
 | Generations per slot | `long.MaxValue` | none | [Records, pools, and handles](records-and-pools.md#claim-release-and-generations) |
 

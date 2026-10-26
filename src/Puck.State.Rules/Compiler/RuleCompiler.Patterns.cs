@@ -478,10 +478,6 @@ public static partial class RuleCompiler {
             )
             : -1
         );
-        var capacity = ((live is null)
-            ? context.RowCapacity(name: tokens[2])
-            : 0L
-        );
         var attributeOrdinal = -1;
         BoardNeighbourQuery? board = null;
         CellKind kind;
@@ -625,7 +621,6 @@ public static partial class RuleCompiler {
                         operand: new PatternOperand(
                             attributeOrdinal: -1,
                             board: null,
-                            capacity: capacity,
                             key: literalKey,
                             keyFrom: keyFrom,
                             matchFacet: facet,
@@ -678,7 +673,6 @@ public static partial class RuleCompiler {
             operand: new PatternOperand(
                 attributeOrdinal: attributeOrdinal,
                 board: board,
-                capacity: capacity,
                 key: literalKey,
                 keyFrom: keyFrom,
                 matchFacet: facet,

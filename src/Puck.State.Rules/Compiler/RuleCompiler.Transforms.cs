@@ -1109,13 +1109,7 @@ public static partial class RuleCompiler {
             samples: samples
         ));
     }
-    // Every token is selected afresh (a sample for a random transfer), then either moves between the two zones or,
-    // onto its own zone, costs an order lease, its fill and a reorder; a slice moves the keyed token's whole run and
-    // reorders its own zone once. A removal closes its gap by shifting every later member down a cell, and the pile
-    // shrinks by one each time, so n removals shift at most n x (F - 1) - n x (n - 1) / 2 cells; taking the last
-    // member, or a slice walked back from its tail, shifts none. An insertion at the head shifts every member already
-    // there; one at the tail shifts none. Either end may be live, so every pair of rows it can select is priced and
-    // the costliest kept.
+    // Price stable-slot moves or an in-row permutation for the costliest admitted row pair.
     private static long TransferWork(RuleCompileContext context, ArenaTransform.Transfer transfer, int[] froms, int[] tos) {
         var door = TransformWork.Door;
         var slice = (transfer.Selector == ZoneSelector.Slice);
@@ -1131,12 +1125,6 @@ public static partial class RuleCompiler {
                     ? fromMembers
                     : transfer.Count)
             );
-            var removalShifts = (((transfer.Selector == ZoneSelector.Last) || (slice && transfer.InsertFirst))
-                ? 0L
-                : Math.Max(
-                    val1: 0L,
-                    val2: ((tokens * (fromMembers - 1L)) - ((tokens * (tokens - 1L)) / 2L))
-                ));
             var reorder = ((2L * fromMembers) + TransformWork.Reorder(
                 context: context,
                 members: fromMembers,
@@ -1148,24 +1136,8 @@ public static partial class RuleCompiler {
 
             foreach (var to in tos) {
                 var toMembers = context.RowCapacity(rowOrdinal: to);
-                var across = (((tokens * (door + TransformWork.Move(
-                    context: context,
-                    fromMembers: fromMembers,
-                    fromOrdinal: from,
-                    toMembers: toMembers,
-                    toOrdinal: to
-                ))) + (removalShifts * TransformWork.Cell(
-                    context: context,
-                    rowOrdinal: from
-                ))) + (transfer.InsertFirst
-                    ? ((tokens * Math.Max(
-                        val1: 0L,
-                        val2: (toMembers - 1L)
-                    )) * TransformWork.Cell(
-                        context: context,
-                        rowOrdinal: to
-                    ))
-                    : 0L));
+                var across = tokens * (door + TransformWork.Move(context: context, fromMembers: fromMembers,
+                    fromOrdinal: from, toMembers: toMembers, toOrdinal: to));
                 var pair = (literal
                     ? ((from == to)
                         ? within

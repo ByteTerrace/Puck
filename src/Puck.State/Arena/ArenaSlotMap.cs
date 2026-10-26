@@ -119,6 +119,16 @@ public sealed class ArenaSlotMap {
         key: key,
         value: out _
     );
+    /// <summary>Removes a key without changing any other cell's address.</summary>
+    /// <param name="key">The key ordinal.</param>
+    public void Remove(int key) {
+        var index = ((long)key) - m_first;
+        if (((ulong)index) < ((ulong)m_dense.Length)) {
+            if (m_dense[index] != 0) { m_dense[index] = 0; m_count--; }
+        } else {
+            _ = m_sparse?.Remove(key: key);
+        }
+    }
     /// <summary>Returns the slot a key's ordinal maps to.</summary>
     /// <param name="key">The key's ordinal.</param>
     /// <param name="value">The slot on success; otherwise <c>-1</c>.</param>
