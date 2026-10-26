@@ -369,46 +369,5 @@ public sealed class WorldCatalogAllocationLawTests {
             work.Instances
         );
     }
-    [Fact]
-    public void ReservedPopulationFitsTheInstanceFormatWithoutDroppingParts() {
-        const int Population = WorldBodiesLimits.CapacityCeiling;
-        var largest = Enumerable.Range(
-            count: WorldLookSource.Catalog.RigCount,
-            start: 0
-        ).MaxBy(keySelector: WorldRigCatalog.InstructionCount);
-        var program = Emit(
-            Population,
-            largest,
-            _ => true
-        );
-        var detailed = Math.Min(
-            val1: Population,
-            val2: WorldRigCatalog.DetailedAvatarCapacity
-        );
-        var coarse = (Population - detailed);
 
-        Assert.Equal(
-            ((detailed * WorldRigCatalog.MaxInstancesPerAvatar) + coarse),
-            program.Instances.Count
-        );
-        Assert.Equal(
-            WorldRigCatalog.InstructionCapacity,
-            program.Instructions.Count
-        );
-        Assert.True(condition: (program.Instances.Count <= SdfProgramBuilder.MaxInstances));
-        Assert.Equal(
-            WorldRigCatalog.DynamicTransformCapacity,
-            program.RequiredDynamicTransformCapacity
-        );
-        for (var index = 0; (index < program.Instances.Count); index++) {
-            var instance = program.Instances[index];
-
-            Assert.Equal(
-                ((index < (detailed * WorldRigCatalog.MaxInstancesPerAvatar))
-                ? 5
-                : 4),
-                (instance.End - instance.First)
-            );
-        }
-    }
 }

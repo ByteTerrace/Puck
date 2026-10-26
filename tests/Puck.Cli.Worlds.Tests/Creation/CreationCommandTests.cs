@@ -314,49 +314,7 @@ public sealed class CreationCommandTests {
             expectedSubstring: "names no prototype"
         );
     }
-    /// <summary><c>stats</c> reports the moth prototype's shape count against its budget — the counts the fixture
-    /// document itself carries (its authored shapes, and its stamp charge, where a panelled shape counts twice),
-    /// never a pinned literal that goes stale with every art pass.</summary>
-    [Fact]
-    public void StatsReportsMothShapeBudget() {
-        using var directory = new TemporaryDirectory();
-        var path = TempWorldCopy(directory: directory);
 
-        var moth = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path)).Creations.Single(predicate: static creation => string.Equals(
-            a: creation.Id.Value,
-            b: "moth",
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        var (exitCode, output) = Invoke(
-            "creation",
-            "stats",
-            "--world",
-            path,
-            "--prototype",
-            "moth"
-        );
-
-        Assert.Equal(
-            actual: exitCode,
-            expected: 0
-        );
-        Assert.Contains(
-            expectedSubstring: $"[moth] shapes: {moth.Document.Shapes!.Count}, stamp budget: {moth.Document.StampShapeCount()}/{WorldPlacementPolicy.MaxShapesPerStamp}",
-            actualString: output,
-            comparisonType: StringComparison.Ordinal
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "primitive:"
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "contact: accepted"
-        );
-    }
     /// <summary><c>shape</c> reads the named shapes' laws in the order named, refuses an unknown prototype or shape by
     /// name (exit 2), and a file that does not load (exit 1).</summary>
     [Fact]

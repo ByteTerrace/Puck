@@ -65,6 +65,13 @@ public readonly record struct SdfEmitContext(
 /// reason about it across the whole composed program.
 /// </para></summary>
 public interface ISdfSceneEmitter {
+    /// <summary>Reconciles live instances before the composition reads revisions and slot counts.</summary>
+    void PrepareFrame() { }
+    /// <summary>Gets the local geometry slots whose meshes are templates, drawn only by their copies.</summary>
+    IReadOnlyList<int> MeshAssetSlots => [];
+    /// <summary>Gets the rigid copies posed by the latest pack.</summary>
+    IReadOnlyList<SdfMeshInstance> MeshInstances => [];
+
     /// <summary>Emits this source's content into <paramref name="builder"/> — the shared program under construction.
     /// Every shape/instance this call declares belongs to the composed program; a takeover (a mode that replaces the
     /// rest of the scene, like the SDF debugger) is not composed alongside other emitters — the host swaps in an

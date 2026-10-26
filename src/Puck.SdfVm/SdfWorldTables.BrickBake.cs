@@ -1,9 +1,29 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
+    // A residency with no brick work binds a single float. The first real request creates its byte-budgeted pool.
+    private void EnsureBrickPool() {
+        if (!m_brickPoolEnabled || m_brickPoolBuffer.SizeBytes > sizeof(float)) { return; }
+        WaitForUploads();
+        var buffer = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "brick-pool"),
+            sizeBytes: checked((ulong)m_brickPoolVoxelCapacity * sizeof(float)), usage: GpuBufferUsage.Storage);
+        var region = new GpuRegion(bindings: m_gpu.Bindings, buffers: m_gpu.BufferFactory,
+            byteCount: Math.Min(SdfBrickPoolLayout.VoxelsPerBrick, m_brickPoolVoxelCapacity) * sizeof(float),
+            copyPipeline: m_regionCopyPipeline, copySets: m_regionCopyPool.Region(index: BrickStagingRegionIndex),
+            destination: buffer, name: RegionName(region: BrickStagingRegionIndex), recorder: m_gpu.Recorder, slotCount: FrameRingSize);
+        Retire(replaced: m_brickPoolBuffer);
+        m_brickPoolBuffer = buffer;
+        m_brickRegion = region;
+        foreach (var set in m_brickBakeSets) {
+            if (set != 0) { WriteInterfaceBuffer(buffer: buffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakePool, set: set); }
+        }
+        m_bindingRevision++;
+    }
+
     private static void ValidateBrickDimension(int value, string name) {
         if (
             (value < 1) ||
@@ -125,6 +145,8 @@ public sealed partial class SdfWorldTables {
             );
         }
 
+        EnsureBrickPool();
+
         // The request buffer is read across this slot's slices as they dispatch over the next uploads; a re-request that
         // rewrites it must first wait out every upload in flight, the only submissions that read it.
         WaitForUploads();
@@ -176,7 +198,7 @@ public sealed partial class SdfWorldTables {
             instance: this
         );
 
-        if (m_brickRegion is null) {
+        if (!m_brickPoolEnabled) {
             throw new InvalidOperationException(message: "These tables have no brick pool; UploadBrick is unavailable.");
         }
 
@@ -227,6 +249,8 @@ public sealed partial class SdfWorldTables {
                 message: $"Brick slot {slot}'s {totalVoxels} voxels exceed the pool capacity {m_brickPoolVoxelCapacity}."
             );
         }
+
+        EnsureBrickPool();
 
         // The copy is recorded by a later frame, so the voxels are taken by value; a slot queued twice before a frame
         // drains keeps only the newest.

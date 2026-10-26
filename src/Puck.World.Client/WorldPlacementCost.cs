@@ -12,10 +12,10 @@ namespace Puck.World.Client;
 /// <param name="BoundRadius">Largest packed instance bound, including safety padding.</param>
 /// <param name="Halo">Largest blend/scoped-field outward reach before safety padding.</param>
 /// <param name="Unmaskable">Whether any instance cannot be finitely culled.</param>
-/// <param name="StampPoolSlots">Reserved transform slots for this placement's live stamp registration.</param>
+/// <param name="CreationSlots">Reserved transform slots for this placement's live stamp registration.</param>
 /// <param name="MeshDraws">Live mesh draws belonging to the placement.</param>
 public sealed record WorldPlacementCost(string Placement, string? Prototype, int OwnedWords, int Shapes, int Instances,
-    int ScopeClamps, float BoundRadius, float Halo, bool Unmaskable, int StampPoolSlots, int MeshDraws);
+    int ScopeClamps, float BoundRadius, float Halo, bool Unmaskable, int CreationSlots, int MeshDraws);
 /// <summary>Partitions a live program's words into placement ownership, other instance ownership and shared tables.
 /// Reading this report performs no emission, GPU work or simulation mutation.</summary>
 /// <param name="ProgramWords">The live packed program's total words.</param>
@@ -65,7 +65,7 @@ public sealed record WorldPlacementCostReport(int ProgramWords, int SharedWords,
 
         WorldPlacementCost Row(WorldPickTarget target, string placement) => (rows.TryGetValue(key: placement, value: out var row)
             ? row : new WorldPlacementCost(Placement: placement, Prototype: target.Prototype, OwnedWords: 0, Shapes: 0,
-                Instances: 0, ScopeClamps: 0, BoundRadius: 0, Halo: 0, Unmaskable: false, StampPoolSlots: target.StampPoolSlots,
+                Instances: 0, ScopeClamps: 0, BoundRadius: 0, Halo: 0, Unmaskable: false, CreationSlots: target.CreationSlots,
                 MeshDraws: 0));
     }
 }

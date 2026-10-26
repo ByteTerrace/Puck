@@ -14,11 +14,13 @@ public readonly record struct CreationStampPlane(Vector3 Normal, float Offset);
 /// <param name="Rotation">The stamp orientation.</param>
 /// <param name="Scale">The uniform stamp scale.</param>
 /// <param name="ReflectionNormal">The optional unit local normal that reflects the creation geometry.</param>
+/// <param name="DynamicSlot">An optional local geometry asset's root transform slot.</param>
 public readonly record struct CreationStampTransform(
     Vector3 Origin,
     Quaternion Rotation,
     float Scale,
-    Vector3? ReflectionNormal
+    Vector3? ReflectionNormal,
+    int? DynamicSlot = null
 );
 /// <summary>A document-neutral two-axis placement pattern.</summary>
 /// <param name="StepA">The first placement-local step.</param>
@@ -73,6 +75,7 @@ public static class CreationStampEmitter {
     // FacetScale is the authored stamp scale as the render-only facets (a blend radius, a dilation, a text em) read it;
     // it is the same number the stamper laid the creation's text out with.
     private readonly record struct StampFrame(FixedVector3 Origin, FixedQuaternion Rotation, FixedQ4816 Scale, float FacetScale, FixedVector3? ReflectionNormal, FixedQuaternion? ReflectionAlignment) {
+        public int? DynamicSlot { get; init; }
         public static StampFrame Of(CreationStampTransform transform) =>
             Of(
                 facetScale: transform.Scale,
@@ -82,7 +85,7 @@ public static class CreationStampEmitter {
                 origin: FixedVector3.FromVector3(value: transform.Origin),
                 rotation: FixedQuaternion.FromQuaternion(value: transform.Rotation),
                 scale: FixedQ4816.FromDouble(value: transform.Scale)
-            );
+            ) with { DynamicSlot = transform.DynamicSlot };
         public static StampFrame Of(FixedCreationStampTransform transform) =>
             Of(
                 facetScale: ((float)transform.Scale),
@@ -201,7 +204,7 @@ public static class CreationStampEmitter {
                 .Rotate(rotation: shape.Rotation);
 
             // Creation-unit lengths, like the rest of this chain past the Scale(stamp scale) op above — no
-            // explicit placement-scale multiply needed here (unlike WorldStampPool.EmitShape's twist/bend/flare
+            // explicit placement-scale multiply needed here (unlike WorldCreationInstances.EmitShape's twist/bend/flare
             // prefix, which has no such chain-level Scale and so must bake placementScale in by hand).
             var flared = ((shape.Flare is { } flare)
                 ? prefix.AxialProfile(
@@ -234,7 +237,7 @@ public static class CreationStampEmitter {
             }
 
             // The warp and the elongation read creation units like the rest of this chain (KEEP IN SYNC with
-            // WorldStampPool.EmitShape, whose chain without a Scale op converts them by hand).
+            // WorldCreationInstances.EmitShape, whose chain without a Scale op converts them by hand).
             if (shape.Warp is { } warp) {
                 sheared = sheared.DomainWarp(amplitude: warp.Amplitude, frequency: warp.Frequency);
             }
@@ -246,7 +249,7 @@ public static class CreationStampEmitter {
         }
 
         var chain = BuildTransformChain();
-        // Per-shape lane-driven erosion (KEEP IN SYNC with WorldStampPool.EmitShape's mirrored prefix): the reach is
+        // Per-shape lane-driven erosion (KEEP IN SYNC with WorldCreationInstances.EmitShape's mirrored prefix): the reach is
         // this shape's own SdfSolidGeometry.Reach, taken in WORLD units like the rest of this chain past the Scale
         // op above. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
         // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
@@ -419,7 +422,7 @@ public static class CreationStampEmitter {
             ).Rotate(rotation: shape.Rotation)
             : origin.Rotate(rotation: (frame.Rotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize()));
     }
-    // The sine relief on the shape's rigid frame (KEEP IN SYNC with WorldStampPool.EmitShape's relief): frequency and
+    // The sine relief on the shape's rigid frame (KEEP IN SYNC with WorldCreationInstances.EmitShape's relief): frequency and
     // amplitude convert inversely with the stamp scale, like a cellular relief's.
     private static void EmitDisplace(SdfProgramBuilder builder, in StampFrame frame, ShapeDocument shape, float stampScale) {
         var displace = shape.Displace!;
@@ -550,8 +553,9 @@ public static class CreationStampEmitter {
     // onto the normal, spelled as that rotation, SdfProgramBuilder.MirrorX, and the rotation back. A mesh placement
     // applies the same H(n) in the same place: after the stamp's scale, before the stamp's rotation.
     private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, in StampFrame frame) {
-        var chain = builder
-            .ResetPoint()
+        var chain = builder.ResetPoint();
+        if (frame.DynamicSlot is { } slot) { chain = chain.TransformDynamic(slot); }
+        chain = chain
             .Translate(offset: frame.Origin.ToVector3())
             .Rotate(rotation: frame.Rotation)
             .Scale(scale: new Vector3(value: ((float)frame.Scale)));

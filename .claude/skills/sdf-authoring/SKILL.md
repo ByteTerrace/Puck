@@ -1,6 +1,6 @@
 ---
 name: sdf-authoring
-description: "Authors Puck creations: shape rows, primitives, blends, folds, palettes, paints, render lanes, rigs, 367-shape budget, creation stats. Use to sculpt or fix a part. Grammar: puck-dsl; GPU: rendering."
+description: "Authors Puck creations: shape rows, primitives, blends, folds, palettes, paints, render lanes, rigs, bake work and bytes, creation stats. Use to sculpt or fix a part. Grammar: puck-dsl; GPU: rendering."
 ---
 
 # Authoring a Puck creation
@@ -65,7 +65,7 @@ puck compile <file>.puck --validate
 puck creation stats --world <file>.puck --prototype <id>
 ```
 
-`compile --validate` runs document validation: the stamp budget and the
+`compile --validate` runs document validation: representation guards and the
 panel/trim/cells creation-scope refusal fire here (PUCK030), over every
 `prototypes[]` document whether or not a placement uses it. It does **not** run
 emission or contact construction, so the Path contact refusal and a residual
@@ -195,21 +195,27 @@ group cannot keep a subtraction off its siblings on a static placement. The VM
 admits two scope levels. [composition](references/composition.md) has the
 formulas, folds, groups, panels, trims and shared-clamp diagnostics.
 
-## The budget
+## Bake work and residency
 
-`MaxShapesPerStamp` is 367. The count is not the length of the shapes list:
+There is no per-creation shape cap or fixed registration pool. A rigid creation
+bakes once in its own space; its bodies share that geometry and palette, with one
+root transform and draw each. Independently moving parts add transform slots;
+static shapes in a part share its slot. Spawning rigid copies does not rebuild
+the field program. Catalog looks emit only for bodies wearing them, at detail
+chosen by projected size.
 
-- each shape counts 1, or **2** if it carries a `panel`
-- **+2 per trim**
-- **+1 per non-whitespace glyph** in every text run
+Panels expand to two field operands, trims to two more each, and glyphs to one
+per non-whitespace glyph. These increase bake work rather than consume a stamp
+budget. `puck creation stats` reports field instructions, bake groups and encoded
+bytes. Read actual mesh vertices, draws, baked groups and resident bytes from
+`world.counters gpu` and `world.render` after the bake settles. `detail: true`
+saves contact work; its render field still bakes normally. Edit-to-running stays
+under 30 seconds, checked on a quiet machine by the lead.
 
-`puck creation stats` prints `shapes: N, stamp budget: M/367`, and an
-over-budget document refuses at `compile --validate` with
-`<path> stamps <n> shapes, exceeding the 367-shape per-stamp budget.` To get
-under it, reduce emitted shapes: fold repetition, remove panel or trim copies,
-replace an appropriate cutter with a blend, or shorten text runs.
-`detail: true` saves contact work, **not stamp budget**; detail shapes are still
-charged, and the bake samples them like any other shape.
+The limits retained protect representations or per-pixel work: 255 skin members
+per bake group (refused by group name if exceeded), 24-bit GPU indices, the
+material sentinel, 64 bounded volumes and 32 screen bindings. Scopes nest to 4.
+Derived faces follow the world's highest authored screen index.
 
 ## Surface and look
 

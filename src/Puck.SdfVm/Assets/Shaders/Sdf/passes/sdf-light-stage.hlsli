@@ -127,6 +127,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 float3 frameOrigin = sdfDynamicTransforms[3u * (uint)s.frameSlot].xyz;
                 float4 frameRotation = sdfDynamicTransforms[3u * (uint)s.frameSlot + 1u];
                 layerPoint = rotatePointByInverseQuaternion(surfacePoint - frameOrigin, frameRotation);
+                // Rigid copies share unit-space palette layers; scale belongs to their root, not a palette copy.
+                float materialScale = sdfDynamicTransforms[3u * (uint)s.frameSlot].w;
+                layerPoint /= (materialScale > 0.0 ? materialScale : 1.0);
                 layerNormal = rotatePointByInverseQuaternion(normal, frameRotation);
                 layerRay = rotatePointByInverseQuaternion(p.rayDirection, frameRotation);
             }

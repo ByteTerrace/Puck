@@ -214,6 +214,7 @@ public sealed partial class SdfMeshPathBake {
     private IReadOnlyList<SdfMeshDraw>? m_frameDraws;
 
     private long m_frameDrawsRevision = -1;
+    private SdfMeshInstance[] m_drawnCopies = [];
 
     private long m_revision;
 
@@ -305,7 +306,13 @@ public sealed partial class SdfMeshPathBake {
             Settle(frame: frame);
 
             var finished = 0;
-            var moved = (!ReferenceEquals(objA: frame.MeshDraws, objB: m_frameDraws) || (frame.MeshDrawsRevision != m_frameDrawsRevision) || !ReferenceEquals(objA: frame.SlotClips, objB: m_slotClips));
+            var copiesChanged = m_drawnCopies.Length != frame.MeshInstances.Count;
+            if (!copiesChanged) {
+                for (var index = 0; index < m_drawnCopies.Length; index++) {
+                    if (m_drawnCopies[index] != frame.MeshInstances[index]) { copiesChanged = true; break; }
+                }
+            }
+            var moved = (copiesChanged || !ReferenceEquals(objA: frame.MeshDraws, objB: m_frameDraws) || (frame.MeshDrawsRevision != m_frameDrawsRevision) || !ReferenceEquals(objA: frame.SlotClips, objB: m_slotClips));
 
             foreach (var group in m_groups) {
                 if (group.Mesh is null) { continue; }
@@ -329,6 +336,14 @@ public sealed partial class SdfMeshPathBake {
                 m_draws.AddRange(collection: frame.MeshDraws);
                 foreach (var group in m_groups) {
                     if (group.Mesh is not { } mesh) { continue; }
+                    if (group.Dynamic && frame.MeshAssetSlots.Contains(group.Slot)) {
+                        foreach (var copy in frame.MeshInstances) {
+                            if (!copy.UsesSlot(group.Slot)) { continue; }
+                            copy.FirstInstance = group.FirstInstance;
+                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, IsDynamic = true, Glass = group.Glass });
+                        }
+                        continue;
+                    }
                     var matrix = (group.Dynamic
                         ? (Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
                         : Matrix4x4.Identity);
@@ -338,12 +353,16 @@ public sealed partial class SdfMeshPathBake {
                         m_draws.Add(item: new SdfMeshDraw(Identity: (mesh.Chunks.Count == 0 ? group : part), Material: 0, Mesh: part, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic, Glass = group.Glass });
                     }
                 }
+                foreach (var copy in frame.MeshInstances) {
+                    if (copy.Mesh is { } mesh) { m_draws.Add(new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { FrameSlot = copy.FrameSlot, IsDynamic = true }); }
+                }
                 // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
                 SdfSlotClip.Apply(
                     clips: frame.SlotClips,
                     draws: m_draws
                 );
                 m_slotClips = frame.SlotClips;
+                m_drawnCopies = frame.MeshInstances.ToArray();
                 m_frameDraws = frame.MeshDraws;
                 m_frameDrawsRevision = frame.MeshDrawsRevision;
                 m_drawnMeshes = finished;
@@ -1426,7 +1445,10 @@ public sealed partial class SdfMeshPathBake {
     private static SdfMesh Skinned(Group group) {
         var mesh = group.Skin!;
         var slots = group.PointMaterials;
-        var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).Take(count: SdfMesh.MaxMembers).ToArray();
+        var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).ToArray();
+        if (others.Length > SdfMesh.MaxMembers) {
+            throw new InvalidOperationException($"Mesh group {group.FirstInstance} needs {others.Length} independently moving skin members; the representation holds {SdfMesh.MaxMembers}.");
+        }
         var vertexMembers = new byte[slots.Length];
         var any = false;
 

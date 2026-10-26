@@ -658,17 +658,13 @@ into the body's own frame. Two derivations off the one facet: the
 authoritative fixed-point resolve
 (`Server/WorldPlacementAttachment.TryResolve`, what the `world.attachments`
 read-back calls), and the rendered pose—presentation float over the client's
-interpolated body pose, packed every frame by `Client/WorldStampPool.cs`, so
+interpolated body pose, packed every frame by `Client/WorldCreationInstances.cs`, so
 the row visibly RIDES its body. An attached row therefore draws through the
-reserved stamp pool rather than as a static stamp
-(`Client/WorldPlacementStamper.IsStaticStamp`) and charges
-`WorldPlacementPolicy.MaxStampRegistrations` (= `WorldBodiesLimits.DetailedRenderBand`,
-128) alongside animated rows; its
-authored `Position`/`YawDegrees` become inert. `Region`, `Solid` (under the
+live creation storage rather than as a static stamp (Client/WorldPlacementStamper.IsStaticStamp). It allocates actual motion slots without a registration ceiling; authored Position/YawDegrees become inert. `Region`, `Solid` (under the
 analytic contact provider), and `Emission` all read the resolved DYNAMIC pose
 instead of refusing outright (`Server/WorldEventFeed.CollectRegions`,
 `Server/WorldColliderSet.RefreshAttached`,
-`Client/WorldStampPool.TryShapePosition`/`RootPose`)—an equipped item's
+`Client/WorldCreationInstances.TryShapePosition`/`RootPose`)—an equipped item's
 aura, hitbox, or voice tracks the carrier, and an inactive carrier makes the
 facet contribute/sense/sound nothing rather than at a stale point.
 `Distribution`/`Mirror` (static-stamp-only) and `Inhabit` (a row cannot both

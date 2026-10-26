@@ -26,10 +26,6 @@ public readonly record struct WorldRenderCost(int Instances, int Materials) {
     /// <see cref="Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId"/> materials (the first screen sentinel).</summary>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     public string? Exceeds() {
-        if (Instances > Puck.SignedDistance.SdfProgramBuilder.MaxInstances) {
-            return $"instances {Instances} exceed the engine ceiling {Puck.SignedDistance.SdfProgramBuilder.MaxInstances}";
-        }
-
         return ((Materials > Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId)
             ? $"materials {Materials} exceed the engine ceiling {Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId}"
             : null);

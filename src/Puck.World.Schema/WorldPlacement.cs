@@ -397,16 +397,16 @@ public sealed record WorldPlacementGrip(bool Holdable);
 /// <c>Puck.World.Server.WorldPlacementAttachment.TryResolve</c>, on demand by <c>world.attachments</c> and once per
 /// tick by attached local gravity areas;</description></item>
 /// <item><description>the rendered pose is presentation float — the same composition over the client's
-/// interpolated body pose, packed every frame by <c>Client.WorldStampPool</c>, which is what makes an attached row
+/// interpolated body pose, packed every frame by <c>Client.WorldCreationInstances</c>, which is what makes an attached row
 /// visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and
 /// not as a static stamp (<c>Client.WorldPlacementStamper.IsStaticStamp</c>), and it charges
-/// <see cref="WorldPlacementPolicy.MaxStampRegistrations"/> like an animated row does.</description></item>
+/// the live creation instance storage like an animated row does.</description></item>
 /// </list>
 /// Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one
 /// because each read the row's own static transform — all three now read the same resolved dynamic pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, <c>Server.WorldColliderSet.RefreshAttached</c>,
 /// <c>Server.WorldGravityField.RefreshAttachedAreas</c>,
-/// <c>Client.WorldStampPool.TryShapePosition</c>/<c>RootPose</c>), so a region's aura, an analytic collider's
+/// <c>Client.WorldCreationInstances.TryShapePosition</c>/<c>RootPose</c>), so a region's aura, an analytic collider's
 /// hitbox, and an emission's voice all track the carrier: an equipped item's sensing sphere, hitbox, or source point
 /// rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an
 /// animated or inhabited row already enforces), inhabit (a row cannot both spawn its own driven bodies and ride
@@ -453,7 +453,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
 /// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Distribution"/> the emission
 /// binds to the placement root only. Omitted from the wire when null. Composes with <paramref name="Attach"/>: an
-/// attached row's source point rides the resolved live pose (<c>Client.WorldStampPool.TryShapePosition</c>) instead
+/// attached row's source point rides the resolved live pose (<c>Client.WorldCreationInstances.TryShapePosition</c>) instead
 /// of the row's static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.</param>
 /// <param name="Solid">The placement's solidity facet (see <see cref="WorldSolid"/>). Both contact providers compile
 /// the creation's emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for

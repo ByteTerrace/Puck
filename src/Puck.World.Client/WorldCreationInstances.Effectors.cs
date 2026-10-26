@@ -10,7 +10,7 @@ namespace Puck.World.Client;
 /// finding each one's world target, and folding <see cref="WorldEffectorSolver"/>'s corrections into the bones' own
 /// deltas so the ordinary parent chaining carries them.
 /// </content>
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     // Per-solve scratch, sized to the chain ceiling and reused by every effector of every registration — the solve is
     // single-threaded on the window-pump thread, and these are what keep PackTransforms allocation-free.
     private readonly Vector3[] m_solveJoints = new Vector3[CreationEffectorDocument.MaxChainBones];
@@ -792,7 +792,7 @@ public sealed partial class WorldStampPool {
     // The named shape's resolved parent and chained delta as the last pack left them; an absent shape answers with
     // no index, and a registration not yet packed with no parent resolved.
     private static WorldRigShape RigShape(Registration live, IReadOnlyList<ShapeDocument> shapes, string shapeName) {
-        var count = Math.Min(val1: shapes.Count, val2: WorldPlacementPolicy.MaxAnimatedStampShapes);
+        var count = shapes.Count;
 
         for (var index = 0; (index < count); index++) {
             if (!string.Equals(a: shapes[index].Name?.Value, b: shapeName, comparisonType: StringComparison.Ordinal)) {

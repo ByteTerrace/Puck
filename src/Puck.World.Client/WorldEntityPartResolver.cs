@@ -7,7 +7,7 @@ namespace Puck.World.Client;
 /// <summary>Resolves entity-part anchors through the part table published by the entity's active compiled look.</summary>
 public static class WorldEntityPartResolver {
     /// <summary>Resolves the current authored pose when no packed transform buffer is available.</summary>
-    public static bool TryAuthoredPose(WorldClient client, WorldStampPool stamps, int entityIndex, string partId, out SdfAnchor pose) {
+    public static bool TryAuthoredPose(WorldClient client, WorldCreationInstances stamps, int entityIndex, string partId, out SdfAnchor pose) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(stamps);
 
@@ -56,7 +56,7 @@ public static class WorldEntityPartResolver {
         return true;
     }
     /// <summary>Resolves a live part pose from the frame's composed transform buffer.</summary>
-    public static bool TryPackedPose(WorldClient client, WorldStampPool stamps, int entityIndex, string partId, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
+    public static bool TryPackedPose(WorldClient client, WorldCreationInstances stamps, int entityIndex, string partId, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(stamps);
 
@@ -77,9 +77,9 @@ public static class WorldEntityPartResolver {
 
         var look = client.Look(index: entityIndex);
 
-        return WorldRigCatalog.TryPartPose(
-            avatar: entityIndex,
-            partId: partId,
+        return stamps.TryCatalogPartPose(
+            body: entityIndex,
+            part: partId,
             rig: WorldRigCatalog.RigFor(
                 look: look,
                 catalogRig: client.CatalogRig(index: entityIndex)

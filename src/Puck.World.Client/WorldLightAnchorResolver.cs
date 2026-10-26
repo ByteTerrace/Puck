@@ -6,7 +6,7 @@ namespace Puck.World.Client;
 
 /// <summary>Resolves positional lights through the same entity, part, and placement frames as other consumers.</summary>
 public static class WorldLightAnchorResolver {
-    private static SdfAnchor? ResolvePlacement(WorldAnchor.Placement anchor, WorldClient client, WorldStampPool stamps, ReadOnlySpan<DynamicTransform> transforms) {
+    private static SdfAnchor? ResolvePlacement(WorldAnchor.Placement anchor, WorldClient client, WorldCreationInstances stamps, ReadOnlySpan<DynamicTransform> transforms) {
         if (
             stamps.TryShapeTransformSlot(
             anchor.PlacementId,
@@ -63,7 +63,7 @@ public static class WorldLightAnchorResolver {
     }
 
     /// <summary>Returns a current pose or null for an unavailable target.</summary>
-    public static SdfAnchor? Resolve(WorldAnchor anchor, WorldClient client, WorldStampPool stamps, ReadOnlySpan<DynamicTransform> transforms) {
+    public static SdfAnchor? Resolve(WorldAnchor anchor, WorldClient client, WorldCreationInstances stamps, ReadOnlySpan<DynamicTransform> transforms) {
         switch (anchor) {
             case WorldAnchor.Entity entity:
                 if (!client.IsActive(index: entity.Index)) { return null; }

@@ -46,18 +46,15 @@ Part of [`puck.world.definition.v1`](documents.md). See
   `world.attachments` and every active tick for attached gravity areas), and
   the rendered pose —
   presentation float over the client's INTERPOLATED body pose, packed every
-  frame by `src/Puck.World.Client/WorldStampPool.cs`. Riding the interpolated pose is what
+  frame by `src/Puck.World.Client/WorldCreationInstances.cs`. Riding the interpolated pose is what
   keeps an attached row as smooth as its body; reading the authoritative
   resolve in the renderer would judder at the tick rate. An attached row
-  draws through the reserved stamp pool, never as a static stamp
-  (`WorldPlacementStamper.IsStaticStamp` in `Puck.World.Client` is the one fork), so it
-  charges `WorldPlacementPolicy.MaxStampRegistrations` alongside animated
-  rows and its authored `Position`/`YawDegrees` are inert. `Region`, `Solid`
+  draws through live creation storage; it allocates its actual motion slots and has no registration ceiling. Its authored Position/YawDegrees are inert. `Region`, `Solid`
   (under the analytic contact provider), and `Emission` combine with
   `Attach` — each reads the resolved DYNAMIC pose instead of
   the row's static transform (`WorldEventFeed.CollectRegions`,
   `WorldColliderSet.RefreshAttached`,
-  `WorldStampPool.TryShapePosition`/`RootPose`), so an equipped item's
+  `WorldCreationInstances.TryShapePosition`/`RootPose`), so an equipped item's
   aura/hitbox/voice tracks its carrier; an inactive carrier makes the facet
   contribute/sense/sound nothing, the same verdict the render stamp already
   had. `Distribution`/`Mirror` (static-stamp-only) and `Inhabit` (a row

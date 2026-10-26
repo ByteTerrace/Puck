@@ -16,12 +16,12 @@ namespace Puck.World.Client.Tests;
 /// reads the body's real speed, and a frame that charges no time (a held capture) keeps the pose of the last frame that
 /// did.
 /// </summary>
-public sealed class WorldStampPoolAirborneSpeedLawTests {
+public sealed class WorldCreationInstancesAirborneSpeedLawTests {
     private const float Amplitude = 0.6f;
     private const float Cadence = 0.2f;
     private const float Speed = 5f;
 
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage() {
+    private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage() {
         var creation = CreationFixtures.Prototype(id: "flier", document: CreationFixtures.Rig(
             drivers: [new CreationDriverDocument(
                 Cadence: Cadence,
@@ -47,20 +47,20 @@ public sealed class WorldStampPoolAirborneSpeedLawTests {
             )],
         });
         var client = ClientFixtures.Client(definition: definition);
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
             creations: [creation],
             dynamics: [],
             placements: []
         );
 
-        return (client, pool, new DynamicTransform[WorldStampPool.DynamicSlotCount]);
+        return (client, pool, new DynamicTransform[pool.DynamicSlotCount]);
     }
     // Moves the body to `Speed` metres a second times `frame` seconds a tick along +X, holding the facts, packs a frame
     // that charges `seconds`, and returns the limb's orientation.
-    private static Quaternion Fly(WorldClient client, WorldStampPool pool, DynamicTransform[] transforms, ulong tick, BodyFacts facts, float frame, float seconds) {
+    private static Quaternion Fly(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms, ulong tick, BodyFacts facts, float frame, float seconds) {
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Authority: "a",
             Entries: new[] { new EntitySnapshot(

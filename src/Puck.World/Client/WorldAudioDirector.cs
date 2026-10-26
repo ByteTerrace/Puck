@@ -82,7 +82,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <summary>How many published snapshots a pending trigger rides (see the type remarks).</summary>
     public const int TriggerPublishRetention = 8;
 
-    private readonly WorldStampPool? m_animator;
+    private readonly WorldCreationInstances? m_animator;
     private readonly WorldClient? m_client;
     private readonly IOverlayPredicateEvaluator? m_evaluator;
     private readonly WorldPerceptionAnchor? m_perception;
@@ -156,7 +156,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <param name="speech">The speech clock a recent-speaker anchor reads, or <see langword="null"/> headless.</param>
     /// <param name="evaluator">The predicate evaluator a ranked camera anchor list selects through, or
     /// <see langword="null"/> (every candidate condition then holds).</param>
-    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator, WorldPerceptionAnchor? perception = null, WorldSpeechClock? speech = null, IOverlayPredicateEvaluator? evaluator = null) {
+    public WorldAudioDirector(WorldClient? client, WorldCreationInstances? animator, WorldPerceptionAnchor? perception = null, WorldSpeechClock? speech = null, IOverlayPredicateEvaluator? evaluator = null) {
         m_client = client;
         m_animator = animator;
         m_perception = perception;
@@ -1350,7 +1350,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     }
 
                     // An ATTACHED row's pool lookup just failed — its target body is not live THIS frame (the SAME
-                    // verdict WorldStampPool.PackTransforms already renders as a hidden stamp), so the row is absent
+                    // verdict WorldCreationInstances.PackTransforms already renders as a hidden stamp), so the row is absent
                     // rather than falling back to its INERT static Position (which neither the resolve nor the renderer
                     // reads for an attached row — see WorldPlacement's own doc).
                     if (anchor.IsAttached) {

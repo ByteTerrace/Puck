@@ -40,7 +40,16 @@ public sealed class SdfDressedPickMap : ISdfPickMap {
         return true;
     }
     /// <inheritdoc/>
-    public object? Resolve(uint identity) => m_inner.Resolve(identity: Translate(identity: identity));
+    public object? Resolve(uint identity) {
+        if (SdfVisibility.KindOf(identity) == SdfVisibilityKind.Mesh) {
+            var source = SdfVisibility.SourceOf(identity);
+            if (source < m_identities.Length) {
+                var named = SdfSlotClip.CopiedFrom(m_identities[source]) ?? m_identities[source];
+                if (named is SdfMeshInstance copy) { return copy.Identity; }
+            }
+        }
+        return m_inner.Resolve(identity: Translate(identity: identity));
+    }
     /// <inheritdoc/>
     public string? MaterialName(uint identity, int material) => m_inner.MaterialName(identity: Translate(identity: identity), material: material);
 
@@ -58,6 +67,9 @@ public sealed class SdfDressedPickMap : ISdfPickMap {
         var named = m_identities[source];
 
         if (SdfSlotClip.CopiedFrom(identity: named) is { } copied) { named = copied; }
+        if (named is SdfMeshInstance copy) {
+            return copy.FirstInstance < 0 ? 0 : SdfVisibility.IdentityOf(SdfVisibilityKind.Sdf, (uint)(copy.FirstInstance + 1));
+        }
         if (named is SdfMeshBakeGroup group) {
             return ((group.FirstInstance < 0) ? 0 : SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: ((uint)(group.FirstInstance + 1))));
         }

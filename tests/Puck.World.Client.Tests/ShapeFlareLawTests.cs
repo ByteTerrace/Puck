@@ -10,7 +10,7 @@ namespace Puck.World.Client.Tests;
 /// THE LAW: <see cref="ShapeFlareDocument"/> is admitted on every primitive, refused by name against a non-finite
 /// amount/bulge/top or a span that is not finite and strictly positive; Top/Span (creation-unit lengths) scale with
 /// the placement on both emission paths exactly as Rounding/Chamfer do (see
-/// <c>WorldStampPoolShapeUnitsLawTests</c>'s convention), while Amount/Bulge (dimensionless ratios) pass through
+/// <c>WorldCreationInstancesShapeUnitsLawTests</c>'s convention), while Amount/Bulge (dimensionless ratios) pass through
 /// unscaled.
 /// </summary>
 public sealed class ShapeFlareLawTests {
@@ -64,7 +64,7 @@ public sealed class ShapeFlareLawTests {
         name: PrototypeId,
         shapes: shapes
     );
-    // --- Pool emission path (WorldStampPool.EmitShape's twist/bend/flare prefix) ---
+    // --- Pool emission path (WorldCreationInstances.EmitShape's twist/bend/flare prefix) ---
 
     private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale) => CreationFixtures.EmitPool(
         bodyScale: bodyScale,

@@ -134,7 +134,7 @@ public sealed partial class WorldScreenBinder {
         var name = RoutedViewName(scene: scene);
         var residency = new SdfWorldResidency(
             dynamicTransformCapacity: Math.Max(
-                val1: source.WorstCaseDynamicTransformCapacity,
+                val1: source.DynamicTransformCapacity,
                 val2: m_viewDynamicTransformCapacity
             ),
             film: context => {
@@ -154,7 +154,7 @@ public sealed partial class WorldScreenBinder {
             meshLibrary: MeshLibrary,
             pipelines: m_viewPipelines!,
             programWordCapacity: Math.Max(
-                val1: source.WorstCaseProgramWordCapacity,
+                val1: source.ProgramWordCapacity,
                 val2: m_viewProgramWordCapacity
             ),
             screenSources: new RoutedScreenSources(

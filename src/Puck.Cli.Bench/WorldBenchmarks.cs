@@ -294,7 +294,7 @@ internal static class WorldBenchmarks {
             seatRouter: routes
         );
         var emitter = new Puck.World.Client.WorldSceneEmitter(
-            animator: new Puck.World.Client.WorldStampPool(),
+            animator: new Puck.World.Client.WorldCreationInstances(),
             audio: inert,
             client: client,
             continuum: new Puck.World.Client.WorldContinuum(client, routes, inert),

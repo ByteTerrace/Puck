@@ -4,17 +4,17 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// The creation-stamp census: which active entities render their creation geometry through a
-/// <see cref="WorldStampPool"/> (an inhabitant, or a crowd body wearing a creation look) instead of a catalog avatar.
+/// <see cref="WorldCreationInstances"/> (an inhabitant, or a crowd body wearing a creation look) instead of a catalog avatar.
 /// The local scene and a session view each keep one over their own <see cref="IWorldStampSource"/>, refresh it at
 /// each rebuild and hand its <see cref="Stamps"/> to their pool. A stamp bakes its body's presented live scale at that
 /// rebuild, so a scene asks <see cref="TryTakeMove"/> each frame whether that scale moved since, whether by a state write
-/// or by its easing, and rebuilds when it did. A body parks its catalog avatar only once the pool registered it (<see cref="WorldStampPool.HasBodyRegistration"/>): a stamp a full pool refused draws as its avatar.
+/// or by its easing, and rebuilds when it did. A body parks its catalog avatar only once the pool registered it (<see cref="WorldCreationInstances.HasBodyRegistration"/>): a stamp a full pool refused draws as its avatar.
 /// </summary>
 public sealed class WorldBodyStampCensus {
     // Each active body's reads of its source's state mirror (its live scale), created on first need and released when
     // the body leaves.
     private readonly WorldStateLease?[] m_reads = new WorldStateLease?[WorldBodiesLimits.CapacityCeiling];
-    private readonly List<WorldStampPool.BodyStamp> m_stamps = new();
+    private readonly List<WorldCreationInstances.BodyStamp> m_stamps = new();
     // The presented live scale each stamped body's stamp baked (or the census last answered a move to), by body index,
     // and the scale row it was read from, so a move is answered once.
     private readonly float[] m_bakedScale = new float[WorldBodiesLimits.CapacityCeiling];
@@ -22,8 +22,8 @@ public sealed class WorldBodyStampCensus {
     private string? m_scaleRow;
 
     /// <summary>Gets the body-rooted stamps the latest <see cref="Refresh"/> found, for
-    /// <see cref="WorldStampPool.Reconcile"/>.</summary>
-    public IReadOnlyList<WorldStampPool.BodyStamp> Stamps => m_stamps;
+    /// <see cref="WorldCreationInstances.Reconcile"/>.</summary>
+    public IReadOnlyList<WorldCreationInstances.BodyStamp> Stamps => m_stamps;
 
     // The body's live scale through the state mirror slot its lease holds, acquired while the body is active.
     private float LiveBodyScale(IWorldStampSource source, WorldDefinition definition, int index) {
@@ -95,7 +95,7 @@ public sealed class WorldBodyStampCensus {
     // The creation a body renders as a stamp, or null (it renders as a catalog avatar). The uniform scale folds the
     // placement scale, the look scale, and the body's own live scale (see LiveBodyScale) — the same bodies.scale register
     // WorldPopulation.SyncBodyScale reads server-side.
-    private WorldStampPool.BodyStamp? ResolveStampCreation(IWorldStampSource source, WorldDefinition definition, int index) {
+    private WorldCreationInstances.BodyStamp? ResolveStampCreation(IWorldStampSource source, WorldDefinition definition, int index) {
         var liveScale = LiveBodyScale(
             definition: definition,
             index: index,
@@ -111,7 +111,7 @@ public sealed class WorldBodyStampCensus {
             scale: out var scale,
             source: source
         )
-            ? new WorldStampPool.BodyStamp(
+            ? new WorldCreationInstances.BodyStamp(
                 BodyIndex: index,
                 Creation: creation,
                 Scale: (scale * liveScale),

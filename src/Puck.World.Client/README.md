@@ -96,25 +96,7 @@ as an explicit remainder; it does not re-emit prototypes or change state.
 
 ## The entity view
 
-Catalog appearance and body identity are independent. `WorldRigCatalog` holds
-128 reusable looks; each body has a separate transform range large enough for
-any of them. A pinned or transferred look therefore keeps every leaf, even when
-its destination slot originally wore a smaller rig. Restyling one body does not
-move another body's transforms or attachment slots. Render-capacity probes
-reserve the largest rig for each of the lowest `WorldBodiesLimits.DetailedRenderBand`
-(128) detailed bodies and one coarse capsule for every remaining body;
-repeated looks do not change that hybrid ceiling, and the number of catalog
-entries is not the population limit.
-This is a buffer and input-complexity bound, not a frame-rate guarantee. A dense
-crowd with a hard presentation target needs a non-per-creature SDF lane such as
-raster impostors or an authored aggregate representation.
-
-Each catalog leaf retains its own culling instance and animated transform. Its
-sphere fits the emitted primitive, including the unscaled authored offset, so
-small looks stay enclosed and a tile touching one hand need not evaluate the
-whole creature. `world.population` reports leaves, culling instances, and
-authored instructions separately. The renderer's instance ceiling remains a
-separate constraint on dense populations; reusable appearances do not remove it.
+Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 
 - `WorldClient.cs`—consumes each tick's snapshot into a double-buffered
   entity view (previous/current pose per entity) and resolves per-frame
@@ -159,7 +141,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs`—one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.
-- `WorldPlacementStamper.cs`, `WorldStampPool.cs`, `WorldPrototypeFacets.cs`—
+- `WorldPlacementStamper.cs`, `WorldCreationInstances.cs`, `WorldPrototypeFacets.cs`—
   the document-to-geometry emission path for scene rows and `puck.creation.v1`
   placements; `WorldSceneEmitter` drives them for the boot world. A
   body-rooted `BodyStamp` carrying a `WorldLookMotion` with `Dynamics`/
@@ -185,7 +167,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   scenery use the same swings and parent chains as inhabitants.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs`—the session
   projection's and adjacency neighbour's own content emission, parallel to
-  `WorldSceneEmitter`'s boot-world path. A session view keeps a `WorldStampPool`
+  `WorldSceneEmitter`'s boot-world path. A session view keeps a `WorldCreationInstances`
   of its own, so its destination's animated, inhabited and attached creations
   draw as the boot world's do.
 - `IWorldStampSource.cs`, `WorldSessionStampSource.cs`—the world a stamp pool

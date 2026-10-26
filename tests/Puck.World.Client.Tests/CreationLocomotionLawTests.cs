@@ -22,7 +22,7 @@ public sealed class CreationLocomotionLawTests {
         Index: 0
     );
 
-    private static void Advance(WorldClient client, WorldStampPool pool, DynamicTransform[] transforms, Vector3 position, float yaw, ulong tick) {
+    private static void Advance(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms, Vector3 position, float yaw, ulong tick) {
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Authority: "a",
             Entries: new[] { new EntitySnapshot(
@@ -139,7 +139,7 @@ public sealed class CreationLocomotionLawTests {
             ]
         );
     }
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(float? align = null, float toe = 0f) {
+    private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage(float? align = null, float toe = 0f) {
         var creation = CreationFixtures.Prototype(document: Legs(align: align, toe: toe), id: "rig");
         var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
             CreationsRaw = [creation],
@@ -151,19 +151,19 @@ public sealed class CreationLocomotionLawTests {
             )],
         });
         var client = ClientFixtures.Client(definition: definition);
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         client.PublishStaticField(field: new SdfFieldEvaluator(program: FloorProgram()));
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
             creations: [creation],
             dynamics: [],
             placements: []
         );
 
-        return (client, pool, new DynamicTransform[WorldStampPool.DynamicSlotCount]);
+        return (client, pool, new DynamicTransform[pool.DynamicSlotCount]);
     }
-    private static WorldRigState Rig(WorldStampPool pool) {
+    private static WorldRigState Rig(WorldCreationInstances pool) {
         Assert.True(condition: pool.TryBodyRig(bodyIndex: 0, state: out var state));
 
         return state!;
@@ -454,7 +454,7 @@ public sealed class CreationLocomotionLawTests {
         var position = Vector3.Zero;
         var tick = 0UL;
 
-        static Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: transforms[Boot].Orientation, value: Vector3.UnitY);
+        Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: (ReferenceEquals(transforms, alignedTransforms) ? aligned : plain).BodyShapePose(0, Boot - 1).Orientation, value: Vector3.UnitY);
         void Step() {
             Advance(client: alignedClient, pool: aligned, position: position, tick: tick, transforms: alignedTransforms, yaw: 0f);
             Advance(client: plainClient, pool: plain, position: position, tick: tick, transforms: plainTransforms, yaw: 0f);
@@ -473,8 +473,8 @@ public sealed class CreationLocomotionLawTests {
         Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: alignedTransforms)) < 1e-4f), userMessage: $"aligned up {Up(transforms: alignedTransforms)}");
         Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: plainTransforms)) > 0.05f), userMessage: $"control up {Up(transforms: plainTransforms)}");
         Assert.True(
-            condition: (Vector3.Distance(value1: alignedTransforms[Boot].Position, value2: plainTransforms[Boot].Position) < 1e-4f),
-            userMessage: $"aligned {alignedTransforms[Boot].Position}, control {plainTransforms[Boot].Position}"
+            condition: (Vector3.Distance(value1: aligned.BodyShapePose(0, Boot - 1).Position, value2: plain.BodyShapePose(0, Boot - 1).Position) < 1e-4f),
+            userMessage: $"aligned {aligned.BodyShapePose(0, Boot - 1).Position}, control {plain.BodyShapePose(0, Boot - 1).Position}"
         );
         Assert.Null(@object: Rig(pool: plain).Effectors[0].Align);
 

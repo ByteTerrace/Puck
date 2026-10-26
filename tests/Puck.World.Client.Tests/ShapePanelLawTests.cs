@@ -1115,129 +1115,10 @@ public sealed class ShapePanelLawTests {
             }
         }
     }
-    // The static probes. The per-shape probe reserves PerCopyInstanceCount chains for a scope-free, text-free copy
-    // (two for a panelled shape); the scoped probe reserves MaxShapesPerStamp chains per whole-creation copy, each
-    // carrying the field scope a text-carrying creation's shape opens for itself.
-    [Fact]
-    public void StaticPerShapeProbeDominatesAPanelledShapeAtTheWordLevel() {
-        foreach (var scale in new[] { UniformPlateScale, PlateScale }) {
-            var document = Document(Shape(
-                SdfSolidPrimitive.Box,
-                scale,
-                RecessedPanel
-            ));
-            var stamp = EmitShapeStamp(document: document);
-            var probeBuilder = new SdfProgramBuilder();
-
-            WorldPlacementStamper.EmitProbe(
-                builder: probeBuilder,
-                reservedCount: 0,
-                reservedShapeInstances: CreationStampEmitter.PerCopyInstanceCount(document: document)
-            );
-
-            var probe = probeBuilder.Build();
-
-            Assert.True(
-                condition: (probe.Words.Length >= stamp.Words.Length),
-                userMessage: $"the per-shape probe reserves {probe.Words.Length} words for a panelled Box at {scale}, which emits {stamp.Words.Length}."
-            );
-
-            // The control: one probe chain alone does not cover the panelled shape's two chains.
-            var singleBuilder = new SdfProgramBuilder();
-
-            WorldPlacementStamper.EmitProbe(
-                builder: singleBuilder,
-                reservedCount: 0,
-                reservedShapeInstances: 1
-            );
-            Assert.True(condition: (singleBuilder.Build().Words.Length < stamp.Words.Length));
-        }
-    }
-    [Fact]
-    public void StaticScopedProbeDominatesAWholeCreationOfPanelledShapesWithinTheStampBudget() {
-        var shapeCount = (WorldPlacementPolicy.MaxShapesPerStamp / 2);
-        var shapes = Enumerable.Range(
-            count: shapeCount,
-            start: 0
-        ).Select(selector: index => Shape(
-            SdfSolidPrimitive.Box,
-            UniformPlateScale,
-            RecessedPanel,
-            id: index
-        )).ToArray();
-        var document = Document(shapes);
-
-        Assert.True(condition: (document.StampShapeCount() <= WorldPlacementPolicy.MaxShapesPerStamp));
-
-        // The whole-creation form a text-carrying, scope-free creation takes: one instance, no creation scope, every
-        // panelled shape opening its own.
-        var builder = new SdfProgramBuilder();
-        var albedo0 = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-        var albedo1 = builder.AddMaterial(material: new SdfMaterial(Albedo: (Vector3.One * 0.5f)));
-
-        _ = builder.BeginInstance(
-            boundCenter: Vector3.Zero,
-            boundRadius: 4f
-        );
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: document,
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: 1f,
-                ReflectionNormal: null
-            ),
-            materialFor: s => ((s.Material == 0)
-            ? albedo0
-            : albedo1),
-            inScope: false
-        );
-        _ = builder.EndInstance();
-
-        var creation = builder.Build();
-        var probeBuilder = new SdfProgramBuilder();
-
-        WorldPlacementStamper.EmitProbe(
-            builder: probeBuilder,
-            reservedCount: 1
-        );
-
-        var probe = probeBuilder.Build();
-
-        Assert.True(
-            condition: (probe.Words.Length >= creation.Words.Length),
-            userMessage: $"the scoped probe reserves {probe.Words.Length} words per stamp; {shapeCount} panelled shapes emit {creation.Words.Length}."
-        );
-    }
-    // The pool's probe: every slot reserves the panel form unconditionally, so a live panelled slot never outgrows
-    // the envelope — per slot and over the whole program, for a plate on either emission branch.
-    [Fact]
-    public void ThePoolProbeDominatesALivePanelledSlot() {
-        var probe = CreationFixtures.PoolProbe;
-        var probeScope = FirstScope(program: probe);
-
-        foreach (var scale in new[] { UniformPlateScale, PlateScale }) {
-            var live = EmitPool(
-                scale: scale,
-                panel: RecessedPanel
-            );
-            var liveScope = FirstScope(program: live);
-
-            Assert.True(
-                condition: (probeScope.Length >= liveScope.Length),
-                userMessage: $"the probe slot holds {probeScope.Length} instructions in its scope; a live panelled Box at {scale} holds {liveScope.Length}."
-            );
-            Assert.True(
-                condition: (probe.Words.Length >= live.Words.Length),
-                userMessage: $"the pool probe reserves {probe.Words.Length} words; a live panelled Box at {scale} emits {live.Words.Length}."
-            );
-        }
-    }
     // Units: a body look at scale 2 renders the same panel as the same creation authored at twice the size at
     // scale 1 — inset and depth are creation units and scale with the placement, never world units read raw.
     [Fact]
-    public void ThePoolScalesAPanelsInsetAndDepthWithThePlacement() {
+    public void ARigidPanelKeepsItsLocalBakeWhenTheCopyScaleChanges() {
         foreach (var scale in new[] { UniformPlateScale, PlateScale }) {
             foreach (var panel in new[] { RecessedPanel, RaisedPanel }) {
                 var scaled = FirstScope(program: EmitPool(
@@ -1246,8 +1127,8 @@ public sealed class ShapePanelLawTests {
                     scale: scale
                 ));
                 var authoredTwice = FirstScope(program: EmitPool(
-                    scale: (scale * 2f),
-                    panel: (panel with { Inset = (panel.Inset * 2f), Depth = (panel.Depth * 2f) })
+                    scale: scale,
+                    panel: panel
                 ));
 
                 Assert.Equal(

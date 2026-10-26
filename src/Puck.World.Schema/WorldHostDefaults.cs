@@ -67,7 +67,7 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// <param name="MinPlacementScale">Live-consumed. The placement uniform-scale envelope's floor — a pure validator
 /// bound, revalidated on every placement mutation.</param>
 /// <param name="MaxPlacementScale">Live-consumed. The placement uniform-scale envelope's ceiling — also the worst-case
-/// scale <c>Client.WorldStampPool</c>'s probe bound-radius reads (bound radius is spatial-cull metadata,
+/// scale <c>Client.WorldCreationInstances</c>'s probe bound-radius reads (bound radius is spatial-cull metadata,
 /// never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).</param>
 /// <param name="CandidateRadius">Live-consumed. The proximity-candidate radius (world units) around a seat's editor
 /// focus point — cycling never walks the whole world (the explicit candidate policy).</param>
@@ -107,7 +107,7 @@ public sealed record WorldPlacementPolicyDefaults(
     /// headroom (instances and screens), no derived faces, no candidate ring, no preview deadline — and a scale
     /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
     /// authored (a row's scale is admitted because it is authored, never against a guessed envelope) and the
-    /// envelope's ceiling keeps <c>Client.WorldStampPool</c>'s probe bound radius covering the largest authored
+    /// envelope's ceiling keeps <c>Client.WorldCreationInstances</c>'s probe bound radius covering the largest authored
     /// row. A non-finite or non-positive scale contributes nothing (the validator refuses it by name before the
     /// envelope is consulted); no contributing row resolves to <see cref="Absent"/>. Zero headroom does not prevent
     /// console mutations: the renderer grows program and instance buffers when admitted content requires it.</summary>

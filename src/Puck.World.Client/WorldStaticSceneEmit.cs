@@ -15,7 +15,7 @@ internal static class WorldStaticSceneEmit {
     /// a caller with a long-lived derivation must thread its OWN resolved set here rather than re-deriving one, so
     /// the geometry this call emits and whatever else reads the same derivation can never disagree about which
     /// placement a face belongs to.</param>
-    /// <param name="carried">Where a body carries a screen this build (<see cref="WorldStampPool.TryCarriedScreen"/>),
+    /// <param name="carried">Where a body carries a screen this build (<see cref="WorldCreationInstances.TryCarriedScreen"/>),
     /// or <see langword="null"/> for a build in which every screen stays where it is authored. A carried screen draws no
     /// slab: its surface is declared at the carried frame, and the carrying look's box shows it.</param>
     public static void Emit(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, Func<WorldScreen, WorldScreen?>? carried = null) {

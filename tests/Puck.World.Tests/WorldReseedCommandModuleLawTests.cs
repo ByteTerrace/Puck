@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 public sealed class WorldReseedCommandModuleLawTests {
     [Fact]
     public void TheVerbNamesTheBodyAndRefusesAnythingElse() {
-        var registry = new CommandRegistry(modules: [new WorldReseedCommandModule(stamps: new WorldStampPool())]);
+        var registry = new CommandRegistry(modules: [new WorldReseedCommandModule(stamps: new WorldCreationInstances())]);
 
         Assert.Equal(expected: "[view.reseed: body 0 restarted 0 registration(s)]", actual: registry.Submit(line: "view.reseed").Output);
         Assert.Equal(expected: "[view.reseed: body 2 restarted 0 registration(s)]", actual: registry.Submit(line: "view.reseed 2").Output);

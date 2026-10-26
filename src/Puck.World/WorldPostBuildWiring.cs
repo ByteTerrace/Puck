@@ -505,18 +505,7 @@ public static class WorldPostBuildWiring {
 
         _ = services.GetRequiredService<WorldRenderEnvelope>().Configure(measure: candidate => scene.Measure(candidate: candidate).Cost);
 
-        // A presented boot's construction probe emits the same scene into one program, which sizes the renderer's
-        // buffers; its instances are the envelope's reservation by construction, and a difference names a part the
-        // count and the probe disagree about.
         try {
-            if (services.GetService<WorldFramePresenter>() is { } composed) {
-                Console.Error.WriteLine(value: $"[world.render] probe: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
-
-                if (composed.InstanceCapacity != scene.ReservedInstances) {
-                    Console.Error.WriteLine(value: $"[world.render] envelope mismatch: the probe declares {composed.InstanceCapacity} instances, the count reserves {scene.ReservedInstances}");
-                }
-            }
-
             // The default render graph plans here too, off the GPU, so a views.post config its package's schema does not
             // bind is refused by name before the renderer is built.
             _ = services.GetService<WorldRootGraph>();

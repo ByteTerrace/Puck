@@ -545,11 +545,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     public static void EmitReservation(SdfProgramBuilder builder, int bandCount, int slotBase) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        WorldPlacementStamper.EmitProbe(
-            builder: builder,
-            reservedCount: (bandCount * MaxInstancesPerBand)
-        );
-
         for (var band = 0; (band < bandCount); band++) {
             var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
             var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];

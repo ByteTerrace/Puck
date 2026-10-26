@@ -8,6 +8,27 @@ public sealed class SdfMeshLibraryLawTests {
     private static readonly Vector2[] Triangle = [new(x: 0f, y: 0.5f), new(x: 0.5f, y: -0.5f), new(x: -0.5f, y: -0.5f)];
 
     [Fact]
+    public void ByteBudgetEvictsOnlyTheOldestGeometryAndKeepsAMissDerivable() {
+        var library = new SdfMeshLibrary(byteBudget: 512);
+        static SdfMeshGeometry Key(float x) {
+            var builder = new SdfMeshGeometryBuilder(dynamic: false);
+            var program = new SdfProgramBuilder().ResetPoint().Translate(new Vector3(x, 0, 0)).Sphere(0, 1).Build();
+            for (var index = 0; index < program.Instructions.Count; index++) { builder.AppendInstruction(index, program, []); }
+            return builder.Geometry;
+        }
+        var first = Key(0); var recent = Key(1); var incoming = Key(2);
+        library.StoreEmpty(first); library.StoreEmpty(recent);
+        library.StoreEmpty(incoming);
+        Assert.False(library.HoldsEmpty(first));
+        Assert.True(library.HoldsEmpty(recent));
+        Assert.True(library.HoldsEmpty(incoming));
+        Assert.Equal(512, library.RetainedBytes);
+        library.StoreEmpty(first);
+        Assert.True(library.HoldsEmpty(first));
+        Assert.Equal(2, library.Count);
+    }
+
+    [Fact]
     public void OneBodyHashesAlikeInEveryProgramThatCarriesIt() {
         var crowded = Body(crowd: true, slot: 3, offset: new Vector3(x: 1f, y: 0f, z: 0f));
         var alone = Body(crowd: false, slot: 7, offset: new Vector3(x: 0f, y: 1f, z: 0f));
@@ -30,37 +51,7 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.NotEqual(expected: crowdedGeometry, actual: other.Geometry);
         Assert.NotEqual(expected: crowdedGeometry.Hash, actual: world.Geometry.Hash);
     }
-    [Fact]
-    public void ATakenMeshIsTheStoredOneOrTheStoredOneRenumberedByPlace() {
-        var library = new SdfMeshLibrary();
-        var geometry = new SdfMeshGeometry(Dynamic: true, Hash: 42);
-        var mesh = Mesh(materials: [4u, 5u, 9u]) with { Levels = [new SdfMeshLevel(Error: 0.5f, Indices: new uint[] { 0, 1, 2 }, TriangleMaterials: new uint[] { 5u })] };
 
-        Assert.False(condition: library.TryTake(geometry: geometry, materials: [4, 5], mesh: out _));
-
-        library.Store(geometry: geometry, materials: [4, 5], mesh: mesh);
-        library.Store(geometry: geometry, materials: [0, 1], mesh: Mesh(materials: [0u, 1u, 0u]));
-
-        Assert.Equal(expected: 1, actual: library.Count);
-        Assert.True(condition: library.TryTake(geometry: geometry, materials: [4, 5], mesh: out var same));
-        Assert.Same(expected: mesh, actual: same);
-        Assert.True(condition: library.TryTake(geometry: geometry, materials: [1, 2], mesh: out var renumbered));
-        // A material no shape of the group carries keeps its id.
-        Assert.Equal(expected: [1u, 2u, 9u], actual: renumbered.TriangleMaterials.ToArray());
-        Assert.Equal(expected: mesh.Positions, actual: renumbered.Positions);
-        // Its levels keep their triangles and error, their materials renumbered alike.
-        Assert.Equal(expected: [2u], actual: Assert.Single(collection: renumbered.Levels).TriangleMaterials.ToArray());
-        Assert.Equal(expected: (mesh.Levels[0].Indices, 0.5f), actual: (renumbered.Levels[0].Indices, renumbered.Levels[0].Error));
-        Assert.True(condition: library.TryTake(geometry: geometry, materials: [1, 2], mesh: out var again));
-        Assert.Same(expected: renumbered, actual: again);
-
-        for (var hash = 0; (hash < SdfMeshLibrary.Capacity); hash++) {
-            library.Store(geometry: new SdfMeshGeometry(Dynamic: false, Hash: (UInt128)hash), materials: [], mesh: mesh);
-        }
-
-        // Past its capacity the library empties whole.
-        Assert.Equal(expected: 1, actual: library.Count);
-    }
     [Fact]
     public void ABakeTakesAGroupAnotherBakeOfItsLibraryMeshedRatherThanBakingIt() {
         var library = new SdfMeshLibrary();

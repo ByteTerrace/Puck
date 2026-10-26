@@ -25387,7 +25387,7 @@
             "title": "WorldPlacementMirror"
           },
           "emission": {
-            "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
+            "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldCreationInstances.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
             "type": [
               "object",
               "null"

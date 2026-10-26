@@ -2076,7 +2076,7 @@ and the canaries hold every scene the check names.
    moved), and `SdfCompositionFrameSource` composes them in emitter order and
    hands the composition to the dresser, which the frame carries as
    `SdfFrame.MeshDraws`; the engine repacks its mesh region only for a list it
-   has not seen. The stamp pool (`WorldStampPool.MeshDraws`) poses each
+   has not seen. The stamp pool (`WorldCreationInstances.MeshDraws`) poses each
    animated, inhabited, attached or look-worn registration's mesh at its packed
    root and scale through `WorldPlacementStamper.MeshDrawOf`, the pose a static
    placement's draw also takes, and rebuilds its list only in a pack that moved
@@ -7420,7 +7420,7 @@ each held.
   view that may
   see them, unseen counting as none; the root follows the body every frame and
   the other slots ride it rigidly between packs, and the next full pack
-  advances by every second the holds carried past (`WorldStampPool.Rates`).
+  advances by every second the holds carried past (`WorldCreationInstances.Rates`).
   The skinned vertices ride those slots in the mesh pass's vertex stage, so the
   pose evaluation is the work a held body saves; there is no skinning dispatch.
 

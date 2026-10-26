@@ -6,13 +6,13 @@ using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     // Whether a creation's text runs bake apart from its shapes on a slot of their own: every run embossed (an engraved
     // run carves the shapes, so it shares their instance) and a slot free after the shapes'. KEEP IN SYNC: EmitOne emits
     // the text on that slot and PackTransforms packs it with the root's pose.
     // Indexed, since the pack asks every registration each frame.
     private static bool TextApart(CreationDocument document) {
-        if ((document.TextRuns is not { Count: > 0 } runs) || ((document.Shapes?.Count ?? 0) >= WorldPlacementPolicy.MaxAnimatedStampShapes)) {
+        if ((document.TextRuns is not { Count: > 0 } runs)) {
             return false;
         }
         for (var index = 0; (index < runs.Count); index++) {
@@ -77,7 +77,7 @@ public sealed partial class WorldStampPool {
     private static float SharedDetail(CreationDocument document, int? groupId, bool[]? hidden, float scale, float detail = 0f) {
         var shapes = (document.Shapes ?? []);
 
-        for (var index = 0; ((index < shapes.Count) && (index < WorldPlacementPolicy.MaxAnimatedStampShapes)); index++) {
+        for (var index = 0; ((index < shapes.Count)); index++) {
             var shape = shapes[index];
             var member = ((groupId is { } id) ? ((shape.Group ?? 0) == id) : !document.IsGlassShape(shape: shape));
 
@@ -98,7 +98,7 @@ public sealed partial class WorldStampPool {
             return true;
         }
 
-        for (var member = fromIndex; ((member < shapes.Count) && (member < WorldPlacementPolicy.MaxAnimatedStampShapes)); member++) {
+        for (var member = fromIndex; ((member < shapes.Count)); member++) {
             if (((shapes[member].Group ?? 0) == groupId) && !hidden[member]) {
                 return true;
             }
@@ -109,7 +109,7 @@ public sealed partial class WorldStampPool {
     // Geometry keeps its authored transform slots; the bound may ride a member shared by the group's motion.
     // Groups with independent motion or followers retain the conservative creation-root bound. The group's instance
     // declares the finest spacing its members ask of the bake (SharedDetail); the probe's, with no document, none.
-    private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden) {
+    private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden, CreationMotionPlan? motion, Vector3 boundOffset) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -119,7 +119,7 @@ public sealed partial class WorldStampPool {
         if (ownInstance) {
             _ = builder.BeginInstanceDynamic(
             slot: boundSlot,
-            boundOffset: Vector3.Zero,
+            boundOffset: boundOffset,
             boundRadius: boundRadius,
             detail: ((document is null) ? 0f : SharedDetail(document: document, groupId: groupId, hidden: hidden, scale: placementScale))
         );
@@ -129,7 +129,7 @@ public sealed partial class WorldStampPool {
             _ = builder.PushField(compose: SdfBlendOp.Union);
         }
 
-        for (var member = fromIndex; ((member < shapes.Count) && (member < WorldPlacementPolicy.MaxAnimatedStampShapes)); member++) {
+        for (var member = fromIndex; ((member < shapes.Count)); member++) {
             var shape = shapes[member];
 
             if (((shape.Group ?? 0) != groupId) || ((hidden is not null) && hidden[member])) {
@@ -158,7 +158,7 @@ public sealed partial class WorldStampPool {
                 steps: shape.Steps,
                 morph: shape.Morph,
                 inGroupScope: true,
-                material: paletteIds[((shape.Material ?? 0) % paletteIds.Length)],
+                material: WorldPlacementStamper.MaterialForShape(builder, paletteIds[((shape.Material ?? 0) % paletteIds.Length)], shape, placementScale),
                 onion: ((shape.Onion ?? 0f) * placementScale),
                 placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
@@ -170,7 +170,8 @@ public sealed partial class WorldStampPool {
                 : (shape.Scale * placementScale)),
                 shapePosition: shape.Position,
                 shapeRotation: shape.Rotation,
-                slot: ((rootSlot + 1) + member),
+                slot: rootSlot + motion!.ShapeSlots[member],
+                motion: motion,
                 smooth: ((shape.Smooth ?? 0f) * placementScale),
                 twist: (shape.Twist ?? 0f),
                 type: shape.Type,
@@ -197,9 +198,10 @@ public sealed partial class WorldStampPool {
     // another placement's accumulator; embossed text is an instance of its own.
     // shapeSlots bounds the shape slots the registration reserves: every shape slot the probe fills, and past every
     // shape a live creation carries.
-    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials, int shapeSlots = WorldPlacementPolicy.MaxAnimatedStampShapes) {
+    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials, int shapeSlots = 0) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
+        shapeSlots = shapes.Count;
         // The isolation's hidden shapes emit nothing, and with them the paints they carry, the creation's mesh and its
         // text; their slots still pack, so a hidden parent still poses what it carries.
         var hidden = (probeWorstCase ? null : live?.Hidden);
@@ -213,7 +215,8 @@ public sealed partial class WorldStampPool {
                 document: (document ?? EmptyDocument),
                 pool: (rootSlot, (live?.Scale ?? 1f)),
                 tint: null,
-                hidden: hidden
+                hidden: hidden,
+                motion: live?.Motion
             )
         );
 
@@ -240,7 +243,7 @@ public sealed partial class WorldStampPool {
         // the probe's full-modifier shape chain. The coupled creation uses fewer instance records than the per-shape
         // probe and keeps each shape's existing local field operations inside the creation's outer scope.
         var hasText = (!probeWorstCase && (hidden is null) && (textCatalog is not null) &&
-            (document is { TextRuns.Count: > 0 }) && (shapes.Count < WorldPlacementPolicy.MaxAnimatedStampShapes));
+            (document is { TextRuns.Count: > 0 }));
         // Cached on the surviving Registration (hasText implies live is not null — document came from live.Creation),
         // keyed by the scale it was computed for: Reconcile only swaps in a fresh Registration when the creation's
         // content hash moves (see isRecreateRequired), so a same-content rebuild reuses last rebuild's layout, and a
@@ -326,11 +329,12 @@ public sealed partial class WorldStampPool {
                     continue;
                 }
     
-                var slot = ((rootSlot + 1) + index);
+                var slot = rootSlot + live!.Motion.ShapeSlots[index];
                 var scale = ((placed?.Scale ?? Vector3.One) * placementScale);
                 var material = (((screenMaterials is { } carried) && (carried[index] >= 0))
                     ? carried[index]
                     : paletteIds[((placed?.Material ?? 0) % paletteIds.Length)]);
+                material = WorldPlacementStamper.MaterialForShape(builder, material, placed!, placementScale);
                 var panelMaterial = ((placed?.Panel is { } placedPanel)
                     ? paletteIds[(placedPanel.Material % paletteIds.Length)]
                     : 0);
@@ -395,7 +399,7 @@ public sealed partial class WorldStampPool {
                 if (ownInstance) {
                     _ = builder.BeginInstanceDynamic(
                     slot: slot,
-                    boundOffset: Vector3.Zero,
+                    boundOffset: hasDomain ? Vector3.Zero : placed!.Position.Value * placementScale,
                     boundRadius: boundRadius,
                     active: active,
                     detail: ((probeWorstCase || (placed is null)) ? 0f : BodyDetail(floor: OwnDetailFloor, scale: placementScale, shape: placed))
@@ -435,6 +439,7 @@ public sealed partial class WorldStampPool {
                     shapePosition: (placed?.Position.Value ?? default),
                     shapeRotation: (placed?.Rotation.Value ?? default),
                     slot: slot,
+                    motion: live!.Motion,
                     twist: (placed?.Twist ?? 0f),
                     type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
                     taper: (placed?.Taper ?? 0.5f), profile: placed?.Profile,
@@ -456,10 +461,10 @@ public sealed partial class WorldStampPool {
 
         // Pass 2 — one instance per blend group. A group sharing one rigid animation delta can use a member's
         // tight traveling bound. Independent motion and followers retain the creation-root envelope.
-        Span<int> emittedGroups = stackalloc int[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        Span<int> emittedGroups = new int[shapes.Count];
         var emittedCount = 0;
 
-        for (var index = 0; ((index < shapes.Count) && (index < WorldPlacementPolicy.MaxAnimatedStampShapes)); index++) {
+        for (var index = 0; ((index < shapes.Count)); index++) {
             var groupId = (shapes[index].Group ?? 0);
 
             if (
@@ -476,15 +481,17 @@ public sealed partial class WorldStampPool {
             }
 
             var boundSlot = rootSlot;
+            var boundOffset = Vector3.Zero;
             var boundRadius = ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin);
 
-            if (!probeWorstCase && !anyPartFollows && (live is not null) &&
-                TryTightGroupRadius(document: document!, fromIndex: index, groupId: groupId, live: live, radius: out var localRadius)) {
-                boundSlot = ((rootSlot + 1) + index);
-                boundRadius = (localRadius * placementScale);
-            }
 
+            if (!anyPartFollows && live is not null && TryTightGroupRadius(live, document!, index, groupId, out var localRadius)) {
+                boundSlot = rootSlot + live.Motion.ShapeSlots[index];
+                boundOffset = shapes[index].Position.Value * placementScale;
+                boundRadius = localRadius * placementScale;
+            }
             EmitGroup(
+                boundOffset: boundOffset,
                 boundRadius: boundRadius,
                 boundSlot: boundSlot,
                 builder: builder,
@@ -497,7 +504,8 @@ public sealed partial class WorldStampPool {
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
                 shapes: shapes,
-                hidden: hidden
+                hidden: hidden,
+                motion: live!.Motion
             );
         }
 
@@ -507,7 +515,7 @@ public sealed partial class WorldStampPool {
         if (hasText) {
             // Apart, the text rides its own slot, which holds the root's pose, so its group holds the glyphs alone (a blend
             // group riding the root would otherwise bake with them at its own spacing), bounded by their reach.
-            var textSlot = (textApart ? (rootSlot + TextSlot(shapeCount: shapes.Count)) : rootSlot);
+            var textSlot = (textApart ? (rootSlot + live!.Motion.SlotCount) : rootSlot);
 
             if (textApart) {
                 _ = builder.BeginInstanceDynamic(

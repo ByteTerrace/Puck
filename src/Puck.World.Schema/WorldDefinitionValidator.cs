@@ -1700,8 +1700,9 @@ public static partial class WorldDefinitionValidator {
         // dict-fill, so the range is carved out of the authored screen-index space here. The membership test itself is
         // WorldPrototypeFacets.IsReservedFaceIndex — shared with the authoring-headroom scan, which excludes the same
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
-        var reservedFaceStart = WorldPlacementPolicy.DerivedFaceBase;
-        var reservedFaceEnd = (reservedFaceStart + authoring.DerivedFaceScreens);
+        if (WorldPlacementPolicy.DerivedFaceBase(definition) + authoring.DerivedFaceScreens > SdfProgramBuilder.MaxScreenSurfaces) {
+            errors.Add($"Authored screens and {authoring.DerivedFaceScreens} derived-face bindings exceed the {SdfProgramBuilder.MaxScreenSurfaces} screen bindings.");
+        }
         // The kits a screen route may name: only a kit carrying a pad map assigns channels a meaning at a machine,
         // so a route naming any other kit would compile to an empty pad and silently press nothing.
         var padKits = new Dictionary<string, IReadOnlyDictionary<string, WorldPadElement>>(comparer: StringComparer.Ordinal);
@@ -1734,11 +1735,6 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.index {screen.Index} is outside 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}.");
                 } else if (!screenIndices.Add(item: screen.Index)) {
                     errors.Add(item: $"{path}.index {screen.Index} is duplicated.");
-                } else if (WorldPlacementPolicy.IsReservedFaceIndex(
-                    index: screen.Index,
-                    derivedFaceScreens: authoring.DerivedFaceScreens
-                )) {
-                    errors.Add(item: $"{path}.index {screen.Index} is inside the reserved derived-face range {reservedFaceStart}..{(reservedFaceEnd - 1)} (creation faces bind there — author screens below {reservedFaceStart}).");
                 }
 
                 if (

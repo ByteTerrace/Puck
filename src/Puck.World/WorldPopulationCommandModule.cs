@@ -115,7 +115,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private string DescribeBudget() {
         var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
-            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {node.ProgramBuilds} program build(s), globalStepScale {node.LiveProgramStepScale.ToString(
                 format: "G6",
                 provider: CultureInfo.InvariantCulture
             )}{((node.LiveProgramStepScale is > 0f and < 1f)
@@ -150,8 +150,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 );
             }
         }
-        var stampPoolWorstCase = ((WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp) + (WorldPlacementPolicy.MaxCompactStampRegistrations * WorldPlacementPolicy.MaxCompactStampShapes));
-        var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) + {WorldPlacementPolicy.MaxCompactStampShapes} x {WorldPlacementPolicy.MaxCompactStampRegistrations} compact = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
+        var stampPool = "geometry assets shared; transforms and draws allocated from the live scene";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
         // A keyed fog is judged at its thinnest key, where the most of the far plane shows through.
         var atmosphere = server.Definition.Render.Atmosphere;

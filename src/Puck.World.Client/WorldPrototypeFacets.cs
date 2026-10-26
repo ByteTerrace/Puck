@@ -39,14 +39,6 @@ public static class WorldPrototypeFacets {
     private const float PlaceholderHalfHeight = 0.45f;
     private const float PlaceholderHalfWidth = 0.6f;
 
-    /// <summary>The first reserved derived-face screen index — high in the 0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>
-    /// range so it never collides with authored screens (which pack from index 0). The binder registers
-    /// <c>[DerivedFaceBase, DerivedFaceBase + DerivedFaceScreens)</c> up front so a derived face re-points a slot that
-    /// already exists (the render provider key set is frozen at boot). Single-sourced in
-    /// <see cref="WorldPlacementPolicy.DerivedFaceBase"/> (Puck.World.Schema) — the document validator needs the same
-    /// reserved band and cannot reference this class (it needs Puck.SdfVm for the classes it derives against).</summary>
-    public const int DerivedFaceBase = WorldPlacementPolicy.DerivedFaceBase;
-
     // THE ONE FRAME CONVERSION BOUNDARY for rendering. The frame is derived in fixed point (WorldFaceCatalog) because
     // the portal trigger it also feeds is simulation state; fixed-to-float is exactly rounded, so every machine draws
     // the slab it collides with. Everything applied here — proud epsilon, interior fraction, the round radius, the
@@ -101,7 +93,7 @@ public static class WorldPrototypeFacets {
 
         return [.. Derive(
             definition: definition,
-            derivedFaceBase: DerivedFaceBase,
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
             derivedFaceScreens: definition.Authoring.DerivedFaceScreens
         ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
     }
@@ -254,21 +246,6 @@ public static class WorldPrototypeFacets {
             Faces: faces
         );
     }
-    /// <summary>Determines whether <paramref name="index"/> falls inside the reserved derived-face band
-    /// <c>[<see cref="DerivedFaceBase"/>, DerivedFaceBase + <paramref name="derivedFaceScreens"/>)</c> — the one
-    /// exclusion every rule that hands out a screen index shares. Two of them exist:
-    /// <c>WorldDefinitionValidator</c> refuses an authored screen here, and <c>WorldSceneEmitter</c>'s
-    /// authoring-headroom scan skips it. They must not be two independently-correct rules — a headroom slot claimed
-    /// inside this band collides with the binder's boot-reserved placeholder just as an authored screen would.
-    /// Forwards to <see cref="WorldPlacementPolicy.IsReservedFaceIndex"/>.</summary>
-    /// <param name="index">The engine screen-surface index to test.</param>
-    /// <param name="derivedFaceScreens">The count of reserved derived-face slots (<c>authoring.derivedFaceScreens</c>).</param>
-    /// <returns><see langword="true"/> when the index is reserved for a derived face.</returns>
-    public static bool IsReservedFaceIndex(int index, int derivedFaceScreens) =>
-        WorldPlacementPolicy.IsReservedFaceIndex(
-            derivedFaceScreens: derivedFaceScreens,
-            index: index
-        );
     /// <summary>The boot-reserved derived-face screen slots (None-sourced placeholders) the binder must register up
     /// front, so a derived face appearing at a later delivery re-points a slot that already exists rather than hitting
     /// the frozen provider key set.</summary>

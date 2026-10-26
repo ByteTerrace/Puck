@@ -215,28 +215,8 @@ erosion resolves at zero. Even on an inhabited placement erosion is baked: it
 holds the lanes the bake read when the program last changed, so it cannot
 follow live state ([render lanes](surface.md#render-lanes)).
 
-## The budget
+## Bake work and bytes
 
-`MaxShapesPerStamp` is 367. The count is not the list length:
+Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 
-| Contributor | Charge |
-|---|---|
-| a shape | 1 |
-| a shape carrying a `panel` | 2 |
-| each trim on a shape | +2 |
-| each non-whitespace glyph in a text run | +1 |
-
-Refusal: `<path> stamps <n> shapes, exceeding the 367-shape per-stamp budget.`
-
-`puck creation stats` prints `shapes: N, stamp budget: M/367` plus histograms by
-primitive and blend and counts by facet. When over budget, the cheapest wins in
-order:
-
-1. Replace hand-placed repetition with a `repeat` or `polar` fold.
-2. Drop panel copies (+1) or trims (+2 each).
-3. Replace a cutter with an appropriate seam blend, accepting its scope rule.
-4. Shorten text runs.
-
-`detail: true` excludes geometry from contact, but does not reduce the stamp
-count, and the baked frame samples it like any other shape. It is a contact
-lever, not a capacity lever.
+Panels expand to two field shapes, trims add two operands each, and glyphs add one per visible character. These are bake work, reported by creation stats alongside program bytes. Actual mesh bytes are read from the running bake, never guessed from shape count.

@@ -9,7 +9,7 @@ namespace Puck.World.Client;
 /// same creation — the panel lane's own scope pattern, but against a second shape's geometry instead of a copy of
 /// the host's own.
 /// </content>
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     // Called from EmitShape after the panel emission, for a scope of its own PER trim (sequential, never nested —
     // each trim's own PushField/PopField opens and closes before the next). The scope pops via Union into the same
     // accumulator the shape's own plain instance already folds into elsewhere, so a genuine erosion of the host
@@ -24,7 +24,7 @@ public sealed partial class WorldStampPool {
     // the reference (no live document exists to resolve a name against during a probe — the reservation needs only
     // the right instruction shape). Refused at validation wherever a domain/group/whole-creation scope would leave
     // this scope nowhere to open, so this never runs for a shape any of those apply to.
-    private static void EmitTrims(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, Vector3 scale, int material, float taper, SdfPrismProfile? profile, SdfLift lift, float rounding, float chamfer, bool probeWorstCase, float placementScale, IReadOnlyList<ShapeTrimDocument>? trims, IReadOnlyList<ShapeDocument>? allShapes, int[]? paletteIds, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent) {
+    private static void EmitTrims(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, Vector3 scale, int material, float taper, SdfPrismProfile? profile, SdfLift lift, float rounding, float chamfer, bool probeWorstCase, float placementScale, IReadOnlyList<ShapeTrimDocument>? trims, IReadOnlyList<ShapeDocument>? allShapes, int[]? paletteIds, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, CreationMotionPlan? motion = null, Vector3 shapePosition = default, Quaternion shapeRotation = default) {
         var count = (probeWorstCase
             ? ShapeTrimDocument.MaxTrims
             : (trims?.Count ?? 0)
@@ -36,6 +36,8 @@ public sealed partial class WorldStampPool {
                 : trims![i]
             );
             var referenceSlot = slot;
+            var referencePosition = shapePosition;
+            var referenceRotation = shapeRotation;
             var referenceType = type;
             var referenceScale = scale;
             var referenceTaper = taper;
@@ -69,7 +71,9 @@ public sealed partial class WorldStampPool {
 
                 var reference = allShapes![referenceIndex];
 
-                referenceSlot = ((rootSlot + 1) + referenceIndex);
+                referenceSlot = rootSlot + motion!.ShapeSlots[referenceIndex];
+                referencePosition = reference.Position;
+                referenceRotation = reference.Rotation;
                 referenceType = reference.Type;
                 referenceScale = (reference.Scale * placementScale);
                 referenceTaper = (reference.Taper ?? 0.5f);
@@ -84,7 +88,7 @@ public sealed partial class WorldStampPool {
             }
 
             var eroded = SdfSolidGeometry.AppendScaledPrimitive(
-                chain: builder.ResetPoint().TransformDynamic(slot: slot).PushField(compose: SdfBlendOp.Union),
+                chain: builder.ResetPoint().TransformDynamic(slot: slot).Translate(shapePosition * placementScale).Rotate(shapeRotation == default ? Quaternion.Identity : shapeRotation).PushField(compose: SdfBlendOp.Union),
                 type: type,
                 taper: taper,
                 profile: profile,
@@ -99,7 +103,7 @@ public sealed partial class WorldStampPool {
             ).Dilate(radius: inset);
 
             _ = SdfSolidGeometry.AppendScaledPrimitive(
-                chain: eroded.ResetPoint().TransformDynamic(slot: referenceSlot),
+                chain: eroded.ResetPoint().TransformDynamic(slot: referenceSlot).Translate(referencePosition * placementScale).Rotate(referenceRotation == default ? Quaternion.Identity : referenceRotation),
                 type: referenceType,
                 taper: referenceTaper,
                 profile: referenceProfile,

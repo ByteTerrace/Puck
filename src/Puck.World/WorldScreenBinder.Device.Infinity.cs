@@ -212,11 +212,11 @@ public sealed partial class WorldScreenBinder {
         if (entry.Residency is { } held) { return held; }
         if ((m_viewPipelines is null) || (entry.Source is not { } source)) { return null; }
         var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-            dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
+            dynamicTransformCapacity: source.DynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(source, CaptureHostFirst),
             height: ((uint)m_viewDisplayHeight), width: ((uint)m_viewDisplayWidth),
-            instanceCapacity: source.WorstCaseInstanceCapacity,
-            programWordCapacity: source.WorstCaseProgramWordCapacity,
+            instanceCapacity: source.InstanceCapacity,
+            programWordCapacity: source.ProgramWordCapacity,
             kernels: ViewKernels(), meshLibrary: MeshLibrary, name: entry.Name, pipelines: m_viewPipelines,
             screenSources: new InfinityScreenSources(entry: entry));
 

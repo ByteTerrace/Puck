@@ -1350,7 +1350,7 @@ public static class SdfSolidGeometry {
     /// <summary>A <see cref="SdfSolidPrimitive.Sweep"/>'s worst-case reach from its local origin: the control
     /// polygon's own farthest point from the origin, plus the largest radius the sweep's tapered/bulged profile can
     /// reach, plus the strand orbit radius. KEEP IN SYNC with <see cref="SdfProgram.ShapeReachRadius"/>'s Sweep case
-    /// and <c>WorldStampPool</c>'s probe.</summary>
+    /// and <c>WorldCreationInstances</c>'s probe.</summary>
     /// <param name="a">The curve's first control point.</param>
     /// <param name="b">The curve's middle control point.</param>
     /// <param name="c">The curve's last control point.</param>

@@ -195,7 +195,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
                 seatRouter: routes
             );
             Emitter = new WorldSceneEmitter(
-                animator: new WorldStampPool(),
+                animator: new WorldCreationInstances(),
                 audio: new SilentAudio(),
                 client: Client,
                 continuum: new WorldContinuum(

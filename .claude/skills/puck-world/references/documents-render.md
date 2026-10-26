@@ -141,7 +141,7 @@ A point light's `anchor` is a `WorldAnchor.Placement` only (every other anchor
 kind is refused by name): its position then rides that placement's — or, with
 `shapeId`, one of the placement's creation shapes' — dynamic transform every
 frame instead of the authored `position`, so the light follows the placement.
-Resolved in `WorldFramePresenter` (`WorldStampPool.TryShapeTransformSlot`),
+Resolved in `WorldFramePresenter` (`WorldCreationInstances.TryShapeTransformSlot`),
 fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
 lights table.
 
@@ -441,24 +441,7 @@ The [Moth courtyard](../../../../experimental/src/Puck.World/Assets/worlds/moth-
 provides eight held poses and independent sky/cloud switches for repeatable GPU
 captures. Density controls live in the World.Authoring README.
 
-The stamp budget is `WorldPlacementPolicy.MaxShapesPerStamp` = 367
-shapes, including expanded glyphs — a panelled shape charges 2 (`sdf-authoring` owns panels); the matched CPU/HLSL
-instance ceiling is 65536 (the stamp pool's own worst-case draw is
-`WorldPlacementPolicy.MaxStampRegistrations x MaxShapesPerStamp`). The shipped overworld's whole
-COMPOSED boot probe — the presenter's four emitters, every adjacency band's reservation included —
-must leave at least 4096 instances under that ceiling, and `MaxShapesPerStamp` is sized against that
-floor; the scene emitter alone under-counts by the adjacency and field reservations, so only the
-composed figure governs. `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`
-enforces the floor and prints the current figures on its `world.budget probe:` output line (run it
-with `--output Detailed`).
-Verify capacity with `WorldRenderEnvelopeLawTests` plus a real rendered world.
-
-`WorldStampPool` keeps fixed dynamic-transform addresses but emits only live
-registrations and authored shapes/groups. Empty capacity does not add parked
-instances or widen live masks. The worst-case boot probe still emits every
-reserved slot. `WorldStampPoolCompactionLawTests` covers removal, slot reuse,
-and grouped geometry growing after a rebuild; `world.budget` shows the live
-instance count separately from the reserved capacity.
+Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 
 ### A kit's `rigid` facet
 

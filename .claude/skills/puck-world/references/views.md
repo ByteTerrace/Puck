@@ -693,7 +693,7 @@ Free Cam do not alter the logical movement basis.
   thigh-right` shows both legs). It keeps the named shapes and every shape
   parented beneath them, transitively; a name ending in `*` is a prefix
   (`thigh-*`). Every other shape of that prototype emits nothing wherever the
-  boot world renders it (body stamps through `WorldStampPool`, and animated,
+  boot world renders it (body stamps through `WorldCreationInstances`, and animated,
   attached and static placements through `WorldPlacementStamper`), so it bakes
   into no mesh and casts no shadow; paints and volumes parented to a hidden
   shape, the prototype's mesh and its text go with it. Hidden shapes' slots
@@ -704,7 +704,7 @@ Free Cam do not alter the logical movement basis.
   prototype or a name matching no shape is refused by name and changes
   nothing. One isolation at a time. Code: `WorldShapeIsolation` (the
   selection, the descendant resolution and its revision, owned by the pool as
-  `WorldStampPool.Isolation`), `WorldViewCommandModule.Isolate.cs` (the verb).
+  `WorldCreationInstances.Isolation`), `WorldViewCommandModule.Isolate.cs` (the verb).
   `WorldSceneEmitter.WriteRevision` carries the isolation's revision, so a
   change rebuilds the program; the changed bake groups hash new geometry, so
   they bake or load their own meshes and never take the whole body's. Until a
@@ -715,7 +715,7 @@ Free Cam do not alter the logical movement basis.
   with nothing to draw.
 - `view.reseed [<body>]` — restarts a body's presentation-only animation (gait
   driver phases and weights, foot plants, root and part followers) as for a new
-  occupant (`WorldStampPool.Reseed`). A `body.pose` teleport of the same
+  occupant (`WorldCreationInstances.Reseed`). A `body.pose` teleport of the same
   occupant keeps its gait phases so it never pops; pin `view.reseed` beside it
   when a scripted motion must look the same on a repeat
   ([tick-exact debug capture](schedules-and-tests.md#tick-exact-debug-capture)).

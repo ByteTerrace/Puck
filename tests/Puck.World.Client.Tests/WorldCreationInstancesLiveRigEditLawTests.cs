@@ -13,9 +13,9 @@ namespace Puck.World.Client.Tests;
 
 /// <summary>A delivered edit of a creation's rig rows (a shape's <c>parent</c>, a first <c>swings</c> row) moves the
 /// shape's slot on the frames after the delivery, through the real scene emitter and composition, whether the program
-/// rebuilds in the frame or in the background, and <see cref="WorldStampPool.TryBodyRig"/> reads the new chain
+/// rebuilds in the frame or in the background, and <see cref="WorldCreationInstances.TryBodyRig"/> reads the new chain
 /// back.</summary>
-public sealed class WorldStampPoolLiveRigEditLawTests {
+public sealed class WorldCreationInstancesLiveRigEditLawTests {
     private const float FrameSeconds = (1f / 60f);
 
     // The body's registration takes the pool's first entry; its shape slots follow its root.
@@ -181,7 +181,7 @@ public sealed class WorldStampPoolLiveRigEditLawTests {
             ) { BuildsInBackground = background };
         }
 
-        public WorldStampPool Pool { get; } = new();
+        public WorldCreationInstances Pool { get; } = new();
 
         // Delivers the creation's edit the way a mutation's definition delivery reaches the client.
         public void Edit(WorldPrototype creation) => m_client.DeliverDefinition(

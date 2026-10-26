@@ -17,7 +17,7 @@ namespace Puck.World.Schema.Tests;
 /// are the opposite case: field ops and a blend radius that act on the running world-space accumulator directly, past
 /// where the Scale op's re-multiply can reach them, so <see cref="CreationStampEmitter.Emit"/> must scale them
 /// explicitly — exactly as the animated pool scales them with a body look
-/// (<c>WorldStampPoolShapeUnitsLawTests</c>).
+/// (<c>WorldCreationInstancesShapeUnitsLawTests</c>).
 /// </summary>
 public sealed class CreationStampEmitterUnitsLawTests {
     private const string PrototypeId = "static-radii";

@@ -20,10 +20,10 @@ public sealed class WorldTextAuthoringLawTests {
         }, source: "engraved-body");
 
         creation = creation with { Document = canonical.Document, HashRaw = canonical.Hash };
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
-            new WorldStampPool.BodyStamp(0, creation, 1f, WorldLook.Implicit),
+            new WorldCreationInstances.BodyStamp(0, creation, 1f, WorldLook.Implicit),
         ]);
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
         var builder = new SdfProgramBuilder();
@@ -44,10 +44,10 @@ public sealed class WorldTextAuthoringLawTests {
     [Fact]
     public void AnEmbossedMovingCreationBakesItsTextAsADetailedInstanceOfItsOwn() {
         var creation = TextCreationWithFrames();
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
-            new WorldStampPool.BodyStamp(0, creation, 2f, WorldLook.Implicit),
+            new WorldCreationInstances.BodyStamp(0, creation, 2f, WorldLook.Implicit),
         ]);
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
         var builder = new SdfProgramBuilder();
@@ -63,7 +63,7 @@ public sealed class WorldTextAuthoringLawTests {
         // The box rides its shape slot after the root, the text the slot after the shapes', which the pack poses as the
         // root: a group of its own, whatever blend group rides the root.
         Assert.Equal(expected: (box.Slot + 1), actual: text.Slot);
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);
         Assert.Equal(expected: transforms[(box.Slot - 1)], actual: transforms[text.Slot]);

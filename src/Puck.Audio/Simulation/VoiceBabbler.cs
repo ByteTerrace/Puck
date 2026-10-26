@@ -14,7 +14,7 @@ namespace Puck.Audio.Simulation;
 /// </summary>
 /// <remarks>
 /// Jitter follows the engine's established per-entity seeding split — state = a per-utterance ordinal, stream = a
-/// per-identity seed, the same split <c>WorldStampPool</c>'s look-cue rest draw uses — rather than inventing a new
+/// per-identity seed, the same split <c>WorldCreationInstances</c>'s look-cue rest draw uses — rather than inventing a new
 /// one: <see cref="ComputeTriggerTicks"/> seeds one <see cref="Pcg32XshRr"/> stream via
 /// <c>Pcg32XshRr.Create(state: utteranceOrdinal, stream: identitySeed)</c>, so the same identity babbling a fresh
 /// utterance draws a fresh jitter sequence, while replaying the same utterance draws the identical one. Each

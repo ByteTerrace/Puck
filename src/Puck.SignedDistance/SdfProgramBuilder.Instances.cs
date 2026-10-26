@@ -3,6 +3,8 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
+    /// <summary>Reads a registered material while composing local material frames.</summary>
+    public SdfMaterial MaterialAt(int index) => m_materials[index];
     /// <summary>Adds a material to the program palette.</summary>
     /// <param name="material">The material to add.</param>
     /// <returns>The zero-based material identifier used by shape instructions.</returns>

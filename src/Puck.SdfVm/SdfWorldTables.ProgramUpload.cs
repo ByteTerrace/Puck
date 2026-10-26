@@ -25,12 +25,7 @@ public sealed partial class SdfWorldTables {
             programChanged = (geometryChanged || !previous.Words.SequenceEqual(other: program.Words));
         }
 
-        if (program.RequiredDynamicTransformCapacity > m_dynamicTransformCapacity) {
-            throw new ArgumentException(
-                message: $"The uploaded program requires {program.RequiredDynamicTransformCapacity} dynamic-transform slots; the tables were constructed for {m_dynamicTransformCapacity} (increase DynamicTransformCapacity or construct the tables with the larger program).",
-                paramName: nameof(program)
-            );
-        }
+        EnsureDynamicTransformCapacity(program.RequiredDynamicTransformCapacity);
 
         // Baking and rendering are SPLIT: pool-less tables (BrickPoolVoxelCapacity 0) still accepts a SampledRegion
         // program. It cannot BAKE (RequestBrickBake stays a loud rejection — nothing to write into), but it RENDERS the

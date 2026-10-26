@@ -70,7 +70,7 @@ public sealed class RestScene {
             roster: new PlayerRoster(definition: definition, link: inert, seatBindings: new WorldSeatBindings(definition: definition)),
             seatRouter: routes
         );
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var emitter = new WorldSceneEmitter(
             animator: pool,
             audio: inert,

@@ -12,17 +12,17 @@ namespace Puck.World.Client.Tests;
 
 /// <summary>Pins Door 1: a domain-bearing shape (Symmetry/Repeat/Polar…) carrying a <c>parent</c> rides the
 /// parent's chained rigid delta on its own dynamic-transform slot instead of the identity — the pair
-/// <see cref="WorldStampPool.PackTransforms"/> (which packs the slot, in placement units) and the emitter (which
+/// <see cref="WorldCreationInstances.PackTransforms"/> (which packs the slot, in placement units) and the emitter (which
 /// reads it, scales, then folds, before the shape's own rest pose) — the two part-pose readers' agreement on such a
 /// shape, and the canonicalizer's/validator's paired refusals: an own swing/slide, a named <c>frames</c> pose, and
 /// a look's <c>partDynamics</c> follower.</summary>
 public sealed class CreationDomainParentLawTests {
-    internal const int FoldSlot = 2;
+    internal const int FoldSlot = 1;
     // The pool's one registration: root slot 0, shape slots (1 + shape index).
     internal const int RootSlot = 0;
     internal const int TorsoSlot = 1;
 
-    private const int AnchorSlot = 3;
+    private const int AnchorSlot = 0;
     private const float Tolerance = 1e-4f;
 
     private static readonly Vector3 SwingPivot = new(
@@ -43,7 +43,7 @@ public sealed class CreationDomainParentLawTests {
     // One frame of the real pack path: deliver body 0's Grounded pose, resolve the render poses, then pack — the
     // same harness shape CreationEffectorLawTests drives, with a held Grounded fact so the torso's driver-gated
     // swing actually advances.
-    internal static void Advance(WorldClient client, WorldStampPool pool, DynamicTransform[] transforms, ulong tick) {
+    internal static void Advance(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms, ulong tick) {
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Authority: "a",
             Entries: new[] { new EntitySnapshot(
@@ -134,11 +134,11 @@ public sealed class CreationDomainParentLawTests {
             )])
     );
     // A pool holding one body-rooted registration of the creation at the given look scale.
-    internal static WorldStampPool Pool(WorldPrototype creation, float scale = 1f) {
-        var pool = new WorldStampPool();
+    internal static WorldCreationInstances Pool(WorldPrototype creation, float scale = 1f) {
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(
+            bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: creation,
                     Scale: scale,
@@ -182,10 +182,7 @@ public sealed class CreationDomainParentLawTests {
     // The fold shape's emitted chain: its own slot, the placement scale, the fold, then its rest translate/rotate —
     // returned as the index of the TransformDynamic that opens it.
     private static int AssertFoldChain(SdfInstruction[] program, float scale, Vector3 engineRestPosition) {
-        var transformIndex = Array.FindIndex(
-            array: program,
-            match: instruction => ((instruction.Op == SdfOp.TransformDynamic) && (((int)instruction.Data0.X) == FoldSlot))
-        );
+        var transformIndex = Array.FindIndex(program, instruction => instruction.Op == SdfOp.SymmetryPlane) - 2;
 
         Assert.True(
             condition: (transformIndex >= 0),
@@ -338,7 +335,7 @@ public sealed class CreationDomainParentLawTests {
             creation: creation,
             scale: Scale
         ));
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         for (var frame = 0; (frame < 120); frame++) {
             Advance(
@@ -349,7 +346,7 @@ public sealed class CreationDomainParentLawTests {
             );
         }
 
-        var torso = transforms[TorsoSlot];
+        var torso = pool.BodyShapePose(0, 0);
         var fold = transforms[FoldSlot];
 
         Assert.True(
@@ -420,7 +417,7 @@ public sealed class CreationDomainParentLawTests {
         var creation = Prototype(document: FollowRig());
         var pool = Pool(creation: creation);
         var client = ClientFixtures.Client(definition: Definition(creation: creation));
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         for (var frame = 0; (frame < 120); frame++) {
             Advance(
@@ -431,7 +428,7 @@ public sealed class CreationDomainParentLawTests {
             );
         }
 
-        var torso = transforms[TorsoSlot];
+        var torso = pool.BodyShapePose(0, 0);
         var fold = transforms[FoldSlot];
         var anchor = transforms[AnchorSlot];
 
@@ -582,7 +579,7 @@ public sealed class CreationDomainParentLawTests {
             creation: creation,
             scale: Scale
         ));
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         for (var frame = 0; (frame < 120); frame++) {
             Advance(

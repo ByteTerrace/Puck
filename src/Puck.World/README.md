@@ -2659,7 +2659,7 @@ and followers advance with the ticks rather than wall time. Hosted machines
 finish each tick synchronously before their video is read, keeping screen
 images and the light they emit independent of worker completion timing; a frame held for a
 settled capture also culls by box and rates no work; and `view.reseed <body>`
-(`WorldStampPool.Reseed`) restarts a body's gait drivers, foot plants and
+(`WorldCreationInstances.Reseed`) restarts a body's gait drivers, foot plants and
 followers as for a new occupant, which a `body.pose` teleport deliberately does
 not. The procedure and its measured repeatability are in
 the `puck-world` skill's

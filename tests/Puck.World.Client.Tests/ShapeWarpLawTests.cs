@@ -64,7 +64,7 @@ public sealed class ShapeWarpLawTests {
         name: PrototypeId,
         shapes: shapes
     );
-    // --- Pool emission path (WorldStampPool.EmitShape's warp prefix) ---
+    // --- Pool emission path (WorldCreationInstances.EmitShape's warp prefix) ---
 
     private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale) => CreationFixtures.EmitPool(
         bodyScale: bodyScale,

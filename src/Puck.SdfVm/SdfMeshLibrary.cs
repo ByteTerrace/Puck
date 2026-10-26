@@ -12,14 +12,22 @@ namespace Puck.SdfVm;
 /// <para>A library over a store (<see cref="Disk"/>) keeps what it bakes between runs: every mesh it stores is written
 /// there under its bake's identity, and a bake takes a geometry the store holds from disk (<see cref="TryLoad"/>) instead
 /// of baking it again.</para>
-/// <para>The library holds at most <see cref="Capacity"/> geometries and empties whole past that. Its members are
+/// <para>The library retains meshes within <see cref="ByteBudget"/>, evicting the oldest first. Its members are
 /// thread-safe: a group's mesh lands from the thread pool.</para>
 /// </summary>
 /// <param name="store">The store the library keeps its meshes in between runs, or <see langword="null"/> to keep them for
 /// the run alone.</param>
-public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
-    /// <summary>The most geometries the library holds before it empties.</summary>
-    public const int Capacity = 4096;
+/// <param name="byteBudget">The retained byte budget, or null for the machine-derived default.</param>
+public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget = null) {
+    /// <summary>Gets the machine's default retained mesh budget: one sixteenth of available managed memory, bounded to 16..512 MiB.</summary>
+    public static long DefaultByteBudget => Math.Clamp(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 16, 16L << 20, 512L << 20);
+    /// <summary>Gets the maximum retained bytes; live residencies retain their own in-use meshes independently.</summary>
+    public long ByteBudget { get; } = Math.Max(0, byteBudget ?? DefaultByteBudget);
+    private long m_retainedBytes;
+    private readonly LinkedList<SdfMeshGeometry> m_age = new();
+    private readonly Dictionary<SdfMeshGeometry, (long Bytes, LinkedListNode<SdfMeshGeometry> Node)> m_usage = [];
+    /// <summary>Gets the estimated retained geometry, mesh and material bytes.</summary>
+    public long RetainedBytes { get { lock (m_gate) { return m_retainedBytes; } } }
 
     private readonly Lock m_gate = new();
     private readonly Dictionary<SdfMeshGeometry, List<Variant>> m_meshes = [];
@@ -89,8 +97,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     public void StoreEmpty(SdfMeshGeometry geometry) {
         lock (m_gate) {
             if (m_meshes.ContainsKey(key: geometry)) { return; }
-            if (m_meshes.Count >= Capacity) { m_meshes.Clear(); }
+
             m_meshes.Add(key: geometry, value: []);
+            Retain(geometry, 256);
         }
     }
     /// <summary>Returns whether a geometry's bake found no surface (<see cref="StoreEmpty"/>).</summary>
@@ -123,7 +132,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
         if ((Disk is null) || !Disk.TryRead(geometry: geometry, identity: identity, materials: out var stored, mesh: out var read, refusal: out refusal)) { return false; }
         _ = Hold(geometry: geometry, materials: stored, mesh: read, form: form);
 
-        return TryTake(geometry: geometry, materials: materials, mesh: out mesh);
+        if (TryTake(geometry: geometry, materials: materials, mesh: out mesh)) { return true; }
+        mesh = stored.AsSpan().SequenceEqual(materials) ? read : Renumber(read, stored, materials);
+        return true;
     }
     /// <summary>Takes the mesh of a geometry for a group whose shapes carry <paramref name="materials"/>: the stored mesh
     /// when its group carried the same ids, and otherwise the stored mesh with each triangle's material renumbered from the
@@ -142,6 +153,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
                 mesh = null;
                 return false;
             }
+            Touch(geometry);
             foreach (var variant in variants) {
                 if (variant.Materials.AsSpan().SequenceEqual(other: materials)) {
                     mesh = variant.Mesh;
@@ -151,6 +163,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
 
             mesh = Renumber(mesh: variants[0].Mesh, from: variants[0].Materials, to: materials);
             variants.Add(item: new Variant(Materials: materials, Mesh: mesh));
+            Retain(geometry, BytesOf(mesh) + materials.LongLength * sizeof(int));
 
             return true;
         }
@@ -162,16 +175,36 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
         lock (m_gate) {
             if (form is { } shapes) { m_forms[shapes] = geometry; }
             if (m_meshes.ContainsKey(key: geometry)) { return false; }
-            if (m_meshes.Count >= Capacity) {
-                m_meshes.Clear();
-                m_forms.Clear();
-                if (form is { } kept) { m_forms[kept] = geometry; }
-            }
             m_meshes.Add(key: geometry, value: [new Variant(Materials: materials, Mesh: mesh)]);
+            Retain(geometry, 256 + BytesOf(mesh) + materials.LongLength * sizeof(int));
 
             return true;
         }
     }
+    private static long BytesOf(SdfMesh mesh) => checked((long)SdfMeshRegion.WordsOf(mesh) * sizeof(uint));
+    private void Touch(SdfMeshGeometry geometry) {
+        if (!m_usage.TryGetValue(geometry, out var usage)) { return; }
+        m_age.Remove(usage.Node);
+        m_age.AddLast(usage.Node);
+    }
+    private void Retain(SdfMeshGeometry geometry, long bytes) {
+        if (m_usage.TryGetValue(geometry, out var usage)) {
+            m_usage[geometry] = (usage.Bytes + bytes, usage.Node);
+            Touch(geometry);
+        } else {
+            m_usage.Add(geometry, (bytes, m_age.AddLast(geometry)));
+        }
+        m_retainedBytes += bytes;
+        while (m_retainedBytes > ByteBudget && m_age.First is { } oldest) {
+            var victim = oldest.Value;
+            m_retainedBytes -= m_usage[victim].Bytes;
+            m_usage.Remove(victim);
+            m_meshes.Remove(victim);
+            m_age.RemoveFirst();
+            foreach (var form in m_forms.Where(entry => entry.Value.Equals(victim)).Select(entry => entry.Key).ToArray()) { m_forms.Remove(form); }
+        }
+    }
+
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
     // list reaches keeps its id. The geometry's equality makes the two lists the same length.
     private static SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {

@@ -12,7 +12,7 @@ namespace Puck.World.Client;
 // at 30 or 15 Hz. Between those packs its root still follows the body every frame and its other slots ride the root
 // rigidly, so the body moves smoothly while its limbs hold; the next full pack advances by every second the holds
 // carried past. The views are the frame source's previous frame's, a frame's lag the tiers do not notice.
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     // The views the last frame rendered the pool's world through: each camera and its image's height in pixels.
     private readonly List<(CameraSnapshot Camera, float Pixels)> m_rateViews = [];
     private SdfUpdateRates m_rates;
@@ -191,6 +191,10 @@ public sealed partial class WorldStampPool {
             });
         }
 
+        for (var shape = 0; shape < live.ShapeTransforms.Length; shape++) {
+            var held = live.ShapeTransforms[shape];
+            live.ShapeTransforms[shape] = held with { Orientation = Quaternion.Normalize(turn * held.Orientation), Position = rootPosition + Vector3.Transform(held.Position - root.Position, turn) };
+        }
         transforms[rootSlot] = (root with {
             Orientation = rootRotation,
             Position = rootPosition,

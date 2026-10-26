@@ -7,7 +7,7 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// A session view's <see cref="IWorldStampSource"/>: the destination's <see cref="WorldSessionMirror"/> read as the
-/// world a <see cref="WorldStampPool"/> roots its stamps on. A body's pose is the mirror's interpolated one, the same
+/// world a <see cref="WorldCreationInstances"/> roots its stamps on. A body's pose is the mirror's interpolated one, the same
 /// blend <see cref="WorldSessionSceneEmitter"/> packs its avatars at (see
 /// <see cref="WorldSessionMirror.InterpolationAlpha"/>), so a stamp riding a body stays on it.
 /// </summary>

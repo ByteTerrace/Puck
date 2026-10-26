@@ -104,10 +104,13 @@ profiles, and superellipsoids; polygon and ellipse profiles are refused for
 field contact until that interpreter supports them. The analytic contact
 provider retains conservative primitive bounds.
 Character looks do not replace the body's authored collision kit.
-World stamps admit up to `WorldPlacementPolicy.MaxShapesPerStamp` shapes
-(367), including expanded text glyphs, with a panelled shape charged as 2 and
-each of a shape's trims charged 2 more. This is headroom for authored detail,
-not a requirement to fill every slot.
+Creations have no shape-count ceiling. Rigid copies share one local bake and
+palette, costing one root transform and one draw each; independently moving
+parts own additional slots. Panels, trims and glyphs increase field work, bake
+time and resident bytes. `puck creation stats` reports that work and encoded
+bytes; the running World's bake and GPU counters report actual mesh work and
+residency. Skin members, GPU indices and per-pixel volumes retain explicit
+representation guards; none is silently truncated.
 
 ## Canonical form and the creation pin
 
@@ -276,7 +279,7 @@ Worked rigs, all built from the same three parts:
 | Walk into run | `driver.stride` drivers weighted by curves of `pace`: one rising from half to whole, one from none to whole, and a bob at cadence 2 on the second | the stride swings on the first; the lean, bent elbows and bob on the others |
 
 Every one of these is presentation-only: the facets are read where a body-rooted
-stamp's per-frame transforms are packed (`Puck.World.Client.WorldStampPool`) and
+stamp's per-frame transforms are packed (`Puck.World.Client.WorldCreationInstances`) and
 nowhere else, so the emitted SDF program, the analytic colliders, the compiled
 solid field, and simulation state are all blind to them. `CreationFrame` carries
 a swing's `pivot` and both facets' `axis` across the author frame; a half turn
@@ -379,7 +382,7 @@ standoff that puts the whole sole on the surface.
 | Spider leg | `["coxaLeft1", "femurLeft1", "tibiaLeft1", "tarsusLeft1"]` | `surface`, `direction` the body's own down, which on a ceiling points UP the world | windowed per leg on a shared gait driver |
 
 Effectors are presentation-only on exactly the terms the swings are: the correction is
-folded into each bone's own per-frame delta in `Puck.World.Client.WorldStampPool` and
+folded into each bone's own per-frame delta in `Puck.World.Client.WorldCreationInstances` and
 read nowhere else. `CreationFrame` carries a probe `direction`, a body `offset`, and a
 shape's `joint` across the author frame; the reach, standoff, weight, and window are
 frame-invariant. A bone carrying `domain` operators is refused, on the same grounds a
@@ -447,7 +450,7 @@ radius composes the shape's already-world-scaled candidate into it, so
 neither is reached by a preceding `Scale` chain op the way a baked-local
 modifier is. Both emission paths therefore multiply them by the placement
 scale explicitly before emission (`CreationStampEmitter.EmitShapeChain` for a
-static placement, `Client.WorldStampPool.EmitShape`/`EmitGroup` for the
+static placement, `Client.WorldCreationInstances.EmitShape`/`EmitGroup` for the
 animated pool) rather than relying on the chain's own `Scale` op. `Dilate`/
 `Onion` on an otherwise scope-free shape open the same one-deep field scope a
 panel would (below)—unscoped, they would inflate
@@ -545,16 +548,13 @@ being the ERODED copy's half-extent along `face`—deeper, a recess is an
 enclosed void and a raise a detached slab. `ShapePanelDocument.Resolve` is the
 one derivation both paths emit from: with `h` the plate's half-extent, a recess
 translates the copy by `h + h′ − depth` and a raise by `|depth| + (h − h′)`.
-`CreationDocument.StampShapeCount` charges a panelled shape as 2, and so does
-`CreationStampEmitter.PerCopyInstanceCount` (the static per-shape probe
-reservation: the copy's own transform chain and shape need a second probe
-chain's words).
+`CreationDocument.StampShapeCount` counts the expanded operands for bake-work reporting; it is not an admission budget.
 
 Both emission paths open a one-deep field scope
 (`SdfProgramBuilder.PushField`/`PopField`) around `[plate, panel]` so the
 panel's compose bites only this shape, never a sibling occupying the same
 space—`CreationStampEmitter.EmitShapeChain` (static placements) and
-`Client.WorldStampPool.EmitShape` (the animated stamp pool)—and emit the copy
+`Client.WorldCreationInstances.EmitShape` (the animated stamp pool)—and emit the copy
 from its own `ResetPoint` chain rather than after the plate's shape
 instruction, whose emission may leave a persistent `Scale` op behind. The
 creation emitter refuses panels outside that independent-shape recipe:
@@ -628,7 +628,7 @@ union carrying its own material as a rivet, painted through the bake's
 point-sampled materials.
 
 Both emission paths (`CreationStampEmitter.EmitShapeChain`,
-`Client.WorldStampPool.EmitShape`) thread `Detail` into
+`Client.WorldCreationInstances.EmitShape`) thread `Detail` into
 `SdfSolidGeometry.AppendScaledPrimitive`'s emission of the shape's OWN
 instruction only—never into a panel's or a trim's second copy, so `Detail`
 is refused by name alongside `Panel` or `Trims` on the same shape rather than

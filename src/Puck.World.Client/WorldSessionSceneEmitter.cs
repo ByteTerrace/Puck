@@ -27,7 +27,7 @@ namespace Puck.World.Client;
 /// <remarks>
 /// <para>
 /// Reuses <see cref="WorldPlacementStamper"/> directly — the same static-stamp compiler
-/// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — a <see cref="WorldStampPool"/>
+/// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — a <see cref="WorldCreationInstances"/>
 /// of its own, rooted on the destination through <see cref="WorldSessionStampSource"/> with its census kept by a
 /// <see cref="WorldBodyStampCensus"/>, and <see cref="WorldRigCatalog"/> directly for avatars, rather than a second
 /// implementation of any of them. The destination's own screens are drawn too, its declared rows and its creations'
@@ -108,7 +108,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
     // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
-    private int m_censusRevision;
+    private int m_articulatedRevision;
+    private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
+    private int m_catalogRevision;
+    private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
 
     // The destination's stamp pool, packed past the avatar catalog's slots, the source it roots on, its creation-stamp
     // census, and the mesh draws: the static placements' the last live Emit fixed, then the pool's.
@@ -121,7 +124,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <inheritdoc/>
     public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_pool.PickMeshTargets);
 
-    private readonly WorldStampPool m_pool = new();
+    private readonly WorldCreationInstances m_pool = new();
 
     private readonly WorldSessionStampSource m_source;
 
@@ -288,6 +291,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+            if (!HoldsAvatar(index)) { continue; }
             // A body the pool registered renders its creation there and parks this catalog avatar; its palette entry
             // is still emitted, so the catalog keeps the frozen shape its probe reserved.
             WorldMirroredAvatarBand.EmitPalette(
@@ -309,6 +313,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         WorldRigCatalog.Emit(
             builder: builder,
             isActive: HoldsAvatar,
+            slotFor: index => m_catalogSlots[index],
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
             probeWorstCase: probeWorstCase,
@@ -592,36 +597,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         var definition = Scoped(definition: m_mirror.Definition);
 
-        if (context.Probe) {
-            WorldSessionRenderEnvelope.EmitProbe(
-                builder: builder,
-                candidate: definition,
-                bodyColor: m_bodyColor,
-                colors: BakedColors(),
-                pool: m_pool,
-                slotBase: context.SlotBase
-            );
-
-            return;
-        } else {
-            m_emittedDefinition = definition;
-            m_picks.Clear();
-            var colors = BakedColors();
+        m_emittedDefinition = definition;
+        m_picks.Clear();
+        var colors = BakedColors();
 
             colors.Begin();
             // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
             // (ScreenDecals).
             var meshDraws = new List<SdfMeshDraw>();
 
-            // The pool reconciles first on every rebuild: animated placements root statically, attached ones on
-            // their target body, and the census's bodies on their live poses, as the local scene's pool does.
-            m_census.Refresh(source: m_source);
-            m_pool.Reconcile(
-                bodyStamps: ((m_onlyPrototypes is null) ? m_census.Stamps : []),
-                creations: definition.Creations,
-                dynamics: definition.Dynamics,
-                placements: definition.Placements
-            );
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 colors: colors,
@@ -647,10 +631,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 colors: colors,
                 maxPlacementScale: definition.Authoring.MaxPlacementScale,
                 probeWorstCase: false,
-                slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
+                slotBase: (context.SlotBase + m_catalogSlotCount),
                 picks: m_picks
             );
-        }
 
         EmitAvatars(
             builder: builder,
@@ -660,7 +643,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     // Whether the scene draws a body's avatar: the mirror's active bodies, none in far geometry.
-    private bool HoldsAvatar(int index) => ((m_onlyPrototypes is null) && m_mirror.IsActive(index: index));
+    private bool HoldsAvatar(int index) => ((m_onlyPrototypes is null) && !m_pool.HasBodyRegistration(index) && m_mirror.IsActive(index: index));
     // The definition the scene emits: the whole of it, or, for far geometry, its placements of the named prototypes alone and
     // none of its screens.
     private WorldDefinition Scoped(WorldDefinition definition) => ((m_onlyPrototypes is null)
@@ -686,6 +669,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+            if (m_catalogSlots[index] < 0) { continue; }
             if (!HoldsAvatar(index: index)) {
                 m_avatarPoseSeeded[index] = false;
 
@@ -693,9 +677,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                     moved: moved,
                     owner: index
                 )) {
-                    WorldTransformOwners.ParkBody(
-                        avatar: index,
-                        catalogBase: context.SlotBase,
+                    WorldTransformOwners.Park(
+                        count: WorldRigCatalog.TransformSlotsPerBody,
+                        start: context.SlotBase + m_catalogSlots[index],
                         moved: moved,
                         parkPosition: context.ParkPosition,
                         table: slots
@@ -745,6 +729,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_avatarOwners.Settle(
                 deltaSeconds: 1f,
                 moved: WorldTransformOwners.PackBody(
+                firstSlot: m_catalogSlots[index],
                 avatar: index,
                 // Session panels omit avatar shadows; a routed scene participates when its host enables them.
                 catalogBase: context.SlotBase,
@@ -769,7 +754,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             client: m_source,
             moved: moved,
             parkPosition: context.ParkPosition,
-            slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
+            slotBase: (context.SlotBase + m_catalogSlotCount),
             transforms: slots
         );
     }
@@ -893,9 +878,39 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// world), and a counter that moves when a stamped body's live scale moves
     /// (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the host's avatar colors — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
     /// identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
+    private readonly int[] m_catalogSlots = new int[WorldBodiesLimits.CapacityCeiling];
+    private int m_catalogSlotCount;
+    private void PrepareCatalog() {
+        m_catalogSlotCount = 0;
+        Array.Fill(m_catalogSlots, -1);
+        for (var body = 0; body < m_catalogSlots.Length; body++) {
+            if (!HoldsAvatar(body)) { continue; }
+            m_catalogSlots[body] = m_catalogSlotCount;
+            m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
+        }
+        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => m_catalogSlots[index] >= 0)
+            .Select(index => (index, (int)m_mirror.CatalogRig(index), m_mirror.Look(index).Scale, m_bodyColor(index))).ToArray();
+        if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
+    }
+    private int m_preparedDefinition = int.MinValue;
+    private int m_preparedSnapshot = int.MinValue;
+    public void PrepareFrame() {
+        if (m_preparedDefinition == m_mirror.DefinitionRevision && m_preparedSnapshot == m_mirror.SnapshotRevision && !m_census.TryTakeMove()) { return; }
+        m_preparedDefinition = m_mirror.DefinitionRevision;
+        m_preparedSnapshot = m_mirror.SnapshotRevision;
+        var definition = Scoped(m_mirror.Definition);
+        m_census.Refresh(m_source);
+        var articulated = (m_onlyPrototypes is null ? m_census.Stamps : []).Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        m_pool.Reconcile(definition.Placements, definition.Creations, definition.Dynamics, m_onlyPrototypes is null ? m_census.Stamps : [], definition.Looks);
+            PrepareCatalog();
+    }
+    public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;
+    public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
+
     public void WriteRevision(Span<int> destination) {
         destination[0] = m_mirror.DefinitionRevision;
-        destination[1] = m_mirror.SnapshotRevision;
+        destination[1] = m_articulatedRevision;
 
         if (BakedColors().TryTakeMove()) {
             m_bakedColorRevision++;
@@ -903,12 +918,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         destination[2] = m_bakedColorRevision;
 
-        // After the baked colors' follow, so the census reads the latest delivery.
-        if (m_census.TryTakeMove()) {
-            m_censusRevision++;
-        }
-
-        destination[3] = m_censusRevision;
+        destination[3] = m_catalogRevision;
         if (m_bodyColors is { } colors) {
             for (var index = 0; (index < colors.Length); index++) {
                 if (!m_mirror.IsActive(index: index)) {
@@ -949,12 +959,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// band and one root slot per remaining crowd body — the same hybrid worst case
     /// <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own avatar range, sized off the engine-wide
     /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
-    public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
+    public int DynamicSlotCount => (m_catalogSlotCount + m_pool.DynamicSlotCount);
     /// <inheritdoc/>
     public int RevisionComponentCount => 5;
     /// <inheritdoc/>
     /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
-    /// pool's (<see cref="WorldStampPool.MeshDraws"/>).</remarks>
+    /// pool's (<see cref="WorldCreationInstances.MeshDraws"/>).</remarks>
     public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
     /// <inheritdoc/>
     public long MeshDrawsRevision => m_meshDraws.Revision;

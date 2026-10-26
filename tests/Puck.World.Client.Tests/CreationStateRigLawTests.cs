@@ -220,7 +220,7 @@ public sealed class CreationStateRigLawTests {
         // Body 0's cell stores 1 while its eased sample is still 0: the pose reads the truth and holds at once.
         Assert.Equal(
             expected: 1,
-            actual: WorldStampPool.SelectPoseFrame(
+            actual: WorldCreationInstances.SelectPoseFrame(
                 reads: ClientFixtures.StateReads(
                     bodyIndex: 0,
                     definition: world
@@ -232,7 +232,7 @@ public sealed class CreationStateRigLawTests {
         // Body 1's cell stores 1 (the pose holds, frame 1); body 2 has no cell (the live pose, frame 0).
         Assert.Equal(
             expected: 1,
-            actual: WorldStampPool.SelectPoseFrame(
+            actual: WorldCreationInstances.SelectPoseFrame(
                 reads: ClientFixtures.StateReads(
                     bodyIndex: 1,
                     definition: world
@@ -243,7 +243,7 @@ public sealed class CreationStateRigLawTests {
         );
         Assert.Equal(
             expected: 0,
-            actual: WorldStampPool.SelectPoseFrame(
+            actual: WorldCreationInstances.SelectPoseFrame(
                 reads: ClientFixtures.StateReads(
                     bodyIndex: 2,
                     definition: world

@@ -5,7 +5,7 @@ using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     // All members must inherit the same rigid delta. Distances between their base positions are then invariant
     // under body motion, parent swings, and effector corrections. The first member's slot supplies the center.
     // Cuts/intersections cannot enlarge the solid; union members, smooth halos and outward field ops can.
@@ -39,10 +39,7 @@ public sealed partial class WorldStampPool {
             null
         );
 
-        for (var index = fromIndex; (index < Math.Min(
-            val1: shapes.Count,
-            val2: WorldPlacementPolicy.MaxAnimatedStampShapes
-        )); index++) {
+        for (var index = fromIndex; (index < shapes.Count); index++) {
             var shape = shapes[index];
 
             if ((shape.Group ?? 0) != groupId) {

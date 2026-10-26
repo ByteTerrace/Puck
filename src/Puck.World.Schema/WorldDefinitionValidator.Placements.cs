@@ -244,7 +244,7 @@ public static partial class WorldDefinitionValidator {
         RequireIntRange(
             value: authoring.DerivedFaceScreens,
             min: 0,
-            max: WorldPlacementPolicy.MaxDerivedFaceScreens,
+            max: SdfProgramBuilder.MaxScreenSurfaces,
             name: "placements.policy.derivedFaceScreens",
             errors: errors
         );
@@ -723,9 +723,7 @@ public static partial class WorldDefinitionValidator {
 
             var stampShapes = creation.Document.StampShapeCount();
 
-            if (stampShapes > WorldPlacementPolicy.MaxShapesPerStamp) {
-                errors.Add(item: $"{path} stamps {stampShapes} shapes, exceeding the {WorldPlacementPolicy.MaxShapesPerStamp}-shape per-stamp budget.");
-            }
+
 
             // A creation-level field op cannot span the per-shape dynamic instances the stamp pool emits for an animated
             // creation — noise is a static-stamp facet.
@@ -1415,7 +1413,7 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names no part of creation '{partCreation.Id}'.");
                         } else if ((partCreation.Document.Shapes ?? []).Any(predicate: shape => ((shape.Id == part.ShapeId) && (shape.Domain is { Count: > 0 })))) {
                             // A domain-bearing shape's slot carries its parent's delta frame, not a pose of its own
-                            // (Client.WorldStampPool.PackTransforms), so a follower has no pose to ease — the same
+                            // (Client.WorldCreationInstances.PackTransforms), so a follower has no pose to ease — the same
                             // reason such a shape refuses its own swing/slide and a frame pose.
                             errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names part '{partId}' of creation '{partCreation.Id}', whose shape {part.ShapeId} carries domain operators — a fold rides its parent's frame and has no pose of its own to ease.");
                         }
@@ -1482,14 +1480,14 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        // The stamp-pool charge: every row that renders through Client.WorldStampPool's reserved registrations rather
+        // The stamp-pool charge: every row that renders through Client.WorldCreationInstances's reserved registrations rather
         // than as a static stamp — an ANIMATED row (a creation with frames or drivers) or an ATTACHED one (rooted on a live body).
-        var stampRegistrationCount = 0;
+
         // The document-global dynamic-instance total (WorldDynamicGeometryCeilings.MaxContributedDynamicInstances):
         // every animated placement's single replay instance plus every inhabited placement's declared body count,
         // summed across the whole document — ValidateInhabit only bounds one row's count to the peer capacity, never
         // totals across rows. The runtime entity table separately caps actual occupancy at population capacity.
-        var dynamicInstanceCount = 0;
+
         var staticPlacementInstanceCount = 0L;
         var solidPlacementColliderCount = 0L;
         // The BOARD facet carries a tabletop's frame; a topology admits at most one carrying placement (see
@@ -1787,8 +1785,8 @@ public static partial class WorldDefinitionValidator {
             var isAnimated = (animatedCreation is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 });
 
             if (isAnimated) {
-                stampRegistrationCount++;
-                dynamicInstanceCount++;
+
+
 
                 if (
                     (placement.Distribution is not null) ||
@@ -1798,10 +1796,10 @@ public static partial class WorldDefinitionValidator {
                 }
             } else if (placement.Attach is not null) {
                 // An ATTACHED row renders through the SAME reserved stamp pool (rooted on its body instead of a static
-                // transform — Client.WorldStampPool), so it charges the same ceiling. Counted in the `else` because an
+                // transform — Client.WorldCreationInstances), so it charges the same ceiling. Counted in the `else` because an
                 // attached row of a FRAMED creation is one registration, not two.
-                stampRegistrationCount++;
-                dynamicInstanceCount++;
+
+
 
                 if (animatedCreation is { Document.Noise: not null }) {
                     errors.Add(item: $"{path} ATTACHES — its creation's noise relief is a static-stamp facet the stamp pool cannot render.");
@@ -1837,7 +1835,7 @@ public static partial class WorldDefinitionValidator {
                 var inhabitMax = inhabit.DeclaredMax(peerCapacity: Math.Max(val1: 0, val2: (definition.Population.Capacity - definition.Population.LocalSeats)));
 
                 if (inhabitMax > 0) {
-                    dynamicInstanceCount += inhabitMax;
+
                 }
             }
 
@@ -1865,12 +1863,7 @@ public static partial class WorldDefinitionValidator {
                     val2: (staticPlacementInstanceCount + contribution)
                 );
 
-                if (
-                    (previousInstanceCount <= SdfProgramBuilder.MaxInstances) &&
-                    (staticPlacementInstanceCount > SdfProgramBuilder.MaxInstances)
-                ) {
-                    errors.Add(item: $"{path} expands the document past the {SdfProgramBuilder.MaxInstances}-instance engine ceiling; reduce lattice counts or mirror copies.");
-                }
+
             }
 
             // The per-instance FACE overrides: each names a declared creation face, no duplicates. The View source's
@@ -1922,7 +1915,7 @@ public static partial class WorldDefinitionValidator {
             // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —
             // never the 1-based player.* seat number. Region, Solid (analytic contact provider), and Emission all
             // read the resolved dynamic pose (WorldEventFeed.CollectRegions, WorldColliderSet.RefreshAttached,
-            // WorldStampPool.TryShapePosition/RootPose), so an equipped item's aura/hitbox/voice tracks the carrier.
+            // WorldCreationInstances.TryShapePosition/RootPose), so an equipped item's aura/hitbox/voice tracks the carrier.
             // Distribution/mirror and inhabit stay refused (a row cannot both spawn its own bodies and ride
             // another's); FaceSources stays permitted (a content selector, not a transform).
             if (placement.Attach is { } attach) {
@@ -2010,17 +2003,6 @@ public static partial class WorldDefinitionValidator {
         // scaled parent is a cross-row fact, not a single row's own shape).
         if (!WorldPlacementFrameCompilation.TryValidate(placements: placements, reason: out var parentReason)) {
             errors.Add(item: $"placements: {parentReason}");
-        }
-
-        if (stampRegistrationCount > WorldPlacementPolicy.MaxStampRegistrations) {
-            errors.Add(item: $"{stampRegistrationCount} animated + attached placements exceed the {WorldPlacementPolicy.MaxStampRegistrations}-slot replay pool.");
-        }
-
-        // The document-global dynamic-instance ceiling (WorldDynamicGeometryCeilings.MaxContributedDynamicInstances,
-        // the measured CPU bound — see its remarks): the sum above, not any single row, is what the ceiling prices, so it
-        // is gated once here rather than per row.
-        if (dynamicInstanceCount > WorldDynamicGeometryCeilings.MaxContributedDynamicInstances) {
-            errors.Add(item: $"{dynamicInstanceCount} contributed dynamic instances (animated placements + inhabited placement bodies) exceed the {WorldDynamicGeometryCeilings.MaxContributedDynamicInstances}-instance document-global dynamic-geometry ceiling.");
         }
 
         // The derived-face SCREEN budget, refused here because it is provable from the document alone: a face whose

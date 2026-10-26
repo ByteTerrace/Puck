@@ -6,7 +6,7 @@ using Puck.World.Client;
 namespace Puck.World.Testing;
 
 internal static partial class CreationFixtures {
-    // The worst-case probe reads no live registration (WorldStampPool.EmitOne emits every reserved slot with the full
+    // The worst-case probe reads no live registration (WorldCreationInstances.EmitOne emits every reserved slot with the full
     // modifier envelope from the placement-scale ceiling alone), so one probe at scale one serves every law that
     // compares against it. Building it walks every reserved slot; it is built once per run.
     private static readonly Lazy<SdfProgram> PoolProbeAtUnitScale = new(valueFactory: static () => EmitPool(
@@ -37,13 +37,13 @@ internal static partial class CreationFixtures {
                 Motion: WorldLookMotion.Default
             )],
         });
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
             placements: [],
             creations: [creation],
             dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
+            bodyStamps: [new WorldCreationInstances.BodyStamp(
                 BodyIndex: 0,
                 Creation: creation,
                 Scale: bodyScale,

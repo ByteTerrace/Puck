@@ -45,7 +45,7 @@ public sealed class InPlaceCarryPresentationLawTests {
         StepTicks: 1UL,
         Tick: tick
     ));
-    private static float Pack(WorldClient client, WorldStampPool pool, DynamicTransform[] transforms) {
+    private static float Pack(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms) {
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: Frame);
 
@@ -119,7 +119,7 @@ public sealed class InPlaceCarryPresentationLawTests {
     });
     // A one-shape creation whose one driver reads the body's vertical speed, ungated and unfollowed; with `shaft`, in a
     // world standing a floor door under its ceiling counterpart.
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(bool shaft = false) {
+    private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage(bool shaft = false) {
         var creation = CreationFixtures.Prototype(id: "faller", document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "faller",
@@ -154,16 +154,16 @@ public sealed class InPlaceCarryPresentationLawTests {
             )],
         });
         var client = ClientFixtures.Client(definition: (shaft ? Shaft(definition: definition) : definition));
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
             creations: [creation],
             dynamics: [],
             placements: []
         );
 
-        return (client, pool, new DynamicTransform[WorldStampPool.DynamicSlotCount]);
+        return (client, pool, new DynamicTransform[pool.DynamicSlotCount]);
     }
 
     [Fact]
@@ -207,44 +207,7 @@ public sealed class InPlaceCarryPresentationLawTests {
         position.Y -= Step;
         Assert.Equal(expected: FallSpeed, actual: Fall(continuity: EntityContinuity.Continuous), tolerance: Tolerance);
     }
-    [Fact]
-    public void ABodyStraddlingASameWorldDoorIsClippedThereAndCopiedToItsCounterpart() {
-        var (client, pool, transforms) = Stage(shaft: true);
-        var doors = WorldPortalStraddle.Doors(definition: client.Definition);
 
-        Assert.Equal(expected: 2, actual: doors.Count);
-        Assert.Same(expected: doors, actual: WorldPortalStraddle.Doors(definition: client.Definition));
-
-        // Half through the floor glass: clipped above the floor and copied, clipped below the ceiling, six metres up.
-        Deliver(client: client, continuity: EntityContinuity.Continuous, position: new Vector3(x: 0.5f, y: 0.1f, z: 0f), tick: 1UL);
-        _ = Pack(client: client, pool: pool, transforms: transforms);
-
-        var clip = Assert.Single(collection: pool.SlotClips);
-        var held = pool.SlotClips;
-
-        // At rest across the glass, the next pack hands on the same list, so the dressing keeps the draws it built.
-        Deliver(client: client, continuity: EntityContinuity.Continuous, position: new Vector3(x: 0.5f, y: 0.1f, z: 0f), tick: 2UL);
-        _ = Pack(client: client, pool: pool, transforms: transforms);
-        Assert.Same(expected: held, actual: pool.SlotClips);
-
-        Assert.Equal(expected: (0, WorldStampPool.CompactSlotsPerPlacement), actual: (clip.FirstSlot, clip.SlotCount));
-        Assert.Equal(expected: new Vector4(w: 0f, x: 0f, y: 1f, z: 0f), actual: clip.Plane);
-        Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: clip.CopyPlane);
-        Assert.Equal(expected: 6.1f, actual: (Vector3.Transform(value: new Vector3(x: 0.5f, y: 0.1f, z: 0f), rotation: clip.CopyRotation) + clip.CopyTranslation).Y, tolerance: Tolerance);
-
-        // A conservative reach that spans the whole shaft clips at the glass the body stands nearest.
-        var nearCeiling = WorldPortalStraddle.Clip(center: new Vector3(x: 0f, y: 5.5f, z: 0f), doors: doors, firstSlot: 0, radius: 10f, slotCount: 1);
-
-        Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: nearCeiling!.Value.Plane);
-
-        // Clear of every glass: drawn once, unclipped.
-        Deliver(client: client, continuity: EntityContinuity.Teleport, position: new Vector3(x: 0f, y: 3f, z: 0f), tick: 3UL);
-        _ = Pack(client: client, pool: pool, transforms: transforms);
-        Assert.Empty(collection: pool.SlotClips);
-
-        // A world whose doors lead elsewhere has none to straddle.
-        Assert.Empty(collection: WorldPortalStraddle.Doors(definition: (client.Definition with { DocumentId = "elsewhere" })));
-    }
     [Fact]
     public void AChaseBoomThroughASameWorldDoorLooksBackThroughItsCounterpart() {
         var (client, _, _) = Stage(shaft: true);

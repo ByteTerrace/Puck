@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldCreationInstances stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -87,7 +87,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     private readonly WorldReplayTape m_tape = tape;
     // The creation-stamp pool, read (never stepped) by body.rig: the driver/effector state is presentation-side and
     // exists nowhere else, so this is the one door onto it.
-    private readonly WorldStampPool m_stamps = stamps;
+    private readonly WorldCreationInstances m_stamps = stamps;
     // The seat camera's pointer adapter, whose drag gate applies player.orbit and player.steer edges; a headless boot
     // registers none, having no pointer to drag.
     private readonly WorldSeatViewInput? m_viewInput = viewInput;

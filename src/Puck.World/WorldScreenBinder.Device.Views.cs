@@ -13,7 +13,7 @@ public sealed partial class WorldScreenBinder {
             screenSources: new FeedScreenSources(
                 feed: feed
             ),
-            dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
+            dynamicTransformCapacity: source.DynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(
                 captureHostFirst: CaptureHostFirst,
                 inner: source,
@@ -21,12 +21,12 @@ public sealed partial class WorldScreenBinder {
                 resolveResolution: (view, width, height) => ResolveResolution(height: height, name: name, view: view, width: width)
             ),
             height: ((uint)resolution.Height),
-            instanceCapacity: source.WorstCaseInstanceCapacity,
+            instanceCapacity: source.InstanceCapacity,
             kernels: ViewKernels(),
             name: name,
             meshLibrary: MeshLibrary,
             pipelines: m_viewPipelines!,
-            programWordCapacity: source.WorstCaseProgramWordCapacity,
+            programWordCapacity: source.ProgramWordCapacity,
             width: ((uint)resolution.Width)
         );
 

@@ -4,14 +4,14 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// A scene's mesh draws (<see cref="SdfFrame.MeshDraws"/>): its static placements' draws, fixed by each static rebuild,
-/// then its <see cref="WorldStampPool"/>'s (an animated, inhabited or attached stamp's mesh at its root this frame).
+/// then its <see cref="WorldCreationInstances"/>'s (an animated, inhabited or attached stamp's mesh at its root this frame).
 /// The local scene and a session view each compose theirs through one. The composition is recomposed only when the
 /// static list is a new one or the pool rewrote its own; either passes through alone, and both are copied into one list
 /// rewritten in place, so a moving stamp allocates nothing here.
 /// </summary>
 public sealed class WorldSceneMeshDraws {
     private readonly List<SdfMeshDraw> m_composed = [];
-    private readonly WorldStampPool m_pool;
+    private readonly WorldCreationInstances m_pool;
 
     private IReadOnlyList<SdfMeshDraw>? m_composedStatic;
     private long m_composedPoolRevision = -1L;
@@ -21,7 +21,7 @@ public sealed class WorldSceneMeshDraws {
     /// <summary>Initializes a new instance of the <see cref="WorldSceneMeshDraws"/> class.</summary>
     /// <param name="pool">The scene's stamp pool.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public WorldSceneMeshDraws(WorldStampPool pool) {
+    public WorldSceneMeshDraws(WorldCreationInstances pool) {
         ArgumentNullException.ThrowIfNull(argument: pool);
 
         m_pool = pool;

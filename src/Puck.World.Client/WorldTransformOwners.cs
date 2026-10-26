@@ -11,12 +11,12 @@ namespace Puck.World.Client;
 /// while preserving the owner's pending follower work. See <see cref="SdfMovedTransforms"/> for the table's side.
 /// </summary>
 public sealed class WorldTransformOwners {
-    private readonly Quaternion[] m_orientation;
-    private readonly Vector3[] m_position;
-    private readonly bool[] m_reseated;
-    private readonly bool[] m_resident;
-    private readonly bool[] m_restless;
-    private readonly int[] m_version;
+    private Quaternion[] m_orientation;
+    private Vector3[] m_position;
+    private bool[] m_reseated;
+    private bool[] m_resident;
+    private bool[] m_restless;
+    private int[] m_version;
 
     /// <summary>Initializes a new instance of the <see cref="WorldTransformOwners"/> class.</summary>
     /// <param name="capacity">The number of owners the band holds.</param>
@@ -29,6 +29,17 @@ public sealed class WorldTransformOwners {
         m_resident = new bool[capacity];
         m_restless = new bool[capacity];
         m_version = new int[capacity];
+    }
+
+    /// <summary>Grows the owner state to the live instance count, preserving resting owners.</summary>
+    public void EnsureCapacity(int capacity) {
+        if (capacity <= m_position.Length) { return; }
+        Array.Resize(ref m_orientation, capacity);
+        Array.Resize(ref m_position, capacity);
+        Array.Resize(ref m_reseated, capacity);
+        Array.Resize(ref m_resident, capacity);
+        Array.Resize(ref m_restless, capacity);
+        Array.Resize(ref m_version, capacity);
     }
 
     /// <summary>Decides whether an owner repacks this frame, and records the inputs it is packed from.</summary>
@@ -104,11 +115,12 @@ public sealed class WorldTransformOwners {
     /// <param name="scale">The look's uniform render scale.</param>
     /// <param name="reseat">Whether the body's slots changed owner (<see cref="Reseats"/>).</param>
     /// <returns><see langword="true"/> when the pack moved any of the body's slots.</returns>
-    public static bool PackBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootOrientation, float gaitPhase, int rig, float scale, bool reseat) {
+    /// <param name="firstSlot">The scene's dense packed slot offset, or null for catalog-local slots.</param>
+    public static bool PackBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootOrientation, float gaitPhase, int rig, float scale, bool reseat, int? firstSlot = null) {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var (first, count) = WorldRigCatalog.BodySlots(avatar: avatar);
-        var start = (catalogBase + first);
+        var start = catalogBase + (firstSlot ?? first);
         Span<DynamicTransform> previous = stackalloc DynamicTransform[count];
 
         table.Slice(
@@ -116,15 +128,15 @@ public sealed class WorldTransformOwners {
             start: start
         ).CopyTo(destination: previous);
         WorldRigCatalog.PackTransforms(
-            avatar: avatar,
+            avatar: firstSlot is null ? avatar : 0,
             gaitPhase: gaitPhase,
             rig: rig,
             rootOrientation: rootOrientation,
             rootPosition: rootPosition,
             scale: scale,
             transforms: table.Slice(
-                length: WorldRigCatalog.DynamicTransformCapacity,
-                start: catalogBase
+                length: firstSlot is null ? WorldRigCatalog.DynamicTransformCapacity : count,
+                start: firstSlot is null ? catalogBase : start
             )
         );
 

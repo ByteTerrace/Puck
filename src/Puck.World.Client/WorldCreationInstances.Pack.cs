@@ -6,17 +6,17 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldStampPool {
-    private readonly WorldTransformOwners m_owners = new(capacity: RegistrationCount);
+public sealed partial class WorldCreationInstances {
+    private readonly WorldTransformOwners m_owners = new(capacity: 0);
     // The registration each pool entry was last packed for: a swapped registration repacks and parks its unused slots.
-    private readonly Registration?[] m_packedRegistrations = new Registration?[RegistrationCount];
+    private Registration?[] m_packedRegistrations = [];
     // A registration's slots as they stood before its repack, which the moved set compares the repack against.
-    private readonly DynamicTransform[] m_previousSlots = new DynamicTransform[SlotsPerPlacement];
+    private DynamicTransform[] m_previousSlots = [];
     // Each pool entry's mesh draw as the last pack posed it (null for none), and the one list they compose, rewritten
     // in place under a new revision only in a pack that changed an entry: a pool at rest hands the engine what it already
     // packed, and a moving one allocates nothing once the list has grown to its stamps.
-    private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[RegistrationCount];
-    private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: RegistrationCount);
+    private SdfMeshDraw?[] m_meshDraws = [];
+    private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: 0);
     private WorldPickTarget?[] m_pickMeshTargets = [];
 
     /// <summary>Gets the immutable mesh identities in draw order, replaced only when membership changes.</summary>
@@ -41,7 +41,7 @@ public sealed partial class WorldStampPool {
     // Each packed run's body, beside m_slotClipRun, for the line a changed run list logs.
     private readonly List<int> m_slotClipBodies = [];
     // The spheres holding the registration being tested against the doors, one a shape (PartSpheres).
-    private readonly Vector4[] m_partSpheres = new Vector4[WorldPlacementPolicy.MaxAnimatedStampShapes];
+    private Vector4[] m_partSpheres = [];
 
     // Whether this pack found exactly the runs the held list names, in order.
     private static bool SameRuns(IReadOnlyList<SdfSlotClip> held, List<SdfSlotClip> packed) {
@@ -92,7 +92,7 @@ public sealed partial class WorldStampPool {
 
         for (var index = 0; (index < shapeCount); index++) {
             if (reaches[index] >= 0f) {
-                m_partSpheres[count++] = new Vector4(value: transforms[((rootSlot + 1) + index)].Position, w: (reaches[index] * placementScale));
+                m_partSpheres[count++] = new Vector4(value: live.ShapeTransforms[index].Position, w: (reaches[index] * placementScale));
             }
         }
 
@@ -178,12 +178,11 @@ public sealed partial class WorldStampPool {
                 live: live
             );
             var document = live.Creation.EngineDocument;
-            var shapeCount = Math.Min(
-                val1: (document.Shapes?.Count ?? 0),
-                val2: WorldPlacementPolicy.MaxAnimatedStampShapes
-            );
+            var shapeCount = (document.Shapes?.Count ?? 0);
+            if (m_partSpheres.Length < shapeCount) { Array.Resize(ref m_partSpheres, shapeCount); }
+            if (m_previousSlots.Length < live.Slots) { Array.Resize(ref m_previousSlots, live.Slots); }
             // The root, the shapes, and the slot text baked apart rides (TextApart).
-            var packedSlots = (TextApart(document: document) ? (TextSlot(shapeCount: shapeCount) + 1) : (1 + shapeCount));
+            var packedSlots = live.Slots;
 
             if (
                 !moved.Everything &&
@@ -224,7 +223,7 @@ public sealed partial class WorldStampPool {
                 ).CopyTo(destination: previous);
 
                 // A body's pose holds between its rated packs, except on the frame its slots change owner or the whole
-                // table is owed (WorldStampPool.Rates).
+                // table is owed (WorldCreationInstances.Rates).
                 if (
                     (live.BodyIndex is not null) &&
                     packedBefore &&
@@ -258,8 +257,8 @@ public sealed partial class WorldStampPool {
                         shapeCount: shapeCount,
                         transforms: transforms
                     );
-                    if (packedSlots > (1 + shapeCount)) {
-                        transforms[(rootSlot + TextSlot(shapeCount: shapeCount))] = transforms[rootSlot];
+                    if (TextApart(document)) {
+                        transforms[rootSlot + live.Motion.SlotCount] = transforms[rootSlot];
                     }
                     if (live.BodyIndex is not null) {
                         m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
@@ -283,6 +282,7 @@ public sealed partial class WorldStampPool {
 
             NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: (ReachOf(live: live) * placementScale), rootSlot: rootSlot);
             AppendVolumes(
+                live: live,
                 document: document,
                 hidden: live.Hidden,
                 placementScale: placementScale,
@@ -330,6 +330,7 @@ public sealed partial class WorldStampPool {
             );
         }
 
+        Rigid.Pack(transforms, client, slotBase + ArticulatedSlotCount, deltaSeconds);
         EndRateCodes();
 
         // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
@@ -461,7 +462,7 @@ public sealed partial class WorldStampPool {
     }
     // Packs one live registration's root and shape slots, stepping its root follower by rootDeltaSeconds, this frame's,
     // and its drivers, effectors and part followers by deltaSeconds, which spans every frame since the registration's
-    // last full pack (a held pose's frames included, WorldStampPool.Rates).
+    // last full pack (a held pose's frames included, WorldCreationInstances.Rates).
     private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, float rootDeltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
@@ -502,7 +503,7 @@ public sealed partial class WorldStampPool {
                 live.RootEpoch = epoch;
                 live.RootAddress = address;
 
-                for (var shapeSlot = 0; (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes); shapeSlot++) {
+                for (var shapeSlot = 0; (shapeSlot < live.PartFollower.Length); shapeSlot++) {
                     live.PartFollower[shapeSlot].Reseed();
                 }
 
@@ -640,7 +641,7 @@ public sealed partial class WorldStampPool {
         }
 
         for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
-            var slot = ((rootSlot + 1) + shapeIndex);
+
             var shape = shapes[shapeIndex];
 
             // A domain-bearing shape's own slot carries the rigid delta its parent chain imparts to creation space
@@ -652,7 +653,7 @@ public sealed partial class WorldStampPool {
             // like every other shape's, so it takes the placement scale here — the same product the ordinary path
             // folds into `position * placementScale` below.
             if (shape.Domain is { Count: > 0 }) {
-                transforms[slot] = new DynamicTransform(
+                live.ShapeTransforms[shapeIndex] = new DynamicTransform(
                     Lanes: lanes,
                     Orientation: Quaternion.Normalize(value: (rootRotation * live.PartDeltaRotation[shapeIndex])),
                     Position: (rootPosition + Vector3.Transform(
@@ -690,11 +691,22 @@ public sealed partial class WorldStampPool {
                 );
             }
 
-            transforms[slot] = new DynamicTransform(
+            live.ShapeTransforms[shapeIndex] = new DynamicTransform(
                 Lanes: lanes,
                 Orientation: Quaternion.Normalize(value: (rootRotation * rotation)),
                 Position: worldPosition
             );
         }
+        for (var owner = 0; owner < live.Motion.Owners.Length; owner++) {
+            var shapeIndex = live.Motion.Owners[owner];
+            var shape = shapes[shapeIndex];
+            var posed = live.ShapeTransforms[shapeIndex];
+            if (shape.Domain is { Count: > 0 }) { transforms[rootSlot + owner + 1] = posed; continue; }
+            var turn = Quaternion.Normalize(posed.Orientation * Quaternion.Inverse(shape.Rotation.Value));
+            transforms[rootSlot + owner + 1] = new DynamicTransform(
+                Position: posed.Position - Vector3.Transform(shape.Position.Value * placementScale, turn),
+                Orientation: turn, Lanes: lanes);
+        }
+
     }
 }

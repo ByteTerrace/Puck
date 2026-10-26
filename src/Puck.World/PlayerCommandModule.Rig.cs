@@ -8,7 +8,7 @@ namespace Puck.World;
 
 /// <content>
 /// <c>body.rig</c> — the read-back for a body-rooted creation look's live animation state. Everything it echoes is
-/// presentation-side and lives only on <see cref="WorldStampPool"/>, so this reads the pool directly rather than
+/// presentation-side and lives only on <see cref="WorldCreationInstances"/>, so this reads the pool directly rather than
 /// routing a query: there is no server-side answer to route to, and a routed one would have to invent the values.
 /// </content>
 internal sealed partial class PlayerCommandModule {

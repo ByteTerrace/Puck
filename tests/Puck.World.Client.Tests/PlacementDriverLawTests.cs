@@ -132,7 +132,7 @@ public sealed class PlacementDriverLawTests {
                 [placement]
             )
         );
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
             bodyStamps: [],
@@ -142,7 +142,7 @@ public sealed class PlacementDriverLawTests {
         );
         var definition = CreationDomainParentLawTests.Definition(creation);
         var client = ClientFixtures.Client(definition: definition);
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(
             client: client,

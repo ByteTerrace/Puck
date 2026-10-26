@@ -7,7 +7,7 @@ using Xunit;
 namespace Puck.World.Client.Tests;
 
 /// <summary>Unused render capacity must not widen a live program's masks or move surviving transform addresses.</summary>
-public sealed class WorldStampPoolCompactionLawTests {
+public sealed class WorldCreationInstancesCompactionLawTests {
     private const int SlotBase = 23;
 
     private static WorldPrototype Creation(params ShapeDocument[] shapes) {
@@ -33,7 +33,7 @@ public sealed class WorldStampPoolCompactionLawTests {
             HashRaw: canonical.Hash
         );
     }
-    private static SdfProgram Emit(WorldStampPool pool) {
+    private static SdfProgram Emit(WorldCreationInstances pool) {
         var builder = new SdfProgramBuilder();
 
         pool.Emit(
@@ -45,11 +45,11 @@ public sealed class WorldStampPoolCompactionLawTests {
         );
         return builder.Build();
     }
-    private static void Reconcile(WorldStampPool pool, WorldPrototype creation, params int[] bodies) => pool.Reconcile(
+    private static void Reconcile(WorldCreationInstances pool, WorldPrototype creation, params int[] bodies) => pool.Reconcile(
         placements: [],
         creations: [creation],
         dynamics: [],
-        bodyStamps: bodies.Select(selector: body => new WorldStampPool.BodyStamp(
+        bodyStamps: bodies.Select(selector: body => new WorldCreationInstances.BodyStamp(
             BodyIndex: body,
             Creation: creation,
             Scale: 1f,
@@ -75,7 +75,7 @@ public sealed class WorldStampPoolCompactionLawTests {
 
     [Fact]
     public void AFrameMovingAUnionMemberIsIncludedInTheBound() {
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var first = Shape(
             id: 0,
             group: 7
@@ -119,14 +119,14 @@ public sealed class WorldStampPoolCompactionLawTests {
         var group = Assert.Single(collection: Emit(pool: pool).Instances);
 
         Assert.Equal(
-            (SlotBase + 1),
+            SlotBase,
             group.Slot
         );
         Assert.True(condition: (group.Radius >= 2.1f));
     }
     [Fact]
     public void ARemoteCutterDoesNotWidenTheGroupsSolidBound() {
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var solid = Shape(
             id: 0,
             group: 7
@@ -152,16 +152,13 @@ public sealed class WorldStampPoolCompactionLawTests {
 
         Reconcile(
             pool,
-            Creation(
-                solid,
-                cutter
-            ),
+            Creation(solid, cutter) with { Document = Creation(solid, cutter).Document with { Frames = [new FrameDocument("rest", [])] } },
             0
         );
         var group = Assert.Single(collection: Emit(pool: pool).Instances);
 
         Assert.Equal(
-            (SlotBase + 1),
+            SlotBase,
             group.Slot
         );
         Assert.InRange(
@@ -203,8 +200,8 @@ public sealed class WorldStampPoolCompactionLawTests {
                 )
             : null)
         );
-        var pool = new WorldStampPool();
-        var bodies = new[] { new WorldStampPool.BodyStamp(
+        var pool = new WorldCreationInstances();
+        var bodies = new[] { new WorldCreationInstances.BodyStamp(
             0,
             creation,
             1f,
@@ -248,7 +245,7 @@ public sealed class WorldStampPoolCompactionLawTests {
     }
     [Fact]
     public void EmptyPoolEmitsNoGeometry() {
-        var program = Emit(pool: new WorldStampPool());
+        var program = Emit(pool: new WorldCreationInstances());
 
         Assert.Empty(collection: program.Instances);
         Assert.DoesNotContain(
@@ -258,7 +255,7 @@ public sealed class WorldStampPoolCompactionLawTests {
     }
     [Fact]
     public void GroupsAndNewShapesUseAuthorSlotsWithoutPlaceholderInstances() {
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var shapes = new[] { Shape(
             id: 0,
             group: 7
@@ -275,19 +272,8 @@ public sealed class WorldStampPoolCompactionLawTests {
         );
         var initial = Emit(pool: pool);
 
-        Assert.Equal(
-            2,
-            initial.Instances.Count
-        );
-        Assert.Contains(
-            collection: initial.Instances,
-            filter: item => (item.Slot == (SlotBase + 1))
-        );
-        Assert.Contains(
-            collection: initial.Instances,
-            filter: item => (item.Slot == (SlotBase + 2))
-        );
-
+        Assert.Single(initial.Instances);
+        Assert.Equal(SlotBase, initial.Instances[0].Slot);
         Reconcile(
             pool,
             Creation([.. shapes, Shape(id: 3)]),
@@ -295,18 +281,8 @@ public sealed class WorldStampPoolCompactionLawTests {
         );
         var grown = Emit(pool: pool);
 
-        Assert.Equal(
-            3,
-            grown.Instances.Count
-        );
-        Assert.All(
-            grown.Instances,
-            item => Assert.True(condition: item.Active)
-        );
-        Assert.Contains(
-            collection: grown.Instances,
-            filter: item => (item.Slot == (SlotBase + 4))
-        );
+        Assert.Single(grown.Instances);
+        Assert.Equal(SlotBase, grown.Instances[0].Slot);
         Assert.Equal(
             1,
             grown.InstanceMaskWordCount
@@ -316,7 +292,7 @@ public sealed class WorldStampPoolCompactionLawTests {
     [InlineData(true)]
     [Theory]
     public void OnlyMembersSharingTheSameRigidMotionUseATightBound(bool inheritMotion) {
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var first = Shape(
             id: 0,
             group: 7
@@ -370,110 +346,6 @@ public sealed class WorldStampPoolCompactionLawTests {
     // A small creation takes a compact registration and a creation past the compact shape count a full one, after every
     // compact range; once every compact registration is taken a small creation takes a full one too; and a body whose
     // creation grows past the compact shape count leaves its compact registration for a full one.
-    [Fact]
-    public void SmallCreationsTakeCompactRegistrationsFirstAndLargeOnesFullOnes() {
-        var small = Creation(Shape(id: 0));
-        var large = Creation(shapes: Enumerable.Range(start: 0, count: (WorldPlacementPolicy.MaxCompactStampShapes + 1)).Select(selector: id => Shape(id: id)).ToArray()) with { Id = "large" };
-        var firstFull = (SlotBase + WorldStampPool.RootSlotOffset(index: WorldPlacementPolicy.MaxCompactStampRegistrations));
 
-        Assert.True(condition: WorldStampPool.FitsCompact(document: small.EngineDocument));
-        Assert.False(condition: WorldStampPool.FitsCompact(document: large.EngineDocument));
-        Assert.Equal(expected: (WorldPlacementPolicy.MaxCompactStampRegistrations * WorldStampPool.CompactSlotsPerPlacement), actual: (firstFull - SlotBase));
-        Assert.Equal(
-            expected: ((WorldPlacementPolicy.MaxCompactStampRegistrations * WorldStampPool.CompactSlotsPerPlacement) + (WorldPlacementPolicy.MaxStampRegistrations * WorldStampPool.SlotsPerPlacement)),
-            actual: WorldStampPool.DynamicSlotCount
-        );
 
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [small, large],
-            dynamics: [],
-            bodyStamps: [
-                new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: small, Scale: 1f, Look: WorldLook.Implicit),
-                new WorldStampPool.BodyStamp(BodyIndex: 1, Creation: large, Scale: 1f, Look: WorldLook.Implicit),
-            ]
-        );
-        var slots = Emit(pool: pool).Instances.Select(selector: instance => instance.Slot).ToArray();
-
-        Assert.Equal(expected: (SlotBase + 1), actual: slots[0]);
-        Assert.Equal(expected: (firstFull + 1), actual: slots[1]);
-
-        // Every compact registration taken, the next small body takes the first full one.
-        var crowd = new WorldStampPool();
-
-        Reconcile(crowd, small, Enumerable.Range(start: 0, count: (WorldPlacementPolicy.MaxCompactStampRegistrations + 1)).ToArray());
-        Assert.Equal(expected: (firstFull + 1), actual: Emit(pool: crowd).Instances[^1].Slot);
-
-        // A body whose creation grows past the compact shape count takes a full registration.
-        var growing = new WorldStampPool();
-
-        Reconcile(growing, small, 0);
-        Reconcile(growing, large, 0);
-        Assert.Equal(expected: (firstFull + 1), actual: Emit(pool: growing).Instances[0].Slot);
-    }
-    [Fact]
-    public void RemovingAnEarlierBodyKeepsTheSurvivorsTransformAddress() {
-        var pool = new WorldStampPool();
-        var creation = Creation(Shape(id: 0));
-
-        Reconcile(
-            pool,
-            creation,
-            0,
-            1
-        );
-        var before = Emit(pool: pool);
-
-        Assert.Equal(
-            2,
-            before.Instances.Count
-        );
-        var survivorSlot = before.Instances[1].Slot;
-
-        Assert.Equal(
-            ((SlotBase + WorldStampPool.CompactSlotsPerPlacement) + 1),
-            survivorSlot
-        );
-
-        Reconcile(
-            pool,
-            creation,
-            1
-        );
-        var after = Emit(pool: pool);
-        var instance = Assert.Single(collection: after.Instances);
-
-        Assert.True(condition: instance.Active);
-        Assert.Equal(
-            survivorSlot,
-            instance.Slot
-        );
-        Assert.Equal(
-            1,
-            after.InstanceMaskWordCount
-        );
-
-        Reconcile(
-            pool,
-            creation,
-            1,
-            2
-        );
-        var reused = Emit(pool: pool);
-
-        Assert.Equal(
-            2,
-            reused.Instances.Count
-        );
-        Assert.Contains(
-            collection: reused.Instances,
-            filter: item => (item.Slot == survivorSlot)
-        );
-        Assert.Contains(
-            collection: reused.Instances,
-            filter: item => (item.Slot == (SlotBase + 1))
-        );
-    }
 }

@@ -6,10 +6,10 @@ namespace Puck.World;
 
 /// <summary>
 /// <c>view.reseed</c>: restarts a body's presentation-only animation as for a new occupant
-/// (<see cref="WorldStampPool.Reseed"/>), so a scripted motion repeated from one reset pose looks the same.
+/// (<see cref="WorldCreationInstances.Reseed"/>), so a scripted motion repeated from one reset pose looks the same.
 /// </summary>
 /// <param name="stamps">The stamp pool whose body registrations the verb restarts.</param>
-public sealed class WorldReseedCommandModule(WorldStampPool stamps) : ICommandModule {
+public sealed class WorldReseedCommandModule(WorldCreationInstances stamps) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(

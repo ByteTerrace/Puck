@@ -94,7 +94,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline? m_brickBakePipeline;
     // The host-baked brick path: a region staging one brick at a time into the brick pool, its external destination,
     // and a queue of pending uploads drained one per upload (RecordBrickUpload). Null without a brick pool.
-    private readonly GpuRegion? m_brickRegion;
+    private GpuRegion? m_brickRegion;
 
     private readonly Queue<(int Slot, int Count, float[] Voxels)> m_brickUploads = new();
 
@@ -104,7 +104,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and the mesh bake samples.
     // Always allocated (a 1-float filler when the pool is disabled), always bound, since the mesh bake compiles the
     // sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
-    private readonly IGpuBuffer m_brickPoolBuffer;
+    private IGpuBuffer m_brickPoolBuffer;
     private readonly bool m_brickPoolEnabled;
     private readonly int m_brickPoolVoxelCapacity;
     private readonly IGpuBindings m_bindings;
@@ -114,7 +114,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_dummyBuffer;
     private readonly IGpuImage m_storageFiller;
     private readonly IGpuImage m_sampledFiller;
-    private readonly int m_dynamicTransformCapacity;
+    private int m_dynamicTransformCapacity;
     private readonly GpuDeviceServices m_gpu;
 
     private int m_instanceCapacity;
@@ -275,7 +275,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         );
         m_brickPoolVoxelCapacity = Math.Max(
             val1: 0,
-            val2: options.BrickPoolVoxelCapacity
+            val2: Math.Min(options.BrickPoolVoxelCapacity, (int)Math.Min(int.MaxValue, Math.Max(SdfBrickPoolLayout.VoxelsPerBrick, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))
         );
         m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
 
@@ -383,10 +383,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         // (only RequestBrickBake stays rejected without a pool).
         m_brickPoolBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "brick-pool"),
-            sizeBytes: checked((((ulong)Math.Max(
-                val1: 1,
-                val2: m_brickPoolVoxelCapacity
-            )) * sizeof(float))),
+            sizeBytes: sizeof(float),
             usage: GpuBufferUsage.Storage
         ));
         // The carve-bake baker and the host-baked brick staging run only when the pool is enabled (nothing bakes into a
@@ -395,23 +392,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             ? pipelines.OptionalPipeline(kernel: SdfKernel.BrickBake)
             : null
         );
-        m_brickRegion = (m_brickPoolEnabled
-            ? scope.Own(created: new GpuRegion(
-                bindings: gpu.Bindings,
-                buffers: gpu.BufferFactory,
-                byteCount: (Math.Min(
-                    val1: SdfBrickPoolLayout.VoxelsPerBrick,
-                    val2: m_brickPoolVoxelCapacity
-                ) * sizeof(float)),
-                copyPipeline: m_regionCopyPipeline,
-                copySets: m_regionCopyPool.Region(index: BrickStagingRegionIndex),
-                destination: m_brickPoolBuffer,
-                name: RegionName(region: BrickStagingRegionIndex),
-                recorder: gpu.Recorder,
-                slotCount: FrameRingSize
-            ))
-            : null
-        );
+        m_brickRegion = null;
 
         // The tables' pool: the World set per ring slot, and with a brick pool the frame set the baker shares and one bake
         // set per brick slot. The sets allocated from the pool are released with it.

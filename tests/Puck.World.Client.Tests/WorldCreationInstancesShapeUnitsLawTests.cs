@@ -12,7 +12,7 @@ namespace Puck.World.Client.Tests;
 /// <c>Scale(transform.Scale)</c> chain — a look at scale 2 emits the same shape lanes as the creation authored at
 /// twice its scale with twice its radius at scale 1, and a look at scale 1 emits the authored radius verbatim.
 /// </summary>
-public sealed class WorldStampPoolShapeUnitsLawTests {
+public sealed class WorldCreationInstancesShapeUnitsLawTests {
     private const string PrototypeId = "radii";
 
     private static SdfProgram Program(IReadOnlyList<ShapeDocument> shapes, float bodyScale) => CreationFixtures.EmitPool(

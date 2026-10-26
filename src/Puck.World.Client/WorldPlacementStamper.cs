@@ -12,7 +12,7 @@ namespace Puck.World.Client;
 /// Emits the world's STATIC placements into the program under construction — each materialized pattern or reflected
 /// copy is a static <see cref="SdfProgramBuilder.BeginInstance"/> whose shapes replay the referenced creation's shape
 /// list with the full placement transform baked into every shape's own segment. Animated placements (framed creations)
-/// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool. A prototype's inline mesh
+/// are NOT emitted here — they ride <see cref="WorldCreationInstances"/>'s reserved dynamic pool. A prototype's inline mesh
 /// (<see cref="WorldPrototype.Mesh"/>) becomes one <see cref="SdfMeshDraw"/> per static placement instance.
 /// </summary>
 /// <remarks>Text runs share the same instance and transform as their creation and resolve through the world's packed
@@ -87,7 +87,8 @@ public static class WorldPlacementStamper {
     /// <param name="pool">A pooled placement's root dynamic slot and placement scale, which parented paints ride; <see langword="null"/> for a
     /// static placement.</param>
     /// <param name="hidden">The shapes the isolation hides, whose parented paints are dropped, or <see langword="null"/>.</param>
-    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null) {
+    /// <param name="motion">The actual shape-to-motion-owner slot mapping.</param>
+    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null, CreationMotionPlan? motion = null) {
         var ids = new int[PaletteLength(document: document)];
 
         FillPalette(
@@ -95,6 +96,7 @@ public static class WorldPlacementStamper {
             colors: colors,
             document: document,
             hidden: hidden,
+            motion: motion,
             ids: ids,
             pool: pool,
             tint: tint
@@ -112,7 +114,7 @@ public static class WorldPlacementStamper {
             val2: 1
         );
     // Registers a creation's palette into ids, which holds PaletteLength(document) entries.
-    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null) {
+    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null, CreationMotionPlan? motion = null) {
         var resolveLayerColor = colors.LayerColor;
         var palette = (document.Palette ?? []);
         var count = Math.Min(
@@ -156,7 +158,7 @@ public static class WorldPlacementStamper {
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor, scale: (pool?.Scale ?? 1f)),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
-                Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool),
+                Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion),
                 EmissiveLane: entry?.EmissiveLane,
                 Glass: entry?.Glass?.ToGlass(scale: (pool?.Scale ?? 1f))
             ));
@@ -167,7 +169,7 @@ public static class WorldPlacementStamper {
     // scales it by the placement; a static placement shares one palette across its placements and has no slot, so it
     // draws only the paints that ride the winning frame, as authored. A paint parented to a shape the isolation hides
     // goes with it.
-    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool, bool[]? hidden) {
+    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool, bool[]? hidden, CreationMotionPlan? motion) {
         if (entry?.Paints is not { Count: > 0 } paints) {
             return null;
         }
@@ -194,11 +196,32 @@ public static class WorldPlacementStamper {
             if ((hidden is not null) && hidden[shapeIndex]) {
                 continue;
             }
-            resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: ((frames.RootSlot + 1) + shapeIndex)));
+            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0));
+            var shape = shapes[shapeIndex];
+            resolved.Add(authored with {
+                Origin = shape.Position.Value * frames.Scale + Vector3.Transform(authored.Origin, shape.Rotation.Value),
+                Rotation = Quaternion.Normalize(shape.Rotation.Value * authored.Rotation)
+            });
         }
 
         return [.. resolved];
     }
+    // Material layers authored in the old winning shape frame are composed into its motion owner's frame.
+    internal static int MaterialForShape(SdfProgramBuilder builder, int material, ShapeDocument shape, float scale, bool rigid = false) {
+        var source = builder.MaterialAt(material);
+        if (source.Inset is null && source.Paints is not { Count: > 0 }) { return material; }
+        var rotation = shape.Rotation.Value;
+        var origin = shape.Position.Value * scale;
+        var inset = source.Inset is { } layer ? layer with {
+            Origin = origin + Vector3.Transform(layer.Origin, rotation),
+            Rotation = Quaternion.Normalize(rotation * layer.Rotation)
+        } : null;
+        var paints = source.Paints?.Select(paint => paint.Slot == SdfPaint.WinningFrame ? paint with {
+            Origin = origin + Vector3.Transform(paint.Origin, rotation), Rotation = Quaternion.Normalize(rotation * paint.Rotation)
+        } : rigid ? paint with { Slot = SdfPaint.WinningFrame } : paint).ToArray();
+        return builder.AddMaterial(source with { Inset = inset, Paints = paints });
+    }
+
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
     // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
@@ -217,7 +240,7 @@ public static class WorldPlacementStamper {
                 continue;
             }
             if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                return;
+                throw new InvalidOperationException($"Creation '{creation.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
             }
 
             var frameOrigin = origin;
@@ -479,7 +502,7 @@ public static class WorldPlacementStamper {
     }
 
     // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke, about
-    // a tenth of its em. A text instance declares it (SdfInstanceRange.Detail), static here or pooled (WorldStampPool).
+    // a tenth of its em. A text instance declares it (SdfInstanceRange.Detail), static here or pooled (WorldCreationInstances).
     internal static float TextDetail(CreationDocument creation, float scale) {
         var detail = float.PositiveInfinity;
 
@@ -784,115 +807,6 @@ public static class WorldPlacementStamper {
         }
     }
 
-    /// <summary>Emits the construction probe's placement reservation: <paramref name="reservedCount"/> worst-case
-    /// stamps — each a distinct full 16-slot palette plus <see cref="WorldPlacementPolicy.MaxShapesPerStamp"/> shapes
-    /// carrying the densest legal per-shape chain — so any real
-    /// static emission within the placement policy fits the once-sized buffers by construction. Never rendered.</summary>
-    /// <param name="builder">The program builder.</param>
-    /// <param name="reservedCount">The reserved SCOPED stamp count (scoped/text-carrying boot placements + the
-    /// authoring headroom).</param>
-    /// <param name="reservedShapeInstances">The reserved per-SHAPE instance count (scope-free boot placements'
-    /// copies × <see cref="CreationStampEmitter.PerCopyInstanceCount"/> — a panelled shape charges two chains for its
-    /// one instance — plus MaxShapesPerStamp for each authoring-headroom copy; see <see cref="StaticStampReservation"/>).</param>
-    public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int reservedShapeInstances = 0) {
-        builder.ReservePathTables(shapeCount: checked(((reservedCount * WorldPlacementPolicy.MaxShapesPerStamp) + reservedShapeInstances)));
-        for (var index = 0; (index < reservedCount); index++) {
-            // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
-            // (the per-id cache only relaxes this; probing as if every stamp were unique is the conservative bound).
-            var paletteIds = new int[CreationDocument.PaletteSize];
-
-            for (var slot = 0; (slot < CreationDocument.PaletteSize); slot++) {
-                paletteIds[slot] = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
-            }
-
-            var center = new Vector3(
-                x: (index * ProbeSpread),
-                y: 4f,
-                z: 0f
-            );
-
-            _ = builder.BeginInstance(
-                boundCenter: center,
-                boundRadius: 12f
-            );
-
-            // Each shape charge reserves the chain a text-carrying, scope-free creation's shape emits with its own
-            // field scope (CreationStampEmitter.EmitShapeChain: a dilate/onion/warp/cells shape, or a panelled shape
-            // whose two charges together cover its plate chain, copy chain, and shape pair).
-            for (var shape = 0; (shape < WorldPlacementPolicy.MaxShapesPerStamp); shape++) {
-                _ = SdfSolidGeometry.AppendPrimitive(
-                    chain: builder.ResetPoint()
-                        .Translate(offset: center)
-                        .Rotate(rotation: Quaternion.Identity)
-                        .Scale(scale: Vector3.One)
-                        .Translate(offset: Vector3.Zero)
-                        .Rotate(rotation: Quaternion.Identity)
-                        .PushField(compose: SdfBlendOp.Union)
-                        .Scale(scale: Vector3.One),
-                    type: SdfSolidPrimitive.Sphere,
-                    material: paletteIds[(shape % CreationDocument.PaletteSize)]
-                ).ResetPoint().Translate(offset: center).Rotate(rotation: Quaternion.Identity)
-                    .CellDisplace(
-                    amplitude: 0.1f,
-                    frequency: 1f,
-                    mode: SdfCellMode.F1,
-                    randomness: 0.2f,
-                    seed: 0u
-                ).PopField();
-            }
-
-            _ = builder.EndInstance();
-        }
-
-        // The PER-SHAPE reservation: one instance per shape of every scope-free static stamp, each a single
-        // full-modifier chain (the domain envelope mirrors ShapeDomainOps.ProbeWorstCase — every domain kind costs one
-        // instruction, so four symmetries dominate any authored combination). Spread like the stamps so segment
-        // merging can never under-reserve the directory.
-        for (var index = 0; (index < reservedShapeInstances); index++) {
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
-            var center = new Vector3(
-                x: (index * ProbeSpread),
-                y: -4f,
-                z: ProbeSpread
-            );
-
-            _ = builder.BeginInstance(
-                boundCenter: center,
-                boundRadius: 12f
-            );
-
-            var chain = builder
-                .ResetPoint()
-                .Translate(offset: center)
-                .Rotate(rotation: Quaternion.Identity)
-                .Scale(scale: Vector3.One);
-
-            for (var op = 0; (op < ShapeDocument.MaxDomainOps); op++) {
-                chain = chain.SymmetryPlane(normal: Vector3.UnitX);
-            }
-
-            // The per-shape field scope a dilate/onion/warp/cells shape opens around itself
-            // (CreationStampEmitter.EmitShapeChain), with the cells relief it may carry, reserved for every shape since
-            // any shape may author one.
-            _ = SdfSolidGeometry.AppendPrimitive(
-                chain: chain
-                    .Translate(offset: Vector3.Zero)
-                    .Rotate(rotation: Quaternion.Identity)
-                    .PushField(compose: SdfBlendOp.Union),
-                type: SdfSolidPrimitive.Sphere,
-                material: material
-            ).ResetPoint().Translate(offset: center).Rotate(rotation: Quaternion.Identity)
-                .CellDisplace(
-                amplitude: 0.1f,
-                frequency: 1f,
-                mode: SdfCellMode.F1,
-                randomness: 0.2f,
-                seed: 0u
-            ).PopField();
-            _ = builder.EndInstance();
-        }
-    }
-
     // Registers the palette of a responding row's authored creation and of each response entry's, in that order.
     private static void RegisterAlternatives(SdfProgramBuilder builder, WorldBakedColors colors, IReadOnlyList<WorldPrototype> creations, WorldPlacement placement, WorldStaticPalettes registered, IReadOnlyList<WorldPlacementResponse> responses) {
         for (var index = -1; (index < responses.Count); index++) {
@@ -989,7 +903,10 @@ public static class WorldPlacementStamper {
             if (retain && registered.Emissions.TryGetValue(key: placement, value: out var held) && (held.Key == key) && builder.CanAppendEmission(emission: held.Program)) {
                 builder.AppendEmission(emission: held.Program);
                 foreach (var volume in held.Volumes) {
-                    if ((volumes is not null) && (volumes.Count < SdfProgramBuilder.MaxVolumes)) { volumes.Add(item: volume); }
+                    if (volumes is not null) {
+                        if (volumes.Count >= SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"A world frame holds at most {SdfProgramBuilder.MaxVolumes} bounded volumes."); }
+                        volumes.Add(item: volume);
+                    }
                 }
                 foreach (var draw in held.Draws) { meshDraws?.Add(item: draw); }
             } else {
@@ -1020,7 +937,10 @@ public static class WorldPlacementStamper {
                     hidden: hidden
                 );
                 foreach (var volume in (emittedVolumes ?? [])) {
-                    if ((volumes is not null) && (volumes.Count < SdfProgramBuilder.MaxVolumes)) { volumes.Add(item: volume); }
+                    if (volumes is not null) {
+                        if (volumes.Count >= SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"A world frame holds at most {SdfProgramBuilder.MaxVolumes} bounded volumes."); }
+                        volumes.Add(item: volume);
+                    }
                 }
                 if (emittedDraws is not null) {
                     foreach (var draw in emittedDraws) { meshDraws!.Add(item: draw); }

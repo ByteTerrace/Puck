@@ -424,7 +424,7 @@ aside while the picture is framed.
 creation look holds the look's `pose` frame, the screen's own slab is not drawn
 (`WorldStaticSceneEmit` declares the surface alone, `SdfProgramBuilder.ScreenSurface`),
 the look's named ungrouped box is emitted in the screen's material
-(`WorldStampPool.CarriedScreenMaterials`), the screen's surface rides the box's
+(`WorldCreationInstances.CarriedScreenMaterials`), the screen's surface rides the box's
 front face (author `-Z`) every frame through the residency's screen-surface
 transform seam (`WorldFramePresenter.ScreenSurfaceTransforms`, the pool's
 `ScreenSurfaceTransforms` over `TryCarriedScreen`; `WorldScreenCarryLawTests`

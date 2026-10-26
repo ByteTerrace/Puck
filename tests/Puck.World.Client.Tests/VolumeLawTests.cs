@@ -160,7 +160,7 @@ public sealed class VolumeLawTests {
             creation: creation,
             scale: 2f
         );
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(
             client: client,
@@ -177,9 +177,9 @@ public sealed class VolumeLawTests {
         var onNozzle = pool.Volumes[0];
         var onRoot = pool.Volumes[1];
 
-        // Slot 0 is the registration root; the first shape rides slot 1.
+        // The rigid nozzle and the volume share the root; its authored offset is baked into the volume.
         Assert.Equal(
-            expected: 1,
+            expected: 0,
             actual: onNozzle.DynamicSlot
         );
         Assert.Equal(
@@ -187,7 +187,7 @@ public sealed class VolumeLawTests {
             actual: onRoot.DynamicSlot
         );
         Assert.Equal(
-            expected: (NozzleOffset * 2f),
+            expected: new Vector3(-0.2f, 2.4f, -0.6f),
             actual: onNozzle.Position
         );
         Assert.Equal(
@@ -356,7 +356,7 @@ public sealed class VolumeLawTests {
             creation: creation,
             scale: 1f
         );
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(
             client: client,

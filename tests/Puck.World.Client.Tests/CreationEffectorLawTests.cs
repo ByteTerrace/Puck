@@ -37,7 +37,7 @@ public sealed class CreationEffectorLawTests {
     );
 
     // One frame of the real pack path: deliver body 0's pose, resolve the render poses, then pack.
-    private static void Advance(WorldClient client, WorldStampPool pool, DynamicTransform[] transforms, Vector3 position, ulong tick) {
+    private static void Advance(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms, Vector3 position, ulong tick) {
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Authority: "a",
             Entries: new[] { new EntitySnapshot(
@@ -133,10 +133,10 @@ public sealed class CreationEffectorLawTests {
             Document: creation.Document,
             HashRaw: creation.Hash
         );
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(
+            bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: prototype,
                     Scale: 1f,
@@ -146,6 +146,7 @@ public sealed class CreationEffectorLawTests {
             dynamics: [],
             placements: []
         );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         var builder = new SdfProgramBuilder();
 
@@ -176,14 +177,13 @@ public sealed class CreationEffectorLawTests {
     );
     // Runs the pack path for a run of frames and returns the tip's final world position.
     private static Vector3 Pack(IReadOnlyList<CreationEffectorDocument>? effectors, int frames, Vector3 step) {
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var creation = Prototype(effectors: effectors);
         var client = Client(definition: Definition(creation: creation));
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
         var position = Vector3.Zero;
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(
+            bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: creation,
                     Scale: 1f,
@@ -193,6 +193,7 @@ public sealed class CreationEffectorLawTests {
             dynamics: [],
             placements: []
         );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         for (var frame = 0; (frame < frames); frame++) {
             Advance(
@@ -205,7 +206,7 @@ public sealed class CreationEffectorLawTests {
             position += step;
         }
 
-        return transforms[TipSlot].Position;
+        return pool.BodyShapePose(0, TipSlot - 1).Position;
     }
     private static ShapeDocument Part(int id, string name, Vector3 position, string? parent, Vector3? pivot, Vector3? joint = null) => new(
         Id: id,
@@ -491,13 +492,12 @@ public sealed class CreationEffectorLawTests {
     /// parent, no swing, and no effector, whose anchor is its authored pose and agreed already.</summary>
     [Fact]
     public void AnAuthoredPartAnchorAgreesWithThePackedPose() {
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
         var creation = Prototype(effectors: [Leg(plant: null)]);
         var client = Client(definition: Definition(creation: creation));
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(
+            bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: creation,
                     Scale: 1f,
@@ -507,6 +507,7 @@ public sealed class CreationEffectorLawTests {
             dynamics: [],
             placements: []
         );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         for (var frame = 0; (frame < 120); frame++) {
             Advance(
@@ -830,13 +831,12 @@ public sealed class CreationEffectorLawTests {
         );
 
         static (float Drift, float Travel) Walk(IReadOnlyList<CreationEffectorDocument>? effectors) {
-            var pool = new WorldStampPool();
+            var pool = new WorldCreationInstances();
             var creation = Prototype(effectors: effectors);
             var client = Client(definition: Definition(creation: creation));
-            var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
 
             pool.Reconcile(
-                bodyStamps: [new WorldStampPool.BodyStamp(
+                bodyStamps: [new WorldCreationInstances.BodyStamp(
                         BodyIndex: 0,
                         Creation: creation,
                         Scale: 1f,
@@ -846,6 +846,7 @@ public sealed class CreationEffectorLawTests {
                 dynamics: [],
                 placements: []
             );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
             // Settle the effector weight at rest first, so the walk below measures the latch and not the ease-in.
             for (var frame = 0; (frame < 120); frame++) {
@@ -858,7 +859,7 @@ public sealed class CreationEffectorLawTests {
                 );
             }
 
-            var start = transforms[TipSlot].Position;
+            var start = pool.BodyShapePose(0, TipSlot - 1).Position;
             var travelled = Vector3.Zero;
 
             for (var frame = 0; (frame < 20); frame++) {
@@ -879,7 +880,7 @@ public sealed class CreationEffectorLawTests {
 
             return (Vector3.Distance(
                 value1: start,
-                value2: transforms[TipSlot].Position
+                value2: pool.BodyShapePose(0, TipSlot - 1).Position
             ), travelled.Length());
         }
     }
@@ -1159,13 +1160,12 @@ public sealed class CreationEffectorLawTests {
         );
 
         static (WorldRigState? Before, WorldRigState? After, float Travel) Rigged(IReadOnlyList<CreationEffectorDocument> effectors) {
-            var pool = new WorldStampPool();
+            var pool = new WorldCreationInstances();
             var creation = Prototype(effectors: effectors);
             var client = Client(definition: Definition(creation: creation));
-            var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
 
             pool.Reconcile(
-                bodyStamps: [new WorldStampPool.BodyStamp(
+                bodyStamps: [new WorldCreationInstances.BodyStamp(
                         BodyIndex: 0,
                         Creation: creation,
                         Scale: 1f,
@@ -1175,6 +1175,7 @@ public sealed class CreationEffectorLawTests {
                 dynamics: [],
                 placements: []
             );
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
             for (var frame = 0; (frame < 120); frame++) {
                 Advance(

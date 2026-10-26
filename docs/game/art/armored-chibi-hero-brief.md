@@ -109,7 +109,7 @@ These are implementation entry points inspected while preparing this brief, not 
 | Shape dimensions, author coordinates, palettes, parents, exported parts | [CreationDocument](../../../src/Puck.World.Authoring/Authoring/CreationDocument.cs), [CreationGeometry](../../../src/Puck.World.Authoring/Authoring/CreationGeometry.cs), [CreationFrame](../../../src/Puck.World.Authoring/Authoring/CreationFrame.cs) |
 | Motion signals, gated drivers, swings and slides | [CreationAnimation](../../../src/Puck.World.Authoring/Authoring/CreationAnimation.cs) |
 | Foot and hand constraints | [CreationEffector](../../../src/Puck.World.Authoring/Authoring/CreationEffector.cs) |
-| Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldStampPool](../../../src/Puck.World.Client/WorldStampPool.cs) |
+| Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldCreationInstances](../../../src/Puck.World.Client/WorldCreationInstances.cs) |
 | Primitive composition and scope behavior | [CreationStampEmitter](../../../src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs) |
 | Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](../../examples/creations/adventurer.creation.json) |
 | Existing studio district for staging | [studio.puck](../../../worlds/debug/studio.puck) |

@@ -202,7 +202,7 @@ on the display and 15 at or below half of it (`RenderGraphRefresh.AtLeast` on
 refresh, the most frequent demand winning); and a body's pose evaluation runs
 at least 30 times a second at or below 30 pixels per metre and 15 at or below
 15, its root followed every frame and its parts riding the root rigidly between
-packs (`WorldStampPool.Rates`). The machine behind a rated screen and the
+packs (`WorldCreationInstances.Rates`). The machine behind a rated screen and the
 simulation behind a rated body run at full rate. Each tier bounds the step a
 held update jumps by on screen to two pixels for the speed it is sized for.
 

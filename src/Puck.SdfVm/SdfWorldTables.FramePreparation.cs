@@ -19,13 +19,24 @@ public sealed partial class SdfWorldTables {
     // list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still packs the one
     // always-present slot as identity so the binding stays valid. Clamped to the slot capacity the construction
     // options grew the table to. Returns whether the active row count or any packed row changed.
+    private void EnsureDynamicTransformCapacity(int count) {
+        if (count <= m_dynamicTransformCapacity) { return; }
+        if (count > SdfProgram.MaxDynamicTransformSlot + 1) { throw new InvalidOperationException($"The frame needs {count} transform slots, beyond the packed slot representation."); }
+        m_dynamicTransformCapacity = count;
+        Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: checked((long)count * DynamicTransformByteLength)));
+        Retire(replaced: m_previousDynamicTransforms);
+        m_previousDynamicTransforms = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: (ulong)m_dynamicTransformRegion.ByteCount, usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
+        m_dynamicHistoryWritten = false;
+        m_seedDynamicHistory = true;
+        m_dynamicTransformsPacked = false;
+        m_bindingRevision++;
+    }
+
     private bool PackDynamicTransforms(SdfFrame frame) {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;
-        var count = Math.Min(
-            val1: transforms.Count,
-            val2: m_dynamicTransformCapacity
-        );
+        EnsureDynamicTransformCapacity(transforms.Count);
+        var count = transforms.Count;
         var everything = (
             !m_dynamicTransformsPacked ||
             (m_packedTransformCount != count) ||
@@ -159,7 +170,7 @@ public sealed partial class SdfWorldTables {
     /// <param name="transform">The frame's posed transform.</param>
     /// <exception cref="IndexOutOfRangeException">The destination has fewer than twelve elements.</exception>
     public static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
-        floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = 0f;
+        floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = transform.MaterialScale;
         floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }

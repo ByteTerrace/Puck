@@ -15,7 +15,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshMatrixBytes = (16 * sizeof(float));
     private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
-    private readonly IGpuBuffer m_previousDynamicTransforms;
+    private IGpuBuffer m_previousDynamicTransforms;
 
     private IGpuBuffer m_previousMeshTransforms;
 

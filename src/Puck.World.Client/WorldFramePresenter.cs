@@ -48,7 +48,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The query field's static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_queryPalettes = new();
 
-    private readonly WorldStampPool m_animator;
+    private readonly WorldCreationInstances m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every dress.
     private readonly IWorldAudioFrameFeed m_audio;
@@ -150,7 +150,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
     // Appends volumes to the frame's, up to the engine's ceiling, indexed so the interface's enumerator is never boxed.
     private void AppendVolumes(IReadOnlyList<SdfVolume> volumes) {
-        for (var index = 0; ((index < volumes.Count) && (m_volumes.Count < SdfProgramBuilder.MaxVolumes)); index++) {
+        if ((m_volumes.Count + volumes.Count) > SdfProgramBuilder.MaxVolumes) {
+            throw new InvalidOperationException($"The world frame needs {m_volumes.Count + volumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
+        }
+        for (var index = 0; index < volumes.Count; index++) {
             m_volumes.Add(item: volumes[index]);
         }
     }
@@ -471,7 +474,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
             var facets = WorldPrototypeFacets.Derive(
                 definition: definition,
-                derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
+                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
                 derivedFaceScreens: definition.Authoring.DerivedFaceScreens
             );
 
@@ -528,7 +531,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
         var facets = WorldPrototypeFacets.Derive(
             definition: m_client.Definition,
-            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(m_client.Definition),
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -2217,7 +2220,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldSceneEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldSceneEnvelope envelope, WorldSeatBindings seatBindings, WorldCreationInstances animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         Editor = (editor ?? new WorldEditorSeats());
@@ -2336,9 +2339,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     + $"edge plus every derivable corner pair).")
             );
         }
-        ProgramWordCapacity = m_composed.WorstCaseProgramWordCapacity;
-        InstanceCapacity = m_composed.WorstCaseInstanceCapacity;
-        DynamicTransformCapacity = m_composed.WorstCaseDynamicTransformCapacity;
+        ProgramWordCapacity = m_composed.ProgramWordCapacity;
+        InstanceCapacity = m_composed.InstanceCapacity;
+        DynamicTransformCapacity = m_composed.DynamicTransformCapacity;
 
         // The scene's count adds the loaded document's materials, and a document load is admitted against the scene the
         // live definition draws: a document declares no instances, so its materials are all it can spend.
@@ -2406,6 +2409,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
     /// <inheritdoc/>
     /// <remarks>A carried screen's (<see cref="WorldScreen.Carry"/>) answers the frame its carrier holds it at this frame
-    /// (<see cref="WorldStampPool.ScreenSurfaceTransforms"/>).</remarks>
+    /// (<see cref="WorldCreationInstances.ScreenSurfaceTransforms"/>).</remarks>
     public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => m_screenTransforms;
 }

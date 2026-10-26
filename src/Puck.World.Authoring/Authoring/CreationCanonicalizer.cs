@@ -909,7 +909,7 @@ public static partial class CreationCanonicalizer {
                 ));
             }
             // A domain-bearing shape with no own swing/slide (refused below) rides its own per-shape slot with the
-            // parent's chained rigid delta instead of the identity — WorldStampPool.PackTransforms/EmitShape — so
+            // parent's chained rigid delta instead of the identity — WorldCreationInstances.PackTransforms/EmitShape — so
             // its fold plane travels with the parent. CreationStampEmitter's static stamp never reads Parent at
             // all: a static placement carries no dynamic-transform buffer for a delta to ride.
         }
@@ -1118,7 +1118,7 @@ public static partial class CreationCanonicalizer {
             } else if (referenceIndex >= hostIndex) {
                 errors.Add(item: new(Message: $"reference '{trim.Shape}' must be declared before the shape it trims.", Path: $"{trimPath}.shape"));
             } else {
-                // The reference is re-emitted from its OWN dynamic slot (WorldStampPool.EmitTrims) and its own authored
+                // The reference is re-emitted from its OWN dynamic slot (WorldCreationInstances.EmitTrims) and its own authored
                 // pose (CreationStampEmitter.EmitTrim), without its fold or its group's chain: a domain-bearing shape's
                 // slot carries only its parent's delta frame (its geometry sits wherever the fold carries it), and a
                 // grouped member rides its group's instance — either would re-emit the reference at the wrong place.
@@ -2081,12 +2081,7 @@ public static partial class CreationCanonicalizer {
 
         var stepFactor = noise.StepFactor();
 
-        if (stepFactor > CreationNoiseDocument.MaxStepFactor) {
-            errors.Add(item: new(
-                Message: $"the derived march step factor {stepFactor:0.###} exceeds the {CreationNoiseDocument.MaxStepFactor} budget — reduce amplitude, frequency, octaves, or lacunarity so amplitude·frequency·(15/4)·√3·Σ(gain·lacunarity)ᵏ/Σgainᵏ stays within it.",
-                Path: "noise"
-            ));
-        }
+
     }
     // An inert facet (zero/non-finite frequency or amplitude after clamping) drops to null so absence and inertness
     // share one spelling; every optional resolves to its documented default so the round-trip is idempotent.

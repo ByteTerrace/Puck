@@ -102,7 +102,7 @@ public sealed record CreationReplantDocument(float Distance, float Seconds, floa
 /// corrected so the tip reaches a target. The solve composes after the drivers and the parent chain and bends the pose
 /// they produced; it never starts from a rest or default pose.
 /// <para>Presentation-only, on exactly the terms <see cref="ShapeSwingDocument"/> is: the correction composes onto the
-/// per-frame dynamic transforms in <c>Puck.World.Client.WorldStampPool</c> and nothing else reads it, so the emitted
+/// per-frame dynamic transforms in <c>Puck.World.Client.WorldCreationInstances</c> and nothing else reads it, so the emitted
 /// SDF program, the analytic colliders, the compiled solid field, and every simulation value are blind to it.</para>
 /// </summary>
 /// <param name="Name">The effector's name, unique within the creation — what a read-back or a refusal spells.</param>

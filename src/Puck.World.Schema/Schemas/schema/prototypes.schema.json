@@ -2950,7 +2950,7 @@
                 "target"
               ],
               "additionalProperties": false,
-              "description": "One inverse-kinematics effector a creation declares: a chain of its own shapes, root\u2192tip, whose driver-posed pose is corrected so the tip reaches a target. The solve composes after the drivers and the parent chain and bends the pose they produced; it never starts from a rest or default pose. Presentation-only, on exactly the terms ShapeSwingDocument is: the correction composes onto the per-frame dynamic transforms in Puck.World.Client.WorldStampPool and nothing else reads it, so the emitted SDF program, the analytic colliders, the compiled solid field, and every simulation value are blind to it."
+              "description": "One inverse-kinematics effector a creation declares: a chain of its own shapes, root\u2192tip, whose driver-posed pose is corrected so the tip reaches a target. The solve composes after the drivers and the parent chain and bends the pose they produced; it never starts from a rest or default pose. Presentation-only, on exactly the terms ShapeSwingDocument is: the correction composes onto the per-frame dynamic transforms in Puck.World.Client.WorldCreationInstances and nothing else reads it, so the emitted SDF program, the analytic colliders, the compiled solid field, and every simulation value are blind to it."
             },
             "default": null,
             "description": "The inverse-kinematics effectors (null = none), at most MaxEffectors \u2014 see CreationEffectorDocument. Each corrects a chain of this creation\u0027s own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers."

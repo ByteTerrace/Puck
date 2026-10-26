@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
 /// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
-internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldStampPool stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null, WorldDiagnostics? diagnostics = null, WorldSeatViewports? viewports = null) : ICommandModule {
+internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldCreationInstances stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null, WorldDiagnostics? diagnostics = null, WorldSeatViewports? viewports = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>

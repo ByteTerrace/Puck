@@ -75,7 +75,7 @@ public static partial class CreationCommand {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Limit to one prototype id (default: every prototype carrying a creation document)." };
         var command = new Command(
-            description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps and segments for static and pooled rest geometry. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.",
+            description: "Reports a creation's expanded field work and encoded bytes, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps and segments for static and pooled rest geometry. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.",
             name: "stats"
         ) { worldOption, prototypeOption };
 
@@ -298,7 +298,7 @@ public static partial class CreationCommand {
         var shapes = (document.Shapes ?? []);
         var stampShapes = document.StampShapeCount();
 
-        Console.Out.WriteLine(value: $"[{id}] shapes: {shapes.Count}, stamp budget: {stampShapes}/{WorldPlacementPolicy.MaxShapesPerStamp}");
+        Console.Out.WriteLine(value: $"[{id}] shapes: {shapes.Count}, expanded field shapes: {stampShapes}; bake work and encoded bytes are reported below, with no shape-count ceiling.");
 
         WriteHistogram(
             label: "primitive",

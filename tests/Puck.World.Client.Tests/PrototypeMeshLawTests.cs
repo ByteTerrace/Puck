@@ -301,7 +301,7 @@ public sealed class PrototypeMeshLawTests {
                 seatRouter: routes
             );
             m_emitter = new WorldSceneEmitter(
-                animator: new WorldStampPool(),
+                animator: new WorldCreationInstances(),
                 audio: new SilentAudio(),
                 client: m_client,
                 continuum: new WorldContinuum(

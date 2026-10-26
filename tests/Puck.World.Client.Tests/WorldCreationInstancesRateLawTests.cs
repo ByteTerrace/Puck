@@ -17,13 +17,13 @@ namespace Puck.World.Client.Tests;
 /// pose at 15 Hz while its root follows it every frame, its parts riding the root rigidly between packs; a body large on
 /// screen, or one packed with the lever off, evaluates its pose every frame.
 /// </summary>
-public sealed class WorldStampPoolRateLawTests {
+public sealed class WorldCreationInstancesRateLawTests {
     private const float Frame = (1f / 60f);
     private const float Step = 0.05f;
     // A 60 Hz display on a fixed signal.
     private static readonly PresentationRate Paced60 = new(DisplayHertz: 60, GridHertz: 60d);
 
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(bool rootDynamics = false) {
+    private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage(bool rootDynamics = false) {
         var creation = CreationFixtures.Prototype(id: "walker", document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "walker",
@@ -50,19 +50,19 @@ public sealed class WorldStampPoolRateLawTests {
             )],
         });
         var client = ClientFixtures.Client(definition: definition);
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         // A look whose root follows the body through a dynamics row, as the Moth's does.
         var follower = (WorldLook.Implicit with { Motion = (WorldLookMotion.Default with { Dynamics = "follow" }) });
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: (rootDynamics ? follower : WorldLook.Implicit))],
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: (rootDynamics ? follower : WorldLook.Implicit))],
             creations: [creation],
             dynamics: (rootDynamics ? [new DynamicsRow(Name: "follow", Frequency: 4f, Damping: 0.8f, Response: 0f)] : []),
             placements: []
         );
 
-        return (client, pool, new DynamicTransform[WorldStampPool.DynamicSlotCount]);
+        return (client, pool, new DynamicTransform[pool.DynamicSlotCount]);
     }
     private static ShapeDocument Box(int id, string name, Vector3 position) => new(
         Id: id,
@@ -77,7 +77,7 @@ public sealed class WorldStampPoolRateLawTests {
         Group: 0
     );
     // Moves the body a step along +X and packs a frame, returning the clock driver's phase.
-    private static float Walk(WorldClient client, WorldStampPool pool, DynamicTransform[] transforms, ulong tick) {
+    private static float Walk(WorldClient client, WorldCreationInstances pool, DynamicTransform[] transforms, ulong tick) {
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Authority: "a",
             Entries: new[] { new EntitySnapshot(

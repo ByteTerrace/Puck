@@ -10,7 +10,7 @@ namespace Puck.World.Server;
 /// authored local offset (quantized to fixed point here, the same boundary <see cref="WorldPlacementRegion"/>'s
 /// sensing already crosses through) — never a float on the sim side.
 /// </summary>
-/// <remarks>The RENDERED pose is a separate derivation, deliberately: <c>Client.WorldStampPool</c> composes the same
+/// <remarks>The RENDERED pose is a separate derivation, deliberately: <c>Client.WorldCreationInstances</c> composes the same
 /// offset over the client's INTERPOLATED body pose in presentation float, every frame, so an attached row is as smooth
 /// as the body it rides — reading this authoritative resolve there would judder at the tick rate and would reach across
 /// the client/server seam. The two agree on the RULE (rotate the offset into the body's frame, then add) and on the

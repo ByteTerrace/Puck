@@ -44,7 +44,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
 
-    private readonly WorldStampPool m_animator;
+    private readonly WorldCreationInstances m_animator;
     private readonly IWorldAudioCueSink m_audio;
     // Boot-consumed authoring policy (WorldPlacementPolicyDefaults), captured once at construction: the initial
     // screen-slot reserve. Later policy edits change the next boot's reserve; live content grows the GPU buffers.
@@ -57,8 +57,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly float m_noseFactor;
     // The probe's placement reservation, frozen at construction: the boot scoped stamps, and the boot per-shape
     // instances plus the authoring headroom.
-    private readonly int m_placementReservation;
-    private readonly int m_placementShapeReservation;
     private readonly WorldTextCatalog m_text;
 
     // The CURRENT derived-face screen ROWS (creation faces derived from placements x creations) — threaded in from
@@ -100,7 +98,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The creation-stamp census, refreshed at each rebuild: the body-rooted stamps handed to the pool. A body the pool
     // registered renders its creation there, so the pack/emit path parks its catalog avatar.
     private readonly WorldBodyStampCensus m_census = new();
-    private readonly List<WorldStampPool.BodyStamp> m_presentedStamps = [];
+    private readonly List<WorldCreationInstances.BodyStamp> m_presentedStamps = [];
 
     // The palette colors the live build baked, and a counter moved when a bound one moves in the state mirror.
     private readonly WorldBakedColors m_bakedColors;
@@ -148,6 +146,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var avatarAccentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+            if (!IsAvatarPresented(index) || m_animator.HasBodyRegistration(index)) { continue; }
             var bodyColor = (TryPresentedAppearance(
                 bodyColor: out var presentedColor,
                 catalogRig: out _,
@@ -182,41 +181,19 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             screens: screens
         );
 
-        // The placement stamps: the probe reserves the boot static stamps and the authoring headroom; a live build emits
-        // the rows as authored, static stamps baked into instructions and animated rows through the replay pool.
-        if (probe) {
-            WorldPlacementStamper.EmitProbe(
-                builder: builder,
-                reservedCount: m_placementReservation,
-                reservedShapeInstances: m_placementShapeReservation
-            );
-        } else {
-            var meshDraws = new List<SdfMeshDraw>();
-
-            m_staticVolumes.Clear();
-            WorldPlacementStamper.EmitStatic(
-                builder: builder,
-                definition: client.Definition,
-                creations: creations,
-                placements: placements,
-                textCatalog: m_text.Catalog,
-                tintFor: null,
-                volumes: m_staticVolumes,
-                meshDraws: meshDraws,
-                colors: m_bakedColors,
-                palettes: m_palettes,
-                picks: m_picks,
-                isolation: m_animator.Isolation
-            );
-            m_meshDraws.Static = meshDraws;
-        }
+        var meshDraws = new List<SdfMeshDraw>();
+        m_staticVolumes.Clear();
+        WorldPlacementStamper.EmitStatic(builder: builder, definition: client.Definition, creations: creations,
+            placements: placements, textCatalog: m_text.Catalog, tintFor: null, volumes: m_staticVolumes,
+            meshDraws: meshDraws, colors: m_bakedColors, palettes: m_palettes, picks: m_picks, isolation: m_animator.Isolation);
+        m_meshDraws.Static = meshDraws;
 
         m_animator.Emit(
             builder: builder,
             colors: m_bakedColors,
             probeWorstCase: probe,
             maxPlacementScale: maxPlacementScale,
-            slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
+            slotBase: (slotBase + m_catalogSlotCount),
             picks: (probe ? null : m_picks),
             textCatalog: m_text.Catalog,
             screens: screens
@@ -269,6 +246,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         WorldRigCatalog.Emit(
             builder: builder,
             isActive: IsAvatarPresented,
+            slotFor: index => m_catalogSlots[index],
             bodyMaterials: avatarBodyMaterials,
             accentMaterials: avatarAccentMaterials,
             probeWorstCase: probe,
@@ -287,6 +265,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // the route seed/continuum pose. Adjacency rendering suppresses that exact address, so a transfer cannot create
     // a one-frame zero-avatar gap or a two-avatar overlap.
     private bool IsAvatarPresented(int index) {
+        if (m_animator.HasBodyRegistration(index)) { return false; }
         if (IsPresentedElsewhere(index: index)) {
             return false;
         }
@@ -404,62 +383,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // narrowing fallback: a headroom count the free indices cannot satisfy is a document the boot envelope cannot
     // honour. Silently reserving fewer slots would misrepresent the authored policy; buffer growth cannot add screen
     // indices beyond the engine's screen-surface limit.
-    private IReadOnlyList<WorldScreen> WithAuthoringHeadroom(IReadOnlyList<WorldScreen> screens) {
-        var padded = new List<WorldScreen>(capacity: (screens.Count + m_authoringHeadroomScreens));
-        var used = new HashSet<int>();
-
-        foreach (var screen in screens) {
-            padded.Add(item: screen);
-            _ = used.Add(item: screen.Index);
-        }
-
-        var authored = used.Count;
-
-        for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
-            if (WorldPrototypeFacets.IsReservedFaceIndex(
-                derivedFaceScreens: m_derivedFaceScreens,
-                index: index
-            )) {
-                _ = used.Add(item: index);
-            }
-        }
-
-        padded.AddRange(collection: WorldScreenHeadroom.Reserve(
-            authoredCount: authored,
-            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
-            derivedFaceScreens: m_derivedFaceScreens,
-            headroomCount: m_authoringHeadroomScreens,
-            usedIndices: used
-        ));
-
-        return padded;
-    }
-
     /// <inheritdoc/>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         ArgumentNullException.ThrowIfNull(argument: builder);
-
-        if (context.Probe) {
-            // The ONE construction-time worst case (never rendered): WorldRigCatalog.DetailedAvatarCapacity
-            // detailed avatars plus every remaining coarse crowd body, the reserved placement instances,
-            // the worst-case animated pool, and the authoring headroom (screens and placement stamps) so a
-            // live editor can add rows up to the reserved ceilings. Reads the client's definition live because the
-            // probe runs exactly once, inside the composition host's constructor, before any delivery can land.
-            var boot = m_client.Definition;
-
-            Compose(
-                builder: builder,
-                screens: WithAuthoringHeadroom(screens: boot.Screens),
-                derivedFaces: m_derivedFaceRows,
-                placements: boot.Placements,
-                creations: boot.Creations,
-                probe: true,
-                maxPlacementScale: boot.Authoring.MaxPlacementScale,
-                slotBase: context.SlotBase
-            );
-
-            return;
-        }
 
         // A live rebuild. The stamp pool reconciles FIRST on every rebuild (a definition delivery OR a population/look
         // change): animated placements root statically, attached ones root on their target body; the creation-stamp bodies (inhabitants + crowd creation-looks)
@@ -467,19 +393,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var definition = m_client.Definition;
 
         m_bakedColors.Begin();
-        m_census.Refresh(source: m_client);
-        m_presentedStamps.Clear();
-        foreach (var stamp in m_census.Stamps) {
-            if (!IsPresentedElsewhere(index: stamp.BodyIndex)) {
-                m_presentedStamps.Add(item: stamp);
-            }
-        }
-        m_animator.Reconcile(
-            placements: definition.Placements,
-            creations: definition.Creations,
-            dynamics: definition.Dynamics,
-            bodyStamps: m_presentedStamps
-        );
         Compose(
             builder: builder,
             screens: definition.Screens,
@@ -491,6 +404,56 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             slotBase: context.SlotBase
         );
     }
+    private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
+    private int m_articulatedRevision;
+    private readonly int[] m_catalogSlots = new int[WorldBodiesLimits.CapacityCeiling];
+    private int m_catalogSlotCount;
+    private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
+    private int m_catalogRevision;
+    private void PrepareCatalog() {
+        m_catalogSlotCount = 0;
+        Array.Fill(m_catalogSlots, -1);
+        for (var body = 0; body < m_catalogSlots.Length; body++) {
+            if (!IsAvatarPresented(body)) { continue; }
+            m_catalogSlots[body] = m_catalogSlotCount;
+            m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
+        }
+        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => m_catalogSlots[index] >= 0)
+            .Select(index => (index, (int)m_client.CatalogRig(index), m_client.Look(index).Scale, m_client.BodyColor(index))).ToArray();
+        if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
+    }
+    private readonly int[] m_preparedRevision = new int[WorldClient.RevisionComponentCount];
+    private bool m_prepared;
+    private int m_preparedPresentation = -1;
+    public void PrepareFrame() {
+        Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
+        m_client.WriteRevision(revision);
+        if (m_prepared && revision.SequenceEqual(m_preparedRevision) && m_preparedPresentation == m_continuum.PresentationRevision && !m_census.TryTakeMove()) { return; }
+        revision.CopyTo(m_preparedRevision);
+        m_prepared = true;
+        m_preparedPresentation = m_continuum.PresentationRevision;
+        var definition = m_client.Definition;
+        m_census.Refresh(source: m_client);
+        m_presentedStamps.Clear();
+        foreach (var stamp in m_census.Stamps) {
+            if (!IsPresentedElsewhere(index: stamp.BodyIndex)) {
+                m_presentedStamps.Add(item: stamp);
+            }
+        }
+        var articulated = m_presentedStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        m_animator.Reconcile(
+            looks: definition.Looks,
+            placements: definition.Placements,
+            creations: definition.Creations,
+            dynamics: definition.Dynamics,
+            bodyStamps: m_presentedStamps
+        );
+            PrepareCatalog();
+    }
+    public IReadOnlyList<int> MeshAssetSlots => m_animator.Rigid.Slots;
+    public IReadOnlyList<SdfMeshInstance> MeshInstances => m_animator.Rigid.Copies;
+
     /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFramePresenter"/>
     /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldPrototypeFacets.Derive"/>'s
     /// one call site), so the slab geometry this emitter composes and the binder's bound sources can never disagree
@@ -515,10 +478,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
     /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+        m_animator.SetCatalogSlots(m_catalogSlots, context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+            if (m_catalogSlots[index] < 0) { continue; }
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,
@@ -531,9 +496,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                     moved: moved,
                     owner: index
                 )) {
-                    WorldTransformOwners.ParkBody(
-                        avatar: index,
-                        catalogBase: context.SlotBase,
+                    WorldTransformOwners.Park(
+                        count: WorldRigCatalog.TransformSlotsPerBody,
+                        start: context.SlotBase + m_catalogSlots[index],
                         moved: moved,
                         parkPosition: context.ParkPosition,
                         table: slots
@@ -583,7 +548,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             )) {
                 continue;
             }
-            // The combined (epoch, address) watch — the pool's own WorldStampPool.RootEpoch/RootAddress shape:
+            // The combined (epoch, address) watch — the pool's own WorldCreationInstances.RootEpoch/RootAddress shape:
             // EITHER term moving is the SAME discontinuity class (a teleport/over-threshold correction bumps the
             // epoch; a body index reused by a different inhabitant changes the address), so both gate the SAME
             // reseed — gait phase resets to 0 and the footstep cue is skipped for the frame a jump lands on, exactly
@@ -664,6 +629,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? deltaSeconds
                 : 1f),
                 moved: WorldTransformOwners.PackBody(
+                firstSlot: m_catalogSlots[index],
                 avatar: index,
                 catalogBase: context.SlotBase,
                 gaitPhase: (m_avatarGaitPhases[index] * m_emittedAvatarGaitAmplitudes[index]),
@@ -688,7 +654,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             transforms: slots,
             client: m_client,
             moved: moved,
-            slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
+            slotBase: (context.SlotBase + m_catalogSlotCount),
             parkPosition: context.ParkPosition
         );
     }
@@ -706,7 +672,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), the continuum's pinned
     /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), the operator's shape isolation
     /// (<see cref="WorldShapeIsolation.Revision"/>), and a counter that moves when the set of screens a body carries
-    /// moves (<see cref="WorldStampPool.TryCarriedScreen"/>).
+    /// moves (<see cref="WorldCreationInstances.TryCarriedScreen"/>).
     /// <para>
     /// Separate components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
@@ -717,6 +683,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="destination">The exactly-<see cref="RevisionComponentCount"/>-long span to fill.</param>
     public void WriteRevision(Span<int> destination) {
         m_client.WriteRevision(destination: destination[..WorldClient.RevisionComponentCount]);
+        destination[0] = m_articulatedRevision;
+        destination[1] = m_catalogRevision;
 
         destination[WorldClient.RevisionComponentCount] = m_continuum.Revision;
 
@@ -743,7 +711,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
     }
-    // The screens a body carries this frame, one bit per screen index (WorldStampPool.TryCarriedScreen).
+    // The screens a body carries this frame, one bit per screen index (WorldCreationInstances.TryCarriedScreen).
     private uint CarriedScreens() {
         var carried = 0u;
         var screens = m_client.Definition.Screens;
@@ -790,7 +758,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="envelope">The boot scene's envelope, whose headroom the probe reserves, or <see langword="null"/>
     /// for one counted from the client's boot definition.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldStampPool animator, IWorldAudioCueSink audio, WorldContinuum continuum, WorldTextCatalog text, WorldSceneEnvelope? envelope = null) {
+    public WorldSceneEmitter(WorldClient client, WorldCreationInstances animator, IWorldAudioCueSink audio, WorldContinuum continuum, WorldTextCatalog text, WorldSceneEnvelope? envelope = null) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: audio);
@@ -817,7 +785,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
         // though no delivery has landed yet.
         m_derivedFaceRows = WorldPrototypeFacets.ReservedFaceSlots(
-            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -825,23 +793,20 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
         // snapshot).
         m_census.Refresh(source: m_client);
+        var articulated = m_presentedStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Reconcile(
+            looks: definition.Looks,
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
             bodyStamps: m_census.Stamps
         );
-        (m_placementReservation, m_placementShapeReservation) = WorldPlacementStamper.StaticStampReservation(
-            creations: definition.Creations,
-            placements: definition.Placements,
-            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
-        );
-        m_placementShapeReservation = checked((m_placementShapeReservation + envelope.HeadroomInstances));
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
     /// one root slot per remaining crowd body, then the reserved creation-stamp pool.</summary>
-    public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
+    public int DynamicSlotCount => (m_catalogSlotCount + m_animator.DynamicSlotCount);
     /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
     /// true; the scope makes it structural, so a positional stride this
     /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials
@@ -854,7 +819,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>
     /// <remarks>One draw per static placement instance of a prototype that carries a mesh, from the last static
-    /// rebuild, then the stamp pool's (<see cref="WorldStampPool.MeshDraws"/>): an animated, inhabited or attached
+    /// rebuild, then the stamp pool's (<see cref="WorldCreationInstances.MeshDraws"/>): an animated, inhabited or attached
     /// stamp's mesh at its root this frame. Recomposed only when the static list is a new one or the pool rewrote its own.</remarks>
     public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
     /// <inheritdoc/>

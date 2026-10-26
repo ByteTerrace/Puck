@@ -9,7 +9,7 @@ namespace Puck.World.Testing;
 
 /// <summary>The suite's one construction of creation documents, canonical prototypes, and the two emission paths a
 /// shape law judges: the static stamper (<see cref="CreationStampEmitter"/>) and the animated pool
-/// (<c>WorldStampPool</c>). A law states only the shape it is about.</summary>
+/// (<c>WorldCreationInstances</c>). A law states only the shape it is about.</summary>
 internal static partial class CreationFixtures {
     /// <summary>Gets a one-entry grey palette.</summary>
     public static IReadOnlyList<PaletteEntryDocument> Grey { get; } = [new(

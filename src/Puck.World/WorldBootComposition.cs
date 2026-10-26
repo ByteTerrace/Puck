@@ -228,7 +228,7 @@ public static class WorldBootComposition {
 
         // The stamp pool (dynamic-creation/placement animation accounting) — plain data, no render dependency.
         // Shared by the (core) audio director's panning source and the (presentation) frame source.
-        services.AddSingleton<WorldStampPool>();
+        services.AddSingleton<WorldCreationInstances>();
 
         // The audio director: derives the emitter table from the delivered definition and resolves poses (the actual
         // WASAPI device pump — WorldAudioRenderService — is presentation-only). Registered here because the core
@@ -237,7 +237,7 @@ public static class WorldBootComposition {
         // attached is simply never drained — harmless headless).
         services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
             client: sp.GetRequiredService<WorldClient>(),
-            animator: sp.GetRequiredService<WorldStampPool>(),
+            animator: sp.GetRequiredService<WorldCreationInstances>(),
             perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
             speech: sp.GetRequiredService<WorldSpeechClock>(),
             evaluator: sp.GetRequiredService<IOverlayPredicateEvaluator>()
@@ -383,7 +383,7 @@ public static class WorldBootComposition {
         // shared by WorldMachineHost and WorldScreenBinder below so BOTH see the identical index set.
         static IReadOnlyList<WorldScreen> ExpandedScreens(WorldDefinition definition) =>
             [.. definition.Screens, .. WorldPrototypeFacets.ReservedFaceSlots(
-                    derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
+                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
@@ -451,7 +451,7 @@ public static class WorldBootComposition {
                 probeKernels: sp.GetRequiredService<IProbeKernelHostService>(),
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
-                stamps: sp.GetRequiredService<WorldStampPool>(),
+                stamps: sp.GetRequiredService<WorldCreationInstances>(),
                 // Seat-relative and ranked camera anchors resolve per seat through the perception anchor and the
                 // overlay facts; the facts are resolved lazily because they read the binder-independent input
                 // router, which the boot order registers after this factory runs.
@@ -890,7 +890,7 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<WorldServer>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
-            stamps: sp.GetRequiredService<WorldStampPool>(),
+            stamps: sp.GetRequiredService<WorldCreationInstances>(),
             speech: sp.GetRequiredService<WorldSpeechClock>(),
             router: () => sp.GetRequiredService<InputRouter>(),
             wheel: () => sp.GetService<WorldWheelFeed>(),
@@ -1308,7 +1308,7 @@ public static class WorldBootComposition {
             binder: sp.GetRequiredService<IWorldScreenPresenter>(),
             envelope: sp.GetRequiredService<WorldSceneEnvelope>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
-            animator: sp.GetRequiredService<WorldStampPool>(),
+            animator: sp.GetRequiredService<WorldCreationInstances>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),
             anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
             speech: sp.GetRequiredService<WorldSpeechClock>(),
@@ -1718,7 +1718,7 @@ public static class WorldBootComposition {
             binder: sp.GetRequiredService<IWorldScreenPresenter>(),
             envelope: sp.GetRequiredService<WorldSceneEnvelope>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
-            animator: sp.GetRequiredService<WorldStampPool>(),
+            animator: sp.GetRequiredService<WorldCreationInstances>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),
             anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
             speech: sp.GetRequiredService<WorldSpeechClock>(),

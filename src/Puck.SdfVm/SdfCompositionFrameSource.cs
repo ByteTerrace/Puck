@@ -63,7 +63,7 @@ public interface ISdfFrameDresser {
 /// <see cref="ISdfSceneEmitter.Emit"/> with <see cref="SdfEmitContext.Probe"/> set — each in its own material scope
 /// when <see cref="ISdfSceneEmitter.OwnsMaterialScope"/> is set — and measured once without being built
 /// (<see cref="SdfProgramBuilder.MeasureCapacity"/>:
-/// <see cref="WorstCaseProgramWordCapacity"/>/<see cref="WorstCaseInstanceCapacity"/>/<see cref="WorstCaseDynamicTransformCapacity"/>),
+/// <see cref="ProgramWordCapacity"/>/<see cref="InstanceCapacity"/>/<see cref="DynamicTransformCapacity"/>),
 /// so the probe packs no stream and runs none of the build's analysis; an engine ceiling the emission exceeds still
 /// refuses there (<see cref="SdfProgramCapacityException"/>).
 /// This generalizes the per-host <c>MeasureWorstCaseEnvelope</c> pattern: any live rebuild (every real
@@ -119,7 +119,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private long m_meshDrawsRevision;
 
     // The shared table: it keeps every slot's last packed transform across frames, so an owner at rest costs nothing.
-    private readonly DynamicTransform[] m_transforms;
+    private DynamicTransform[] m_transforms;
+    private int m_programSlots;
+    private readonly List<SdfMeshInstance> m_meshInstances = [];
+    private readonly List<int> m_meshAssetSlots = [];
 
     private readonly SdfMovedTransforms m_moved = new();
 
@@ -157,6 +160,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public long Frames { get; private set; }
     /// <summary>Gets the program the frames carry, or <see langword="null"/> before the first frame.</summary>
     public SdfProgram? Program => m_program;
+    /// <summary>Gets the number of completed program builds, separate from per-frame instance poses.</summary>
+    public long ProgramBuilds { get; private set; }
 
     private bool Converging => (m_convergence is { Completion.IsCompleted: false });
     private bool WaitsForBuild => (Converging || m_dresser.TickLocked);
@@ -235,25 +240,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_buildingRevisions = new int[revisionCursor];
         m_transforms = new DynamicTransform[slotCursor];
 
-        // The probe is measured, never built: its emission states every count the capacity depends on.
-        var probe = new SdfProgramBuilder();
-
-        Emit(
-            builder: probe,
-            context: new SdfEmitContext(
-                Probe: true,
-                Time: 0f,
-                RenderOrigin: Vector3.Zero,
-                ParkPosition: ParkPosition,
-                SlotBase: 0
-            )
-        );
-
-        var capacity = probe.MeasureCapacity();
-
-        WorstCaseProgramWordCapacity = capacity.Words;
-        WorstCaseInstanceCapacity = capacity.Instances;
-        WorstCaseDynamicTransformCapacity = m_transforms.Length;
+        m_programSlots = slotCursor;
     }
 
     /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
@@ -266,13 +253,11 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     public SdfMovedTransforms MovedTransforms => m_moved;
     /// <summary>Gets the dynamic-transform slot floor the render assembly must reserve — the sum of every registered
     /// emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/>.</summary>
-    public int WorstCaseDynamicTransformCapacity { get; }
-    /// <summary>Gets the instance-count floor the engine's mask buffer must reserve (see <see cref="WorstCaseProgramWordCapacity"/>).</summary>
-    public int WorstCaseInstanceCapacity { get; }
-    /// <summary>Gets the packed-word floor the engine's program buffer must reserve — every registered emitter's probe
-    /// form, combined into one emission and measured once at construction (<see cref="SdfProgramBuilder.MeasureCapacity"/>),
-    /// with room for part compilation and sharing to vary within the probe's instruction and instance ceilings.</summary>
-    public int WorstCaseProgramWordCapacity { get; }
+    public int DynamicTransformCapacity => m_transforms.Length;
+    /// <summary>Gets the live program's instance count, or zero before its first build.</summary>
+    public int InstanceCapacity => m_program?.Instances.Count ?? 0;
+    /// <summary>Gets the live program's word count, or zero before its first build.</summary>
+    public int ProgramWordCapacity => m_program?.Words.Length ?? 0;
 
     // A live rebuild's emission, which reads the emitters' live state and so runs in the frame. `previous`, the program
     // this call rebuilds, supplies List capacity hints for the fresh builder: its own counts are exactly what this build's
@@ -312,6 +297,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         m_building = null;
         (m_program, m_programDelta) = building.GetAwaiter().GetResult();
+        ProgramBuilds++;
         Array.Copy(
             sourceArray: m_buildingRevisions,
             destinationArray: m_builtRevisions,
@@ -414,6 +400,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             );
         }
 
+        foreach (var copy in m_meshInstances) {
+            if (copy.Clip is { } clip) { composed = [.. composed, clip with { FirstSlot = copy.FrameSlot, SlotCount = 1 }]; }
+        }
         return composed;
     }
     // Reads every emitter's mesh draws after packing and recomposes them only when an emitter's list or revision moved:
@@ -477,7 +466,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         var repack = (rebuilt && !everything);
 
         if (repack) {
-            m_repackedTransforms ??= new DynamicTransform[m_transforms.Length];
+            if (m_repackedTransforms?.Length != m_transforms.Length) { m_repackedTransforms = new DynamicTransform[m_transforms.Length]; }
             m_transforms.CopyTo(
                 array: m_repackedTransforms,
                 index: 0
@@ -524,6 +513,20 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             );
         }
 
+        m_meshInstances.Clear();
+        m_meshAssetSlots.Clear();
+        var root = m_programSlots;
+        foreach (var emitter in m_emitters) {
+            m_meshAssetSlots.AddRange(emitter.MeshAssetSlots);
+            foreach (var copy in emitter.MeshInstances) {
+                copy.FrameSlot = root;
+                var previous = m_transforms[root];
+                m_transforms[root] = copy.Transform;
+                if (previous != copy.Transform) { m_moved.Owe(start: root, count: 1); }
+                m_meshInstances.Add(copy);
+                root++;
+            }
+        }
         if (repack) {
             m_moved.CompleteRepack(
                 current: m_transforms,
@@ -557,8 +560,25 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         //
         // A frame holding the previous program while its successor builds packs only the moved transforms: a slot's owner
         // may differ between the two programs for the frames until the adoption, which repacks the whole table.
-        var moved = CaptureRevisions();
+        foreach (var emitter in m_emitters) { emitter.PrepareFrame(); }
+        var slots = 0;
+        var layoutChanged = false;
+        for (var index = 0; index < m_emitters.Count; index++) {
+            layoutChanged |= m_slotBases[index] != slots;
+            m_slotBases[index] = slots;
+            slots = checked(slots + m_emitters[index].DynamicSlotCount);
+        }
+        layoutChanged |= slots != m_programSlots;
+        m_programSlots = slots;
+        var roots = m_emitters.Sum(emitter => emitter.MeshInstances.Count);
+        if (m_transforms.Length != slots + roots) {
+            Array.Resize(ref m_transforms, slots + roots);
+            m_transformsPacked = false;
+        }
+        var moved = CaptureRevisions() || layoutChanged;
+        if (layoutChanged && m_building is { } pending) { pending.GetAwaiter().GetResult(); }
         var rebuilt = AdoptBuild(moved: ref moved);
+        moved |= layoutChanged;
 
         if ((m_building is null) && ((m_program is null) || moved)) {
             var builder = EmitProgram(
@@ -579,8 +599,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 length: m_buildingRevisions.Length
             );
 
-            if ((m_program is null) || !BuildsInBackground || WaitsForBuild) {
+            if ((m_program is null) || !BuildsInBackground || WaitsForBuild || layoutChanged) {
                 m_program = Build(builder: builder);
+                ProgramBuilds++;
                 m_programDelta = null;
                 Array.Copy(
                     sourceArray: m_buildingRevisions,
@@ -633,7 +654,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         dressed.PickMap = ComposePickMap();
         dressed.SlotClips = ComposeSlotClips();
+        dressed = dressed with { MeshAssetSlots = m_meshAssetSlots, MeshInstances = m_meshInstances };
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
+        if (Frames == 0) { Console.Error.WriteLine($"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;
         return dressed;
     }

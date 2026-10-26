@@ -525,23 +525,13 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | Render validation, stamp capacity, rigid/carry/tether facets | [documents-render.md](references/documents-render.md) |
 | Navigation, the tabletop primitive, records and pools | [documents-state.md](references/documents-state.md) |
 | Boot-only sections (gravity, portals, simulation rate, references), `basis`/`imports` composition, the validator, serialization, the sculpting library | [documents-composition.md](references/documents-composition.md) |
-| How a body's look animates: creation drivers, swings, effectors and look followers, all read in `WorldStampPool.PackTransforms` (presentation only); the moth's turning, directional gait and stepping feet are authored there, never in client code | [documents-composition.md](references/documents-composition.md), [sdf-authoring rig](../sdf-authoring/references/rig.md#how-the-moth-moves) |
+| How a body's look animates: creation drivers, swings, effectors and look followers, all read in `WorldCreationInstances.PackTransforms` (presentation only); the moth's turning, directional gait and stepping feet are authored there, never in client code | [documents-composition.md](references/documents-composition.md), [sdf-authoring rig](../sdf-authoring/references/rig.md#how-the-moth-moves) |
 | Extensions (`IPuckExtension`, `PuckExtensionSet`, installed `extensions/<name>/<name>.dll`), agent participants, the silo, MCP, release | [hosting-and-release.md](references/hosting-and-release.md) |
 | `captures`, `schedule`, verdict rows, `puck test` | [schedules-and-tests.md](references/schedules-and-tests.md) |
 
 ## Limits worth knowing
 
-- `WorldPlacementPolicy.MaxShapesPerStamp` is 367 (a panelled shape charges 2).
-- `WorldBodiesLimits.CapacityCeiling` is 4096 bodies; detailed rigs cover the
-  first 128 indices. A body draws as its creation only while it holds a stamp
-  registration: 128 full ones, shared with animated and attached placements,
-  and 256 compact ones that a creation of at most 8 shapes and no text takes
-  first. A body past them draws as a catalog avatar and stderr says so
-  (`[world.placement: creation-stamp body N has no free stamp slot`).
-- `SdfProgramBuilder.MaxInstances` is 65536; `WorldRenderEnvelope.TryFit` is the
-  apply-time capacity gate, counted on the CPU by `WorldSceneEnvelope`, so a
-  headless boot and `puck test` see it: every boot prints
-  `[world.render] envelope: …` and refuses a boot scene past a ceiling.
+- Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
   empty): spheres, circular cylinders and Boxes have surface contact. Box

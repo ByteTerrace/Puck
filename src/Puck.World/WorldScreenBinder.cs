@@ -82,7 +82,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     // (Handle/Light/MachineAt) and facades several of its read-only members. Never mutated through here — see this
     // type's own remarks.
     private readonly WorldMachineHost m_machines;
-    private readonly WorldStampPool m_stamps;
+    private readonly WorldCreationInstances m_stamps;
     private readonly WorldPerceptionAnchor m_perception;
     // Resolved lazily: the facts read the input router, which the composition root registers after this binder.
     private readonly Func<IOverlayPredicateEvaluator> m_facts;
@@ -224,7 +224,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
     /// transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_domains = domains;

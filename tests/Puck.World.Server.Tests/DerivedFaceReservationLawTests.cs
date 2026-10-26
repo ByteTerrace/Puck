@@ -77,29 +77,7 @@ public sealed class DerivedFaceReservationLawTests {
 
         Assert.Empty(collection: refusals);
     }
-    [Fact]
-    public void TheFixtureLeavesHeadroomAboveItsBootReservation() {
-        // The instrument check: the raise below must be one the STATIC range admits, or the law proves nothing about
-        // the boot-frozen gate.
-        using var fixture = FreshServer();
 
-        Assert.Equal(
-            expected: BootReservation,
-            actual: fixture.Server.BootDerivedFaceScreens
-        );
-        Assert.True(
-            condition: ((BootReservation + 1) <= WorldPlacementPolicy.MaxDerivedFaceScreens),
-            userMessage: "the raise under test must sit inside the static derivedFaceScreens range"
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: (Fixtures.BuildDocument() with { AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = (BootReservation + 1) }) }),
-                reason: out var reason,
-                neighbours: null
-            ),
-            userMessage: reason
-        );
-    }
     [Fact]
     public void TheRefusalNamesTheBandAndTheAskedForWidth() {
         using var fixture = FreshServer();

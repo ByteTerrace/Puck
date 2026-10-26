@@ -6,7 +6,7 @@ using Puck.Physics.Motion;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The world a <see cref="WorldStampPool"/> roots its stamps on: the definition it stamps, each entity's live pose and
+/// The world a <see cref="WorldCreationInstances"/> roots its stamps on: the definition it stamps, each entity's live pose and
 /// facts, and the state its looks read. The local world's <see cref="WorldClient"/> is one; a session view's
 /// <see cref="WorldSessionStampSource"/>, over the destination's mirror, is the other, so a session screen draws its
 /// destination's animated, inhabited and attached creations through the same pool the local scene does.

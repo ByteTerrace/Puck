@@ -251,8 +251,8 @@ public sealed class WorldFaceCatalogLawTests {
         var screen = Assert.Single(
             collection: WorldPrototypeFacets.Derive(
                 definition: linear,
-                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase,
-                derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase) + 1)
+                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(linear),
+                derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase(linear)) + 1)
             ).Faces,
             predicate: face => (face.Index == row.ScreenIndex)
         );
@@ -295,8 +295,8 @@ public sealed class WorldFaceCatalogLawTests {
             return Assert.Single(
                 collection: WorldPrototypeFacets.Derive(
                     definition: definition,
-                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase,
-                    derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase) + 1)
+                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
+                    derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase(definition)) + 1)
                 ).Faces,
                 predicate: face => (face.Index == row.ScreenIndex)
             );
@@ -610,10 +610,8 @@ public sealed class WorldFaceCatalogLawTests {
     public void SlotExhaustionDarkensTheNewestClaimant_ButNeverRemovesItsGeometry() {
         // The dynamic half of the budget: a band that cannot seat everything must darken, loudly and by name, and
         // the darkened face must still carry the frame its door is derived from.
-        var catalog = WorldFaceCatalog.For(definition: BuildBudgetDocument(
-            liveFaces: 3,
-            reservedSlots: 2
-        ));
+        var definition = BuildBudgetDocument(liveFaces: 3, reservedSlots: 2);
+        var catalog = WorldFaceCatalog.For(definition);
         var starved = catalog.Rows[^1];
 
         Assert.True(condition: starved.SlotStarved);
@@ -640,11 +638,11 @@ public sealed class WorldFaceCatalogLawTests {
             ))
         );
         Assert.Equal(
-            expected: WorldPlacementPolicy.DerivedFaceBase,
+            expected: WorldPlacementPolicy.DerivedFaceBase(definition),
             actual: catalog.Rows[0].ScreenIndex
         );
         Assert.Equal(
-            expected: (WorldPlacementPolicy.DerivedFaceBase + 1),
+            expected: WorldPlacementPolicy.DerivedFaceBase(definition) + 1,
             actual: catalog.Rows[1].ScreenIndex
         );
     }

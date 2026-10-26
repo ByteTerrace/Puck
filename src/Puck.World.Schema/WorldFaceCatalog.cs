@@ -142,7 +142,7 @@ public sealed class WorldFaceCatalog {
         var cameras = DerivedCameraNames(definition: definition);
         var capacity = definition.Authoring.DerivedFaceScreens;
         var claiming = 0;
-        var screenIndex = WorldPlacementPolicy.DerivedFaceBase;
+        var screenIndex = WorldPlacementPolicy.DerivedFaceBase(definition);
 
         foreach (var placement in definition.Placements) {
             if (
@@ -181,7 +181,7 @@ public sealed class WorldFaceCatalog {
                 if (claimsSlot) {
                     claiming++;
 
-                    if (screenIndex < (WorldPlacementPolicy.DerivedFaceBase + capacity)) {
+                    if (screenIndex < (WorldPlacementPolicy.DerivedFaceBase(definition) + capacity)) {
                         seated = screenIndex;
                         screenIndex++;
                     } else {

@@ -110,7 +110,7 @@ public static class WorldSeatAnchors {
     /// <param name="speech">The speech clock.</param>
     /// <param name="transforms">The current packed transforms (parts only).</param>
     /// <param name="pose">The resolved pose, or default.</param>
-    public static bool TryResolve(WorldAnchor? anchor, int slot, WorldClient client, WorldStampPool stamps, WorldPerceptionAnchor perception, WorldSpeechClock speech, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
+    public static bool TryResolve(WorldAnchor? anchor, int slot, WorldClient client, WorldCreationInstances stamps, WorldPerceptionAnchor perception, WorldSpeechClock speech, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: stamps);
 

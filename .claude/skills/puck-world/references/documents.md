@@ -203,77 +203,14 @@ its whole authority surface.
 
 ## Capacity constants
 
-- `WorldBodiesLimits` (`Puck.World.Schema`): `CapacityCeiling = 4096`,
-  `LocalSeatCount = 4` (indices 0–3) — single-sourced against
-  `WorldClient.EntityCapacity` (see
-  [SKILL.md](../SKILL.md)'s "Limits worth knowing" section). The client reserves full
-  catalog detail for the first `DetailedRenderBand` (128) indices and emits
-  later active bodies as one-instance coarse capsules. That hybrid bounds
-  storage and SDF inputs; it
-  does not establish dense-crowd frame time. Hard presentation targets require
-  a non-per-creature SDF lane (for example raster impostors or an authored
-  aggregate). A world's `bodies.networkPlayers` is ordinary document data, not
-  an engine ceiling.
-- `WorldLookSource.Catalog.RigCount` is the reusable appearance count, not
-  body capacity. `DefaultIndex` cycles fresh slot picks through that catalog;
-  an admitted occupant carries its pick across transfers. The client reserves
-  a maximum-sized transform range per body and probes the largest rig in every
-  range, so a repeated or transferred look is neither truncated nor duplicated.
-  Each catalog leaf retains a separate cull instance with a primitive-sized
-  bound plus its unscaled local offset. The instance ceiling remains distinct
-  from population capacity. Do not use live instance count to size reserved
-  bone storage.
+- WorldBodiesLimits.CapacityCeiling is 4,096; each world authors its actual capacity. Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
 - `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 1024`,
   `MaxCellsPerRow = TopologyCompilation.MaxCells` (an authored `capacity` may only narrow it),
   `MaxTextValueLength = 1024` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed
   per-body register/checkpoint width).
-- `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`,
-  the document-global CPU/instance-grid admission ceiling. The recorded
-  GPU-bound measurement is 0 but does not govern admission.
-- `WorldPlacementPolicy`: `MaxShapesPerStamp = 367`,
-  `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128, an
-  independent value), `TimelineSecondsPerFrame = 8f/60f`, and the reserved
-  derived-face screen band. Beside the full registrations the pool holds
-  `MaxCompactStampRegistrations` (256) compact ones of
-  `MaxCompactStampShapes` (8) shape slots, which a creation of at most that
-  many shapes and no text takes first (`WorldStampPool.FitsCompact`): a
-  game's pieces draw as themselves without crowding the full registrations.
-  The stamp pool's worst-case instance draw is
-  `MaxStampRegistrations x MaxShapesPerStamp` (46,976) plus
-  `MaxCompactStampRegistrations x MaxCompactStampShapes` (2,048) against
-  `Puck.SignedDistance.SdfProgramBuilder.MaxInstances`, most of the debug
-  world's envelope. A world's whole composed scene (screens, static placements,
-  the stamp pool, the avatar catalog and one reservation per adjacency band)
-  must fit under that cap and under `ScreenMaterialId` materials.
-  `Puck.World.Client.WorldSceneEnvelope` counts it on the CPU from the
-  definition alone, so every boot, headless or windowed, prints
-  `[world.render] envelope: …` with each part's instances and the reservation,
-  and refuses a boot scene past a ceiling by name. A presented boot also prints
-  `[world.render] probe: …` (the construction probe's instances, program words
-  and dynamic slots) and an `envelope mismatch` line should the probe and the
-  count ever disagree.
-- `WorldRenderEnvelope.cs` — the render-capacity oracle: each consumer
-  `Configure`s a measurer returning a `WorldRenderCost` (instances,
-  materials), and `TryFit(candidate)` at every apply refuses a candidate past
-  an engine ceiling; unconfigured reads as "fits". The boot registers the
-  world scene's count on every boot shape (`WorldPostBuildWiring`), session and
-  infinity views register theirs on the instance they show. A measure runs once
-  per render-relevant mutation, each responding placement a light switch flips
-  included, so it counts and never emits: the stamp pool's and the avatar
-  catalog's worst cases are emitted once a process, a candidate's own rows are
-  counted (`WorldPlacementStamper.StaticStampReservation`, one slab a screen,
-  bands times one band's reservation).
-- `placements.policy.authoringHeadroomInstances` — the instances the
-  construction probe reserves beyond the boot scene, clamped to what the
-  ceiling leaves. Buffers grow past it; it is no quota, and only an engine
-  ceiling refuses a candidate.
-- `CreationDocument.PaletteSize = 32` bounds `puck.creation.v1`'s `palette`
-  array — see [documents-render.md](documents-render.md) for the entry shape
-  (weathering/inset lanes), which is decision prose, not a bare catalog.
-- `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
-  surface illumination; see [documents-render.md](documents-render.md).
+- WorldPlacementPolicy keeps the per-world 32,768 solid-collider ceiling and timeline cadence. Derived faces start after authored screen indices. No interpreter-era scene envelope is admitted or reserved.
 
 ## Routing map (one line each, all under `src/Puck.World.Schema/`)
 

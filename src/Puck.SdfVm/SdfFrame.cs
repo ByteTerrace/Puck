@@ -188,6 +188,10 @@ public sealed record SdfFrame(
     /// <see cref="MeshDrawsRevision"/> moved, so a producer that reuses one list rewrites it in place and moves the
     /// revision.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
+    /// <summary>Gets the baked template slots, which draw only through MeshInstances.</summary>
+    public IReadOnlyList<int> MeshAssetSlots { get; init; } = [];
+    /// <summary>Gets the copies of local geometry assets.</summary>
+    public IReadOnlyList<SdfMeshInstance> MeshInstances { get; init; } = [];
 
     /// <summary>The revision of <see cref="MeshDraws"/>' content, which a producer that rewrites one list in place moves
     /// whenever it does; 0 for a producer that supplies a new list instead.</summary>

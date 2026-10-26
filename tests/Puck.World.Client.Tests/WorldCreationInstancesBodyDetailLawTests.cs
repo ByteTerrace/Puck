@@ -12,7 +12,7 @@ namespace Puck.World.Client.Tests;
 /// crease split; a flat-faced shape declares none, and a blend group takes its finest member at or above the group floor,
 /// never a thinner member's, which would refine the whole group.
 /// </summary>
-public sealed class WorldStampPoolBodyDetailLawTests {
+public sealed class WorldCreationInstancesBodyDetailLawTests {
     private static ShapeDocument Shape(int id, SdfSolidPrimitive type, Vector3 scale, int group = 0) => new(
         Id: id,
         Name: null,

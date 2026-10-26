@@ -15,6 +15,25 @@ Rendering is presentation: floats are legal, and nothing here may feed back
 into simulation state. The deterministic contract lives with the fixed-point
 query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
+## Mesh pipeline limits
+
+The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
+live transform table and reports an actual `[world.render] envelope`; it builds
+no worst-case probe. `WorldRigidAssets` emits local creation templates once and
+supplies `SdfMeshInstance` roots and identities. `SdfMeshPathBake.Dress` expands
+the shared mesh into copies without program or palette duplication. Animated
+creation fields use root and motion-owner deltas; CPU pose scratch remains per
+actual shape. A skin past 255 members throws instead of attaching excess members
+to the root. Volume overflow is explicit. Scope depth is 4, screen bindings 32,
+and derived faces follow authored screen indices. `SDF_MAX_INSTANCES` bounds
+one bake program, not a per-world render budget.
+
+`SdfMeshLibrary` retains an age-ordered byte budget derived from available
+machine memory, evicting oldest geometries rather than clearing the library.
+Brick storage is allocated on its first bake/upload request. Measure draw/vertex
+counts, actual transform rows, program/material bytes, region residency and
+bakes; the lead measures frame times and edit-to-running on a quiet machine.
+
 ## Evidence-preserving diagnostics
 
 `world.debug-view colliders|contacts` uses the beauty path through temporal
@@ -85,7 +104,7 @@ for commands, coverage and the GPU handoff checks.
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, and under `passes/` one `*.comp.hlsl` wrapper per dispatch plus the stage modules | [kernels](references/kernels.md) |
 | Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfRenderHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
 | Cameras and views | `src/Puck.SdfVm/Views`; `WorldViewInstances`, `WorldScreenBinder.*` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`); `CreationStampEmitter` | `puck-world` skill |
+| World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldCreationInstances`); `CreationStampEmitter` | `puck-world` skill |
 | Shader packages, pipelines, render graph | `src/Puck.Shaders` (`RenderGraphRuntime`, `ShaderPipelineRenderNode`, `ShaderPipelineCompiler`), `build/Shaders.targets` | [shaders reference](../../../docs/reference/shaders.md), [runtime contracts](references/runtime-contracts.md) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` and their `.Presentation` projects | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds) |
 
@@ -627,7 +646,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 | Skill | Route there for |
 |---|---|
-| `sdf-authoring` | Sculpting creations: primitives, blends, palette, rigs, the shape budget. |
+| `sdf-authoring` | Sculpting creations: primitives, blends, palette, rigs, bake work and bytes. |
 | `puck-world` | What world-document sections mean and console verbs' semantics. |
 | `puck-dsl` | `.puck` grammar and the compile/lint verbs. |
 | `maths-usage` | Fixed-point primitives for the query evaluator. |

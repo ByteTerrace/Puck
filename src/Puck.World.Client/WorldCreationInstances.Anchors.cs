@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     /// <summary>Composes the rest pose onto a placement slot that carries a domain frame instead of a shape frame.</summary>
     public SdfAnchor ResolvePlacementSlotPose(string placementId, int? shapeId, IWorldStampSource client, DynamicTransform transform) {
         var live = FindRow(id: placementId);
@@ -20,7 +20,7 @@ public sealed partial class WorldStampPool {
         }
         var shape = live?.Creation.EngineDocument.Shapes?.FirstOrDefault(predicate: s => (s.Id == shapeId));
 
-        if (shape is { Domain.Count: > 0 }) {
+        if (shape is not null) {
             return new(
                 (transform.Position + Vector3.Transform(
                     (shape.Position.Value * live!.Scale),

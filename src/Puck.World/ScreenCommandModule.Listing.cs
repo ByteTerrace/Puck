@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
-using Puck.World.Client;
+
 
 namespace Puck.World;
 
@@ -40,7 +40,7 @@ internal sealed partial class ScreenCommandModule {
 
         foreach (var face in m_binder.Mappings.Screens) {
             if (
-                (face.Index >= WorldPrototypeFacets.DerivedFaceBase) &&
+                (face.Index >= WorldPlacementPolicy.DerivedFaceBase(m_server.Definition)) &&
                 (face.Source is not WorldScreenSource.None)
             ) {
                 declaredScreens.Add(item: face);

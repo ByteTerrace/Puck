@@ -291,7 +291,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
         var emitter = new WorldSceneEmitter(
-            animator: new WorldStampPool(),
+            animator: new WorldCreationInstances(),
             audio: new SilentAudio(),
             client: client,
             continuum: new WorldContinuum(adjacencies: new NoNeighbours(), client: client, routes: routes),

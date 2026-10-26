@@ -92,13 +92,13 @@ public sealed class WorldScreenCarryLawTests {
         predicate: surface => (surface.ScreenIndex == ScreenIndex)
     );
     // The stamp wears the world's creation unless a stamped one is given, as a live edit leaves it out of step.
-    private static (WorldStampPool Pool, WorldClient Client) Pack(WorldDefinition world, WorldPrototype? stamped = null) {
+    private static (WorldCreationInstances Pool, WorldClient Client) Pack(WorldDefinition world, WorldPrototype? stamped = null) {
         var creation = (stamped ?? WorldDefinitionRows.FindCreation(creations: world.Creations, id: "rig")!);
         var client = ClientFixtures.Client(definition: world);
-        var pool = new WorldStampPool();
+        var pool = new WorldCreationInstances();
 
         pool.Reconcile(
-            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: world.Looks[0])],
+            bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: world.Looks[0])],
             creations: world.Creations,
             dynamics: [],
             placements: []
@@ -126,7 +126,7 @@ public sealed class WorldScreenCarryLawTests {
         pool.Tick(deltaSeconds: (1f / 60f));
 
         var moved = new SdfMovedTransforms();
-        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         moved.Begin(everything: false, tableRows: transforms.Length);
         pool.PackTransforms(client: client, moved: moved, parkPosition: new Vector3(x: 0f, y: -1000f, z: 0f), slotBase: 0, transforms: transforms);
@@ -305,7 +305,7 @@ public sealed class WorldScreenCarryLawTests {
         }
 
         public WorldClient Client { get; }
-        public WorldStampPool Pool { get; } = new();
+        public WorldCreationInstances Pool { get; } = new();
 
         // Delivers the held cell's new value the way a mutation's definition delivery reaches the client.
         public void Hold(long raw) => Client.DeliverDefinition(

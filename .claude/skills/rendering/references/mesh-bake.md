@@ -123,7 +123,7 @@ laws exercise that boundary.
   static instance after its opaque ones (`WorldPlacementStamper`, with a field
   scope of their own when one blends other than by union) and a pooled
   creation's each on its own slot, before any text-coupled instance opens
-  (`WorldStampPool.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
+  (`WorldCreationInstances.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
   glass pass alone and stays out of the mesh pass, the cascades and the
   irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
 - **Static features declare their spacing.** `WorldPlacementStamper.ShapeDetail`
@@ -175,7 +175,7 @@ laws exercise that boundary.
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.
 - **A body's round sections declare their spacing.** Every pooled instance
-  declares detail from its shapes' round sections (`WorldStampPool.BodyDetail`):
+  declares detail from its shapes' round sections (`WorldCreationInstances.BodyDetail`):
   a strand's thicker radius, a capsule's, a sphere's, an ellipsoid's middle
   radius (a superellipsoid's tightened by its exponent), or an elliptic prism's
   tightest bend (an eye socket's carved rim follows it), over three cells, so
@@ -199,7 +199,7 @@ laws exercise that boundary.
   and multiply her triangles about eighteenfold.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
-  (`WorldStampPool.TextSlot`), bounded by its glyphs' reach and declaring their
+  (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their
   detail. Sharing the root slot with a blend group put the glyphs in that
   group's coarser lattice, which dropped an "I". A slot's group refines toward
   the finest detail its

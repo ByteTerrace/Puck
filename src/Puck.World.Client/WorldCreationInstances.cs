@@ -36,18 +36,22 @@ namespace Puck.World.Client;
 /// <c>Follower4</c>); a part named in <see cref="WorldLookMotion.PartDynamics"/> gets its own position-only follower
 /// chasing the composed (already-followed) root — a secondary lag on top of the root's.
 /// </summary>
-/// <remarks>The pool reserves a constant dynamic-transform slot range (<see cref="DynamicSlotCount"/>): the
-/// <see cref="WorldPlacementPolicy.MaxCompactStampRegistrations"/> compact registrations of
-/// <see cref="CompactSlotsPerPlacement"/> slots, which a small creation takes first (<see cref="FitsCompact"/>), then the
-/// <see cref="WorldPlacementPolicy.MaxStampRegistrations"/> full ones of <see cref="SlotsPerPlacement"/>. Live programs emit
-/// only registered geometry; unused transform slots do not need placeholder instances. The probe path
-/// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source measures
-/// it once at construction, so a body-rooted stamp never grows the frozen floor. Single-threaded on the window-pump
-/// thread, like every editor/render type here.</remarks>
-public sealed partial class WorldStampPool {
+/// <remarks>Articulated instances allocate their actual root and motion-owner slots. Rigid bodies share local geometry through <see cref="WorldRigidAssets"/>.</remarks>
+public sealed partial class WorldCreationInstances {
+    private int[] m_catalogSlots = [];
+    private int m_catalogBase;
+    /// <summary>Publishes the catalog looks' actual packed slot map for part anchors.</summary>
+    public void SetCatalogSlots(int[] slots, int slotBase) { m_catalogSlots = slots; m_catalogBase = slotBase; }
+    /// <summary>Reads a procedural look's part through its dense slot map.</summary>
+    public bool TryCatalogPartPose(int body, string part, int rig, float scale, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
+        if ((uint)body >= (uint)m_catalogSlots.Length || m_catalogSlots[body] < 0) { pose = default; return false; }
+        return WorldRigCatalog.TryPartPose(0, part, rig, transforms[(m_catalogBase + m_catalogSlots[body])..], out pose, scale);
+    }
     private const float GroupBoundMargin = 0.4f;
 
-    private readonly Registration?[] m_pool = new Registration?[RegistrationCount];
+    private Registration?[] m_pool = [];
+    public WorldRigidAssets Rigid { get; } = new();
+    public int ArticulatedSlotCount => RootSlotOffset(index: m_pool.Length);
     private int m_packedSlotBase = -1;
 
     /// <summary>Gets the operator's live shape isolation (<c>view.isolate</c>), which every live <see cref="Emit"/>
@@ -110,7 +114,7 @@ public sealed partial class WorldStampPool {
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
-    private sealed class Registration {
+    private sealed class Registration(CreationDocument document) {
         // The body-rooted stamp's population index, or null for a row-rooted registration. An ATTACHED row leaves this
         // null deliberately: FindBody keys the one-per-body creation-look registration, and an attached row rides a body
         // WITHOUT owning its look or its part namespace.
@@ -118,10 +122,12 @@ public sealed partial class WorldStampPool {
 
         private WorldPickTarget? m_pickTarget;
 
-        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { Prototype = Creation.Id, StampPoolSlots = Slots };
+        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { Prototype = Creation.Id, CreationSlots = Slots };
 
         // The dynamic-transform slots the registration's pool index reserves (SlotsAt), set when it takes the index.
-        public int Slots = SlotsPerPlacement;
+        public CreationMotionPlan Motion = new(document);
+        public int Slots => Motion.SlotCount + ((document.TextRuns is { Count: > 0 }) ? 1 : 0);
+        public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[document.Shapes?.Count ?? 0];
 
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
@@ -207,10 +213,10 @@ public sealed partial class WorldStampPool {
         // The creation's reach from its root (CreationGeometry.Reach), measured on the first pack that needs it; -1
         // before.
         public float Reach = -1f;
-        // Each shape's reach about its own slot, in creation units, or -1 for a cutter (WorldStampPool.PartSpheres); null
+        // Each shape's reach about its own slot, in creation units, or -1 for a cutter (WorldCreationInstances.PartSpheres); null
         // before the first pack that needs it.
         public float[]? ShapeReaches;
-        // The world.rates hold of a body's pose (WorldStampPool.Rates): the seconds the frames that held it carried its
+        // The world.rates hold of a body's pose (WorldCreationInstances.Rates): the seconds the frames that held it carried its
         // pose past, which its next full pack advances its drivers, effectors and part followers by, and whether a held
         // frame owes that pack whatever wakes the registration.
         public float RateSeconds;
@@ -243,24 +249,24 @@ public sealed partial class WorldStampPool {
         // Per-shape-slot part position followers, resolved from the look's PartDynamics map through Parts —
         // indexed by shape slot (the same index PackTransforms's per-shape loop and Parts.TryResolve's
         // transformSlot use), sized once to the fixed per-stamp shape budget.
-        public readonly bool[] PartFollows = new bool[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly bool[] PartFollows = new bool[(document.Shapes?.Count ?? 0)];
         // The rigid delta each shape's animation produced this frame, kept so a later shape naming it as `parent`
         // rides it and a pose read (LatchedShapePose) answers with what was drawn; PartParent is the resolved parent
         // index per shape (−1 = the root), filled on first pack. The rotations start at identity, so a read before the
         // first pack answers the rest pose.
         public readonly Quaternion[] PartDeltaRotation = Enumerable.Repeat(
-            count: WorldPlacementPolicy.MaxAnimatedStampShapes,
+            count: (document.Shapes?.Count ?? 0),
             element: Quaternion.Identity
         ).ToArray();
-        public readonly Vector3[] PartDeltaTranslation = new Vector3[WorldPlacementPolicy.MaxAnimatedStampShapes];
-        public readonly int[] PartParent = new int[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly Vector3[] PartDeltaTranslation = new Vector3[(document.Shapes?.Count ?? 0)];
+        public readonly int[] PartParent = new int[(document.Shapes?.Count ?? 0)];
 
         public bool PartParentsResolved;
 
         // Each shape's OWN delta before the parent chain — kept because an effector folds its correction into a
         // bone's own delta and the whole chain then re-chains off these.
-        public readonly Quaternion[] PartOwnRotation = new Quaternion[WorldPlacementPolicy.MaxAnimatedStampShapes];
-        public readonly Vector3[] PartOwnTranslation = new Vector3[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly Quaternion[] PartOwnRotation = new Quaternion[(document.Shapes?.Count ?? 0)];
+        public readonly Vector3[] PartOwnTranslation = new Vector3[(document.Shapes?.Count ?? 0)];
         // The per-effector solve state: each effector's eased gate weight, its resolved bone/tip shape slots
         // (−1 = unresolved, so the effector is inert), and its plant latch. Sized to the document ceilings, resolved
         // once per registration.
@@ -288,41 +294,20 @@ public sealed partial class WorldStampPool {
 
         public bool EffectorsResolved;
 
-        public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[WorldPlacementPolicy.MaxAnimatedStampShapes];
-        public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[(document.Shapes?.Count ?? 0)];
+        public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[(document.Shapes?.Count ?? 0)];
     }
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
-    public static int DynamicSlotCount => RootSlotOffset(index: RegistrationCount);
-    /// <summary>The dynamic-transform slots one full registration reserves: its root + its full shape-slot pool.</summary>
-    public static int SlotsPerPlacement => (1 + WorldPlacementPolicy.MaxAnimatedStampShapes);
-    /// <summary>The dynamic-transform slots one compact registration reserves: its root +
-    /// <see cref="WorldPlacementPolicy.MaxCompactStampShapes"/> shape slots.</summary>
-    public static int CompactSlotsPerPlacement => (1 + WorldPlacementPolicy.MaxCompactStampShapes);
-    /// <summary>The pool's registration count: the compact registrations, then the full ones.</summary>
-    public static int RegistrationCount => (WorldPlacementPolicy.MaxStampRegistrations + WorldPlacementPolicy.MaxCompactStampRegistrations);
-
-    /// <summary>Returns the dynamic-transform slots the registration at a pool index reserves.</summary>
-    /// <param name="index">The pool index, compact registrations first.</param>
-    /// <returns><see cref="CompactSlotsPerPlacement"/> for a compact registration, <see cref="SlotsPerPlacement"/> for a
-    /// full one.</returns>
-    public static int SlotsAt(int index) => (IsCompact(index: index) ? CompactSlotsPerPlacement : SlotsPerPlacement);
-    /// <summary>Returns the offset, from the pool's first dynamic-transform slot, of the root slot of the registration
-    /// at a pool index: the compact registrations' ranges, then the full ones'.</summary>
-    /// <param name="index">The pool index, compact registrations first; <see cref="RegistrationCount"/> gives the end of
-    /// the last range.</param>
-    /// <returns>The slot offset.</returns>
-    public static int RootSlotOffset(int index) => ((index <= WorldPlacementPolicy.MaxCompactStampRegistrations)
-        ? (index * CompactSlotsPerPlacement)
-        : ((WorldPlacementPolicy.MaxCompactStampRegistrations * CompactSlotsPerPlacement) + ((index - WorldPlacementPolicy.MaxCompactStampRegistrations) * SlotsPerPlacement)));
-    // Whether the pool index is a compact registration's.
-    private static bool IsCompact(int index) => (index < WorldPlacementPolicy.MaxCompactStampRegistrations);
-    /// <summary>Determines whether a creation fits a compact registration: at most
-    /// <see cref="WorldPlacementPolicy.MaxCompactStampShapes"/> shapes and no text runs.</summary>
-    /// <param name="document">The creation.</param>
-    /// <returns><see langword="true"/> when the creation fits.</returns>
-    public static bool FitsCompact(CreationDocument document) => (((document.Shapes?.Count ?? 0) <= WorldPlacementPolicy.MaxCompactStampShapes) && (document.TextRuns is not { Count: > 0 }));
+    public int DynamicSlotCount => ArticulatedSlotCount + Rigid.SlotCount;
+    public int RegistrationCount => m_pool.Length;
+    public int SlotsAt(int index) => m_pool[index]?.Slots ?? 0;
+    public int RootSlotOffset(int index) {
+        var offset = 0;
+        for (var entry = 0; entry < index; entry++) { offset = checked(offset + SlotsAt(entry)); }
+        return offset;
+    }
 
     // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
     // registration computed still matches the scale being rendered this call, a fresh CreationStampEmitter.LayoutTextRuns
@@ -366,13 +351,13 @@ public sealed partial class WorldStampPool {
     // the placement scale for the fold's offsets, spacings, and cells as well as the rest offset, which a baked
     // primitive scale could not). A domain-bearing shape therefore never carries its own swing/slide or a
     // frame-timeline pose (refused at validation) — only a parent's motion reaches it, and only through
-    // PackTransforms's parent-delta chain (WorldStampPool.ChainPartDeltas).
+    // PackTransforms's parent-delta chain (WorldCreationInstances.ChainPartDeltas).
     //
     // A panel's copy is emitted from a SECOND chain (its own ResetPoint + TransformDynamic + the same twist/bend
     // prefix) rather than after the plate's shape instruction, whose emission may leave a persistent Scale op on the
     // chain. placementScale converts the panel's creation-unit Inset/Depth into the world units `scale` is already
     // in, and is the Scale op a domain-bearing shape's chain carries (above).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null, ShapeWarpDocument? warp = null, ShapeDisplaceDocument? displace = null, DocumentVector3? elongate = null, int? steps = null, ShapeMorphDocument? morph = null) {
+    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, CreationMotionPlan? motion = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null, ShapeWarpDocument? warp = null, ShapeDisplaceDocument? displace = null, DocumentVector3? elongate = null, int? steps = null, ShapeMorphDocument? morph = null) {
         if (probeWorstCase) { builder.ReservePathTables(shapeCount: 1); }
         // The worst-case reservation for a Sweep's fixed 3-uvec4 curve table entry — any admitted curve costs the
         // SAME table words (unlike ConvexPolygon's variable vertex count), so one representative curve inside the
@@ -398,7 +383,7 @@ public sealed partial class WorldStampPool {
                     ? Quaternion.Identity
                     : Quaternion.Normalize(value: shapeRotation)));
             } else {
-                chain = chain.TransformDynamic(slot: slot);
+                chain = chain.TransformDynamic(slot: slot).Translate(shapePosition * placementScale).Rotate(shapeRotation == default ? Quaternion.Identity : shapeRotation);
             }
 
             if (
@@ -647,7 +632,10 @@ public sealed partial class WorldStampPool {
             }
             _ = builder.PopField();
             EmitTrims(
-                allShapes: allShapes, builder: builder, chamfer: chamfer, exponent: exponent, lift: lift, material: material,
+                allShapes: allShapes,
+            motion: motion,
+            shapePosition: shapePosition,
+            shapeRotation: shapeRotation, builder: builder, chamfer: chamfer, exponent: exponent, lift: lift, material: material,
                 paletteIds: paletteIds, placementScale: placementScale, probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot,
                 rounding: rounding, scale: scale,
                 slot: slot, taper: taper, trims: trims, type: type
@@ -687,7 +675,10 @@ public sealed partial class WorldStampPool {
 
         if (!inGroupScope) {
             EmitTrims(
-                allShapes: allShapes, builder: builder, chamfer: chamfer, exponent: exponent, lift: lift, material: material,
+                allShapes: allShapes,
+            motion: motion,
+            shapePosition: shapePosition,
+            shapeRotation: shapeRotation, builder: builder, chamfer: chamfer, exponent: exponent, lift: lift, material: material,
                 paletteIds: paletteIds, placementScale: placementScale, probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot,
                 rounding: rounding, scale: scale,
                 slot: slot, taper: taper, trims: trims, type: type
@@ -789,20 +780,15 @@ public sealed partial class WorldStampPool {
     // A creation that fits a compact registration takes one first, so small creations never crowd the full ones; any
     // creation then takes a free full registration.
     private int FreeSlot(CreationDocument document) {
-        if (FitsCompact(document: document)) {
-            for (var index = 0; (index < WorldPlacementPolicy.MaxCompactStampRegistrations); index++) {
-                if (m_pool[index] is null) {
-                    return index;
-                }
-            }
+        for (var index = 0; index < m_pool.Length; index++) {
+            if (m_pool[index] is null) { return index; }
         }
-        for (var index = WorldPlacementPolicy.MaxCompactStampRegistrations; (index < m_pool.Length); index++) {
-            if (m_pool[index] is null) {
-                return index;
-            }
-        }
-
-        return -1;
+        var next = m_pool.Length;
+        Array.Resize(ref m_pool, next + 1);
+        Array.Resize(ref m_packedRegistrations, next + 1);
+        Array.Resize(ref m_meshDraws, next + 1);
+        m_owners.EnsureCapacity(next + 1);
+        return next;
     }
     private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
         for (var member = fromIndex; (member < shapes.Count); member++) {
@@ -835,7 +821,7 @@ public sealed partial class WorldStampPool {
         return ids;
     }
     private static Registration RegisterBody(BodyStamp stamp) {
-        var registration = new Registration {
+        var registration = new Registration(stamp.Creation.EngineDocument) {
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
@@ -855,6 +841,7 @@ public sealed partial class WorldStampPool {
     // retuned lane, a new pose) applies on the next frame; the cue clocks restart only when the cues themselves change.
     private static void LatchLook(Registration live, BodyStamp stamp) {
         var motion = stamp.Look.Motion;
+        live.Motion = new CreationMotionPlan(live.Creation.EngineDocument, motion.PartDynamics);
         var frames = (stamp.Creation.Document.Frames ?? []);
 
         live.Look = stamp.Look;
@@ -934,7 +921,7 @@ public sealed partial class WorldStampPool {
                 partId: partId,
                 transformSlot: out var shapeSlot
             ) ||
-                (((uint)shapeSlot) >= ((uint)WorldPlacementPolicy.MaxAnimatedStampShapes)) ||
+                (((uint)shapeSlot) >= ((uint)live.PartFollows.Length)) ||
                 !WorldDynamicsResponse.TryResolveResponse(
                 name: rowName,
                 response: out var response,
@@ -1036,7 +1023,7 @@ public sealed partial class WorldStampPool {
             seed: ((uint)(live.BodyIndex ?? 0))
         ));
     }
-    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new() {
+    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new(creation.EngineDocument) {
         Row = row,
         Creation = creation,
         Parts = CreationPartCompiler.Compile(document: creation.Document),
@@ -1142,16 +1129,6 @@ public sealed partial class WorldStampPool {
     public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null, IReadOnlyList<WorldScreen>? screens = null) {
         ArgumentNullException.ThrowIfNull(argument: colors);
 
-        if (probeWorstCase) {
-            EmitProbe(
-                builder: builder,
-                maxPlacementScale: maxPlacementScale,
-                slotBase: slotBase
-            );
-
-            return;
-        }
-
         for (var index = 0; (index < m_pool.Length); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
@@ -1173,44 +1150,27 @@ public sealed partial class WorldStampPool {
             );
             picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
         }
-    }
-    /// <summary>Emits the pool's worst case, never rendered: every registration slot in the largest legal form a
-    /// creation can take, whatever the pool holds (a compact registration's at its smaller shape count).</summary>
-    /// <param name="builder">The program builder.</param>
-    /// <param name="maxPlacementScale">The placement scale envelope's ceiling, which feeds only the slots' bound
-    /// radii.</param>
-    /// <param name="slotBase">The pool's first dynamic-transform slot.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
-    public static void EmitProbe(SdfProgramBuilder builder, float maxPlacementScale, int slotBase) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        for (var index = 0; (index < RegistrationCount); index++) {
-            EmitOne(
-                builder: builder,
-                colors: null,
-                live: null,
-                maxPlacementScale: maxPlacementScale,
-                picks: null,
-                probeWorstCase: true,
-                rootSlot: (slotBase + RootSlotOffset(index: index)),
-                screenMaterials: null,
-                textCatalog: null,
-                shapeSlots: (SlotsAt(index: index) - 1)
-            );
-        }
+        Rigid.Emit(builder, colors, slotBase + ArticulatedSlotCount, textCatalog, picks ?? new WorldPickMapBuilder());
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
-    public bool HasBodyRegistration(int bodyIndex) => (FindBody(bodyIndex: bodyIndex) is not null);
+    public bool HasBodyRegistration(int bodyIndex) => Rigid.ContainsBody(bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null);
 
     /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
     /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
-    public IReadOnlyList<SdfVolume> Volumes => m_volumes;
+    private readonly List<SdfVolume> m_allVolumes = [];
+    public IReadOnlyList<SdfVolume> Volumes {
+        get {
+            m_allVolumes.Clear(); m_allVolumes.AddRange(m_volumes); m_allVolumes.AddRange(Rigid.Volumes);
+            if (m_allVolumes.Count > SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"The world's creations need {m_allVolumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}."); }
+            return m_allVolumes;
+        }
+    }
 
     // A volume rides the slot of the shape its parent names (the shape's own live frame, so the volume's authored
     // offset is shape-local) or the root slot; a parent past the animated shape-slot budget has no slot and falls
     // back to the root. The list is capped at the engine's volume ceiling; later registrations' volumes are dropped.
-    private void AppendVolumes(CreationDocument document, float placementScale, int rootSlot, int shapeCount, bool[]? hidden) {
+    private void AppendVolumes(Registration live, CreationDocument document, float placementScale, int rootSlot, int shapeCount, bool[]? hidden) {
         if (document.Volumes is not { Count: > 0 } volumes) {
             return;
         }
@@ -1225,10 +1185,12 @@ public sealed partial class WorldStampPool {
                 continue;
             }
             if (m_volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                return;
+                throw new InvalidOperationException($"Creation '{document.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
             }
 
             var slot = rootSlot;
+            var origin = Vector3.Zero;
+            var rotation = Quaternion.Identity;
 
             if (volume.Parent is { } parent) {
                 if (WorldShapeIsolation.IsHidden(hidden: hidden, name: parent, shapes: shapes)) {
@@ -1241,7 +1203,9 @@ public sealed partial class WorldStampPool {
                         b: parent,
                         comparisonType: StringComparison.Ordinal
                     )) {
-                        slot = ((rootSlot + 1) + shapeIndex);
+                        slot = rootSlot + live.Motion.ShapeSlots[shapeIndex];
+                        origin = shapes[shapeIndex].Position.Value;
+                        rotation = shapes[shapeIndex].Rotation.Value;
 
                         break;
                     }
@@ -1250,8 +1214,8 @@ public sealed partial class WorldStampPool {
 
             m_volumes.Add(item: volume.ToVolume(
                 dynamicSlot: slot,
-                origin: Vector3.Zero,
-                rotation: Quaternion.Identity,
+                origin: origin * placementScale,
+                rotation: rotation,
                 scale: placementScale
             ));
         }
@@ -1302,7 +1266,10 @@ public sealed partial class WorldStampPool {
     /// <param name="dynamics">The delivered <c>dynamics</c> rows — resolves each body-rooted registration's root/part
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
-    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
+    /// <param name="looks">The world's declared looks, whose rigid assets are compiled independently of body membership.</param>
+    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null) {
+        Rigid.Reconcile(creations, bodyStamps, looks, placements);
+        bodyStamps = bodyStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).ToArray();
         m_bodySlotsStale = true;
         ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placements: placements);
         IndexBodySlots();
@@ -1426,19 +1393,6 @@ public sealed partial class WorldStampPool {
             )) {
                 live.Reads.Release();
             }
-            // A recreated creation too large for the compact index it held leaves it; the passes below admit it again.
-            if (
-                (reconciled is { } kept) &&
-                IsCompact(index: index) &&
-                !FitsCompact(document: kept.Creation.EngineDocument)
-            ) {
-                kept.Reads.Release();
-                reconciled = null;
-            }
-            if (reconciled is not null) {
-                reconciled.Slots = SlotsAt(index: index);
-            }
-
             m_pool[index] = reconciled;
         }
 
@@ -1461,20 +1415,14 @@ public sealed partial class WorldStampPool {
 
             var slot = FreeSlot(document: creation.EngineDocument);
 
-            if (slot < 0) {
-                Console.Error.WriteLine(value: $"[world.placement: {((placement.Attach is null)
-                    ? "animated"
-                    : "attached")} '{placement.Id}' has no free stamp slot — the {WorldPlacementPolicy.MaxStampRegistrations}-slot pool is full]");
 
-                continue;
-            }
 
             var registered = RegisterRow(
                 creation: creation,
                 row: placement
             );
 
-            registered.Slots = SlotsAt(index: slot);
+
             m_pool[slot] = registered;
         }
 
@@ -1486,15 +1434,11 @@ public sealed partial class WorldStampPool {
 
             var slot = FreeSlot(document: stamp.Creation.EngineDocument);
 
-            if (slot < 0) {
-                Console.Error.WriteLine(value: $"[world.placement: creation-stamp body {stamp.BodyIndex} has no free stamp slot — the {WorldPlacementPolicy.MaxStampRegistrations} full and {WorldPlacementPolicy.MaxCompactStampRegistrations} compact registrations are taken; it renders as a catalog avatar]");
 
-                continue;
-            }
 
             var fresh = RegisterBody(stamp: stamp);
 
-            fresh.Slots = SlotsAt(index: slot);
+
             m_pool[slot] = fresh;
             ApplyMotion(
                 live: fresh,
@@ -1559,6 +1503,7 @@ public sealed partial class WorldStampPool {
     /// and the rendered geometry answer with the same pose (<see cref="TryShapePosition"/> reads the same latch). A
     /// shape with no animation has an identity delta, so its anchor is its authored pose.</remarks>
     public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose) {
+        if (Rigid.ContainsBody(bodyIndex)) { return Rigid.TryPartPose(bodyIndex, partId, client, out pose); }
         if (
             !TryFindBody(
             bodyIndex: bodyIndex,
@@ -1604,7 +1549,7 @@ public sealed partial class WorldStampPool {
             shape: shapes[shapeSlot]
         );
 
-        if (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) {
+        if (shapeSlot < (live.Creation.EngineDocument.Shapes?.Count ?? 0)) {
             WorldGaitDrivers.Apply(
                 deltaRotation: live.PartDeltaRotation[shapeSlot],
                 deltaTranslation: live.PartDeltaTranslation[shapeSlot],
@@ -1623,7 +1568,7 @@ public sealed partial class WorldStampPool {
         ));
 
         if (
-            (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) &&
+            (shapeSlot < (live.Creation.EngineDocument.Shapes?.Count ?? 0)) &&
             live.PartFollows[shapeSlot] &&
             live.PartFollower[shapeSlot].Seeded
         ) {
@@ -1634,6 +1579,17 @@ public sealed partial class WorldStampPool {
             Position: worldPosition,
             Orientation: Quaternion.Normalize(value: (rootRotation * localRotation))
         );
+    }
+
+    /// <summary>Reads a packed shape's world pose by authored index, independently of the shared transform layout.</summary>
+    public DynamicTransform BodyShapePose(int bodyIndex, int shapeIndex) {
+        var live = FindBody(bodyIndex);
+        if (live is null || (uint)shapeIndex >= (uint)live.ShapeTransforms.Length) { throw new ArgumentOutOfRangeException(nameof(shapeIndex)); }
+        var pose = live.ShapeTransforms[shapeIndex];
+        var shape = live.Creation.EngineDocument.Shapes![shapeIndex];
+        return shape.Domain is { Count: > 0 } ? new DynamicTransform(
+            Position: pose.Position + Vector3.Transform(shape.Position.Value * live.Scale, pose.Orientation),
+            Orientation: Quaternion.Normalize(pose.Orientation * shape.Rotation.Value), Lanes: pose.Lanes) : pose;
     }
 
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
@@ -1647,6 +1603,7 @@ public sealed partial class WorldStampPool {
     /// the same answer <see cref="TryBodyPartAuthoredPose"/> gives for it, read from the packed buffer instead of
     /// the latch.</remarks>
     public bool TryBodyPartPose(int bodyIndex, string partId, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
+        if (Rigid.ContainsBody(bodyIndex)) { return Rigid.TryPartPose(bodyIndex, partId, null, out pose); }
         if (
             (m_packedSlotBase < 0) ||
             !TryFindBody(
@@ -1664,7 +1621,7 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        var transformSlot = (((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + 1) + shapeSlot);
+        var transformSlot = m_packedSlotBase + RootSlotOffset(index: poolIndex) + live.Motion.ShapeSlots[shapeSlot];
 
         if (((uint)transformSlot) >= ((uint)transforms.Length)) {
             pose = default;
@@ -1673,27 +1630,9 @@ public sealed partial class WorldStampPool {
         }
 
         var transform = transforms[transformSlot];
-        var shapes = (live.Creation.EngineDocument.Shapes ?? []);
-
-        if (
-            (((uint)shapeSlot) < ((uint)shapes.Count)) &&
-            (shapes[shapeSlot] is { Domain: { Count: > 0 } } folded)
-        ) {
-            pose = new SdfAnchor(
-                Position: (transform.Position + Vector3.Transform(
-                    rotation: transform.Orientation,
-                    value: (folded.Position.Value * live.Scale)
-                )),
-                Orientation: Quaternion.Normalize(value: (transform.Orientation * folded.Rotation.Value))
-            );
-
-            return true;
-        }
-
-        pose = new SdfAnchor(
-            Position: transform.Position,
-            Orientation: transform.Orientation
-        );
+        var shape = live.Creation.EngineDocument.Shapes![shapeSlot];
+        pose = new SdfAnchor(Position: transform.Position + Vector3.Transform(shape.Position.Value * live.Scale, transform.Orientation),
+            Orientation: Quaternion.Normalize(transform.Orientation * shape.Rotation.Value));
 
         return true;
     }
@@ -1707,6 +1646,7 @@ public sealed partial class WorldStampPool {
     /// unresolved.</param>
     /// <returns><see langword="true"/> when the body's stamp is live and its pool range has packed.</returns>
     public bool TryBodyTransformSlot(int bodyIndex, out int transformSlot, out int slotCount) {
+        if (Rigid.TryRootSlot(bodyIndex, out transformSlot)) { slotCount = 1; return true; }
         if ((m_packedSlotBase < 0) || !TryFindBody(bodyIndex: bodyIndex, live: out _, poolIndex: out var poolIndex)) {
             transformSlot = -1;
             slotCount = 0;
@@ -1722,6 +1662,7 @@ public sealed partial class WorldStampPool {
     /// <param name="transformSlot">The absolute composed-buffer slot, or -1 when unresolved.</param>
     /// <returns><see langword="true"/> when the live creation look publishes the part and its pool range has packed.</returns>
     public bool TryBodyPartTransformSlot(int bodyIndex, string partId, out int transformSlot) {
+        if (Rigid.ContainsBody(bodyIndex)) { return Rigid.TryPartSlot(bodyIndex, partId, out transformSlot); }
         if (
             (m_packedSlotBase < 0) ||
             !TryFindBody(
@@ -1739,7 +1680,7 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        transformSlot = (((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + 1) + shapeSlot);
+        transformSlot = m_packedSlotBase + RootSlotOffset(index: poolIndex) + live.Motion.ShapeSlots[shapeSlot];
 
         return true;
     }
@@ -1757,6 +1698,7 @@ public sealed partial class WorldStampPool {
     /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
     /// <param name="position">The resolved world position.</param>
     public bool TryShapePosition(string placementId, int? shapeId, IWorldStampSource client, out Vector3 position) {
+        if (client.TryInhabitantBody(placementId, out var rigidBody) && Rigid.ContainsBody(rigidBody) && Rigid.TryShapePose(rigidBody, shapeId, client, out var rigidPose)) { position = rigidPose.Position; return true; }
         var live = FindRow(id: placementId);
 
         // An inhabited placement (a body-rooted stamp) resolves through the client's body pose, keyed by placement id.
@@ -1823,6 +1765,7 @@ public sealed partial class WorldStampPool {
     /// <param name="client">The client whose inhabitant lookup resolves a body-rooted placement.</param>
     /// <param name="transformSlot">The absolute packed dynamic-transform slot, or -1 when unresolved.</param>
     public bool TryShapeTransformSlot(string placementId, int? shapeId, IWorldStampSource client, out int transformSlot) {
+        if (client.TryInhabitantBody(placementId, out var rigidBody) && Rigid.TryRootSlot(rigidBody, out transformSlot)) { return true; }
         transformSlot = -1;
 
         if (m_packedSlotBase < 0) {
@@ -1865,7 +1808,7 @@ public sealed partial class WorldStampPool {
 
             for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
                 if (shapes[shapeIndex].Id == targetShapeId) {
-                    transformSlot = ((rootSlot + 1) + shapeIndex);
+                    transformSlot = rootSlot + live.Motion.ShapeSlots[shapeIndex];
 
                     return true;
                 }

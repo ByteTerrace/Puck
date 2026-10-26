@@ -801,7 +801,7 @@ public sealed class WorldScreenBinderLawTests {
                 roster: Roster,
                 screens: Rows,
                 speech: new WorldSpeechClock(),
-                stamps: new WorldStampPool(),
+                stamps: new WorldCreationInstances(),
                 windowCapture: new FakeCaptures(supported: options.CapturesSupported)
             );
         }

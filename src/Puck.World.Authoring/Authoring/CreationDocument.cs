@@ -195,7 +195,7 @@ public sealed record ShapeDocument(
     public const float MaxDilate = 0.2f;
     /// <summary>The most domain operators <see cref="Domain"/> carries — every kind costs exactly one
     /// <c>SdfInstruction</c>, so this bounds a shape's domain-op instruction cost for capacity probes
-    /// (<c>Puck.World.Client.WorldStampPool</c>'s <c>probeWorstCase</c> sizing).</summary>
+    /// (<c>Puck.World.Client.WorldCreationInstances</c>'s <c>probeWorstCase</c> sizing).</summary>
     public const int MaxDomainOps = 4;
     /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
     public const float MaxOnion = 0.2f;
@@ -250,10 +250,6 @@ public sealed record CreationNoiseDocument(
     public const float MaxGain = 1f;
     /// <summary>The largest per-octave lacunarity.</summary>
     public const float MaxLacunarity = 4f;
-    /// <summary>The largest derived march step factor (<see cref="SdfProgram.NoiseDisplaceStepFactor"/>) a creation
-    /// may declare — the whole program's march divides its steps by this factor, so it is a shared frame budget,
-    /// refused (never silently clamped) when exceeded.</summary>
-    public const float MaxStepFactor = 8f;
     /// <summary>The smallest per-octave gain.</summary>
     public const float MinGain = 0.05f;
     /// <summary>The smallest per-octave lacunarity.</summary>

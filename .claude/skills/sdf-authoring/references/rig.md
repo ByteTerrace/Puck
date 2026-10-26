@@ -40,15 +40,15 @@ reparented at rest does not move until the new parent's motion differs from the
 old one's. `body.rig <body> <shape>` reads back the parent the shape's motion
 chains under and the delta the last frame composed for it
 (`shape:<name> parent=<name>|root delta=(x, y, z) turn=r`).
-`WorldStampPoolLiveRigEditLawTests` pins both edits through the scene emitter.
+`WorldCreationInstancesLiveRigEditLawTests` pins both edits through the scene emitter.
 
 A placement anchor naming a shape (an audio emitter, an overlay subject, a
-camera view's `placement` anchor) reads `WorldStampPool.TryShapePosition`, which
+camera view's `placement` anchor) reads `WorldCreationInstances.TryShapePosition`, which
 answers where the last frame drew the shape: its rest or frame pose under the
 composed delta (own swings and slides, the parent chain, effector corrections)
 and its part follower. It reads the latch `PackRegistration` left, the same one
 `TryBodyPartAuthoredPose` reads (`LatchedShapePose`), and evaluates no rig of its
-own. `WorldStampPoolLiveRigEditLawTests` pins it to the drawn slot every frame.
+own. `WorldCreationInstancesLiveRigEditLawTests` pins it to the drawn slot every frame.
 
 A shape carrying `domain` folds may carry neither, since a fold rides its
 parent's frame. It may still carry a `parent`: the folded shape rides its own

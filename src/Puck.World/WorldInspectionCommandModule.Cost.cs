@@ -41,7 +41,7 @@ internal sealed partial class WorldInspectionCommandModule {
         foreach (var row in rows) {
             found = true;
             text.Append(provider: CultureInfo.InvariantCulture,
-                handler: $"\n{row.Placement}: prototype={(row.Prototype ?? "none")} shapes={row.Shapes} owned-words={row.OwnedWords} share={((100.0 * row.OwnedWords) / Math.Max(val1: 1, val2: report.ProgramWords)):0.###}% instances={row.Instances} scope-clamps={row.ScopeClamps} bound-radius={row.BoundRadius:0.#####} halo={row.Halo:0.#####} unmaskable={row.Unmaskable} stamp-pool-slots={row.StampPoolSlots} mesh-draws={row.MeshDraws}");
+                handler: $"\n{row.Placement}: prototype={(row.Prototype ?? "none")} shapes={row.Shapes} owned-words={row.OwnedWords} share={((100.0 * row.OwnedWords) / Math.Max(val1: 1, val2: report.ProgramWords)):0.###}% instances={row.Instances} scope-clamps={row.ScopeClamps} bound-radius={row.BoundRadius:0.#####} halo={row.Halo:0.#####} unmaskable={row.Unmaskable} stamp-pool-slots={row.CreationSlots} mesh-draws={row.MeshDraws}");
         }
         if (!found && !top) { return CommandResult.Error(output: $"[world.cost: no live placement '{placement}']"); }
         text.Append(value: ']');

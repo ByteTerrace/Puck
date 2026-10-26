@@ -2,7 +2,7 @@ using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     private static int SelectPose(Registration live) => SelectPoseFrame(
         reads: live.Reads,
         references: live.PoseReferences,

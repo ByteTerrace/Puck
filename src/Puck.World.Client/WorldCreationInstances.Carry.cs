@@ -6,7 +6,7 @@ using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldStampPool {
+public sealed partial class WorldCreationInstances {
     /// <summary>Resolves where a carried screen's picture is this frame (<see cref="WorldScreen.Carry"/>): on the front
     /// face of the carrying look's box, for the first live body wearing that look whose pose frame holding now is the
     /// carry's pose, read off the latch the last <see cref="PackTransforms"/> left, so the picture rides the box the frame
@@ -152,7 +152,7 @@ public sealed partial class WorldStampPool {
     private static int? CarriedShapeSlot(CreationDocument document, WorldScreenCarry carry) {
         var shapes = (document.Shapes ?? []);
 
-        for (var slot = 0; ((slot < shapes.Count) && (slot < WorldPlacementPolicy.MaxAnimatedStampShapes)); slot++) {
+        for (var slot = 0; ((slot < shapes.Count)); slot++) {
             if (string.Equals(a: shapes[slot].Name?.Value, b: carry.Shape, comparisonType: StringComparison.Ordinal)) {
                 return slot;
             }
@@ -179,7 +179,7 @@ public sealed partial class WorldStampPool {
                 continue;
             }
 
-            materials ??= Enumerable.Repeat(count: WorldPlacementPolicy.MaxAnimatedStampShapes, element: -1).ToArray();
+            materials ??= Enumerable.Repeat(count: (live.Creation.EngineDocument.Shapes?.Count ?? 0), element: -1).ToArray();
             materials[slot] = ((SdfProgramBuilder.ScreenMaterialId + 1) + screen.Index);
         }
 

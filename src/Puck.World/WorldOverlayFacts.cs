@@ -25,7 +25,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     private readonly WorldSeatBindings m_seatBindings;
     private readonly WorldServer m_server;
     private readonly WorldSpeechClock m_speech;
-    private readonly WorldStampPool m_stamps;
+    private readonly WorldCreationInstances m_stamps;
     private readonly Func<WorldWheelFeed?> m_wheel;
 
     private readonly ulong[] m_lastHeldTick = new ulong[(PlayerRoster.MaxSlots * FactCount)];
@@ -36,7 +36,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
     /// <summary>Initializes the evaluator over the fact owners. Presentation-only owners are optional: a headless
     /// composition has no pointer, wheel, or console, and their facts read false there.</summary>
-    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldServer server, WorldSeatBindings seatBindings, WorldPerceptionAnchor perception, WorldStampPool stamps, WorldSpeechClock speech, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
+    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldServer server, WorldSeatBindings seatBindings, WorldPerceptionAnchor perception, WorldCreationInstances stamps, WorldSpeechClock speech, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(server);

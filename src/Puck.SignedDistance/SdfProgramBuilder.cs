@@ -19,7 +19,7 @@ public sealed partial class SdfProgramBuilder {
     /// complete creation to own an engraved field while its groups retain independent cuts and field operations.
     /// Builder admission, CPU interpreters and generated shader stacks share this bound. Scope instructions retain
     /// their existing packed layout; each pop composes only into its immediate parent.</summary>
-    public const int MaxFieldScopeDepth = 2;
+    public const int MaxFieldScopeDepth = 4;
     /// <summary>The floor <see cref="AxialProfile"/>'s scale profile s(t) clamps against at evaluation time — an admitted
     /// amount/bulge combination can still drive the algebraic s(t) non-positive (e.g. a large negative amount paired
     /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign. The

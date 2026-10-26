@@ -168,7 +168,7 @@ Engine facts those worlds exercised, which hold for any world:
   `(−x, y, −z)`; `CreationAuthorFrameLawTests`).
 - **Creation shapes and animation** (modifiers, `flare`/`shear`/`bumps`,
   blends, `cells`, `erode`, `volumes`, `panel`/`trims`/`detail`, sweeps, and
-  the `drivers`/`swings`/`effectors` animation `WorldStampPool.PackTransforms`
+  the `drivers`/`swings`/`effectors` animation `WorldCreationInstances.PackTransforms`
   composes, read back with `body.rig`) are `sdf-authoring`'s:
   [shapes](../../sdf-authoring/references/shapes.md),
   [composition](../../sdf-authoring/references/composition.md),
@@ -351,9 +351,7 @@ violates — `views` and `kits` refuse for any document whose
 
 Notable validator constants:
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are
-validated unique, `< SdfProgramBuilder.MaxScreenSurfaces`, and outside the
-reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
-`Authoring.DerivedFaceScreens`).
+validated unique, `< SdfProgramBuilder.MaxScreenSurfaces`, and leave room after the highest authored index for Authoring.DerivedFaceScreens. The derived band follows that authored index rather than reserving a fixed upper half.
 
 This is what a compiled `.puck` document's `puck compile --validate` runs
 before writing JSON — see [documents.md](documents.md)'s "Verifying a change
