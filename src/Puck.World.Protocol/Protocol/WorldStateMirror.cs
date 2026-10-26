@@ -110,6 +110,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
 
     private ulong m_tick;
     private bool m_ticked;
+    private int m_valueSerial;
 
     /// <summary>Initializes a new instance of the <see cref="WorldStateMirror"/> class.</summary>
     /// <param name="view">The state view every slot reads through.</param>
@@ -369,8 +370,8 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
         m_tick = stamp.Tick;
         MoveEngineTick(engineTick: stamp.EngineTick);
         RefreshSlots(
-            everything: stamp.Everything,
-            moved: stamp.MovedRows.Span
+            everything: (stamp.Everything && !stamp.ArenaValues),
+            moved: (stamp.ArenaValues ? default : stamp.MovedRows.Span)
         );
         if (notifyDelivery) { Delivered?.Invoke(); }
     }
@@ -395,6 +396,10 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <param name="tick">The completed tick.</param>
     /// <param name="engineTick">The completed engine tick.</param>
     public void Advance(ulong tick, ulong engineTick) {
+        if ((m_view is WorldDocumentStateView view) && (m_valueSerial != view.ValueSerial)) {
+            m_valueSerial = view.ValueSerial;
+            RefreshRows(ordinals: view.ValueRowsMoved);
+        }
         if (
             m_ticked &&
             (tick <= m_tick)

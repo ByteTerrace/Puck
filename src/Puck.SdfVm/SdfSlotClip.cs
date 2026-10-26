@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Puck.SdfVm;
 
@@ -56,7 +57,7 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
                     CarryScale = clip.CopyScale,
                     CarryTranslation = clip.CopyTranslation,
                     ClipPlane = clip.CopyPlane,
-                    Identity = new Copy(Of: draw.Identity),
+                    Identity = Copies.GetValue(key: draw.Identity, createValueCallback: static of => new Copy(Of: of)),
                 }));
 
                 break;
@@ -69,6 +70,8 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
     /// <returns>The copied draw's identity, or <see langword="null"/> when <paramref name="identity"/> is not a copy's.</returns>
     internal static object? CopiedFrom(object identity) => ((identity as Copy)?.Of);
 
-    // The identity of a draw's carried copy: stable across frames while the draw's is, and never equal to the draw's.
+    // The identity of a draw's carried copy: one object for the life of the draw's, and never equal to the draw's.
     private sealed record Copy(object Of);
+
+    private static readonly ConditionalWeakTable<object, Copy> Copies = new();
 }

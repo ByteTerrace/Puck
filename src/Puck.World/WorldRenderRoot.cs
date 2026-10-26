@@ -266,6 +266,9 @@ public static class WorldRenderRoot {
             completedFrames: () => runtime.NodeOf(instance: host.ComparisonLiveRoot!)?.FrameCounter);
 
         RenderGraphRuntimeNode? node = null;
+        // The overlay node and scene the capture companions were last made for.
+        object? companionNode = null;
+        object? companionScene = null;
         var display = new WorldDisplayExtent(
             binder: binder,
             height: height,
@@ -299,9 +302,19 @@ public static class WorldRenderRoot {
                 );
                 compareCapture.Poll();
                 frameSource.PrepareGraph(context: in context);
-                if (overlaid && host.Synthesized is { } synthesizedRoot && runtime.NodeOf(WorldRootGraph.OverlayInstance) is { } captureNode) {
-                    captureNode.CaptureCompanionFactory = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureCompanion(runtime, synthesizedRoot.Scene);
-                    captureNode.CaptureCompanionReady = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureReady(runtime, synthesizedRoot.Scene);
+                // The companions are made again only for another overlay node or scene, never for each frame.
+                if (
+                    overlaid &&
+                    host.Synthesized is { } synthesizedRoot &&
+                    runtime.NodeOf(WorldRootGraph.OverlayInstance) is { } captureNode &&
+                    (!ReferenceEquals(objA: captureNode, objB: companionNode) || !Equals(objA: synthesizedRoot.Scene, objB: companionScene))
+                ) {
+                    var shown = synthesizedRoot.Scene;
+
+                    captureNode.CaptureCompanionFactory = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureCompanion(runtime, shown);
+                    captureNode.CaptureCompanionReady = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureReady(runtime, shown);
+                    companionNode = captureNode;
+                    companionScene = shown;
                 }
                 timing.Tick();
             },

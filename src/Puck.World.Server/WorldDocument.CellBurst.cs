@@ -8,6 +8,7 @@ public sealed partial class WorldDocument {
     // and final row validation then proves exactly the same constraints as validating each intermediate row.
     // Any failed prepare falls back to the original ordered acts, retaining partial success and refusal details.
     internal bool TryApplyCellBurst(IReadOnlyList<WorldPendingOp.Mutate> ops, ulong tick, ulong engineTick) {
+        Host.MaterializeArena();
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var members = new WorldMutation[ops.Count];
 

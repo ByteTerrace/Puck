@@ -138,7 +138,22 @@ public sealed record CreationDriverDocument(
     /// <param name="name">The named driver, or empty.</param>
     /// <returns><see langword="true"/> for a non-empty <see cref="SignalDriverPrefix"/> form.</returns>
     public static bool TryDriverSignal(string? signal, out string name) {
-        name = string.Empty;
+        var named = TryDriverSignalName(
+            name: out var span,
+            signal: signal
+        );
+
+        name = (named ? span.ToString() : string.Empty);
+
+        return named;
+    }
+    /// <summary>Returns the driver a <see cref="SignalDriverPrefix"/> signal reads as a slice of the signal, without
+    /// allocating.</summary>
+    /// <param name="signal">The signal name.</param>
+    /// <param name="name">The named driver, or empty.</param>
+    /// <returns><see langword="true"/> for a non-empty <see cref="SignalDriverPrefix"/> form.</returns>
+    public static bool TryDriverSignalName(string? signal, out ReadOnlySpan<char> name) {
+        name = default;
 
         if (
             (signal is not { } named) ||
@@ -151,7 +166,7 @@ public sealed record CreationDriverDocument(
             return false;
         }
 
-        name = named[SignalDriverPrefix.Length..];
+        name = named.AsSpan(start: SignalDriverPrefix.Length);
 
         return true;
     }

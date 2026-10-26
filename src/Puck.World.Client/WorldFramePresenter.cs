@@ -143,6 +143,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    // The client's document version as the dressed frames' diagnostic source carries it, boxed.
+    private Puck.World.Protocol.WorldDocumentVersion m_diagnosticVersion;
+    private object? m_diagnosticSource;
+
+    // Appends volumes to the frame's, up to the engine's ceiling, indexed so the interface's enumerator is never boxed.
+    private void AppendVolumes(IReadOnlyList<SdfVolume> volumes) {
+        for (var index = 0; ((index < volumes.Count) && (m_volumes.Count < SdfProgramBuilder.MaxVolumes)); index++) {
+            m_volumes.Add(item: volumes[index]);
+        }
+    }
 
     private readonly WorldValueDomainGuard m_domains;
     private readonly WorldEnvironmentResolve m_environment;
@@ -1710,8 +1720,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var hasSeatViewFallback = false;
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
+        // Indexed, since the list is an interface and a foreach over it boxes its enumerator every frame.
+        var composedSlots = m_composer.Slots;
 
-        foreach (var composed in m_composer.Slots) {
+        for (var slotIndex = 0; (slotIndex < composedSlots.Count); slotIndex++) {
+            var composed = composedSlots[slotIndex];
             var region = composed.Region;
 
             // An instance slot is placed over the SDF world by the render graph's root (PrepareGraph), so the world
@@ -2093,17 +2106,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
 
         m_volumes.Clear();
+        AppendVolumes(volumes: m_emitter.StaticVolumes);
+        AppendVolumes(volumes: m_animator.Volumes);
 
-        foreach (var volume in m_emitter.StaticVolumes) {
-            if (m_volumes.Count < SdfProgramBuilder.MaxVolumes) {
-                m_volumes.Add(item: volume);
-            }
-        }
-
-        foreach (var volume in m_animator.Volumes) {
-            if (m_volumes.Count < SdfProgramBuilder.MaxVolumes) {
-                m_volumes.Add(item: volume);
-            }
+        // The document version a diagnostic compares frames by, boxed once for each version rather than every frame.
+        if ((m_diagnosticSource is null) || (m_diagnosticVersion != m_client.DocumentVersion)) {
+            m_diagnosticVersion = m_client.DocumentVersion;
+            m_diagnosticSource = m_diagnosticVersion;
         }
 
         m_dressedFrame = new SdfFrame(
@@ -2151,7 +2160,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
             Clock = m_client.StateMirror.Presented,
-            DiagnosticSource = m_client.DocumentVersion,
+            DiagnosticSource = m_diagnosticSource,
         };
 
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
@@ -2371,6 +2380,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets the composed source every frame is captured through: its frame count, the program it holds and
     /// whether a build of the next is in flight, which a wait for the baked frame reads.</summary>
     public SdfCompositionFrameSource Composed => m_composed;
+    /// <inheritdoc/>
+    public void ObserveBuilds(Action<SdfProgram, IReadOnlyList<DynamicTransform>> built) => m_composed.ObserveBuilds(built: built);
     /// <inheritdoc/>
     public SdfGlyphAtlas? GlyphAtlas => m_text.GlyphAtlas;
     /// <summary>The worst-case (all avatars active) instance count — the spec's <c>InstanceCapacity</c> floor.</summary>

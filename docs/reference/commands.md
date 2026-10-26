@@ -509,6 +509,25 @@ guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
 session's following non-Simulation line until its pending Simulation submission
 has applied, and each session's hold is independent of every other session's.
 
+An Operator control call (`puck_exec`) may submit a newline-separated script,
+up to 8192 characters total and 64 nonblank, noncomment lines. The complete
+script queues on the ordinary command pump before its first line runs. This
+settling session holds each line until its predecessor answers, including an
+authority verdict or a `world.wait` release; successive Simulation lines apply
+on adjacent ticks. Scripts continue after refusals and report each command's
+status and output with its one-based source line number in `commands`. A
+single output budget is shared across the script. A deadline covers the whole
+call, and cancellation discards queued lines, without undoing dispatched work.
+Native JSON object or array output is available as `data` alongside the text,
+including for individual script lines; truncated output has null data.
+
+For absolute ticks, `world.at` retains its schedule forms. `world.at --json`
+reads the current completed `tick`, `pending` and `ran` arrays; each line
+carries `tick`, `command`, `status` and `output`. This makes scheduled outcomes
+readable without splitting the transcript. A multiline `puck_exec` handles
+ordered command/wait/read sequences; `world.at` can pin multiple commands to
+one tick and scripts to a fixed timeline.
+
 A host runs that drain before every fixed step, not once per frame. When the
 host is behind and runs several steps in one frame, each step still gets its
 own drain. So a line that a step unblocks, such as the line after a tick wait,

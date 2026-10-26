@@ -196,8 +196,7 @@ machine under a new generation.
 Walk up to a device and press the context button, E on a keyboard or RB on a
 pad (the Moth's `interact` channel, which every screen route here names as its
 `engageChannel`). A press engages the nearest free device within its route's
-3 m (on the ground plane, the earlier in document order on a tie); no prompt shows, since the controller bar is the
-debug world's only on-screen UI. Engaging captures the seat, so the
+3 m (on the ground plane, the earlier in document order on a tie); no prompt shows. Engaging captures the seat, so the
 Moth stands still, and the camera eases in on the device's screen, square-on,
 with everything between the camera and the screen (the Moth included) left out,
 while the binding bar and the cursor step aside. It frames the screen's picture,
