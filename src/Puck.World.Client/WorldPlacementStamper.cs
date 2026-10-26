@@ -981,29 +981,54 @@ public static class WorldPlacementStamper {
 
             var firstInstance = builder.InstanceCount;
             var firstMesh = (meshDraws?.Count ?? 0);
+            var hidden = isolation?.HiddenFor(document: creation.EngineDocument, prototype: creation.Id.Value);
+            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            var key = new WorldStaticPalettes.EmissionKey(creation, textCatalog, hidden, paletteIds[0], frame.Position, frame.Rotation, worldSeed, meshScope, (meshDraws is not null));
+            var retain = ((palettes is not null) && (tint is null));
 
-            EmitPlacement(
-                builder: builder,
-                creation: creation.EngineDocument,
-                definition: definition,
-                paletteIds: paletteIds,
-                placement: placement,
-                textCatalog: textCatalog,
-                worldSeed: worldSeed,
-                volumes: volumes,
-                mesh: (((meshDraws is not null) && (creation.Mesh is { } mesh))
-                    ? MeshOf(mesh: mesh)
-                    : null),
-                meshMaterial: paletteIds[Math.Clamp(
-                    value: (creation.Mesh?.Material ?? 0),
-                    max: (paletteIds.Length - 1),
-                    min: 0
-                )],
-                meshDraws: meshDraws,
-                meshScope: meshScope,
-                firstMesh: firstMesh,
-                hidden: isolation?.HiddenFor(document: creation.EngineDocument, prototype: creation.Id.Value)
-            );
+            if (retain && registered.Emissions.TryGetValue(key: placement, value: out var held) && (held.Key == key) && builder.CanAppendEmission(emission: held.Program)) {
+                builder.AppendEmission(emission: held.Program);
+                foreach (var volume in held.Volumes) {
+                    if ((volumes is not null) && (volumes.Count < SdfProgramBuilder.MaxVolumes)) { volumes.Add(item: volume); }
+                }
+                foreach (var draw in held.Draws) { meshDraws?.Add(item: draw); }
+            } else {
+                var mark = (retain ? builder.MarkEmission() : default);
+                var emittedVolumes = (retain ? new List<SdfVolume>() : null);
+                var emittedDraws = ((retain && (meshDraws is not null)) ? new List<SdfMeshDraw>() : null);
+
+                EmitPlacement(
+                    builder: builder,
+                    creation: creation.EngineDocument,
+                    definition: definition,
+                    paletteIds: paletteIds,
+                    placement: placement,
+                    textCatalog: textCatalog,
+                    worldSeed: worldSeed,
+                    volumes: (retain ? emittedVolumes : volumes),
+                    mesh: (((meshDraws is not null) && (creation.Mesh is { } mesh))
+                        ? MeshOf(mesh: mesh)
+                        : null),
+                    meshMaterial: paletteIds[Math.Clamp(
+                        value: (creation.Mesh?.Material ?? 0),
+                        max: (paletteIds.Length - 1),
+                        min: 0
+                    )],
+                    meshDraws: (retain ? emittedDraws : meshDraws),
+                    meshScope: meshScope,
+                    firstMesh: (retain ? 0 : firstMesh),
+                    hidden: hidden
+                );
+                foreach (var volume in (emittedVolumes ?? [])) {
+                    if ((volumes is not null) && (volumes.Count < SdfProgramBuilder.MaxVolumes)) { volumes.Add(item: volume); }
+                }
+                if (emittedDraws is not null) {
+                    foreach (var draw in emittedDraws) { meshDraws!.Add(item: draw); }
+                }
+                if (retain) {
+                    registered.Emissions.AddOrUpdate(key: placement, value: new(key, builder.RetainEmission(mark: mark), [.. emittedVolumes!], ((emittedDraws is null) ? [] : [.. emittedDraws])));
+                }
+            }
             if (picks is not null) {
                 var target = new WorldPickTarget(Placement: placement.Id, BodyIndex: null) { Prototype = creation.Id };
 

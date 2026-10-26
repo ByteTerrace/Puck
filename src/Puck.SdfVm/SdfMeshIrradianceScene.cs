@@ -19,8 +19,9 @@ public sealed partial class SdfMeshIrradianceScene {
     /// it, the most recently drawn first: a responding placement toggled back takes its earlier geometry again.</summary>
     public const long RetainedTriangles = 8_000_000L;
 
-    // The most triangles a geometry's leaf holds, and the bins the surface-area split tries along an axis.
-    private const int LeafTriangles = 4;
+    // Fill the packed leaf count before adding another pair of bounding boxes. Triangle tests still read the
+    // original mesh vertices; denser leaves change storage and traversal work, not the nearest surface.
+    private const int LeafTriangles = Node.MaxCount;
     private const int Bins = 12;
     // A node range at least this many primitives wide builds its two children in parallel, and a geometry at least
     // this many triangles wide prepares its triangles in parallel chunks of it.
