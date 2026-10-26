@@ -121,86 +121,84 @@ declaring world; a standalone `--validate` on this excerpt alone refuses
 those three names):
 
 ```
-kits {
-    rows [
-        {
-            name: "kart"
-            bodyMotionProgram: "kart-drive"
-            motion {
-                speed {
-                    value: 16
-                    envelope {
-                        min: 16
-                        max: 16
-                    }
-                    held {
-                        channel: "boost"
-                        multiplier: 1.5
-                    }
+kits [
+    {
+        name: "kart"
+        bodyMotionProgram: "kart-drive"
+        motion {
+            speed {
+                value: 16
+                envelope {
+                    min: 16
+                    max: 16
                 }
-                turn {
-                    rate: 2.4
-                    referenceSpeed: 4
-                    falloff: 0.55
+                held {
+                    channel: "boost"
+                    multiplier: 1.5
                 }
-                holds [
-                    {
-                        name: "ground"
-                        bond: "Surface"
-                        cone [0, 60]
-                        hold: "Gravity"
-                        reach: 1.2
-                        gravity {
-                            rise: 14
-                            fall: 26
-                        }
-                        envelope {
-                            sinkSpeed: 30
-                        }
-                    }
-                    {
-                        name: "air"
-                        bond: "Free"
-                        hold: "Gravity"
-                        gravity {
-                            rise: 14
-                            fall: 26
-                        }
-                        envelope {
-                            sinkSpeed: 30
-                        }
-                    }
-                ]
-                shaping [
-                    {
-                        when: held(channel: "drift")
-                        along {
-                            engage: 7
-                            reversalRate: 18
-                            release: 4
-                            backwardSpeed: 5
-                        }
-                        across {
-                            lateral: 6
-                        }
-                        turnScale: 1.4
-                    }
-                    {
-                        along {
-                            engage: 7
-                            reversalRate: 18
-                            release: 4
-                            backwardSpeed: 5
-                        }
-                        across {
-                            lateral: 22
-                        }
-                    }
-                ]
             }
+            turn {
+                rate: 2.4
+                referenceSpeed: 4
+                falloff: 0.55
+            }
+            holds [
+                {
+                    name: "ground"
+                    bond: "Surface"
+                    cone [0, 60]
+                    hold: "Gravity"
+                    reach: 1.2
+                    gravity {
+                        rise: 14
+                        fall: 26
+                    }
+                    envelope {
+                        sinkSpeed: 30
+                    }
+                }
+                {
+                    name: "air"
+                    bond: "Free"
+                    hold: "Gravity"
+                    gravity {
+                        rise: 14
+                        fall: 26
+                    }
+                    envelope {
+                        sinkSpeed: 30
+                    }
+                }
+            ]
+            shaping [
+                {
+                    when: held(channel: "drift")
+                    along {
+                        engage: 7
+                        reversalRate: 18
+                        release: 4
+                        backwardSpeed: 5
+                    }
+                    across {
+                        lateral: 6
+                    }
+                    turnScale: 1.4
+                }
+                {
+                    along {
+                        engage: 7
+                        reversalRate: 18
+                        release: 4
+                        backwardSpeed: 5
+                    }
+                    across {
+                        lateral: 22
+                    }
+                }
+            ]
         }
-    ]
-}
+    }
+]
 ```
 
 Compiles to (`puck compile kart.puck`, structural — no `--validate` on this
@@ -232,9 +230,9 @@ excerpt for the reason above):
 ```
 
 Note the wrapping shape: `kits` lowers to `{"rows": [...]}` (`WorldKitsSection`
-— the same dealt-row shape `looks`/`placements` use), never a bare array; the
-`.puck` sugar for it is the named block `kits { rows [ ... ] }`, not
-`kits [ ... ]`.
+— the same dealt-row shape `looks`/`placements` use), never a bare array; a
+`.puck` section holding only its rows is written as the array of them,
+`kits [ ... ]`, and `kits { rows [ ... ] }` is refused (PUCK123).
 
 with the program `[ResolveDriveFrame, ResolveHold, ShapeVelocity,
 RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]`
@@ -349,68 +347,66 @@ A worked walker's `holds` list, in `.puck` (again a fragment — `walk`, and
 the `jump`/`stamina` names, live in the declaring world):
 
 ```
-kits {
-    rows [
-        {
-            name: "walker"
-            bodyMotionProgram: "walk"
-            motion {
-                speed {
-                    value: 5
-                }
-                turn {
-                    rate: 3
-                }
-                holds [
-                    {
-                        name: "wall"
-                        bond: "Surface"
-                        cone [60, 120]
-                        hold: "Pull"
-                        pull: 1
-                        reach: 0.8
-                        speed: 2
-                        upLean: 0
-                        forward: "Heading"
-                        onDrive: true
-                        driveAlignment: 0.5
-                        release: "jump"
-                        spend {
-                            state: "stamina"
-                            ratePerSecond: 1
-                        }
-                    }
-                    {
-                        name: "ground"
-                        bond: "Surface"
-                        cone [0, 60]
-                        hold: "Gravity"
-                        reach: 1.2
-                        gravity {
-                            rise: 28
-                            fall: 46
-                        }
-                        envelope {
-                            sinkSpeed: 40
-                        }
-                    }
-                    {
-                        name: "air"
-                        bond: "Free"
-                        hold: "Gravity"
-                        gravity {
-                            rise: 28
-                            fall: 46
-                        }
-                        envelope {
-                            sinkSpeed: 40
-                        }
-                    }
-                ]
+kits [
+    {
+        name: "walker"
+        bodyMotionProgram: "walk"
+        motion {
+            speed {
+                value: 5
             }
+            turn {
+                rate: 3
+            }
+            holds [
+                {
+                    name: "wall"
+                    bond: "Surface"
+                    cone [60, 120]
+                    hold: "Pull"
+                    pull: 1
+                    reach: 0.8
+                    speed: 2
+                    upLean: 0
+                    forward: "Heading"
+                    onDrive: true
+                    driveAlignment: 0.5
+                    release: "jump"
+                    spend {
+                        state: "stamina"
+                        ratePerSecond: 1
+                    }
+                }
+                {
+                    name: "ground"
+                    bond: "Surface"
+                    cone [0, 60]
+                    hold: "Gravity"
+                    reach: 1.2
+                    gravity {
+                        rise: 28
+                        fall: 46
+                    }
+                    envelope {
+                        sinkSpeed: 40
+                    }
+                }
+                {
+                    name: "air"
+                    bond: "Free"
+                    hold: "Gravity"
+                    gravity {
+                        rise: 28
+                        fall: 46
+                    }
+                    envelope {
+                        sinkSpeed: 40
+                    }
+                }
+            ]
         }
-    ]
-}
+    }
+]
 ```
 
 Compiles to (`puck compile walker.puck`, structural):

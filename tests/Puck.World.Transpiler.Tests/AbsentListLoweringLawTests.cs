@@ -60,11 +60,7 @@ public class AbsentListLoweringLawTests {
     }
     [Fact]
     public void AnAuthoredEmptyRowsListLowersAsTheEmptyListItIs() {
-        var placements = Assert.IsType<JsonObject>(@object: WorldSources.LowerClean(body: """
-            placements {
-                rows []
-            }
-            """)["placements"]);
+        var placements = Assert.IsType<JsonObject>(@object: WorldSources.LowerClean(body: "placements []")["placements"]);
 
         Assert.Empty(collection: Assert.IsType<JsonArray>(@object: placements["rows"]));
     }
@@ -79,7 +75,7 @@ public class AbsentListLoweringLawTests {
     }
     [Fact]
     public void AnAbsentRowsListAndAnEmptyOneEachDecompileToTheirOwnSource() {
-        foreach (var body in new[] { Policy, "placements {\n    rows []\n}" }) {
+        foreach (var body in new[] { Policy, "placements []" }) {
             var lowered = WorldSources.LowerClean(body: body);
 
             _ = WorldSources.AssertRoundTrips(original: lowered);

@@ -158,6 +158,13 @@ A container value is written as a block and a scalar takes a colon—`host { }`,
 rule is about the punctuation in front of a literal, not about what the value turns out to be; a call's named
 argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a statement.
 
+A section whose model holds a `rows` list beside optional policy members (`kits`, `looks`, `placements`,
+`captures`, `schedule`, `navigation`, a deal's `assignment`) takes the array of its rows directly when it authors
+nothing else: `kits [ { name: "kart", … } ]` lowers to `"kits": { "rows": [ … ] }`, and `looks: map(…)` fills
+`looks.rows` (`WorldSectionRows`). A block holding only `rows` is refused (PUCK123); one that also authors a policy
+member keeps its block (`looks { assignment { … } rows [ … ] }`), and the decompiler prints the array form exactly
+when the rows are all a section holds.
+
 Expressions: the rule language's infix operators, grouped by the binding the operator table
 (`Puck.State.ExpressionOperators`) gives them ([Comparisons are 1 or 0](../../docs/reference/dsl.md#comparisons-are-1-or-0)), `.` member access, `(...)` calls,
 `[a, b]` arrays, `{ k: v }` objects, `a..b` ranges, `#rrggbb[aa]` colors, and number literals with an optional unit

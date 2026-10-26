@@ -1143,6 +1143,19 @@ public static partial class WorldDecompiler {
         );
         var position = ((holder is null) ? null : WorldCallArguments.MemberType(member: key, owner: holder));
         var form = ((holder is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: key, owner: holder));
+
+        // A section holding only its rows prints as the array of them, its one spelling.
+        if (
+            (holder is not null) &&
+            (value is JsonObject { Count: 1 } section) &&
+            (section[WorldSectionRows.Member] is JsonArray rows) &&
+            (WorldSectionRows.SectionOf(holder: holder, member: key) is { } sectionType)
+        ) {
+            position = WorldCallArguments.MemberType(member: WorldSectionRows.Member, owner: sectionType);
+            form = WorldCallArguments.Classify(member: WorldSectionRows.Member, owner: sectionType);
+            value = rows;
+        }
+
         var text = PrintsAsText(form: form, node: value);
 
         if (

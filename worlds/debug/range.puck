@@ -116,94 +116,92 @@ bodyMotionPrograms [
   }
 ]
 
-kits {
-  rows [
-    {
-      name: "range-walker"
-      bodyMotionProgram: "walk"
-      collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
-      motion {
-        facingSnap: false
-        groundSnap: 0.3
-        holds [
-          {
-            name: "ground"
-            bond: Surface
-            hold: Gravity
-            cone [0, 60]
-            reach: 1.2
-            forward: Heading
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            envelope {
-              sinkSpeed: 40
-            }
+kits [
+  {
+    name: "range-walker"
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
+    motion {
+      facingSnap: false
+      groundSnap: 0.3
+      holds [
+        {
+          name: "ground"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 1.2
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
           }
-          {
-            name: "fall"
-            bond: Free
-            hold: Gravity
-            forward: Heading
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            envelope {
-              sinkSpeed: 40
-            }
+          envelope {
+            sinkSpeed: 40
           }
-        ]
-        moveFrame: World
-        shaping [
-          {
-            along {
-              engage: 40
-              release: 50
-            }
-            turnScale: 1
-          }
-        ]
-        speed {
-          value: 5
         }
-        stepHeight: 0.3
-        turn {
-          falloff: 1
-          maxPitch: 1.2
-          pitchRate: 0
-          rate: 2.5
+        {
+          name: "fall"
+          bond: Free
+          hold: Gravity
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          envelope {
+            sinkSpeed: 40
+          }
         }
+      ]
+      moveFrame: World
+      shaping [
+        {
+          along {
+            engage: 40
+            release: 50
+          }
+          turnScale: 1
+        }
+      ]
+      speed {
+        value: 5
       }
-      producers {
-        rangeLoop {
-          scalars {
-            forward: 0.3
-            softRadius: 2.5
-            weaveAmplitude: 0.6
-            inwardGain: 2
-            turnScale: 1
-            weaveFrequencyBase: 0.8
-            weaveFrequencyRange: 0
-            altitudeGain: 0
-            activityRateBase: 0
-            activityRateRange: 0
-            strafeWave: 0
-            turnWave: 0
-            upWave: 0
-            pitchWave: 0
-            rollTurn: 0
-            pressThreshold: 0
-            altitudeBase: 0
-            altitudeRange: 0
-          }
-          channels {}
-        }
+      stepHeight: 0.3
+      turn {
+        falloff: 1
+        maxPitch: 1.2
+        pitchRate: 0
+        rate: 2.5
       }
     }
-  ]
-}
+    producers {
+      rangeLoop {
+        scalars {
+          forward: 0.3
+          softRadius: 2.5
+          weaveAmplitude: 0.6
+          inwardGain: 2
+          turnScale: 1
+          weaveFrequencyBase: 0.8
+          weaveFrequencyRange: 0
+          altitudeGain: 0
+          activityRateBase: 0
+          activityRateRange: 0
+          strafeWave: 0
+          turnWave: 0
+          upWave: 0
+          pitchWave: 0
+          rollTurn: 0
+          pressThreshold: 0
+          altitudeBase: 0
+          altitudeRange: 0
+        }
+        channels {}
+      }
+    }
+  }
+]
 
 // Each television's deck plays the bouncing ball.
 machines: map(televisions, tv => {
@@ -215,8 +213,7 @@ machines: map(televisions, tv => {
       path: "cartridges/deck/moving-sprite.nes"
     }
   }
-}
-)
+})
 
 // The televisions' pictures, each facing +Z, back up the lane.
 screens: map(televisions, tv => {
@@ -237,8 +234,7 @@ screens: map(televisions, tv => {
     engageable: false
     engageRadius: 0
   }
-}
-)
+})
 
 prototypes {
   // The lane: a pale stripe down its middle, from the spawn to past the last walker.

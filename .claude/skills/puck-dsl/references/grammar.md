@@ -25,6 +25,11 @@ punctuation in front of a literal, not what the value turns out to be; a call's
 named argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call
 syntax rather than a statement.
 
+A section holding only its rows is the array of them: `kits [ … ]`,
+`looks: map(…)`, `assignment []` lower to `{ "rows": [ … ] }`. The block form
+`kits { rows [ … ] }` is **PUCK123**; a section that also authors a policy
+member keeps its block (`looks { assignment { … } rows [ … ] }`).
+
 ## Names
 
 One rule, `Puck.State.IdentifierSpelling`, for every Puck language (document

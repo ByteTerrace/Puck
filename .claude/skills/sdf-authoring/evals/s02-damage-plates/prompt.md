@@ -23,18 +23,16 @@ state {
   ]
 }
 
-looks {
-  rows [
-    {
-      name: "subject"
-      scale: 1
-      source: creation(prototypeId: subject)
-      motion {
-        lanes [0, 0, 0, 0]
-      }
+looks [
+  {
+    name: "subject"
+    scale: 1
+    source: creation(prototypeId: subject)
+    motion {
+      lanes [0, 0, 0, 0]
     }
-  ]
-}
+  }
+]
 
 prototypes {
   prototype "subject" {

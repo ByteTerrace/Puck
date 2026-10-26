@@ -13,7 +13,9 @@ public static partial class PuckPrinter {
 
             m_builder.Append(value: '(');
             Arguments(arguments: arguments, everyLine: everyLine, level: level, multiLine: (multiLine || everyLine));
-            if (multiLine || everyLine) {
+            // A call that spans lines only inside its last argument (`map(xs, x => {` … `})`) closes on that
+            // argument's last line; one with an argument on a line of its own closes on its own line.
+            if (everyLine || (multiLine && (arguments is not [.., { Trivia.Trailing: null }] || arguments.Any(predicate: static argument => (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0)))))) {
                 EndLine();
                 Indent(level: level);
             }

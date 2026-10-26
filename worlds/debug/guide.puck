@@ -202,9 +202,7 @@ state {
       cells: reduce(range(0, length(guideCopy)), [], (cells, index) => concat(cells, [
         { key: $"{index}-title", value: guideCopy[index].title }
         { key: $"{index}-note", value: guideCopy[index].note }
-      ]
-      )
-      )
+      ]))
     }
     table guide {
       title = ""

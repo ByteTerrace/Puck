@@ -322,13 +322,10 @@ let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
     z0: 14.47
     z1: 37.53
   }
-]
-), map(
+]), map(
   ((k == 3) ? skylightStarts : []),
   x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 }
-)
-)
-)
+)))
 let blindPalette = [{ color: "#CFCFCC", roughness: 0.9, specular: 0.03 }]
 // The seams painted across a window's board, the most a palette slot's paints hold.
 let blindSeams = 8
@@ -1405,46 +1402,42 @@ spawnPoints: concat(
 
 // The car's kit: a sphere of radius 0.1 m that touches nothing in the cab or shaft, with no gravity, so it stands wherever
 // `lift-ride` last posed it.
-kits {
-  rows [
-    {
-      name: "lift"
-      bodyMotionProgram: "walk"
-      collider: sphere(radius: 0.1)
-      motion {
-        holds [
-          {
-            bond: Free
-            hold: None
-            name: "held"
-          }
-        ]
-        shaping [
-          {
-            along {}
-          }
-        ]
-        speed {
-          value: 0.001
+kits [
+  {
+    name: "lift"
+    bodyMotionProgram: "walk"
+    collider: sphere(radius: 0.1)
+    motion {
+      holds [
+        {
+          bond: Free
+          hold: None
+          name: "held"
         }
-        turn {
-          rate: 0.001
+      ]
+      shaping [
+        {
+          along {}
         }
+      ]
+      speed {
+        value: 0.001
+      }
+      turn {
+        rate: 0.001
       }
     }
-  ]
-}
+  }
+]
 
-looks {
-  rows [
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "lift-car"
-      scale: 1
-      source: creation(prototypeId: `lift-hidden`)
-    }
-  ]
-}
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "lift-car"
+    scale: 1
+    source: creation(prototypeId: `lift-hidden`)
+  }
+]
 
 state {
   // The shaft: one 3 m column of 1/16 m layers from the ground to level 3, the car's root riding liftRoot over each.

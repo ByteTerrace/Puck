@@ -379,8 +379,7 @@ template signPrototypes() {
         material: run.material
         align: run.align
         maxWidth: 1.36
-      }
-      )
+      })
     }
   }
 }
