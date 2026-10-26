@@ -1439,15 +1439,16 @@ public sealed partial class SdfMeshPathBake {
 
         return new SdfMesh(indices: mesh.Indices, members: members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: mesh.TriangleMaterials, vertexMembers: vertexMembers);
     }
-    // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge): in the
-    // library, which keeps it for another program or residency and its store, and as the group's drawn mesh.
+    // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge) and its
+    // coarser levels collapsed from those (SdfMeshCollapse): in the library, which keeps it for another program or
+    // residency and its store, and as the group's drawn mesh.
     private void Land(Group group, SdfMesh? mesh) {
         var merged = 0;
 
         if (mesh is not null) {
             var contoured = mesh.TriangleCount;
 
-            mesh = SdfMeshPlanarMerge.Merge(mesh: mesh) with { BakeCell = group.DiagnosticCell };
+            mesh = SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh) with { BakeCell = group.DiagnosticCell });
             merged = (contoured - mesh.TriangleCount);
             Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
@@ -1507,11 +1508,16 @@ public sealed partial class SdfMeshPathBake {
         var vertices = m_groups.Sum(selector: static group => ((long)(group.Mesh?.Positions.Length ?? 0)));
         // The meshes some of whose vertices ride a member's slot rather than the group's.
         var skinned = m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
+        // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its
+        // coarsest where it has fewer).
+        var levelled = m_groups.Count(predicate: static group => (group.Mesh is { Levels.Count: > 0 }));
+        var first = m_groups.Sum(selector: static group => ((group.Mesh is { } mesh) ? (long)SdfMeshRegion.LevelOf(level: 1, mesh: mesh).TriangleCount : 0L));
+        var second = m_groups.Sum(selector: static group => ((group.Mesh is { } mesh) ? (long)SdfMeshRegion.LevelOf(level: 2, mesh: mesh).TriangleCount : 0L));
 
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return ($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
+        return ($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
     }
 
     // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it

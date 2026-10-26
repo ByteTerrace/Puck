@@ -19,7 +19,7 @@ public sealed class SdfMeshStoreLawTests {
     public void AWrittenMeshReadsBackExactlyUnderItsIdentityAndGeometryAlone() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
-        var mesh = Mesh() with { BakeCell = new Vector3(0.01f, 0.02f, 0.03f) };
+        var mesh = Mesh() with { BakeCell = new Vector3(0.01f, 0.02f, 0.03f), Levels = [Level()] };
 
         // An empty store holds nothing and has made no directory.
         Assert.False(condition: store.Contains(geometry: Geometry, identity: Identity));
@@ -36,6 +36,12 @@ public sealed class SdfMeshStoreLawTests {
         Assert.Equal(expected: mesh.Indices.ToArray(), actual: read.Indices.ToArray());
         Assert.Equal(expected: mesh.TriangleMaterials.ToArray(), actual: read.TriangleMaterials.ToArray());
         Assert.Equal(mesh.BakeCell, read.BakeCell);
+
+        var level = Assert.Single(collection: read.Levels);
+
+        Assert.Equal(expected: Level().Indices.ToArray(), actual: level.Indices.ToArray());
+        Assert.Equal(expected: Level().TriangleMaterials.ToArray(), actual: level.TriangleMaterials.ToArray());
+        Assert.Equal(expected: Level().Error, actual: level.Error);
 
         // Another bake, another surface, or the same surface in a slot's frame reads nothing.
         Assert.False(condition: store.Contains(geometry: Geometry, identity: (Identity + 1)));
@@ -82,6 +88,34 @@ public sealed class SdfMeshStoreLawTests {
         // Nor will it write there; the store is a cache, and says so rather than throwing.
         Assert.False(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
         Assert.True(condition: Directory.Exists(path: path));
+    }
+    [Fact]
+    public void ALevelsCountsMustLayOutTheEntrysTail() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: (Mesh() with { Levels = [Level()] })));
+
+        var path = Directory.GetFiles(path: store.SetDirectoryOf(identity: Identity), searchPattern: ("*" + SdfMeshStore.Extension)).Single();
+        var sound = File.ReadAllBytes(path: path);
+        // The level's triangle count sits past the header, the triangles, materials and normals before it.
+        var levelAt = (sound.Length - 16 - (4 + 4 + 12 + 4));
+
+        (string Refusal, byte[] Bytes)[] damages = [
+            // A second level the bytes do not hold.
+            ("holds counts its length does not", Resealed(bytes: sound, edit: static body => BinaryPrimitives.WriteInt32LittleEndian(destination: body[64..], value: 2))),
+            ("holds counts its length does not", Resealed(bytes: sound, edit: static body => BinaryPrimitives.WriteInt32LittleEndian(destination: body[64..], value: -1))),
+            ("holds counts its length does not", Resealed(bytes: sound, edit: body => BinaryPrimitives.WriteInt32LittleEndian(destination: body[levelAt..], value: 0))),
+            // A level whose error is not a distance.
+            ("is no mesh", Resealed(bytes: sound, edit: body => BinaryPrimitives.WriteSingleLittleEndian(destination: body[(levelAt + 4)..], value: -1f))),
+        ];
+
+        foreach (var (refusal, bytes) in damages) {
+            File.WriteAllBytes(bytes: bytes, path: path);
+
+            Assert.False(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out _, refusal: out var why));
+            Assert.Contains(expectedSubstring: refusal, actualString: why);
+        }
     }
     [Fact]
     public void AWritePastTheCapacityRemovesTheLeastRecentlyUsedEntries() {
@@ -177,7 +211,7 @@ public sealed class SdfMeshStoreLawTests {
         mask[(int)SdfKernel.MeshBakeMask] = new byte[] { 200 };
 
         Assert.True(condition: identity.HasParts);
-        Assert.Equal(expected: "PUCKMSH3", actual: SdfMeshStore.EntryVersion);
+        Assert.Equal(expected: "PUCKMSH4", actual: SdfMeshStore.EntryVersion);
         Assert.Equal(expected: SdfMeshStore.EntryVersion, actual: identity.EntryVersion);
         Assert.Equal(expected: string.Empty, actual: new SdfMeshBakeIdentity(value: 5).EntryVersion);
         Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: identity.Code);
@@ -217,7 +251,7 @@ public sealed class SdfMeshStoreLawTests {
             if (string.Equals(a: Path.GetFileName(path: dll), b: "Puck.SdfVm.dll", comparisonType: StringComparison.Ordinal)) {
                 var image = File.ReadAllBytes(path: dll);
                 var oldVersion = System.Text.Encoding.ASCII.GetBytes(s: SdfMeshStore.EntryVersion);
-                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: "PUCKMSH4");
+                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: "PUCKMSH5");
                 var replaced = 0;
 
                 for (var index = 0; (index <= (image.Length - oldVersion.Length)); index++) {
@@ -235,13 +269,13 @@ public sealed class SdfMeshStoreLawTests {
 
         var bumped = SdfMeshBakeIdentity.Of(code: SdfMeshBakeClosure.Of(directory: bumpedBuild), kernels: kernels);
 
-        Assert.Equal(expected: "PUCKMSH4", actual: bumped.EntryVersion);
+        Assert.Equal(expected: "PUCKMSH5", actual: bumped.EntryVersion);
         Assert.NotEqual(expected: first.Value, actual: bumped.Value);
         Assert.False(condition: store.TryRead(geometry: Geometry, identity: bumped.Value, materials: out _, mesh: out _, refusal: out var bumpedRefusal));
         Assert.Null(@object: bumpedRefusal);
         Assert.True(condition: store.Contains(geometry: Geometry, identity: first.Value));
         Assert.Equal(
-            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> PUCKMSH4) changed",
+            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> PUCKMSH5) changed",
             actual: store.ExplainMisses(identity: bumped)
         );
         File.Delete(path: Path.Combine(path1: store.Directory, path2: (bumped.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));
@@ -334,6 +368,7 @@ public sealed class SdfMeshStoreLawTests {
         positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY },
         triangleMaterials: new uint[] { 4u, 9u }
     );
+    private static SdfMeshLevel Level() => new(Error: 0.25f, Indices: new uint[] { 0, 1, 2 }, TriangleMaterials: new uint[] { 9u });
     // The file an entry is kept in: the name a write of it to a store of its own takes.
     private static string Entry(SdfMeshStore store, SdfMeshGeometry geometry) {
         var probe = new SdfMeshStore(directory: Path.Combine(path1: store.Directory, path2: "probe"));

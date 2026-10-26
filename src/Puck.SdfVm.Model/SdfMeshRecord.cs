@@ -8,12 +8,17 @@ namespace Puck.SdfVm;
 /// at, its attribute flags, the word its first triangle material sits at, the normal matrix row by row (nine words), the
 /// frame slot or -1, the word the mesh's members sit at, the carry every world position and normal the draw resolves
 /// goes through last (a unit rotation quaternion, a translation, then the uniform scale a position takes before the
-/// translation), and the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
-/// draws everything).
+/// translation), the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
+/// draws everything), and the first triangle of each coarser level of detail.
 /// </summary>
 public static class SdfMeshRecord {
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 45;
+    public const int DrawWords = 47;
+    /// <summary>The first of two words: the first triangle of the mesh's first and second coarser levels of detail among
+    /// its levelled triangles (<c>SdfMesh.Levels</c>; a level past the mesh's coarsest names the coarsest). A draw of a
+    /// level (<see cref="SdfKernelInterfaces.MeshLevelShift"/>) draws its triangles from there, its vertex id counting
+    /// from zero on every backend.</summary>
+    public const int LevelTriangleWord = 45;
     /// <summary>The first of the carry rotation's four words (x, y, z, w).</summary>
     public const int CarryRotationWord = 33;
     /// <summary>The first of the carry translation's three words.</summary>

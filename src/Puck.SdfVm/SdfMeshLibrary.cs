@@ -175,7 +175,15 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
     // list reaches keeps its id. The geometry's equality makes the two lists the same length.
     private static SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {
-        var source = mesh.TriangleMaterials.Span;
+        var levels = new SdfMeshLevel[mesh.Levels.Count];
+
+        for (var level = 0; (level < levels.Length); level++) {
+            levels[level] = (mesh.Levels[level] with { TriangleMaterials = Renumbered(from: from, source: mesh.Levels[level].TriangleMaterials.Span, to: to) });
+        }
+
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: Renumbered(from: from, source: mesh.TriangleMaterials.Span, to: to), vertexMembers: mesh.VertexMembers) { BakeCell = mesh.BakeCell, Levels = levels };
+    }
+    private static uint[] Renumbered(ReadOnlySpan<uint> source, int[] from, int[] to) {
         var renumbered = new uint[source.Length];
 
         for (var triangle = 0; (triangle < source.Length); triangle++) {
@@ -184,7 +192,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null) {
             renumbered[triangle] = (((place >= 0) && (place < to.Length)) ? (uint)to[place] : source[triangle]);
         }
 
-        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: renumbered, vertexMembers: mesh.VertexMembers) { BakeCell = mesh.BakeCell };
+        return renumbered;
     }
 
     private sealed record Variant(int[] Materials, SdfMesh Mesh);

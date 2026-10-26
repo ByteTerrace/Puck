@@ -303,6 +303,7 @@
     { "name": "world.debug-view", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.decisions", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.destinations", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.detail", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.device-profiles", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "world.devices", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "world.dynamics", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

@@ -51,15 +51,39 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         var half = ((bounds.High - bounds.Low) * 0.5f);
         var rotation = draw.CarryRotation;
         var scale = draw.CarryScale;
+        var rowX = new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13);
+        var rowY = new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23);
+        var rowZ = new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33);
 
         box = new SdfMeshBox(
             Center: ((Vector3.Transform(value: Vector3.Transform(position: center, matrix: matrix), rotation: rotation) * scale) + draw.CarryTranslation),
-            HalfX: (Vector3.Transform(value: (half.X * new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13)), rotation: rotation) * scale),
-            HalfY: (Vector3.Transform(value: (half.Y * new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23)), rotation: rotation) * scale),
-            HalfZ: (Vector3.Transform(value: (half.Z * new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33)), rotation: rotation) * scale)
-        );
+            HalfX: (Vector3.Transform(value: (half.X * rowX), rotation: rotation) * scale),
+            HalfY: (Vector3.Transform(value: (half.Y * rowY), rotation: rotation) * scale),
+            HalfZ: (Vector3.Transform(value: (half.Z * rowZ), rotation: rotation) * scale)
+        ) {
+            Stretch = (StretchOf(rowX: rowX, rowY: rowY, rowZ: rowZ) * MathF.Abs(x: scale)),
+        };
 
         return true;
+    }
+
+    /// <summary>Gets the most the draw's matrix and carry lengthen an object-space distance, a bound on the matrix's
+    /// largest singular value, exact for a matrix whose rows are perpendicular: a mesh's error in object units is at most
+    /// this many world units.</summary>
+    public float Stretch { get; init; } = 1f;
+
+    // The square root of the Gershgorin bound on the largest eigenvalue of the rows' Gram matrix: the largest row's sum of
+    // its absolute dot products with every row.
+    private static float StretchOf(Vector3 rowX, Vector3 rowY, Vector3 rowZ) {
+        var xy = MathF.Abs(x: Vector3.Dot(vector1: rowX, vector2: rowY));
+        var xz = MathF.Abs(x: Vector3.Dot(vector1: rowX, vector2: rowZ));
+        var yz = MathF.Abs(x: Vector3.Dot(vector1: rowY, vector2: rowZ));
+        var largest = MathF.Max(
+            x: ((rowX.LengthSquared() + xy) + xz),
+            y: MathF.Max(x: ((rowY.LengthSquared() + xy) + yz), y: ((rowZ.LengthSquared() + xz) + yz))
+        );
+
+        return MathF.Sqrt(x: largest);
     }
 
     /// <summary>Returns whether a view's mesh pass may draw any of the box: the camera's frustum widened by

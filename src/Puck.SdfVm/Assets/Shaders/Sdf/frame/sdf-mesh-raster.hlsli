@@ -20,5 +20,9 @@ struct MeshRasterVertex {
 uint sdfMeshRasterDraw(uint instanceId) {
     return ((pushedIndex.index + instanceId) & SdfMeshDrawMask);
 }
+// The level of detail the draw draws, carried from bit SDF_MESH_LEVEL_SHIFT up the same way.
+uint sdfMeshRasterLevel(uint instanceId) {
+    return ((pushedIndex.index + instanceId) >> SDF_MESH_LEVEL_SHIFT);
+}
 
 #endif

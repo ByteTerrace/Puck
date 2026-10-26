@@ -7536,10 +7536,13 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
      hierarchy boxes a long thin triangle in pieces, which keeps a probe sweep at
      7.3 CPU seconds over the merged meshes where the unmerged took 6.9, with the
      same hits.
-   - *Step 2:* two coarser levels derived from that mesh by quadric edge
-     collapse, each recording its exact error, with creases and material edges
-     simplifying last. This is a simplification of the one contour, not a
-     second mesher.
+   - *Step 2, landed:* two coarser levels derived from that mesh by half-edge
+     collapse ordered by quadrics, creases and material edges weighted to
+     simplify last (`SdfMeshCollapse`, after the merge in `Land`), each
+     recording its measured error, and chosen per pass beside the box cull
+     (`SdfMeshDetail`, `SdfWorldPassRecorder.Choose`); `world.detail` forces a
+     level for comparison. This is a simplification of the one contour, not a
+     second mesher. LEVELS-READINGS
 
    The selection rules are the owner's
    ([decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)):

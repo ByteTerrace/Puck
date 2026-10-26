@@ -44,10 +44,11 @@ public sealed class SdfKernelInterfaces {
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
     public const string BakePool = "brickPool";
-    /// <summary>The bit the view starts at in the index a <see cref="Mesh"/> draw call pushes; the bits below it name the
-    /// draw. The occlusion kernel's pushed index holds its step from this bit up and the pyramid level it writes
-    /// below it.</summary>
-    public const int MeshViewShift = 24;
+    /// <summary>The bit the level of detail starts at in the index a <see cref="Mesh"/> draw call pushes, and in a counted
+    /// indirect draw's identity; the bits below it name the draw. A draw of level <c>L</c> above zero draws the triangles
+    /// from the one its record names (<see cref="SdfMeshRecord.LevelTriangleWord"/>). The occlusion kernel's pushed index
+    /// holds its step from this bit up and the pyramid level it writes below it.</summary>
+    public const int MeshLevelShift = 24;
     /// <summary>The mesh pass occlusion's candidates, a <see cref="Mesh"/> table of <c>uint4</c>s the host writes each
     /// frame: a header (the candidates, the depth pyramid's levels), then four rows a candidate, its draw, its vertex
     /// count and its world box (<c>SdfMeshOcclusion</c> in <c>Puck.SdfVm</c>).</summary>
@@ -268,8 +269,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the interface the mesh pass draws with: the pass block <see cref="World"/> declares, member for member
     /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region and the work
     /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>); and the index
-    /// each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits below it name
-    /// the draw (<see cref="MeshPushedIndex"/>). The mesh pass's occlusion kernel reads the same interface through a
+    /// each draw call pushes, whose bits from <see cref="MeshLevelShift"/> up name the level of detail and whose bits
+    /// below it name the draw (<see cref="MeshPushedIndex"/>). The mesh pass's occlusion kernel reads the same interface through a
     /// compute layout, with the mesh target and the occlusion's tables (<see cref="MeshOcclusionCandidates"/> and the
     /// members after it), which the raster stages leave unread.</summary>
     public ShaderInterface Mesh { get; }
@@ -297,13 +298,13 @@ public sealed class SdfKernelInterfaces {
             name: name
         );
 
-    /// <summary>Returns the index a <see cref="Mesh"/> draw call pushes: the view from bit <see cref="MeshViewShift"/> up,
-    /// the draw below it.</summary>
-    /// <param name="view">The view the draw renders into.</param>
+    /// <summary>Returns the index a <see cref="Mesh"/> draw call pushes, and a counted indirect draw's identity: the level
+    /// of detail from bit <see cref="MeshLevelShift"/> up, the draw below it.</summary>
+    /// <param name="level">The level of detail the draw draws, zero for its mesh's own triangles.</param>
     /// <param name="draw">The draw.</param>
     /// <returns>The pushed index.</returns>
-    public static uint MeshPushedIndex(uint view, uint draw) =>
-        (view << MeshViewShift) | draw;
+    public static uint MeshPushedIndex(uint level, uint draw) =>
+        (level << MeshLevelShift) | draw;
     /// <summary>Returns the binding number, in the group that declares it, of a resource member of <see cref="World"/>,
     /// <see cref="BrickBake"/> or <see cref="Mesh"/>.</summary>
     /// <param name="layout">The interface's layout.</param>

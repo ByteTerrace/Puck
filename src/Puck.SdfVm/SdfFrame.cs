@@ -234,6 +234,11 @@ public sealed record SdfFrame(
     /// measures each one's saving and checks it shows the same image. The cadence signature folds it, so a change
     /// re-renders.</summary>
     public SdfMeshCullLevel MeshCull { get; init; }
+    /// <summary>Engine-bench lever: which levels of detail the raster passes draw. The default,
+    /// <see cref="SdfMeshDetailLevel.Auto"/>, has each pass choose each draw's level by the error it can show
+    /// (<see cref="SdfMeshDetail"/>); a fixed level draws it everywhere, so the lever shows what a level changes. The
+    /// cadence signature folds it, so a change re-renders.</summary>
+    public SdfMeshDetailLevel MeshDetail { get; init; }
     /// <summary>Which work the frame's views update less often when it is far or small on screen
     /// (<see cref="SdfUpdateRates"/>, <c>world.rates</c>); the default, <see cref="SdfUpdateRates.None"/>, updates
     /// everything every frame. The residency reads <see cref="SdfUpdateRates.ShadowFar"/>; the host reads the rest

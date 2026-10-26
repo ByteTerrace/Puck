@@ -33,13 +33,15 @@ public sealed class SdfMeshStore {
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";
 
-    // "PUCKMSH3": counts followed by the contour cell. Retired cache entries are derived again.
-    private const ulong Magic = 0x3348534D4B435550ul;
-    // The magic, the key, and seven counts: vertices, normals, indices, triangle materials, the group's materials, members
-    // and vertex members.
-    private const int HeaderBytes = (sizeof(ulong) + 16 + (7 * sizeof(int)) + (3 * sizeof(float)));
+    // "PUCKMSH4": counts, the contour cell, then the levels' count. Retired cache entries are derived again.
+    private const ulong Magic = 0x3448534D4B435550ul;
+    // The magic, the key, seven counts (vertices, normals, indices, triangle materials, the group's materials, members and
+    // vertex members), the contour cell and the levels' count.
+    private const int HeaderBytes = (sizeof(ulong) + 16 + (7 * sizeof(int)) + (3 * sizeof(float)) + sizeof(int));
     // A member's bytes: its slot offset, its position and its orientation.
     private const int MemberBytes = (sizeof(int) + (7 * sizeof(float)));
+    // A level's bytes before its indices and triangle materials: its triangle count and its error.
+    private const int LevelHeaderBytes = (sizeof(int) + sizeof(float));
     private const int ChecksumBytes = 16;
     // The most sets a store keeps, past any machine's builds many times over: its bytes bound it first.
     private const int MaxSets = 4_096;
@@ -400,7 +402,13 @@ public sealed class SdfMeshStore {
         var groupMaterials = MemoryMarshal.AsBytes(span: materials.AsSpan());
         var members = mesh.Members.Span;
         var vertexMembers = mesh.VertexMembers.Span;
-        var bytes = new byte[(((((((HeaderBytes + groupMaterials.Length) + positions.Length) + normals.Length) + indices.Length) + triangleMaterials.Length) + (members.Length * MemberBytes)) + vertexMembers.Length) + ChecksumBytes];
+        var levelBytes = 0;
+
+        foreach (var level in mesh.Levels) {
+            levelBytes += ((LevelHeaderBytes + (level.Indices.Length * sizeof(uint))) + (level.TriangleMaterials.Length * sizeof(uint)));
+        }
+
+        var bytes = new byte[((((((((HeaderBytes + groupMaterials.Length) + positions.Length) + normals.Length) + indices.Length) + triangleMaterials.Length) + (members.Length * MemberBytes)) + vertexMembers.Length) + levelBytes) + ChecksumBytes];
         var at = bytes.AsSpan();
 
         BinaryPrimitives.WriteUInt64LittleEndian(destination: at, value: Magic);
@@ -415,6 +423,7 @@ public sealed class SdfMeshStore {
         BinaryPrimitives.WriteSingleLittleEndian(destination: at[52..], value: mesh.BakeCell.X);
         BinaryPrimitives.WriteSingleLittleEndian(destination: at[56..], value: mesh.BakeCell.Y);
         BinaryPrimitives.WriteSingleLittleEndian(destination: at[60..], value: mesh.BakeCell.Z);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: at[64..], value: mesh.Levels.Count);
         var offset = HeaderBytes;
 
         groupMaterials.CopyTo(destination: at[offset..]);
@@ -442,6 +451,15 @@ public sealed class SdfMeshStore {
         }
         vertexMembers.CopyTo(destination: at[offset..]);
         offset += vertexMembers.Length;
+        foreach (var level in mesh.Levels) {
+            BinaryPrimitives.WriteInt32LittleEndian(destination: at[offset..], value: level.TriangleCount);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: at[(offset + sizeof(int))..], value: level.Error);
+            offset += LevelHeaderBytes;
+            MemoryMarshal.AsBytes(span: level.Indices.Span).CopyTo(destination: at[offset..]);
+            offset += (level.Indices.Length * sizeof(uint));
+            MemoryMarshal.AsBytes(span: level.TriangleMaterials.Span).CopyTo(destination: at[offset..]);
+            offset += (level.TriangleMaterials.Length * sizeof(uint));
+        }
         BinaryPrimitives.WriteUInt128LittleEndian(destination: at[offset..], value: XxHash128.HashToUInt128(source: bytes.AsSpan(length: (bytes.Length - ChecksumBytes), start: 0)));
 
         return bytes;
@@ -497,10 +515,31 @@ public sealed class SdfMeshStore {
 
         var vertexMemberData = body.Slice(length: vertexMemberCount, start: offset).ToArray();
 
+        offset += vertexMemberCount;
+
+        var levels = new SdfMeshLevel[BinaryPrimitives.ReadInt32LittleEndian(source: body[64..])];
+
+        for (var level = 0; (level < levels.Length); level++) {
+            var triangles = BinaryPrimitives.ReadInt32LittleEndian(source: body[offset..]);
+            var error = BinaryPrimitives.ReadSingleLittleEndian(source: body[(offset + sizeof(int))..]);
+
+            offset += LevelHeaderBytes;
+
+            var levelIndices = MemoryMarshal.Cast<byte, uint>(span: body.Slice(length: (12 * triangles), start: offset)).ToArray();
+
+            offset += (12 * triangles);
+
+            var levelMaterials = ((triangleMaterials == 0) ? [] : MemoryMarshal.Cast<byte, uint>(span: body.Slice(length: (4 * triangles), start: offset)).ToArray());
+
+            offset += (4 * levelMaterials.Length);
+            levels[level] = new SdfMeshLevel(Error: error, Indices: levelIndices, TriangleMaterials: levelMaterials);
+        }
+
         try {
             mesh = new SdfMesh(indices: indexData, members: members, normals: normalData, positions: positionData, triangleMaterials: materialData, vertexMembers: vertexMemberData) {
                 BakeCell = new Vector3(BinaryPrimitives.ReadSingleLittleEndian(body[52..]),
                     BinaryPrimitives.ReadSingleLittleEndian(body[56..]), BinaryPrimitives.ReadSingleLittleEndian(body[60..])),
+                Levels = levels,
             };
             if (!float.IsFinite(mesh.BakeCell.LengthSquared()) || Vector3.Min(mesh.BakeCell, Vector3.Zero) != Vector3.Zero) {
                 throw new ArgumentException("Invalid contour cell.");
@@ -531,9 +570,23 @@ public sealed class SdfMeshStore {
         var groupMaterials = BinaryPrimitives.ReadInt32LittleEndian(source: body[40..]);
         var members = BinaryPrimitives.ReadInt32LittleEndian(source: body[44..]);
         var vertexMembers = BinaryPrimitives.ReadInt32LittleEndian(source: body[48..]);
+        var levels = BinaryPrimitives.ReadInt32LittleEndian(source: body[64..]);
         var expected = ((((((((long)HeaderBytes + (4L * groupMaterials)) + (12L * vertices)) + (12L * normals)) + (4L * indices)) + (4L * triangleMaterials)) + (((long)MemberBytes) * members)) + vertexMembers);
 
-        return (((vertices < 0) || (normals < 0) || (indices < 0) || (triangleMaterials < 0) || (groupMaterials < 0) || (members < 0) || (vertexMembers < 0) || (expected != body.Length)) ? "holds counts its length does not" : null);
+        if ((vertices < 0) || (normals < 0) || (indices < 0) || (triangleMaterials < 0) || (groupMaterials < 0) || (members < 0) || (vertexMembers < 0) || (levels < 0)) { return "holds counts its length does not"; }
+
+        // Each level's triangle count, read where the parts before it end, lays out its bytes.
+        var walked = 0;
+
+        for (; ((walked < levels) && ((expected + LevelHeaderBytes) <= body.Length)); walked++) {
+            var triangles = BinaryPrimitives.ReadInt32LittleEndian(source: body[((int)expected)..]);
+
+            if (triangles <= 0) { return "holds counts its length does not"; }
+
+            expected += ((LevelHeaderBytes + (12L * triangles)) + ((triangleMaterials == 0) ? 0L : (4L * triangles)));
+        }
+
+        return (((walked != levels) || (expected != body.Length)) ? "holds counts its length does not" : null);
     }
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
