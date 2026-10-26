@@ -90,6 +90,9 @@ public sealed partial class WorldPopulation {
     public int DynamicContactNarrowPairs { get; private set; }
     /// <summary>Number of box-overlapping sweep candidates inspected by the latest dynamic-body solve.</summary>
     public int DynamicContactCandidates { get; private set; }
+    /// <summary>Raw body-pair visits before Y/Z rejection or candidate limits, summed over every pass in the latest
+    /// dynamic-body solve.</summary>
+    public long DynamicContactPairVisits { get; private set; }
     /// <summary>Number of solid bodies whose latest sweep search exhausted its candidate budget.</summary>
     public int DynamicContactLimitedBodies { get; private set; }
     /// <summary>Number of solid-body pairs before broadphase pruning in the most recently completed solve.</summary>
@@ -140,7 +143,7 @@ public sealed partial class WorldPopulation {
     public WorldSolidField? SolidField => (m_baseContactField as WorldSolidField);
     /// <summary>The static collider inputs actually held by the analytic solver, with authored provenance.</summary>
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders =>
-        (m_baseContactField as WorldColliderSet)?.DiagnosticColliders ?? [];
+        ((m_baseContactField as WorldColliderSet)?.DiagnosticColliders ?? []);
     /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
     /// narrates nothing.</summary>
     public WorldOutputHub? NarrationHub { get; set; }
@@ -180,6 +183,10 @@ public sealed partial class WorldPopulation {
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
     private readonly WorldSweepBody[] m_dynamicContactBodies;
     private readonly byte[] m_dynamicContactDegrees;
+    // Y/Z cell heads and links in X-sweep order. Only lookups enumerate cells, never dictionary iteration.
+    private readonly Dictionary<(long Y, long Z), int> m_dynamicContactGrid;
+    private readonly (long Y, long Z)[] m_dynamicContactCells;
+    private readonly int[] m_dynamicContactNext;
     // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
     // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
     private readonly CarryRelationship[] m_activeCarries;
@@ -335,6 +342,9 @@ public sealed partial class WorldPopulation {
         m_entries = new Entry[definition.Population.Capacity];
         m_dynamicContactBodies = new WorldSweepBody[m_entries.Length];
         m_dynamicContactDegrees = new byte[m_entries.Length];
+        m_dynamicContactGrid = new Dictionary<(long Y, long Z), int>(capacity: m_entries.Length);
+        m_dynamicContactCells = new (long Y, long Z)[m_entries.Length];
+        m_dynamicContactNext = new int[m_entries.Length];
         m_activeCarries = new CarryRelationship[m_entries.Length];
 
         m_seatSpawns = CompileSeatSpawns(
@@ -449,11 +459,13 @@ public sealed partial class WorldPopulation {
         // The resolved LOOK row index (PRESENTATION-ONLY; carried out on the snapshot). Reassigned by ResolveLookIndices
         // on construction and on every Rebuild.
         public byte LookIndex { get; set; }
+
         // The kit and look rows this body's own cell of an assignment selector picks, or -1 where none does. They
         // outrank KitIndex/LookIndex and the seat kit, and are derived from state (ResolveSelections), so a checkpoint
         // carries the cell rather than these.
         public int SelectedKit { get; set; } = -1;
         public int SelectedLook { get; set; } = -1;
+
         // The stable cross-authority incarnation/epoch and the local generation whose occupant owns it. The stamp
         // makes ordinary slot reuse invalidate stale mobility without comparing the foreign origin generation.
         public WorldMobilityIdentity? Mobility { get; set; }

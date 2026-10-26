@@ -7,7 +7,7 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Executable law for the local half of cross-seam melee contact: two dynamic bodies are not allowed to
 /// occupy one volume, and the stable pair order produces the same authoritative result on every run.</summary>
-public sealed class DynamicBodyContactLawTests {
+public sealed class DynamicBodyContactLawTests(ITestOutputHelper output) {
     private static (Vector3 Left, Vector3 Right) ResolveCoincidentPair() {
         using var fixture = TwoBodies(mode: WorldBodyContactMode.Solid);
         var coincident = new Vector3(
@@ -242,5 +242,50 @@ public sealed class DynamicBodyContactLawTests {
             low: (Count - 1),
             high: (Count * 4)
         );
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void XAlignedDisjointBodiesPrunePairVisitsOnBothOtherAxes(bool separateY) {
+        const int Count = 4096;
+        var source = Fixtures.BuildDocument();
+        var definition = source with {
+            PopulationRaw = source.Population with {
+                CapacityRaw = Count,
+                NetworkPlayers = (Count - source.Population.LocalSeats),
+            },
+            KitRowsRaw = [
+                source.Kits[0] with {
+                    BodyContact = WorldBodyContactMode.Solid,
+                    Collider = new WorldCollider.Sphere(Radius: 0.5f),
+                },
+            ],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var population = fixture.Server.Population;
+
+        Assert.Equal((Count - population.LocalSeatCount), population.SetSimulatedCount(count: Count));
+        for (var index = 0; (index < population.LocalSeatCount); index++) {
+            fixture.JoinSeat(slot: index);
+        }
+        for (var index = 0; (index < Count); index++) {
+            // Negative and positive cells exercise floor division across the origin. Reverse spatial order to
+            // ensure pruning does not depend on the body's population ordinal matching its coordinate order.
+            var offset = (((Count / 2) - index) * 3f);
+
+            fixture.Server.Body(index: index)!.Pose(
+                pitchRadians: 0f, rollRadians: 0f, x: 0f,
+                y: (separateY ? offset : 5f), yawRadians: 0f, z: (separateY ? 0f : offset)
+            );
+        }
+
+        fixture.Step();
+
+        output.WriteLine(message: $"{Count} X-aligned {(separateY ? "Y" : "Z")}-disjoint bodies: {population.DynamicContactPairVisits} visits / {population.DynamicContactPotentialPairs} potential pairs");
+        Assert.Equal(((((long)Count) * (Count - 1)) / 2), population.DynamicContactPotentialPairs);
+        Assert.InRange(population.DynamicContactPairVisits, 1, (Count * 4L));
+        Assert.Equal(0, population.DynamicContactCandidates);
+        Assert.Equal(0, population.DynamicContactLimitedBodies);
+        Assert.Equal(0, population.DynamicContactResolvedPairs);
     }
 }

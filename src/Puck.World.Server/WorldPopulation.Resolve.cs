@@ -639,6 +639,7 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+
     // Carries one body's navigation route and producer domain from the runtime a recompile replaced into the current one,
     // by domain name. A route stores domain-local node ordinals, so it is kept only when the replacement runtime proved
     // the same complete static bake and rebound its dynamic query provider; every uncertain case replans from the
@@ -688,6 +689,7 @@ public sealed partial class WorldPopulation {
         index = -1;
         return false;
     }
+
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
     /// motion/producer retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
     /// re-resolves every entry's kit index, re-derives the kit/producer-dependent per-entry statics without resetting the
@@ -824,6 +826,7 @@ public sealed partial class WorldPopulation {
     public void ResolveDynamicContacts() {
         var contacts = m_dynamicContactBodies;
         var count = 0;
+        var maximumRadius = FixedQ4816.Zero;
 
         for (var index = 0; (index < Capacity); index++) {
             if (
@@ -836,6 +839,8 @@ public sealed partial class WorldPopulation {
 
             var radius = body.BroadphaseRadius;
 
+            maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
+
             contacts[count++] = new WorldSweepBody(
                 Index: index,
                 MinimumX: (body.FixedPosition.X - radius),
@@ -846,16 +851,20 @@ public sealed partial class WorldPopulation {
 
         DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
         DynamicContactCandidates = 0;
+        DynamicContactPairVisits = 0;
         DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
         RigidPairResolvedCount = 0;
         RigidPairPassesThisTick = 0;
 
+        // A pair's summed radii never exceed this cell width, so intersecting Y/Z intervals have centres in the
+        // same or adjacent cells. Keep raw units for exact floor division (including negative coordinates).
+        var cellWidth = Math.Max(val1: 2L, val2: maximumRadius.Value.AddSaturating(right: maximumRadius.Value));
+
         // One full broadphase-plus-narrowphase sweep over the CURRENT contacts[]/count captured above: reused,
         // unmodified, for the first pass and every extra pass, since a rigid pair's own positional correction can
-        // move a body into a THIRD one a later pass needs to see. The scratch spans are parameters, not captures —
-        // a local function cannot close over a ref struct. Returns candidate pairs routed to the rigid impulse path
+        // move a body into a THIRD one a later pass needs to see. Returns candidate pairs routed to the rigid impulse path
         // (used only to derive the extra-pass count below) — RigidPairResolvedCount is ResolveRigidPairContact's own
         // to increment, one call at a time, never assigned here directly.
         int RunSweep() {
@@ -864,7 +873,7 @@ public sealed partial class WorldPopulation {
             // Refreshed from each body's CURRENT FixedPosition every pass (radius is collider-derived and does not
             // change mid-tick): an earlier pass's own positional correction can move a body's X interval enough that
             // the stale one either misses a pair it should now prune in, or keeps pruning in a pair that has since
-            // moved apart, before the Y/Z prune and narrowphase below (which already read live positions) ever see it.
+            // moved apart. The Y/Z grid is rebuilt from those same current positions below.
             for (var refreshOrdinal = 0; (refreshOrdinal < count); refreshOrdinal++) {
                 var refreshedRadius = contacts[refreshOrdinal].Radius;
                 var refreshedX = m_entries[contacts[refreshOrdinal].Index].Body!.FixedPosition.X;
@@ -884,18 +893,59 @@ public sealed partial class WorldPopulation {
             );
             Array.Clear(array: m_dynamicContactDegrees);
 
+            // Prepend in reverse sweep order: each cell is a sorted linked list, without per-cell allocations.
+            // A left body's nine neighbouring lists are merged lazily, preserving the original X/index pair order
+            // and stopping immediately at the candidate/degree budget even when every body occupies one cell.
+            m_dynamicContactGrid.Clear();
+            for (var ordinal = (count - 1); (ordinal >= 0); ordinal--) {
+                var position = m_entries[contacts[ordinal].Index].Body!.FixedPosition;
+                var cell = (position.Y.Value.FloorDivide(divisor: cellWidth), position.Z.Value.FloorDivide(divisor: cellWidth));
+
+                m_dynamicContactCells[ordinal] = cell;
+                m_dynamicContactNext[ordinal] = (m_dynamicContactGrid.TryGetValue(key: cell, value: out var head) ? head : -1);
+                m_dynamicContactGrid[cell] = ordinal;
+            }
+            Span<int> neighbours = stackalloc int[9];
+
             for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
                 var leftContact = contacts[leftOrdinal];
                 var leftIndex = leftContact.Index;
                 var left = m_entries[leftIndex].Body!;
+                var cell = m_dynamicContactCells[leftOrdinal];
+
+                // Remove every left body, even one already at its degree limit. Queries then see only later
+                // bodies, without repeatedly walking past earlier bodies in a crowded cell.
+                m_dynamicContactGrid[cell] = m_dynamicContactNext[leftOrdinal];
 
                 if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                     continue;
                 }
 
                 var inspected = 0;
+                var neighbourCount = 0;
 
-                for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
+                for (var y = -1; (y <= 1); y++) {
+                    for (var z = -1; (z <= 1); z++) {
+                        neighbours[neighbourCount++] = (m_dynamicContactGrid.TryGetValue(
+                            key: ((cell.Y + y), (cell.Z + z)), value: out var head
+                        ) ? head : -1);
+                    }
+                }
+                while (true) {
+                    var rightOrdinal = count;
+                    var nearestCell = -1;
+
+                    for (var neighbour = 0; (neighbour < neighbours.Length); neighbour++) {
+                        if ((neighbours[neighbour] >= 0) && (neighbours[neighbour] < rightOrdinal)) {
+                            rightOrdinal = neighbours[neighbour];
+                            nearestCell = neighbour;
+                        }
+                    }
+                    if ((nearestCell < 0) || (contacts[rightOrdinal].MinimumX > leftContact.MaximumX)) {
+                        break;
+                    }
+                    neighbours[nearestCell] = m_dynamicContactNext[rightOrdinal];
+                    DynamicContactPairVisits++;
                     var rightContact = contacts[rightOrdinal];
                     var rightIndex = rightContact.Index;
                     var right = m_entries[rightIndex].Body!;
