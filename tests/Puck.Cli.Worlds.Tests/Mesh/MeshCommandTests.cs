@@ -73,9 +73,24 @@ public sealed class MeshCommandTests {
         groups.Single(predicate: group => scene.Label(group: group, owner: scene.Owner(group: group)).EndsWith(value: $" {shape}", comparisonType: StringComparison.Ordinal));
 
     [Fact]
+    public void ARigidLookNamesItsSharedTemplateAndMapsItsLocalGeometryToTheBody() {
+        var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(CreationDocument.CurrentSchema, "rigid", null,
+            [new ShapeDocument(0, "tip", SdfSolidPrimitive.Sphere, new Vector3(0, 2, 0), Quaternion.Identity, Vector3.One, 0, SdfBlendOp.Union, 0, 0)], null));
+        var creation = new WorldPrototype("rigid", canonical.Document, canonical.Hash);
+        var definition = new WorldDefinition() with { CreationsRaw = [creation], LookRowsRaw = [new WorldLook("rigid", new WorldLookSource.Creation("rigid"), 2, WorldLookMotion.Default)] };
+        var scene = RestScene.Compose(definition, RepositoryPaths.Resolve(relativePath: "worlds/debug/debug.puck"));
+        var group = Assert.Single(SdfMeshBakeGroup.Plan(scene.Program, scene.Transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+        var owner = Assert.Single(scene.Bodies);
+
+        Assert.Equal(owner, scene.Owner(group));
+        Assert.EndsWith(" tip", scene.Label(group, owner), StringComparison.Ordinal);
+        Assert.Equal(new Vector3(0, 4, 0), scene.ToWorld(group)(creation.EngineDocument.Shapes![0].Position.Value));
+    }
+    [Fact]
     public void AStoredMeshIsMeasuredLocatedNamedDrawnAndFoundInTheHistory() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");
         var world = TempWorldCopy(directory: directory);
+
         var (scene, groups) = Plan(world: world);
         var hinge = Group(groups: groups, scene: scene, shape: "podHinge-left");
         var field = new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: hinge, program: scene.Program), reading: SdfFieldReading.Render);
@@ -89,6 +104,7 @@ public sealed class MeshCommandTests {
         Assert.True(condition: store.Write(geometry: hinge.Sealed, identity: Identity, materials: hinge.MaterialOrder, mesh: new SdfMesh(indices: mesh.Indices, normals: mesh.Normals, positions: positions, triangleMaterials: mesh.TriangleMaterials)));
 
         var images = directory.PathOf(name: "images");
+
         var (exitCode, output) = Invoke("mesh", "audit", "--world", world, "--prototype", "moth", "--group", "podHinge-left", "--identity", Identity.ToString(format: "x32", provider: null), "--cache-dir", directory.PathOf(name: "cache"), "--images", images, "--history", "--worst", "1");
 
         Assert.Equal(expected: 0, actual: exitCode);
@@ -104,6 +120,7 @@ public sealed class MeshCommandTests {
     public void AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");
         var world = Placed(path: TempWorldCopy(directory: directory));
+
         var (scene, groups) = Plan(world: world);
         var store = new SdfMeshStore(directory: directory.PathOf(name: Path.Combine("cache", "meshes")));
         var hexagonal = Group(groups: groups, scene: scene, shape: "hexagonal (hexagonal)");
@@ -124,6 +141,7 @@ public sealed class MeshCommandTests {
         File.WriteAllBytes(bytes: File.ReadAllBytes(path: damaged)[..20], path: damaged);
 
         var identity = Identity.ToString(format: "x32", provider: null);
+
         var (refusal, output) = Invoke("mesh", "audit", "--world", world, "--group", "hexagonal", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
         // A regular polygon lowers to the convex polygon of its vertices, which the reading takes, so the stored dummy
@@ -156,6 +174,7 @@ public sealed class MeshCommandTests {
     public void AnOfflineBakeAuditsAGroupWithNoDeviceAndNoStore() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");
         var world = Placed(path: TempWorldCopy(directory: directory));
+
         var (baked, report) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "plain", "--cache-dir", directory.PathOf(name: "empty"));
 
         Assert.Equal(expected: 0, actual: baked);
@@ -191,6 +210,7 @@ public sealed class MeshCommandTests {
     public void TheSceneVerbTimesABuildAndAOneDrawChangeOverStoredStaticMeshes() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-scene-");
         var world = Placed(path: TempWorldCopy(directory: directory));
+
         var (scene, groups) = Plan(world: world);
         var store = new SdfMeshStore(directory: directory.PathOf(name: Path.Combine("cache", "meshes")));
         var identity = Identity.ToString(format: "x32", provider: null);
@@ -199,6 +219,7 @@ public sealed class MeshCommandTests {
             groups.Single(predicate: group => scene.Label(group: group, owner: null).Contains(value: $" {name} ({name})", comparisonType: StringComparison.Ordinal));
 
         var storedCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
         foreach (var (placement, samples) in new[] { ("plain", 17), ("hexagonal", 9) }) {
             var group = Placement(name: placement);
             var plain = Placement(name: "plain");
@@ -225,7 +246,8 @@ public sealed class MeshCommandTests {
         Assert.Equal(expected: 0, actual: largest);
         // The store collapses geometry; choose by the stored triangle count, as the scene command does.
         var largestPlacement = storedCounts.MaxBy(entry => entry.Value).Key;
-        Assert.Contains(expectedSubstring: $"{largestPlacement} ({largestPlacement})", actualString: largestReport.Split(separator: '\n')[1]);
+
+        Assert.Contains(expectedSubstring: $"{largestPlacement} ({largestPlacement})", actualString: largestReport.Split(separator: '\n').Single(line => line.StartsWith("  change: ", StringComparison.Ordinal)));
 
         var malformed = directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]");
 
@@ -241,6 +263,7 @@ public sealed class MeshCommandTests {
     public void TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-identity-");
         var build = AppContext.BaseDirectory;
+
         var (printed, report) = Invoke("mesh", "identity", "--build", build, "--against", build, "--members", "--why", "SdfDualContouring.Extract");
 
         Assert.Equal(expected: 0, actual: printed);

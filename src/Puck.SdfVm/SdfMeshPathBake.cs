@@ -349,7 +349,7 @@ public sealed partial class SdfMeshPathBake {
                         foreach (var copy in frame.MeshInstances) {
                             if (!copy.UsesSlot(group.Slot)) { continue; }
                             copy.FirstInstance = group.FirstInstance;
-                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { MotionIdentity = (copy.Identity, group.Selector), FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true });
+                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true, MotionIdentity = (copy.Identity, group.Selector) });
                         }
                         continue;
                     }
@@ -364,7 +364,7 @@ public sealed partial class SdfMeshPathBake {
                     }
                 }
                 foreach (var copy in frame.MeshInstances) {
-                    if (copy.Mesh is { } mesh) { m_draws.Add(new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { MotionIdentity = (copy.Identity, "mesh"), FrameSlot = copy.FrameSlot, IsDynamic = true }); }
+                    if (copy.Mesh is { } mesh) { m_draws.Add(new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { FrameSlot = copy.FrameSlot, IsDynamic = true, MotionIdentity = (copy.Identity, "mesh") }); }
                 }
                 // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
                 SdfSlotClip.Apply(

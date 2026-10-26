@@ -22,6 +22,7 @@ namespace Puck.Cli.Mesh;
 public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Origin, float Scale, int RootSlot, int SlotCount) {
     /// <summary>Gets each authored shape's actual motion-owner slot relative to the root.</summary>
     public int[] ShapeSlots { get; init; } = [];
+
     /// <summary>Returns a world point in the creation's author frame: about the body, unscaled, then turned a half turn
     /// about up (<see cref="Puck.World.Authoring.CreationFrame"/>).</summary>
     /// <param name="world">The world point, in metres.</param>
@@ -44,12 +45,18 @@ public sealed class RestScene {
 
     // The frame's instances by the placements and prototypes they stand for.
     private readonly ISdfPickMap? m_picks;
+    private readonly Dictionary<int, RestBody> m_rigidTemplates = [];
 
-    private RestScene(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, IReadOnlyList<RestBody> bodies, ISdfPickMap? picks) {
+    private RestScene(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, IReadOnlyList<RestBody> bodies, ISdfPickMap? picks, IReadOnlyList<SdfMeshInstance> copies) {
         m_picks = picks;
         Program = program;
         Transforms = transforms;
         Bodies = bodies;
+        foreach (var copy in copies) {
+            if ((copy.Identity is not WorldPickTarget { BodyIndex: { } index }) || (bodies.FirstOrDefault(body => (body.BodyIndex == index)) is not { } body)) { continue; }
+            m_rigidTemplates.TryAdd(copy.AssetSlot, body);
+            foreach (var slot in copy.OtherAssetSlots) { m_rigidTemplates.TryAdd(slot, body); }
+        }
     }
 
     /// <summary>Gets the composed program.</summary>
@@ -115,11 +122,13 @@ public sealed class RestScene {
         client.DeliverSnapshot(snapshot: new WorldSnapshot(Authority: "rest", Entries: entries.ToArray(), Revision: 1, StepTicks: 1UL, Tick: 1UL));
         client.UpdateRenderPoses(alpha: 1f);
         ISdfPickMap? picks = null;
+        SdfFrame? captured = null;
 
         // Two frames: the first registers the bodies' stamps, the second packs their poses.
         for (var frame = 0; (frame < 2); frame++) {
             emitter.Tick(deltaSeconds: 0f);
-            picks = frames.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 1f, width: 64).PickMap;
+            captured = frames.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 1f, width: 64);
+            picks = captured.PickMap;
         }
 
         var bodies = new List<RestBody>();
@@ -134,13 +143,13 @@ public sealed class RestScene {
             bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale, SlotCount: slots) { ShapeSlots = new CreationMotionPlan(creation.EngineDocument, look.Motion.PartDynamics).ShapeSlots });
         }
 
-        return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms);
+        return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms, copies: captured!.MeshInstances);
     }
     /// <summary>Returns the body whose pool carries a dynamic group's slot, or <see langword="null"/> for a static
     /// group.</summary>
     /// <param name="group">The group.</param>
     /// <returns>The body, or <see langword="null"/>.</returns>
-    public RestBody? Owner(SdfMeshBakeGroup group) => (group.Dynamic ? BodyOf(slot: group.Slot) : null);
+    public RestBody? Owner(SdfMeshBakeGroup group) => (group.Dynamic ? (m_rigidTemplates.GetValueOrDefault(group.Slot) ?? BodyOf(slot: group.Slot)) : null);
     /// <summary>Returns a group's label: its slot and the body and shape the slot carries, its first instance, or the world
     /// segments.</summary>
     /// <param name="group">The group.</param>
@@ -153,7 +162,8 @@ public sealed class RestScene {
 
         var first = ((group.FirstInstance >= 0) ? Program.Instances[group.FirstInstance].First : 0);
         var end = ((group.FirstInstance >= 0) ? Program.Instances[group.FirstInstance].End : Program.Instructions.Count);
-        var shape = Enumerable.Range(first, (end - first)).FirstOrDefault(index => Program.Instructions[index].Op == SdfOp.ShapeBlend, -1);
+        var shape = Enumerable.Range(first, (end - first)).FirstOrDefault(index => (Program.Instructions[index].Op == SdfOp.ShapeBlend), -1);
+
         return $"slot {group.Slot} {owner.Creation.Id} body {owner.BodyIndex} {((shape >= 0) ? ShapeName(group, shape) : "root")}";
     }
     /// <summary>Returns the name of the creation shape a shape instruction draws: the shape whose pool slot its chain's
@@ -165,21 +175,28 @@ public sealed class RestScene {
         var instructions = Program.Instructions;
 
         var position = Vector3.Zero;
+        var positioned = false;
+
         for (var index = (instruction - 1); (index >= 0); index--) {
             var op = instructions[index].Op;
 
             if (op == SdfOp.ResetPoint) { break; }
-            if (op == SdfOp.Translate) { position = new Vector3(instructions[index].Data0.X, instructions[index].Data0.Y, instructions[index].Data0.Z); }
+            if ((op == SdfOp.Translate) && !positioned) { position = new Vector3(instructions[index].Data0.X, instructions[index].Data0.Y, instructions[index].Data0.Z); positioned = true; }
             if (op != SdfOp.TransformDynamic) { continue; }
 
             var slot = ((int)instructions[index].Data0.X);
 
-            if (BodyOf(slot) is not { } body) { return $"slot {slot}"; }
+            var rigid = m_rigidTemplates.TryGetValue(slot, out var body);
+
+            body ??= BodyOf(slot);
+            if (body is null) { return $"slot {slot}"; }
             var shapes = (body.Creation.EngineDocument.Shapes ?? []);
+            var root = (rigid ? slot : body.RootSlot);
             var matches = Enumerable.Range(0, shapes.Count).Where(shape =>
-                ((body.RootSlot + body.ShapeSlots[shape]) == slot) &&
-                (Vector3.DistanceSquared(shapes[shape].Position.Value * body.Scale, position) < 0.000001f)).ToArray();
-            return ((matches.Length > 0) ? string.Join("/", matches.Select(shape => shapes[shape].Name?.Value ?? $"shape {shape}")) : $"slot {slot}");
+                (((root + body.ShapeSlots[shape]) == slot) &&
+                (Vector3.DistanceSquared((shapes[shape].Position.Value * ((rigid || (shapes[shape].Domain is { Count: > 0 })) ? 1f : body.Scale)), position) < 0.000001f))).ToArray();
+
+            return ((matches.Length > 0) ? string.Join("/", matches.Select(shape => (shapes[shape].Name?.Value ?? $"shape {shape}"))) : $"slot {slot}");
         }
 
         return $"shape {instruction}";
@@ -191,10 +208,11 @@ public sealed class RestScene {
     public Func<Vector3, Vector3> ToWorld(SdfMeshBakeGroup group) {
         if (!group.Dynamic || (group.Slot >= Transforms.Count)) { return static point => point; }
 
-        var transform = Transforms[group.Slot];
+        var rigid = m_rigidTemplates.GetValueOrDefault(group.Slot);
+        var transform = Transforms[(rigid?.RootSlot ?? group.Slot)];
         var turn = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
 
-        return point => (transform.Position + Vector3.Transform(value: point, rotation: turn));
+        return point => (transform.Position + Vector3.Transform(value: (point * (rigid?.Scale ?? 1f)), rotation: turn));
     }
 
     // The placement and prototype a static instance stands for, as the frame's pick map names it; empty where it names

@@ -56,10 +56,13 @@ public sealed class WorldShapeIsolationLawTests {
         var program = builder.Build();
 
         Assert.Equal(0, Assert.Single(program.Instances).Slot);
-        Assert.Equal(3, program.Instructions.Count(instruction => instruction.Op == SdfOp.ShapeBlend));
+        Assert.Equal(3, program.Instructions.Count(instruction => (instruction.Op == SdfOp.ShapeBlend)));
 
-        Assert.All(program.Materials.Where(material => material.Paints is not null), material => {
+        var painted = program.Materials.Where(material => (material.Paints is not null)).ToArray();
+        Assert.NotEmpty(painted);
+        Assert.All(painted, material => {
             var paint = Assert.Single(material.Paints!);
+
             Assert.Contains(paint.Slot, new[] { -1, 0 }); // shape-local material variants bake their paint coordinates
             Assert.Equal(new Vector3(1, 0, 0), paint.Color);
         });

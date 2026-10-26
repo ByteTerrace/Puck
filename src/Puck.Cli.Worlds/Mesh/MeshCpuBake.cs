@@ -22,8 +22,10 @@ namespace Puck.Cli.Mesh;
 public static class MeshCpuBake {
     /// <summary>The narrowest spacing, in metres, of a gradient tap from its sample.</summary>
     public const float MinimumSpacing = 0.0005f;
+
     // The value a group not selected answers at every sample: far outside any surface.
     private const float Empty = 1_000f;
+
     private static readonly Vector3[] Taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
     /// <summary>Bakes the selected groups of a program.</summary>
@@ -61,6 +63,7 @@ public static class MeshCpuBake {
 
         return meshes;
     }
+
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points.
     private static byte[] Answer(SdfMeshBakeBatch batch, IReadOnlyDictionary<int, SdfProgram> fields) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
@@ -119,5 +122,5 @@ public static class MeshCpuBake {
     }
     // The field's value and material at a point; empty space where the field answers nothing.
     private static float Sample(SdfFieldEvaluator field, Vector3 point, out int material) =>
-        (field.TryDistance(distance: out var distance, material: out material, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))) ? (float)(double)distance : Empty);
+        (field.TryDistance(distance: out var distance, material: out material, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))) ? (float)((double)distance) : Empty);
 }

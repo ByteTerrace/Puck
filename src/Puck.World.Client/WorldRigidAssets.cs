@@ -30,6 +30,7 @@ public sealed class WorldRigidAssets {
     private readonly List<WorldCreationInstances.BodyStamp> m_bodies = [];
     private readonly HashSet<int> m_liveBodies = [];
     private readonly Dictionary<int, RootMotion> m_motion = [];
+
     private WorldShapeIsolation? m_isolation;
 
     private sealed class RootMotion {
@@ -38,7 +39,9 @@ public sealed class WorldRigidAssets {
         public WorldEntityAddress Address;
 
         public int Epoch = -1;
+
         public int CarryEpoch;
+
         public readonly WorldStateLease Reads = new();
     }
 

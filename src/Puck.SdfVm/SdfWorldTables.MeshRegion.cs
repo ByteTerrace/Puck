@@ -17,22 +17,26 @@ namespace Puck.SdfVm;
 // keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
+
     // Whether the arena has written its meshes into the region.
     private bool m_meshSectionWritten;
-
     // The draw list last planned and its revision, and whether its draws are all staged: a list whose meshes' words are
     // still owed stages again each frame as they land.
     private IReadOnlyList<SdfMeshDraw>? m_meshSource;
     private long m_meshSourceRevision;
     private bool m_meshStaged;
+
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
     private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMeshDraw> m_meshLanded = [];
+
     // The draws the latest frame staged, whose meshes are written.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
+
     // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
     // owed mesh): what StageChangedDraws compares a list against.
     private SdfMeshDraw[] m_stagedDraws = [];
+
     private int m_stagedCount;
     private bool m_stagedWhole;
 
@@ -42,6 +46,7 @@ public sealed partial class SdfWorldTables {
     public const int MeshLandingWords = (1 << 19);
 
     private readonly GpuRegion m_meshRegion;
+
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
     // renders.
     private long m_meshRevision;
@@ -50,27 +55,32 @@ public sealed partial class SdfWorldTables {
     // The draws the frame being rendered rasterizes, from its staged draw list, and how many of them are glass.
     private uint m_meshDrawCount;
     private uint m_glassDrawCount;
-    private SdfMeshBox?[] m_meshDrawBoxes = [];
 
+    private SdfMeshBox?[] m_meshDrawBoxes = [];
     // The draw records as the next write sends them, and one mesh's words as a flush stages them.
     private uint[] m_meshDrawWords = [];
     private uint[] m_meshWords = [];
+
     // The region's source for its mesh section, and the placed meshes by their first word, sorted again after a plan
     // places or forgets one.
     private MeshSection? m_meshSection;
+
     private readonly List<(int Word, SdfMesh Mesh)> m_meshOrder = [];
     private bool m_meshOrderStale = true;
+
     // The zeros a flush stages into words no placed mesh holds.
-    private static readonly uint[] ZeroWords = new uint[1 << 16];
+    private static readonly uint[] ZeroWords = new uint[(1 << 16)];
 
     /// <summary>Gets the words the mesh region's draw records and meshes take for the draws the latest frame staged; zero
     /// before a frame draws a mesh.</summary>
     public int MeshRegionWords => m_meshArena.Words;
+
     /// <summary>The most bytes one mesh region holds, a whole number of words (<see cref="GpuRegion.MaxByteCount"/>): the
     /// baked meshes a frame draws must fit it, and a frame that needs more throws.</summary>
     public const ulong MostMeshRegionBytes = ((ulong)GpuRegion.MaxByteCount);
     /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB.</summary>
     public const ulong MeshRegionGranuleBytes = (16UL << 20);
+
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
     /// needs more. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
@@ -96,6 +106,7 @@ public sealed partial class SdfWorldTables {
             val2: MostMeshRegionBytes
         );
     }
+
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
     public uint MeshDrawCount => m_meshDrawCount;
     /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass (<see cref="SdfMeshDraw.Glass"/>): the glass pass
@@ -383,13 +394,14 @@ public sealed partial class SdfWorldTables {
         }
 
         var end = (((long)word) + count);
-        var cursor = (long)word;
+        var cursor = ((long)word);
         var low = 0;
         var high = m_meshOrder.Count;
 
         // The first placed mesh that ends past word.
         while (low < high) {
             var middle = ((low + high) >>> 1);
+
             var (start, mesh) = m_meshOrder[middle];
 
             if ((((long)start) + SdfMeshRegion.WordsOf(mesh: mesh)) <= word) {
@@ -398,7 +410,7 @@ public sealed partial class SdfWorldTables {
                 high = middle;
             }
         }
-        for (var index = low; (index < m_meshOrder.Count) && (m_meshOrder[index].Word < end); index++) {
+        for (var index = low; ((index < m_meshOrder.Count) && (m_meshOrder[index].Word < end)); index++) {
             var (start, mesh) = m_meshOrder[index];
             var words = MeshWordsOf(mesh: mesh, placement: m_meshArena.Placements[mesh]);
             var first = Math.Max(val1: cursor, val2: start);
@@ -422,11 +434,13 @@ public sealed partial class SdfWorldTables {
             count -= piece;
         }
     }
+
     // The mesh section's words as the region's source sees them.
     private sealed class MeshSection(SdfWorldTables tables) : IGpuRegionSource {
         public void WriteWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) =>
             tables.WriteSourcedMeshWords(buffer: buffer, count: count, destinationOffsetBytes: destinationOffsetBytes, word: word);
     }
+
     // Grows the region to MeshRegionGrownBytes of the need, refusing by name past what a region holds, without waiting for
     // the device (GpuRegion.Grow): the next upload clears the new buffer and copies the words the old one held into it on
     // the GPU, so every placed mesh stands where it was written and nothing it held is staged again, and the old buffer is

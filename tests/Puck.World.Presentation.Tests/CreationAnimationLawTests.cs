@@ -528,8 +528,8 @@ public sealed class CreationAnimationLawTests {
         );
 
         Assert.Equal(
-            expected: CreationFixtures.EmitPool(bodyScale: 1f, creation: inertCreation).Instructions.Where(i => i.Op == SdfOp.ShapeBlend),
-            actual: CreationFixtures.EmitPool(bodyScale: 1f, creation: animatedCreation).Instructions.Where(i => i.Op == SdfOp.ShapeBlend)
+            expected: CreationFixtures.EmitPool(bodyScale: 1f, creation: inertCreation).Instructions.Where(i => (i.Op == SdfOp.ShapeBlend)),
+            actual: CreationFixtures.EmitPool(bodyScale: 1f, creation: animatedCreation).Instructions.Where(i => (i.Op == SdfOp.ShapeBlend))
         );
 
         // The limb's engine-frame centre is the author frame's half turn of (0.5, 0.9, 0); its capsule radius is 0.1,

@@ -58,8 +58,9 @@ public sealed partial class WorldRenderEnvelopeLawTests {
     public void TheAuthoredCensusAddsDocumentMaterialsWithoutReservingLiveBodies() {
         var definition = Document(headroom: 0, placements: []);
         var envelope = new WorldSceneEnvelope(definition);
+
         envelope.DocumentMaterials = static () => 3;
-        Assert.Equal(envelope.Boot.Cost with { Materials = envelope.Boot.Cost.Materials + 3 }, envelope.Measure(definition).Cost);
+        Assert.Equal(envelope.Boot.Cost with { Materials = (envelope.Boot.Cost.Materials + 3) }, envelope.Measure(definition).Cost);
         Assert.Contains("buffers follow the live program", envelope.Describe(), StringComparison.Ordinal);
     }
     /// <summary>The count's placement term covers what the static stamper emits for placements of a panelled, a trimmed
