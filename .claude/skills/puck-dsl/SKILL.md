@@ -20,6 +20,7 @@ file is corrected in the same change.
 |---|---|
 | Parser, printer, lowering, diagnostics | `src/Puck.Transpiler` (`Parsing/PuckParser*.cs`, `Formatting/PuckPrinter*.cs`, `Lowering/DocumentLowering*.cs` and `DocumentBuiltins.cs`, `Diagnostics/PuckDiagnosticCodes.cs`) |
 | World vocabulary, its linter and language server | `src/Puck.World.Transpiler` (`Vocabulary/` describes every construct once; `Validation/PuckLinter*.cs`; `Lsp/`) |
+| World compile contract | `src/Puck.World.Transpiler/WorldCompiler.cs`; `WorldDocumentMembers.cs` checks emitted members against `WorldModelShape` and lowers authored pins to canonical document identities |
 | Cartridge vocabulary | `src/Puck.GamingBricks.Transpiler` |
 | Expression vocabulary (operators, named functions) | `Puck.State.ExpressionOperators`, `Puck.State.ExpressionVocabulary` |
 | CLI verbs | `src/Puck.Cli.Worlds` (`Transpiler/`: compile, decompile, lint, lsp, migrate, embed; `Test/`; `Vocabulary/`), `src/Puck.Cli.Format` (format) |
@@ -75,6 +76,14 @@ A document's `schema:` field selects its vocabulary, never the filename.
   interpolated `$"""..."""`. An interpolated string computes a name, key,
   number or text, never an expression (**PUCK112**). Backquote a name the bare
   form cannot carry (`` `seat-1` ``).
+- **Hashes have one authored spelling.** Write `hash: auto` for automatic
+  hashing, or `hash: "sha256/<64 lowercase hex>"` for a digest. Quoted `"auto"`,
+  bare digests and `sha256-64/` pins are refused by name during compilation.
+  A null document hash carries no pin: decompilation omits that member, rather
+  than inventing an empty digest or an automatic hash.
+  Font pins cover the font bytes; canonical document rows (creations, patches, tunes,
+  music and tables) pin their canonical document, whose compiled identity is
+  still the canonicalizer's digest. The printer restores the authored prefix.
 - Generated names use `$` inside a document and `~` in file names
   (`Puck.State.GeneratedName`); an author name using them is **PUCK113**.
 - **Control flow is core-parsed; each vocabulary decides what its rule shape
@@ -165,8 +174,10 @@ puck compile <file> --validate        # writes <source>.world.json (and its .puc
 puck test <path-or-dir>               # boots each test block headless, one verdict a line
 ```
 
-- `puck compile --validate` runs the engine's own validation over the lowered
-  document; lowering alone proves only that the source was well formed.
+- Compilation refuses unknown document members by name, including members
+  supplied through templates and bound objects. Converter-owned values retain
+  their own shape rules, and reserved document extension keys remain data.
+  `puck compile --validate` additionally runs the engine's semantic validation.
   `--output` names the destination; a world source declaring `world` entries
   writes one document per declaration and reads `--output` as a directory.
   A world document also gets its compiled world (`.puckb`) beside it.

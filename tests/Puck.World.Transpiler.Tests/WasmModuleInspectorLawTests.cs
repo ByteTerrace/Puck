@@ -65,7 +65,7 @@ public sealed class WasmModuleInspectorLawTests {
         Assert.True(condition: result.IsValid);
         Assert.Empty(collection: result.Imports);
         Assert.Empty(collection: result.Exports);
-        Assert.Equal(ContentPin.Compute(Header).ToString(), result.ContentHash);
+        Assert.Equal(ContentPin.Compute(content: Header).ToString(), result.ContentHash);
     }
     [MemberData(nameof(Malformed))]
     [Theory]
@@ -86,21 +86,36 @@ public sealed class WasmModuleInspectorLawTests {
             schema: "puck.world.definition.v1"
             addon "guest" {
                 modulePath: "security-content-producer.wasm"
-                hash: "auto"
+                hash: auto
             }
             """;
         var missing = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
             cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Contains(missing.Diagnostics, diagnostic => diagnostic.Code == PuckDiagnosticCodes.AddonHash &&
-            diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Message.Contains("was not found", StringComparison.Ordinal));
+
+        Assert.Contains(collection: missing.Diagnostics, filter: diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.AddonHash) &&
+            (diagnostic.Severity == DiagnosticSeverity.Error) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "was not found")));
 
         // WebAssembly text pins its source bytes, the bytes the loader checks before converting them.
-        foreach (var bytes in new[] { Header, Module(Section(0, [1, (byte)'x', 42])), "(module)"u8.ToArray() }) {
+        foreach (var bytes in new[] { Header, Module(Section(id: 0, payload: [1, ((byte)'x'), 42])), "(module)"u8.ToArray() }) {
             _ = directory.WriteBytes(bytes: bytes, name: "security-content-producer.wasm");
             var compiled = WorldCompiler.Compile(source: Source, basePath: directory.RootPath,
                 cancellationToken: TestContext.Current.CancellationToken);
-            Assert.Equal(ContentPin.Compute(bytes).ToString(), compiled.RequireJson()["addons"]![0]!["hash"]!.GetValue<string>());
+
+            Assert.Equal(ContentPin.Compute(content: bytes).ToString(), compiled.RequireJson()["addons"]![0]!["hash"]!.GetValue<string>());
         }
+    }
+    [InlineData("\"auto\"")]
+    [InlineData("\"sha256-64/0123456789abcdef\"")]
+    [InlineData("\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"")]
+    [InlineData("\"sha256/ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789\"")]
+    [Theory]
+    public void AuthoredHashesRefuseOtherSpellingsByName(string spelling) {
+        var compiled = WorldCompiler.Compile(source: $"addon \"guest\" {{ hash: {spelling} }}",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(condition: compiled.Success);
+        Assert.Contains(collection: compiled.Diagnostics, filter: diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.AddonHash) &&
+            (diagnostic.Severity == DiagnosticSeverity.Error) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "sha256/<64 lowercase hex>")));
     }
     [Fact]
     public void EveryTruncationOfAWellFormedModuleIsAnsweredWithoutThrowing() {

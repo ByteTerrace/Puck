@@ -271,7 +271,7 @@ public static partial class WorldConstructs {
             ],
             RootArm: WorldRootArm.Addons,
             Shape: WorldConstructShape.Row,
-            Snippet: "addon \"${1:name}\" {\n    modulePath: \"${2:addon.wasm}\"\n    hash: \"auto\"\n}",
+            Snippet: "addon \"${1:name}\" {\n    modulePath: \"${2:addon.wasm}\"\n    hash: auto\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
             Summary: "One WebAssembly extension, its capability requests, and its machine-memory watches."
         ),
@@ -440,7 +440,7 @@ public static partial class WorldConstructs {
             ],
             RootArm: WorldRootArm.Cartridge,
             Shape: WorldConstructShape.Section,
-            Snippet: "cartridge {\n    rom: \"${1:game.gb}\"\n    hash: \"auto\"\n}",
+            Snippet: "cartridge {\n    rom: \"${1:game.gb}\"\n    hash: auto\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
             Summary: "The cartridge a hosted machine in this world runs."
         ),

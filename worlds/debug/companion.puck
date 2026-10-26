@@ -166,7 +166,7 @@ placements {
 
 addon "companion" {
   modulePath: "addons/companion.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests [

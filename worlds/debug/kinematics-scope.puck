@@ -83,7 +83,7 @@ let scopeRows = [
 ]
 addon "kinematics-scope" {
   modulePath: "addons/kinematics-scope.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests: concat(

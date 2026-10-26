@@ -39,6 +39,45 @@ material blending at smooth seams do not survive the bake: the mesh carries no
 curvature, a rasterized pixel is covered or not, and the bake point-samples a
 quad's winning material.
 
+## Limits price the mesh pipeline, not the interpreter
+
+The scene ceilings sized for the per-pixel interpreter are retired. Two
+independent reviews (Codex and Antigravity) agreed on what replaces them, and
+the lead settled the points where they differed.
+
+- **A rigid creation is one shared geometry asset.** A creation with no
+  timeline, drivers, effectors, part dynamics, field-changing lanes, cameras or
+  faces bakes once in its own space; each copy costs one root transform and one
+  draw, never a stamp registration, program instances or a palette copy.
+  Spawning, despawning or restyling such a body never rebuilds the program.
+  An articulated creation takes a root transform plus one slot per part that
+  moves on its own, not one per shape.
+- **No scene ceiling is sized for a worst case.** There is no per-creation
+  shape cap, no fixed registration pool and no transform reservation for
+  shapes a world does not have; buffers are allocated for what the world holds
+  and grow. Timings measured on the interpreter set no ceiling. Detail follows
+  projected size (the one-pixel rule), never a body's index, and a body always
+  wears its own look, never a substitute because a pool ran out.
+- **What a creation's size costs** is bake work and resident bytes, counted
+  and reported (`puck creation stats`, the bake counters), not refused by a
+  shape count. The guards that remain protect representations: skin member
+  indices, 24-bit slot, draw and triangle indices, exact-float ranges, the
+  material sentinel and region addresses. A guard is never exceeded silently;
+  past it a document is refused by name.
+- **Kept as work bounds:** 64 volumes (still marched per pixel), the 32 screen
+  bindings with the derived-face band following the authored screens, lights,
+  sky layers and nested views, 4,096 bodies, and 32,768 solid placement
+  colliders per world. `SDF_MAX_INSTANCES` bounds one bake program, not a
+  world.
+- **Field scope depth rises from 2 to 4.** Scopes are evaluated only by the
+  bake and CPU queries.
+- **Machine budgets are bytes.** Mesh residency, the geometry cache and brick
+  pools are sized from the machine and evicted by size and age, never cleared
+  wholesale and never refused on a miss.
+- **Performance is read, not ledgered.** The bars are the RTX 4070's steady
+  60 FPS at the highest settings and, later, the Steam Deck's 45 FPS floor,
+  read on a quiet machine from frame time and the GPU counters.
+
 ## A raster pass draws only what it can show
 
 Every raster pass skips the mesh draws it cannot show any of, by a world box per

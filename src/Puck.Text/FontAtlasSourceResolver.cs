@@ -250,7 +250,7 @@ public sealed class FontAtlasSourceResolver(
     /// <summary>Resolves a hash-pinned font beside <paramref name="basePath"/>; the pin, not the directory, is what
     /// admits its bytes.</summary>
     /// <param name="fontPath">The font asset path, relative to <paramref name="basePath"/> unless rooted.</param>
-    /// <param name="expectedHash">The canonical <c>sha256-64/{16 lowercase hex}</c> content pin.</param>
+    /// <param name="expectedHash">The canonical <c>sha256/{64 lowercase hex}</c> content pin.</param>
     /// <param name="generationOptions">The generation options.</param>
     /// <param name="basePath">The containing document directory.</param>
     public FontAtlas ResolvePinned(string fontPath, string expectedHash, FontAtlasGenerationOptions generationOptions, string basePath) {
@@ -263,7 +263,7 @@ public sealed class FontAtlasSourceResolver(
             path: fontPath
         ));
         var fontBytes = m_assetSource.Read(path: resolvedPath);
-        var actualHash = AssetContentHash.Compute(content: fontBytes.Span).ToString();
+        var actualHash = ContentPin.Compute(content: fontBytes.Span).ToString();
 
         if (!string.Equals(
             a: actualHash,
