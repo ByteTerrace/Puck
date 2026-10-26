@@ -631,11 +631,12 @@ public sealed class WorldVectorSchemaTests {
         Assert.Contains(collection: errors, filter: e => e.Contains(value: "whose row is kind vector — vector rows cannot serve as control contexts"));
     }
     [Fact]
-    public void Defect3_UnauthoredCapacityVectorTableUsesDefaultRoom() {
-        var space = SampleSpace(dimensions: 128);
+    public void UnauthoredCapacityVectorTableUsesSeedReservation() {
+        var space = SampleSpace(dimensions: 256);
         var definition = BuildDefinition(
             rows: [
                 new WorldStateRow(
+                    Cells: [new StateCell(Key: CellName.Parse(candidate: "seed"), Value: CellValue.Vector(components: SampleVector(dimensions: 256).Memory))],
                     Kind: CellKind.Vector,
                     Name: CellName.Parse(candidate: "unbounded"),
                     Space: "lore"
