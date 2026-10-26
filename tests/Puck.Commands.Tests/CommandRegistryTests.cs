@@ -95,13 +95,13 @@ public sealed class CommandRegistryTests {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 
         Assert.Contains(
-            actualString: registry.Submit(line: "help").Output,
+            actualString: registry.Submit(line: "help --full").Output,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "sum - "
         );
         // help lists the built-ins too, so `help` answers for the whole surface a line can reach.
         Assert.Contains(
-            actualString: registry.Submit(line: "help").Output,
+            actualString: registry.Submit(line: "help --full").Output,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "wire.errors - "
         );
@@ -812,8 +812,20 @@ public sealed class CommandRegistryTests {
             expected: "wire.ack\nwire.errors"
         );
         Assert.Equal(
+            actual: registry.Submit(line: "help").Output.Split(separator: '\n'),
+            expected: ["alpha", "beta", "help", "ping", "run", "sum", "wire.ack", "wire.errors"]
+        );
+        Assert.Equal(
             actual: registry.Submit(line: "help --names").Output.Split(separator: '\n'),
             expected: ["alpha", "beta", "help", "ping", "run", "sum", "wire.ack", "wire.errors"]
+        );
+        Assert.Equal(
+            actual: registry.Submit(line: "help --full").Output.Split(separator: '\n').Select(selector: static entry => entry.Split(separator: " - ")[0]),
+            expected: ["alpha", "beta", "help", "ping", "run", "sum", "wire.ack", "wire.errors"]
+        );
+        Assert.Equal(
+            actual: registry.Submit(line: "help --full wire.").Output,
+            expected: family.Output
         );
 
         var unmatched = registry.Submit(line: "help world.sky");
@@ -824,6 +836,8 @@ public sealed class CommandRegistryTests {
             expected: "[help: no command is named 'world.sky' or starts with it]"
         );
         Assert.True(condition: registry.Submit(line: "help wire. sum").IsError);
+        Assert.True(condition: registry.Submit(line: "help --full --names").IsError);
+        Assert.True(condition: registry.Submit(line: "help --unknown").IsError);
     }
     [Fact]
     public void HelpListsEveryCommandInOrdinalNameOrder() {

@@ -494,8 +494,8 @@ public sealed partial class CommandRegistry {
             TryResolveWireLine(
             definition: out var wireDefinition,
             line: line,
-            tokenCount: out var tokenCount,
             slot: slot,
+            tokenCount: out var tokenCount,
             tokenRanges: tokenRanges
         ) &&
             ReferenceEquals(
@@ -674,7 +674,7 @@ public sealed partial class CommandRegistry {
     private IEnumerable<CommandDefinition> BuiltInCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
-            description: "Lists the available commands: help [--names] [<prefix>] — one `name - description` line per registered verb, this registry's own built-ins included, ordinal-ordered by name. A prefix keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.); --names prints the names alone, one per line.",
+            description: "Lists the available commands: help [--full|--names] [<prefix>] — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - description` lines unless `--names` is given; `--full` prints `name - description` for every verb (or for `<prefix>`).",
             handler: (context, args) => Help(args: in args, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
@@ -1147,8 +1147,8 @@ public sealed partial class CommandRegistry {
         if (TryResolveWireLine(
             definition: out var wireDefinition,
             line: line,
-            tokenCount: out var tokenCount,
             slot: slot,
+            tokenCount: out var tokenCount,
             tokenRanges: tokenRanges
         )) {
             if (
@@ -1625,30 +1625,37 @@ public sealed partial class CommandRegistry {
         );
     }
 
-    // help [--names] [<prefix>]: a prefix that matches nothing is refused by name, so a mistyped one never answers an
-    // empty success.
+    // help [--full|--names] [<prefix>]: bare help lists the names index; --full or a prefix prints name - description,
+    // and --names keeps names alone even with a prefix. A prefix that matches nothing is refused by name, so a mistyped
+    // one never answers an empty success.
     private CommandResult Help(in WireArgs args, int slot) {
+        var full = false;
+        var names = false;
         string? prefix = null;
-        var namesOnly = false;
 
         for (var index = 0; (index < args.Count); index++) {
-            if (!namesOnly && args.Is(
+            if (!full && !names && args.Is(
+                index: index,
+                value: "--full"
+            )) {
+                full = true;
+            } else if (!full && !names && args.Is(
                 index: index,
                 value: "--names"
             )) {
-                namesOnly = true;
-            } else if (prefix is null) {
+                names = true;
+            } else if ((prefix is null) && !args[index].StartsWith(value: '-')) {
                 prefix = args[index].ToString();
             } else {
                 return CommandResult.Usage(
-                    form: "help [--names] [<prefix>]",
+                    form: "help [--full|--names] [<prefix>]",
                     verb: HelpCommandName
                 );
             }
         }
 
         var text = BuildHelpText(
-            namesOnly: namesOnly,
+            namesOnly: (names || (!full && (prefix is null))),
             prefix: prefix,
             slot: slot
         );
