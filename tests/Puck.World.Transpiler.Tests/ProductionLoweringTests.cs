@@ -15,7 +15,7 @@ public sealed class ProductionLoweringTests {
         cancellation.Cancel();
         Assert.Throws<OperationCanceledException>(testCode: () => WorldCompiler.Compile(
             cancellationToken: cancellation.Token,
-            source: "value: range(0, 1000)"
+            source: "_value: range(0, 1000)"
         ));
     }
     [InlineData("position [d,0,0]\ndelaySeconds: d")]
@@ -51,12 +51,12 @@ public sealed class ProductionLoweringTests {
     public void ExactNumbersAndStructuralCollections(string expression, string expected) {
         Assert.True(condition: JsonNode.DeepEquals(
             node1: JsonNode.Parse(expected),
-            node2: Lower(source: $"value: {expression}")["value"]
+            node2: Lower(source: $"_value: {expression}")["_value"]
         ));
     }
     [Fact]
     public void ExcessiveNestingIsRefusedBeforeRecursiveParsing() {
-        var result = PuckParser.ParseDocumentWithDiagnostics(((("value: " + new string(
+        var result = PuckParser.ParseDocumentWithDiagnostics(((("_value: " + new string(
             c: '[',
             count: 10000
         )) + "0") + new string(
@@ -78,7 +78,7 @@ public sealed class ProductionLoweringTests {
     }
     [Fact]
     public void FormatterPreservesRawAndInterpolatedLiteralValues() {
-        const string Source = "value: \"\"\"a:     b\n  indent\n\n{}[]\"\"\"\nother: $\"\"\"a  {1+2}\n   b\"\"\"";
+        const string Source = "_value: \"\"\"a:     b\n  indent\n\n{}[]\"\"\"\n_other: $\"\"\"a  {1+2}\n   b\"\"\"";
         var formatted = PuckFormat.Format(source: Source);
 
         Assert.Equal(
@@ -90,22 +90,22 @@ public sealed class ProductionLoweringTests {
             node2: Lower(source: formatted)
         ));
     }
-    [InlineData("value: clamp(1, 5, 2)")]
-    [InlineData("value: squareRoot(-1)")]
-    [InlineData("value: power(2, -1)")]
-    [InlineData("value: power(2, 63)")]
-    [InlineData("value: modularPower(2, 3, 0)")]
-    [InlineData("value: modularInverse(4, 8)")]
-    [InlineData("value: floorDivide(1, 0)")]
-    [InlineData("value: 1e999")]
-    [InlineData("let a = b\nlet b = a\nvalue: a")]
-    [InlineData("let a = 1\nlet a = 2\nvalue: a")]
+    [InlineData("_value: clamp(1, 5, 2)")]
+    [InlineData("_value: squareRoot(-1)")]
+    [InlineData("_value: power(2, -1)")]
+    [InlineData("_value: power(2, 63)")]
+    [InlineData("_value: modularPower(2, 3, 0)")]
+    [InlineData("_value: modularInverse(4, 8)")]
+    [InlineData("_value: floorDivide(1, 0)")]
+    [InlineData("_value: 1e999")]
+    [InlineData("let a = b\nlet b = a\n_value: a")]
+    [InlineData("let a = 1\nlet a = 2\n_value: a")]
     [InlineData("missing()")]
-    [InlineData("template make(v) { value: v }\nmake()")]
-    [InlineData("template make(v) { value: v }\nmake(1, 2)")]
+    [InlineData("template make(v) { _value: v }\nmake()")]
+    [InlineData("template make(v) { _value: v }\nmake(1, 2)")]
     [InlineData("template make() { make() }\nmake()")]
-    [InlineData("value: range(0, 1000001)")]
-    [InlineData("value: range(9223372036854775807, 2)")]
+    [InlineData("_value: range(0, 1000001)")]
+    [InlineData("_value: range(9223372036854775807, 2)")]
     [Theory]
     public void InvalidOrUnboundedInputHasLocatedDiagnostic(string source) {
         var parsed = WorldCompiler.Compile(
@@ -123,7 +123,7 @@ public sealed class ProductionLoweringTests {
     public void RepeatedCopiesCannotBypassTheWorkBudget() {
         var result = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
-            source: "let a = range(0, 10000)\nvalue: map(range(0, 1000), i => a)"
+            source: "let a = range(0, 10000)\n_value: map(range(0, 1000), i => a)"
         );
 
         Assert.Contains(
@@ -133,24 +133,24 @@ public sealed class ProductionLoweringTests {
     }
     [Fact]
     public void TemplateArgumentsCaptureEachCallerIteration() {
-        var json = Lower(source: "template make(v) { rows [v + 1] }\nfor i in [4,9] { make(i) }");
+        var json = Lower(source: "template make(v) { _rows [v + 1] }\nfor i in [4,9] { make(i) }");
 
         Assert.True(condition: JsonNode.DeepEquals(
             node1: JsonNode.Parse("[5,10]"),
-            node2: json["rows"]
+            node2: json["_rows"]
         ));
     }
     [Fact]
     public void TemplateParametersCannotRebindDocumentConstants() {
-        var json = Lower(source: "let seed = 3\nlet copy = seed\ntemplate make(seed, next = seed + 1) { first: copy\nsecond: next }\nmake(7)");
+        var json = Lower(source: "let seed = 3\nlet copy = seed\ntemplate make(seed, next = seed + 1) { _first: copy\n_second: next }\nmake(7)");
 
         Assert.Equal(
             3L,
-            json["first"]!.GetValue<long>()
+            json["_first"]!.GetValue<long>()
         );
         Assert.Equal(
             8L,
-            json["second"]!.GetValue<long>()
+            json["_second"]!.GetValue<long>()
         );
     }
 }

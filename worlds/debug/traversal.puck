@@ -1,4 +1,5 @@
 // Optional development route runner, body 43. The sealed studio and gallery are independent passes.
+import "stand-in"
 // Route coordinates are WORLD coordinates. The studio course is offset (48, 0, -48).
 let traversalStudioGoals = [
   { x: 60.0, y: 0.01, z: -30.0 } // approach
@@ -78,7 +79,7 @@ prototypes {
 
 placements {
   placement "traversal-stand-in" {
-    prototype: "companion"
+    prototype: "standIn"
     position [60, 0.05, -30]
     inhabit {
       count: 1
@@ -91,7 +92,7 @@ placements {
         region: disc(radius: 0.01)
       }
       kit: "walker"
-      look: "companion"
+      look: "standIn"
       source: "Idle"
     }
   }
@@ -99,7 +100,7 @@ placements {
 
 addon "traversal" {
   modulePath: "addons/traversal.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests [

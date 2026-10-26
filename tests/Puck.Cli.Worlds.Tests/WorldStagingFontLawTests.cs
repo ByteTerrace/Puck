@@ -72,7 +72,7 @@ public sealed class WorldStagingFontLawTests {
         try {
             files.WriteText(name: "font.ttf", text: "font bytes");
             files.WriteText(name: "basis.world.json", text: """
-                {"text":{"defaultFont":"body","fonts":[{"name":"body","source":"font.ttf","hash":"sha256-64/0000000000000000"}]}}
+                {"text":{"defaultFont":"body","fonts":[{"name":"body","source":"font.ttf","hash":"sha256/0000000000000000000000000000000000000000000000000000000000000000"}]}}
                 """);
             var basis = files.PathOf(name: "basis").Replace(newChar: '/', oldChar: '\\');
             var world = new JsonObject { ["schema"] = WorldDefinition.SchemaVersion };
@@ -112,9 +112,9 @@ public sealed class WorldStagingFontLawTests {
         var basis = new JsonObject {
             ["text"] = new JsonObject {
                 ["fonts"] = new JsonArray {
-                    new JsonObject { ["name"] = "keep", ["source"] = "keep.ttf", ["hash"] = "sha256-64/0000000000000000" },
-                    new JsonObject { ["name"] = "replace", ["source"] = invalid, ["hash"] = "sha256-64/0000000000000000" },
-                    new JsonObject { ["name"] = "drop", ["source"] = invalid, ["hash"] = "sha256-64/0000000000000000" },
+                    new JsonObject { ["name"] = "keep", ["source"] = "keep.ttf", ["hash"] = "sha256/0000000000000000000000000000000000000000000000000000000000000000" },
+                    new JsonObject { ["name"] = "replace", ["source"] = invalid, ["hash"] = "sha256/0000000000000000000000000000000000000000000000000000000000000000" },
+                    new JsonObject { ["name"] = "drop", ["source"] = invalid, ["hash"] = "sha256/0000000000000000000000000000000000000000000000000000000000000000" },
                 },
             },
         };
@@ -126,7 +126,7 @@ public sealed class WorldStagingFontLawTests {
             ["text"] = new JsonObject {
                 ["defaultFont"] = "keep",
                 ["fonts"] = new JsonArray {
-                    new JsonObject { ["name"] = "keep", ["hash"] = "sha256-64/1111111111111111" },
+                    new JsonObject { ["name"] = "keep", ["hash"] = "sha256/1111111111111111111111111111111111111111111111111111111111111111" },
                     new JsonObject { ["name"] = "replace", ["source"] = "root.ttf" },
                     new JsonObject { ["name"] = "drop", ["$drop"] = true },
                 },
@@ -186,7 +186,7 @@ public sealed class WorldStagingFontLawTests {
                 fonts.Add(item: new JsonObject {
                     ["name"] = name,
                     ["source"] = $"{name}/font.ttf",
-                    ["hash"] = "sha256-64/0000000000000000",
+                    ["hash"] = "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                 });
             }
             var absolute = Path.Combine(path1: source, path2: "first", path3: "font.ttf").Replace(newChar: '/', oldChar: '\\');
@@ -194,7 +194,7 @@ public sealed class WorldStagingFontLawTests {
             fonts.Add(item: new JsonObject {
                 ["name"] = "invalid-absolute",
                 ["source"] = absolute,
-                ["hash"] = "sha256-64/0000000000000000",
+                ["hash"] = "sha256/0000000000000000000000000000000000000000000000000000000000000000",
             });
             var invalidPaths = new[] { "./first/font.ttf", "first\\font.ttf", "first//font.ttf", "C:font.ttf" };
 
@@ -202,7 +202,7 @@ public sealed class WorldStagingFontLawTests {
                 fonts.Add(item: new JsonObject {
                     ["name"] = $"invalid-{index}",
                     ["source"] = invalidPaths[index],
-                    ["hash"] = "sha256-64/0000000000000000",
+                    ["hash"] = "sha256/0000000000000000000000000000000000000000000000000000000000000000",
                 });
             }
             var world = new JsonObject {
@@ -232,7 +232,7 @@ public sealed class WorldStagingFontLawTests {
                 }
                 Assert.False(condition: Path.IsPathRooted(path: path));
                 Assert.DoesNotContain(actualString: path, expectedSubstring: "\\");
-                Assert.Equal(expected: "sha256-64/0000000000000000", actual: row["hash"]!.GetValue<string>());
+                Assert.Equal(expected: "sha256/0000000000000000000000000000000000000000000000000000000000000000", actual: row["hash"]!.GetValue<string>());
                 Assert.Equal(expected: name, actual: File.ReadAllText(path: Path.Combine(path1: target, path2: path)));
                 if (!crossDrive) {
                     Assert.Equal(actual: path, expected: $"../source/{name}/font.ttf");

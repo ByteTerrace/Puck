@@ -77,6 +77,21 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     );
     /// <inheritdoc />
     public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out System.Text.Json.Nodes.JsonNode? value) {
+        if (fieldKey == "hash") {
+            if (expression is IdentifierExpressionNode { Name: "auto" } or OperandExpressionNode { Text: "auto" }) {
+                value = System.Text.Json.Nodes.JsonValue.Create(value: "auto");
+                return true;
+            }
+            value = DocumentLowering.EvaluateValue(expr: expression, fieldKey: null, scope: scope);
+            var spelling = value?.ToString();
+
+            if (ContentPin.TryParse(pin: out _, text: spelling)) {
+                return true;
+            }
+            scope.Diagnostics.ReportError(code: Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.AddonHash,
+                message: $"Hash '{spelling}' is not an authored content pin; write hash: auto for automatic hashing or hash: \"sha256/<64 lowercase hex>\" for a digest. Quoted 'auto', bare digests and 'sha256-64/' are refused.", span: expression.Span);
+            return true;
+        }
         if (
             (expression is ObjectExpressionNode keyed) &&
             WorldDocumentEmitter.TryLowerKeyed(

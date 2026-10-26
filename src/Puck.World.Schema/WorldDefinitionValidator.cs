@@ -626,8 +626,8 @@ public static partial class WorldDefinitionValidator {
         definition: definition,
         value: value
     );
-    private static bool IsValidFontHash(string hash) => AssetContentHash.TryParse(
-        hash: out _,
+    private static bool IsValidFontHash(string hash) => ContentPin.TryParse(
+        pin: out _,
         text: hash
     );
     // The dangling-reference door every "names a row this document must declare" check opens: blank or unresolved

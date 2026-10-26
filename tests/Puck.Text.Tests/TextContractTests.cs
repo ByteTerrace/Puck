@@ -811,7 +811,7 @@ public sealed class TextContractTests {
             fontAtlasGenerator: new StubFontAtlasGenerator(),
             assetSource: source
         );
-        var expectedHash = AssetContentHash.Compute(content: fontBytes).ToString();
+        var expectedHash = ContentPin.Compute(content: fontBytes).ToString();
 
         _ = resolver.ResolvePinned(
             fontPath: "fonts/body.ttf",
@@ -828,7 +828,7 @@ public sealed class TextContractTests {
         );
         _ = Assert.Throws<InvalidDataException>(testCode: () => resolver.ResolvePinned(
             fontPath: "fonts/body.ttf",
-            expectedHash: "sha256-64/0000000000000000",
+            expectedHash: "sha256/0000000000000000000000000000000000000000000000000000000000000000",
             generationOptions: new FontAtlasGenerationOptions(),
             basePath: basePath
         ));

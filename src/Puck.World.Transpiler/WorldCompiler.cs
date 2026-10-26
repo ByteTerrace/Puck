@@ -255,6 +255,7 @@ public static class WorldCompiler {
         // Only a source with a test block reads the composed state of its imports: a test's given lines and witness
         // rows resolve against it, and composing every imported document is not free.
         var hasTests = document.Statements.OfType<TestDeclarationNode>().Any();
+
         var (inheritedEnums, inheritedState) = ((effectiveImports == ImportHandling.Ignore)
             ? (Enums: [], State: null)
             : InheritedState(
@@ -296,6 +297,14 @@ public static class WorldCompiler {
             diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "This source emits several worlds. Compile them to individual documents before selecting one for this consumer.", span: document.Span);
         }
         assets?.Validate(diagnostics: diagnostics);
+
+        if (worlds.Count == 0) {
+            WorldDocumentMembers.Validate(document: loweringResult.Value, sourceMap: sourceMap, diagnostics: diagnostics);
+        } else {
+            foreach (var world in worlds) {
+                WorldDocumentMembers.Validate(document: world.Json, sourceMap: world.SourceMap, diagnostics: diagnostics);
+            }
+        }
 
         return new WorldCompilation(
             Diagnostics: diagnostics,
@@ -386,7 +395,7 @@ public static class WorldCompiler {
 
             if ((basis is not null) && (TryReadComposed(name: basis, referrer: referrer) is { } basisDoc)) {
                 state = (keepState
-                    ? (basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject
+                    ? ((basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject)
                     : (basisDoc["state"] as JsonObject));
             }
 
@@ -435,7 +444,6 @@ public static class WorldCompiler {
             ReadingBasisOf.Value = previous;
         }
     }
-
     private static JsonObject? TryReadComposed(string name, string referrer) => (
         (
             PuckDocumentComposer.Instance.TryRead(

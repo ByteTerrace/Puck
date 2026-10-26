@@ -44,12 +44,12 @@ public class CompositionTestLawTests {
           grants [
             {
               capability: Mutate
-              principal: "seat1"
+              grantee: "seat1"
               subject: "section:state"
             }
             {
               capability: Edit
-              principal: "seat1"
+              grantee: "seat1"
               subject: "all"
             }
           ]
