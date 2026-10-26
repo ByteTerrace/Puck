@@ -157,6 +157,7 @@ public static class WorldSourceEdits {
         // row joins the list's end. Rows that change order are rewritten slot by slot.
         private bool TryRows(JsonObject target, string pointer, JsonArray before, JsonArray after, string key, out string reason) {
             var appendAt = -1;
+            var appendLine = false;
             var indent = "    ";
             // A deletion must not move an unchanged expansion into another source span. Match surviving identities
             // in place when their order stands and new rows form a suffix; a real reorder still replaces the slots.
@@ -189,19 +190,25 @@ public static class WorldSourceEdits {
             }
             for (var index = 0; (index < before.Count); index++) {
                 var next = (preservesOrder ? matched[index] : ((index < after.Count) ? index : -1));
-
-                if ((next >= 0) && JsonNode.DeepEquals(node1: before[index], node2: after[next])) { continue; }
                 var oldPointer = ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture));
 
+                if (m_entries.TryGetValue(key: oldPointer, value: out var existing) && Local(origin: existing, sourcePath: sourcePath)) {
+                    var rowEnd = (existing.Span.Offset + existing.Span.Length);
+
+                    if (rowEnd >= appendAt) {
+                        appendAt = rowEnd;
+                        appendLine = false;
+                    }
+                    var lineStart = (source.LastIndexOf(value: '\n', startIndex: Math.Max(val1: 0, val2: (existing.Span.Offset - 1))) + 1);
+                    var prefix = source[lineStart..existing.Span.Offset];
+
+                    if (prefix.All(predicate: static value => (value is ' ' or '\t'))) { indent = prefix; }
+                }
+                if ((next >= 0) && JsonNode.DeepEquals(node1: before[index], node2: after[next])) { continue; }
                 if (!m_entries.TryGetValue(key: oldPointer, value: out var origin)) {
                     reason = $"{oldPointer} has no authored span; save a JSON delta with this source as its basis";
                     return false;
                 }
-                appendAt = Math.Max(val1: appendAt, val2: (origin.Span.Offset + origin.Span.Length));
-                var lineStart = (source.LastIndexOf(value: '\n', startIndex: Math.Max(val1: 0, val2: (origin.Span.Offset - 1))) + 1);
-                var prefix = source[lineStart..origin.Span.Offset];
-
-                if (prefix.All(predicate: static value => (value is ' ' or '\t'))) { indent = prefix; }
                 if (preservesOrder && (next >= 0)) {
                     foreach (var changed in Changes(after: after[next], before: before[index], pointer: oldPointer)) {
                         if (!TryChange(changed: changed, reason: out reason, target: aligned)) { return false; }
@@ -212,7 +219,13 @@ public static class WorldSourceEdits {
                 var replacement = string.Empty;
 
                 if ((next >= 0) && !TryRowText(after: after, before: before, index: next, key: key, pointer: pointer, reason: out reason, target: target, text: out replacement)) { return false; }
-                m_edits.Add(item: new Edit(Pointer: oldPointer, Span: ((next < 0) ? Removal(source: source, span: origin.Span) : origin.Span), Text: replacement.Replace(comparisonType: StringComparison.Ordinal, newValue: ("\n" + indent), oldValue: "\n")));
+                var span = ((next < 0) ? Removal(source: source, span: origin.Span) : origin.Span);
+
+                if ((next < 0) && ((span.Offset + span.Length) > appendAt)) {
+                    appendAt = (span.Offset + span.Length);
+                    appendLine = (source[appendAt - 1] == '\n');
+                }
+                m_edits.Add(item: new Edit(Pointer: oldPointer, Span: span, Text: replacement.Replace(comparisonType: StringComparison.Ordinal, newValue: ("\n" + indent), oldValue: "\n")));
             }
             var additions = new StringBuilder();
 
@@ -249,6 +262,8 @@ public static class WorldSourceEdits {
                             _ = additions.Append(value: '\n');
                         }
                     }
+                } else if (appendLine) {
+                    _ = additions.Remove(startIndex: 0, length: 1).Append(value: '\n');
                 }
                 if (appendAt < 0) { reason = $"{pointer} has no authored section to append to"; return false; }
                 m_edits.Add(item: new Edit(Pointer: pointer, Span: new SourceSpan(Column: 0, Length: 0, Line: 0, Offset: appendAt), Text: additions.ToString()));

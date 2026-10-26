@@ -308,6 +308,10 @@ public sealed partial class WorldAddonRuntime {
                     continue;
                 }
 
+                if (addon.Instance.State != AddonState.Enabled) {
+                    break;
+                }
+
                 if (query.Verb == AddonAbi.RequestVerbs.BodyPoses) {
                     ResolveBodyPoses(addon: addon, query: in query, tick: tick);
                     continue;

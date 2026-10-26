@@ -94,7 +94,7 @@ public sealed partial class WorldDocument {
                 (raw is not { } value) ||
                 ((cell.Kind is { } kind) && (row.Kind != kind)) ||
                 ((cell.Text is not null) && (text != cell.Text)) ||
-                ((cell.Kind != CellKind.Text) && !cell.Comparison.Holds(
+                ((row.Kind != CellKind.Text) && (cell.Kind != CellKind.Text) && !cell.Comparison.Holds(
                 FixedQ4816.FromRawBits(value: value),
                 FixedQ4816.FromRawBits(value: cell.Value)
             ))

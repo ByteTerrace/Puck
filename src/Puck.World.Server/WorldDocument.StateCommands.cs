@@ -50,32 +50,24 @@ public sealed partial class WorldDocument {
                 return WorldArenaTransforms.TryApply(definition: m_definition, transform: transform.Transform, actor: transform.Principal,
                     tick: time.Tick, engineTick: time.EngineTick, instance: Host.InstanceIdentity, candidate: out _, reason: out reason, guard: transform.Guard, live: Host.Arena);
             case WorldMutation.UpsertStateRow replace:
-                Host.Arena.Catalog.TryResolve(lane: StateLane.Document, name: replace.Row.Name, handle: out var rowHandle);
-                var ordinal = rowHandle.Ordinal;
-                var keys = new List<CellName>();
-                var cursor = 0;
-                while (Host.Arena.TryNextCell(rowOrdinal: ordinal, cursor: ref cursor, key: out var key)) {
-                    var name = Host.Arena.Keys[key];
-                    if (!(replace.Row.Cells ?? []).Any(cell => cell.Key == name)) { keys.Add(name); }
+                var existing = WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: replace.Row.Name.Value);
+                if (StateRows.IsGeneratedRowName(name: replace.Row.Name.Value, rows: m_definition.State)) {
+                    reason = $"state row '{replace.Row.Name}' is generated storage; mutate its owning declaration or use a typed instance effect";
+                    return false;
                 }
-                foreach (var key in keys) {
-                    if (!TryStateMembers(new WorldMutation.RemoveStateCell(Principal: replace.Principal, Row: replace.Row.Name.Value, Key: key.Value), in time, out reason, out evicted)) { return false; }
+                if (ReadsThroughDisclosure(principal: replace.Principal) && !WorldStateDisclosure.CanReadRow(arena: Host.Arena, rowName: replace.Row.Name.Value, recipient: replace.Principal)) {
+                    reason = $"state row '{replace.Row.Name}' is not writable by {replace.Principal.Describe()}";
+                    return false;
                 }
-                foreach (var cell in replace.Row.Cells ?? []) {
-                    var value = cell.Value;
-                    var write = new WorldMutation.UpsertStateCell(Principal: replace.Principal, Row: replace.Row.Name.Value, Key: cell.Key.Value,
-                        Kind: WorldDocumentWriteKind.Set, Value: value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool ? value.Raw : 0L,
-                        Text: value.Kind == CellKind.Text ? value.AsText : null,
-                        Vector: value.Kind == CellKind.Vector && StateVector.TryCreate(value.AsVector.Span, out var vector, out _) ? vector : null);
-                    if (!TryStateMembers(write, in time, out reason, out evicted)) { return false; }
-                    Host.Arena.Keys.TryResolve(name: cell.Key, key: out var stored);
-                    if (Host.Arena.Layout.HasColumn(row: ordinal, column: ArenaColumn.Behavior)) {
-                        Host.Arena.TryWriteBehavior(rowOrdinal: ordinal, key: stored, behavior: cell.Behavior);
-                    }
-                    if ((Host.Arena.Layout.HasColumn(row: ordinal, column: ArenaColumn.Visibility) && !Host.Arena.TryWriteVisibility(rowOrdinal: ordinal, key: stored, visibility: cell.Visibility)) ||
-                        (Host.Arena.Layout.HasColumn(row: ordinal, column: ArenaColumn.Observation) && !Host.Arena.TryWriteObservation(rowOrdinal: ordinal, key: stored, observation: cell.Observation))) { reason = "cell metadata refused"; return false; }
+                if (existing is { Inverse: { } existingInverse }) {
+                    reason = $"state row '{replace.Row.Name}' is a derived board (inverse names '{existingInverse.Tokens}'/'{existingInverse.Codes}') — write those rows instead; the engine recomputes '{replace.Row.Name}' on install";
+                    return false;
                 }
-                return true;
+                if (existing is { IsRuleWritten: true }) {
+                    reason = WorldVerdict.RefuseWrite(row: existing);
+                    return false;
+                }
+                return Host.Arena.TryLoad(rows: [replace.Row], time: in time, reason: out reason);
             case WorldMutation.UpsertStateCell write:
                 return TryApplyCellUpsert(arena: Host.Arena, working: m_definition, mutation: write, time: in time, reason: out reason, evictedKey: out evicted);
             case WorldMutation.RemoveStateCell remove:
@@ -144,7 +136,7 @@ public sealed partial class WorldDocument {
             if (!WorldStateReader.TryRead(definition: m_definition, arena: Host.Arena, rowName: cell.Row, key: cell.Key,
                 tick: time.Tick, engineTick: time.EngineTick, row: out var row, rawValue: out var raw, text: out var text) ||
                 (raw is not { } value) || ((cell.Kind is { } kind) && row.Kind != kind) || (cell.Text is not null && text != cell.Text) ||
-                ((cell.Kind != CellKind.Text) && !cell.Comparison.Holds(value: FixedQ4816.FromRawBits(value), expected: FixedQ4816.FromRawBits(cell.Value)))) {
+                ((row.Kind != CellKind.Text) && (cell.Kind != CellKind.Text) && !cell.Comparison.Holds(value: FixedQ4816.FromRawBits(value), expected: FixedQ4816.FromRawBits(cell.Value)))) {
                 reason = $"the proposal is stale: state '{cell.Row}' changed; preview again"; return false;
             }
         }

@@ -836,4 +836,62 @@ public sealed class ArenaSerializationLawTests {
             expected: before
         );
     }
+
+    [Fact]
+    public void AnInitiallyEmptySlotRowRemainsAddressableAfterSnapshotRestoreAndHashesIdenticallyAcrossExport() {
+        var section = new StateSection(Rows: [new StateRow(
+            Name: ArenaFixture.Name(value: "deal"),
+            Kind: CellKind.Int
+        )]);
+        var catalog = StateCatalog.Compile(section: section);
+        var arena = new StateArena(
+            catalog: catalog,
+            options: null,
+            section: section,
+            time: ArenaTime.Origin
+        );
+        var slot = ArenaFixture.SlotKey(catalog: catalog);
+
+        Assert.True(
+            condition: arena.TryWrite(
+                key: slot,
+                operand: 7L,
+                reason: out var reason,
+                rowOrdinal: 0,
+                write: StateWriteKind.Set
+            ),
+            userMessage: reason
+        );
+
+        var reloaded = new StateArena(
+            catalog: StateCatalog.Compile(section: section),
+            options: null,
+            section: section with { Rows = arena.ToRows() },
+            time: ArenaTime.Origin
+        );
+
+        Assert.Equal(
+            actual: reloaded.ComputeHash(),
+            expected: arena.ComputeHash()
+        );
+
+        arena.RestoreSnapshot(snapshot: arena.CaptureSnapshot());
+        Assert.Equal(
+            actual: arena.Read(
+                key: slot,
+                rowOrdinal: 0
+            ),
+            expected: CellValue.Int(value: 7L)
+        );
+        Assert.True(
+            condition: arena.TryWrite(
+                key: slot,
+                operand: 8L,
+                reason: out reason,
+                rowOrdinal: 0,
+                write: StateWriteKind.Set
+            ),
+            userMessage: reason
+        );
+    }
 }

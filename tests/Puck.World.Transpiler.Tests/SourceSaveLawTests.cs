@@ -162,4 +162,37 @@ public sealed class SourceSaveLawTests {
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
         Assert.Equal(source.Replace(comparisonType: StringComparison.Ordinal, newValue: after, oldValue: before), saved);
     }
+    [Fact]
+    public void TopLevelRowsAppendInOrderAndReplaceRemovedTailWithoutContainerBlock() {
+        const string MaterialsSource = (WorldSources.Header + """
+            material "stone" { albedo [0.2, 0.2, 0.2] roughness: 0.8 }
+            material "wood" { albedo [0.5, 0.3, 0.1] roughness: 0.6 }
+            // Keep this tail.
+            """);
+        var baseline = WorldCompiler.Compile(source: MaterialsSource, cancellationToken: TestContext.Current.CancellationToken).RequireJson();
+        var gold = baseline["materials"]![0]!.DeepClone().AsObject();
+
+        gold["name"] = "gold";
+        gold["roughness"] = 0.1;
+
+        var appendedOnly = baseline.DeepClone().AsObject();
+
+        appendedOnly["materials"]!.AsArray().Add(item: gold.DeepClone());
+        Assert.True(condition: WorldSourceEdits.TryRewrite(source: MaterialsSource, target: appendedOnly, rewritten: out var savedAppended, reason: out var reason), userMessage: reason);
+        Assert.True(condition: JsonNode.DeepEquals(node1: appendedOnly, node2: WorldCompiler.Compile(source: savedAppended, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+
+        var modifiedAndAppended = baseline.DeepClone().AsObject();
+
+        modifiedAndAppended["materials"]![0]!["roughness"] = 0.4;
+        modifiedAndAppended["materials"]!.AsArray().Add(item: gold.DeepClone());
+        Assert.True(condition: WorldSourceEdits.TryRewrite(source: MaterialsSource, target: modifiedAndAppended, rewritten: out var savedModified, reason: out reason), userMessage: reason);
+        Assert.True(condition: JsonNode.DeepEquals(node1: modifiedAndAppended, node2: WorldCompiler.Compile(source: savedModified, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+
+        var removedTailAndAppended = baseline.DeepClone().AsObject();
+
+        removedTailAndAppended["materials"]!.AsArray().RemoveAt(index: 1);
+        removedTailAndAppended["materials"]!.AsArray().Add(item: gold.DeepClone());
+        Assert.True(condition: WorldSourceEdits.TryRewrite(source: MaterialsSource, target: removedTailAndAppended, rewritten: out var savedReplaced, reason: out reason), userMessage: reason);
+        Assert.True(condition: JsonNode.DeepEquals(node1: removedTailAndAppended, node2: WorldCompiler.Compile(source: savedReplaced, cancellationToken: TestContext.Current.CancellationToken).RequireJson()));
+    }
 }

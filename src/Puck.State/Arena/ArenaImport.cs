@@ -70,7 +70,7 @@ public sealed partial class StateArena {
             ref readonly var board = ref m_layout[rowOrdinal];
 
             if (!board.IsDerivedBoard) { continue; }
-            if (onlyLoadedBoards) {
+            if (onlyLoadedBoards || (m_journal.Scopes > 0)) {
                 var loaded = false;
 
                 foreach (var member in admitted) {
@@ -294,6 +294,20 @@ public sealed partial class StateArena {
         }
 
         m_slotOfKey[rowOrdinal].Clear();
+
+        // A slot's one cell is addressable whether or not it holds a value, so its reserved key stays in the
+        // column and the index even when the cleared or loaded row carries no cell.
+        if (layout.Shape == RowShape.Slot) {
+            var key = m_keys.Intern(name: StateRow.SlotKey);
+
+            WriteNumber(
+                column: ArenaColumn.MemberKey,
+                index: layout.CellStart,
+                value: key.Ordinal
+            );
+
+            m_slotOfKey[rowOrdinal][key.Ordinal] = layout.CellStart;
+        }
     }
     // A cell whose effective behavior is timed always carries a clock, so the column a live read evaluates against
     // is never the zero an untouched column would answer. A dynamics follower is born at rest on its own stored
@@ -442,7 +456,7 @@ public sealed partial class StateArena {
             );
         }
 
-        if (layout.Shape is (RowShape.Slot or RowShape.Keyed or RowShape.Ordered)) {
+        if (layout.Shape is (RowShape.Keyed or RowShape.Ordered)) {
             WriteNumber(
                 column: ArenaColumn.MemberCount,
                 index: rowOrdinal,
@@ -453,20 +467,6 @@ public sealed partial class StateArena {
                 layout: layout,
                 rowOrdinal: rowOrdinal
             );
-        }
-
-        // A slot's one cell is addressable whether or not it holds a value, so its reserved key stays in the
-        // column and the index even when the loaded row carries no cell.
-        if (layout.Shape == RowShape.Slot) {
-            var key = m_keys.Intern(name: StateRow.SlotKey);
-
-            WriteNumber(
-                column: ArenaColumn.MemberKey,
-                index: layout.CellStart,
-                value: key.Ordinal
-            );
-
-            m_slotOfKey[rowOrdinal][key.Ordinal] = layout.CellStart;
         }
 
         // Each runtime-state field lands through its own door, which the admission pass has already put this
