@@ -96,7 +96,7 @@ internal static class WorldBenchmarks {
             stepTicks: stepTicks
         );
         MeasureCellBurst(rows: rows, server: server, stepTicks: stepTicks);
-        MeasureResponseSwap(rows: rows, server: server, stepTicks: stepTicks);
+        MeasureResponseChange(rows: rows, server: server, stepTicks: stepTicks);
         MeasureSceneEmission(path: path, rows: rows, server: server, stepTicks: stepTicks);
         MeasureMachines(
             bench: bench,
@@ -211,7 +211,7 @@ internal static class WorldBenchmarks {
     // roof, switches) to their lit or dark creations in that tick. The tick is timed and metered beside the population
     // revisions it moved: a response change moves no body and leaves the revision, so a client composes its program
     // once, on the values the change delivers.
-    private static void MeasureResponseSwap(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+    private static void MeasureResponseChange(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
         if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
             rows.Add(item: ("world: response change", "no hallLights row"));
 
