@@ -1,0 +1,180 @@
+// The Reversi table's scenarios (reversi.puck), each booted in the whole debug world:
+// `puck test worlds/debug/reversi-tests.puck`. Cells are named by ordinal, 8 * row + column, column along +X and row
+// along +Z; the opening holds white on 27 and 36 and black on 28 and 35, and Black's first legal moves are 19, 26, 37
+// and 44. A position given on `reversiBoard` is the accepted position; the table fills it from the trays, one cell a
+// reading, as it fills the opening. Every scenario but the opponent's own leaves both sides to the steps
+// (reversiAiSide 0).
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "reversi-tests"
+
+test "the opening's four discs reach the board with their faces up" {
+  given {
+    reversiAiSide = 0
+  }
+  when {
+    ticks 400
+  }
+  expect {
+    reversiSeen[27] == 2
+    reversiSeen[36] == 2
+    reversiSeen[28] == 1
+    reversiSeen[35] == 1
+    reversiChangedCount == 0
+    reversiCollisions == 0
+    reversiIllegal == 0
+    reversiMoveCount == 0
+  }
+}
+
+// Seat 1 stands at Black's edge, sits down with the context button and plays 19 with the pick button (the cursor
+// starts there): the move brackets white's 27 against black's 35, and the white disc on 27 is turned over on the table.
+test "a seated player plays and the bracketed disc turns over on the table" {
+  given {
+    reversiAiSide = 0
+  }
+  when {
+    seat1: body.pose 65 9.25 21 0 0 0 0
+    ticks 400
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press confirm
+    ticks 300
+  }
+  expect {
+    reversiMoveCount == 1
+    reversiBoard[19] == 1
+    reversiBoard[27] == 1
+    reversiSeen[19] == 1
+    reversiSeen[27] == 1
+    reversiFlips == 1
+    reversiTurn == 2
+    reversiIllegal == 0
+    board(engaged, reversiBoard, 1) == 1
+  }
+}
+
+// The same opening move, and the computer, playing White, answers with a disc of its own.
+test "the computer answers a seated player's move" {
+  when {
+    seat1: body.pose 65 9.25 21 0 0 0 0
+    ticks 400
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press confirm
+    ticks 500
+  }
+  expect {
+    reversiMoveCount == 2
+    reversiTurn == 1
+    reversiRejected == 0
+    reversiIllegal == 0
+    reversiBlack + reversiWhite == 6
+  }
+}
+
+// A disc put on cell 0, which brackets nothing, is refused by the door and goes back to its tray.
+test "a disc that brackets nothing is refused and goes back to its tray" {
+  given {
+    reversiAiSide = 0
+  }
+  when {
+    ticks 400
+    seat1: world.state.cell.set reversiPut $value 0
+    ticks 200
+  }
+  expect {
+    reversiRejected == 1
+    reversiMoveCount == 0
+    reversiBoard[0] == 0
+    reversiSeen[0] == 0
+    reversiChangedCount == 0
+  }
+}
+
+// Black's opening move on 19 brackets along one ray only: south, over white's 27 to black's 35. The other seven rays
+// from 19 bracket nothing.
+test "a one-direction move flips its bracket" {
+  given {
+    reversiAiSide = 0
+    reversiMove[play] = 19
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    reversiMoveCount == 1
+    reversiBoard[19] == 1
+    reversiBoard[27] == 1
+    reversiFlips == 1
+    reversiBlack == 4
+    reversiWhite == 1
+    reversiTurn == 2
+  }
+}
+
+// White to move on the opening board: 20 brackets black's 28 against white's 36, again along one ray.
+test "white's one-direction move flips its bracket" {
+  given {
+    reversiAiSide = 0
+    reversiTurn = 2
+    reversiMove[play] = 20
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    reversiMoveCount == 1
+    reversiBoard[20] == 2
+    reversiBoard[28] == 2
+    reversiFlips == 1
+    reversiBlack == 1
+    reversiWhite == 4
+    reversiTurn == 1
+  }
+}
+
+// A white disc on 29 capped by black's 21 gives black's 37 a second bracket: west over 36 to 35, and north over 29 to
+// 21. Both runs flip in the one move.
+test "a two-direction move flips both brackets" {
+  given {
+    reversiAiSide = 0
+    reversiBoard[21] = 1
+    reversiBoard[29] = 2
+    reversiMove[play] = 37
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    reversiMoveCount == 1
+    reversiBoard[37] == 1
+    reversiBoard[36] == 1
+    reversiBoard[29] == 1
+    reversiFlips == 2
+    reversiBlack == 6
+    reversiWhite == 1
+  }
+}
+
+// One black disc alone on the board: neither side has a move, so each passes in turn once the table has rested, and
+// the game ends with Black ahead.
+test "a side with no legal move passes and two passes end the game" {
+  given {
+    reversiAiSide = 0
+    reversiBoard[27] = 0
+    reversiBoard[28] = 0
+    reversiBoard[35] = 0
+    reversiBoard[36] = 0
+    reversiBoard[0] = 1
+  }
+  when {
+    ticks 300
+  }
+  expect {
+    reversiPasses == 2
+    reversiWinner == 1
+    reversiSeen[0] == 1
+  }
+}

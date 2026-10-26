@@ -60,11 +60,17 @@ let goTrayOrigin = [
   (goTable[1] + 1.304),
   (goTable[2] - ((goTrayDeep * goTrayPitch) / 2))
 ]
-let goHome = map(
+// Each stone's spot: its column and row in the trays' grid (a compile-time `/` divides exactly, so a row is counted
+// down from its column), and the cell they make.
+let goHomeColumn = map(
   range(0, goStones),
-  i => (((i < goPerSide) ? i : (i - goPerSide)) / goTrayWide) * goTrayColumns + ((i < goPerSide) ? 0 : (goTrayColumns -
-    goTrayWide)) + (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide)
+  i => ((i < goPerSide) ? 0 : (goTrayColumns - goTrayWide)) + (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide)
 )
+let goHomeRow = map(
+  range(0, goStones),
+  i => ((((i < goPerSide) ? i : (i - goPerSide)) - (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide)) / goTrayWide)
+)
+let goHome = map(range(0, goStones), i => (goHomeRow[i] * goTrayColumns) + goHomeColumn[i])
 let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
 
 // The bodies: debug.puck imports this file first, so its cursor and stones take the population's top slots (shapes.puck's
@@ -194,9 +200,9 @@ placements {
       }
       parent: "goTable"
       position [
-        (((goHome[i] % goTrayColumns) + 0.5) * goTrayPitch - ((goTrayColumns * goTrayPitch) / 2))
+        (((goHomeColumn[i] + 0.5) * goTrayPitch) - ((goTrayColumns * goTrayPitch) / 2))
         1.37,
-        (((goHome[i] / goTrayColumns) + 0.5) * goTrayPitch - ((goTrayDeep * goTrayPitch) / 2))
+        (((goHomeRow[i] + 0.5) * goTrayPitch) - ((goTrayDeep * goTrayPitch) / 2))
       ]
     }
   }
@@ -404,11 +410,9 @@ set goMissing: (board(goBoard, 1..1) & ~board(goSeen, 1..1)) | (board(goBoard, 2
 rules "" when goHold == goSettleTicks and search(ply) == 0 {
   mode: "Edge"
   rule "go-read-stones" {
+    local point = board(cellOf, goBoard, placement, $each)
     forEach: goCode
-    goCell[$each] = (
-      (board(cellOf, goBoard, placement, $each) >= 0) ? board(cellOf, goBoard, placement, $each) :
-      (-1 - goOrdinal[$each])
-    )
+    goCell[$each] = (point >= 0) ? point : (-1 - goOrdinal[$each])
   }
 
   // Each set's points are found by walking every row of the board both ways from its ends (a ray never reads the
@@ -420,42 +424,130 @@ rules "" when goHold == goSettleTicks and search(ply) == 0 {
     transform writeSet(row: goGap, set: goMissing, value: 1)
     goChangedCount = count(goDiff, c -> c != 0)
     goCollisions = count(goCell, atLeast: 0, atMost: goLastPoint) - count(goSeen, c -> c != 0)
-    goNewCell = -1
-    goFix = -1
-    for r in range(0, goSize) {
-      goNewCell = maximum(
-        goNewCell,
+    goNewCell = maximum(
+      maximum(
         maximum(
-          match(goRayEmpty, goDiff, E, cell)[goSize * r],
-          match(goRayEmpty, goDiff, W, cell)[goSize * r + goSize - 1]
-        )
-      )
-      goFix = maximum(
-        goFix,
+          maximum(
+            maximum(
+              maximum(
+                maximum(
+                  maximum(
+                    maximum(
+                      maximum(
+                        maximum(
+                          maximum(
+                            maximum(
+                              maximum(
+                                maximum(
+                                  maximum(
+                                    maximum(
+                                      match(goRayEmpty, goDiff, E, cell)[0],
+                                      match(goRayEmpty, goDiff, W, cell)[8]
+                                    ),
+                                    match(goRayEmpty, goDiff, E, cell)[9]
+                                  ),
+                                  match(goRayEmpty, goDiff, W, cell)[17]
+                                ),
+                                match(goRayEmpty, goDiff, E, cell)[18]
+                              ),
+                              match(goRayEmpty, goDiff, W, cell)[26]
+                            ),
+                            match(goRayEmpty, goDiff, E, cell)[27]
+                          ),
+                          match(goRayEmpty, goDiff, W, cell)[35]
+                        ),
+                        match(goRayEmpty, goDiff, E, cell)[36]
+                      ),
+                      match(goRayEmpty, goDiff, W, cell)[44]
+                    ),
+                    match(goRayEmpty, goDiff, E, cell)[45]
+                  ),
+                  match(goRayEmpty, goDiff, W, cell)[53]
+                ),
+                match(goRayEmpty, goDiff, E, cell)[54]
+              ),
+              match(goRayEmpty, goDiff, W, cell)[62]
+            ),
+            match(goRayEmpty, goDiff, E, cell)[63]
+          ),
+          match(goRayEmpty, goDiff, W, cell)[71]
+        ),
+        match(goRayEmpty, goDiff, E, cell)[72]
+      ),
+      match(goRayEmpty, goDiff, W, cell)[80]
+    )
+    goFix = maximum(
+      maximum(
         maximum(
-          match(goRayEmpty, goGap, E, cell)[goSize * r],
-          match(goRayEmpty, goGap, W, cell)[goSize * r + goSize - 1]
-        )
-      )
-    }
+          maximum(
+            maximum(
+              maximum(
+                maximum(
+                  maximum(
+                    maximum(
+                      maximum(
+                        maximum(
+                          maximum(
+                            maximum(
+                              maximum(
+                                maximum(
+                                  maximum(
+                                    maximum(match(goRayEmpty, goGap, E, cell)[0], match(goRayEmpty, goGap, W, cell)[8]),
+                                    match(goRayEmpty, goGap, E, cell)[9]
+                                  ),
+                                  match(goRayEmpty, goGap, W, cell)[17]
+                                ),
+                                match(goRayEmpty, goGap, E, cell)[18]
+                              ),
+                              match(goRayEmpty, goGap, W, cell)[26]
+                            ),
+                            match(goRayEmpty, goGap, E, cell)[27]
+                          ),
+                          match(goRayEmpty, goGap, W, cell)[35]
+                        ),
+                        match(goRayEmpty, goGap, E, cell)[36]
+                      ),
+                      match(goRayEmpty, goGap, W, cell)[44]
+                    ),
+                    match(goRayEmpty, goGap, E, cell)[45]
+                  ),
+                  match(goRayEmpty, goGap, W, cell)[53]
+                ),
+                match(goRayEmpty, goGap, E, cell)[54]
+              ),
+              match(goRayEmpty, goGap, W, cell)[62]
+            ),
+            match(goRayEmpty, goGap, E, cell)[63]
+          ),
+          match(goRayEmpty, goGap, W, cell)[71]
+        ),
+        match(goRayEmpty, goGap, E, cell)[72]
+      ),
+      match(goRayEmpty, goGap, W, cell)[80]
+    )
   }
 
   // One stone of the side to move, come onto an empty point and alone on it, with nothing else changed: a request
   // through the door.
+  rule "go-read-legal" {
+    goLegal = (
+      (goChangedCount == 1) &
+      (goCollisions == 0) &
+      (goNewCell >= 0) &
+      (goOver == 0) &
+      (goBoard[goNewCell[$value]] == 0) &
+      (goSeen[goNewCell[$value]] == goTurn)
+    )
+  }
+
   rule "go-read-request" {
-    when physics(quiescent) == 1 and
-      goChangedCount == 1 and
-      goCollisions == 0 and
-      goNewCell >= 0 and
-      goOver == 0 and
-      goBoard[goNewCell[$value]] == 0 and
-      goSeen[goNewCell[$value]] == goTurn
+    when physics(quiescent) == 1 and goLegal == 1
     goMove[play] = goNewCell
   }
 
   // Anything else that changed is illegal, and is put right below.
   rule "go-read-illegal" {
-    when (goChangedCount > 0 or goCollisions > 0) and goMove[play] == goPlaced
+    when (goChangedCount > 0 or goCollisions > 0) and goLegal == 0
     goIllegal += 1
   }
 
@@ -466,7 +558,7 @@ rules "" when goHold == goSettleTicks and search(ply) == 0 {
 
   // A point the table lacks is filled once the strays are back in their trays; a request takes the turn instead.
   rule "go-read-fill" {
-    when goFix >= 0 and goMove[play] == goPlaced
+    when goFix >= 0 and goLegal == 0
     goPut = goFix
   }
 
@@ -621,15 +713,17 @@ rule "go-score-open" {
 // One side's reach taking one step each way: its members shifted, kept where the point is empty, and added back.
 template goGrow(reach) {
   rule $"go-{reach}" {
-    for direction in ["N", "E", "S", "W"] {
-      transform boardCombine(row: goFrontier, operation: Shift, left: reach, direction: direction)
-      transform boardCombine(row: goFrontier, operation: And, left: goFrontier, right: goOpen)
-      transform boardCombine(row: reach, operation: Or, left: reach, right: goFrontier)
+    transform boardCombine(row: goFrontier, operation: Shift, left: reach, direction: "N")
+    for direction in ["E", "S", "W"] {
+      transform boardCombine(row: goStep, operation: Shift, left: reach, direction: direction)
+      transform boardCombine(row: goFrontier, operation: Or, left: goFrontier, right: goStep)
     }
+    transform boardCombine(row: goFrontier, operation: And, left: goFrontier, right: goOpen)
+    transform boardCombine(row: reach, operation: Or, left: reach, right: goFrontier)
   }
 }
 
-stabilize goFlood maxPasses(2) until goScoring != 1 {
+stabilize goFlood maxPasses(128) until goScoring != 1 {
   goGrow(reach: goBlackReach)
   goGrow(reach: goWhiteReach)
 
@@ -802,54 +896,52 @@ search {
 // and the cancel button passes. Either acts only on the seat's own turn, once the table has rested and matches the
 // position.
 
-// The seated seat's buttons this tick, each 1 while held past half way.
-rule "go-seat-buttons" {
+// The seated seat's presses this tick: each button's edge is 1 on the tick it goes past half way, and its *Down
+// cell remembers whether it was held.
+rule "go-seat-presses" {
   mode: Level
-  goSeat[pickNow] = 0
-  goSeat[cancelNow] = 0
-  goSeat[aheadNow] = 0
-  goSeat[behindNow] = 0
-  goSeat[rightNow] = 0
-  goSeat[leftNow] = 0
   if board(engaged, goBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    goSeat[pickNow] = 1
+    goSeat[pickEdge] = goSeat[pickDown] == 0
+    goSeat[pickDown] = 1
+  } else {
+    goSeat[pickEdge] = 0
+    goSeat[pickDown] = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
-    goSeat[cancelNow] = 1
+    goSeat[cancelEdge] = goSeat[cancelDown] == 0
+    goSeat[cancelDown] = 1
+  } else {
+    goSeat[cancelEdge] = 0
+    goSeat[cancelDown] = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    goSeat[aheadNow] = 1
+    goSeat[aheadEdge] = goSeat[aheadDown] == 0
+    goSeat[aheadDown] = 1
+  } else {
+    goSeat[aheadEdge] = 0
+    goSeat[aheadDown] = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    goSeat[behindNow] = 1
+    goSeat[behindEdge] = goSeat[behindDown] == 0
+    goSeat[behindDown] = 1
+  } else {
+    goSeat[behindEdge] = 0
+    goSeat[behindDown] = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    goSeat[rightNow] = 1
+    goSeat[rightEdge] = goSeat[rightDown] == 0
+    goSeat[rightDown] = 1
+  } else {
+    goSeat[rightEdge] = 0
+    goSeat[rightDown] = 0
   }
   if board(engaged, goBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    goSeat[leftNow] = 1
+    goSeat[leftEdge] = goSeat[leftDown] == 0
+    goSeat[leftDown] = 1
+  } else {
+    goSeat[leftEdge] = 0
+    goSeat[leftDown] = 0
   }
-}
-
-// The press images: each binary is this tick's press on a rising edge, and each step is +1 or -1 on a rising edge.
-rule "go-seat-edges" {
-  mode: Level
-  local pick = goSeat[pickNow]
-  local cancel = goSeat[cancelNow]
-  local ahead = goSeat[aheadNow]
-  local behind = goSeat[behindNow]
-  local rightward = goSeat[rightNow]
-  local leftward = goSeat[leftNow]
-  goSeat[pickEdge] = pick & (goSeat[pickDown] == 0)
-  goSeat[cancelEdge] = cancel & (goSeat[cancelDown] == 0)
-  goSeat[stepAhead] = (ahead & (goSeat[aheadDown] == 0)) - (behind & (goSeat[behindDown] == 0))
-  goSeat[stepRight] = (rightward & (goSeat[rightDown] == 0)) - (leftward & (goSeat[leftDown] == 0))
-  goSeat[pickDown] = pick
-  goSeat[cancelDown] = cancel
-  goSeat[aheadDown] = ahead
-  goSeat[behindDown] = behind
-  goSeat[rightDown] = rightward
-  goSeat[leftDown] = leftward
 }
 
 // The pointer moves the cursor whenever it moves onto another point.
@@ -866,18 +958,18 @@ rule "go-seat-point" {
 // A step moves the cursor one point in the seat's own frame: from the -Z side up the board is +row and right is
 // -column (the camera's right is its forward crossed with up), and each other side turns both a quarter.
 rule "go-seat-step" {
-  when goSeat[stepAhead] != 0 or goSeat[stepRight] != 0
+  when (goSeat[aheadEdge] - goSeat[behindEdge]) != 0 or (goSeat[rightEdge] - goSeat[leftEdge]) != 0
   mode: Level
   local seatSide = board(side, goBoard, 1)
   local cursorColumn = (
     goSeat[cursor] % goSize +
-    goSeat[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    goSeat[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+    (goSeat[aheadEdge] - goSeat[behindEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    (goSeat[rightEdge] - goSeat[leftEdge]) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
   )
   local cursorRow = (
     goSeat[cursor] / goSize +
-    goSeat[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    goSeat[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+    (goSeat[aheadEdge] - goSeat[behindEdge]) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    (goSeat[rightEdge] - goSeat[leftEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
   )
   goSeat[cursor] = clamp(cursorRow, 0, goSize - 1) * goSize + clamp(cursorColumn, 0, goSize - 1)
 }
@@ -984,7 +1076,7 @@ state {
     }
 
     // Scoring's boards: each side's reach, the step a flood pass takes, and the owner of every point.
-    for name in ["goBlackReach", "goWhiteReach", "goFrontier", "goOwner"] {
+    for name in ["goBlackReach", "goWhiteReach", "goFrontier", "goStep", "goOwner"] {
       row {
         name: name
         kind: "Int"
@@ -1132,6 +1224,7 @@ state {
     slot goChangedCount = 0 bounds(0..goPoints)
     slot goCollisions = 0 bounds(0..goStones)
     slot goNewCell = -1 bounds(-1..goLastPoint)
+    slot goLegal = 0 bounds(0..1)
     slot goFix = -1 bounds(-1..goLastPoint)
     slot goIllegal = 0 bounds(0..50400)
     slot goSync = 0 bounds(0..1)
@@ -1140,21 +1233,17 @@ state {
     slot goPick = -1 bounds(-1..goStones)
     slot goJudging = 0 bounds(0..1)
 
-    // Seat 1 at the table: the cursor's point, the last pointed point, this tick's presses (the *Edge and step keys),
+    // Seat 1 at the table: the cursor's point, the last pointed point, this tick's presses (the *Edge keys),
     // last tick's buttons (*Down), and whether the seat may act.
     table goSeat {
       cursor = 40
       pointer = -1
-      pickNow = 0
-      cancelNow = 0
-      aheadNow = 0
-      behindNow = 0
-      rightNow = 0
-      leftNow = 0
       pickEdge = 0
       cancelEdge = 0
-      stepAhead = 0
-      stepRight = 0
+      aheadEdge = 0
+      behindEdge = 0
+      rightEdge = 0
+      leftEdge = 0
       pickDown = 0
       cancelDown = 0
       aheadDown = 0

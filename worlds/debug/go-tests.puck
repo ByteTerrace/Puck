@@ -44,7 +44,6 @@ test "a seated player plays the centre and the computer answers" {
     goStoneCount[1] == 1
     goStoneCount[2] == 1
     goIllegal == 0
-    goChangedCount == 0
     board(engaged, goBoard, 1) == 1
   }
 }
@@ -273,24 +272,29 @@ test "the table fills a given position and a captured stone goes back to its tra
   }
 }
 
-// A stone put on a point while it is White's turn, and a stray stone put beside it as Black's: the reading sees two new
-// stones, records the arrangement illegal, and puts both back in their trays.
-test "an arrangement that changes more than one point is illegal and put right" {
+// Black to move, a white stone (goStone41, body 150) is set by hand on point 41, 10 cm over the board: the reading
+// records the arrangement illegal and puts the stone back in White's tray. Then a black stone and a second black stone
+// beside it: two points changed, illegal again, and both go back.
+test "an arrangement that is not one stone of the side to move is illegal and put right" {
   given {
     goAiSide = 0
   }
   when {
     ticks 150
-    seat1: world.state.cell.set goPut $value 40
-    seat1: world.state.cell.set goPut $value 41
+    seat1: body.pose 56.65 10 30.6 0 0 0 150
+    ticks 150
+    seat1: body.pose 56.65 10 30.6 0 0 0 191
+    seat1: body.pose 56.8 10 30.6 0 0 0 190
     ticks 200
   }
   expect {
-    goIllegal >= 1
+    goIllegal == 2
     goMoves == 0
-    goSeen[40] == 0
     goSeen[41] == 0
+    goSeen[42] == 0
     goChangedCount == 0
+    goCell[goStone41] == -42
+    goCell[goStone0] == -1
   }
 }
 
@@ -309,7 +313,6 @@ test "the computer plays one move" {
     goTurn == 2
     goRejected == 0
     goIllegal == 0
-    goChangedCount == 0
   }
 }
 

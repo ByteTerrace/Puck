@@ -1,1 +1,1139 @@
+import "inputs"
 import "shapes"
+// Physical Reversi (Othello) on an 8x8 board, played to the World Othello Federation's official rules
+// (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english): 64 rigid two-faced discs,
+// black on one face and white on the other, on a table in the gallery hall's board game room (hall.puck), whose every
+// settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug world
+// imports this file whole. The table stands east of the chess table, its board's centre at (65, 9.905, 22.6) on level
+// 2; Black sits at its -Z edge and White at its +Z edge, each with a tray of 32 discs at their right-hand end.
+// reversi.md beside this file says how to play, read the game and set the opponent.
+//
+// The game has two layers. The rules are a move door over the logical board `reversiBoard`: a request names the
+// cell the move token `reversiMove[play]` is moved to, and the door plays it when the cell is empty and brackets at least
+// one unbroken run of the opponent's discs along one of the eight compass rays; every bracketed disc flips. A side with
+// no legal move passes; two passes in a row end the game, as a full board does, and the side holding more discs wins.
+// Over it lies the physical layer: each disc body is a token whose cell (`reversiCell`) and up face (`reversiFace`)
+// are read off the board whenever the physics has rested. A settled table that differs from the accepted position by
+// one disc of the side to move on an empty cell is a request through the door; any other change is recorded as
+// illegal. Either way the table is then put back to the position: a disc showing the wrong face is turned over where
+// it lies, which is how a move's flips reach the table, a refused or stray disc goes back to its tray, and a cell the
+// table lacks is filled from a tray, which is how the opening's four discs reach the board.
+
+// The table's placement (its creation's floor 0.5 m under its origin on level 2's floor), the ticks the physics must
+// stay at rest before an arrangement is judged (0.3 s at 30 Hz) and the board. A cell's ordinal is 8 * row + column:
+// its column runs along +X and its row along +Z, so cell 0 is the -X, -Z corner, at Black's right hand.
+let reversiTable = [65, 8.55, 22.6]
+let reversiSettleTicks = 9
+let reversiSize = 8
+let reversiCells = (reversiSize * reversiSize)
+let reversiCellSize = 0.15
+// The board's playing surface over the table's origin; the tabletop's own top is at 1.3.
+let reversiSurface = 1.355
+let reversiCorner = (0 - ((reversiSize * reversiCellSize) / 2))
+
+// The opening: the four middle cells, 27 and 36 white, 28 and 35 black.
+let reversiOpening = map(range(0, reversiCells), i => ((i == 27) | (i == 36)) ? 2 : (((i == 28) | (i == 35)) ? 1 : 0))
+
+// The discs: 64, Black's tray holding reversiDisc0 .. reversiDisc31 and White's reversiDisc32 .. reversiDisc63. Each has
+// a spot in its tray, a 6 by 6 grid of 0.14 m cells at the end of the table on its owner's right (Black's at -X, White's
+// at +X), which the `reversiTrays` topology lays out in world coordinates: columns 0 to 5 are Black's, 18 to 23 White's.
+// Any disc plays either colour, by the face it shows.
+let reversiPerSide = 32
+let reversiDiscs = (2 * reversiPerSide)
+let reversiTrayLow = (0 - reversiDiscs)
+let reversiTrayPitch = 0.14
+let reversiTrayColumns = 24
+let reversiTrayWide = 6
+let reversiTrayDeep = 6
+let reversiTrayOrigin = [
+  (reversiTable[0] - ((reversiTrayColumns * reversiTrayPitch) / 2)),
+  (reversiTable[1] + 1.304),
+  (reversiTable[2] - ((reversiTrayDeep * reversiTrayPitch) / 2))
+]
+let reversiHomeColumn = map(
+  range(0, reversiDiscs),
+  i => ((i < reversiPerSide) ? 0 : (reversiTrayColumns - reversiTrayWide)) + (((i < reversiPerSide) ? i : (i -
+    reversiPerSide)) % reversiTrayWide)
+)
+// A compile-time `/` divides exactly, so a row is counted down from its column.
+let reversiHomeRow = map(
+  range(0, reversiDiscs),
+  i => ((((i < reversiPerSide) ? i : (i - reversiPerSide)) - (((i < reversiPerSide) ? i : (i - reversiPerSide)) %
+    reversiTrayWide)) / reversiTrayWide)
+)
+let reversiHome = map(range(0, reversiDiscs), i => (reversiHomeRow[i] * reversiTrayColumns) + reversiHomeColumn[i])
+
+// The bodies: debug.puck imports this file second, so its cursor and discs take the population's slots under Go's
+// (shapes.puck's goBodies and reversiBodies): the cursor is the highest and disc i the one `1 + i` below it. Seat 1
+// drives each disc, so a seat's `body.pose` may set one on a cell (reversi.md).
+let reversiTop = (((galleryPopulation + 2 + boardRoomBodies) - 1) - goBodies)
+grants: map(range(0, reversiDiscs), i => { capability: Drive, grantee: "seat1", subject: $"body:{reversiTop - 1 - i}" })
+
+looks {
+  rows: map(["reversiDisc", "reversiCursor"], name => {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: name
+    scale: 1
+    source: creation(prototypeId: name)
+  }
+  )
+}
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.055, 0.016, 0.055], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "reversiDisc"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.6
+        linearDamping: 0.05
+        mass: 0.04
+        restitution: 0.05
+        rollingFriction: 0.2
+      }
+    }
+  ]
+}
+
+placements {
+  placement "reversiTable" {
+    prototype: "reversiTable"
+    board {
+      occupancy: "reversiBoard"
+      topology: "reversiGrid"
+      turn: "reversiTurn"
+      verdict: "reversiVerdict"
+      // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera
+      // looks down on the board from the seat's side and the pointer picks cells 2 cm over the board's face.
+      engage {
+        channel: "interact"
+        radius: 2.5
+        pitch: 62
+        margin: 0.12
+        surface: 0.02
+      }
+    }
+    position: reversiTable
+    solid
+  }
+
+  // The cell cursor a seated player moves, before the discs so it takes the highest of the game's bodies.
+  placement "reversiCursor" {
+    prototype: "reversiCursor"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "boardCursor"
+      look: "reversiCursor"
+      source: "Idle"
+    }
+    parent: "reversiTable"
+    position [0, 1.33, 0]
+  }
+
+  // Each disc starts 6 cm over its tray spot, black face up, and drops onto it.
+  for i in range(0, reversiDiscs) {
+    placement $"reversiDisc{i}" {
+      prototype: "reversiDisc"
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "reversiDisc"
+        look: "reversiDisc"
+        source: "Idle"
+      }
+      parent: "reversiTable"
+      position [
+        (((reversiHomeColumn[i] + 0.5) * reversiTrayPitch) - ((reversiTrayColumns * reversiTrayPitch) / 2))
+        1.37,
+        (((reversiHomeRow[i] + 0.5) * reversiTrayPitch) - ((reversiTrayDeep * reversiTrayPitch) / 2))
+      ]
+    }
+  }
+
+  // The board's face: 64 green felt tiles over a dark base, so the centimetre between neighbouring tiles reads as the
+  // board's lines, and a dot at each of the four corners of the middle sixteen cells.
+  for r in range(0, reversiSize) {
+    for c in range(0, reversiSize) {
+      placement $"reversiTile-{r * reversiSize + c}" {
+        prototype: "reversiTile"
+        parent: "reversiTable"
+        position [
+          (reversiCorner + (reversiCellSize * (c + 0.5))),
+          (reversiSurface - 0.0075),
+          (reversiCorner + (reversiCellSize * (r + 0.5)))
+        ]
+      }
+    }
+  }
+  for at in [[2, 2], [2, 6], [6, 2], [6, 6]] {
+    placement $"reversiDot-{at[0] * reversiSize + at[1]}" {
+      prototype: "reversiDot"
+      parent: "reversiTable"
+      position [
+        (reversiCorner + (reversiCellSize * at[1]))
+        reversiSurface,
+        (reversiCorner + (reversiCellSize * at[0]))
+      ]
+    }
+  }
+}
+
+// At Black's edge of the table, 1.6 m from the board's centre and facing it, inside the engage radius: the context
+// button sits her down.
+spawnPoints [
+  { id: "reversi", position [reversiTable[0], galleryFloor[2], (reversiTable[2] - 1.6)], yawDegrees: 180 }
+]
+
+prototypes {
+  prototype "reversiTable" {
+    document {
+      name: "reversiTable"
+      palette [
+        { color: "#8A6A45" }
+        { color: "#141816", roughness: 0.7 }
+        { color: "#4A3526", roughness: 0.8, specular: 0.05 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top" {
+        material: 0
+        position [0, 1.25, 0]
+        scale [1.75, 0.05, 0.85]
+      }
+      for x in [-1.1, 1.1] {
+        // The two pedestals stand on the floor 0.5 m under the creation's origin.
+        shape Cylinder $"leg-{x}" {
+          material: 0
+          position [x, 0.855, 0]
+          scale [0.08, 0.355, 0.08]
+        }
+        shape Cylinder $"foot-{x}" {
+          material: 0
+          position [x, 0.52, 0]
+          scale [0.35, 0.02, 0.35]
+        }
+      }
+      // The board: a dark base the lines show through, inside a dark rim flush with the tiles' faces.
+      shape Box "base" {
+        material: 1
+        position [0, 1.32, 0]
+        scale [0.605, 0.02, 0.605]
+      }
+      shape Box "rim-north" {
+        material: 1
+        position [0, 1.3275, 0.645]
+        scale [0.685, 0.0275, 0.04]
+      }
+      shape Box "rim-south" {
+        material: 1
+        position [0, 1.3275, -0.645]
+        scale [0.685, 0.0275, 0.04]
+      }
+      shape Box "rim-east" {
+        material: 1
+        position [0.645, 1.3275, 0]
+        scale [0.04, 0.0275, 0.605]
+      }
+      shape Box "rim-west" {
+        material: 1
+        position [-0.645, 1.3275, 0]
+        scale [0.04, 0.0275, 0.605]
+      }
+      // The trays: a walnut lid under each side's discs.
+      shape Box "lid-west" {
+        material: 2
+        position [-1.26, 1.302, 0]
+        scale [0.44, 0.002, 0.44]
+      }
+      shape Box "lid-east" {
+        material: 2
+        position [1.26, 1.302, 0]
+        scale [0.44, 0.002, 0.44]
+      }
+    }
+  }
+
+  prototype "reversiTile" {
+    document {
+      name: "reversiTile"
+      palette [{ color: "#1F6B3A", roughness: 0.85, specular: 0.04 }]
+      schema: "puck.creation.v1"
+      shape Box "tile" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.07, 0.0075, 0.07]
+      }
+    }
+  }
+
+  prototype "reversiDot" {
+    document {
+      name: "reversiDot"
+      palette [{ color: "#141816", roughness: 0.7 }]
+      schema: "puck.creation.v1"
+      shape Cylinder "dot" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.014, 0.0015, 0.014]
+      }
+    }
+  }
+
+  // A disc: black on its upper face (its own +Y) and white below, so a disc turned over shows white.
+  prototype "reversiDisc" {
+    document {
+      name: "reversiDisc"
+      palette [
+        { color: "#1A1B1E", roughness: 0.4, specular: 0.25 }
+        { color: "#EEECE6", roughness: 0.4, specular: 0.25 }
+      ]
+      schema: "puck.creation.v1"
+      shape Cylinder "black" {
+        material: 0
+        position [0, 0.008, 0]
+        scale [0.06, 0.008, 0.06]
+      }
+      shape Cylinder "white" {
+        material: 1
+        position [0, -0.008, 0]
+        scale [0.06, 0.008, 0.06]
+      }
+    }
+  }
+
+  // A cell's outline: four flat bars round the cell the cursor stands on, outside a disc's edge.
+  prototype "reversiCursor" {
+    document {
+      name: "reversiCursor"
+      palette [{ color: "#3FA9F5", roughness: 0.4, specular: 0.3 }]
+      schema: "puck.creation.v1"
+      shape Box "near" {
+        material: 0
+        position [0, 0, -0.068]
+        scale [0.075, 0.003, 0.007]
+      }
+      shape Box "far" {
+        material: 0
+        position [0, 0, 0.068]
+        scale [0.075, 0.003, 0.007]
+      }
+      shape Box "left" {
+        material: 0
+        position [-0.068, 0, 0]
+        scale [0.007, 0.003, 0.075]
+      }
+      shape Box "right" {
+        material: 0
+        position [0.068, 0, 0]
+        scale [0.007, 0.003, 0.075]
+      }
+    }
+  }
+}
+
+// One alphabet over the board's own raw values, shared by every pattern below: 0 empty, 1 black, 2 white.
+let reversiAlphabet = [
+  { name: "empty", min: 0, max: 0 }
+  { name: "black", min: 1, max: 1 }
+  { name: "white", min: 2, max: 2 }
+]
+
+patterns [
+  // The probes: how far an unbroken run of the opponent's discs reaches. Read through the 'distance' facet, whose
+  // answer is the step count to the first cell the run does not cover, one past the last opponent disc, or -1 when the
+  // run reaches the board's edge.
+  { name: "reversiWhiteRun", kind: Int, symbols: reversiAlphabet, pattern: star(item: symbol(name: "white")) }
+  { name: "reversiBlackRun", kind: Int, symbols: reversiAlphabet, pattern: star(item: symbol(name: "black")) }
+  // The brackets: the run 'setRay' rewrites. The trailing own-colour symbol is what closes the run, so a ray of
+  // opponent discs running off the board accepts no prefix at all, the answer the flip rules gate each direction's write
+  // on, since 'setRay' refuses an empty prefix.
+  {
+    name: "reversiWhiteBracket"
+    kind: Int
+    symbols: reversiAlphabet
+    pattern: sequence(items: [plus(item: symbol(name: "white")), symbol(name: "black")])
+  }
+  {
+    name: "reversiBlackBracket"
+    kind: Int
+    symbols: reversiAlphabet
+    pattern: sequence(items: [plus(item: symbol(name: "black")), symbol(name: "white")])
+  }
+  // The legality lines: the same bracket, extended to cover the whole ray, so the acceptance the 'any' direction counts
+  // is "this ray brackets" rather than "this ray is exactly a bracket".
+  {
+    name: "reversiBlackLine"
+    kind: Int
+    symbols: reversiAlphabet
+    pattern: sequence(items: [plus(item: symbol(name: "white")), symbol(name: "black"), star(item: any())])
+  }
+  {
+    name: "reversiWhiteLine"
+    kind: Int
+    symbols: reversiAlphabet
+    pattern: sequence(items: [plus(item: symbol(name: "black")), symbol(name: "white"), star(item: any())])
+  }
+]
+
+// ---- Reading the board -------------------------------------------------------------------------------------------
+// Whenever the physics has rested for reversiSettleTicks, the rules read each disc's cell and face off the board. Discs
+// are alike, so what an arrangement says is the board it shows (`reversiSeen`, each disc's face on the cell it lies
+// on) against the accepted one, both as 64-bit cell masks. A disc's cell is the cell it lies on, or `-1 - ordinal` off
+// the board, so the lowest-numbered disc a tray holds is the greatest of that tray's cells there. The search's
+// hypothetical plies never read the table: they try the door alone.
+
+rule "reversi-settle-hold-advance" {
+  when physics(quiescent) == 1 and reversiHold < reversiSettleTicks
+  mode: Level
+  reversiHold += 1
+}
+
+rule "reversi-settle-hold-reset" {
+  when physics(quiescent) != 1
+  mode: Level
+  reversiHold = 0
+}
+
+rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
+  mode: "Edge"
+  // A disc lying black face up reads black; any other way up, white.
+  rule "reversi-read-discs" {
+    local square = board(cellOf, reversiBoard, placement, $each)
+    forEach: reversiFace
+    reversiCell[$each] = (square >= 0) ? square : (-1 - reversiOrdinal[$each])
+    if upright(placement, $each) >= 0 {
+      reversiFace[$each] = 1
+    } else {
+      reversiFace[$each] = 2
+    }
+  }
+
+  // The cells whose face differs from the position, the cells the position holds that the table lacks, and the discs
+  // sharing a cell.
+  rule "reversi-read-board" {
+    local changed = (
+      (board(mask, reversiSeen, 1, 1) ^ board(mask, reversiBoard, 1, 1)) |
+      (board(mask, reversiSeen, 2, 2) ^ board(mask, reversiBoard, 2, 2))
+    )
+    local missing = board(mask, reversiBoard, 1, 2) & ~board(mask, reversiSeen, 1, 2)
+    reversiChangedCount = setBitCount(changed)
+    reversiNewCell = changed == 0 ? -1 : trailingZeroCount(changed)
+    reversiFix = missing == 0 ? -1 : trailingZeroCount(missing)
+    reversiCollisions = count(reversiCell, atLeast: 0, atMost: 63) - setBitCount(board(mask, reversiSeen, 1, 2))
+  }
+
+  // One disc of the side to move, come onto an empty cell and alone on it, with nothing else changed: a request through
+  // the door.
+  rule "reversi-read-legal" {
+    reversiLegal = (
+      (reversiChangedCount == 1) &
+      (reversiCollisions == 0) &
+      (reversiNewCell >= 0) &
+      (reversiWinner == 0) &
+      (reversiBoard[reversiNewCell[$value]] == 0) &
+      (reversiSeen[reversiNewCell[$value]] == reversiTurn)
+    )
+  }
+
+  rule "reversi-read-request" {
+    when physics(quiescent) == 1 and reversiLegal == 1
+    reversiMove[play] = reversiNewCell
+  }
+
+  // Anything else that changed is illegal, and is put right below: a disc showing a face the position does not give
+  // its cell is turned over (so a missing flip is no illegality, only a change put right), a stray goes back.
+  rule "reversi-read-illegal" {
+    when (reversiChangedCount > 0 or reversiCollisions > 0) and reversiLegal == 0 and (
+        board(mask, reversiSeen, 1, 2) & ~board(mask, reversiBoard, 1, 2)
+      ) != 0
+    reversiIllegal += 1
+  }
+
+  rule "reversi-read-sync" {
+    when reversiChangedCount > 0
+    reversiSync = 1
+  }
+
+  // A cell the table lacks is filled once the strays are back in their trays; a request takes the turn instead.
+  rule "reversi-read-fill" {
+    when reversiFix >= 0 and reversiLegal == 0
+    reversiPut = reversiFix
+  }
+
+  rule "reversi-read-done" {
+    reversiJudging = 0
+  }
+}
+
+// ---- The rules of Reversi ----------------------------------------------------------------------------------------
+
+// Mobility, for the side to move, as 64-bit cell masks: along each compass direction, the side's discs are shifted
+// over unbroken runs of the opponent's (at most six of them), and a shift past a run onto an empty cell is a legal
+// move. `reversiMoves` holds each direction's moves; a side with none in any direction has no legal move.
+for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
+  rule $"reversi-moves-{direction}" {
+    local black = board(mask, reversiBoard, 1, 1)
+    local white = board(mask, reversiBoard, 2, 2)
+    local own = (reversiTurn == 1) ? black : white
+    local opponent = (reversiTurn == 1) ? white : black
+    local run1 = boardShift(own, reversiGrid, $"{direction}") & opponent
+    local run2 = run1 | (boardShift(run1, reversiGrid, $"{direction}") & opponent)
+    local run3 = run2 | (boardShift(run2, reversiGrid, $"{direction}") & opponent)
+    local run4 = run3 | (boardShift(run3, reversiGrid, $"{direction}") & opponent)
+    local run5 = run4 | (boardShift(run4, reversiGrid, $"{direction}") & opponent)
+    local run6 = run5 | (boardShift(run5, reversiGrid, $"{direction}") & opponent)
+    mode: Level
+    reversiMoves[$"{direction}"] = boardShift(run6, reversiGrid, $"{direction}") & ~(black | white)
+  }
+}
+
+// A side with no legal move passes, once the table has rested and matches the position. Two consecutive passes end the
+// game; an accepted move clears the count, so only consecutive ones accumulate.
+rule "reversi-pass" {
+  when physics(quiescent) == 1 and
+    reversiWinner == 0 and
+    reversiHold == reversiSettleTicks and
+    reversiJudging == 0 and
+    reversiPut < 0 and
+    reversiSync == 0 and
+    (
+      reversiMoves[N] |
+      reversiMoves[NE] |
+      reversiMoves[E] |
+      reversiMoves[SE] |
+      reversiMoves[S] |
+      reversiMoves[SW] |
+      reversiMoves[W] |
+      reversiMoves[NW]
+    ) == 0 and
+    reversiPasses < 2 and
+    search(ply) == 0
+  mode: Level
+  reversiTurn = 3 - reversiTurn
+  reversiPasses += 1
+  reversiAiRevision += 1
+}
+
+// The move door: the token's cell must be empty and bracket at least one ray. Everything it admits is legal Othello;
+// everything it closes on falls through to the refusal below.
+template reversiPlace(colour, opponentRun, line) {
+  rule $"reversi-place-{colour}" {
+    when reversiMove[play] != reversiPlaced and
+      reversiMove[play] >= 0 and
+      reversiWinner == 0 and
+      reversiTurn == colour and
+      reversiBoard[reversiMove[play]] == 0 and
+      match(line, reversiBoard, any, count)[reversiMove[play]] >= 1
+    mode: Level
+    reversiPrevOwn = setBitCount(board(mask, reversiBoard, colour, colour))
+    for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
+      reversiRay[$"{direction}"] = match(opponentRun, reversiBoard, $"{direction}", distance)[reversiMove[play]]
+    }
+    reversiBoard[reversiMove[play]] = colour
+    reversiPlaced = reversiMove[play]
+    reversiFlipping = 1
+  }
+}
+
+reversiPlace(colour: 1, opponentRun: reversiWhiteRun, line: reversiBlackLine)
+reversiPlace(colour: 2, opponentRun: reversiBlackRun, line: reversiWhiteLine)
+
+// The flips. 'setRay' rewrites the longest run its pattern accepts, walked outward from the origin and excluding it,
+// exactly a Reversi bracket, and its origin is the played cell. A ray that brackets nothing accepts no prefix, and
+// 'setRay' refuses an empty prefix, so each direction's write is gated on that direction's own bracket.
+template reversiFlip(colour, bracket) {
+  rule $"reversi-flip-{colour}" {
+    when reversiFlipping == 1 and reversiTurn == colour
+    mode: Level
+    for direction in ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] {
+      if match(bracket, reversiBoard, $"{direction}", prefix)[reversiMove[play]] >= 1 {
+        transform setRay(
+          row: reversiBoard,
+          from: cell(reversiMove, play),
+          direction: $"{direction}",
+          pattern: bracket,
+          value: colour
+        )
+      }
+    }
+  }
+}
+
+reversiFlip(colour: 1, bracket: reversiWhiteBracket)
+reversiFlip(colour: 2, bracket: reversiBlackBracket)
+
+rule "reversi-finish" {
+  when reversiFlipping == 1
+  mode: Level
+  reversiFlips = (
+    ((reversiTurn == 1) ? setBitCount(board(mask, reversiBoard, 1, 1)) : setBitCount(board(mask, reversiBoard, 2, 2))) -
+    reversiPrevOwn -
+    1
+  )
+  reversiMoveCount += 1
+  reversiPasses = 0
+  reversiTurn = 3 - reversiTurn
+  reversiFlipping = 0
+  reversiVerdict = 1
+  reversiAiRevision += 1
+  reversiAccepted = 1
+}
+
+// A request the door did not admit is answered, not applied: the board stays where it was and the refusal is counted.
+// The token goes back to the last disc played, so the next request is a fresh one.
+rule "reversi-refuse" {
+  when reversiMove[play] != reversiPlaced
+  mode: Level
+  reversiRejected += 1
+  reversiVerdict = 0
+  reversiMove[play] = reversiPlaced
+  reversiSync = 1
+}
+
+rule "reversi-score" {
+  mode: Level
+  reversiBlack = setBitCount(board(mask, reversiBoard, 1, 1))
+  reversiWhite = setBitCount(board(mask, reversiBoard, 2, 2))
+  reversiWinner = (
+    ((reversiBlack + reversiWhite) >= 64) | (reversiPasses >= 2) ?
+      ((reversiBlack > reversiWhite) ? 1 : ((reversiWhite > reversiBlack) ? 2 : 3)) :
+    0
+  )
+}
+
+// ---- Keeping the table to the position -----------------------------------------------------------------------------
+
+// A new game: `reversi.reset` writes reversiReset, the board takes the opening again, and the table follows: discs off
+// the opening's cells go back to their trays, and the opening's cells fill from them. Black moves first.
+rule "reversi-reset" {
+  when reversiReset == 1
+  mode: Level
+  transform boardCombine(row: reversiBoard, operation: Copy, left: reversiStart)
+  reversiTurn = 1
+  reversiMove[play] = -1
+  reversiPlaced = -1
+  reversiPasses = 0
+  reversiWinner = 0
+  reversiMoveCount = 0
+  reversiAiRevision += 1
+  reversiAccepted = 1
+  reversiReset = 0
+}
+
+// Once the door has answered, every disc is set to the position: a disc showing the wrong face on a cell the position
+// holds is turned over where it lies (dropped 6 cm, black face up or white face up), and one on a cell the position
+// leaves empty goes back to its tray.
+rule "reversi-accept-done" {
+  when reversiAccepted == 1
+  mode: Level
+  reversiAccepted = 0
+  reversiSync = 1
+}
+
+rule "reversi-sync-black" {
+  when reversiSync == 1 and
+    search(ply) == 0 and
+    reversiCell[$each] >= 0 and
+    reversiBoard[reversiCell[$each]] == 1 and
+    reversiFace[$each] != 1
+  mode: Level
+  forEach: reversiFace
+  poseCell(key: `placement:$each`, topology: reversiGrid, expression: reversiCell[$each], offset: [0, 0.06, 0])
+}
+
+rule "reversi-sync-white" {
+  when reversiSync == 1 and
+    search(ply) == 0 and
+    reversiCell[$each] >= 0 and
+    reversiBoard[reversiCell[$each]] == 2 and
+    reversiFace[$each] != 2
+  mode: Level
+  forEach: reversiFace
+  poseCell(
+    key: `placement:$each`,
+    topology: reversiGrid,
+    expression: reversiCell[$each],
+    offset: [0, 0.06, 0],
+    rollDegrees: 180
+  )
+}
+
+rule "reversi-sync-tray" {
+  when reversiSync == 1 and search(ply) == 0 and reversiCell[$each] >= 0 and reversiBoard[reversiCell[$each]] == 0
+  mode: Level
+  forEach: reversiFace
+  poseCell(key: `placement:$each`, topology: reversiTrays, expression: reversiHomeCell[$each], offset: [0, 0.05, 0])
+}
+
+rule "reversi-sync-done" {
+  when reversiSync == 1
+  mode: Level
+  reversiSync = 0
+}
+
+// ---- Putting a disc down -----------------------------------------------------------------------------------------
+// A put (`reversiPut`, a cell) takes the lowest-numbered disc still in a tray, the putting colour's own tray first, and
+// drops it 6 cm onto the cell with that colour's face up: the side to move's onto an empty cell, the position's onto a
+// cell the table lacks. The settled board is then read as ever. The seated player, the computer and a reading that
+// fills a gap all play this way.
+rule "reversi-put-pick" {
+  when reversiPut >= 0
+  mode: Level
+  local colour = (reversiBoard[reversiPut[$value]] != 0) ? reversiBoard[reversiPut[$value]] : reversiTurn
+  local own = (
+    -1 -
+    (
+      (colour == 1) ? max(reversiCell, where: reversiBlackTray, atLeast: reversiTrayLow, atMost: -1) :
+      max(reversiCell, where: reversiWhiteTray, atLeast: reversiTrayLow, atMost: -1)
+    )
+  )
+  reversiPutFace = colour
+  reversiPick = own >= 0 ? own : (-1 - max(reversiCell, atLeast: reversiTrayLow, atMost: -1))
+}
+
+rule "reversi-put-black" {
+  when reversiPut >= 0 and search(ply) == 0 and reversiPutFace == 1 and reversiOrdinal[$each] == reversiPick
+  mode: Level
+  forEach: reversiFace
+  poseCell(key: `placement:$each`, topology: reversiGrid, expression: reversiPut, offset: [0, 0.06, 0])
+}
+
+rule "reversi-put-white" {
+  when reversiPut >= 0 and search(ply) == 0 and reversiPutFace == 2 and reversiOrdinal[$each] == reversiPick
+  mode: Level
+  forEach: reversiFace
+  poseCell(
+    key: `placement:$each`,
+    topology: reversiGrid,
+    expression: reversiPut,
+    offset: [0, 0.06, 0],
+    rollDegrees: 180
+  )
+}
+
+rule "reversi-put-done" {
+  when reversiPut >= 0
+  mode: Level
+  reversiJudging = reversiPick >= 0
+  reversiPut = -1
+}
+
+// ---- The opponent ------------------------------------------------------------------------------------------------
+// reversiAiSide 2 (the default) plays White, 1 plays Black and 0 leaves both sides to people. On its turn, once the
+// table has rested and matches the position, the search job below looks three plies ahead, and its disc is put down on
+// the table as a player's is; with no legal move, the side passes by the rule above.
+rule "reversi-ai-enable" {
+  mode: Level
+  reversiAiEnabled = (
+    (physics(quiescent) == 1) &
+    (reversiAiSide == reversiTurn) &
+    (reversiWinner == 0) &
+    (reversiHold == reversiSettleTicks) &
+    (reversiJudging == 0) &
+    (reversiPut < 0) &
+    (reversiSync == 0)
+  )
+}
+
+rule "reversi-ai-play" {
+  when physics(quiescent) == 1 and
+    reversiAiEnabled == 1 and
+    reversiAiBest[revision] == reversiAiRevision and
+    reversiAiBest[to] >= 0 and
+    search(ply) == 0
+  mode: Level
+  reversiPut = reversiAiBest[to]
+  reversiAiEnabled = 0
+}
+
+search {
+  jobs [
+    {
+      name: "reversiAI"
+      tokens: reversiMove
+      board: reversiBoard
+      turn: reversiTurn
+      verdict: reversiVerdict
+      enabled: reversiAiEnabled
+      revision: reversiAiRevision
+      best: reversiAiBest
+      depth: 3
+      shapes [drop(), relocate(displace: false)]
+      // From the side that just moved, the one reversiTurn no longer names: its discs less the other side's, and a
+      // corner worth ten discs.
+      "score": (2 * reversiTurn - 3) * ((reversiBlack - reversiWhite) + 10 * (setBitCount(
+        board(mask, reversiBoard, 1, 1) & 0x8100000000000081
+      ) - setBitCount(board(mask, reversiBoard, 2, 2) & 0x8100000000000081)))
+    }
+  ]
+}
+
+// ---- Playing at the table ----------------------------------------------------------------------------------------
+// Seat 1 sits down with the context button (the board's engage block) and plays with the board page chess.puck
+// declares: the cursor follows the pointer, the movement keys, the d-pad or the stick, one cell a press, up the board
+// being away from the side the seat sits on. The pick button puts a disc of the side to move on the cursor's cell, on the
+// seat's own turn, once the table has rested and matches the position. A side with no move passes by itself.
+
+// The seated seat's presses this tick: each button's edge is 1 on the tick it goes past half way, and its *Down
+// cell remembers whether it was held.
+rule "reversi-seat-presses" {
+  mode: Level
+  if board(engaged, reversiBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
+    reversiSeat[pickEdge] = reversiSeat[pickDown] == 0
+    reversiSeat[pickDown] = 1
+  } else {
+    reversiSeat[pickEdge] = 0
+    reversiSeat[pickDown] = 0
+  }
+  if board(engaged, reversiBoard, 1) == 1 and channel(1, forward) >= 0.5 {
+    reversiSeat[aheadEdge] = reversiSeat[aheadDown] == 0
+    reversiSeat[aheadDown] = 1
+  } else {
+    reversiSeat[aheadEdge] = 0
+    reversiSeat[aheadDown] = 0
+  }
+  if board(engaged, reversiBoard, 1) == 1 and channel(1, forward) <= -0.5 {
+    reversiSeat[behindEdge] = reversiSeat[behindDown] == 0
+    reversiSeat[behindDown] = 1
+  } else {
+    reversiSeat[behindEdge] = 0
+    reversiSeat[behindDown] = 0
+  }
+  if board(engaged, reversiBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
+    reversiSeat[rightEdge] = reversiSeat[rightDown] == 0
+    reversiSeat[rightDown] = 1
+  } else {
+    reversiSeat[rightEdge] = 0
+    reversiSeat[rightDown] = 0
+  }
+  if board(engaged, reversiBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
+    reversiSeat[leftEdge] = reversiSeat[leftDown] == 0
+    reversiSeat[leftDown] = 1
+  } else {
+    reversiSeat[leftEdge] = 0
+    reversiSeat[leftDown] = 0
+  }
+}
+
+// The pointer moves the cursor whenever it moves onto another cell.
+rule "reversi-seat-point" {
+  local pointed = board(pointer, reversiBoard, 1)
+  when board(engaged, reversiBoard, 1) == 1
+  mode: Level
+  if pointed >= 0 and pointed != reversiSeat[pointer] {
+    reversiSeat[cursor] = pointed
+  }
+  reversiSeat[pointer] = pointed
+}
+
+// A step moves the cursor one cell in the seat's own frame: from the -Z side up the board is +row and right is -column
+// (the camera's right is its forward crossed with up), and each other side turns both a quarter.
+rule "reversi-seat-step" {
+  when (reversiSeat[aheadEdge] - reversiSeat[behindEdge]) != 0 or (reversiSeat[rightEdge] - reversiSeat[leftEdge]) != 0
+  mode: Level
+  local seatSide = board(side, reversiBoard, 1)
+  local cursorColumn = (
+    reversiSeat[cursor] % reversiSize +
+    (reversiSeat[aheadEdge] - reversiSeat[behindEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    (reversiSeat[rightEdge] - reversiSeat[leftEdge]) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  )
+  local cursorRow = (
+    reversiSeat[cursor] / reversiSize +
+    (reversiSeat[aheadEdge] - reversiSeat[behindEdge]) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    (reversiSeat[rightEdge] - reversiSeat[leftEdge]) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  )
+  reversiSeat[cursor] = clamp(cursorRow, 0, reversiSize - 1) * reversiSize + clamp(cursorColumn, 0, reversiSize - 1)
+}
+
+rule "reversi-seat-put" {
+  when board(engaged, reversiBoard, 1) == 1 and
+    reversiSeat[pickEdge] == 1 and
+    reversiAiSide != reversiTurn and
+    reversiWinner == 0 and
+    reversiHold == reversiSettleTicks and
+    reversiJudging == 0 and
+    reversiPut < 0 and
+    reversiSync == 0 and
+    reversiBoard[reversiSeat[cursor]] == 0
+  mode: Level
+  reversiPut = reversiSeat[cursor]
+}
+
+// The cursor stands on its cell while the seat sits at the table, and rests inside the board otherwise.
+rule "reversi-seat-cursor-shown" {
+  when board(engaged, reversiBoard, 1) == 1
+  mode: Level
+  poseCell(
+    key: `placement:reversiCursor`,
+    topology: reversiGrid,
+    expression: reversiSeat[cursor],
+    offset: [0, 0.004, 0]
+  )
+}
+
+rule "reversi-seat-cursor-parked" {
+  when board(engaged, reversiBoard, 1) == 0
+  mode: Level
+  poseCell(
+    key: `placement:reversiCursor`,
+    topology: reversiGrid,
+    expression: reversiSeat[cursor],
+    offset: [0, -0.035, 0]
+  )
+}
+
+commands [
+  {
+    name: "reversi.reset"
+    help: "Starts a new game at the Reversi table: the board takes the opening again, the table follows it and Black moves first."
+    lines [
+      "world.state.cell.set reversiReset $value 1"
+    ]
+  }
+  {
+    name: "reversi.opponent"
+    help: "Gives the Reversi table's computer a side: 2 White (the default), 1 Black, or 0 to leave both sides to people."
+    parameters [
+      { name: "side", kind: Choice, values ["0", "1", "2"], default: "2" }
+    ]
+    lines [
+      "world.state.cell.set reversiAiSide $value {side}"
+    ]
+  }
+]
+
+state {
+  lattices [
+    grid(
+      band: 0.12,
+      cellSize: reversiCellSize,
+      depth: reversiSize,
+      width: reversiSize,
+      origin: [reversiCorner, reversiSurface, reversiCorner],
+      name: "reversiGrid",
+      wrap: None
+    )
+    // The two trays' spots, in world coordinates over the table's lids.
+    grid(
+      cellSize: reversiTrayPitch,
+      depth: reversiTrayDeep,
+      width: reversiTrayColumns,
+      origin: reversiTrayOrigin,
+      name: "reversiTrays",
+      wrap: None
+    )
+  ]
+
+  world {
+    // The play board, the accepted position, written by the door and its flips: 0 empty, 1 black, 2 white.
+    row {
+      name: "reversiBoard"
+      kind: "Int"
+      capacity: reversiCells
+      min: 0
+      max: 2
+      domain: cellsOf(topology: reversiGrid)
+      cells: map(range(0, reversiCells), i => { key: $"{i}", value: reversiOpening[i] })
+    }
+    // The opening, which a reset copies back.
+    row {
+      name: "reversiStart"
+      kind: "Int"
+      capacity: reversiCells
+      min: 0
+      max: 2
+      domain: cellsOf(topology: reversiGrid)
+      cells: map(range(0, reversiCells), i => { key: $"{i}", value: reversiOpening[i] })
+    }
+
+    // What the table shows: each disc's face on the cell it lies on, derived from the discs' cells.
+    row {
+      name: "reversiSeen"
+      kind: "Int"
+      capacity: reversiCells
+      min: 0
+      max: 2
+      domain: cellsOf(topology: reversiGrid)
+      inverse {
+        tokens: "reversiCell"
+        codes: "reversiFace"
+      }
+    }
+
+    // The side to move's legal moves along each compass direction, as cell masks (bit c is cell c).
+    table reversiMoves capacity(8) {
+      N = 0
+      NE = 0
+      E = 0
+      SE = 0
+      S = 0
+      SW = 0
+      W = 0
+      NW = 0
+    }
+
+    // The bracket reach the last accepted move measured in each of the eight directions: the step distance to the
+    // first cell the opponent run does not cover, or -1 when that run reaches the edge.
+    table reversiRay capacity(8) bounds(-1..8) {
+      N = -1
+      NE = -1
+      E = -1
+      SE = -1
+      S = -1
+      SW = -1
+      W = -1
+      NW = -1
+    }
+
+    // The move token: the cell the last disc was played on, and the cell a request moves it to. It is the search job's
+    // one token.
+    table reversiMove bounds(-1..63) {
+      play = -1
+    }
+
+    slot reversiPlaced = -1 bounds(-1..63)
+    slot reversiTurn = 1 bounds(1..2)
+    slot reversiVerdict = 0 bounds(0..1)
+    slot reversiFlipping = 0 bounds(0..1)
+    slot reversiMoveCount = 0 bounds(0..60)
+    slot reversiRejected = 0 bounds(0..50400)
+    slot reversiPasses = 0 bounds(0..2)
+    slot reversiPrevOwn = 2 bounds(0..64)
+    slot reversiFlips = 0 bounds(0..63)
+    slot reversiBlack = 2 bounds(0..64)
+    slot reversiWhite = 2 bounds(0..64)
+    slot reversiWinner = 0 bounds(0..3)
+    slot reversiAiRevision = 0 bounds(0..)
+    slot reversiAiSide = 2 bounds(0..2)
+    slot reversiAiEnabled = 0 bounds(0..1)
+    slot reversiReset = 0 bounds(0..1)
+
+    table reversiAiBest {
+      token = -1
+      to = -1
+      score = 0
+      revision = -1
+    }
+
+    // The discs: the face each last showed (1 black, 2 white), each one's ordinal, its tray spot (a `reversiTrays`
+    // cell) and whether that spot is in Black's or White's tray, and the cell it was last read on, or `-1 - ordinal` off
+    // the board.
+    row {
+      name: "reversiFace"
+      kind: "Int"
+      capacity: reversiDiscs
+      min: 1
+      max: 2
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: 1 })
+    }
+    row {
+      name: "reversiOrdinal"
+      kind: "Int"
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: i })
+    }
+    row {
+      name: "reversiHomeCell"
+      kind: "Int"
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: reversiHome[i] })
+    }
+    row {
+      name: "reversiBlackTray"
+      kind: "Int"
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: (i < reversiPerSide) ? 1 : 0 })
+    }
+    row {
+      name: "reversiWhiteTray"
+      kind: "Int"
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: (i < reversiPerSide) ? 0 : 1 })
+    }
+    row {
+      name: "reversiCell"
+      kind: "Int"
+      capacity: reversiDiscs
+      min: reversiTrayLow
+      max: 63
+      cells: map(range(0, reversiDiscs), i => { key: $"reversiDisc{i}", value: (-1 - i) })
+    }
+
+    // The table: the ticks it has rested, what the last reading found (how many cells differ from the position, the
+    // first of them, the first cell the position holds that the table lacks, how many discs share a cell, and whether
+    // it was a legal move), the arrangements refused, whether the discs are to be set to the position this tick, whether
+    // the door has accepted a move, the cell a put drops a disc on, the face it shows and the disc it picked (-1 for
+    // none), and whether a put awaits its reading.
+    slot reversiHold = 0 bounds(0..reversiSettleTicks)
+    slot reversiChangedCount = 0 bounds(0..64)
+    slot reversiNewCell = -1 bounds(-1..63)
+    slot reversiFix = -1 bounds(-1..63)
+    slot reversiCollisions = 0 bounds(0..reversiDiscs)
+    slot reversiLegal = 0 bounds(0..1)
+    slot reversiIllegal = 0 bounds(0..50400)
+    slot reversiSync = 0 bounds(0..1)
+    slot reversiAccepted = 0 bounds(0..1)
+    slot reversiPut = -1 bounds(-1..63)
+    slot reversiPutFace = 1 bounds(1..2)
+    slot reversiPick = -1 bounds(-1..reversiDiscs)
+    slot reversiJudging = 0 bounds(0..1)
+
+    // Seat 1 at the table: the cursor's cell, the last pointed cell, this tick's presses (the *Edge keys) and
+    // last tick's buttons (*Down).
+    table reversiSeat {
+      cursor = 19
+      pointer = -1
+      pickEdge = 0
+      aheadEdge = 0
+      behindEdge = 0
+      rightEdge = 0
+      leftEdge = 0
+      pickDown = 0
+      aheadDown = 0
+      behindDown = 0
+      rightDown = 0
+      leftDown = 0
+    }
+  }
+}
