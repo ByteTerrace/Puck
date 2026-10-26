@@ -21,7 +21,10 @@ palettes {
   object [shades]
 }
 
-tiles: map(range(0, 4), bar => { name: $"bar{bar}", pixels: map(range(0, 8), row => $"{bar}{bar}{bar}{bar}{bar}{bar}{bar}{bar}") })
+tiles: map(
+  range(0, 4),
+  bar => { name: $"bar{bar}", pixels: map(range(0, 8), row => $"{bar}{bar}{bar}{bar}{bar}{bar}{bar}{bar}") }
+)
 
 map: map(range(0, mapColumns * mapColumns), cell => floor(cell % mapColumns / barColumns))
 

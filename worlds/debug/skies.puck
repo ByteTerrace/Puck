@@ -41,7 +41,14 @@ template starryNight(density = 48, brightness = 1.2, luminance = 2) {
       { elevation: 1, color: "#070B16" }
     ]
     )
-    stars(name: "stars", luminance: luminance, density: density, brightness: brightness, seed: 7, twinkle: { share: 0.3, depth: 0.5, rate: 1 })
+    stars(
+      name: "stars",
+      luminance: luminance,
+      density: density,
+      brightness: brightness,
+      seed: 7,
+      twinkle: { share: 0.3, depth: 0.5, rate: 1 }
+    )
   ]
 }
 
@@ -54,7 +61,17 @@ template polarNight(clock, intensity = 1.5, density = 48, luminance = 2) {
     ]
     )
     stars(name: "stars", luminance: luminance, density: density, brightness: 1, seed: 11)
-    aurora(name: "curtains", luminance: luminance, intensity: intensity, color: "#3DFFB0", top: "#7A4CFF", base: 15deg, height: 25deg, clock: clock, tier: medium)
+    aurora(
+      name: "curtains",
+      luminance: luminance,
+      intensity: intensity,
+      color: "#3DFFB0",
+      top: "#7A4CFF",
+      base: 15deg,
+      height: 25deg,
+      clock: clock,
+      tier: medium
+    )
   ]
 }
 
@@ -67,7 +84,15 @@ template overcast(cover = 0.85, luminance = 3200) {
       { elevation: 1, color: "#9AA3AB" }
     ]
     )
-    clouds(name: "deck", luminance: luminance, coverage: cover, scale: 3, softness: 0.6, color: "#C9CED3", drift: [0.006, 0.002])
+    clouds(
+      name: "deck",
+      luminance: luminance,
+      coverage: cover,
+      scale: 3,
+      softness: 0.6,
+      color: "#C9CED3",
+      drift: [0.006, 0.002]
+    )
   ]
 }
 

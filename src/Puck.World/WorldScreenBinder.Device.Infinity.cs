@@ -322,6 +322,7 @@ public sealed partial class WorldScreenBinder {
         public uint Width { get; set; }
 
         public GpuWorkSample Sample { get; } = new();
+
         // The nested viewer tier the fit asks of the root that holds this consumer, built on its first fit.
         public Func<string, QualityTier>? TierOf { get; set; }
 
@@ -341,6 +342,7 @@ public sealed partial class WorldScreenBinder {
 
         public bool Emits(int screen) => WorldScreenBinder.Emits(entry.Screens, screen);
         public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: entry.Screens?.RowOf(screen: screen));
+        public SdfScreenFace FaceOf(int screen) => WorldScreenBinder.FaceOf(row: entry.Screens?.RowOf(screen: screen));
         public SourceMapping? MappingOf(int screen) => (((entry.Screens is { } screens) && screens.Mappings.TryGet(mapping: out var mapping, screen: screen)) ? mapping : null);
         public string? ReadOf(int view, int screen) => entry.Screens?.InstanceOf(screen: screen);
     }

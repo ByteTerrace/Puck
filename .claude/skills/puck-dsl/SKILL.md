@@ -160,8 +160,10 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   `--watch` recompiles on change; `--tree` mirrors a directory of sources.
 - `puck decompile` is **one-way**: `let`, `template` and `for` never come back.
   Decompile once to import a JSON document, then edit the `.puck`.
-- `puck format` prints `.puck` through `PuckPrinter` (two-space indent, no
-  options); the language server formats through the same printer.
+- `puck format` prints `.puck` through `PuckPrinter` (two-space indent, lines
+  broken past 120 columns, no options); the language server and `puck
+  decompile` print through the same printer. Formatting is a fixed point and
+  never moves a compiled document; reformat sources after a printer change.
 - `puck lsp` serves completion, hover, symbols, formatting and diagnostics.
 - `puck migrate <name> <path> [--check]` applies one registered source rewrite
   and proves each rewritten source compiles to the document it did before.

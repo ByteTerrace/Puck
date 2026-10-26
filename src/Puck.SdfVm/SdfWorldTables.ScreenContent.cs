@@ -175,17 +175,16 @@ public sealed partial class SdfWorldTables {
         m_decalRevision++;
     }
     /// <summary>Sets the luminance a screen's picture shows at: a picture value of one is a display's peak luminance, in
-    /// nits, which scales both its face and the light its GPU reduction casts into the room. A screen its mapping draws as
-    /// an opening (no glass) shows the luminance of the world beyond it as it is, so it takes one whatever
-    /// <paramref name="luminance"/> says. Call it after <see cref="SetScreenMapping"/>, whose glass flag it reads.</summary>
+    /// nits, which scales both its face and the light its GPU reduction casts into the room. A screen whose face is an
+    /// opening (<see cref="SdfScreenFace.Opening"/>) shows the luminance of the world beyond it as it is, so it takes one
+    /// whatever <paramref name="luminance"/> says. Call it after <see cref="SetScreenMapping"/>, whose face it reads.</summary>
     /// <param name="screenIndex">The screen slot (0..31, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
     /// <param name="luminance">The display's peak luminance, in nits; zero or less, or not finite, shows its default.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenLuminance(int screenIndex, float luminance) {
         RequireScreenIndex(screenIndex: screenIndex);
         var row = (screenIndex * ScreenMappingStride);
-        var glass = MemoryMarshal.Read<float>(source: m_screenMappingRegion.Contents[(row + ScreenGlassOffset)..]);
-        var value = ((glass == 0f) ? 1f : ((float.IsFinite(f: luminance) && (luminance > 0f)) ? luminance : SdfScreenEmission.DefaultLuminance));
+        var value = ((m_screenFaces[screenIndex] == SdfScreenFace.Opening) ? 1f : ((float.IsFinite(f: luminance) && (luminance > 0f)) ? luminance : SdfScreenEmission.DefaultLuminance));
 
         _ = m_screenMappingRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in value)),
             offset: ((row + ScreenBoundOffset) + (sizeof(float) * 2)));
@@ -212,22 +211,28 @@ public sealed partial class SdfWorldTables {
         );
     }
     /// <summary>Supplies (or clears) the mapping screen <paramref name="screenIndex"/> is drawn from for the next produced
-    /// frame: the mapping its row publishes, whose draw form (<see cref="SourceMapping.Draw"/>) the screen shading reads
-    /// for the glass's warp, the layout, the fit's letterbox and the crop. A screen shades its bound source only while it
-    /// has a mapping; with none it shades as unbound glass. A call with the mapping already supplied packs nothing, and
-    /// the region owes only the words a new mapping changes.</summary>
+    /// frame, and what its face is: the mapping its row publishes, whose draw form (<see cref="SourceMapping.Draw"/>) the
+    /// screen shading reads for the warp (a CRT's bezel), the layout, the fit's letterbox and the crop. A screen shades its
+    /// bound source only while it has a mapping; with none it shades as unbound glass. A call with the mapping and face
+    /// already supplied packs nothing, and the region owes only the words a new mapping changes.</summary>
     /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
     /// <param name="mapping">The screen's surface mapping, or <see langword="null"/> for none.</param>
+    /// <param name="face">The screen's face, which decides its treatment and its luminance; ignored without a mapping.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="mapping"/> is not drawable: its placement is not a
     /// surface, its warp declares no inverse, or its shape is invalid.</exception>
-    public void SetScreenMapping(int screenIndex, SourceMapping? mapping) {
+    public void SetScreenMapping(int screenIndex, SourceMapping? mapping, SdfScreenFace face) {
         RequireScreenIndex(screenIndex: screenIndex);
 
-        if (ReferenceEquals(
-            objA: m_screenMappings[screenIndex],
-            objB: mapping
-        )) {
+        face = ((mapping is null) ? SdfScreenFace.Opening : face);
+
+        if (
+            ReferenceEquals(
+                objA: m_screenMappings[screenIndex],
+                objB: mapping
+            ) &&
+            (m_screenFaces[screenIndex] == face)
+        ) {
             return;
         }
 
@@ -235,13 +240,11 @@ public sealed partial class SdfWorldTables {
         // v rows (coefficients of u, v and 1, then the face distance one warped unit spans), the image map's u and v rows
         // (coefficients, then whether the screen is mapped and whether it letterboxes), the crop (left, top, right,
         // bottom), and the crop inset by half a source pixel, which every sample is clamped to; then the seventh row's
-        // sampler, the filter's value, and its glass flag, set for a display drawn through the screen glass (a mapping with a
-        // warp) and clear for an opening, which shows its image with no display treatment. The seventh row's bound flag is
-        // SetScreenBound's.
+        // sampler, the filter's value, and its face. The seventh row's bound flag is SetScreenBound's.
         Span<float> floats = stackalloc float[((ScreenMappingByteLength / sizeof(float)) - ScreenStateFloats)];
 
         var sampler = 0f;
-        var glass = 0f;
+        var faceValue = ((float)face);
 
         floats.Clear();
 
@@ -261,7 +264,6 @@ public sealed partial class SdfWorldTables {
             floats[16] = crop.X; floats[17] = crop.Y; floats[18] = right; floats[19] = bottom;
             floats[20] = (crop.X + halfTexel.X); floats[21] = (crop.Y + halfTexel.Y); floats[22] = (right - halfTexel.X); floats[23] = (bottom - halfTexel.Y);
             sampler = ((float)draw.Filter);
-            glass = ((mapping.Warp is null) ? 0f : 1f);
         }
 
         _ = m_screenMappingRegion.Write(
@@ -273,10 +275,11 @@ public sealed partial class SdfWorldTables {
             offset: ((screenIndex * ScreenMappingStride) + ScreenSamplerOffset)
         );
         _ = m_screenMappingRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in glass)),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenGlassOffset)
+            bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in faceValue)),
+            offset: ((screenIndex * ScreenMappingStride) + ScreenFaceOffset)
         );
         m_screenMappings[screenIndex] = mapping;
+        m_screenFaces[screenIndex] = face;
 
         // The face distance one unit of a warped coordinate spans: the reciprocal of its gradient's length, or zero for a
         // warp that collapses the axis.

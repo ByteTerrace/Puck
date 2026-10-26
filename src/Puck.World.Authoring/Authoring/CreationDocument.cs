@@ -422,9 +422,9 @@ public sealed record CreationCameraDocument(
     string? Feed
 );
 /// <summary>One screen face a creation declares — a surface on the creation (backed by one of its shapes) that shows a
-/// feed. The robot's CRT face is one of these: it shows the named host <c>emotes</c> feed by default, and is wirable to
+/// feed: by default the source it names (a host feed such as <c>emotes</c>), and wirable to
 /// any camera feed (a creation camera's named feed, another creation's feed, a world camera) purely by naming a
-/// different default source. No robot-specific channel exists — a face is just a screen surface with a default wire,
+/// different default source. No feature-specific channel exists — a face is just a screen surface with a default wire,
 /// and the wiring model does the rest.</summary>
 /// <param name="Name">The face's name (a wiring handle — <c>face</c> by default).</param>
 /// <param name="ShapeId">The shape whose surface is the screen (a <see cref="ShapeDocument.Id"/>; -1/null = the whole
@@ -585,6 +585,7 @@ public sealed record CreationDocument(
 
         return palette[Math.Clamp(value: (shape.Material ?? 0), max: (count - 1), min: 0)].IsGlass;
     }
+
     /// <summary>Gets whether any shape of the creation is glass (<see cref="IsGlassShape"/>).</summary>
     [JsonIgnore]
     public bool HasGlass => (Shapes ?? []).Any(predicate: IsGlassShape);

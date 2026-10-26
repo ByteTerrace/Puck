@@ -202,9 +202,9 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     }
 
     float edgeAa = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_EDGE_AA);
-    float haloBlur = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_BLOOM_HALO_BLUR);
-    float bloomRingA = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_BLOOM_RING_A);
-    float bloomHaloA = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_BLOOM_HALO_A);
+    float haloBlur = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_GLOW_HALO_BLUR);
+    float glowRingA = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_GLOW_RING_A);
+    float glowHaloA = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_GLOW_HALO_A);
     float4 lineHair = OverlayTokenColor(overlayData, OVERLAY_ROLE_LINE_HAIR);
     float4 lineSoft = OverlayTokenColor(overlayData, OVERLAY_ROLE_LINE_SOFT);
 
@@ -265,7 +265,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             float ring = strokeMask(abs(panelDist), 0.5, edgeAa);
             float halo = saturate(1.0 - (max(panelDist, 0.0) / haloBlur));
 
-            color = lerp(color, hue, (max((ring * bloomRingA), (halo * halo * bloomHaloA * (panelDist > 0.0 ? 1.0 : 0.0))) * panelAlpha));
+            color = lerp(color, hue, (max((ring * glowRingA), (halo * halo * glowHaloA * (panelDist > 0.0 ? 1.0 : 0.0))) * panelAlpha));
         }
     }
 
@@ -278,7 +278,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //   rect:     colorRole << 4 · 0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
     //   icon:     (accentRole << 4, 0 = the accent token) · 0..1 plate center (normalized) · 2 plate half (px) ·
     //             3 badge half (px) · 5 iconGlyph0 · 6 state bits · 7..8 badge offset (px) · 10 iconGlyph1 ·
-    //             11 toggle phase (0..1; the marching border's position while state bit 25, TOGGLED, is set)
+    //             11 toggle phase (0..1, the marching border's position while state bit 25, TOGGLED, is set; negative draws it still)
     //   ring:     colorRole << 4 · 0..1 center (normalized) · 2 radius (px) · 3 vertical radius (px, 0 = a circle) ·
     //             7 alpha · 10 stroke half-width (px, 0 = the hairline) — a stroked circle (the marker radius
     //             indicator, at the hairline weight like every grammar stroke) or ellipse (an annotation outline,
@@ -447,8 +447,8 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 float ring = strokeMask(abs(dist), 0.5, edgeAa);
                 float halo = (saturate(1.0 - (max(dist, 0.0) / max(haloBlur, 1e-4))) * step(0.0, dist));
 
-                color = lerp(color, hue, (halo * halo * bloomHaloA * alpha));
-                color = lerp(color, hue, (ring * bloomRingA * alpha));
+                color = lerp(color, hue, (halo * halo * glowHaloA * alpha));
+                color = lerp(color, hue, (ring * glowRingA * alpha));
             }
         } else if (kind == 4u) {
             // A SAMPLED FRAME: a live WorldFrameSource picture-in-picture (e.g. the HUD face-cam element) drawn from
@@ -535,8 +535,8 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
             // Every px token scales by the chip's own size relative to the reference chip, so the recipes hold as
             // chips shrink/grow through the split-screen ladder.
-            float chipScale = (plateHalf / OverlayTokenScalar(overlayData, OVERLAY_SCALAR_REFERENCE_CHIP_HALF));
-            float aa = max((OverlayTokenScalar(overlayData, OVERLAY_SCALAR_EDGE_HAIRLINE) * chipScale), 0.75);
+            float chipScale = (plateHalf / OverlayTokenScalar(overlayData, OVERLAY_SCALAR_KEYCAP_REFERENCE_HALF));
+            float aa = max((OverlayTokenScalar(overlayData, OVERLAY_SCALAR_HAIRLINE) * chipScale), 0.75);
             float outlineWidth = aa;
             float haloBlurPx = (haloBlur * chipScale);
             float cornerRadius = (OverlayTokenScalar(overlayData, OVERLAY_SCALAR_RADIUS_1) * chipScale);
@@ -558,12 +558,12 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 ? OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_BASE).rgb
                 : (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_RAISED).rgb));
             float plateOpacity = (isDisabled
-                ? OverlayTokenScalar(overlayData, OVERLAY_SCALAR_CHIP_REST_OPACITY)
+                ? OverlayTokenScalar(overlayData, OVERLAY_SCALAR_KEYCAP_REST_OPACITY)
                 : (isHeld
                     ? 1.0
                     : (isAccentTier
                         ? OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT_QUIET).a
-                        : OverlayTokenScalar(overlayData, OVERLAY_SCALAR_CHIP_REST_OPACITY))));
+                        : OverlayTokenScalar(overlayData, OVERLAY_SCALAR_KEYCAP_REST_OPACITY))));
 
             color = lerp(color, fillColor, (fill * alpha * plateOpacity));
 
@@ -571,8 +571,8 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 // Tier-1 bloom: an SDF distance-falloff halo OUTSIDE the plate plus a brighter 1px ring AT the
                 // edge, in the element's own semantic hue — an extra SDF pass, never a blur.
                 float3 hue = (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_TEXT_PRIMARY).rgb);
-                float ringA = OverlayTokenScalar(overlayData, (isAccentTier ? OVERLAY_SCALAR_BLOOM_RING_A : OVERLAY_SCALAR_BLOOM_NEUTRAL_RING_A));
-                float haloA = OverlayTokenScalar(overlayData, (isAccentTier ? OVERLAY_SCALAR_BLOOM_HALO_A : OVERLAY_SCALAR_BLOOM_NEUTRAL_HALO_A));
+                float ringA = OverlayTokenScalar(overlayData, (isAccentTier ? OVERLAY_SCALAR_GLOW_RING_A : OVERLAY_SCALAR_GLOW_NEUTRAL_RING_A));
+                float haloA = OverlayTokenScalar(overlayData, (isAccentTier ? OVERLAY_SCALAR_GLOW_HALO_A : OVERLAY_SCALAR_GLOW_NEUTRAL_HALO_A));
                 float haloMask = (saturate(1.0 - (max(plateDistance, 0.0) / max(haloBlurPx, 1e-4))) * step(0.0, plateDistance));
 
                 color = lerp(color, hue, (haloMask * haloA * alpha));
@@ -580,16 +580,16 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             }
 
             if (toggled) {
-                // The latched-toggle border: three bright arcs of the accent hue marching clockwise around the plate's
-                // edge — the "autocast" grammar: a state that stays on until pressed again, as distinct from a
-                // momentary hold's static bloom. The band sits just outside the plate so it never dims the fill or
-                // the icon; its phase is the caller's presentation clock (word 11), so every latched plate on screen
-                // marches in step.
+                // The latched-toggle border: an accent band just outside the plate, so it never dims the fill or the
+                // icon — a state that stays on until pressed again, as distinct from a momentary hold's glow. Word 11
+                // is the march phase on the caller's presentation clock, so every latched plate marches in step: three
+                // bright arcs travelling clockwise. A negative phase (the keycap style's ToggleMarch 0) draws the band
+                // still, at full strength.
                 float phase = OverlayFloat(overlayData, (o + 11u));
                 float bandWidth = max((plateHalf * 0.10), 1.5);
                 float band = strokeMask(abs(plateDistance - (bandWidth * 0.5)), (bandWidth * 0.5), aa);
                 float angle = atan2(slotLocal.x, -slotLocal.y);
-                float march = smoothstep(0.15, 1.0, (0.5 + (0.5 * cos((angle * 3.0) - (phase * 6.28318530718)))));
+                float march = ((phase < 0.0) ? 1.0 : smoothstep(0.15, 1.0, (0.5 + (0.5 * cos((angle * 3.0) - (phase * 6.28318530718))))));
                 float3 marchHue = OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb;
 
                 color = lerp(color, marchHue, (band * (0.25 + (0.75 * march)) * alpha));
@@ -623,10 +623,10 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             // glyphs (a two-character label like "LB", or a single pictogram glyph like a d-pad arrow).
             uint char0 = ((state >> 9u) & 0x7Fu);
             uint char1 = ((state >> 16u) & 0x7Fu);
-            float3 badgeBackingColor = (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_BADGE_DARK).rgb);
+            float3 badgeBackingColor = (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_KEYCAP_BADGE).rgb);
             float3 badgeInkColor = (isAccentTier
                 ? OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT_INK).rgb
-                : OverlayTokenColor(overlayData, OVERLAY_ROLE_BADGE_LIGHT).rgb);
+                : OverlayTokenColor(overlayData, OVERLAY_ROLE_KEYCAP_BADGE_INK).rgb);
 
             if ((glyphHalf > 0.0) && (char0 != 0u)) {
                 float2 glyphLocal = ((fragCoord.xy - (slotCenter + glyphOffset)) / glyphHalf);

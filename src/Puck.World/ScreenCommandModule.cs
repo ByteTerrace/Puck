@@ -100,7 +100,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.screens",
-            description: "Lists every declared diegetic screen, then every creation face showing a source, one segment each — index, source kind (none, a producer's id such as testPattern, qr, camera or capture, view, probe:<id>, machine:<instance>:<output>, session:<destination> or text:<n>-line), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), for a camera on its GPU tier, a capture on its GPU route or a probe output, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU), and last the mapping the screen publishes, in the line world.view.panes prints for a pane (mapping producer:source$<producer>$<digest> surface … or instance:<view> surface …, the source extent, crop, layout, fit, the glass warp and the destination), or mapping none (reason): no image source, a live presentation source no row names, an extent not known yet, or not published by a boot that presents nothing. No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen shades as dark glass. Every boot shape answers it, headless and offscreen included. A query — its listing always echoes, even under wire.ack quiet.",
+            description: "Lists every declared diegetic screen, then every creation face showing a source, one segment each — index, source kind (none, a producer's id such as testPattern, qr, camera or capture, view, probe:<id>, machine:<instance>:<output>, session:<destination> or text:<n>-line), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), material:crt for a screen whose row opts into the CRT material, for a camera on its GPU tier, a capture on its GPU route or a probe output, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU), and last the mapping the screen publishes, in the line world.view.panes prints for a pane (mapping producer:source$<producer>$<digest> surface … or instance:<view> surface …, the source extent, crop, layout, fit, a CRT's glass warp and the destination), or mapping none (reason): no image source, a live presentation source no row names, an extent not known yet, or not published by a boot that presents nothing. No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen shades as dark glass. Every boot shape answers it, headless and offscreen included. A query — its listing always echoes, even under wire.ack quiet.",
             handler: ScreensHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -667,9 +667,9 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             ? FormattableString.Invariant(formattable: $"{((pad.Buttons == MachineButtons.None)
                 ? "none"
                 : pad.Buttons.ToString().Replace(
-                    oldValue: ", ",
+                    comparisonType: StringComparison.Ordinal,
                     newValue: "+",
-                    comparisonType: StringComparison.Ordinal
+                    oldValue: ", "
                 ))}/stick({pad.LeftStick.X:0.###}, {pad.LeftStick.Y:0.###})")
             : "off"
         );

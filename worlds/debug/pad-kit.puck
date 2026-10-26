@@ -27,7 +27,13 @@ let padRightStick = ["gamepad.rightStickPress", "keyboard.m"]
 // modifier list, so each overlay that adds entries to a trigger page declares the pair again (they merge by id).
 let padModifiers = [
   { id: "lt", label: "LT", pressThreshold: 0.55, releaseThreshold: 0.35, sources ["gamepad.leftTrigger", "keyboard.z"] }
-  { id: "rt", label: "RT", pressThreshold: 0.55, releaseThreshold: 0.35, sources ["gamepad.rightTrigger", "keyboard.x"] }
+  {
+    id: "rt"
+    label: "RT"
+    pressThreshold: 0.55
+    releaseThreshold: 0.35
+    sources ["gamepad.rightTrigger", "keyboard.x"]
+  }
 ]
 
 // view.override takes an Axis1D from a binding; its text names the layout or camera, so the value is never read.

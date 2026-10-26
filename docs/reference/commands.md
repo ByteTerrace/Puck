@@ -730,8 +730,8 @@ chain from the place it is shown to the source's pixels:
 
 - the placement: a `SourcePlacement.Surface` face frame in the world, or a
   `SourcePlacement.Pane` rectangle on the display;
-- an optional `SourceWarp` pass the face is drawn through, such as a screen's
-  bezel. A warp either declares its exact inverse (`SourceWarpInverse.Affine`)
+- an optional `SourceWarp` pass the face is drawn through, such as a CRT
+  screen's bezel. A warp either declares its exact inverse (`SourceWarpInverse.Affine`)
   or it cannot be an input path, though it still draws;
 - a `SourceUvLayout`, one of the eight rotations and reflections;
 - a `SourceFit` that stretches, letterboxes or fills the face with the crop;
@@ -790,8 +790,10 @@ answered and the pixel it answered at (see
 [presentation picking](../rendering/sdf/handbook/frame-rendering.md#presentation-picking)).
 
 Every screen in the world publishes a mapping too. The World's screen binder
-builds each row's mapping through `WorldScreenMappings.Of`, with the screen
-glass's bezel as its warp, and names it by the instance its source is: a
+builds each row's mapping through `WorldScreenMappings.Of`, with no warp for a
+plain screen, whose picture fills its face, and the CRT glass's bezel
+(`WorldScreenMappings.CrtGlass`) for a screen whose `material` is `Crt`, and
+names it by the instance its source is: a
 producer, machine or probe source by its source instance
 (`source$<producer>$<digest>`, from `WorldSourceInstances`), a view by its
 camera's registration and a session by its screen's session view. A view's and
