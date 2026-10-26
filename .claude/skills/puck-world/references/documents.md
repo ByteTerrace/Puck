@@ -235,8 +235,14 @@ its whole authority surface.
 - `WorldPlacementPolicy`: `MaxShapesPerStamp = 367`,
   `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128, an
   independent value), `TimelineSecondsPerFrame = 8f/60f`, and the reserved
-  derived-face screen band. The stamp pool's worst-case instance draw is
-  `MaxStampRegistrations x MaxShapesPerStamp` (46,976) against
+  derived-face screen band. Beside the full registrations the pool holds
+  `MaxCompactStampRegistrations` (256) compact ones of
+  `MaxCompactStampShapes` (8) shape slots, which a creation of at most that
+  many shapes and no text takes first (`WorldStampPool.FitsCompact`): a
+  game's pieces draw as themselves without crowding the full registrations.
+  The stamp pool's worst-case instance draw is
+  `MaxStampRegistrations x MaxShapesPerStamp` (46,976) plus
+  `MaxCompactStampRegistrations x MaxCompactStampShapes` (2,048) against
   `Puck.SignedDistance.SdfProgramBuilder.MaxInstances`, most of the debug
   world's envelope. A world's whole composed scene (screens, static placements,
   the stamp pool, the avatar catalog and one reservation per adjacency band)

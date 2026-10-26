@@ -227,7 +227,7 @@ public sealed class InPlaceCarryPresentationLawTests {
         _ = Pack(client: client, pool: pool, transforms: transforms);
         Assert.Same(expected: held, actual: pool.SlotClips);
 
-        Assert.Equal(expected: (0, WorldStampPool.SlotsPerPlacement), actual: (clip.FirstSlot, clip.SlotCount));
+        Assert.Equal(expected: (0, WorldStampPool.CompactSlotsPerPlacement), actual: (clip.FirstSlot, clip.SlotCount));
         Assert.Equal(expected: new Vector4(w: 0f, x: 0f, y: 1f, z: 0f), actual: clip.Plane);
         Assert.Equal(expected: new Vector4(w: 6f, x: 0f, y: -1f, z: 0f), actual: clip.CopyPlane);
         Assert.Equal(expected: 6.1f, actual: (Vector3.Transform(value: new Vector3(x: 0.5f, y: 0.1f, z: 0f), rotation: clip.CopyRotation) + clip.CopyTranslation).Y, tolerance: Tolerance);

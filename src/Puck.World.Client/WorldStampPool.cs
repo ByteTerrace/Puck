@@ -36,8 +36,10 @@ namespace Puck.World.Client;
 /// <c>Follower4</c>); a part named in <see cref="WorldLookMotion.PartDynamics"/> gets its own position-only follower
 /// chasing the composed (already-followed) root — a secondary lag on top of the root's.
 /// </summary>
-/// <remarks>The pool reserves a constant dynamic-transform slot range
-/// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/> × <see cref="SlotsPerPlacement"/>). Live programs emit
+/// <remarks>The pool reserves a constant dynamic-transform slot range (<see cref="DynamicSlotCount"/>): the
+/// <see cref="WorldPlacementPolicy.MaxCompactStampRegistrations"/> compact registrations of
+/// <see cref="CompactSlotsPerPlacement"/> slots, which a small creation takes first (<see cref="FitsCompact"/>), then the
+/// <see cref="WorldPlacementPolicy.MaxStampRegistrations"/> full ones of <see cref="SlotsPerPlacement"/>. Live programs emit
 /// only registered geometry; unused transform slots do not need placeholder instances. The probe path
 /// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source measures
 /// it once at construction, so a body-rooted stamp never grows the frozen floor. Single-threaded on the window-pump
@@ -45,7 +47,7 @@ namespace Puck.World.Client;
 public sealed partial class WorldStampPool {
     private const float GroupBoundMargin = 0.4f;
 
-    private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
+    private readonly Registration?[] m_pool = new Registration?[RegistrationCount];
     private int m_packedSlotBase = -1;
 
     /// <summary>Gets the operator's live shape isolation (<c>view.isolate</c>), which every live <see cref="Emit"/>
@@ -116,7 +118,10 @@ public sealed partial class WorldStampPool {
 
         private WorldPickTarget? m_pickTarget;
 
-        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { Prototype = Creation.Id, StampPoolSlots = SlotsPerPlacement };
+        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { Prototype = Creation.Id, StampPoolSlots = Slots };
+
+        // The dynamic-transform slots the registration's pool index reserves (SlotsAt), set when it takes the index.
+        public int Slots = SlotsPerPlacement;
 
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
@@ -289,9 +294,35 @@ public sealed partial class WorldStampPool {
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
-    public static int DynamicSlotCount => (WorldPlacementPolicy.MaxStampRegistrations * SlotsPerPlacement);
-    /// <summary>The dynamic-transform slots one registration reserves: its root + its full shape-slot pool.</summary>
+    public static int DynamicSlotCount => RootSlotOffset(index: RegistrationCount);
+    /// <summary>The dynamic-transform slots one full registration reserves: its root + its full shape-slot pool.</summary>
     public static int SlotsPerPlacement => (1 + WorldPlacementPolicy.MaxAnimatedStampShapes);
+    /// <summary>The dynamic-transform slots one compact registration reserves: its root +
+    /// <see cref="WorldPlacementPolicy.MaxCompactStampShapes"/> shape slots.</summary>
+    public static int CompactSlotsPerPlacement => (1 + WorldPlacementPolicy.MaxCompactStampShapes);
+    /// <summary>The pool's registration count: the compact registrations, then the full ones.</summary>
+    public static int RegistrationCount => (WorldPlacementPolicy.MaxStampRegistrations + WorldPlacementPolicy.MaxCompactStampRegistrations);
+
+    /// <summary>Returns the dynamic-transform slots the registration at a pool index reserves.</summary>
+    /// <param name="index">The pool index, compact registrations first.</param>
+    /// <returns><see cref="CompactSlotsPerPlacement"/> for a compact registration, <see cref="SlotsPerPlacement"/> for a
+    /// full one.</returns>
+    public static int SlotsAt(int index) => (IsCompact(index: index) ? CompactSlotsPerPlacement : SlotsPerPlacement);
+    /// <summary>Returns the offset, from the pool's first dynamic-transform slot, of the root slot of the registration
+    /// at a pool index: the compact registrations' ranges, then the full ones'.</summary>
+    /// <param name="index">The pool index, compact registrations first; <see cref="RegistrationCount"/> gives the end of
+    /// the last range.</param>
+    /// <returns>The slot offset.</returns>
+    public static int RootSlotOffset(int index) => ((index <= WorldPlacementPolicy.MaxCompactStampRegistrations)
+        ? (index * CompactSlotsPerPlacement)
+        : ((WorldPlacementPolicy.MaxCompactStampRegistrations * CompactSlotsPerPlacement) + ((index - WorldPlacementPolicy.MaxCompactStampRegistrations) * SlotsPerPlacement)));
+    // Whether the pool index is a compact registration's.
+    private static bool IsCompact(int index) => (index < WorldPlacementPolicy.MaxCompactStampRegistrations);
+    /// <summary>Determines whether a creation fits a compact registration: at most
+    /// <see cref="WorldPlacementPolicy.MaxCompactStampShapes"/> shapes and no text runs.</summary>
+    /// <param name="document">The creation.</param>
+    /// <returns><see langword="true"/> when the creation fits.</returns>
+    public static bool FitsCompact(CreationDocument document) => (((document.Shapes?.Count ?? 0) <= WorldPlacementPolicy.MaxCompactStampShapes) && (document.TextRuns is not { Count: > 0 }));
 
     // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
     // registration computed still matches the scale being rendered this call, a fresh CreationStampEmitter.LayoutTextRuns
@@ -749,8 +780,17 @@ public sealed partial class WorldStampPool {
 
         return poses;
     }
-    private int FreeSlot() {
-        for (var index = 0; (index < m_pool.Length); index++) {
+    // A creation that fits a compact registration takes one first, so small creations never crowd the full ones; any
+    // creation then takes a free full registration.
+    private int FreeSlot(CreationDocument document) {
+        if (FitsCompact(document: document)) {
+            for (var index = 0; (index < WorldPlacementPolicy.MaxCompactStampRegistrations); index++) {
+                if (m_pool[index] is null) {
+                    return index;
+                }
+            }
+        }
+        for (var index = WorldPlacementPolicy.MaxCompactStampRegistrations; (index < m_pool.Length); index++) {
             if (m_pool[index] is null) {
                 return index;
             }
@@ -1107,7 +1147,7 @@ public sealed partial class WorldStampPool {
                 maxPlacementScale: maxPlacementScale,
                 picks: picks,
                 probeWorstCase: false,
-                rootSlot: (slotBase + (index * SlotsPerPlacement)),
+                rootSlot: (slotBase + RootSlotOffset(index: index)),
                 screenMaterials: CarriedScreenMaterials(live: live, screens: screens),
                 textCatalog: textCatalog
             );
@@ -1115,7 +1155,7 @@ public sealed partial class WorldStampPool {
         }
     }
     /// <summary>Emits the pool's worst case, never rendered: every registration slot in the largest legal form a
-    /// creation can take, whatever the pool holds.</summary>
+    /// creation can take, whatever the pool holds (a compact registration's at its smaller shape count).</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="maxPlacementScale">The placement scale envelope's ceiling, which feeds only the slots' bound
     /// radii.</param>
@@ -1124,7 +1164,7 @@ public sealed partial class WorldStampPool {
     public static void EmitProbe(SdfProgramBuilder builder, float maxPlacementScale, int slotBase) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        for (var index = 0; (index < WorldPlacementPolicy.MaxStampRegistrations); index++) {
+        for (var index = 0; (index < RegistrationCount); index++) {
             EmitOne(
                 builder: builder,
                 colors: null,
@@ -1132,9 +1172,10 @@ public sealed partial class WorldStampPool {
                 maxPlacementScale: maxPlacementScale,
                 picks: null,
                 probeWorstCase: true,
-                rootSlot: (slotBase + (index * SlotsPerPlacement)),
+                rootSlot: (slotBase + RootSlotOffset(index: index)),
                 screenMaterials: null,
-                textCatalog: null
+                textCatalog: null,
+                shapeSlots: (SlotsAt(index: index) - 1)
             );
         }
     }
@@ -1336,6 +1377,18 @@ public sealed partial class WorldStampPool {
             )) {
                 live.Reads.Release();
             }
+            // A recreated creation too large for the compact index it held leaves it; the passes below admit it again.
+            if (
+                (reconciled is { } kept) &&
+                IsCompact(index: index) &&
+                !FitsCompact(document: kept.Creation.EngineDocument)
+            ) {
+                kept.Reads.Release();
+                reconciled = null;
+            }
+            if (reconciled is not null) {
+                reconciled.Slots = SlotsAt(index: index);
+            }
 
             m_pool[index] = reconciled;
         }
@@ -1357,7 +1410,7 @@ public sealed partial class WorldStampPool {
                 continue;
             }
 
-            var slot = FreeSlot();
+            var slot = FreeSlot(document: creation.EngineDocument);
 
             if (slot < 0) {
                 Console.Error.WriteLine(value: $"[world.placement: {((placement.Attach is null)
@@ -1367,10 +1420,13 @@ public sealed partial class WorldStampPool {
                 continue;
             }
 
-            m_pool[slot] = RegisterRow(
+            var registered = RegisterRow(
                 creation: creation,
                 row: placement
             );
+
+            registered.Slots = SlotsAt(index: slot);
+            m_pool[slot] = registered;
         }
 
         // Pass 3 — admit new body-rooted stamps into the remaining free slots.
@@ -1379,16 +1435,17 @@ public sealed partial class WorldStampPool {
                 continue;
             }
 
-            var slot = FreeSlot();
+            var slot = FreeSlot(document: stamp.Creation.EngineDocument);
 
             if (slot < 0) {
-                Console.Error.WriteLine(value: $"[world.placement: creation-stamp body {stamp.BodyIndex} has no free stamp slot — the {WorldPlacementPolicy.MaxStampRegistrations}-slot pool is full; it renders as a catalog avatar]");
+                Console.Error.WriteLine(value: $"[world.placement: creation-stamp body {stamp.BodyIndex} has no free stamp slot — the {WorldPlacementPolicy.MaxStampRegistrations} full and {WorldPlacementPolicy.MaxCompactStampRegistrations} compact registrations are taken; it renders as a catalog avatar]");
 
                 continue;
             }
 
             var fresh = RegisterBody(stamp: stamp);
 
+            fresh.Slots = SlotsAt(index: slot);
             m_pool[slot] = fresh;
             ApplyMotion(
                 live: fresh,
@@ -1558,7 +1615,7 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        var transformSlot = (((m_packedSlotBase + (poolIndex * SlotsPerPlacement)) + 1) + shapeSlot);
+        var transformSlot = (((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + 1) + shapeSlot);
 
         if (((uint)transformSlot) >= ((uint)transforms.Length)) {
             pose = default;
@@ -1592,12 +1649,22 @@ public sealed partial class WorldStampPool {
         return true;
     }
     /// <summary>Resolves a live body's root dynamic transform, or false when its render stamp is absent.</summary>
-    public bool TryBodyTransformSlot(int bodyIndex, out int transformSlot) {
+    public bool TryBodyTransformSlot(int bodyIndex, out int transformSlot) => TryBodyTransformSlot(bodyIndex: bodyIndex, slotCount: out _, transformSlot: out transformSlot);
+    /// <summary>Resolves a live body's root dynamic transform and the slots its registration reserves from it, or false
+    /// when its render stamp is absent.</summary>
+    /// <param name="bodyIndex">The population entity index.</param>
+    /// <param name="transformSlot">The absolute composed-buffer root slot, or -1 when unresolved.</param>
+    /// <param name="slotCount">The dynamic-transform slots the registration reserves from its root, or 0 when
+    /// unresolved.</param>
+    /// <returns><see langword="true"/> when the body's stamp is live and its pool range has packed.</returns>
+    public bool TryBodyTransformSlot(int bodyIndex, out int transformSlot, out int slotCount) {
         if ((m_packedSlotBase < 0) || !TryFindBody(bodyIndex: bodyIndex, live: out _, poolIndex: out var poolIndex)) {
             transformSlot = -1;
+            slotCount = 0;
             return false;
         }
-        transformSlot = (m_packedSlotBase + (poolIndex * SlotsPerPlacement));
+        transformSlot = (m_packedSlotBase + RootSlotOffset(index: poolIndex));
+        slotCount = SlotsAt(index: poolIndex);
         return true;
     }
     /// <summary>Resolves a body-rooted creation look's authored part id to its absolute packed transform slot.</summary>
@@ -1623,7 +1690,7 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        transformSlot = (((m_packedSlotBase + (poolIndex * SlotsPerPlacement)) + 1) + shapeSlot);
+        transformSlot = (((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + 1) + shapeSlot);
 
         return true;
     }
@@ -1742,7 +1809,7 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        var rootSlot = (m_packedSlotBase + (poolIndex * SlotsPerPlacement));
+        var rootSlot = (m_packedSlotBase + RootSlotOffset(index: poolIndex));
 
         if (shapeId is { } targetShapeId) {
             var shapes = (live.Creation.EngineDocument.Shapes ?? []);

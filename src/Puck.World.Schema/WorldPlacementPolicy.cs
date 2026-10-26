@@ -51,6 +51,18 @@ public static class WorldPlacementPolicy {
     /// INVARIANT: sizes <c>Client.WorldStampPool</c>'s pool array and the field-initializer-time dynamic-transform
     /// capacity; the validator's rejection line names this ceiling word-exactly.</summary>
     public const int MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand;
+    /// <summary>The most shapes a creation may carry, with no text runs, and still take a compact stamp registration:
+    /// a small creation many bodies wear at once (a game's pieces, stones, discs, cards, tokens). CONTRACT INVARIANT:
+    /// sizes each compact registration's dynamic-transform range (<c>Client.WorldStampPool.CompactSlotsPerPlacement</c>)
+    /// and its worst-case probe.</summary>
+    public const int MaxCompactStampShapes = 8;
+    /// <summary>The compact stamp-registration count: registrations beside the <see cref="MaxStampRegistrations"/>
+    /// full ones, each reserving only <see cref="MaxCompactStampShapes"/> shape slots, so a world of many small
+    /// body-rooted creations draws each as its creature without multiplying the full slots' worst case. A creation that
+    /// fits takes a compact registration first and a full one only when the compact ones are taken. CONTRACT
+    /// INVARIANT: sizes <c>Client.WorldStampPool</c>'s pool array and its dynamic-transform range; the composed scene's
+    /// worst case (<c>Client.WorldSceneEnvelope</c>) counts it.</summary>
+    public const int MaxCompactStampRegistrations = 256;
     /// <summary>The timeline replay hold per frame, in seconds — an 8-tick-at-60-Hz cadence, hold-style with no
     /// interpolation. Presentation-only (rides the render clock, never simulation state). A contract invariant, not
     /// an authoring knob — a world wanting a different replay feel is a future authoring surface.</summary>
