@@ -273,18 +273,20 @@ No one feature's, world's or game's look or vocabulary enters an engine
 contract: core design tokens, enums, schema names and defaults, default shader
 paths, or engine prose (the owner's ruling). A feature's look is that feature's
 material, style or skin, opted into where it is used, and the engine's own
-default is neutral and complete:
+default is neutral and complete. [The UI decisions](ui.md#a-neutral-design-language)
+hold how the overlay theme stays neutral and why a screen shows its picture
+plainly; as built:
 
 - **The overlay theme.** The core tokens of the `theme` section name purposes
   (surfaces, scrims, rules, text, accent, status; spacing, radii, type sizes,
-  stroke, motion), never a component or a look. Each component's geometry,
-  opacities and recipe (the keycap's badge and its latched toggle's march, the
-  glow, the console's echo color, the bar, cursor, wheel, toast and HUD chrome)
-  is its style under `theme.styles`, which takes a core role by name or its own
-  color. A document that authors no theme draws the engine's neutral
-  `WorldThemeSection.Default`; the debug world's look is its own skin
-  (`worlds/debug/skin.puck`). The scrim opacity floor is a player's high-contrast
-  preference (`world.theme contrast high`), not a document refusal.
+  stroke, motion). Each component's geometry, opacities and recipe (the keycap's
+  badge and its latched toggle's march, the glow, the console's echo color, the
+  bar, cursor, wheel, toast and HUD chrome) is its style under `theme.styles`,
+  which takes a core role or its own color. A document that authors no theme
+  draws the engine's neutral `WorldThemeSection.Default`; the debug world's look
+  is its own skin (`worlds/debug/skin.puck`). No document refuses a translucent
+  scrim: a player's high-contrast preference (`world.theme contrast high`)
+  raises every scrim to a near-opaque backplate.
 - **Screens.** A screen shows its picture as its source made it, filling its
   authored face; a CRT's bezel, scanlines, grille and bloom are the `Crt` screen
   material a row opts into, and a pointer hit maps through that bezel only on
