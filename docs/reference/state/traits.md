@@ -211,8 +211,8 @@ The two readings are separate on purpose:
   That includes rule gates, a write's operand, effect sources, reductions,
   search judges, disclosures, and the state hash. The arena's live read never
   eases.
-- **Eased reading.** `StateReader.TryReadEased` computes the follower's current
-  position. It reads a document's exported rows instead of the arena, and it's
+- **Eased reading.** `StateArena.TryReadEased` computes the follower's current
+  position from the arena clock and catalog trait. It is
   the read a presentation binding such as a HUD readout, a look, or a gait driver
   takes.
 
@@ -298,7 +298,7 @@ flowchart TD
 
 An advance reads the engine clock and a cycle reads the simulation clock; both
 clamp the result to the row's range. A dynamics cell reads its stored target
-everywhere except `StateReader.TryReadEased`, which samples the follower for
+everywhere except `StateArena.TryReadEased`, which samples the follower for
 presentation. A cell with no behavior reads what it stores. The next section
 explains how the effective behavior is resolved.
 
@@ -558,7 +558,7 @@ arena refuses the declaration otherwise. The board can be an `Int` or `Bool` row
 | `StateKnowledge`, `StateObservation` | Puck.State | A remembered observation layer and its stamps. |
 | `StatePhase`, `PhaseGuard` | Puck.State | A guarded submission generation. |
 | `StateInverse` | Puck.State | A board derived from token positions. |
-| `StateReader` | Puck.State | Computes reads over exported rows, including eased reads. |
+| `StateReader` | Puck.State | Reads live arena columns; declaration-boundary seed reads materialize an arena. |
 
 ## Next steps
 

@@ -147,11 +147,9 @@ public enum WorldSection : byte {
 
     /// <summary>The world-scoped <c>rules</c> rows — targeted by <c>WorldMutation.UpsertWorldRule</c> /
     /// <c>WorldMutation.RemoveWorldRule</c>. Gates authoring a rule only. A rule's own evaluation and its
-    /// fired effects never consult this table: they act as <see cref="Principal.World"/>, which
-    /// <c>Server.WorldServer.TryAdmitMutation</c> exempts structurally — the same standing a per-body
-    /// <c>ActionEffect</c> has always had (an authored program is the world acting on itself, not an actor
-    /// submitting). Holding Mutate here is therefore holding the power to write the program, which is the only
-    /// authority question a rule raises.</summary>
+    /// fired effects act as <see cref="Principal.World"/>. Document admission exempts that principal structurally;
+    /// gameplay transactions check its live Edit grant at commit. Holding Mutate here permits writing the
+    /// program itself.</summary>
     Rules,
 
     /// <summary>The group + membership binding substrate — the group-kind policy catalog and the group roster rows

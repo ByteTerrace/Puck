@@ -32,6 +32,17 @@ verdict fixtures are quarantined under `experimental/`; do not boot, repair or
 retarget them, and read the references' mentions of them as prior art
 ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
 
+## Live state reads and writes
+
+The arena is the live gameplay store. `WorldServer.Definition` holds declarations
+and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
+Runtime value readers use `WorldStateReader` bound to the live arena, and
+publication carries journal changes without rebuilding document rows. Rules,
+bound addon batches and host cell commands share the grant-checked transaction.
+Every untrusted read and delivery checks `WorldStateDisclosure` again; caching
+a bound address never caches permission. Responses, deals and tenure are
+placement projections. Checkpoints snapshot arena columns directly.
+
 ## Diagnostic reports and pins
 
 `world.debug-view report colliders --json` and `world.debug-view report contacts

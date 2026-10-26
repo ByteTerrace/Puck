@@ -31,6 +31,7 @@ public sealed partial class WorldDocument {
 
         AdoptDefinition(definition: definition);
         m_pendingStateDelivery = true;
+        m_pendingPlacementProjection = true;
 
         if (m_responseRows.Count == 0) {
             return;

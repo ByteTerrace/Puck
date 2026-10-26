@@ -215,7 +215,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
-        if (m_feed is not null || !stamp.ArenaValues) { DeliverDefinition(definition: definition, version: version); }
+        if (m_feed is not null || !stamp.ArenaValues || stamp.PlacementProjection) { DeliverDefinition(definition: definition, version: version); }
     }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,

@@ -359,8 +359,9 @@ Rules the catalog encodes:
 - **The one structural exemption.** `Principal.World` — the world's own
   authored program (a `rules` effect, a kit's `generate` effect) — is admitted by
   `TryAdmitMutation` BEFORE the table is consulted, keyed on the principal kind.
-  It is not an actor: it holds no grant rows (the grant door refuses one by
-  name), the wire refuses it as a submitter, and `world.why world …` reports
+  The program holds an Edit grant for gameplay transactions, checked at every
+  commit; it holds no other capability. The wire refuses it as a submitter,
+  and structural document admission still reports
   `allowed (structural)` rather than a verdict about a table that was never
   asked. Every non-authority gate still runs. See [authority.md](authority.md).
 

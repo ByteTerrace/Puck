@@ -95,8 +95,11 @@ it writes its bound cells directly into the state arena, without document mutati
 
 The tools use numeric authored reads, settled kinematics, bound cell writes and bounded guest logs. The
 [ABI](../../docs/reference/scripting.md#request-channelquery-acts-through-a-handle)
-owns their layouts and fuel charges. The watchdog, scope and guide bind row/key names once and publish
-through their live edit grants, Set/Add masks and dispatch budgets. Document edits still use JSON mutations.
+owns their layouts and fuel charges. The watchdog, scope, guide, fuzzer,
+traversal controls and machine debugger bind row/key names once and publish
+through their live edit grants, Set/Add masks and dispatch budgets. Each native
+cell batch commits atomically. Traversal history mints and document edits use
+the same transaction door through submitted mutations.
 
 The watchdog, scope and guide no longer serialize state rows or run document validation and narration each tick.
 Their plain cell values travel in snapshots; explicit document reads, exports and checkpoints materialize rows.

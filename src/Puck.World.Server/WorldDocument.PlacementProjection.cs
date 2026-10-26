@@ -17,6 +17,7 @@ public sealed partial class WorldDocument {
         var definition = previous with { PlacementRowsRaw = rows.ToArray() };
         AdoptDefinition(definition);
         m_pendingStateDelivery = true;
+        m_pendingPlacementProjection = true;
         if (!solidsMoved) { return; }
         if (WorldContactSelection.RequiresField(definition.Collision) || WorldTargetSelection.RequiresLineOfSight(definition)) {
             if (!TryBuildSolids(definition, out var solids, out var reason)) { throw new InvalidOperationException(reason); }

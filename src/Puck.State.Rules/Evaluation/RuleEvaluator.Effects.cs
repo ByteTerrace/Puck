@@ -115,7 +115,7 @@ public sealed partial class RuleEvaluator {
                 if ((arm.Needs & EffectNeeds.Transactional) != EffectNeeds.None) {
                     continue;
                 }
-                if (arm.TryFire(
+                if (arm.TryDeliverAfterCommit(
                     firing: in firing,
                     host: m_host,
                     refusal: out var refusal

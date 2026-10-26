@@ -107,7 +107,6 @@ public sealed partial class WorldDocument {
         if (Host.Arena is { } arena) { WorldStateReader.Bind(definition, arena); }
         m_sequence++;
     }
-    internal void CacheArenaExport(WorldDefinition definition) => m_definition = definition;
 
     /// <summary>Adopts a rebuilt solid field and bumps its revision.</summary>
     /// <param name="solids">The new field, or <see langword="null"/> under the analytic provider.</param>

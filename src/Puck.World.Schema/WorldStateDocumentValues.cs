@@ -25,7 +25,7 @@ namespace Puck.World;
 public static class WorldStateDocumentValues {
     /// <summary>Creates an owned projection whose bound values read the live arena. Seed rows remain declarations.</summary>
     public static WorldDefinition BindLive(WorldDefinition definition, StateArena arena, Func<ArenaTime> clock) {
-        if (ReferencedRows(definition: definition).Count == 0) { return definition; }
+        if (ReferencedRows(definition: definition).Count == 0) { return definition with { }; }
         var owned = (JsonSerializer.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition),
             jsonTypeInfo: WorldJsonContext.Default.WorldDefinition) ?? throw new InvalidOperationException(message: "The binding projection did not deserialize."))
             with { StateRaw = definition.StateRaw, DocumentDirectory = definition.DocumentDirectory };

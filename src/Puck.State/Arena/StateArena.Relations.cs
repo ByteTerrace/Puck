@@ -16,6 +16,9 @@ public sealed partial class StateArena {
                 if (layout.Shape == RowShape.Ordered && TryRead(ordinal, key, out var value) && value.Raw != 1L) {
                     reason = "an ordered zone's membership must be true"; return false;
                 }
+                if (layout.ValueTopology is { } topology && TryRead(ordinal, key, out var position) && (ulong)position.Raw >= (ulong)topology.CellCount) {
+                    reason = "a token position is outside its valuesFrom topology"; return false;
+                }
             }
         }
         return true;

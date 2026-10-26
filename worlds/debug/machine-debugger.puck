@@ -127,7 +127,6 @@ addon "machine-debugger" {
     [
       { capability: Observe, subject: "state:machineDebugger" }
       { capability: Observe, subject: "state:machineDebuggerOperations" }
-      { capability: Mutate, subject: "section:State" }
       { capability: Edit, subject: "state:machineDebuggerViolations" }
     ],
     map(range(0, 3), i => { capability: Edit, subject: $"state:machineDebugger{i}" }),
@@ -145,16 +144,9 @@ grants: concat(
   [
     { grantee: "addon:machine-debugger", capability: Observe, subject: "state:machineDebugger", budget: 32 }
     { grantee: "addon:machine-debugger", capability: Observe, subject: "state:machineDebuggerOperations", budget: 16 }
-    {
-      grantee: "addon:machine-debugger"
-      capability: Mutate
-      subject: "section:State"
-      kindMask: "UpsertStateRow"
-      budget: 2
-    }
-    { grantee: "addon:machine-debugger", capability: Edit, subject: "state:machineDebuggerViolations" }
+    { grantee: "addon:machine-debugger", capability: Edit, subject: "state:machineDebuggerViolations", budget: 3, writeMask: "Set" }
   ],
-  map(range(0, 3), i => { grantee: "addon:machine-debugger", capability: Edit, subject: $"state:machineDebugger{i}" }),
+  map(range(0, 3), i => { grantee: "addon:machine-debugger", capability: Edit, subject: $"state:machineDebugger{i}", budget: 23, writeMask: "Set" }),
   map(
     range(0, 3),
     i => { grantee: "addon:machine-debugger", capability: Observe, subject: $"screen:{i}", budget: 8, eventBudget: 1 }

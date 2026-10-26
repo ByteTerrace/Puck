@@ -79,6 +79,9 @@ public sealed partial class StateArena {
             RequireSnapshotPosition(column: entry.Column, index: entry.Index);
             if (entry.Column is ArenaColumn.CellCapacity or ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation) { throw new InvalidOperationException(message: "The checkpoint carries a nonnumeric column as a number."); }
             if (entry.Column == ArenaColumn.MemberKey && (entry.Value < -1L || entry.Value >= m_keys.Count)) { throw new InvalidOperationException(message: "The checkpoint carries an invalid key ordinal."); }
+            if (entry.Column == ArenaColumn.MemberCount && (entry.Value < 0L || entry.Value > m_layout[entry.Index].CellCapacity)) {
+                throw new InvalidOperationException("The checkpoint carries an invalid member count.");
+            }
             var value = entry.Value;
             if (entry.Column == ArenaColumn.MemberKey && value >= 0L) {
                 if (!m_keys.TryResolve(snapshot.Keys[(int)value], out var key)) { throw new InvalidOperationException("The checkpoint key did not bind."); }

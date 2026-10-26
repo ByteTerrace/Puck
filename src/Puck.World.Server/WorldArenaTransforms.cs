@@ -2,10 +2,8 @@ using Puck.Commands;
 
 namespace Puck.World.Server;
 
-/// <summary>Composes one submitted state operation through the arena kernels a rule firing fires through. The
-/// operation is resolved to ordinals and interned keys once, applied inside a journal scope, and read back as the
-/// candidate document; the scope is always rewound, so a caller's store is exactly as it was and the ordinary
-/// mutation pipeline installs the candidate.</summary>
+/// <summary>Runs resolved state operations through the rule kernels. Live calls join the caller transaction;
+/// edit previews use a temporary arena and export their candidate before rewinding.</summary>
 public static class WorldArenaTransforms {
     /// <summary>Composes one operation without changing the supplied definition.</summary>
     /// <param name="definition">The validated current definition.</param>
@@ -100,7 +98,7 @@ public static class WorldArenaTransforms {
         );
 
         host.Advance(
-            engineTick: tick,
+            engineTick: engineTick ?? tick,
             tick: tick
         );
 

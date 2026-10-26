@@ -7,6 +7,7 @@ public sealed partial class WorldDocument {
     // carries state; the step delivers whichever is pending, once, through DeliverPending.
     private bool m_pendingDefinitionDelivery;
     private bool m_pendingStateDelivery;
+    private bool m_pendingPlacementProjection;
 
     /// <summary>Delivers whatever the step installed and has not yet delivered: the definition after a shape change,
     /// or the state after a value change, stamped with the tick and the rows the export sweep found moved.</summary>
@@ -18,7 +19,7 @@ public sealed partial class WorldDocument {
                 version: Host.DocumentVersion
             );
         } else if (m_pendingStateDelivery) {
-            var stamp = Host.TakeStateStamp() with { ArenaValues = Host.StreamsArenaValues };
+            var stamp = Host.TakeStateStamp() with { ArenaValues = true, PlacementProjection = m_pendingPlacementProjection };
 
             Host.Output.DeliverState(
                 definition: m_definition,
@@ -30,6 +31,7 @@ public sealed partial class WorldDocument {
 
         m_pendingDefinitionDelivery = false;
         m_pendingStateDelivery = false;
+        m_pendingPlacementProjection = false;
     }
     /// <summary>Records that the live definition was replaced since the last delivery, so
     /// <see cref="DeliverPending"/> carries it whole to every attached sink. Every way the authoritative state jumps

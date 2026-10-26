@@ -209,7 +209,8 @@ Puck.World extends the rule compiler the way any host does (see
 for rules, and a separate latch for interactions.
 
 Every compiled rule, group trigger, and decision is admitted against this host
-once, when the rules are installed. Nothing on the tick path asks again. As an
+once, when the rules are installed. Each gameplay batch also checks the live
+Edit grants at commit. As an
 `IRuleOwner`, the host claims interactions and decisions and runs each
 evaluation back through `RuleEvaluator.EvaluateOnce`, binding pool carriers into
 lexical instance registers for the duration. As an `IRuleRefusalSink`, it
@@ -238,14 +239,18 @@ The firing sequence and each arm's promise are explained in
 
 ### Publication
 
-Nothing outside the arena sees a rule's write until the rules finish.
-`WorldServer.ProposePublication` composes what a publication would install: it
-reads back only the rows whose version moved since the document and the arena
-last agreed, plus rows an open scope has written, and keeps every other
-installed row. Document values that read a moved row (a placement's position
-bound to `state.spot`, for example) are re-resolved. `PublishArena` adopts that
-proposal, marks state delivery pending, and calls
-`WorldDocument.ReconcileStateConsumers`.
+The arena is the live gameplay store. `StateReader` reads its columns;
+`WorldStateReader` binds the world projection to that same store. A definition
+holds declarations and seeds. `WorldServer.ExportDefinition()` materializes
+cells only at an explicit export or edit boundary.
+
+`WorldServer.ProposePublication` reads the journal's changed-row flags without
+exporting rows. `PublishArena` publishes committed changes to snapshot mirrors,
+marks delivery pending, and calls `WorldDocument.ReconcileStateConsumers`.
+Bound document values read the arena, so a state write does not serialize and
+rehydrate the definition each tick. Responses, deals and contribution tenure
+install placement projections rather than placement mutations. Tenure
+deadlines live in `contributionTenure` state.
 
 `ReconcileStateConsumers` is the same routine a value mutation ends in. It
 brings every consumer that keeps its own copy of a state value up to date: the
@@ -267,7 +272,7 @@ grants:
 
 | Tier | What the peer receives |
 |---|---|
-| `replica` | The world document verbatim, `state` included. |
+| `replica` | Declarations with disclosed state, followed by recipient-checked arena changes. |
 | `presentation` (the default) | A projection document with no `state` section. Every `state.<row>` binding is resolved to its value by the authority, and state observations are composed per recipient through `WorldStateDisclosure`, so a hidden cell or zone isn't sent to a reader its visibility doesn't admit. A placement dealt from a hidden cell crosses as the deal would deal it from the reader's own rows: the template's own prototype for a hidden variant, nothing for a hidden dealt cell. A placement whose `respond` conditions read a hidden cell shows the first entry that holds over what the reader may read (its own cells and the field lattice), or its authored prototype. The observations become plain state rows in the document a remote client rebuilds. |
 | `frames` | No document at all. |
 
@@ -487,7 +492,9 @@ The authoritative scope is built from a fixed, ordered list of named components
 (`WorldStateHashComposition`), so what a hash covers changes only by a
 deliberate edit to that list. Rule scheduling caches are never part of any hash.
 
-A checkpoint carries the same state, and search progress rides along through
+A checkpoint snapshots arena columns, admitted reservations and key names;
+it does not rebuild gameplay state from exported document rows. Opaque machines
+and native cores keep their own snapshot owners. Search progress rides through
 `ArenaSearch.Capture`. The replay tape records each tick's intent submissions and
 authority inputs, stamps the simulation rate in its header, and notes each pause or
 resume of the rate lever. It reproduces the authoritative trajectory. A recording
@@ -585,8 +592,8 @@ run it.
 
 ## Limitations
 
-- A reader outside the rule loop (a body, a field, the console, a search job)
-  sees a rule's write only after publication.
+- Change deliveries follow commit and publication. Reads answer directly from
+  the live arena, including the open transaction during speculation.
 - A delivered arm can't be rolled back with its firing.
 - A search judge can't read world-only facts, so a rule that needs one is left
   out of the judge or refuses the job.

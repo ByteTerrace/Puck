@@ -23,7 +23,7 @@ public enum WorldCellWriteVerdict {
     Rejected,
 }
 /// <summary>The server's authoritative columnar store. Bound plain values stream through snapshots; an immutable
-/// document export is materialized for document edits, checkpoints and explicit definition reads.</summary>
+/// document export is materialized for document edits and explicit definition reads.</summary>
 /// <remarks>Construction, document installation, and checkpoint restoration validate the complete state section.
 /// Pool storage is admitted through its typed snapshot; ordinary rows use <see cref="StateArena.TryLoad"/>.</remarks>
 public sealed partial class WorldServer {
@@ -55,7 +55,6 @@ public sealed partial class WorldServer {
             }
         }
     }
-    internal bool StreamsArenaValues => true;
 
     private readonly Dictionary<(Principal Principal, GrantSubject Subject), int> m_cellWriteCounts = [];
 
@@ -124,20 +123,10 @@ public sealed partial class WorldServer {
     private StateCatalog? m_arenaCatalog;
 
     private string[] m_drawSites = [];
-    // Each row's version as of the last time the installed document and the arena agreed on it: when the arena was
-    // seeded from the document, and when the row was last published. A row whose version has moved past this is
-    // what the next publication carries, whenever the write happened.
+    // Versions at the last declaration installation, used to reconcile a subsequent edit boundary.
     private ulong[] m_publishedVersions = [];
 
-    // A seeded arena holds the document's rows as authored, and a published row is the arena's own spelling of it:
-    // a row holding no cell carries none rather than an empty list. The first publication after a seed therefore
-    // carries every row, so the installed document is in one spelling from then on.
-
-    // One flag per catalog ordinal: the rows an open scope has written, as of the proposal in flight.
-
-
-    // What the last exports moved that a consumer outside the arena keeps its own copy of, until SettleStateConsumers
-    // brings them up to date.
+    // Journal publication marks the consumers whose derived projections need refreshing.
     private bool m_consumersOwed;
     private bool m_driveGateOwed;
     private bool m_fieldsOwed;
@@ -252,7 +241,7 @@ public sealed partial class WorldServer {
         m_arenaCatalog = definition.StateCatalog;
         m_drawSites = WorldDrawSites.Of(catalog: m_arenaCatalog);
         m_documentRowCount = m_arenaCatalog.Lane(lane: StateLane.Document).Count;
-        m_publicationRows = new bool[m_documentRowCount];
+        m_publicationRows = new bool[m_arena.Layout.RowCount];
         m_snapshotRows = new bool[m_documentRowCount];
         m_publishedVersions = new ulong[m_arena.Layout.RowCount];
         MarkPublished();
@@ -450,7 +439,6 @@ public sealed partial class WorldServer {
     }
 
     private void BindArenaDocument() {
-        WorldStateReader.Bind(m_document.Definition, m_arena);
         var projected = WorldStateDocumentValues.BindLive(definition: m_document.Definition, arena: m_arena, clock: () => m_ruleHost.Time);
         m_document.AdoptDefinition(definition: projected);
     }

@@ -144,12 +144,12 @@ that same routine. Don't update a copy at one of the places a value can arrive
 from (a rule effect, a console write, a search landing), because the next
 entry point you add will miss it.
 
-Row versions make publication cheap. A row's version moves only when a commit
-leaves its bytes different, so a publication can read back only the rows whose
-version moved since the last one (`IStateReader.TryRowVersion`) and keep the
-rest. Build the proposal in a step that installs nothing, and have a preflight
-judge that same proposal, open scope included, so what was judged is what gets
-installed.
+The committed journal marks changed positions and rows. Publish those changes
+without constructing another live row list. Row versions prove whether stored
+contents changed for scheduling; generations invalidate speculative reads. A
+preflight reads the same arena with its scope open, then grant and relation
+validation decide whether the complete batch can commit. Outward effects use
+the explicit `TryDeliverAfterCommit` door after that boundary.
 
 Puck.World's publication is `WorldServer.PublishArena`, which ends in
 `WorldDocument.ReconcileStateConsumers` (see [State in Puck.World](worlds.md)).

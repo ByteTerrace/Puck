@@ -182,7 +182,10 @@ grants its sources. Batches apply the same checks recursively to each member.
 rowScopedEditSubject, rowScopedMutateSubject, meter, out admission)` owns the WHOLE authority decision
 for a document write. ONE structural exemption runs first — a `World` principal
 is admitted (`WorldMutationAdmissionRule.Structural`) without any lookup; there
-is no bypass parameter and nothing else may exempt. Then four gates, in order:
+is no bypass parameter and nothing else may exempt. Gameplay state commits
+still check the program's live Edit grant through the shared transaction;
+structural document admission never substitutes for that check. Then four
+document-admission gates, in order:
 
 1. `Allows(Mutate, section:<name>)` — the coarse section hold — OR, when
    the mutation names one concrete creations/placements row and the section

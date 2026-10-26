@@ -154,6 +154,14 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
     /// <param name="refusal">Why the arm did not fire, or <see cref="EffectRefusal.None"/>.</param>
     /// <returns><see langword="true"/> when the arm fired.</returns>
     bool TryFire(IEffectHost host, in EffectFiring firing, out EffectRefusal refusal);
+
+    /// <summary>Delivers an admitted outward effect after its gameplay transaction has committed.</summary>
+    bool TryDeliverAfterCommit(IEffectHost host, in EffectFiring firing, out EffectRefusal refusal) {
+        if (firing.Preflight || (Needs & EffectNeeds.Irreversible) == EffectNeeds.None) {
+            throw new InvalidOperationException("Only an admitted post-commit delivery reaches this door.");
+        }
+        return TryFire(host, in firing, out refusal);
+    }
 }
 /// <summary>A compiled effect that writes the arena and nothing outside it.</summary>
 public abstract class RuleEffect : IRuleEffect {

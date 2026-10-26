@@ -6,7 +6,7 @@
   (memory (export "memory") 1)
   (data (i32.const 0x100)
     "\01\00\07\00\00\02\00\00\00\00\00\00\00\00\00\00"
-    "\02\00\06\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\02\00\10\00\00\00\00\00\00\00\00\00\00\00\00\00"
     "\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 0x200) "\07forward\06strafe\04turn\04jump\06flight\08interact\04rise")
 
@@ -86,41 +86,13 @@
     (if (i32.load offset=4 (local.get $h)) (then
       (global.set $pose (call $request (local.get $h) (i32.const 0) (i64.const 0) (i64.const 0)))
       (global.set $kin (call $request (local.get $h) (i32.const 3) (i64.const 0) (i64.const 0))))))
-  (func $put (param $v i32)
-    (i32.store8 (global.get $cursor) (local.get $v))
-    (global.set $cursor (i32.add (global.get $cursor) (i32.const 1))))
-  (func $puts (param $p i32)
-    (block $done (loop $next
-      (br_if $done (i32.eqz (i32.load8_u (local.get $p))))
-      (call $put (i32.load8_u (local.get $p)))
-      (local.set $p (i32.add (local.get $p) (i32.const 1))) (br $next))))
+
+
   ;; Signed decimal, including MIN_VALUE (unsigned magnitude after wrapping negation).
-  (func $putInt (param $v i64)
-    (local $p i32)
-    (if (i64.lt_s (local.get $v) (i64.const 0)) (then (call $put (i32.const 45)) (local.set $v (i64.sub (i64.const 0) (local.get $v)))))
-    (local.set $p (i32.const 0x52ff))
-    (loop $digit
-      (local.set $p (i32.sub (local.get $p) (i32.const 1)))
-      (i32.store8 (local.get $p) (i32.add (i32.const 48) (i32.wrap_i64 (i64.rem_u (local.get $v) (i64.const 10)))))
-      (local.set $v (i64.div_u (local.get $v) (i64.const 10)))
-      (br_if $digit (i64.ne (local.get $v) (i64.const 0))))
-    (block $done (loop $next
-      (br_if $done (i32.ge_u (local.get $p) (i32.const 0x52ff)))
-      (call $put (i32.load8_u (local.get $p)))
-      (local.set $p (i32.add (local.get $p) (i32.const 1))) (br $next))))
-  (func $beginPayload
-    (global.set $payload (i32.add (i32.const 0x8000) (i32.shl (global.get $out) (i32.const 8))))
-    (global.set $cursor (global.get $payload)))
-  (func $mutate (param $slot i32) (param $kind i64)
-    (local $h i32)
-    (local.set $h (i32.add (i32.const 0x3000) (i32.shl (local.get $slot) (i32.const 3))))
-    (if (i32.load offset=4 (local.get $h)) (then
-      (drop (call $emit (i32.const 1) (i32.const 1) (i32.load16_u (local.get $h)) (i32.load16_u offset=2 (local.get $h))
-        (i32.const 1) (local.get $kind) (i64.extend_i32_u (global.get $payload))
-        (i64.extend_i32_u (i32.sub (global.get $cursor) (global.get $payload))))))))
-  (func $abs (param $v i64) (result i64)
-    (if (result i64) (i64.lt_s (local.get $v) (i64.const 0))
-      (then (i64.sub (i64.const 0) (local.get $v))) (else (local.get $v))))
+
+
+
+
   (func $clamp (param $v i64) (result i64)
     (if (i64.gt_s (local.get $v) (i64.const 65536)) (then (return (i64.const 65536))))
     (if (i64.lt_s (local.get $v) (i64.const -65536)) (then (return (i64.const -65536)))) (local.get $v))
@@ -192,6 +164,10 @@
     (local $cos i64) (local $sin i64) (local $right i64)
     (call $drain (local.get $count))
     (global.set $out (i32.const 0))
+    (if (i32.eqz (global.get $boundCells)) (then
+      (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 14)
+        (i64.const 53248) (i64.const 5) (i64.const 0)))
+      (global.set $boundCells (i32.const 1))))
 
     (if (i32.and (i32.eq (global.get $reads) (i32.const 7)) (i64.ne (i64.load (i32.const 17408)) (i64.const 0))) (then
       (if (i32.eqz (global.get $active)) (then
@@ -222,37 +198,17 @@
         (call $act (i32.const 44) (i32.const 5) (i64.extend_i32_u (i32.shl (i32.eqz (i32.and (local.get $r) (i32.const 127))) (i32.const 16))))
         (call $act (i32.const 44) (i32.const 6) (i64.shl (i64.sub (i64.extend_i32_u (i32.rem_u (i32.shr_u (local.get $r) (i32.const 8)) (i32.const 3))) (i64.const 1)) (i64.const 16)))
         (global.set $steps (i64.add (global.get $steps) (i64.const 1)))
-        (call $beginPayload)
-        (call $puts (i32.const 49250)) (call $puts (i32.const 49242))
-        (call $puts (i32.const 49273))
-        (call $putInt (global.get $steps)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
-        (call $beginPayload)
-        (call $puts (i32.const 49250)) (call $puts (i32.const 49296))
-        (call $puts (i32.const 49273))
-        (call $putInt (global.get $state)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
-        (call $beginPayload)
-        (call $puts (i32.const 49250)) (call $puts (i32.const 49302))
-        (call $puts (i32.const 49273))
-        (call $putInt (global.get $tick)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
-        (call $beginPayload)
-        (call $puts (i32.const 49250)) (call $puts (i32.const 49309))
-        (call $puts (i32.const 49273))
-        (call $putInt (i64.extend_i32_u (local.get $r))) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
+        (call $stateWrite (i32.const 0) (global.get $steps) (i64.const 0))
+        (call $stateWrite (i32.const 1) (global.get $state) (i64.const 0))
+        (call $stateWrite (i32.const 2) (global.get $tick) (i64.const 0))
+        (call $stateWrite (i32.const 3) (i64.extend_i32_u (local.get $r)) (i64.const 0))
         (if (i64.ge_s (global.get $steps) (i64.load (i32.const 17424))) (then
-          (call $beginPayload)
-        (call $puts (i32.const 49250)) (call $puts (i32.const 49316))
-        (call $puts (i32.const 49273))
-        (call $putInt (i64.const 0)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47)) (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49326)) (i64.const 25) (i64.const 0))))))))
+          (call $stateWrite (i32.const 4) (i64.const 0) (i64.const 0)) (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49326)) (i64.const 25) (i64.const 0))))))))
     (else (global.set $active (i32.const 0))))
 
     (call $ask (i32.const 0) (i32.const 5) (i32.const 49152) (i32.const 6) (i64.const 2))
 (call $ask (i32.const 1) (i32.const 5) (i32.const 49159) (i32.const 12) (i64.const 2))
-(call $ask (i32.const 2) (i32.const 3) (i32.const 49172) (i32.const 5) (i64.const 8))
+
 (call $read (i32.const 0) (i32.const 49178) (i32.const 7) (i32.const 17408))
 (call $read (i32.const 0) (i32.const 49186) (i32.const 4) (i32.const 17416))
 (call $read (i32.const 0) (i32.const 49191) (i32.const 5) (i32.const 17424))
@@ -281,4 +237,12 @@
   (data (i32.const 49309) "\22\64\72\61\77\22\00")
   (data (i32.const 49316) "\22\65\6e\61\62\6c\65\64\22\00")
   (data (i32.const 49326) "\73\65\65\64\65\64\20\66\75\7a\7a\20\70\61\73\73\20\63\6f\6d\70\6c\65\74\65\00")
+
+  ;; Bound addresses are declarations; every write still checks its live grant and audience.
+  (global $boundCells (mut i32) (i32.const 0))
+  (func $stateWrite (param $slot i32) (param $value i64) (param $kind i64)
+    (drop (call $emit (i32.const 1) (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 15)
+      (local.get $value) (local.get $kind) (i64.const 0))))
+  (data (i32.const 53248) "\00\e0\00\00\07\e0\00\00\06\00\05\00\00\00\00\00\00\e0\00\00\0d\e0\00\00\06\00\03\00\00\00\00\00\00\e0\00\00\11\e0\00\00\06\00\04\00\00\00\00\00\00\e0\00\00\16\e0\00\00\06\00\04\00\00\00\00\00\00\e0\00\00\1b\e0\00\00\06\00\07\00\00\00\00\00")
+  (data (i32.const 57344) "\66\75\7a\7a\65\72\00\73\74\65\70\73\00\72\6e\67\00\74\69\63\6b\00\64\72\61\77\00\65\6e\61\62\6c\65\64\00")
 )
