@@ -59,7 +59,7 @@ hud {
 
 addon "watchdog" {
   modulePath: "addons/watchdog.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests: concat(

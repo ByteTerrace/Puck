@@ -3,7 +3,7 @@ namespace Puck.Text;
 /// <summary>A named, hash-pinned font asset and the exact Unicode scalar set Puck generates for it.</summary>
 /// <param name="Name">The stable name text runs use.</param>
 /// <param name="Source">The asset path, interpreted by the owning document.</param>
-/// <param name="Hash">The canonical <c>sha256-64/{16 lowercase hex}</c> pin of the font bytes.</param>
+/// <param name="Hash">The canonical <c>sha256/{64 lowercase hex}</c> pin of the font bytes.</param>
 /// <param name="CodePointRanges">The scalar tokens to include, such as <c>U+0020-U+007E</c>.</param>
 /// <param name="Characters">Additional non-whitespace scalars to include.</param>
 /// <param name="PixelSize">The rasterization em size in pixels; null uses 48.</param>

@@ -28,7 +28,7 @@ public class ComprehensiveSyntheticTests {
             cartridge {
                 title: "Synthetic AGB"
                 rom: "synthetic.agb"
-                hash: "auto"
+                hash: auto
                 saveType: "Sram32k"
             }
             """;
@@ -139,8 +139,7 @@ public class ComprehensiveSyntheticTests {
                 presentation: Windowed
                 surfaceFormat: r8g8b8a8
                 targetHertz: targetFps
-                timing: false
-                width: 1280
+               width: 1280
             }
 
             // Views section
@@ -151,8 +150,7 @@ public class ComprehensiveSyntheticTests {
                         {
                             camera: null
                             height: 1
-                            pipeline: "ink"
-                            width: 1
+                           width: 1
                             x: 0
                             y: 0
                         }
@@ -169,8 +167,7 @@ public class ComprehensiveSyntheticTests {
 
                 seatRigPreset("pilot", turnAngle, 2.5m)
 
-                pipeline "ink" {
-                    camera: null
+                graph "ink" {
                     source: "../pipelines/ink.graph.json"
                     timeScale: 1
                 }
@@ -179,7 +176,7 @@ public class ComprehensiveSyntheticTests {
             // Addon with auto-hashing
             addon "rules-engine" {
                 modulePath: "addons/rules.wasm"
-                hash: "auto"
+                hash: auto
             }
 
             // State catalog with world cells

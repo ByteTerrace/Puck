@@ -70,14 +70,14 @@ public sealed class MultiWorldCompilationTests {
     [Fact]
     public void WorldsHaveSeparateMapsAndDeclaredNamesAreOrigins() {
         var result = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
-            module room(value) { simulation { rate: value } }
+            module room(value) { simulation { rateHz: value } }
             world north = room(20)
             world south = room(30)
             """, allowMultiple: true);
 
         Assert.True(condition: result.Success, userMessage: string.Join(separator: "\n", values: result.Diagnostics));
-        Assert.True(condition: result.Worlds[0].SourceMap.TryGetOrigin(jsonPointer: "/simulation/rate", origin: out var north));
-        Assert.True(condition: result.Worlds[1].SourceMap.TryGetOrigin(jsonPointer: "/simulation/rate", origin: out var south));
+        Assert.True(condition: result.Worlds[0].SourceMap.TryGetOrigin(jsonPointer: "/simulation/rateHz", origin: out var north));
+        Assert.True(condition: result.Worlds[1].SourceMap.TryGetOrigin(jsonPointer: "/simulation/rateHz", origin: out var south));
         Assert.Contains("north", north.ModuleInstancePath);
         Assert.Contains("south", south.ModuleInstancePath);
     }

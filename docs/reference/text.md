@@ -32,7 +32,7 @@ can substitute another backend.
   placement; a consumer resolves the per-glyph channel at a deterministic
   content tick.
 - *Portable, hash-pinned font catalogs:* a document names its fonts by a
-  document-relative path and a `sha256-64/...` content hash, so a world stays
+  document-relative path and a full `sha256/...` content pin, so a world stays
   replayable with no ambient system-font lookup.
 - *A content-addressed cache:* `FontAtlasSourceResolver` keys atlas reuse on
   the font's bytes and a normalized hash of the generation options, so the
@@ -307,7 +307,7 @@ mapping; the values do not make the sampled zero set identical to the source out
 
 `TextFontCatalogDefinition` is the reusable authoring contract for a document
 that brings its own fonts. Every `TextFontDefinition` names a
-document-relative source, pins its bytes with a `sha256-64/...` hash, and
+document-relative source, pins its bytes with a full `sha256/...` pin, and
 declares the Unicode scalar ranges to generate. Call
 `FontAtlasSourceResolver.ResolveCatalog` to generate every logical atlas and
 pack them into one texture through `FontAtlasCatalogPacker`; the returned
@@ -325,7 +325,7 @@ lookup, which keeps a world portable and replayable.
   "fonts": [{
     "name": "body",
     "source": "fonts/Inter-Regular.ttf",
-    "hash": "sha256-64/0123456789abcdef",
+    "hash": "sha256/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "codePointRanges": ["U+0020-U+007E", "U+00A0-U+024F"],
     "faceIndex": 0,
     "pixelSize": 48,

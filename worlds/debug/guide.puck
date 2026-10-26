@@ -179,7 +179,7 @@ patches [
   {
     name: "gallery-guide"
     source: "patches/guide-voice.patch.json"
-    hash: "405ee9583477d64a47e99762ed96d22b97b0542650154d3b60cda55b00f243c0"
+    hash: "sha256/405ee9583477d64a47e99762ed96d22b97b0542650154d3b60cda55b00f243c0"
   }
 ]
 audio {
@@ -302,7 +302,7 @@ placements {
 // The requests list the regions in walking order, matching the keys in the authored guideExhibits row.
 addon "guide" {
   modulePath: "addons/guide.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests: concat(

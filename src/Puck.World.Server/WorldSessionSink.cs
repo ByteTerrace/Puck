@@ -24,6 +24,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private bool m_withheld;
 
     private EntitySnapshot[] m_redacted = [];
+    private readonly WorldStateChangeDisclosure m_stateDisclosure = new();
 
     /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
     /// takes deliveries; the session ends with it.</summary>
@@ -235,7 +236,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
 
         if (tier == WorldDisclosureTier.Replica) {
-            return WorldStateDisclosure.Disclose(definition, arena, recipient, unrestricted).Definition;
+            return WorldStateDisclosure.Disclose(arena: arena, definition: definition, recipient: recipient, unrestricted: unrestricted).Definition;
         }
 
         var time = server.DeliveryTime;
@@ -272,7 +273,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (Tier == WorldDisclosureTier.Replica) {
                 inner.DeliverDefinition(
-                    definition: Disclose(definition)!,
+                    definition: Disclose(definition: definition)!,
                     version: version
                 );
             } else {
@@ -335,7 +336,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 }
             }
 
-            redacted = redacted with { FieldCells = WorldStateChangeDisclosure.Filter(server, observation.Session, redacted.FieldCells, Tier == WorldDisclosureTier.Replica) };
+            redacted = redacted with { FieldCells = m_stateDisclosure.Filter(server, observation.Session, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)) };
             inner.DeliverSnapshot(snapshot: in redacted);
             FollowObserverDetach();
         } catch (Exception exception) {
@@ -375,7 +376,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (m_withheld) {
                 m_withheld = false;
                 inner.DeliverDefinition(
-                    definition: Disclose(definition)!,
+                    definition: Disclose(definition: definition)!,
                     version: version
                 );
                 FollowObserverDetach();
@@ -385,7 +386,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (stamp.ArenaValues && !stamp.PlacementProjection) { return; }
             inner.DeliverState(
-                definition: Disclose(definition)!,
+                definition: Disclose(definition: definition)!,
                 stamp: in stamp,
                 version: version
             );

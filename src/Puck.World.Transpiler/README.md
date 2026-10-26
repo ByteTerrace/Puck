@@ -744,7 +744,14 @@ world with a verb whose grammar carries no world token), PUCK107 (a
 inferred from its expression). The `table`/`slot`/`pile`/`grid` declaration refusals (PUCK049–PUCK066) are listed in
 [State declarations](#state-declarations) above.
 
-The engine's validation of a composed world reports each refusal as PUCK030 (an error), a row or record field
+Compilation refuses unknown document members as PUCK030, including members supplied by templates and bound
+objects, whether or not semantic validation is requested. Reserved document extension keys remain data, and
+converter-owned values follow their converter's shape. Authored hashes are `hash: auto` or
+`hash: "sha256/<64 lowercase hex>"`; quoted `"auto"`, bare digests and `sha256-64/` pins are refused by name.
+Font pins cover font bytes. Canonical asset rows (creations, patches, tunes, music and tables) carry their canonicalizer's
+digest in the compiled document; the decompiler restores its authored prefix.
+
+The engine's validation of a composed world reports each semantic refusal as PUCK030 (an error), a row or record field
 naming an undeclared enum as PUCK119, and each check it deferred to
 the host that runs the world — a machine engine, post-process package or probe kind the diagnosing host carries no
 catalog for — as PUCK118, an information notice that never fails a compile or a composition.

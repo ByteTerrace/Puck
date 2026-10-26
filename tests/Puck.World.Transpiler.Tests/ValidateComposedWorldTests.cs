@@ -50,7 +50,8 @@ public sealed class ValidateComposedWorldTests : IDisposable {
             System.Text.Json.JsonSerializer.Serialize(patch, Puck.Assets.Documents.DocumentJsonOptions.Shared));
         var source = $$"""
             schema: "puck.world.definition.v1"
-            patches [{ name: "voice", source: "voice.patch.json", hash: "{{canonical.Hash}}" }]
+            let voice = { name: "voice", source: "voice.patch.json", hash: "sha256/{{canonical.Hash}}" }
+            patches [voice]
             """;
         var path = Path.Combine(path1: m_directory.RootPath, path2: "world.puck");
         var compiled = WorldCompiler.Compile(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);

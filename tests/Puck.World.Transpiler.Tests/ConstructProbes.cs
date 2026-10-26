@@ -148,7 +148,7 @@ internal static class ConstructProbes {
         )],
         ["addon"] = [new(
             Pointer: "/addons/0",
-            Source: Doc(body: "addon \"extra\" {\n    hash: \"0000\"\n}")
+            Source: Doc(body: "addon \"extra\" {\n    hash: \"sha256/0000000000000000000000000000000000000000000000000000000000000000\"\n}")
         )],
         ["request"] = [new(
             Pointer: "/addons/0/requests/0",
@@ -184,7 +184,7 @@ internal static class ConstructProbes {
         )],
         ["cartridge"] = [new(
             Pointer: "/cartridge",
-            Source: Doc(body: "cartridge {\n    hash: \"0000\"\n}")
+            Source: Doc(body: "cartridge {\n    hash: \"sha256/0000000000000000000000000000000000000000000000000000000000000000\"\n}")
         )],
         ["state"] = [new(
             Pointer: "/state",
@@ -530,12 +530,12 @@ internal static class ConstructProbes {
                 grants [
                     {
                         capability: Edit
-                        principal: "seat1"
+                        grantee: "seat1"
                         subject: "all"
                     }
                     {
                         capability: Mutate
-                        principal: "seat1"
+                        grantee: "seat1"
                         subject: "section:state"
                     }
                 ]

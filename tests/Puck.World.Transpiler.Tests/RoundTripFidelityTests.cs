@@ -48,7 +48,7 @@ public class RoundTripFidelityTests {
         ["a binding without a kind is not given one"] = new(
             Json: """
                 {"schema":"puck.world.definition.v1","rules":[
-                  {"name":"r","bindings":[{"name":"x","expression":"$each"}],
+                  {"name":"r","locals":[{"name":"x","expression":"$each"}],
                    "effects":[{"$type":"setState","state":"hp","value":0}]}
                 ]}
                 """,
@@ -90,11 +90,11 @@ public class RoundTripFidelityTests {
         ["every degrees field prints its unit"] = new(
             Json: """
                 {"schema":"puck.world.definition.v1","placements":{"rows":[
-                  {"id":"a","prototypeId":"p","position":[0,0,0],"scale":1,"yawDegrees":30,"outwardYawDegrees":15}
+                  {"id":"a","prototypeId":"p","position":[0,0,0],"scale":1,"yawDegrees":30}
                 ]}}
                 """,
             NotPrinted: [],
-            Printed: ["outwardYawDegrees: 15deg"]
+            Printed: ["yawDegrees: 30deg"]
         ),
         // An exported facet with zero names is a present-but-empty array, not an absent facet; losing it would
         // silently drop the export from the composed document.
@@ -144,10 +144,17 @@ public class RoundTripFidelityTests {
         ),
         ["scientific notation"] = new(
             Json: """
-                {"schema":"puck.world.definition.v1","palette":{"b":[0.01452,-0.0030928,8.57e-05]}}
+                {"schema":"puck.world.definition.v1","_palette":{"b":[0.01452,-0.0030928,8.57e-05]}}
                 """,
             NotPrinted: [],
             Printed: []
+        ),
+        ["a canonical creation digest prints as an authored pin"] = new(
+            Json: """
+                {"schema":"puck.world.definition.v1","prototypes":[{"id":"p","document":null,"hash":"0000000000000000000000000000000000000000000000000000000000000000"}]}
+                """,
+            NotPrinted: [],
+            Printed: ["hash: \"sha256/"]
         ),
     };
 

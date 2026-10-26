@@ -14,11 +14,11 @@ public sealed class ConditionalLawTests {
     [InlineData("0 ?? 1 ? 4 : 5", 5L)]
     [Theory]
     public void AValueConditionalFoldsTheArmItsConditionSelects(string text, long expected) {
-        var lowered = WorldSources.LowerClean(body: $"value: {text}\n");
+        var lowered = WorldSources.LowerClean(body: $"_value: {text}\n");
 
         Assert.Equal(
             expected: expected,
-            actual: lowered["value"]?.GetValue<long>()
+            actual: lowered["_value"]?.GetValue<long>()
         );
     }
     // Only the selected arm is evaluated, so an arm the condition rules out may be one that has no value.
@@ -27,12 +27,12 @@ public sealed class ConditionalLawTests {
         var lowered = WorldSources.LowerClean(body: """
             let items = [1, 2]
 
-            value: length(items) > 5 ? items[5] : "short"
+            _value: length(items) > 5 ? items[5] : "short"
             """);
 
         Assert.Equal(
             expected: "short",
-            actual: lowered["value"]?.GetValue<string>()
+            actual: lowered["_value"]?.GetValue<string>()
         );
     }
     [Fact]
@@ -40,21 +40,21 @@ public sealed class ConditionalLawTests {
         var lowered = WorldSources.LowerClean(body: """
             let flipped = 1
 
-            value: flipped ? [1, 0, 0, 0] : [0, 1, 0, 0]
+            _value: flipped ? [1, 0, 0, 0] : [0, 1, 0, 0]
             """);
 
         Assert.Equal(
             expected: "[1,0,0,0]",
-            actual: lowered["value"]?.ToJsonString()
+            actual: lowered["_value"]?.ToJsonString()
         );
     }
-    [InlineData("value: a ? b : c")]
-    [InlineData("value: a ? b : c ? d : e")]
-    [InlineData("value: (a ? b : c) ? d : e")]
-    [InlineData("value: a ? (b ? c : d) : e")]
-    [InlineData("value: (a ? b : c) + 1")]
-    [InlineData("value: -(a ? b : c)")]
-    [InlineData("value: map(xs, x => x > 0 ? x : -x)")]
+    [InlineData("_value: a ? b : c")]
+    [InlineData("_value: a ? b : c ? d : e")]
+    [InlineData("_value: (a ? b : c) ? d : e")]
+    [InlineData("_value: a ? (b ? c : d) : e")]
+    [InlineData("_value: (a ? b : c) + 1")]
+    [InlineData("_value: -(a ? b : c)")]
+    [InlineData("_value: map(xs, x => x > 0 ? x : -x)")]
     [Theory]
     public void TheFormatterPrintsAConditionalAsItReadsBack(string line) {
         var source = $"schema: \"puck.world.definition.v1\"\n{line}\n";
@@ -96,7 +96,7 @@ public sealed class ConditionalLawTests {
         var (_, diagnostics) = WorldSources.Lower(body: """
             let spread = 2
 
-            value: +spread
+            _value: +spread
             """);
 
         Assert.Contains(

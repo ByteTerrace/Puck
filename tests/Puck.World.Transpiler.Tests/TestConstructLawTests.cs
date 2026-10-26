@@ -197,12 +197,12 @@ internal static class TestWorldFixtures {
         grants [
             {
                 capability: Edit
-                principal: "seat1"
+                grantee: "seat1"
                 subject: "all"
             }
             {
                 capability: Mutate
-                principal: "seat1"
+                grantee: "seat1"
                 subject: "section:state"
             }
         ]

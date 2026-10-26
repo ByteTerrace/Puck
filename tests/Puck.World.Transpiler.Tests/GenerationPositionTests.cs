@@ -140,12 +140,12 @@ public class GenerationPositionTests {
         var lowered = WorldSources.LowerClean(body: """
             let points = [1, 2, 3]
 
-            curve: map(points, p => [p, 0])
+            _curve: map(points, p => [p, 0])
             """);
 
         Assert.Equal(
             "[[1,0],[2,0],[3,0]]",
-            Assert.IsType<JsonArray>(@object: lowered["curve"]).ToJsonString()
+            Assert.IsType<JsonArray>(@object: lowered["_curve"]).ToJsonString()
         );
     }
     [Fact]

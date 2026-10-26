@@ -92,7 +92,7 @@ public class MemberSpellingRegressionTests {
                     }
                 ]
             }
-            {{(evaluateDataFirst ? "let cached = { interactions: settings }\nprobe: cached" : "")}}
+            {{(evaluateDataFirst ? "let cached = { interactions: settings }\n_probe: cached" : "")}}
             {{(shadowConstant ? "template emit(amount) { interactions: settings }\nemit(7)" : "interactions: settings")}}
             """);
 

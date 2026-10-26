@@ -1177,10 +1177,11 @@ public static partial class WorldDecompiler {
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{indent}{PuckPrinter.PrintPropertyName(level: indentLevel, name: key)}{(text ? ": " : FieldSeparator(value: value))}{FormatArgument(
+            $"{indent}{PuckPrinter.PrintPropertyName(level: indentLevel, name: key)}{(text ? ": " : FieldSeparator(value: value))}{FormatFieldArgument(
                 context: position,
                 form: form,
                 indentLevel: indentLevel,
+                key: key,
                 node: value
             )}"
         );
@@ -1419,7 +1420,8 @@ public static partial class WorldDecompiler {
                 // container. The literal grammar admits `key { }` and `key [ ]` directly.
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"{itemIndent}{PuckPrinter.PrintPropertyName(level: (indentLevel + 1), name: k)}{(PrintsAsText(form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)), node: v) ? ": " : FieldSeparator(value: v))}{FormatArgument(
+                    $"{itemIndent}{PuckPrinter.PrintPropertyName(level: (indentLevel + 1), name: k)}{(PrintsAsText(form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)), node: v) ? ": " : FieldSeparator(value: v))}{FormatFieldArgument(
+                        key: k,
                         context: ((context is null) ? null : WorldCallArguments.MemberType(member: k, owner: context)),
                         form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)),
                         indentLevel: (indentLevel + 1),
@@ -1460,7 +1462,7 @@ public static partial class WorldDecompiler {
                 node: v
             )}");
         }
-        return $"{(type == "not" ? "`not`" : type)}({string.Join(
+        return $"{((type == "not") ? "`not`" : type)}({string.Join(
             separator: ", ",
             values: args
         )})";
@@ -1476,11 +1478,19 @@ public static partial class WorldDecompiler {
     // An argument is printed in its one spelling: a name, a key, an expression and a closed word bare, text quoted.
     // The bare forms print the document's spelling and the finished text is respelled with the rest of the source;
     // a key is the exception, since its document spelling reads as an operand anywhere outside brackets.
+    private static string FormatFieldArgument(string key, JsonNode? node, WorldArgumentForm form, int indentLevel, Type? context = null) {
+        if ((key == "hash") && (node is JsonValue value) && value.TryGetValue<string>(value: out var hash)) {
+            if ((hash == "auto") || Puck.Assets.AssetContentHash.TryParse(hash: out _, text: hash)) { return "auto"; }
+            if (Puck.Assets.ContentPin.TryParseHex(hex: hash, pin: out var pin)) { return PuckStrings.Write(value: pin.ToString()); }
+        }
+        return FormatArgument(context: context, form: form, indentLevel: indentLevel, node: node);
+    }
     private static string FormatArgument(JsonNode? node, WorldArgumentForm form, int indentLevel, Type? context = null) {
         if (PrintsAsText(form: form, node: node)) {
             var text = WorldExpressionJson.Text(node: node);
-            return ExpressionSpelling.TryParse(text: text, program: out var program, error: out _) &&
-                ExpressionSpelling.TryPrintSource(program: program, text: out var source) ? source : text;
+
+            return ((ExpressionSpelling.TryParse(error: out _, program: out var program, text: text) &&
+                ExpressionSpelling.TryPrintSource(program: program, text: out var source)) ? source : text);
         }
         if ((node is JsonObject reference) && (form == WorldArgumentForm.Name) && (reference["field"] is not null)) {
             return StateChannelRefJsonConverter.FromNode(node: reference).Spelling;

@@ -51,7 +51,7 @@ public class SugarFallbackTests {
     // its own line, and the next statement sits at the same indentation, so it is not read as a name.
     [Fact]
     public void ABareExportFacetLowersToAnEmptyArrayWithoutSwallowingTheNextStatement() {
-        var lowered = Recompile(puck: "schema: \"puck.world.definition.v1\"\n\nexport action\nexport binding\n\nname: \"t\"\n");
+        var lowered = Recompile(puck: "schema: \"puck.world.definition.v1\"\n\nexport action\nexport binding\n\n_name: \"t\"\n");
 
         var exports = Assert.IsType<JsonObject>(@object: lowered["exports"]);
 
@@ -59,14 +59,14 @@ public class SugarFallbackTests {
         Assert.Empty(collection: Assert.IsType<JsonArray>(@object: exports["bindings"]));
         Assert.Equal(
             "t",
-            lowered["name"]?.ToString()
+            lowered["_name"]?.ToString()
         );
     }
     // The other side of the same indentation rule: `export`'s names are read only while a line stays indented deeper
     // than the keyword, so a formatter that re-indents from delimiter depth alone empties the facet silently.
     [Fact]
     public void FormattingAWrappedExportFacetKeepsItsNamesIndentedDeeperThanTheKeyword() {
-        const string Source = "schema: \"puck.world.definition.v1\"\n\nexport read\n    a, b, c\n\nname: \"t\"\n";
+        const string Source = "schema: \"puck.world.definition.v1\"\n\nexport read\n    a, b, c\n\n_name: \"t\"\n";
 
         var formatted = PuckFormat.Format(source: Source);
         var exports = Assert.IsType<JsonObject>(@object: Recompile(puck: formatted)["exports"]);
@@ -148,7 +148,6 @@ public class SugarFallbackTests {
     [InlineData("""{"$type":"addState","state":"d","value":null,"fromState":"e"}""")]
     [InlineData("""{"$type":"setState","state":"f","value":1,"target":"Self"}""")]
     [InlineData("""{"$type":"pushState","state":"g","fromState":"h","value":null}""")]
-    [InlineData("""{"$type":"scheduleState","state":"j","delaySeconds":2,"target":"Self"}""")]
     [Theory]
     public void AnEffectCarryingAKeyTheSugarWouldNotReprintFallsToCallForm(string effectJson) {
         var json = $$"""
