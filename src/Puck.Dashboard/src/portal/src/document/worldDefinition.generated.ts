@@ -5254,7 +5254,7 @@ export type WorldEffectPose = {
 };
 
 /**
- * Places a body upright at a live cell of an anchored topology, plus an authored offset.
+ * Places a body at a live cell of an anchored topology, plus an authored offset, upright or rolled.
  */
 export type WorldEffectPoseCell = {
   $type?: "poseCell";
@@ -5278,6 +5278,10 @@ export type WorldEffectPoseCell = {
    * Whether the body moves there as continuous motion, which a client interpolates and which keeps the body's attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.
    */
   glide?: boolean;
+  /**
+   * The roll a teleport stands the body at, about its forward axis: 180 lays it upside down, as a rule turning a two-faced piece over does. A glide keeps the body's attitude and ignores it.
+   */
+  rollDegrees?: number;
 };
 
 /**

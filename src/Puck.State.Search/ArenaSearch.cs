@@ -259,6 +259,8 @@ public sealed partial class ArenaSearch {
     private readonly List<ArenaSearchWrite> m_outputs = [];
 
     private Job[] m_jobs = [];
+    // Each job's input stamp this step, so choosing the job a step advances allocates nothing.
+    private ulong[] m_stepStamps = [];
     private CellKey m_bestRevisionKey;
     private CellKey m_bestScoreKey;
     private CellKey m_bestTargetKey;
@@ -422,6 +424,7 @@ public sealed partial class ArenaSearch {
         }
 
         m_jobs = jobs;
+        m_stepStamps = new ulong[jobs.Length];
 
         foreach (var job in jobs) {
             job.StampRows = ResolveStampRows(job: job);
@@ -432,8 +435,12 @@ public sealed partial class ArenaSearch {
 
         return true;
     }
-    /// <summary>Advances every job by what its allowance and its judged-candidate quota admit, landing a finished
-    /// job's outputs through <paramref name="apply"/>.</summary>
+    /// <summary>Advances one job with work to do by what its allowance and its judged-candidate quota admit, landing a
+    /// finished job's outputs through <paramref name="apply"/>.</summary>
+    /// <remarks>A job has work to do while it is enabled and its inputs moved, its walk is open, or its answer has not
+    /// landed. Each allowance is the whole tick's search share, so a tick steps one such job: the
+    /// <c>tick mod n</c>-th of the <c>n</c> that have work, in installed order. A job alone with work steps every
+    /// tick, and several take turns.</remarks>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="engineTick">The engine tick a value-over-time read answers as of.</param>
     /// <param name="apply">Installs one job's writes through the caller's own door.</param>
@@ -448,82 +455,115 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
-        var installed = false;
         var ledger = LedgerFold();
+        var stamps = m_stepStamps;
+        var busy = 0;
 
-        foreach (var job in m_jobs) {
+        for (var index = 0; (index < m_jobs.Length); index++) {
+            var job = m_jobs[index];
+
             if ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
                 continue;
             }
-            var work = job.Plan.Work;
-            var spent = 0L;
-
-            // A restart and a replay are work the step does before the walk moves, so both come out of the step's
-            // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
-            var jobStamp = Stamp(
+            stamps[index] = Stamp(
                 job: job,
                 stateStamp: InputStamp(
                     job: job,
                     ledger: ledger
                 )
             );
-
-            if (job.Stamp != jobStamp) {
-                Restart(
-                    job: job,
-                    stamp: jobStamp
-                );
-                spent += work.Restart;
+            if ((job.Stamp != stamps[index]) || job.Running || !job.Done) {
+                busy++;
             }
-            if (job.Running) {
-                try {
-                    spent += work.Replay(scopes: job.ScopeCount);
-                    if (!Replay(job: job)) {
-                        Restart(
-                            job: job,
-                            stamp: jobStamp
-                        );
-                        spent += work.Restart;
-                    }
+        }
+        if (busy == 0) {
+            return false;
+        }
 
-                    spent = Walk(
-                        job: job,
-                        spent: spent
-                    );
-                } catch {
-                    // Rewinding first puts the arena back to what the stamp was taken over, so the restart reads
-                    // the position the step started from.
-                    Suspend(job: job);
+        var turn = ((int)(tick % ((ulong)busy)));
+
+        for (var index = 0; (index < m_jobs.Length); index++) {
+            var job = m_jobs[index];
+
+            if (
+                ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) ||
+                ((job.Stamp == stamps[index]) && !job.Running && job.Done)
+            ) {
+                continue;
+            }
+            if (turn-- == 0) {
+                return StepJob(
+                    apply: apply,
+                    job: job,
+                    jobStamp: stamps[index]
+                );
+            }
+        }
+
+        return false;
+    }
+    private bool StepJob(Job job, ulong jobStamp, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
+        var work = job.Plan.Work;
+        var spent = 0L;
+
+        // A restart and a replay are work the step does before the walk moves, so both come out of the step's
+        // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
+        if (job.Stamp != jobStamp) {
+            Restart(
+                job: job,
+                stamp: jobStamp
+            );
+            spent += work.Restart;
+        }
+        if (job.Running) {
+            try {
+                spent += work.Replay(scopes: job.ScopeCount);
+                if (!Replay(job: job)) {
                     Restart(
                         job: job,
                         stamp: jobStamp
                     );
-
-                    throw;
+                    spent += work.Restart;
                 }
 
+                spent = Walk(
+                    job: job,
+                    spent: spent
+                );
+            } catch {
+                // Rewinding first puts the arena back to what the stamp was taken over, so the restart reads
+                // the position the step started from.
                 Suspend(job: job);
+                Restart(
+                    job: job,
+                    stamp: jobStamp
+                );
+
+                throw;
             }
 
-            job.PeakStepWork = Math.Max(
-                val1: job.PeakStepWork,
-                val2: spent
-            );
-            job.Work += spent;
-            if (
-                job.Running ||
-                job.Done
-            ) {
-                continue;
-            }
-
-            // Done is set only once the door has answered, so a door that throws leaves the job to land again.
-            installed |= Land(
-                apply: apply,
-                job: job
-            );
-            job.Done = true;
+            Suspend(job: job);
         }
+
+        job.PeakStepWork = Math.Max(
+            val1: job.PeakStepWork,
+            val2: spent
+        );
+        job.Work += spent;
+        if (
+            job.Running ||
+            job.Done
+        ) {
+            return false;
+        }
+
+        // Done is set only once the door has answered, so a door that throws leaves the job to land again.
+        var installed = Land(
+            apply: apply,
+            job: job
+        );
+
+        job.Done = true;
 
         return installed;
     }

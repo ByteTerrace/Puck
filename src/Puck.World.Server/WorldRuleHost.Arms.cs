@@ -485,7 +485,7 @@ public sealed partial class WorldRuleHost {
             if (effect.Glide) {
                 body.Glide(position: position);
             } else {
-                body.Pose(position: position, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+                body.Pose(position: position, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: effect.Roll);
             }
         }
         return true;

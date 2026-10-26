@@ -496,13 +496,13 @@ public static partial class WorldFactsCompiler {
         var body = context.ResolveBodyRef(channel: "poseCell.key", ruleName: ruleName, start: 0, tokens: effect.Key.Split(':'));
 
         if ((WorldTopologyCompilation.Find(definition: context.Definition, name: effect.Topology) is null) ||
-            !VectorFunctions.IsFinite(vector: effect.Offset)) {
-            throw new RuleException(detail: "poseCell requires a declared topology and a finite offset", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
+            !VectorFunctions.IsFinite(vector: effect.Offset) || !float.IsFinite(f: effect.RollDegrees)) {
+            throw new RuleException(detail: "poseCell requires a declared topology, a finite offset and a finite roll", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
 
         return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
-            FixedVector3.FromVector3(value: effect.Offset), effect.Glide);
+            FixedVector3.FromVector3(value: effect.Offset), effect.Glide, FixedQ4816.FromDegrees(degrees: effect.RollDegrees));
     }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;
