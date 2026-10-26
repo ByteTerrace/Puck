@@ -8,6 +8,11 @@ starting work, and tick or remove an item in the same change that closes it.
 
 - [ ] The owner's sequence: the current lanes finish and land, the integrated work is vetted by review, quiet-machine readings (frame times and memory) find no regression, and then the owner decides to push `main`, which deploys.
 
+## World authoring diagnostics
+
+- [ ] Make `puck creation stats --world worlds/debug/debug.puck --prototype companion` compose the live world's grant masks. A fresh lane CLI reported `MutationKindVocabularyHook.TryParse was never installed`, while `puck compile --validate` and the real World accepted the same sources. The diagnostic path's initializer failure still needs isolation.
+- [ ] Investigate state-rule bindings after a full `world.reload`: a debug World reported `blink-close`'s state transaction refused because the live edit grant refused `state:blink`, then the companion's sensory and glow rows stayed at their reload seeds while the guest continued to fly. Fresh boots and an addon-row replacement worked. The general cause is unconfirmed.
+
 ## Maths law classification
 
 - [ ] Classify the public Maths surface the retired ratchet grandfathered without

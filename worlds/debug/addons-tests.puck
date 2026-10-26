@@ -7,6 +7,10 @@ schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "addons-tests"
 
+// This test-only host seat may initialize the companion's floor-contact scenario. The shipped debug world still
+// grants Drive over body 42 solely to its guest; this is not an addon capability or a gameplay grant.
+grants [{ grantee: "seat1", capability: Drive, subject: "body:42" }]
+
 test "the watchdog stays quiet through an ordinary boot" {
   when {
     ticks 90
@@ -79,11 +83,25 @@ test "the faerie flies within 2.5 m of her at shoulder height and keeps clear" {
 }
 
 test "the faerie hovers without a floor attachment" {
-  when { ticks 90 }
+  when {
+    ticks 90
+  }
   expect {
     bodyPosition(body, 42, y) > 1.2 and bodyPosition(body, 42, y) < 2.2
     fact(body, 42, Airborne) == 1
     companionGlow.level >= 0.5 and companionGlow.level <= 1
+    watchdog.count == 0
+  }
+}
+
+test "the faerie takes off again after touching a floor" {
+  when {
+    seat1: body.pose -1.2 0.02 1 0 0 0 42
+    ticks 90
+  }
+  expect {
+    bodyPosition(body, 42, y) > 1.2 and bodyPosition(body, 42, y) < 2.2
+    fact(body, 42, Airborne) == 1
     watchdog.count == 0
   }
 }

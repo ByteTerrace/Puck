@@ -1,18 +1,33 @@
 // Neutral walking tools have their own model; the companion's faerie creation belongs to the companion alone.
-exports { reads [standIn] }
+exports {
+  reads [standIn]
+}
 prototypes {
   prototype "standIn" {
     document {
       name: "standIn"
       schema: "puck.creation.v1"
       palette [{ color: "#5E8C88", roughness: 0.55 }, { color: "#E8E2D4", roughness: 0.4 }]
-      shape Capsule "torso" { material: 0, position [0, 0.95, 0], scale [0.3, 0.6, 0.3] }
-      shape Sphere "head" { material: 0, position [0, 1.78, 0], scale [0.24, 0.24, 0.24] }
-      shape Box "visor" { material: 1, position [0, 1.8, 0.2], scale [0.16, 0.05, 0.05] }
+      shape Capsule "torso" {
+        material: 0
+        position [0, 0.95, 0]
+        scale [0.3, 0.6, 0.3]
+      }
+      shape Sphere "head" {
+        material: 0
+        position [0, 1.78, 0]
+        scale [0.24, 0.24, 0.24]
+      }
+      shape Box "visor" {
+        material: 1
+        position [0, 1.8, 0.2]
+        scale [0.16, 0.05, 0.05]
+      }
     }
   }
 }
 looks [{
-  name: "standIn", scale: 1, source: creation(prototypeId: standIn)
-  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-}]
+    name: "standIn", scale: 1, source: creation(prototypeId: standIn)
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  }
+]

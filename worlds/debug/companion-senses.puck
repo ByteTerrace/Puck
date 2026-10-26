@@ -2,7 +2,9 @@
 // companion.threat writes today. Input is authoritative tick data; no presentation clock, microphone level or GPU
 // readback enters its decisions. Observe is the guest's only access to this projection.
 import "shapes"
-exports { reads [companionGlow] }
+exports {
+  reads [companionGlow]
+}
 
 state {
   world {
@@ -46,9 +48,18 @@ state {
       z = 1.0
       speed = 0.0
     }
-    table companionAttention { distance = 16.0, nearDistance = 4.0 }
-    table companionCue { guide = -1, door = 1 }
-    table companionClock { threat = 0, sound = 0 }
+    table companionAttention {
+      distance = 16.0
+      nearDistance = 4.0
+    }
+    table companionCue {
+      guide = -1
+      door = 1
+    }
+    table companionClock {
+      threat = 0
+      sound = 0
+    }
   }
 }
 
@@ -125,7 +136,7 @@ rule "companion-neighbours" {
   local dy = bodyPosition(each, y) + 0.8 - bodyPosition(body, 42, y)
   local dz = bodyPosition(each, z) - bodyPosition(body, 42, z)
   local distance = dx * dx + dy * dy + dz * dz
-  when (dx != 0 or dz != 0) and distance < companionAttention.nearDistance
+  when (dx or dz) and distance < companionAttention.nearDistance
   mode: Level
   forEach: $bodies
   companionAttention.nearDistance = distance
@@ -172,7 +183,9 @@ rule "companion-glow" {
   when 1
   mode: Level
   companionGlow.phase += 0.013 + speed * 0.023
-  if companionGlow.phase >= 1 { companionGlow.phase -= 1 }
+  if companionGlow.phase >= 1 {
+    companionGlow.phase -= 1
+  }
   companionGlow.level = 0.5 + speed * 0.2 + companionGlow.phase * (1 - companionGlow.phase)
   companionGlow.speed = speed
   companionGlow.x = bodyPosition(body, 42, x)

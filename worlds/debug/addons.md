@@ -287,7 +287,10 @@ the companion can try the direct line but cannot find a staircase to another
 floor from that alone. For an inspection capture, initialize both bodies on that
 floor, then drive the Moth normally. Ordinary walks retain the doors and stairs
 she used, and free flight follows a lift's vertical change without needing floor
-attachment.
+attachment. Height changes in place keep a current shoulder-height target instead
+of pursuing an old breadcrumb through a moving car's floor. Its surface takeoff
+hold lets it leave the floor again after an incidental landing. Evasions reflect
+an inward escape away from the Moth and preserve clearance from her whole capsule.
 
 ## Machine debugger
 

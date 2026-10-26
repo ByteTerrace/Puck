@@ -159,6 +159,7 @@
   (global $dodgeZ (mut i64) (i64.const 0))
   (global $startleEnd (mut i64) (i64.const 0))
   (global $portalEnd (mut i64) (i64.const 0))
+  (global $verticalEnd (mut i64) (i64.const 0))
   (global $portalX (mut i64) (i64.const 0))
   (global $portalY (mut i64) (i64.const 0))
   (global $portalZ (mut i64) (i64.const 0))
@@ -278,6 +279,14 @@
       (i64.mul (local.get $side) (i64.div_s (i64.mul (local.get $dx) (i64.const 32768)) (local.get $length))))))
     (global.set $dodgeY (i64.add (global.get $selfY) (i64.add (i64.const 16384)
       (i64.div_s (i64.mul (local.get $dy) (i64.const 22938)) (local.get $length)))))
+    ;; A perpendicular escape must not cut through the Moth. Reflect an inward choice across our current point;
+    ;; this preserves the seeded variation while sending its entire first leg away from her occupied capsule.
+    (if (i64.lt_s (i64.add
+          (call $mul (i64.sub (global.get $dodgeX) (global.get $selfX)) (i64.sub (global.get $selfX) (global.get $mothX)))
+          (call $mul (i64.sub (global.get $dodgeZ) (global.get $selfZ)) (i64.sub (global.get $selfZ) (global.get $mothZ))))
+        (i64.const 0)) (then
+      (global.set $dodgeX (i64.sub (i64.mul (global.get $selfX) (i64.const 2)) (global.get $dodgeX)))
+      (global.set $dodgeZ (i64.sub (i64.mul (global.get $selfZ) (i64.const 2)) (global.get $dodgeZ)))))
     (global.set $dodgeEnd (i64.add (global.get $tick) (i64.add (i64.const 12) (call $random (i32.const 12)))))
     (global.set $startleEnd (i64.add (global.get $dodgeEnd) (i64.const 45)))
     (global.set $modeEnd (global.get $startleEnd))
@@ -293,6 +302,7 @@
       (global.set $seeded (i32.const 1))
       (drop (call $next)) (global.set $rng (i64.add (global.get $rng) (i64.const 314159))) (drop (call $next))
       (global.set $lastMX (global.get $mothX)) (global.set $lastMY (global.get $mothY)) (global.set $lastMZ (global.get $mothZ))
+      (global.set $restX (global.get $selfX)) (global.set $restZ (global.get $selfZ))
       (global.set $lastSX (global.get $selfX)) (global.set $lastSZ (global.get $selfZ))))
     (local.set $mx (i64.sub (global.get $mothX) (global.get $lastMX)))
     (local.set $my (i64.sub (global.get $mothY) (global.get $lastMY)))
@@ -315,6 +325,11 @@
         (i64.const 393216)) (then
       (global.set $portalEnd (i64.const 0)) (global.set $trailNext (global.get $trailHead))))
     (local.set $moving (i64.gt_s (local.get $speed) (i64.const 1800)))
+    ;; A lift or jump changes height in place. Keep its head-height target current instead of trying to descend
+    ;; through a rising platform to a breadcrumb on the floor it just left.
+    (if (i32.and (i64.lt_s (call $planar (i64.const 0) (i64.const 0) (local.get $mx) (local.get $mz)) (i64.const 655))
+        (i32.and (i64.gt_s (call $abs (local.get $my)) (i64.const 655)) (i64.lt_s (local.get $distance) (i64.const 196608))))
+      (then (global.set $verticalEnd (i64.add (global.get $tick) (i64.const 90)))))
     (call $trail)
     ;; The idle choice lasts 2.2 to 8.2 seconds; successive choices use a seeded stream, never a short loop.
     (if (i64.ge_u (global.get $tick) (global.get $modeEnd)) (then
@@ -355,12 +370,12 @@
         (local.set $gx (i64.add (global.get $mothX) (call $mul (local.get $fz) (i64.const 58982))))
         (local.set $gz (i64.sub (global.get $mothZ) (call $mul (local.get $fx) (i64.const 58982))))
         (local.set $gy (i64.add (global.get $mothY) (i64.const 111411)))))))
-    ;; Start and run: lead a little. Stop: carry a short decaying overshoot instead of snapping to rest.
+    ;; Start and run: lead a little. The kit's release response carries the final motion into a stop.
     (if (local.get $moving) (then
       (local.set $gx (i64.add (local.get $gx) (i64.mul (local.get $mx) (i64.const 5))))
       (local.set $gz (i64.add (local.get $gz) (i64.mul (local.get $mz) (i64.const 5))))))
     (local.set $gx (i64.add (local.get $gx) (call $mul (call $s (i32.const 15)) (i64.const 22938))))
-    ;; At more than 2.5 m, keep the route rather than a side offset: thread doors, stairs and the lift's opening.
+    ;; While moving, beyond 1.8 m, or on another height, keep the route: thread doors, stairs and the lift opening.
     (if (i32.or (local.get $moving) (i32.or
           (i64.gt_s (local.get $distance) (i64.const 117965))
           (i64.gt_s (call $abs (i64.sub (global.get $selfY) (local.get $gy))) (i64.const 49152)))) (then
@@ -369,15 +384,18 @@
         (local.set $at (call $crumb (global.get $trailNext)))
         (br_if $reached (i64.gt_s (call $planar (global.get $selfX) (global.get $selfZ)
           (i64.load (local.get $at)) (i64.load offset=16 (local.get $at))) (i64.const 26214)))
-        (br_if $reached (i64.gt_s (call $abs (i64.sub (global.get $selfY)
-          (i64.add (i64.load offset=8 (local.get $at)) (i64.const 98304)))) (i64.const 32768)))
+        (br_if $reached (i32.and (i64.le_u (global.get $verticalEnd) (global.get $tick))
+          (i64.gt_s (call $abs (i64.sub (global.get $selfY)
+            (i64.add (i64.load offset=8 (local.get $at)) (i64.const 98304)))) (i64.const 32768))))
         (global.set $trailNext (i32.add (global.get $trailNext) (i32.const 1))) (br $pass)))
       (if (i32.lt_u (global.get $trailNext) (global.get $trailHead)) (then
         (local.set $route (i32.const 1))
         (local.set $at (call $crumb (global.get $trailNext)))
         (local.set $gx (i64.load (local.get $at)))
         (local.set $gy (i64.add (i64.load offset=8 (local.get $at)) (i64.const 98304)))
-        (local.set $gz (i64.load offset=16 (local.get $at)))))))
+        (local.set $gz (i64.load offset=16 (local.get $at))))
+        (else
+          (local.set $gx (global.get $mothX)) (local.set $gz (global.get $mothZ))))))
     ;; Keep a metre of comfort while the Moth moves, but leave the crumb cursor ready for her next doorway.
     (if (i32.and (local.get $moving) (i64.lt_s (local.get $distance) (i64.const 65536))) (then
       (local.set $gx (global.get $selfX)) (local.set $gz (global.get $selfZ))))
@@ -419,6 +437,21 @@
     (if (i64.lt_s (global.get $tick) (global.get $dodgeEnd)) (then
       (local.set $gx (global.get $dodgeX)) (local.set $gy (global.get $dodgeY)) (local.set $gz (global.get $dodgeZ))
       (local.set $gain (i64.const 10))))
+    (if (i32.and (i64.gt_u (global.get $verticalEnd) (global.get $tick))
+          (i64.lt_s (local.get $distance) (i64.const 163840))) (then
+      (local.set $gy (i64.add (global.get $mothY) (i64.const 98304)))))
+    ;; Keep clear of the Moth's whole occupied capsule, including during an evasion or vertical ride. A centre
+    ;; sampled at torso height alone does not protect the ends of a tall body while a platform moves it.
+    (if (i32.and (i64.lt_s (local.get $distance) (i64.const 49152))
+          (i64.lt_s (call $abs (i64.sub (global.get $selfY) (i64.add (global.get $mothY) (i64.const 65536))))
+            (i64.const 78643))) (then
+      (local.set $dx (i64.sub (global.get $selfX) (global.get $mothX)))
+      (local.set $dz (i64.sub (global.get $selfZ) (global.get $mothZ)))
+      (local.set $length (call $planar (i64.const 0) (i64.const 0) (local.get $dx) (local.get $dz)))
+      (if (i64.lt_s (local.get $length) (i64.const 1024)) (then
+        (local.set $dx (i64.const -65536)) (local.set $dz (i64.const 0)) (local.set $length (i64.const 65536))))
+      (local.set $gx (i64.add (global.get $mothX) (i64.div_s (i64.mul (local.get $dx) (i64.const 58982)) (local.get $length))))
+      (local.set $gz (i64.add (global.get $mothZ) (i64.div_s (i64.mul (local.get $dz) (i64.const 58982)) (local.get $length))))))
     (local.set $dx (i64.sub (local.get $gx) (global.get $selfX)))
     (local.set $dy (i64.sub (local.get $gy) (global.get $selfY)))
     (local.set $dz (i64.sub (local.get $gz) (global.get $selfZ)))

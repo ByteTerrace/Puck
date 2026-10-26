@@ -7,7 +7,9 @@ import "companion-senses"
 let companionBody = 42
 let mothBody = 0
 
-exports { reads [companion] }
+exports {
+  reads [companion]
+}
 
 prototypes {
   prototype "companion" {
@@ -16,7 +18,7 @@ prototypes {
       schema: "puck.creation.v1"
       palette [
         { color: "#F2C49A", roughness: 0.4, specular: 0.2 }
-        { color: "#FFD078", roughness: 0.3, emissive: 1400, emissiveLane: 0 }
+        { color: "#FF9F38", roughness: 0.3, emissive: 900, emissiveLane: 0 }
         { color: "#744080", roughness: 0.5, specular: 0.15 }
       ]
       // Both curved sides meet the seed at both tips. All pieces ride one root: banking opens no attachment.
@@ -26,7 +28,7 @@ prototypes {
         material: 0
         curve {
           a [-0.025, 0.025, 0]
-          b [0.155, 0.125, 0]
+          b [0.185, 0.125, 0]
           c [0.025, 0.235, 0]
           radiusStart: 0.016
           radiusEnd: 0.012
@@ -44,7 +46,7 @@ prototypes {
         parent: "husk-left"
         curve {
           a [-0.025, 0.025, 0]
-          b [-0.105, 0.135, -0.005]
+          b [-0.135, 0.135, -0.005]
           c [0.025, 0.235, 0]
           radiusStart: 0.016
           radiusEnd: 0.012
@@ -57,11 +59,11 @@ prototypes {
         parent: "husk-left"
         curve {
           a [-0.025, 0.027, 0]
-          b [0.025, 0.12, 0.012]
+          b [-0.005, 0.12, 0.012]
           c [0.025, 0.233, 0]
           radiusStart: 0.009
           radiusEnd: 0.009
-          bulge: 0.025
+          bulge: 0.018
         }
       }
       shape Sweep "lavender-cuff" {
@@ -95,6 +97,17 @@ kits [
     motion {
       facingSnap: false
       holds [
+        {
+          name: "takeoff"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 0.3
+          forward: Heading
+          gravity { fall: 46, rise: 28 }
+          envelope { sinkSpeed: 40 }
+          thrust: 1
+        }
         {
           name: "hover"
           bond: Free
@@ -136,7 +149,14 @@ placements {
     position [-1.2, 1.52, 1]
     inhabit {
       count: 1
-      distribution { fill { name: "additive", offset: 0, step: 0.001 }, region: disc(radius: 0.01) }
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
       kit: "companion-flight"
       look: "companion"
       source: "Idle"
