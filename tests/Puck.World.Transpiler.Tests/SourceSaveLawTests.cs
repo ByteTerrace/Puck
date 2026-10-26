@@ -151,14 +151,14 @@ public sealed class SourceSaveLawTests {
         var source = (WorldSources.Header + """
             views {
               // First authored array stays separate.
-              post [ { name: a, package: "sdf.film-grain", parameters { strength: 0.2 } } ]
+              post [ { name: a, package: "sdf.film-grain", config { strength: 0.2 } } ]
               // The appended row owns a different nested value span.
-              post [ { name: b, package: "sdf.film-grain", parameters { strength: 0.8 } } ]
+              post [ { name: b, package: "sdf.film-grain", config { strength: 0.8 } } ]
             }
             """);
         var target = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
 
-        target["views"]!["post"]![row]!["parameters"]!["strength"] = double.Parse(after, System.Globalization.CultureInfo.InvariantCulture);
+        target["views"]!["post"]![row]!["config"]!["strength"] = double.Parse(after, System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(condition: WorldSourceEdits.TryRewrite(source: source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
         Assert.Equal(source.Replace(comparisonType: StringComparison.Ordinal, newValue: after, oldValue: before), saved);
     }

@@ -2338,7 +2338,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (!IsValidFontHash(hash: font.Hash)) {
-                errors.Add(item: $"{path}.hash '{font.Hash}' must match sha256-64/{{16 lowercase hex}}.");
+                errors.Add(item: $"{path}.hash '{font.Hash}' must match sha256/{{64 lowercase hex}}; bare digests and sha256-64/ are refused.");
             }
 
             if (

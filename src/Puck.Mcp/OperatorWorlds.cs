@@ -162,16 +162,15 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
                 data["startId"] = id;
                 result.StructuredContent = JsonElement.Parse(data.ToJsonString());
-                result.Content = [new TextContentBlock { Text = result.StructuredContent.Value.GetRawText() }];
                 return result;
             }));
         }
         return Pending(id: id);
     }
-    /// <summary>Waits briefly for an admitted start, or explicitly cancels it. A request cancellation only ends the poll.</summary>
+    /// <summary>Waits up to 20 seconds for an admitted start, or explicitly cancels it. A request cancellation only ends the poll.</summary>
     public async Task<CallToolResult> WaitStartAsync(IDictionary<string, JsonElement>? arguments, CancellationToken cancellationToken) {
         string? id = null;
-        var milliseconds = 1000;
+        var milliseconds = 20_000;
         var cancel = false;
 
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
@@ -184,9 +183,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         try { return await start.Work.WaitAsync(TimeSpan.FromMilliseconds(milliseconds: milliseconds), clock, cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (TimeoutException) { return Pending(id: id); }
     }
 
-    private static CallToolResult Pending(string id) => Result(metadata: Metadata(
-        $"Start {id} is pending (building, waiting for a lease, or attaching). Poll puck_world_start_wait with this startId; do not repeat puck_world_start.",
-        started: null, status: "pending", startId: id));
+    private static CallToolResult Pending(string id) => Result(metadata: Metadata(output: null, started: null, status: "pending", startId: id));
     private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string holder,
         bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
@@ -246,7 +243,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 if (world is { } reached) {
                     started.AttachmentId = reached.AttachmentId;
 
-                    return Result(metadata: Metadata(output: $"Started World process {started.Process.Id} ({(windowed ? "windowed, holding the GPU lease" : "headless")}{((backend is null) ? string.Empty : $", --backend {backend}")}, --devices {(ownerPlay ? "all" : "none")}) from {build}; name it by processId or attachmentId in every call, read its output with host.log, and end it with puck_world_stop.", started: started, status: "started", world: reached));
+                    return Result(metadata: Metadata(output: null, started: started, status: "started", world: reached));
                 }
                 if (clock.GetElapsedTime(startingTimestamp: begun) >= budget) {
                     _ = Stop(grace: TimeSpan.Zero, started: started);
@@ -301,7 +298,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var stopped = await Task.Run(function: () => Stop(started: started, grace: TimeSpan.FromMilliseconds(milliseconds: timeout)), cancellationToken: CancellationToken.None).WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         return Result(metadata: Metadata(
-            output: $"World process {started.Process.Id} {(stopped.Killed ? "did not quit in time and its process tree was killed" : "quit")}; exit code {stopped.ExitCode}.{(stopped.LeaseReleased ? " Its GPU lease is released." : string.Empty)}",
+            output: null,
             started: started,
             status: "stopped",
             stop: stopped
@@ -312,27 +309,37 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path));
     private static CallToolResult Refuse(string output, Started? started = null) => Result(metadata: Metadata(output: output, started: started, status: "refused"));
-    private static OperatorMcpWorldRun Metadata(string output, Started? started, string status, OperatorMcpWorld? world = null, (int? ExitCode, bool Killed, bool LeaseReleased)? stop = null, string? startId = null) => new(
-        Build: started?.Build,
-        Checkout: started?.Checkout,
-        ExitCode: stop?.ExitCode,
-        IsError: (status == "refused"),
-        Killed: (stop?.Killed ?? false),
-        LeaseReleased: (stop?.LeaseReleased ?? false),
-        Output: output,
-        ProcessId: started?.Process.Id,
-        StateDirectory: started?.StateDirectory,
-        Status: status,
-        StderrLog: started?.StderrLog,
-        StdoutLog: started?.StdoutLog,
-        World: world,
-        StartId: startId
-    );
+    private static OperatorMcpWorldRun Metadata(string? output, Started? started, string status, OperatorMcpWorld? world = null, (int? ExitCode, bool Killed, bool LeaseReleased)? stop = null, string? startId = null) {
+        var failed = (status == "refused");
+
+        return new(
+            Build: (failed ? started?.Build : null),
+            Checkout: (failed ? started?.Checkout : null),
+            ExitCode: stop?.ExitCode,
+            IsError: failed,
+            Killed: (stop?.Killed ?? false),
+            LeaseReleased: (stop?.LeaseReleased ?? false),
+            Output: output,
+            ProcessId: started?.Process.Id,
+            StateDirectory: (failed ? started?.StateDirectory : null),
+            Status: status,
+            StderrLog: started?.StderrLog,
+            StdoutLog: started?.StdoutLog,
+            World: world,
+            StartId: startId
+        );
+    }
     private static CallToolResult Result(OperatorMcpWorldRun metadata) {
         var element = JsonSerializer.SerializeToElement(value: metadata, jsonTypeInfo: OperatorMcpJson.Default.OperatorMcpWorldRun);
+        var text = metadata.Status switch {
+            "pending" => $"pending {metadata.StartId}",
+            "started" => $"started {metadata.ProcessId} {metadata.World?.AttachmentId}",
+            "stopped" => $"stopped {metadata.ProcessId} exit={metadata.ExitCode}",
+            _ => (metadata.Output ?? metadata.Status),
+        };
 
         return new() {
-            Content = [new TextContentBlock { Text = element.GetRawText() }],
+            Content = [new TextContentBlock { Text = text }],
             IsError = metadata.IsError,
             StructuredContent = element,
         };

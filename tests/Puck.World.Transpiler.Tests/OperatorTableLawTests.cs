@@ -58,7 +58,7 @@ public sealed class OperatorTableLawTests {
     }
     // Returns the document's folded value for an expression's text, or null where the document refuses it.
     private static long? Document(string text) {
-        var (json, diagnostics) = WorldSources.Lower(body: $"value: {text}\n");
+        var (json, diagnostics) = WorldSources.Lower(body: $"_value: {text}\n");
 
         if (diagnostics.HasErrors) {
             return null;
@@ -66,10 +66,10 @@ public sealed class OperatorTableLawTests {
 
         Assert.True(
             condition: DocumentNumbers.TryInteger(
-                node: json["value"],
+                node: json["_value"],
                 number: out var value
             ),
-            userMessage: $"{text} folded to {json["value"]?.ToJsonString()}"
+            userMessage: $"{text} folded to {json["_value"]?.ToJsonString()}"
         );
 
         return value;
@@ -80,12 +80,12 @@ public sealed class OperatorTableLawTests {
         var lowered = WorldSources.LowerClean(body: """
             let mask = 1 << 3
 
-            value: mask
+            _value: mask
             """);
 
         Assert.Equal(
             expected: 8L,
-            actual: lowered["value"]?.GetValue<long>()
+            actual: lowered["_value"]?.GetValue<long>()
         );
     }
     [Fact]
@@ -122,7 +122,7 @@ public sealed class OperatorTableLawTests {
                 foreach (var right in fractions) {
                     var text = $"({left.ToString(provider: CultureInfo.InvariantCulture)}) {row.Symbol} ({right.ToString(provider: CultureInfo.InvariantCulture)})";
 
-                    var (json, diagnostics) = WorldSources.Lower(body: $"value: {text}\n");
+                    var (json, diagnostics) = WorldSources.Lower(body: $"_value: {text}\n");
                     var rule = Rule(kind: CellKind.Fixed, text: text);
 
                     if (diagnostics.HasErrors) {
@@ -138,7 +138,7 @@ public sealed class OperatorTableLawTests {
                     // double when a decimal cannot hold it either.
                     if (
                         !DocumentNumbers.TryExact(
-                            node: json["value"],
+                            node: json["_value"],
                             number: out var folded
                         ) ||
                         (decimal.Truncate(d: (folded * 65536m)) != (folded * 65536m))

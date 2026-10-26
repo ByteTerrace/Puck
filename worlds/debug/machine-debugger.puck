@@ -120,7 +120,7 @@ state {
 
 addon "machine-debugger" {
   modulePath: "addons/machine-debugger.wat"
-  hash: "auto"
+  hash: auto
   fuel: 1000000
   enabled: true
   requests: concat(

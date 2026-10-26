@@ -37,7 +37,7 @@ public sealed class McpInteropTests {
 
         Assert.True(condition: result.IsError);
         Assert.Contains(expectedSubstring: "is not a checkout of this repository", actualString: result.StructuredContent!.Value.GetProperty(propertyName: "output").GetString());
-        Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: result.StructuredContent.Value.GetProperty(propertyName: "processId").ValueKind);
+        Assert.False(condition: result.StructuredContent.Value.TryGetProperty(propertyName: "processId", value: out _));
     }
     [InlineData(true)]
     [InlineData(false)]
@@ -156,12 +156,10 @@ public sealed class McpInteropTests {
             "refused",
             absent.StructuredContent!.Value.GetProperty(propertyName: "status").GetString()
         );
-        using var text = System.Text.Json.JsonDocument.Parse(echo.Content.OfType<TextContentBlock>().Single().Text);
-
-        Assert.True(condition: System.Text.Json.JsonElement.DeepEquals(
-            element1: echo.StructuredContent.Value,
-            element2: text.RootElement
-        ));
+        Assert.Equal(
+            expected: "completed",
+            actual: echo.Content.OfType<TextContentBlock>().Single().Text
+        );
         var image = await client.CallToolAsync(
             "puck_capture_frame",
             cancellationToken: Token
@@ -187,9 +185,8 @@ public sealed class McpInteropTests {
             "refused",
             invalid.StructuredContent!.Value.GetProperty(propertyName: "status").GetString()
         );
-        Assert.Equal(
-            System.Text.Json.JsonValueKind.Null,
-            invalid.StructuredContent.Value.GetProperty(propertyName: "requestId").ValueKind
+        Assert.False(
+            condition: invalid.StructuredContent.Value.TryGetProperty(propertyName: "requestId", value: out _)
         );
         var oversized = await client.CallToolAsync(
             "puck_exec",
@@ -203,9 +200,8 @@ public sealed class McpInteropTests {
         );
 
         Assert.True(condition: oversized.IsError);
-        Assert.Equal(
-            System.Text.Json.JsonValueKind.Null,
-            oversized.StructuredContent!.Value.GetProperty(propertyName: "requestId").ValueKind
+        Assert.False(
+            condition: oversized.StructuredContent!.Value.TryGetProperty(propertyName: "requestId", value: out _)
         );
         Assert.True(condition: (await client.CallToolAsync(
             "puck_capture_frame",
@@ -387,10 +383,14 @@ public sealed class McpInteropTests {
                 return (await adapter.Client.CallToolAsync(tool, arguments, cancellationToken: Token)).StructuredContent!.Value.Clone();
             }
             async Task<System.Text.Json.JsonElement[]> ListAsync() => [.. (await CallAsync(tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray()];
-            async Task<(string Status, string Output, System.Text.Json.JsonElement World)> StatusAsync(string? world) {
+            async Task<(string Status, string Output, System.Text.Json.JsonElement? World)> StatusAsync(string? world) {
                 var result = await CallAsync(command: "world.status", tool: "puck_exec", world: world);
 
-                return (result.GetProperty(propertyName: "status").GetString()!, result.GetProperty(propertyName: "output").GetString()!, result.GetProperty(propertyName: "world"));
+                return (
+                    result.GetProperty(propertyName: "status").GetString()!,
+                    result.GetProperty(propertyName: "output").GetString()!,
+                    (result.TryGetProperty(propertyName: "world", value: out var reached) ? reached : null)
+                );
             }
 
             var listed = await ListAsync();
@@ -399,7 +399,7 @@ public sealed class McpInteropTests {
                 expected: new[] { a.Id, b.Id }.Order(),
                 actual: listed.Select(selector: world => world.GetProperty(propertyName: "processId").GetInt32()).Order()
             );
-            Assert.All(collection: listed, action: world => Assert.False(condition: world.GetProperty(propertyName: "current").GetBoolean()));
+            Assert.All(collection: listed, action: world => Assert.False(condition: (world.TryGetProperty(propertyName: "current", value: out var flag) && flag.GetBoolean())));
             Assert.All(collection: listed, action: world => Assert.True(condition: (DateTimeOffset.Parse(input: world.GetProperty(propertyName: "startedUtc").GetString()!, formatProvider: System.Globalization.CultureInfo.InvariantCulture) < DateTimeOffset.UtcNow)));
 
             var idOf = listed.ToDictionary(keySelector: world => world.GetProperty(propertyName: "processId").GetInt32(), elementSelector: world => world.GetProperty(propertyName: "attachmentId").GetString()!);
@@ -427,23 +427,23 @@ public sealed class McpInteropTests {
                 var named = await StatusAsync(world: selector);
 
                 Assert.True(condition: ((named.Status == "completed") && (Placements(status: named.Output) == placements)), userMessage: $"{selector}: {named.Status}: {named.Output}");
-                Assert.Equal(expected: process, actual: named.World.GetProperty(propertyName: "processId").GetInt32());
-                Assert.Equal(expected: idOf[process], actual: named.World.GetProperty(propertyName: "attachmentId").GetString());
+                Assert.Equal(expected: process, actual: named.World!.Value.GetProperty(propertyName: "processId").GetInt32());
+                Assert.Equal(expected: idOf[process], actual: named.World.Value.GetProperty(propertyName: "attachmentId").GetString());
             }
 
             var unnamed = await StatusAsync(world: null);
-            var current = unnamed.World.GetProperty(propertyName: "processId").GetInt32();
+            var current = unnamed.World!.Value.GetProperty(propertyName: "processId").GetInt32();
 
             Assert.Equal(expected: ((current == a.Id) ? baseline : (baseline + 1)), actual: Placements(status: unnamed.Output));
             Assert.Equal(
                 expected: [current],
-                actual: (await ListAsync()).Where(predicate: world => world.GetProperty(propertyName: "current").GetBoolean()).Select(selector: world => world.GetProperty(propertyName: "processId").GetInt32())
+                actual: (await ListAsync()).Where(predicate: world => (world.TryGetProperty(propertyName: "current", value: out var flag) && flag.GetBoolean())).Select(selector: world => world.GetProperty(propertyName: "processId").GetInt32())
             );
 
             var other = ((current == a.Id) ? b.Id : a.Id);
 
-            Assert.Equal(expected: other, actual: (await StatusAsync(world: other.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))).World.GetProperty(propertyName: "processId").GetInt32());
-            Assert.Equal(expected: current, actual: (await StatusAsync(world: null)).World.GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(expected: other, actual: (await StatusAsync(world: other.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))).World!.Value.GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(expected: current, actual: (await StatusAsync(world: null)).World!.Value.GetProperty(propertyName: "processId").GetInt32());
 
             // A killed World leaves its capability file behind.
             b.Kill(entireProcessTree: true);
@@ -455,15 +455,15 @@ public sealed class McpInteropTests {
                 var refused = await StatusAsync(world: gone);
 
                 Assert.Equal(actual: refused.Status, expected: "refused");
-                Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refused.World.ValueKind);
+                Assert.Null(@object: refused.World);
                 Assert.Contains(actualString: refused.Output, expectedSubstring: $"No running World matches '{gone}'");
             }
 
             var survivor = await StatusAsync(world: idOf[a.Id]);
 
             Assert.Equal(actual: survivor.Status, expected: "completed");
-            Assert.Equal(expected: a.Id, actual: survivor.World.GetProperty(propertyName: "processId").GetInt32());
-            Assert.Equal(expected: a.Id, actual: (await StatusAsync(world: null)).World.GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(expected: a.Id, actual: survivor.World!.Value.GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(expected: a.Id, actual: (await StatusAsync(world: null)).World!.Value.GetProperty(propertyName: "processId").GetInt32());
         } finally {
             foreach (var process in new[] { a, b }) {
                 if (!process.HasExited) { process.Kill(entireProcessTree: true); }
@@ -504,7 +504,7 @@ public sealed class McpInteropTests {
                 var refusal = await CallAsync(arguments: refused, tool: "puck_world_start");
 
                 Assert.Equal(expected: "refused", actual: refusal.GetProperty(propertyName: "status").GetString());
-                Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refusal.GetProperty(propertyName: "processId").ValueKind);
+                Assert.False(condition: refusal.TryGetProperty(propertyName: "processId", value: out _));
             }
 
             var start = await CallAsync(arguments: [], tool: "puck_world_start");
@@ -526,7 +526,7 @@ public sealed class McpInteropTests {
             );
 
             var listed = (await CallAsync(arguments: [], tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray().ToDictionary(
-                elementSelector: static world => world.GetProperty(propertyName: "started").GetBoolean(),
+                elementSelector: static world => (world.TryGetProperty(propertyName: "started", value: out var flag) && flag.GetBoolean()),
                 keySelector: static world => world.GetProperty(propertyName: "processId").GetInt32()
             );
 
@@ -556,8 +556,8 @@ public sealed class McpInteropTests {
 
             Assert.True(condition: (stop.GetProperty(propertyName: "status").GetString() == "stopped"), userMessage: stop.ToString());
             Assert.Equal(expected: 0, actual: stop.GetProperty(propertyName: "exitCode").GetInt32());
-            Assert.False(condition: stop.GetProperty(propertyName: "killed").GetBoolean());
-            Assert.False(condition: stop.GetProperty(propertyName: "leaseReleased").GetBoolean());
+            Assert.False(condition: (stop.TryGetProperty(propertyName: "killed", value: out var killed) && killed.GetBoolean()));
+            Assert.False(condition: (stop.TryGetProperty(propertyName: "leaseReleased", value: out var leaseReleased) && leaseReleased.GetBoolean()));
             Assert.Contains(expectedSubstring: "[world.host] physical input devices are off", actualString: File.ReadAllText(path: stop.GetProperty(propertyName: "stderrLog").GetString()!));
             Assert.DoesNotContain(
                 collection: (await CallAsync(arguments: [], tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray(),

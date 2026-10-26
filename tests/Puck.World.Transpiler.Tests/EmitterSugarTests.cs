@@ -508,7 +508,7 @@ public class EmitterSugarTests {
     [Fact]
     public void PercentSuffixDividesByOneHundredOnAnyField() {
         var (json, diagnostics) = WorldSources.Lower(body: """
-            host {
+            _host {
                 opacity: 50%
             }
             """);
@@ -516,7 +516,7 @@ public class EmitterSugarTests {
             condition: diagnostics.HasErrors,
             userMessage: diagnostics.FormatReport("")
         );
-        var host = Assert.IsType<JsonObject>(@object: json["host"]);
+        var host = Assert.IsType<JsonObject>(@object: json["_host"]);
 
         Assert.Equal(
             0.5,
@@ -580,7 +580,7 @@ public class EmitterSugarTests {
     public void PlacementsPolicySurvivesAlongsidePlacementRows() {
         var (json, diagnostics) = WorldSources.Lower(body: """
             placements {
-                policy { maxLivePlacements: 8 }
+                policy { candidateCap: 8 }
                 placement "p1" {
                     prototype: proto
                     position [0, 0, 0]
@@ -596,7 +596,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             8,
-            LoweredNumbers.AsDouble(node: policy["maxLivePlacements"])
+            LoweredNumbers.AsDouble(node: policy["candidateCap"])
         );
         Assert.Single(collection: Assert.IsType<JsonArray>(@object: placements["rows"]));
     }
@@ -628,7 +628,7 @@ public class EmitterSugarTests {
         // Each light quantity is native in its one unit, which a suffix names and nothing converts; a point's and a
         // spot's power and intensity qualify by the call, since a rim's `power` is an exponent.
         var (json, diagnostics) = WorldSources.Lower(body: """
-            host {
+            _host {
                 a: directional(illuminance: 100000lx, temperature: 5500K)
                 b: point(power: 800lm)
                 c: spot(intensity: 300cd, angle: 30deg)
@@ -640,7 +640,7 @@ public class EmitterSugarTests {
             condition: diagnostics.HasErrors,
             userMessage: diagnostics.FormatReport("")
         );
-        var host = Assert.IsType<JsonObject>(@object: json["host"]);
+        var host = Assert.IsType<JsonObject>(@object: json["_host"]);
 
         Assert.Equal(100000d, LoweredNumbers.AsDouble(node: host["a"]!["illuminance"]));
         Assert.Equal(5500d, LoweredNumbers.AsDouble(node: host["a"]!["temperature"]));
@@ -654,7 +654,7 @@ public class EmitterSugarTests {
         label: nameof(APhotometricFieldWithAnotherQuantitysUnitReportsPuck025),
         refusal: new(
             Body: """
-                host {
+                _host {
                     a: point(power: 800lx)
                 }
                 """,
@@ -667,7 +667,7 @@ public class EmitterSugarTests {
         // `orbit`'s named-argument keys thread as the CallExpressionNode's own field keys regardless of the
         // enclosing property's own name, so this exercises the table without needing real seatRig semantics.
         var (json, diagnostics) = WorldSources.Lower(body: """
-            host {
+            _host {
                 camera: orbit(pitch: 90deg, yaw: 1rad, distance: 5)
             }
             """);
@@ -675,7 +675,7 @@ public class EmitterSugarTests {
             condition: diagnostics.HasErrors,
             userMessage: diagnostics.FormatReport("")
         );
-        var orbit = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonObject>(@object: json["host"])["camera"]);
+        var orbit = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonObject>(@object: json["_host"])["camera"]);
 
         Assert.Equal(
             Math.Round(
@@ -988,7 +988,7 @@ public class EmitterSugarTests {
         label: nameof(UnknownFieldWithUnitReportsPuck024),
         refusal: new(
             Body: """
-                host {
+                _host {
                     width: 5m
                 }
                 """,

@@ -18,13 +18,13 @@ public class StringIndexTests {
         var compilation = Compile(body: """
             let row = "b.R=Y"
 
-            cells: map(range(0, length(row)), i => row[i])
+            _cells: map(range(0, length(row)), i => row[i])
             """);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport());
         Assert.Equal(
             expected: ["b", ".", "R", "=", "Y"],
-            actual: Assert.IsType<JsonArray>(@object: compilation.RequireJson()["cells"]).Select(selector: item => item!.GetValue<string>())
+            actual: Assert.IsType<JsonArray>(@object: compilation.RequireJson()["_cells"]).Select(selector: item => item!.GetValue<string>())
         );
     }
     [Fact]
@@ -32,9 +32,9 @@ public class StringIndexTests {
         var compilation = Compile(body: """
             let row = "b.R"
 
-            cells: filter(map(range(0, length(row)), i => row[i]), glyph => glyph != ".")
-            same: row == "b.R"
-            other: row == "b.r"
+            _cells: filter(map(range(0, length(row)), i => row[i]), glyph => glyph != ".")
+            _same: row == "b.R"
+            _other: row == "b.r"
             """);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport());
@@ -42,10 +42,10 @@ public class StringIndexTests {
 
         Assert.Equal(
             expected: ["b", "R"],
-            actual: Assert.IsType<JsonArray>(@object: json["cells"]).Select(selector: item => item!.GetValue<string>())
+            actual: Assert.IsType<JsonArray>(@object: json["_cells"]).Select(selector: item => item!.GetValue<string>())
         );
-        Assert.Equal(expected: 1L, actual: json["same"]!.GetValue<long>());
-        Assert.Equal(expected: 0L, actual: json["other"]!.GetValue<long>());
+        Assert.Equal(expected: 1L, actual: json["_same"]!.GetValue<long>());
+        Assert.Equal(expected: 0L, actual: json["_other"]!.GetValue<long>());
     }
     [Fact]
     public void AStringHasNoOrder() {
@@ -54,10 +54,10 @@ public class StringIndexTests {
             filter: item => (item.Code == PuckDiagnosticCodes.InvalidValue)
         );
     }
-    [InlineData("cells: \"abc\"[3]", "outside the string's 0..2")]
-    [InlineData("cells: \"abc\"[-1]", "outside the string's 0..2")]
-    [InlineData("cells: \"abc\"[\"x\"]", "a string index is a whole number")]
-    [InlineData("cells: 4[0]", "only an array, an object or a string can be indexed")]
+    [InlineData("_cells: \"abc\"[3]", "outside the string's 0..2")]
+    [InlineData("_cells: \"abc\"[-1]", "outside the string's 0..2")]
+    [InlineData("_cells: \"abc\"[\"x\"]", "a string index is a whole number")]
+    [InlineData("_cells: 4[0]", "only an array, an object or a string can be indexed")]
     [Theory]
     public void AnIndexAStringCannotAnswerIsRefusedByName(string body, string refusal) {
         var diagnostic = Assert.Single(collection: Compile(body: body).Diagnostics, predicate: item => (item.Code == PuckDiagnosticCodes.IndexRefused));

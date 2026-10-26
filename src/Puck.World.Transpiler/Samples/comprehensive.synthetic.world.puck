@@ -91,7 +91,7 @@ addon "rules-engine" {
   modulePath: "addons/rules.wasm"
   fuel: 1000000
   enabled: true
-  hash: "auto"
+  hash: auto
 }
 
 // State catalog with world cells

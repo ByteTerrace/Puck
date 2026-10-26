@@ -45,7 +45,7 @@ placements {
 
 addon "fuzzer" {
   modulePath: "addons/fuzzer.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests [

@@ -23,7 +23,7 @@ public sealed class ControlOutputLawTests {
 
         Assert.Equal("completed", response.Status);
         Assert.True(condition: response.Truncated);
-        Assert.True(condition: (response.Output.Length <= ControlLimits.OutputCharacters));
+        Assert.Empty(value: response.Output);
         var commands = Assert.IsType<ControlCommandResult[]>(@object: response.Commands);
 
         Assert.Equal([2, 4], commands.Select(selector: static line => line.Line));

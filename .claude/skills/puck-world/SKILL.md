@@ -82,7 +82,7 @@ only when the task allows it, and restore what you changed.
 To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
 call returns `pending` and a `startId` promptly. Poll `puck_world_start_wait`
-with that id (each wait is at most 20 seconds); never repeat the start while
+with that id (each wait defaults to its 20-second maximum); never repeat the start while
 pending. A cold build continues between calls and across adapter updates.
 `cancel: true` on the wait cancels an unfinished start. A cancelled poll only
 ends that poll. Session shutdown cancels starts and stops its Worlds.
@@ -130,13 +130,16 @@ one text session together. Each line waits for the preceding settlement, so
 successive Simulation lines apply on adjacent ticks; include `world.wait` to
 space them further. Reads see earlier writes. Scripts continue after refusals;
 inspect the per-line `commands` array (one-based source line, command, status,
-output and flags). `timeoutMs` covers the entire script. Cancellation discards
+and `output` or `data`, plus flags when true; top-level `output` and `data` are
+omitted on scripts). `timeoutMs` covers the entire script. Cancellation discards
 queued lines but may leave dispatched changes; inspect before retrying.
-Results expose native JSON output as `data`, including each script line's
-`data`; text and truncated output have null data. `world.at --json` returns
-the completed tick and arrays of pending and ran lines with tick, command,
-status and output. Use `world.at` for absolute ticks or several commands at
-the same tick, and a multiline script for an ordered command/wait/read sequence.
+Results expose native JSON output as `data` in place of `output`, including each
+script line's `data`; null and false fields with documented defaults are omitted,
+and `content[0].text` carries a short status so no payload is serialized twice.
+`world.at --json` returns the completed tick and arrays of pending and ran lines
+with tick, command, status and output. Use `world.at` for absolute ticks or
+several commands at the same tick, and a multiline script for an ordered
+command/wait/read sequence.
 
 ## The model
 
