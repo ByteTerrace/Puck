@@ -3,7 +3,7 @@ max_turns: 10
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-this thing wont load, i get 'prototypes[2] stamps 369 shapes, exceeding the 367-shape per-stamp budget'. i dont really want to lose any of the detail. heres the file (over-budget.puck), prototype 'subject'. what are my options and whats the cheapest fix?
+an old build says 'prototypes[2] stamps 369 shapes, exceeding the 367-shape per-stamp budget'. the current build uses baked meshes. i dont really want to lose any detail. heres the file (over-budget.puck), prototype 'subject'. what costs should i check now, and do i need to simplify this to load it?
 
 ```puck
 schema: "puck.world.definition.v1"

@@ -2453,25 +2453,19 @@ public static partial class CreationCanonicalizer {
                     Path: $"shapes[{i}].blend"
                 ));
             } else if (shape.Blend is SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
-                // A stairs seam needs a radius to step over, and the VM's two scope levels leave none for a shape's own
-                // scope under a grouped, text-bearing creation's outer scope.
+                // A stairs seam needs a radius to step over. Four field levels admit the shape's scope
+                // inside a group's and a text-bearing creation's enclosing scopes.
                 if (!((shape.Smooth ?? 0f) > 0f)) {
                     errors.Add(item: new(Message: $"blend '{shape.Blend}' needs a smooth radius above zero to step over.", Path: $"shapes[{i}].smooth"));
                 }
                 if ((shape.Steps is { } steps) && ((steps < 1) || (steps > ShapeScope.MaxSteps))) {
                     errors.Add(item: new(Message: $"steps must be in [1, {ShapeScope.MaxSteps}].", Path: $"shapes[{i}].steps"));
                 }
-                if ((shape.Group is not (null or 0)) && (document.TextRuns is { Count: > 0 })) {
-                    errors.Add(item: new(Message: $"blend '{shape.Blend}' needs a scope of its own, which a grouped shape of a text-bearing creation has no depth left for.", Path: $"shapes[{i}].blend"));
-                }
             } else if (shape.Blend is SdfBlendOp.Morph) {
                 if (shape.Morph is not { } morph) {
                     errors.Add(item: new(Message: "blend 'Morph' needs a morph facet naming its lane and range.", Path: $"shapes[{i}].morph"));
                 } else if ((morph.Lane < 0) || (morph.Lane > 3) || !float.IsFinite(f: morph.From) || !float.IsFinite(f: morph.To) || (morph.From == morph.To)) {
                     errors.Add(item: new(Message: "morph requires a lane in [0, 3] and finite, differing from and to values.", Path: $"shapes[{i}].morph"));
-                }
-                if ((shape.Group is not (null or 0)) && (document.TextRuns is { Count: > 0 })) {
-                    errors.Add(item: new(Message: "blend 'Morph' needs a scope of its own, which a grouped shape of a text-bearing creation has no depth left for.", Path: $"shapes[{i}].blend"));
                 }
             } else if (shape.Steps is not null) {
                 errors.Add(item: new(Message: "steps requires a stairs blend.", Path: $"shapes[{i}].steps"));

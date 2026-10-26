@@ -7,9 +7,8 @@ using Puck.World.Authoring;
 namespace Puck.World.Client;
 
 public sealed partial class WorldCreationInstances {
-    // Whether a creation's text runs bake apart from its shapes on a slot of their own: every run embossed (an engraved
-    // run carves the shapes, so it shares their instance) and a slot free after the shapes'. KEEP IN SYNC: EmitOne emits
-    // the text on that slot and PackTransforms packs it with the root's pose.
+    // Embossed runs bake apart from the shapes, while sharing the root transform. An engraved run carves the
+    // shapes, so it shares their instance. Separate bake groups preserve the text's own detail and bounds.
     // Indexed, since the pack asks every registration each frame.
     private static bool TextApart(CreationDocument document) {
         if ((document.TextRuns is not { Count: > 0 } runs)) {

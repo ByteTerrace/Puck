@@ -23,7 +23,9 @@ no worst-case probe. `WorldRigidAssets` emits local creation templates once and
 supplies `SdfMeshInstance` roots and identities. `SdfMeshPathBake.Dress` expands
 the shared mesh into copies without program or palette duplication. Animated
 creation fields use root and motion-owner deltas; CPU pose scratch remains per
-actual shape. A skin past 255 members throws instead of attaching excess members
+actual shape. Bake groups keep separate bounds and detail even when they share
+a motion slot; the lattice frame and instance selector are independent. A skin
+past 255 members throws before queuing, instead of attaching excess members
 to the root. Volume overflow is explicit. Scope depth is 4, screen bindings 32,
 and derived faces follow authored screen indices. `SDF_MAX_INSTANCES` bounds
 one bake program, not a per-world render budget.

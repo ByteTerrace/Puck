@@ -8,8 +8,8 @@ namespace Puck.World.Schema.Tests;
 
 /// <summary>
 /// THE LAW: a creation's noise-relief facet is admitted only where every consumer can honour it — a static stamp,
-/// inside the creation's own field scope, with its march cost bounded at the door. An over-budget noise declaration
-/// is refused by name (never silently reshaped into a stalled march), an animated creation cannot carry one (the
+/// inside the creation's own field scope. Bake work is measured rather than refused by an interpreter march budget.
+/// An animated creation cannot carry one (the
 /// dynamic stamp pool emits per-shape instances a creation-level field op cannot span), and a noise-free document
 /// round-trips byte-identically.
 /// <para>Each arm pairs a denial with a control differing in exactly one authored number.</para>
@@ -139,7 +139,7 @@ public sealed class CreationNoiseLawTests {
         );
     }
     [Fact]
-    public void AnOverBudgetStepFactorRefusesByName() {
+    public void AHighStepFactorIsBakeWorkRatherThanAnAdmissionBudget() {
         var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
             Amplitude: 4f,
             Frequency: 8f,
@@ -147,16 +147,7 @@ public sealed class CreationNoiseLawTests {
             Octaves: 8
         )));
 
-        Assert.Contains(
-            collection: violations,
-            filter: violation => (
-                (violation.Path == "noise") &&
-                violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "step factor"
-            )
-            )
-        );
+        Assert.Empty(violations);
     }
     [Fact]
     public void EmittedNoiseFoldsTheStepClampAndAnOpFreeProgramStaysAtOne() {

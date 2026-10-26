@@ -3,7 +3,7 @@
 ## Blends
 
 In static emission, `shapes[].blend` selects how a shape composes with
-everything accumulated before it. In the pooled/body path, ungrouped shapes
+everything accumulated before it. Rigid bodies share that local geometry. In the articulated body path, ungrouped shapes
 are emitted with default Union and zero smooth; put interacting shapes in
 the same nonzero `group` to carry their authored blends and radii. Groups
 also affect ordering and scope ownership; inspect both emission paths.
@@ -33,8 +33,8 @@ climbs `steps` (1 to 64, default 4) over its `smooth` radius, which must be
 above zero, and a morph blend takes a `morph { lane, from, to }` facet and
 interpolates the field before the shape with the shape as the riding slot's
 lane runs from `from` to `to` (a static placement reads the lane as zero). The
-VM holds two scope levels, so a grouped shape of a text-bearing animated
-creation, whose groups already sit in an outer scope, is refused one. The
+VM holds four scope levels, so a grouped shape of a text-bearing animated
+creation can nest its shape scope inside the group and creation scopes. The
 gallery's `shape-stairs-union`, `shape-stairs-subtraction` and `shape-morph`
 show them.
 

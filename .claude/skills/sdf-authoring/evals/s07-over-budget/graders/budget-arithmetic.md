@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response computes the charge as 1 for the wall plus 2 for each of the 184 panelled studs, 369 in all.
+The response distinguishes 185 authored shapes from 369 expanded field operands (the wall plus two for each panelled stud), as bake work rather than a stamp budget.

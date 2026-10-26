@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says this refusal is a document validation check that puck compile --validate reports itself (as PUCK030), before any boot.
+The response identifies the old per-stamp refusal as retired and directs the user to the current build, without claiming current validation still enforces 367.

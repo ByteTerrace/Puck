@@ -6,9 +6,8 @@ using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>THE LAW: a body stamp bakes its body's live scale (the <c>bodies.scale</c> register) at each rebuild, and a
-/// snapshot carrying a new value of that register moves the scene's revision, so the next frame rebuilds and packs the
-/// stamp at the new scale; a frame with nothing delivered moves nothing. Held on a session view, which reads its
+/// <summary>A rigid body's live scale (<c>bodies.scale</c>) changes its root matrix without rebuilding the shared
+/// program. A frame with nothing delivered moves nothing. Held on a session view, which reads its
 /// destination through the same <see cref="WorldBodyStampCensus"/> the local scene does.</summary>
 [Collection(SceneProbeCollection.Name)]
 public sealed class BodyStampScaleLawTests {
@@ -54,7 +53,7 @@ public sealed class BodyStampScaleLawTests {
     }
 
     [Fact]
-    public void AScaleRegisterWriteMovesTheRevisionAndTheNextPackUsesTheNewScale() {
+    public void AScaleRegisterWriteChangesTheCopyMatrixWithoutRebuildingTheProgram() {
         var session = new WorldSessionMirror(placeholder: Document());
 
         session.DeliverDefinition(definition: Document(), version: default);
@@ -93,8 +92,7 @@ public sealed class BodyStampScaleLawTests {
             expected: settled
         );
 
-        // A snapshot carrying a new value of the body's scale register moves the census component, and the next frame
-        // packs at it.
+        // A new scale changes the root matrix while leaving the geometry revision unchanged.
         session.DeliverSnapshot(snapshot: Snapshot(
             scale: 0.5d,
             tick: 2UL

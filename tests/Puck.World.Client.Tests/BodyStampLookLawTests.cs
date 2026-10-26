@@ -7,7 +7,7 @@ namespace Puck.World.Client.Tests;
 
 /// <summary>THE LAW: a body's stamp follows the look its snapshot entry carries. When the server moves a body's look (a
 /// look assignment's selector following the body's state cell) the snapshot carries the new look index with a moved
-/// revision, and the next frame re-latches that body's registration onto the new look's creation. Held on a session
+/// revision, and the next frame uses the new look's shared asset without rebuilding the program. Held on a session
 /// view, which reads its destination through the same <see cref="WorldBodyStampCensus"/> the local scene does.</summary>
 [Collection(SceneProbeCollection.Name)]
 public sealed class BodyStampLookLawTests {

@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says that marking shapes detail: true does not lower the stamp count, since detail shapes are still charged.
+The response explains that detail: true saves contact work, while those shapes still contribute render bake work and mesh memory.

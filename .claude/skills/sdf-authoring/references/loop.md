@@ -137,10 +137,13 @@ puck creation sculpt <name> --world <path>
 ```
 
 `creation stats` loads and validates the whole document, then prints
-`[<id>] shapes: N, stamp budget: M/367`, histograms by primitive and blend,
+`[<id>] shapes: N, expanded field shapes: M`, histograms by primitive and blend,
 counts by facet, and palette slot usage. It then emits text-free prototypes at
 unit placement scale through the static path (when applicable) and pooled
-rest-pose path, reporting global and scoped/shared clamps. Exit 1 covers
+rest-pose path, reporting bake groups, field instructions, encoded program and
+pose bytes, and global and scoped/shared clamps. There is no shape-count ceiling;
+read actual mesh bytes and bake counts from `world.budget` after `world.wait bakes`.
+Exit 1 covers
 validation refusal **or emission inspection failure**; 2 is a usage error.
 Text-bearing prototypes explicitly report that a resolved font atlas is needed
 and defer clamp inspection to live `world.budget`.
