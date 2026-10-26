@@ -49,7 +49,7 @@ public static class McpCommand {
             throw;
         }
     }
-    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, CancellationToken cancellationToken) {
+    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, CancellationToken cancellationToken) {
         // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
         // so every console interrupt is a graceful drain rather than a tear-down mid-session.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
@@ -62,6 +62,21 @@ public static class McpCommand {
         Console.CancelKeyPress += cancel;
 
         try {
+            if ((installRoot is not null) && (buildSource is not null)) {
+                if (prepareInstall) {
+                    _ = await LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    return 0;
+                }
+                if (!worker) {
+                    await OperatorMcpFront.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(),
+                        Path.Combine(path1: installRoot, path2: (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "Puck.Launcher.Stub")),
+                        ["mcp", "--profile", "operator", "--worker", "--install-root", installRoot, "--build-source", buildSource,
+                            "--checkout", (checkoutPath ?? RepositoryPaths.FindRoot()!), "--attach", (attachmentPath ?? "latest")],
+                        token => LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: token), stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    return 0;
+                }
+                LocalAdapterInstall.Healthy(install: installRoot);
+            }
             if (siloPath is not null) {
                 return await Puck.World.Silo.WorldSiloApplication
                     .RunAsync(
@@ -82,7 +97,7 @@ public static class McpCommand {
 
             // A World the adapter starts boots from this checkout or one of its worktrees, and a windowed one holds the
             // machine's shared GPU lease, the one `puck lease gpu` takes.
-            var checkout = RepositoryPaths.FindRoot();
+            var checkout = (checkoutPath ?? RepositoryPaths.FindRoot());
             var launch = ((checkout is null)
                 ? null
                 : new OperatorWorldLaunch(
@@ -135,10 +150,15 @@ public static class McpCommand {
         var siloOption = new Option<string?>(name: "--silo") {
             Description = "The silo document (puck.silo.configuration.v1) to run, forwarded to Puck.World.Silo unchanged; the MCP extension composes over that host. Requires --http.",
         };
+        var installOption = new Option<string?>("--install-root") { Description = "Local launcher install root for the persistent operator session." };
+        var buildOption = new Option<string?>("--build-source") { Description = "Completed local CLI build tracked through the development release channel." };
+        var checkoutOption = new Option<string?>("--checkout") { Description = "Checkout served by an installed operator adapter." };
+        var workerOption = new Option<bool>("--worker") { Description = "Serve one installed backend behind the persistent operator session." };
+        var prepareOption = new Option<bool>("--prepare-install") { Description = "Stage and activate a completed local build, then exit." };
         var command = new Command(
             description: "Host the Puck Console over MCP, on local stdio or OAuth-protected HTTP.",
             name: "mcp"
-        ) { attachOption, httpOption, profileOption, siloOption };
+        ) { attachOption, httpOption, profileOption, siloOption, installOption, buildOption, checkoutOption, workerOption, prepareOption };
 
         command.Detail(detail: """
             Both shapes target MCP 2026-07-28; local stdio also answers the initialize handshake of earlier revisions.
@@ -151,12 +171,20 @@ public static class McpCommand {
 
         profileOption.AcceptOnlyFromAmong(values: ["operator"]);
         command.Validators.Add(item: result => {
+            if (((result.GetValue(option: installOption) is null) != (result.GetValue(option: buildOption) is null)) ||
+                ((result.GetValue(option: workerOption) || result.GetValue(option: prepareOption)) && (result.GetValue(option: installOption) is null))) {
+                result.AddError(errorMessage: "--install-root and --build-source are paired; --worker and --prepare-install require them.");
+            }
             var attachmentPath = result.GetValue(option: attachOption);
             var configurationPath = result.GetValue(option: httpOption);
             var profile = result.GetValue(option: profileOption);
             var siloPath = result.GetValue(option: siloOption);
             var stdio = ((attachmentPath is not null) || (profile is not null));
             var hosted = ((configurationPath is not null) || (siloPath is not null));
+            if (((result.GetValue(option: installOption) is not null) || (result.GetValue(option: checkoutOption) is not null)) &&
+                ((profile != "operator") || hosted)) {
+                result.AddError("Installed adapter options require --profile operator and cannot mix with --silo/--http.");
+            }
 
             if (
                 stdio &&
@@ -184,7 +212,12 @@ public static class McpCommand {
             attachmentPath: parseResult.GetValue(option: attachOption),
             cancellationToken: cancellationToken,
             configurationPath: parseResult.GetValue(option: httpOption),
-            siloPath: parseResult.GetValue(option: siloOption)
+            siloPath: parseResult.GetValue(option: siloOption),
+            installRoot: parseResult.GetValue(option: installOption),
+            buildSource: parseResult.GetValue(option: buildOption),
+            checkoutPath: parseResult.GetValue(option: checkoutOption),
+            worker: parseResult.GetValue(option: workerOption),
+            prepareInstall: parseResult.GetValue(option: prepareOption)
         ));
 
         return command;
