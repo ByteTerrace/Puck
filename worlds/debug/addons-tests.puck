@@ -1,4 +1,4 @@
-// The debug world's three addons (addons.md), each scenario booted in the whole debug world:
+// The debug world's addons (addons.md), each scenario booted in the whole debug world:
 // `puck test worlds/debug/addons-tests.puck`. The watchdog (watchdog.puck) counts violations in `watchdog`, the
 // gallery guide (guide.puck) names the exhibit she stands at by its walking-order position in `guideAt`, and the
 // companion (companion.puck) is body 42. The expectations read numeric counts and the actual text rows.
@@ -64,7 +64,7 @@ test "the guide clears when she walks away" {
   }
 }
 
-test "the companion comes within 2.5 m of her and keeps clear of her" {
+test "the faerie flies within 2.5 m of her at shoulder height and keeps clear" {
   when {
     seat1: body.pose 10 0.05 10 0 0 0 0
     ticks 150
@@ -72,6 +72,18 @@ test "the companion comes within 2.5 m of her and keeps clear of her" {
   expect {
     bodyPosition(body, 42, x) > 7.5 and bodyPosition(body, 42, x) < 12.5
     bodyPosition(body, 42, z) > 7.5 and bodyPosition(body, 42, z) < 12.5
+    bodyPosition(body, 42, y) > 1.2 and bodyPosition(body, 42, y) < 2.2
+    fact(body, 42, Airborne) == 1
+    watchdog.count == 0
+  }
+}
+
+test "the faerie hovers without a floor attachment" {
+  when { ticks 90 }
+  expect {
+    bodyPosition(body, 42, y) > 1.2 and bodyPosition(body, 42, y) < 2.2
+    fact(body, 42, Airborne) == 1
+    companionGlow.level >= 0.5 and companionGlow.level <= 1
     watchdog.count == 0
   }
 }
