@@ -116,7 +116,13 @@ activated builds without reconnecting the client; earlier backends retain
 their World processes and route their stops until the session ends. Rebuild
 `src/Puck.Cli` to publish adapter changes, then use `puck_adapter` to inspect
 the answering backend's module id and installed directory. No publisher key,
-Azure release or application-copy staging is involved.
+Azure release or application-copy staging is involved. The main checkout's
+`.claude/mcp-install` serves every session on the machine, the lead's
+included: a lane proving an adapter change publishes into an install root in
+its own worktree (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`)
+and runs that front, never the main checkout's. A lane once activated its
+unfinished adapter there and every session's tool results broke until the lead
+pointed `current` back at `last-good`.
 
 `puck_exec.command` also accepts a newline-separated script: at most 64
 nonblank, noncomment lines and 8192 characters total. The entire script reaches
