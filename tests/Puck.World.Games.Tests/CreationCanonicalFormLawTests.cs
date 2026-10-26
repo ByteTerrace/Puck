@@ -135,12 +135,15 @@ public sealed class CreationCanonicalFormLawTests(CreationCanonicalFormLawTests.
         WorldDefinition read;
 
         try {
-            read = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: (definition with {
-                CreationsRaw = [.. prototypes.Select(selector: (prototype, i) => (prototype with {
-                    Document = canonical[i].Document,
-                    HashRaw = canonical[i].Hash,
-                }))],
-            })));
+            read = WorldDefinitionSerialization.Deserialize(
+                documentDirectory: definition.DocumentDirectory,
+                utf8Json: WorldDefinitionSerialization.Serialize(definition: (definition with {
+                    CreationsRaw = [.. prototypes.Select(selector: (prototype, i) => (prototype with {
+                        Document = canonical[i].Document,
+                        HashRaw = canonical[i].Hash,
+                    }))],
+                }))
+            );
         } catch (InvalidDataException exception) {
             failures.Add(item: $"{world}: a world carrying its canonical prototypes does not read back: {exception.Message}");
 

@@ -53,10 +53,13 @@ internal static partial class AuthoredGameFixtures {
             baseDirectory: () => (Path.GetDirectoryName(path: path) ?? Root)
         );
 
+        // The host's boot reads the document from its file, so its relative paths (patches, voices, and a cabinet's
+        // cartridge among them) resolve beside that file during admission.
         Assert.True(
-            condition: WorldDefinitionLoader.TryLoad(
+            condition: WorldDefinitionLoader.TryLoadForAdmission(
                 catalog: puckCatalog,
                 definition: out var definition,
+                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path),
                 instanceIdentity: WorldDefinitionLoader.BootInstanceName,
                 neighbours: neighbours,
                 reason: out var reason,
@@ -68,8 +71,6 @@ internal static partial class AuthoredGameFixtures {
             userMessage: reason
         );
 
-        // The host's boot reads the document from its file, so its relative paths (a cabinet's cartridge among them)
-        // resolve beside that file.
-        return (definition! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
+        return definition!;
     }
 }
