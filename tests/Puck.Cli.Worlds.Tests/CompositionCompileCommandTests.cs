@@ -37,34 +37,6 @@ public sealed class CompositionCompileCommandTests {
         Assert.False(condition: File.Exists(path: directory.PathOf(name: "north.world.json")));
         Assert.False(condition: File.Exists(path: directory.PathOf(name: "south.world.json")));
     }
-    // A composition's worlds decompile together into the one source that emits them, with the border between them
-    // read back from the rows it generated in both; that source compiles to the same documents, byte for byte.
-    [Fact]
-    public async Task CompositionWorldsDecompileTogetherIntoTheSourceThatEmitsThemAsync() {
-        using var directory = new TemporaryDirectory();
-        var source = directory.WriteText(name: "map.puck", text: """
-            module plot(centre: Point) {
-                ground yard { center: centre size [12m, 12m] }
-            }
-            world north = plot(centre: [0m, 0m, -6m])
-            world south = plot(centre: [0m, 0m, 6m])
-            border north.south, south.north { height: 4m }
-            """);
-        var decompiled = directory.PathOf(name: "again/map.puck");
-
-        Assert.Equal(expected: 0, actual: await SuiteRoot.InvokeAsync(args: ["compile", source]));
-        Assert.Equal(expected: 2, actual: await SuiteRoot.InvokeAsync(args: ["decompile", directory.PathOf(name: "north.world.json"), directory.PathOf(name: "south.world.json")]));
-        Assert.Equal(expected: 0, actual: await SuiteRoot.InvokeAsync(args: ["decompile", directory.PathOf(name: "north.world.json"), directory.PathOf(name: "south.world.json"), "--output", decompiled]));
-        Assert.Contains(expectedSubstring: "border north.south, south.north", actualString: File.ReadAllText(path: decompiled), comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: 0, actual: await SuiteRoot.InvokeAsync(args: ["compile", decompiled]));
-
-        foreach (var world in new[] { "north", "south" }) {
-            Assert.Equal(
-                expected: File.ReadAllBytes(path: directory.PathOf(name: $"{world}.world.json")),
-                actual: File.ReadAllBytes(path: directory.PathOf(name: $"again/{world}.world.json"))
-            );
-        }
-    }
     [Fact]
     public async Task CompositionOutputOptionNamesDestinationDirectoryAsync() {
         using var directory = new TemporaryDirectory();

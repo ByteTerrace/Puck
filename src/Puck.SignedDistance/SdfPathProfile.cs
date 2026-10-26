@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 
 namespace Puck.SignedDistance;
 
@@ -31,7 +33,28 @@ public sealed record SdfPathProfile(IReadOnlyList<SdfPathContour> Contours, floa
     /// <summary>Compiles this profile or throws ArgumentException for invalid or over-budget input. All points,
     /// including stroke extents, must fit the unit square. Scaling a shape multiplies this error by at most
     /// max(scale.x, scale.y). Compiled filled boundaries may nest but may not touch or cross.</summary>
-    public SdfPathEdge[] Compile() => SdfPathCompiler.Compile(path: this);
+    public SdfPathEdge[] Compile() {
+        var compiled = Compilations.GetValue(
+            key: this,
+            createValueCallback: static profile => {
+                try {
+                    return SdfPathCompiler.Compile(path: profile);
+                } catch (ArgumentException refusal) {
+                    return ExceptionDispatchInfo.Capture(source: refusal);
+                }
+            }
+        );
+
+        if (compiled is ExceptionDispatchInfo refused) {
+            refused.Throw();
+        }
+
+        return (SdfPathEdge[])((SdfPathEdge[])compiled).Clone();
+    }
+
+    // Each profile's edges, or its refusal, compiled once: a profile is immutable, and every program that draws it (a
+    // rebuild composes each placement's shapes again) asks for them.
+    private static readonly ConditionalWeakTable<SdfPathProfile, object> Compilations = new();
 }
 /// <summary>One compiled boundary edge or the convex hull of two endpoint disks. Radius values are zero for fill.</summary>
 public readonly record struct SdfPathEdge(Vector2 A, Vector2 B, float RadiusA = 0f, float RadiusB = 0f);

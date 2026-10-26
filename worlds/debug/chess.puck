@@ -29,15 +29,12 @@ let pieceLooks = concat(
   map(pieceTypes, kind => $"piece_black_{kind}")
 )
 
-looks {
-  rows: map(concat(pieceLooks, ["boardCursor"]), name => {
-    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-    name: name
-    scale: 1
-    source: creation(prototypeId: name)
-  }
-  )
-}
+looks: map(concat(pieceLooks, ["boardCursor"]), name => {
+  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  name: name
+  scale: 1
+  source: creation(prototypeId: name)
+})
 
 // The board reads as a real one from each side. The `chessBoard` grid is world-axis-aligned, cell = 8 * row + column,
 // its rows running +Z and its columns +X; a rank is a row (rank 1 on the -Z side, White's), and a file runs the other
@@ -158,79 +155,77 @@ template squareProto(name, colorKey) {
   }
 }
 
-kits {
-  rows [
-    {
-      bodyContact: Solid
-      bodyMotionProgram: "walk"
-      collider: box(halfExtents: [0.045, 0.12, 0.045], rotation: [0, 0, 0, 1])
-      motion {
-        facingSnap: true
-        holds [
-          {
-            bond: Free
-            envelope {
-              sinkSpeed: 40
-            }
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            hold: Gravity
-            name: "air"
+kits [
+  {
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: box(halfExtents: [0.045, 0.12, 0.045], rotation: [0, 0, 0, 1])
+    motion {
+      facingSnap: true
+      holds [
+        {
+          bond: Free
+          envelope {
+            sinkSpeed: 40
           }
-        ]
-        shaping [
-          {
-            along {}
+          gravity {
+            fall: 46
+            rise: 28
           }
-        ]
-        speed {
-          value: 0.001
+          hold: Gravity
+          name: "air"
         }
-        turn {
-          rate: 0.001
+      ]
+      shaping [
+        {
+          along {}
         }
+      ]
+      speed {
+        value: 0.001
       }
-      name: "piece"
-      rigid {
-        angularDamping: 0.05
-        friction: 0.5
-        linearDamping: 0.05
-        mass: 0.12
-        restitution: 0.1
-        rollingFriction: 0.15
+      turn {
+        rate: 0.001
       }
     }
-    // The board cursor: volumeless and overlapping, so it touches no piece, and posed by the rules every tick.
-    {
-      bodyContact: Overlap
-      bodyMotionProgram: "walk"
-      motion {
-        facingSnap: true
-        holds [
-          {
-            bond: Free
-            hold: None
-            name: "held"
-          }
-        ]
-        shaping [
-          {
-            along {}
-          }
-        ]
-        speed {
-          value: 0.001
-        }
-        turn {
-          rate: 0.001
-        }
-      }
-      name: "boardCursor"
+    name: "piece"
+    rigid {
+      angularDamping: 0.05
+      friction: 0.5
+      linearDamping: 0.05
+      mass: 0.12
+      restitution: 0.1
+      rollingFriction: 0.15
     }
-  ]
-}
+  }
+  // The board cursor: volumeless and overlapping, so it touches no piece, and posed by the rules every tick.
+  {
+    bodyContact: Overlap
+    bodyMotionProgram: "walk"
+    motion {
+      facingSnap: true
+      holds [
+        {
+          bond: Free
+          hold: None
+          name: "held"
+        }
+      ]
+      shaping [
+        {
+          along {}
+        }
+      ]
+      speed {
+        value: 0.001
+      }
+      turn {
+        rate: 0.001
+      }
+    }
+    name: "boardCursor"
+  }
+]
 
 pattern chessRayEmpty: Int {
   symbols {
@@ -1517,7 +1512,7 @@ search {
       ]
       // The score is from the side that just moved. One ply, automatic queen
       // promotion, material first, then central occupation and pawn progress.
-      "score": (2 * turn - 1) * ai[evaluation]
+      score: (2 * turn - 1) * ai[evaluation]
     }
   ]
 }
@@ -1596,8 +1591,7 @@ state {
         y: -1
         z: 0
       }
-    ], name: "chessBoard", origin: [-0.8, 1.25, -0.8], width: 8, wrap: None
-    )
+    ], name: "chessBoard", origin: [-0.8, 1.25, -0.8], width: 8, wrap: None)
   ]
 
   world {

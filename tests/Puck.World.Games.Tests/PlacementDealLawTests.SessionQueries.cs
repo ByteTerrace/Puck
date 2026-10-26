@@ -17,13 +17,10 @@ public sealed partial class PlacementDealLawTests {
         using var fixture = Fixtures.FreshServer(definition: (document with {
             PlacementRowsRaw = [template with { Deal = template.Deal! with { Reflow = new WorldPlacementReflow() } }],
             Admission = [new WorldAdmissionEntry(
-                Algorithm: string.Empty,
                 Disclosure: tier,
                 Domain: WorldAdmissionEntry.AnyAuthority,
                 Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 64)],
-                Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                PublicKey: string.Empty,
-                Subject: null
+                Mode: WorldAdmissionTrustMode.FederatedAuthority
             )],
         }));
 

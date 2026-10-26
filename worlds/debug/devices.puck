@@ -1123,7 +1123,7 @@ placements {
     yawDegrees: deviceYaw
     respond [
       {
-        "when": state(state: pilotHold, key: `0`, comparison: Equal, value: 1)
+        when: state(state: pilotHold, key: `0`, comparison: Equal, value: 1)
         prototypeId: "device-humble-gaming-brick-held"
       }
     ]
@@ -1210,49 +1210,47 @@ machines [
 
 // The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B, the start
 // channel (the pad's Start, Enter on a keyboard) is start and the select channel (the pad's Back, right Shift) is select.
-kits {
-  rows [
-    {
-      name: "devicePad"
-      bodyMotionProgram: "walk"
-      motion {
-        holds [
-          {
-            bond: Free
-            envelope {
-              sinkSpeed: 40
-            }
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            hold: Gravity
-            name: "air"
+kits [
+  {
+    name: "devicePad"
+    bodyMotionProgram: "walk"
+    motion {
+      holds [
+        {
+          bond: Free
+          envelope {
+            sinkSpeed: 40
           }
-        ]
-        shaping [
-          {
-            along {}
+          gravity {
+            fall: 46
+            rise: 28
           }
-        ]
-        speed {
-          value: 4
+          hold: Gravity
+          name: "air"
         }
-        turn {
-          rate: 2
+      ]
+      shaping [
+        {
+          along {}
         }
+      ]
+      speed {
+        value: 4
       }
-      pad {
-        forward: "LeftStickY"
-        strafe: "LeftStickX"
-        jump: "South"
-        flight: "East"
-        start: "Start"
-        select: "Back"
+      turn {
+        rate: 2
       }
     }
-  ]
-}
+    pad {
+      forward: "LeftStickY"
+      strafe: "LeftStickX"
+      jump: "South"
+      flight: "East"
+      start: "Start"
+      select: "Back"
+    }
+  }
+]
 
 // Engaging a device shows no HUD prompt. The section's panel list
 // starts here because the garden, which imports controls.puck too, authors its own; the debug world's only panels are

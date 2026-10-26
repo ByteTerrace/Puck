@@ -871,4 +871,79 @@ public sealed class WorldFaceCatalogLawTests {
         ));
         Assert.Null(@object: unmapped);
     }
+    // THE LAW: a holding projection over face-free rows takes the document's derived faces, frames and spatial index
+    // whole and reads as an appearance change; one over a row whose creation carries a face derives its own faces and
+    // reads as a facet change; and an empty projection is the document itself.
+    [Fact]
+    public void AHoldingProjectionOverFaceFreeRowsCarriesTheCatalogAndTheFrames() {
+        var door = BuildDoorDocument();
+        var crate = new WorldPlacement(
+            Id: "crate",
+            PrototypeId: "crate",
+            Position: new Vector3(x: 1f, y: 0f, z: 2f),
+            YawDegrees: 0f,
+            Scale: 1f
+        );
+        var before = (door with {
+            CreationsRaw = [.. door.Creations, CreationFixtures.UnitSphere(id: "crate")],
+            PlacementRowsRaw = [.. door.Placements, crate],
+        });
+        var catalog = WorldFaceCatalog.For(definition: before);
+        var frames = WorldPlacementFrameCompilation.Resolve(section: before.PlacementsRaw);
+        var spatial = WorldSpatialQueryCompilation.Resolve(section: before.PlacementsRaw);
+        var swapped = before.WithPlacementHoldings(holdings: [(1, 1)]);
+
+        Assert.Same(expected: before, actual: before.WithPlacementHoldings(holdings: []));
+        Assert.Equal(expected: 1, actual: swapped.Placements[1].Holding);
+        Assert.Same(expected: before.Placements[0], actual: swapped.Placements[0]);
+        Assert.Same(expected: catalog, actual: WorldFaceCatalog.For(definition: swapped));
+        Assert.Same(expected: frames, actual: WorldPlacementFrameCompilation.Resolve(section: swapped.PlacementsRaw));
+        Assert.Same(expected: spatial, actual: WorldSpatialQueryCompilation.Resolve(section: swapped.PlacementsRaw));
+        Assert.Equal(expected: WorldHoldingChange.Appearance, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: before));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: swapped));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: null));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: (before with { PlacementRowsRaw = [before.Placements[0]] }), before: before));
+        Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: (before with { PlacementRowsRaw = [before.Placements[0], (crate with { Scale = 2f })] }), before: before));
+
+        var faced = before.WithPlacementHoldings(holdings: [(0, 1)]);
+
+        Assert.NotSame(expected: catalog, actual: WorldFaceCatalog.For(definition: faced));
+        Assert.Equal(expected: WorldHoldingChange.Facets, actual: WorldPlacementResponse.CompareHoldings(after: faced, before: before));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => before.WithPlacementHoldings(holdings: [(2, 1)]));
+    }
+    // THE LAW: a session mirror, whose readers watch its definition revision alone, moves it for a value delivery that
+    // moves a holding mask and for no other; and preparing a document's responses emits each responding row once for
+    // its authored creation and once for each entry.
+    [Fact]
+    public void AMovedHoldingIsASceneChangeToASessionMirror() {
+        var door = BuildDoorDocument();
+        var crate = new WorldPlacement(
+            Id: "crate",
+            PrototypeId: "crate",
+            Position: new Vector3(x: 1f, y: 0f, z: 2f),
+            YawDegrees: 0f,
+            Scale: 1f,
+            Respond: [new WorldPlacementResponse(
+                When: new WorldPlacementResponseCondition.StateCondition(State: "heat", Comparison: Puck.State.ExpressionOp.GreaterOrEqual, Value: 1),
+                PrototypeId: "lid"
+            )]
+        );
+        var before = (door with {
+            CreationsRaw = [.. door.Creations, CreationFixtures.UnitSphere(id: "crate"), CreationFixtures.Sphere(id: "lid", scale: 2f)],
+            PlacementRowsRaw = [.. door.Placements, crate],
+        });
+        var session = new WorldSessionMirror(placeholder: before);
+        var stamp = new Puck.World.Protocol.WorldStateStamp(EngineTick: 1UL, Everything: false, MovedRows: default, Tick: 1UL);
+
+        session.DeliverDefinition(definition: before, version: default);
+
+        var revision = session.DefinitionRevision;
+
+        session.DeliverState(definition: (before with { }), stamp: in stamp, version: default);
+        Assert.Equal(expected: revision, actual: session.DefinitionRevision);
+        session.DeliverState(definition: before.WithPlacementHoldings(holdings: [(1, 1)]), stamp: in stamp, version: default);
+        Assert.Equal(expected: (revision + 1), actual: session.DefinitionRevision);
+        Assert.Equal(expected: 2, actual: WorldPlacementStamper.PrepareResponses(definition: before));
+        Assert.Equal(expected: 0, actual: WorldPlacementStamper.PrepareResponses(definition: door));
+    }
 }

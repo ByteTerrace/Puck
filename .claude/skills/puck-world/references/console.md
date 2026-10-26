@@ -502,9 +502,11 @@ lowers to, so an edit that lowers identically keeps the pin. `world.load` and
 `WorldDefinitionLoader.TryLoadFileForAdmission`, with the host's machine
 catalog and the running instance's identity, so the document's boot draws
 refill exactly as the boot drew them before it is admitted and embedded.
-`world.save` with no argument updates the loaded source through
-`WorldSourceSave`: it prints changed authored nodes and proves the composed
-snapshot before an atomic write, retaining every unrelated source span.
+`world.save` with no argument updates the loaded source tree through
+`WorldSourceSave`: the composition's scalar origins name the document that
+authors each change, it prints the changed nodes there and proves the composed
+snapshot before the atomic writes, retaining every unrelated source span. The
+simulation's `state` and a placement's response mask are not written.
 Template, compile-time `for` and module-generated rows refuse by name; their
 generator is the authoring surface. An engine-generated duplicate needs an
 authored name before source can spell it. A JSON target declaring the source as

@@ -56,7 +56,6 @@ metadata {
 // it whole.
 admission [
   {
-    algorithm: ""
     disclosure: Replica
     domain: "*"
     grants [
@@ -72,8 +71,6 @@ admission [
       }
     ]
     mode: FederatedAuthority
-    publicKey: ""
-    subject: null
   }
 ]
 
@@ -152,8 +149,7 @@ cameras: concat(
 spawnPoints: concat([
   { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
   { id: "stage", position [0, 0, 0], yawDegrees: 0 }
-], gallerySpawns
-)
+], gallerySpawns)
 
 commands: galleryCommands
 

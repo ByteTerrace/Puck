@@ -52,9 +52,9 @@ Against a world booted `--world <file>.puck`:
   recompiles it (basis chain included) with no restart. A re-read that no
   longer compiles or validates leaves the running world untouched and echoes
   why.
-- `world.save` prints changed authored nodes back into a `.puck` target,
-  retaining unrelated source text and proving the recompiled snapshot before
-  writing. Template and compile-time `for` rows refuse by name. Rename a live
+- `world.save` prints each changed authored node into the `.puck` source that
+  authors it (the root or any document it imports), retaining unrelated source
+  text and proving the recomposed snapshot before writing. Template and compile-time `for` rows refuse by name. Rename a live
   duplicate before saving its generated id to source.
 
 `world.row.set`/`world.row` mutations act on the in-memory document. Keep an

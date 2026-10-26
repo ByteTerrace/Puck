@@ -76,7 +76,8 @@ public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Transl
 /// <summary>
 /// The in-place crossings a presentation mirror has seen, per entity: a counter that advances once per crossing and
 /// the last few carries, so a consumer that latched an entity's pose at one count carries it to the current one.
-/// Presentation only.
+/// Presentation only. An entity's history is allocated at its first crossing, so a mirror sized for every entity slot
+/// holds one reference and one count per slot until a body crosses.
 /// </summary>
 /// <param name="capacity">The number of entity indices tracked.</param>
 public sealed class WorldPoseCarries(int capacity) {
@@ -84,7 +85,9 @@ public sealed class WorldPoseCarries(int capacity) {
     private const int Depth = 4;
 
     private readonly int[] m_epoch = new int[capacity];
-    private readonly WorldPoseCarry[] m_ring = new WorldPoseCarry[(capacity * Depth)];
+    // Each entity's last Depth carries, by crossing count modulo Depth; null until its first crossing. Record writes the
+    // history before it publishes the count, so a reader that sees a count past its own finds the history written.
+    private readonly WorldPoseCarry[]?[] m_rings = new WorldPoseCarry[]?[capacity];
 
     /// <summary>Returns an entity's crossing count.</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -96,7 +99,7 @@ public sealed class WorldPoseCarries(int capacity) {
     public void Record(int index, WorldPoseCarry carry) {
         var next = (m_epoch[index] + 1);
 
-        m_ring[((index * Depth) + (next % Depth))] = carry;
+        (m_rings[index] ??= new WorldPoseCarry[Depth])[(next % Depth)] = carry;
         Volatile.Write(
             location: ref m_epoch[index],
             value: next
@@ -121,8 +124,14 @@ public sealed class WorldPoseCarries(int capacity) {
             return false;
         }
 
+        if (current == since) {
+            return true;
+        }
+
+        var ring = Volatile.Read(location: ref m_rings[index])!;
+
         for (var epoch = (since + 1); (epoch <= current); epoch++) {
-            carry = carry.Then(later: m_ring[((index * Depth) + (epoch % Depth))]);
+            carry = carry.Then(later: ring[(epoch % Depth)]);
         }
 
         return true;

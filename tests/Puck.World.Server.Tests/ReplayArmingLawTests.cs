@@ -44,7 +44,6 @@ public sealed class ReplayArmingLawTests {
         using var harness = new WorldHistoryHarness(
             definition: (document with {
                 Admission = [new WorldAdmissionEntry(
-                    Algorithm: string.Empty,
                     Disclosure: WorldDisclosureTier.Replica,
                     Domain: WorldAdmissionEntry.AnyAuthority,
                     Grants: [new WorldAdmissionGrant(
@@ -52,9 +51,7 @@ public sealed class ReplayArmingLawTests {
                         Capability: WorldCapability.Observe,
                         Subject: GrantSubject.All
                     )],
-                    Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                    PublicKey: string.Empty,
-                    Subject: null
+                    Mode: WorldAdmissionTrustMode.FederatedAuthority
                 )],
             }),
             on: false,

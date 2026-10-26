@@ -279,18 +279,23 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // counts were last time, and a live scene's shape rarely swings wildly frame to frame, so seeding from them removes
     // most of List<T>'s geometric-growth reallocation without guessing at a number nothing measured. A capacity hint
     // changes nothing observable (List<T>.Capacity affects no read value).
+    // The convex-polygon profiles the last live emission emitted: the program keeps its side table to itself.
+    private int m_emittedConvexPolygons;
+
     private SdfProgramBuilder EmitProgram(SdfEmitContext context, SdfProgram? previous) {
         var builder = new SdfProgramBuilder(
             instructionCapacity: (previous?.InstructionCount ?? 0),
             instanceCapacity: (previous?.Instances.Count ?? 0),
             materialCapacity: (previous?.MaterialCount ?? 0),
-            screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0)
+            screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0),
+            convexPolygonCapacity: m_emittedConvexPolygons
         );
 
         Emit(
             builder: builder,
             context: context
         );
+        m_emittedConvexPolygons = builder.ConvexPolygonCount;
 
         return builder;
     }

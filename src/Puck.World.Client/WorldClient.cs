@@ -26,7 +26,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
     /// <summary>How many counters <see cref="WriteRevision"/> reports — the component count
     /// <c>WorldSceneEmitter</c> folds into its own when it lays out its revision vector.</summary>
-    public const int RevisionComponentCount = 3;
+    public const int RevisionComponentCount = 4;
 
     // The shared live composition-override store — the frame source's composer reads it; DeliverComposition writes it.
     private readonly WorldCompositionState m_composition;
@@ -41,6 +41,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
     private int m_definitionRevision;
+    private int m_responseRevision;
     private WorldDocumentVersion m_documentVersion;
 
     // The field rows a snapshot's field-cell writes moved, handed to the state mirror.
@@ -76,6 +77,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
+    /// <summary>The monotonic response counter — bumped each time a value delivery moves which creation a placement
+    /// shows without moving a presentation facet (<see cref="WorldHoldingChange.Appearance"/>). The frame source composes
+    /// again on it; nothing derived from the definition's shape reconciles.</summary>
+    public int ResponseRevision => m_responseRevision;
     /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
     public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
@@ -998,10 +1003,23 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
     /// <inheritdoc/>
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
-    /// definition is stored for state-value reads without bumping the frame source's rebuild-watch revision, and the
-    /// state mirror refreshes the slots bound to the rows the stamp names.</remarks>
+    /// definition is stored for state-value reads, and the state mirror refreshes the slots bound to the rows the stamp
+    /// names. A delivery that moved which creations placements show bumps <see cref="ResponseRevision"/>, so the frame
+    /// source composes again, or, when a shown creation derives a face, a camera or a sound,
+    /// <see cref="DefinitionRevision"/>, so the presentation reconciles them as well.</remarks>
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+
+        switch (WorldPlacementResponse.CompareHoldings(after: definition, before: m_definition)) {
+            case WorldHoldingChange.Appearance:
+                m_responseRevision++;
+
+                break;
+            case WorldHoldingChange.Facets:
+                m_definitionRevision++;
+
+                break;
+        }
 
         m_definition = definition;
         BeginVersion(version: version);
@@ -1313,11 +1331,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
     }
     /// <summary>Writes this client's program-rebuild watch counters side by side, never added together: the seat-metadata
-    /// revision (colors, pending state), the server's declared-set revision from the latest snapshot, and the
-    /// definition-delivery revision.
+    /// revision (colors, pending state), the server's declared-set revision from the latest snapshot, the
+    /// definition-delivery revision and the response revision.
     /// <para>
     /// The server term is not monotonic — it is assigned from <c>snapshot.Revision</c>, so it can move down. A sum of
-    /// these three would therefore stall on a real change whenever the server revision fell by exactly as much as
+    /// these would therefore stall on a real change whenever the server revision fell by exactly as much as
     /// another term rose, holding a stale program with nothing to report it. Keeping them apart lets the composition
     /// host's componentwise compare see each one move on its own (see <see cref="ISdfSceneEmitter.WriteRevision"/>).
     /// </para></summary>
@@ -1326,6 +1344,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         destination[0] = m_roster.Revision;
         destination[1] = m_serverRevision;
         destination[2] = m_definitionRevision;
+        destination[3] = m_responseRevision;
     }
 
     // The correction error-smoothing state, one per entity, with a Begin/Decay/Apply/Reset lifecycle. Presentation

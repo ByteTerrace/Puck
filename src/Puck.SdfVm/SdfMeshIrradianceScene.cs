@@ -50,13 +50,22 @@ public sealed partial class SdfMeshIrradianceScene {
     /// <summary>Gets the triangles of the geometry the scene keeps for a later scene though no draw of its own uses it.</summary>
     public long TrianglesRetained { get; }
 
+    // 28 bytes: the bounds, then one word holding the first index above the count's CountBits.
     private struct Node {
+        private const int CountBits = 3;
+
         public Vector3 Low;
         public Vector3 High;
+        private int m_firstAndCount;
+
         // A leaf's first primitive, or an inner node's first child (its second follows it).
-        public int First;
+        public readonly int First => (m_firstAndCount >> CountBits);
         // A leaf's primitive count; zero for an inner node.
-        public int Count;
+        public readonly int Count => (m_firstAndCount & ((1 << CountBits) - 1));
+        // The most primitives a leaf can hold.
+        public const int MaxCount = ((1 << CountBits) - 1);
+
+        public void Link(int first, int count) => m_firstAndCount = ((first << CountBits) | count);
     }
 
     /// <summary>Builds the scene of a frame's static mesh draws: every draw that is not dynamic.</summary>
@@ -623,13 +632,19 @@ public sealed partial class SdfMeshIrradianceScene {
         }
     }
 
-    // A binned surface-area hierarchy over primitive bounds, its wide ranges' children built in parallel.
+    // A binned surface-area hierarchy over primitive bounds, its wide ranges' children built in parallel. Its nodes
+    // are written into chunks allocated as the build reaches them, since the bound a range can need (2n - 1 nodes)
+    // is several times what a build of leaves several primitives wide uses; the result is copied out at its size.
     private sealed class Hierarchy {
+        private const int ChunkShift = 16;
+        private const int ChunkMask = ((1 << ChunkShift) - 1);
+
         private readonly Vector3[] m_lows;
         private readonly Vector3[] m_highs;
         private readonly Vector3[] m_centroids;
         private readonly int[] m_order;
-        private readonly Node[] m_nodes;
+        private readonly Node[]?[] m_chunks;
+        private readonly int m_capacity;
         private readonly int m_leaf;
         private readonly int m_braid;
         private readonly List<int> m_braids = [];
@@ -644,7 +659,8 @@ public sealed partial class SdfMeshIrradianceScene {
             m_braid = braid;
             m_centroids = new Vector3[count];
             m_order = new int[count];
-            m_nodes = new Node[Math.Max(val1: 1, val2: ((2 * count) - 1))];
+            m_capacity = Math.Max(val1: 1, val2: ((2 * count) - 1));
+            m_chunks = new Node[]?[(((m_capacity - 1) >> ChunkShift) + 1)];
             for (var index = 0; (index < count); index++) {
                 m_centroids[index] = ((lows[index] + highs[index]) * 0.5f);
                 m_order[index] = index;
@@ -654,11 +670,40 @@ public sealed partial class SdfMeshIrradianceScene {
         // The nodes, root first, the primitive each leaf position holds, and with a braid width the widest nodes at most
         // that many primitives wide.
         public static (Node[] Nodes, int[] Order, int[] Braids) Build(Vector3[] lows, Vector3[] highs, int leaf, int braid) {
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value: leaf, other: Node.MaxCount);
+
             var hierarchy = new Hierarchy(braid: braid, highs: highs, leaf: leaf, lows: lows);
 
             hierarchy.BuildNode(count: lows.Length, first: 0, node: 0, wide: true);
             hierarchy.m_braids.Sort();
-            return (hierarchy.m_nodes.AsSpan(length: hierarchy.m_nodeCount, start: 0).ToArray(), hierarchy.m_order, [.. hierarchy.m_braids]);
+            return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids]);
+        }
+        // A node's storage, its chunk allocated by the first build task to reach it; the last chunk is as long as the
+        // bound needs, so a small hierarchy allocates no more than it could use.
+        private ref Node At(int node) {
+            var index = (node >> ChunkShift);
+            var chunk = Volatile.Read(location: ref m_chunks[index]);
+
+            if (chunk is null) {
+                lock (m_chunks) {
+                    chunk = m_chunks[index];
+                    if (chunk is null) {
+                        chunk = new Node[Math.Min(val1: (1 << ChunkShift), val2: (m_capacity - (index << ChunkShift)))];
+                        Volatile.Write(location: ref m_chunks[index], value: chunk);
+                    }
+                }
+            }
+
+            return ref chunk[(node & ChunkMask)];
+        }
+        private Node[] CopyNodes() {
+            var nodes = new Node[m_nodeCount];
+
+            for (var start = 0; (start < m_nodeCount); start += (1 << ChunkShift)) {
+                m_chunks[(start >> ChunkShift)].AsSpan(length: Math.Min(val1: (1 << ChunkShift), val2: (m_nodeCount - start)), start: 0).CopyTo(destination: nodes.AsSpan(start: start));
+            }
+
+            return nodes;
         }
 
         // Builds a node over a range of the order; wide says its parent, if any, is wider than the braid width.
@@ -681,20 +726,20 @@ public sealed partial class SdfMeshIrradianceScene {
                 centroidHigh = Vector3.Max(value1: centroidHigh, value2: m_centroids[primitive]);
             }
 
-            m_nodes[node].Low = low;
-            m_nodes[node].High = high;
+            ref var built = ref At(node: node);
+
+            built.Low = low;
+            built.High = high;
 
             if (count <= m_leaf) {
-                m_nodes[node].First = first;
-                m_nodes[node].Count = count;
+                built.Link(count: count, first: first);
                 return;
             }
 
             var mid = Split(centroidHigh: centroidHigh, centroidLow: centroidLow, count: count, first: first);
             var child = Interlocked.Add(location1: ref m_nodeCount, value: 2) - 2;
 
-            m_nodes[node].First = child;
-            m_nodes[node].Count = 0;
+            built.Link(count: 0, first: child);
             var wider = (count > m_braid);
 
             if (count >= ParallelPrimitives) {

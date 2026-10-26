@@ -89,7 +89,7 @@ public sealed class IdentifierAgreementLawTests {
                 ? property.Name
                 : null
             ),
-            Reserved: PuckPrinter.PropertyKeywords.Contains,
+            Reserved: static _ => false,
             Rule: static name => IdentifierSpelling.IsName(text: name)
         ),
         new SpellingPosition(
@@ -103,7 +103,7 @@ public sealed class IdentifierAgreementLawTests {
                 ? property.Name
                 : null
             ),
-            Reserved: static name => (PuckPrinter.PropertyKeywords.Contains(item: name) || PuckPrinter.DocumentHeaders.Contains(item: name)),
+            Reserved: PuckPrinter.DocumentHeaders.Contains,
             Rule: static name => IdentifierSpelling.IsName(text: name)
         ),
         new SpellingPosition(
@@ -221,7 +221,6 @@ public sealed class IdentifierAgreementLawTests {
                 _ = extensions.Remove(propertyName: "probeExt");
                 extensions[name] = member;
             },
-            reserved: PuckPrinter.PropertyKeywords.Contains,
             rule: static name => IdentifierSpelling.IsName(text: name)
         ),
         Decompiled(
@@ -241,7 +240,6 @@ public sealed class IdentifierAgreementLawTests {
                 _ = member.Remove(propertyName: "seat");
                 member[name] = value;
             },
-            reserved: PuckPrinter.PropertyKeywords.Contains,
             rule: static name => IdentifierSpelling.IsName(text: name)
         ),
     ];

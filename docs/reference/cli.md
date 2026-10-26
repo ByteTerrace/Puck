@@ -3346,7 +3346,7 @@ formatter for every source kind.
 
 ```text
 puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--strict] [--watch] [--update-assets]
-puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
+puck decompile <source.json> [-o <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
 puck lint <path> [--strict]
@@ -3499,16 +3499,12 @@ write the `.puck` next to the JSON it came from. Pass `--embeddings <file.embedd
 to decompile vector cell arrays back into their original authored text literals when present
 in the lock.
 
-A name the compiler generated ([generated names](dsl.md#generated-names)) prints back
-as the construct that generated it: a ground's prototype and placement as its `ground`
-block, a rule scope's members as `rules` scopes, and a generated test world's verdict
-rows, rules and schedule as its `test` block. Given several `<world>.world.json`
-documents, `decompile` reads them as the worlds of one composition and writes the one
-source that emits them, with `--output` naming it: each world becomes a module and a
-`world` declaration, and each `border` and `door` is read back from the rows it
-generated in both worlds it joins. A document declaring a generated name that nothing
-prints back is refused by that name, so the verb never writes a source the compiler
-refuses.
+`decompile` imports one hand-written document that no source authors. A rule scope's
+joined names ([generated names](dsl.md#generated-names)) print back as `rules` scopes;
+any other generated name, which a `ground`, a `test`, a composition's `border` or
+`door`, or an aliased module instance writes, is refused by that name, since those
+constructs are written in source and never printed back from a document, so the verb
+never writes a source the compiler refuses.
 
 The source composes to the document it came from: a list or object the document holds
 empty prints as `rows []` or the like, because composition replaces a list that is

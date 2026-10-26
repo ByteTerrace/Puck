@@ -28,7 +28,6 @@ metadata {
 // A traveller from the debug world arrives here, and the debug world's window onto the night field observes it whole.
 admission [
   {
-    algorithm: ""
     disclosure: Replica
     domain: "*"
     grants [
@@ -44,8 +43,6 @@ admission [
       }
     ]
     mode: FederatedAuthority
-    publicKey: ""
-    subject: null
   }
 ]
 
@@ -279,8 +276,7 @@ render {
         { elevation: 0, color: "#101A33" }
         { elevation: 0.5, color: "#070B16" }
         { elevation: 1, color: "#02030A" }
-      ]
-      )
+      ])
       stars(
         name: "stars",
         luminance: 150nit,

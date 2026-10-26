@@ -122,6 +122,9 @@ public static class PuckDiagnosticCodes {
     public const string ScheduleDelayUnit = "PUCK010";
     /// <summary>A document the engine schema rejected outright.</summary>
     public const string SchemaRejected = "PUCK031";
+    /// <summary>PUCK123: a section block holding only its rows (<c>kits { rows [ … ] }</c>); such a section is written
+    /// as the array of them, <c>kits [ … ]</c>.</summary>
+    public const string SectionRowsWrapped = "PUCK123";
     /// <summary>An engine semantic-validation refusal.</summary>
     public const string SemanticValidation = "PUCK030";
     /// <summary>A placement authoring both the bare <c>solid</c> flag and an explicit override.</summary>

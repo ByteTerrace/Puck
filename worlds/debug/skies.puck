@@ -26,8 +26,7 @@ template clearDay(cloudiness = 0.25, sunLight = 0, cloudTier = low) {
       { elevation: 0, color: "#CFDCE6" }
       { elevation: 0.4, color: "#7FAED4" }
       { elevation: 1, color: "#2F5C8C" }
-    ]
-    )
+    ])
     sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
     clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)
   ]
@@ -39,8 +38,7 @@ template starryNight(density = 48, brightness = 1.2, luminance = 2) {
     gradient(name: "air", luminance: luminance, stops: [
       { elevation: -1, color: "#020306" }
       { elevation: 1, color: "#070B16" }
-    ]
-    )
+    ])
     stars(
       name: "stars",
       luminance: luminance,
@@ -58,8 +56,7 @@ template polarNight(clock, intensity = 1.5, density = 48, luminance = 2) {
     gradient(name: "air", luminance: luminance, stops: [
       { elevation: -1, color: "#020306" }
       { elevation: 1, color: "#060C18" }
-    ]
-    )
+    ])
     stars(name: "stars", luminance: luminance, density: density, brightness: 1, seed: 11)
     aurora(
       name: "curtains",
@@ -82,8 +79,7 @@ template overcast(cover = 0.85, luminance = 3200) {
     gradient(name: "air", luminance: luminance, stops: [
       { elevation: -1, color: "#4A4F55" }
       { elevation: 1, color: "#9AA3AB" }
-    ]
-    )
+    ])
     clouds(
       name: "deck",
       luminance: luminance,

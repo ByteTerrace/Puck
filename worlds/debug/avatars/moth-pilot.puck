@@ -1396,14 +1396,14 @@ prototypes {
 
       drivers [
         // Her pace in metres per second, the X every gait curve reads.
-        { name: "pace", cadence: 1, signal: "speed", dynamics: "gait-pace", "when" ["always"] }
+        { name: "pace", cadence: 1, signal: "speed", dynamics: "gait-pace", when ["always"] }
         // The one stride cycle her feet plant on and every gait driver rides, its length opening with her pace.
         {
           name: "stride"
           cadence: 1
           signal: "planarTravel"
           cadenceBy { driver: "pace", curve: "pilot-stride" }
-          "when" ["Grounded", "moving"]
+          when ["Grounded", "moving"]
         }
         // The stride swings, half their amplitude at a walk and whole at a run.
         {
@@ -1411,7 +1411,7 @@ prototypes {
           cadence: 1
           signal: "driver.stride"
           weightBy { driver: "pace", curve: "moth-gait" }
-          "when" ["Grounded", "moving"]
+          when ["Grounded", "moving"]
         }
         // What only a run has: the forward lean and the bent elbows, and at twice the stride's rate, the bob.
         {
@@ -1419,16 +1419,16 @@ prototypes {
           cadence: 1
           signal: "driver.stride"
           weightBy { driver: "pace", curve: "moth-run" }
-          "when" ["Grounded", "moving"]
+          when ["Grounded", "moving"]
         }
         {
           name: "bob"
           cadence: 2
           signal: "driver.stride"
           weightBy { driver: "pace", curve: "moth-run" }
-          "when" ["Grounded", "moving"]
+          when ["Grounded", "moving"]
         }
-        { name: "breath", cadence: 1.7, signal: "time", "when" ["still"] }
+        { name: "breath", cadence: 1.7, signal: "time", when ["still"] }
         // Twice the travel direction off the facing: a sine of it peaks on the diagonals and vanishes on a pure
         // strafe or backpedal, and half of it, linear, is the direction itself.
         {
@@ -1437,11 +1437,11 @@ prototypes {
           signal: "travelDirection"
           blendInSeconds: 0.12
           blendOutSeconds: 0.3
-          "when" ["Grounded", "moving"]
+          when ["Grounded", "moving"]
         }
-        { name: "trail", cadence: 1, signal: "turnRate", dynamics: "body-turn", "when" ["always"] }
-        { name: "lean", cadence: 1, signal: "lateralAcceleration", dynamics: "body-lean", "when" ["Grounded"] }
-        { name: "surge", cadence: 1, signal: "forwardAcceleration", dynamics: "body-lean", "when" ["Grounded"] }
+        { name: "trail", cadence: 1, signal: "turnRate", dynamics: "body-turn", when ["always"] }
+        { name: "lean", cadence: 1, signal: "lateralAcceleration", dynamics: "body-lean", when ["Grounded"] }
+        { name: "surge", cadence: 1, signal: "forwardAcceleration", dynamics: "body-lean", when ["Grounded"] }
         // Her vertical speed, eased: it poses her in the air, tucked rising and reaching for the ground falling.
         {
           name: "air"
@@ -1450,7 +1450,7 @@ prototypes {
           dynamics: "body-air"
           blendInSeconds: 0.06
           blendOutSeconds: 0.04
-          "when" ["Airborne"]
+          when ["Airborne"]
         }
         // The same speed through an underdamped response that lags it: the landing's crouch and spring back up.
         {
@@ -1460,7 +1460,7 @@ prototypes {
           dynamics: "body-land"
           blendInSeconds: 0
           blendOutSeconds: 0.08
-          "when" ["Grounded"]
+          when ["Grounded"]
         }
         // Her arms come up to hold the handheld while her body's pilotHold cell is set.
         {
@@ -1469,7 +1469,7 @@ prototypes {
           signal: "time"
           blendInSeconds: 0.2
           blendOutSeconds: 0.2
-          "when" ["state.pilotHold.$body"]
+          when ["state.pilotHold.$body"]
         }
       ]
 
@@ -1480,7 +1480,7 @@ prototypes {
           tip: "boot-left"
           // The sole stays flat on the ground however far the planted boot sits from its rest offset.
           align: 1
-          "when" ["Grounded"]
+          when ["Grounded"]
           target {
             kind: "surface"
             direction [0, -1, 0]
@@ -1504,7 +1504,7 @@ prototypes {
           chain ["thigh-right", "shin-right"]
           tip: "boot-right"
           align: 1
-          "when" ["Grounded"]
+          when ["Grounded"]
           target {
             kind: "surface"
             direction [0, -1, 0]

@@ -46,7 +46,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Statement,
             Snippet: "world ${1:name} = ${2:module}()",
-            Sugar: WorldConstructSugar.ReadBack(condition: "the composition's worlds are decompiled together (`WorldDecompiler.DecompileComposition`), each world printing as a module of its own name"),
+            Sugar: WorldConstructSugar.Generator,
             Summary: "Emits one named world document by invoking a module, declared at the top level of its source. Written `entry world`, it is the world `Puck.World --world` boots when it boots the source; a composition declares at most one."
         ),
         new(
@@ -66,7 +66,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Block,
             Snippet: "border ${1:left}.${2:endpoint}, ${3:right}.${4:endpoint} {\n    width: ${5:4m}\n    height: ${6:3m}\n}",
-            Sugar: WorldConstructSugar.ReadBack(condition: "the composition's worlds are decompiled together and the two adjacencies, references and destinations the border generated regenerate from it exactly"),
+            Sugar: WorldConstructSugar.Generator,
             Summary: "Connects two world boundaries with a bidirectional border window."
         ),
         new(
@@ -80,7 +80,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Statement,
             Snippet: "door ${1:left}.${2:face}, ${3:right}.${4:spawn}",
-            Sugar: WorldConstructSugar.ReadBack(condition: "the composition's worlds are decompiled together and the portals, return arch, references and destinations the door generated regenerate from it exactly"),
+            Sugar: WorldConstructSugar.Generator,
             Summary: "Connects a door face to a named arrival point in another world."
         ),
         new(
@@ -113,7 +113,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Block,
             Snippet: "ground ${1:name} {\n    size [${2:10m}, ${3:10m}]\n}",
-            Sugar: WorldConstructSugar.ReadBack(condition: "its `ground$name` prototype and `name` placement are exactly the rows the block writes, standing in the same order in both sections"),
+            Sugar: WorldConstructSugar.Generator,
             Summary: "Generates a solid ground prototype, its placement, and boundary geometry."
         ),
         new(

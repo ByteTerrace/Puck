@@ -90,18 +90,20 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         var moved = false;
 
-        // A state-only delivery hands over a new definition sharing the render section and every placement, at the same
-        // revision: the environment reads none of its state, so only the bound slots below move it.
-        if ((revision != m_revision) || !ReferenceEquals(
+        // The expansion reads the render section alone, so a delivery that hands over the same section (a state write, a
+        // response swap) keeps it; the delivery still writes the environment again below.
+        if (!ReferenceEquals(
             objA: definition.Render,
             objB: m_definition?.Render
         )) {
-            m_definition = definition;
-            m_revision = revision;
             m_lighting = WorldRenderKeys.Expand(lighting: definition.Render.Lighting);
             m_sky = WorldRenderKeys.Expand(sky: definition.Render.Sky);
             m_skyLabels = WorldSkyLayers.LabelsOf(layers: (m_sky?.Layers ?? []));
-            moved = true;
+        }
+        if ((revision != m_revision) || !ReferenceEquals(objA: definition, objB: m_definition)) {
+            moved = (revision != m_revision) || !ReferenceEquals(objA: definition.Render, objB: m_definition?.Render);
+            m_definition = definition;
+            m_revision = revision;
         }
 
         if (

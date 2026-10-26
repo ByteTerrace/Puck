@@ -3,6 +3,7 @@ using Puck.SignedDistance;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Diagnostics;
+using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -76,6 +77,45 @@ public static partial class WorldDocumentEmitter {
         shapesArr.AppendNode(item: shapeObj);
 
         return true;
+    }
+    // `kits [ … ]`: a section that holds only its rows, written as the array of them, lowers to the section object's
+    // rows, each row mapped to the text that wrote it.
+    private static void LowerSectionRows(PropertyNode property, Type section, string pointer, JsonObject target, DocumentScope scope) {
+        if (target[property.Name] is not JsonObject sectionObject) {
+            sectionObject = [];
+            target[property.Name] = sectionObject;
+        }
+
+        var rowsPointer = $"{pointer}/{WorldSectionRows.Member}";
+        var offset = ((sectionObject[WorldSectionRows.Member] is JsonArray existing) ? existing.Count : 0);
+        var lowered = DocumentLowering.LowerMember(
+            fieldKey: WorldSectionRows.Member,
+            holder: section,
+            holderName: null,
+            memberName: WorldSectionRows.Member,
+            scope: scope,
+            sourceIndexOffset: offset,
+            sourcePointer: rowsPointer,
+            value: property.Value
+        );
+
+        if (
+            (property.Value is ArrayExpressionNode authored) &&
+            (lowered is JsonArray elements) &&
+            (elements.Count == authored.Elements.Count)
+        ) {
+            for (var index = 0; (index < authored.Elements.Count); ++index) {
+                scope.SourceMap?.Register(
+                    jsonPointer: $"{rowsPointer}/{(offset + index)}",
+                    span: authored.Elements[index].Span
+                );
+            }
+        }
+        DocumentLowering.AssignOrExtend(
+            sectionObject,
+            WorldSectionRows.Member,
+            lowered
+        );
     }
     private static bool LowerPlacementsBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["placements"] is not JsonObject placementsObj) {
