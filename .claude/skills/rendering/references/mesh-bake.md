@@ -109,6 +109,13 @@ laws exercise that boundary.
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
   serial contour of about a million samples is the bake's long pole on the
   debug world, so unions take each frame's first lattices.
+- **Large static unions draw in chunks.** `SdfMeshChunks` partitions the finished contour's triangles by their
+  centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
+  triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
+  edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent concatenates their merged
+  surfaces for whole-group queries, and never enters the GPU region. The store writes only the chunks and reconstructs
+  that query view on load. Dynamic groups and glass stay whole; glass skips collapse because its pass always draws level
+  zero. The existing per-draw box cull and detail selector apply to each chunk without shader changes.
 - **A glass instance is a group of its own** (`SdfMeshBakeGroup.Glass`, from
   `SdfProgram.IsGlassRange`): it never joins a static run and no instance joins
   it, whatever either declares, and a dynamic group is glass only while every

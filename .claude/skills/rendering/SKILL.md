@@ -453,6 +453,9 @@ wrong. The contracts that bite most often:
   mesh, level zero. Each pass's choice is `SdfMeshDetail` beside the box cull, in
   `SdfWorldPassRecorder.Choose`; `world.detail 0|1|2` forces one level
   everywhere, and `world.detail auto` restores the choice.
+- **Large static unions have independently drawn chunks** (`SdfMeshChunks`, before the merge). Their contour edges
+  partition the surface, and every seam edge stays fixed at every level. The store holds the pieces; only those pieces
+  enter the region. See the [mesh bake](references/mesh-bake.md#groups-poses-and-materials).
 - **A field diagnostic is a bake lattice, never a pixel-kernel walk.**
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
   bake and draws the distance bands and `|grad d|` on the CPU from the answers.

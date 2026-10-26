@@ -11,6 +11,45 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshCollapseLawTests {
     [Fact]
+    public void IndependentlyLevelledChunksKeepEverySeamEdgeThroughTheStore() {
+        var source = Sphere(cells: 24);
+        var large = new SdfMesh(positions: source.Positions.ToArray().Select(static p => p * 12f).ToArray(), indices: source.Indices,
+            normals: source.Normals, triangleMaterials: source.TriangleMaterials) { BakeCell = source.BakeCell * 12f };
+        var mesh = SdfMeshChunks.Bake(large);
+        Assert.True(mesh.Chunks.Count > 1);
+        Assert.Contains(mesh.Chunks, static chunk => chunk.Levels.Count > 0);
+        using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-chunk-seams-");
+        var store = new SdfMeshStore(scratch.PathOf("meshes"));
+        var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 123);
+        Assert.True(store.Write(7, geometry, mesh, [0]));
+        Assert.True(store.TryRead(7, geometry, out var read, out _, out _));
+        Assert.Equal(mesh.Chunks.Count, read.Chunks.Count);
+        Assert.Equal(mesh.Indices.ToArray(), read.Indices.ToArray());
+        for (var at = 0; at < mesh.Chunks.Count; at++) {
+            var chunk = mesh.Chunks[at];
+            var boundary = Boundary(chunk, chunk.Indices);
+            Assert.Equal(chunk.Levels.Count, read.Chunks[at].Levels.Count);
+            for (var level = 0; level < chunk.Levels.Count; level++) {
+                Assert.True(boundary.SetEquals(Boundary(chunk, chunk.Levels[level].Indices)));
+                Assert.Equal(chunk.Levels[level].Indices.ToArray(), read.Chunks[at].Levels[level].Indices.ToArray());
+                Assert.Equal(chunk.Levels[level].Error, read.Chunks[at].Levels[level].Error);
+            }
+        }
+    }
+
+    private static HashSet<(Vector3, Vector3)> Boundary(SdfMesh mesh, ReadOnlyMemory<uint> indices) {
+        var edges = new Dictionary<(Vector3, Vector3), int>();
+        for (var at = 0; at < indices.Length; at += 3) {
+            for (var corner = 0; corner < 3; corner++) {
+                var a = mesh.Positions.Span[(int)indices.Span[at + corner]];
+                var b = mesh.Positions.Span[(int)indices.Span[at + (corner + 1) % 3]];
+                var key = (a.X, a.Y, a.Z).CompareTo((b.X, b.Y, b.Z)) < 0 ? (a, b) : (b, a);
+                edges[key] = edges.GetValueOrDefault(key) + 1;
+            }
+        }
+        return edges.Where(static edge => edge.Value == 1).Select(static edge => edge.Key).ToHashSet();
+    }
+    [Fact]
     public void ACurvedSurfaceThinsWithinItsRecordedErrors() {
         var sphere = Sphere(cells: 24);
         var levelled = SdfMeshCollapse.Levels(mesh: sphere);
