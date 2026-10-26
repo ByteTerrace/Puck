@@ -157,7 +157,7 @@ public static partial class RuleCompiler {
 
         if (plans.Length > 0) {
             try {
-                var layout = ArenaLayout.Build(context.Catalog, context.Section);
+                var layout = context.AdmittedLayout ?? ArenaLayout.Build(context.Catalog, context.Section);
 
                 if (StateArena.EstimateUndoBytes(catalog: context.Catalog, layout: layout, plans: plans) > ArenaCapacity.MaxJournalBytes) {
                     throw new InvalidOperationException(message: $"undo groups exceed the {ArenaCapacity.MaxJournalBytes}-byte journal ceiling at their declared depths");

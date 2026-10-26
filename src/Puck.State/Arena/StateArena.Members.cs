@@ -526,10 +526,10 @@ public sealed partial class StateArena {
         )) {
             return false;
         }
-        _ = TryPositionOf(rowOrdinal: fromOrdinal, key: key, position: out var sourcePosition);
         if (!TryReserveCells(rowOrdinal: toOrdinal, required: CellCount(rowOrdinal: toOrdinal) + 1, reason: out reason)) { return false; }
-        if (!TryRemoveAt(
-            position: sourcePosition,
+        _ = TryCellSlot(rowOrdinal: fromOrdinal, key: key, slot: out slot);
+        if (!RemoveMemberSlot(
+            slot: slot,
             reason: out reason,
             rowOrdinal: fromOrdinal
         )) {
@@ -670,10 +670,6 @@ public sealed partial class StateArena {
         WriteNumber(column: ArenaColumn.HeadSlot, index: rowOrdinal, value: (count == 0 ? 0 : at[order[0]] + 1));
         WriteNumber(column: ArenaColumn.TailSlot, index: rowOrdinal, value: (count == 0 ? 0 : at[order[count - 1]] + 1));
 
-        Reindex(
-            layout: layout,
-            rowOrdinal: rowOrdinal
-        );
         RecomputeMembership(rowOrdinal: rowOrdinal);
 
         reason = string.Empty;

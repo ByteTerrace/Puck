@@ -109,7 +109,7 @@ public sealed partial class StateArena {
             layout: out var layout,
             rowOrdinal: rowOrdinal
         ) &&
-            (((uint)position) < ((uint)layout.CellCapacity))
+            (((uint)position) < ((uint)HashCellExtent(layout: layout)))
         ) {
             return TryReadRawSlot(
                 raw: out raw,

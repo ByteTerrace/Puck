@@ -8,8 +8,8 @@ public sealed partial class StateArena {
     /// <returns>The hash value.</returns>
     /// <remarks>
     /// The fold reads the logical value of each position rather than the array behind it, so an arena that has
-    /// never written a clock hashes the same as one whose clock was written back to zero. Offsets are a function of
-    /// the catalog and the authored rows alone, so two hosts running the same document and the same writes fold the
+    /// never written a clock hashes the same as one whose clock was written back to zero. Reservations follow
+    /// the catalog, authored rows and admitted growth, so hosts running the same document and writes fold the
     /// same bytes in the same order.
     /// <para>A host-owned row is excluded: it has no columns here, and its facet hashes what it serves.</para>
     /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger

@@ -136,6 +136,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     // Moves the tick pair every read answers as of, on this host and on the arena host that shares its arena.
     private void AdvanceHost(ulong tick, ulong engineTick) {
+        BeginGrowthTick(engineTick: engineTick);
         m_hostEngineTick = engineTick;
         m_hostTick = tick;
         Host.ArenaHost.Advance(

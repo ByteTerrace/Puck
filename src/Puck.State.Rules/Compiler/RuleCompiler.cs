@@ -464,7 +464,6 @@ public static partial class RuleCompiler {
             throw Malformed(detail: "declares an empty 'zones' table — list at least one ordered zone, or drop the table");
         }
 
-        var capacity = 0L;
         var indices = new List<CellKey>(capacity: authored.Count);
         var kind = CellKind.Int;
         var names = new string[authored.Count];
@@ -502,10 +501,6 @@ public static partial class RuleCompiler {
                 throw Malformed(detail: $"'zones' names '{name}' twice");
             }
 
-            capacity = Math.Max(
-                val1: capacity,
-                val2: context.RowCapacity(name: name)
-            );
             indices.Add(item: InternKey(
                 context: context,
                 name: IndexKeyCache.Get(index: index)
@@ -521,7 +516,6 @@ public static partial class RuleCompiler {
         }
 
         return new ZoneTable(
-            capacity: ((int)capacity),
             indices: [.. indices],
             kind: kind,
             names: names,

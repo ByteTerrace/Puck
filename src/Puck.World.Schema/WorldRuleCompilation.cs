@@ -39,15 +39,15 @@ public sealed class WorldRuleCompilation {
     /// <summary>Gets the heuristic admission sheet, computed once from the compiled programs.</summary>
     public WorldRuleWorkBudget WorkBudget => m_work.Value.Budget;
     /// <summary>Returns a deterministic refusal of a proposed arena reservation, including the tick's growth
-    /// work and a possible rollback. Programs are repriced against that reservation without recompiling.</summary>
+    /// work and a possible rollback. Fresh pricing programs include costs captured during compilation.</summary>
     /// <param name="layout">The proposed arena layout.</param>
     /// <param name="growthWork">Growth work already spent this tick plus the proposed change and rollback.</param>
     public string? RefuseReservation(ArenaLayout layout, long growthWork) {
         var context = WorldFactsCompiler.Context(definition: Definition);
-        var declared = Enumerable.Range(start: 0, count: layout.RowCount).Select(selector: context.RowCapacity).ToArray();
-        context.CapacityOverride = ordinal => ((uint)ordinal < (uint)layout.RowCount)
-            ? (layout[ordinal].HostOwned ? declared[ordinal] : layout[ordinal].CellCapacity) : StateCapacity.MaxCellsPerRow;
-        var report = WorldRuleWorkBudget.Analyze(definition: Definition, rules: Rules, interactions: Interactions, context: context);
+        context.AdmittedLayout = layout;
+        var (rules, _) = WorldFactsCompiler.CompileDocument(context: context, definition: Definition);
+        var interactions = WorldFactsCompiler.CompileAllInteractions(context: context, definition: Definition);
+        var report = WorldRuleWorkBudget.Analyze(definition: Definition, rules: rules, interactions: interactions, context: context);
         if ((growthWork <= RuleCapacity.MaxWorkUnitsPerTick) && report.Budget.WorkUnitsPerTick.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick - growthWork)) { return null; }
         return $"arena growth and rollback ({growthWork} work units) plus rules ({report.Budget.WorkUnitsPerTick}) exceed the {RuleCapacity.MaxWorkUnitsPerTick}-unit tick allowance";
     }

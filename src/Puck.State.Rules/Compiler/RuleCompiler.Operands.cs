@@ -684,7 +684,6 @@ public static partial class RuleCompiler {
         }
 
         // A live row selected out of a zone table is an ordered keyed zone by construction, in the table's one kind.
-        var capacity = 0L;
         var domainOrdinal = -1;
         var keyed = true;
         var ordered = true;
@@ -700,7 +699,6 @@ public static partial class RuleCompiler {
             context.Catalog.TryGetPool(name: poolName, pool: out var pool) &&
             (pool is not null)
         ) {
-            capacity = pool.Capacity;
             rowOrdinal = pool.DomainRowOrdinal;
         } else if (!TryResolveLiveRow(
             context: context,
@@ -718,7 +716,6 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
 
-            capacity = context.RowCapacity(name: rowName);
             keyed = reduceRow.IsKeyed;
             ordered = (reduceRow.EffectiveDomain is StateDomain.KeysOf { Ordered: true });
             rowKind = reduceRow.Kind;
@@ -784,7 +781,6 @@ public static partial class RuleCompiler {
         return new ResolvedOperand(
             describe: describe,
             operand: new ReductionOperand(
-                capacity: capacity,
                 domainOrdinal: domainOrdinal,
                 filterOrdinal: filterOrdinal,
                 range: ((bounds is { } range)

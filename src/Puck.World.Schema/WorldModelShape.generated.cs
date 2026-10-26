@@ -1151,6 +1151,8 @@ public static partial class WorldModelShape {
             [],
             [
                 M("slot", typeof(global::System.Int32), typeof(global::Puck.State.StatePoolSeed), "Slot", Read | Write, static value => ((global::Puck.State.StatePoolSeed)value).Slot),
+                M("leftSlot", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.State.StatePoolSeed), "LeftSlot", Read | Write, static value => ((global::Puck.State.StatePoolSeed)value).LeftSlot),
+                M("rightSlot", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.State.StatePoolSeed), "RightSlot", Read | Write, static value => ((global::Puck.State.StatePoolSeed)value).RightSlot),
                 M("values", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.State.StatePoolValue>), typeof(global::Puck.State.StatePoolSeed), "Values", Read | Write, static value => ((global::Puck.State.StatePoolSeed)value).Values),
             ],
             []),
@@ -5773,6 +5775,9 @@ public static partial class WorldModelShape {
                 M("drawnMasks", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.State.ClosedBitset256>), typeof(global::Puck.State.StateRow), "DrawnMasks", Read | Write, static value => ((global::Puck.State.StateRow)value).DrawnMasks),
                 M("generated", typeof(global::System.Boolean), typeof(global::Puck.State.StateRow), "Generated", Read | Write, static value => ((global::Puck.State.StateRow)value).Generated),
                 M("cellCeiling", typeof(global::System.Int32), typeof(global::Puck.State.StateRow), "CellCeiling", Read, static value => ((global::Puck.State.StateRow)value).CellCeiling),
+                M("initialCellCapacity", typeof(global::System.Int32), typeof(global::Puck.State.StateRow), "InitialCellCapacity", Read | Ignored),
+                M("reservedCapacity", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.State.StateRow), "ReservedCapacity", Read | Write, static value => ((global::Puck.State.StateRow)value).ReservedCapacity),
+                M("cellSlots", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.Int32>), typeof(global::Puck.State.StateRow), "CellSlots", Read | Write, static value => ((global::Puck.State.StateRow)value).CellSlots),
                 M("effectiveDomain", typeof(global::Puck.State.StateDomain), typeof(global::Puck.State.StateRow), "EffectiveDomain", Read | Ignored),
                 M("isAdvancing", typeof(global::System.Boolean), typeof(global::Puck.State.StateRow), "IsAdvancing", Read, static value => ((global::Puck.State.StateRow)value).IsAdvancing),
                 M("isCycling", typeof(global::System.Boolean), typeof(global::Puck.State.StateRow), "IsCycling", Read, static value => ((global::Puck.State.StateRow)value).IsCycling),

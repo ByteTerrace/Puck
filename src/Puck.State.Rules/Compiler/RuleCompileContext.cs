@@ -252,7 +252,9 @@ public class RuleCompileContext : IRuleCostContext {
     }
     /// <inheritdoc/>
     public long RowCapacity(int rowOrdinal) {
-        if (CapacityOverride is { } capacity) { return capacity(rowOrdinal); }
+        if (AdmittedLayout is { } layout && (uint)rowOrdinal < (uint)layout.RowCount && layout[rowOrdinal].IsStored) {
+            return layout[rowOrdinal].CellCapacity;
+        }
         var row = FindRowAt(rowOrdinal: rowOrdinal);
         if (row is null) { return StateCapacity.MaxCellsPerRow; }
         return row.Shape switch {
@@ -263,8 +265,8 @@ public class RuleCompileContext : IRuleCostContext {
         };
     }
 
-    /// <summary>Gets or sets the admitted runtime row capacities when repricing an arena growth.</summary>
-    public Func<int, long>? CapacityOverride { get; set; }
+    /// <summary>Gets or sets the runtime reservation used for row and retained-undo pricing.</summary>
+    public ArenaLayout? AdmittedLayout { get; set; }
 
     /// <inheritdoc/>
     /// <remarks>The state-neutral context declares no bodies; a document project whose host holds bodies answers its

@@ -11,35 +11,43 @@ internal static class PoolEffectWork {
         : 1L
     );
     public static long InsertWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = (pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L);
+        var units = (pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L, rowOrdinal: pool.DomainRowOrdinal, context: context);
 
         foreach (var field in pool.Fields) {
             units = BinaryIntegerFunctions.AddSaturating(
                 left: units,
-                right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field))
+                right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field), rowOrdinal: field.RowOrdinal, context: context)
             );
         }
         return units;
     }
     public static long ReleaseWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = (pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L);
+        var units = (pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L, rowOrdinal: pool.DomainRowOrdinal, context: context);
 
         units = BinaryIntegerFunctions.AddSaturating(left: units, right: 1L);
         foreach (var field in pool.Fields) {
             units = BinaryIntegerFunctions.AddSaturating(
                 left: units,
-                right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field))
+                right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field), rowOrdinal: field.RowOrdinal, context: context)
             );
         }
         return units;
     }
-    // One fixed slot, its member count, and every optional per-cell metadata lane. The typed value includes a
-    // vector's components. A claim clears then initializes its vector, journaling the payload twice; no live-count
-    // multiplier remains.
-    private static long RowMutationWidth(long valueWidth) => BinaryIntegerFunctions.AddSaturating(
-        left: 20L,
-        right: BinaryIntegerFunctions.MultiplySaturating(left: 2L, right: valueWidth)
-    );
+    // Member key, presence and count, plus clearing and initializing only the payload and metadata held by the row.
+    private static long RowMutationWidth(long valueWidth, int rowOrdinal, IRuleCostContext context) {
+        var metadata = 9L;
+        if (context is RuleCompileContext compiler && compiler.FindRowAt(rowOrdinal: rowOrdinal) is { } row) {
+            metadata = 0L;
+            var columns = ArenaLayout.ColumnsOf(row: row);
+            foreach (var column in new[] { ArenaColumn.ClockEpochTick, ArenaColumn.ClockEpochEngineTick,
+                ArenaColumn.ClockY0, ArenaColumn.ClockV0, ArenaColumn.ClockSubstepTicks, ArenaColumn.ClockSet,
+                ArenaColumn.Behavior, ArenaColumn.Visibility, ArenaColumn.Observation }) {
+                if ((columns & (1UL << (int)column)) != 0UL) { metadata++; }
+            }
+        }
+        return BinaryIntegerFunctions.AddSaturating(left: 3L,
+            right: BinaryIntegerFunctions.MultiplySaturating(left: 2L, right: valueWidth + metadata));
+    }
 
     public static long OccupancyWords(StatePoolDescriptor pool) => ((pool.Capacity + 63L) / 64L);
 
