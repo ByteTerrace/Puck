@@ -16,11 +16,13 @@ public sealed partial class WorldDocument {
     /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
     /// <returns>Whether the mutation applied.</returns>
     internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
-        Host.MaterializeArena();
+        if (IsStateCommand(mutation: mutation)) { return TryApplyStateCommand(mutation: mutation, tick: tick, engineTick: engineTick,
+            connectionId: connectionId, correlationId: correlationId, preMetered: preMetered); }
+        var current = Host.MaterializeArena();
         m_lastMutationFailureDetail = null;
 
         if (!TryPrepareMutation(
-            current: m_definition,
+            current: current,
             denied: out var denied,
             engineTick: engineTick,
             mutation: mutation,
@@ -105,6 +107,7 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        candidate = WorldContributionState.Declare(candidate);
         var installsArena = (RequiresFullInstall(
             candidate: candidate,
             mutation: mutation,
@@ -411,12 +414,12 @@ public sealed partial class WorldDocument {
         if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, mutation: mutation, prepared: prepared); }
     }
 
-    private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation) {
-        var tick = prepared.Tick;
-        var engineTick = prepared.EngineTick;
-        var addonPlan = prepared.AddonPlan;
-        var machinePlan = prepared.MachinePlan;
+    private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation) =>
+        RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
+            correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan);
 
+    private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,
+        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null) {
         m_journal.Add(item: new WorldJournalEntry(
             EngineTick: engineTick,
             Mutation: mutation,
@@ -454,7 +457,7 @@ public sealed partial class WorldDocument {
 
         // An Evicts row's overflow policy dropped a cell to make room — named on the SAME echo line rather than a
         // separate one, so an eviction can never scroll past unnoticed the way a second stderr line could.
-        if (prepared.EvictedKey is { } evicted) {
+        if (evictedKey is { } evicted) {
             message = $"{message} (evicted '{evicted}')";
         }
 

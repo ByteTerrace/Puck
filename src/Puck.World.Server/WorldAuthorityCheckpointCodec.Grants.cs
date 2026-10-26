@@ -30,7 +30,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static (Grantee Grantee, WorldCapability Capability, GrantSubject Subject) ReadGrantKey(ref WireReader reader) {
-        var grantee = WorldWireCodec.ReadGrantee(reader: ref reader);
+        var grantee = ReadCheckpointGrantee(reader: ref reader);
         var capability = WorldWireCodec.ReadCapability(reader: ref reader);
         var subject = WorldWireCodec.ReadSubject(reader: ref reader);
 
@@ -91,7 +91,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldGrantsGranteeCheckpoint ReadGrantsGrantee(ref WireReader reader) {
-        var grantee = WorldWireCodec.ReadGrantee(reader: ref reader);
+        var grantee = ReadCheckpointGrantee(reader: ref reader);
         var drive = reader.ReadArray(
             field: "grants drive subjects",
             readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
@@ -345,7 +345,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => {
                 var capability = WorldWireCodec.ReadCapability(reader: ref r);
                 var subject = WorldWireCodec.ReadSubject(reader: ref r);
-                var holder = WorldWireCodec.ReadGrantee(reader: ref r);
+                var holder = ReadCheckpointGrantee(reader: ref r);
 
                 return (capability, subject, holder);
             },

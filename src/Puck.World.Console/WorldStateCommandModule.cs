@@ -96,14 +96,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         var eased = string.Empty;
 
         if (
-            WorldStateReader.TryReadEasedValue(
-            definition: view.Definition,
+            view.TryReadValue(eased: true,
             key: key,
             row: out _,
             rowName: row.Name,
-            value: out var easedValue,
-            tick: view.CompletedTick,
-            engineTick: view.CompletedEngineTick
+            value: out var easedValue
         ) &&
             easedValue.HasValue
         ) {
@@ -227,12 +224,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // disclosed document, and a key the reader's disclosure does not carry is refused alike whether it is withheld or
     // absent, so the refusal never says which of a restricted row's keys exist.
     private static CommandResult DescribeOneCell(WorldStateReadView view, string rowName, string key) {
-        if (!WorldStateReader.TryReadValue(
-            definition: view.Definition,
+        if (!view.TryReadValue(
             rowName: rowName,
             key: key,
-            tick: view.CompletedTick,
-            engineTick: view.CompletedEngineTick,
             row: out var row,
             value: out var value
         )) {
@@ -292,12 +286,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         // so an advancing row's slot cell reads LIVE here exactly as it does on the row line above — one command's
         // output can never show the same cell two ways.
         foreach (var cell in cells) {
-            _ = WorldStateReader.TryReadValue(
-                definition: view.Definition,
-                rowName: row.Name,
+            _ = view.TryReadValue(
+                    rowName: row.Name,
                 key: cell.Key.Value,
-                tick: view.CompletedTick,
-                engineTick: view.CompletedEngineTick,
                 row: out _,
                 value: out var value
             );
@@ -406,12 +397,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         // IsSlot already proved this row carries exactly the cell a null key addresses, and the row came out of the
         // very section the reader looks it up in.
-        _ = WorldStateReader.TryReadValue(
-            definition: view.Definition,
+        _ = view.TryReadValue(
             rowName: row.Name,
             key: null,
-            tick: view.CompletedTick,
-            engineTick: view.CompletedEngineTick,
             row: out _,
             value: out var slot
         );

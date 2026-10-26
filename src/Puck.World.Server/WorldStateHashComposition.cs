@@ -309,33 +309,11 @@ public static partial class WorldStateHashComposition {
 
         hash.Add(value: WorldReplaySnapshot.HashState(population: server.Population));
 
-        foreach (var row in server.Definition.State) {
-            if (!catalog.TryResolve(
-                handle: out var handle,
-                lane: StateLane.Document,
-                name: row.Name
-            )) {
-                continue;
-            }
-
-            var rowOrdinal = handle.Ordinal;
-
-            foreach (var cell in (row.Cells ?? [])) {
-                if (
-                    !catalog.Keys.TryResolve(
-                    key: out var key,
-                    name: cell.Key
-                ) ||
-                    !arena.TryReadLive(
-                    key: key,
-                    rowOrdinal: rowOrdinal,
-                    time: in time,
-                    value: out var value
-                )
-                ) {
-                    continue;
-                }
-
+        for (var rowOrdinal = 0; rowOrdinal < arena.Rows.Count; rowOrdinal++) {
+            var row = arena.Rows[rowOrdinal];
+            var cursor = 0;
+            while (arena.TryNextCell(rowOrdinal, ref cursor, out var key)) {
+                if (!arena.TryReadLive(rowOrdinal: rowOrdinal, key: key, time: in time, value: out var value)) { continue; }
                 hash.Add(value: (value.Kind switch {
                     CellKind.Bool => (value.AsBool
                         ? 1L

@@ -17,6 +17,7 @@ public static class WorldClockAnchors {
     /// moves no phase and carries rate zero. Every other row, eased, cycling, quantized, held at its envelope, or
     /// moved only by writes, carries rate zero.</remarks>
     /// <param name="definition">The authority's installed document.</param>
+    /// <param name="arena">The live store, or null at a seed boundary.</param>
     /// <param name="clock">A state clock the document declares.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
@@ -24,13 +25,14 @@ public static class WorldClockAnchors {
     /// phase.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="clock"/> is
     /// <see langword="null"/>.</exception>
-    public static WorldClockAnchor? Read(WorldDefinition definition, WorldClock clock, ulong tick, ulong engineTick) {
+    public static WorldClockAnchor? Read(WorldDefinition definition, WorldClock clock, ulong tick, ulong engineTick, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: clock);
 
         if (
             (clock.State is not { } rowName) ||
             !WorldStateReader.TryReadEased(
+            arena: arena,
             definition: definition,
             engineTick: engineTick,
             key: null,
@@ -47,6 +49,7 @@ public static class WorldClockAnchors {
         }
 
         var (rate, step) = AffineRate(
+            arena: arena,
             definition: definition,
             engineTick: engineTick,
             raw: raw,
@@ -112,7 +115,7 @@ public static class WorldClockAnchors {
 
     // The phase one authoritative tick adds over a span proved affine, and the engine ticks it spans; zero for both
     // otherwise.
-    private static (long Rate, ulong Step) AffineRate(WorldDefinition definition, WorldStateRow row, long raw, ulong tick, ulong engineTick) {
+    private static (long Rate, ulong Step) AffineRate(WorldDefinition definition, WorldStateRow row, long raw, ulong tick, ulong engineTick, StateArena? arena) {
         var rateHz = definition.SimulationRateHz;
 
         if (
@@ -123,7 +126,7 @@ public static class WorldClockAnchors {
             return (0L, 0UL);
         }
 
-        var behavior = EffectiveBehavior.Resolve(
+        var behavior = arena is not null && arena.Catalog.TryResolve(StateLane.Document, row.Name, out var handle) && arena.Keys.TryResolve(StateRow.SlotKey, out var slot) ? arena.LiveBehavior(handle.Ordinal, slot) : EffectiveBehavior.Resolve(
             cell: StateRows.FindCell(
                 cells: row.Cells,
                 key: StateRow.SlotKey
@@ -166,6 +169,7 @@ public static class WorldClockAnchors {
 
         if (
             !WorldStateReader.TryReadEased(
+            arena: arena,
             definition: definition,
             engineTick: (engineTick + step),
             key: null,

@@ -66,10 +66,9 @@ public static class WorldStateDisclosure {
     /// <param name="key">The cell's key.</param>
     /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
     /// <returns><see langword="true"/> when the recipient may read the cell.</returns>
-    public static bool CanRead(WorldDefinition definition, StateArena arena, WorldStateRow row, CellName key, Principal? recipient) {
+    public static bool CanRead(WorldDefinition definition, StateArena arena, StateRow row, CellName key, Principal? recipient) {
         var observer = new Observer(
             arena: arena,
-            definition: definition,
             recipient: recipient
         );
 
@@ -97,45 +96,30 @@ public static class WorldStateDisclosure {
     /// <returns><see langword="true"/> when the document declares the row, generated storage included, and the
     /// recipient may read the cell; <see langword="false"/> for an undeclared row.</returns>
     public static bool CanReadCell(WorldDefinition definition, StateArena arena, string rowName, CellName key, Principal recipient) {
-        foreach (var row in definition.State) {
-            if (string.Equals(
-                a: row.Name.Value,
-                b: rowName,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return CanRead(
-                    arena: arena,
-                    definition: definition,
-                    key: key,
-                    recipient: recipient,
-                    row: row
-                );
-            }
-        }
-
-        return false;
+        if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle)) { return false; }
+        var observer = new Observer(arena: arena, recipient: recipient);
+        return observer.CanRead(row: arena.Rows[handle.Ordinal], rowOrdinal: handle.Ordinal,
+            key: arena.Keys.TryResolve(name: key, key: out var cell) ? cell : default);
     }
-    /// <summary>Determines whether the recipient may read a named row, from the document's own rows: the row's
-    /// visibility admits the recipient by its reader list or by the cells of its live reader row as the document
-    /// holds them.</summary>
-    /// <param name="definition">The document, for the row declarations and the reader row.</param>
+    /// <summary>Determines whether the recipient may read a named row, evaluating its reader list against the
+    /// arena on every call.</summary>
+    /// <param name="arena">The live store and its declarations.</param>
     /// <param name="rowName">The name of the row.</param>
     /// <param name="recipient">The recipient.</param>
     /// <returns><see langword="true"/> when the document declares the row and its visibility admits the recipient.</returns>
-    public static bool CanReadRow(WorldDefinition definition, string rowName, Principal recipient) {
-        foreach (var row in definition.State) {
-            if (string.Equals(
-                a: row.Name.Value,
-                b: rowName,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((row.Visibility is null) || row.Visibility.Allows(
-                    recipient: recipient.Describe(),
-                    rows: definition.State
-                ));
-            }
-        }
+    public static bool CanReadRow(StateArena arena, string rowName, Principal recipient) =>
+        arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) &&
+        Allows(arena: arena, policy: arena.Rows[handle.Ordinal].Visibility, recipient: recipient.Describe());
 
+    private static bool Allows(StateArena arena, StateVisibility? policy, string? recipient) {
+        if ((policy is null) || policy.Allows(recipient: recipient)) { return true; }
+        if ((recipient is null) || (policy.ReadersFrom is null) ||
+            !arena.Catalog.TryResolve(lane: StateLane.Document, name: policy.ReadersFrom, handle: out var readers)) { return false; }
+        var cursor = 0;
+        while (arena.TryNextCell(rowOrdinal: readers.Ordinal, cursor: ref cursor, key: out var key)) {
+            if (arena.TryRead(rowOrdinal: readers.Ordinal, key: key, value: out var value) &&
+                (value.Kind == CellKind.Text) && string.Equals(value.AsText, recipient, StringComparison.Ordinal)) { return true; }
+        }
         return false;
     }
     /// <summary>Projects the rows and cells with explicit observation policies, and every row in
@@ -154,13 +138,12 @@ public static class WorldStateDisclosure {
     public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null) {
         var observer = new Observer(
             arena: arena,
-            definition: definition,
             recipient: recipient,
             unrestricted: unrestricted
         );
         var result = new List<WorldObservedRow>();
 
-        foreach (var row in definition.State) {
+        foreach (var row in arena.Rows) {
             if (!observer.TryRow(
                 ordinal: out var rowOrdinal,
                 row: row
@@ -303,7 +286,6 @@ public static class WorldStateDisclosure {
 
         var observer = new Observer(
             arena: arena,
-            definition: definition,
             recipient: recipient,
             unrestricted: unrestricted
         );
@@ -312,7 +294,8 @@ public static class WorldStateDisclosure {
         var withheld = new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < authored.Count); index++) {
-            var row = authored[index];
+            var exported = arena.ToRow(rowOrdinal: index);
+            var row = exported as WorldStateRow ?? new WorldStateRow(exported, false, null);
 
             rows[index] = row;
             if (!observer.TryRow(
@@ -371,7 +354,7 @@ public static class WorldStateDisclosure {
 
         if (withheld.Count == 0) {
             return new WorldStateDisclosed(
-                Definition: definition,
+                Definition: definition.WithWorldState(rows: rows),
                 Withheld: withheld
             );
         }
@@ -392,7 +375,31 @@ public static class WorldStateDisclosure {
         );
     }
 
-    // The placement half of Disclose, over the disclosed rows; null when no deal or response facet reads a withheld row.
+    /// <summary>Reads placement projections directly from the arena for one recipient, without exporting state rows.</summary>
+    public static IReadOnlyList<WorldPlacement> PlacementProjection(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
+        var observer = new Observer(arena, recipient, unrestricted);
+        bool Withheld(string name, string? key) {
+            if (!arena.Catalog.TryResolve(StateLane.Document, name, out var row)) { return false; }
+            if (key is null) { return !observer.Allows(arena.Rows[row.Ordinal].Visibility) || observer.AnyCellWithheld(arena.Rows[row.Ordinal], row.Ordinal); }
+            return !CellName.TryParse(key, out var cell, out _) || !observer.CanRead(arena.Rows[row.Ordinal], row.Ordinal, arena.Keys.TryResolve(cell, out var interned) ? interned : default);
+        }
+        List<WorldPlacement>? result = null;
+        for (var index = 0; index < definition.Placements.Count; index++) {
+            var placement = definition.Placements[index];
+            var projected = WorldPlacementResponse.Disclosed(placement, Withheld);
+            if (placement.Parent is { } parent && WorldDefinitionRows.FindPlacement(definition.Placements, parent) is { Deal: { } deal } template && WorldPlacementDeal.IsChild(placement, template)) {
+                var key = placement.Id[(parent.Length + 1)..];
+                if (Withheld(deal.Row, key)) { projected = null; }
+                else if (deal.Variants is { } variants && Withheld(variants.Row, key)) { projected = projected with { PrototypeId = template.PrototypeId }; }
+            }
+            if (ReferenceEquals(projected, placement) && result is null) { continue; }
+            result ??= definition.Placements.Take(index).ToList();
+            if (projected is not null) { result.Add(projected); }
+        }
+        return result ?? definition.Placements;
+    }
+
+    // The placement half of an explicit document export.
     private static WorldPlacement[]? DisclosePlacements(WorldDefinition definition, WorldStateRow[] rows, Dictionary<string, WorldWithheldRow> withheld) {
         var placements = definition.Placements;
         Dictionary<string, WorldPlacement>? templates = null;
@@ -575,12 +582,11 @@ public static class WorldStateDisclosure {
     public static void ValidateBindings(WorldDefinition definition, StateArena arena, object graph, Principal? recipient, bool unrestricted = false) {
         var observer = new Observer(
             arena: arena,
-            definition: definition,
             recipient: recipient,
             unrestricted: unrestricted
         );
 
-        foreach (var row in definition.State) {
+        foreach (var row in arena.Rows) {
             if (!observer.TryRow(
                 ordinal: out var rowOrdinal,
                 row: row
@@ -595,7 +601,7 @@ public static class WorldStateDisclosure {
             }
             if (WorldStateDocumentValues.ReferencesRow(
                 definition: definition,
-                graph: graph,
+                    graph: graph,
                 rowName: row.Name.Value
             )) {
                 throw new WorldDisclosureException(message: "a presentation binding references restricted state; bind an explicit observation layer instead");
@@ -646,96 +652,15 @@ public static class WorldStateDisclosure {
     // One recipient's view of one live store: the canonical token is formatted once, and the ordered zones are
     // indexed by token domain once, so a cell's read check costs the zones over its own domain and nothing else.
     private readonly struct Observer {
-        private readonly Dictionary<string, List<(int Ordinal, WorldStateRow Row)>>? m_zonesByDomain;
         private readonly StateArena m_arena;
-        private readonly WorldDefinition m_definition;
-        // Composing as a reader every restriction admits: the most any recipient could be handed.
         private readonly bool m_unrestricted;
-
-        public Observer(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
-            m_arena = arena;
-            m_definition = definition;
-            m_unrestricted = unrestricted;
-            Name = recipient?.Describe();
-
-            foreach (var row in definition.State) {
-                if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zoneDomain) {
-                    continue;
-                }
-                if (!TryRow(
-                    ordinal: out var ordinal,
-                    row: row
-                )) {
-                    continue;
-                }
-
-                var domain = zoneDomain.Row.Value;
-
-                m_zonesByDomain ??= new(comparer: StringComparer.Ordinal);
-                if (!m_zonesByDomain.TryGetValue(
-                    key: domain,
-                    value: out var zones
-                )) {
-                    zones = [];
-                    m_zonesByDomain[domain] = zones;
-                }
-
-                zones.Add(item: (ordinal, row));
-            }
+        public Observer(StateArena arena, Principal? recipient, bool unrestricted = false) {
+            m_arena = arena; m_unrestricted = unrestricted; Name = recipient?.Describe();
         }
-
         public string? Name { get; }
 
         // A restriction the store holds for the recipient's own token, or one a live text row lists it in.
-        public bool Allows(StateVisibility? policy) {
-            if (
-                (policy is null) ||
-                m_unrestricted
-            ) {
-                return true;
-            }
-            if (policy.Allows(recipient: Name)) {
-                return true;
-            }
-            if (
-                (Name is null) ||
-                (policy.ReadersFrom is null) ||
-                !m_definition.StateCatalog.TryResolve(
-                handle: out var handle,
-                lane: StateLane.Document,
-                name: policy.ReadersFrom
-            )
-            ) {
-                return false;
-            }
-
-            var readers = handle.Ordinal;
-            var cursor = 0;
-
-            while (m_arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: readers
-            )) {
-                if (
-                    m_arena.TryRead(
-                    key: key,
-                    rowOrdinal: readers,
-                    value: out var value
-                ) &&
-                    (value.Kind == CellKind.Text) &&
-                    string.Equals(
-                    a: value.AsText,
-                    b: Name,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        public bool Allows(StateVisibility? policy) => m_unrestricted || WorldStateDisclosure.Allows(arena: m_arena, policy: policy, recipient: Name);
         public bool AnyCellRestricted(int rowOrdinal) {
             var cursor = 0;
 
@@ -754,7 +679,7 @@ public static class WorldStateDisclosure {
 
             return false;
         }
-        public bool AnyCellWithheld(WorldStateRow row, int rowOrdinal) {
+        public bool AnyCellWithheld(StateRow row, int rowOrdinal) {
             var cursor = 0;
 
             while (m_arena.TryNextCell(
@@ -773,7 +698,7 @@ public static class WorldStateDisclosure {
 
             return false;
         }
-        public bool CanRead(WorldStateRow row, int rowOrdinal, CellKey key) {
+        public bool CanRead(StateRow row, int rowOrdinal, CellKey key) {
             if (m_unrestricted) {
                 return true;
             }
@@ -787,25 +712,8 @@ public static class WorldStateDisclosure {
                 return false;
             }
 
-            var domain = ((row.EffectiveDomain is StateDomain.KeysOf keysOf)
-                ? keysOf.Row.Value
-                : row.Name.Value
-            );
-
-            if (
-                (domain is null) ||
-                (m_zonesByDomain is null) ||
-                !m_zonesByDomain.TryGetValue(
-                key: domain,
-                value: out var zones
-            )
-            ) {
-                return true;
-            }
-
-            // A token's audience is its zone's: whichever ordered zone over this domain currently holds the key
-            // decides, so this asks the store which one that is rather than a document's last export.
-            foreach (var (zoneOrdinal, zone) in zones) {
+            foreach (var zoneOrdinal in m_arena.Catalog.ContainingZones(rowOrdinal: rowOrdinal)) {
+                var zone = m_arena.Rows[zoneOrdinal];
                 if (!m_arena.TryCellSlot(
                     key: key,
                     rowOrdinal: zoneOrdinal,
@@ -826,8 +734,8 @@ public static class WorldStateDisclosure {
 
             return true;
         }
-        public bool TryRow(WorldStateRow row, out int ordinal) {
-            if (m_definition.StateCatalog.TryResolve(
+        public bool TryRow(StateRow row, out int ordinal) {
+            if (m_arena.Catalog.TryResolve(
                 handle: out var handle,
                 lane: StateLane.Document,
                 name: row.Name

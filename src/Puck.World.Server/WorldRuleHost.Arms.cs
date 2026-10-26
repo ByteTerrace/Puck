@@ -21,6 +21,17 @@ namespace Puck.World.Server;
 /// delivery that refuses is counted and undoes nothing.</para>
 /// </remarks>
 public sealed partial class WorldRuleHost {
+    /// <inheritdoc/>
+    public int BeginStateTransaction() => Host.BeginStateTransaction();
+    /// <inheritdoc/>
+    public bool PrepareStateCommit(out EffectRefusal refusal) {
+        if (Host.ValidateStateTransaction(principal: Principal.World, reason: out var reason)) { refusal = EffectRefusal.None; return true; }
+        refusal = EffectRefusal.Of(code: RuleEffectRefusal.MutationRejected, reason: reason); return false;
+    }
+    /// <inheritdoc/>
+    public void CommitStateTransaction(int mark) => Host.CommitStateTransaction(mark: mark);
+    /// <inheritdoc/>
+    public void RewindStateTransaction(int mark) => Host.RewindStateTransaction(mark: mark);
     // What one firing's preflights carry from each arm to the next: the document rows it has queued so far, which
     // are the unit its commit installs, and the velocity its impulses would leave each rigid body at. Preflighting
     // clears both.
@@ -110,7 +121,7 @@ public sealed partial class WorldRuleHost {
     }
 
     // The proposal is taken once per firing: its preflights run after the firing's last arena write.
-    private WorldArenaPublication Proposed() => (m_proposedPublication ??= Host.ProposePublication());
+    private WorldArenaPublication Proposed() => (m_proposedPublication ??= Host.ProposePublication() with { Definition = Host.MaterializeArena() });
     // One row travels as itself, so its journal entry is the mutation it always was; several travel as one batch.
     private WorldMutation DocumentUnit() => ((m_documentArms.Count == 1)
         ? m_documentArms[0]

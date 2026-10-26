@@ -59,8 +59,8 @@ public sealed class GeneratorExtendedWorldLawTests {
         using var left = Fixtures.FreshServer(definition: definition);
         using var right = Fixtures.FreshServer(definition: definition);
 
-        var (leftCursor, leftValue) = ReadSlot(definition: left.Server.Definition);
-        var (rightCursor, rightValue) = ReadSlot(definition: right.Server.Definition);
+        var (leftCursor, leftValue) = ReadSlot(definition: left.Server.ExportDefinition());
+        var (rightCursor, rightValue) = ReadSlot(definition: right.Server.ExportDefinition());
 
         // The scripted first sample settled at boot, identically on both sides.
         Assert.Equal(
@@ -90,7 +90,7 @@ public sealed class GeneratorExtendedWorldLawTests {
     public void Undo_PastAnExtendedDraw_RestoresTheCursorAndTheNextDraw() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument());
 
-        var (bootCursor, bootValue) = ReadSlot(definition: fixture.Server.Definition);
+        var (bootCursor, bootValue) = ReadSlot(definition: fixture.Server.ExportDefinition());
 
         Assert.Equal(
             actual: bootValue,
@@ -103,7 +103,7 @@ public sealed class GeneratorExtendedWorldLawTests {
         ));
         fixture.Step();
 
-        var (redrawnCursor, redrawnValue) = ReadSlot(definition: fixture.Server.Definition);
+        var (redrawnCursor, redrawnValue) = ReadSlot(definition: fixture.Server.ExportDefinition());
 
         Assert.Equal(
             actual: redrawnCursor,
@@ -116,7 +116,7 @@ public sealed class GeneratorExtendedWorldLawTests {
         );
         fixture.Step();
 
-        var (undoneCursor, undoneValue) = ReadSlot(definition: fixture.Server.Definition);
+        var (undoneCursor, undoneValue) = ReadSlot(definition: fixture.Server.ExportDefinition());
 
         Assert.Equal(
             actual: undoneCursor,
@@ -135,7 +135,7 @@ public sealed class GeneratorExtendedWorldLawTests {
         ));
         fixture.Step();
 
-        var (replayedCursor, replayedValue) = ReadSlot(definition: fixture.Server.Definition);
+        var (replayedCursor, replayedValue) = ReadSlot(definition: fixture.Server.ExportDefinition());
 
         Assert.Equal(
             actual: replayedCursor,

@@ -57,6 +57,11 @@ internal static class WorldBenchmarks {
         MeasureGallery(catalog: catalog, definition: definition!, rows: rows);
 
         var server = bench.Server;
+        rows.Add(item: ("world: arena storage", $"{server.Arena.Bytes:N0} bytes"));
+        if (!server.TryCaptureCheckpoint(Puck.World.Server.WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var checkpointReason)) {
+            throw new InvalidOperationException(checkpointReason);
+        }
+        rows.Add(item: ("world: authority checkpoint", $"{Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(checkpoint!).Length:N0} bytes (before guests and machines step)"));
         var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition!.SimulationRateHz));
 
         for (var tick = 0; (tick < WarmupTicks); tick++) {
@@ -374,8 +379,8 @@ internal static class WorldBenchmarks {
 
             due += period;
 
-            var installed = server.Definition.State;
-            var current = WorldDefinitionRows.FindStateRow(rows: installed, name: row.Name.Value)!;
+            var installed = server.Configuration.State;
+            var current = WorldDefinitionRows.FindStateRow(rows: server.ExportDefinition().State, name: row.Name.Value)!;
             var cell = current.Cells![0];
             var written = (current with { Cells = [(cell with { Value = Puck.State.CellValue.Int(value: (cell.Value.Raw + 1L)) })] });
 
@@ -394,7 +399,7 @@ internal static class WorldBenchmarks {
             }
 
             var sample = (tick - WarmupTicks);
-            var after = server.Definition.State;
+            var after = server.Configuration.State;
 
             allocationSamples[sample] = allocated;
             elapsedTicksSamples[sample] = elapsed;

@@ -10,7 +10,7 @@ namespace Puck.State;
 /// become the eased value and velocity computed AT the write's own tick, and <see cref="StateCellClock.EpochTick"/>
 /// becomes that tick — the same rebase discipline <see cref="StateAdvance"/>'s own write rule follows, so a retune
 /// never jumps. A cell composed with this trait but no clock yet (never settled or explicitly written) reads its own
-/// stored value as the follower's position, at rest — see <see cref="StateReader.TryEvaluateDynamics"/>.
+/// stored value as the follower's position, at rest — see <see cref="StateSeedReader.TryEvaluateDynamics"/>.
 /// </summary>
 /// <param name="Row">The referenced <c>dynamics</c> row name; must resolve.</param>
 public sealed record StateDynamics(string Row);

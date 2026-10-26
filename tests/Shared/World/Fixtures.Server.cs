@@ -277,7 +277,7 @@ internal sealed class WorldFixture : IDisposable {
 
     /// <summary>The live document's current bytes — the byte-identity probe the all-or-nothing law compares
     /// before/after an apply attempt.</summary>
-    public byte[] DefinitionBytes() => WorldDefinitionSerialization.Serialize(definition: Server.Definition);
+    public byte[] DefinitionBytes() => WorldDefinitionSerialization.Serialize(definition: Server.ExportDefinition());
     /// <inheritdoc/>
     public void Dispose() {
         m_machines.Dispose();

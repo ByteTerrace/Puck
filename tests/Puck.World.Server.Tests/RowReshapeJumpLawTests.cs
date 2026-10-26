@@ -36,7 +36,7 @@ public sealed class RowReshapeJumpLawTests {
         Principal: Principal.Console,
         Row: SlotRow()
     );
-    private static WorldStateRow Row(WorldServer server) => server.Definition.State.Single(predicate: static row => (row.Name.Value == Trace));
+    private static WorldStateRow Row(WorldServer server) => server.ExportDefinition().State.Single(predicate: static row => (row.Name.Value == Trace));
     private static void AssertKeyed(WorldServer server) {
         var row = Row(server: server);
 

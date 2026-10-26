@@ -325,7 +325,7 @@ public sealed partial class ProjectionAnchorLawTests {
         late.Dispose();
 
         // A clock that read no number at load either seeds from its row's closed envelope, zero clamped into it.
-        var closed = Document(row: Row(max: FixedQ4816.FromDouble(value: 0.75d).Value, min: FixedQ4816.FromDouble(value: 0.375d).Value, raw: 0L, slot: false));
+        var closed = Document(row: Row(max: FixedQ4816.FromDouble(value: 0.75d).Value, min: FixedQ4816.FromDouble(value: 0.375d).Value, raw: FixedQ4816.FromDouble(value: 0.375d).Value, slot: false));
 
         Assert.Equal(
             expected: WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: FixedQ4816.FromDouble(value: 0.375d).Value),

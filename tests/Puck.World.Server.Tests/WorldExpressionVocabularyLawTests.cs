@@ -21,7 +21,7 @@ public sealed class WorldExpressionVocabularyLawTests {
     );
     private static long Value(WorldFixture fixture, string row) {
         var declared = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         )!;
 

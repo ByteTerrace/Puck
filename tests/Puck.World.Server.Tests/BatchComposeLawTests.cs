@@ -263,47 +263,47 @@ public sealed class BatchComposeLawTests {
         Assert.Equal(
             expected: 8,
             actual: Slot(
-                definition: batched.Server.Definition,
+                definition: batched.Server.ExportDefinition(),
                 row: "counter"
             )
         );
         Assert.Equal(
             expected: ["a", "c", "d"],
             actual: Keys(
-                definition: batched.Server.Definition,
+                definition: batched.Server.ExportDefinition(),
                 row: "bag"
             )
         );
         Assert.Equal(
             expected: "beta",
-            actual: ComposedGroup(definition: batched.Server.Definition)
+            actual: ComposedGroup(definition: batched.Server.ExportDefinition())
         );
         Assert.Equal(
             expected: "beta",
-            actual: ComposedGroup(definition: sequential.Server.Definition)
+            actual: ComposedGroup(definition: sequential.Server.ExportDefinition())
         );
         Assert.Equal(
             expected: 3,
             actual: Row(
-                definition: batched.Server.Definition,
+                definition: batched.Server.ExportDefinition(),
                 row: "deck"
             ).Cells!.Count
         );
         Assert.Single(collection: Row(
-            definition: batched.Server.Definition,
+            definition: batched.Server.ExportDefinition(),
             row: "randomPile"
         ).Cells!);
         Assert.Equal(
             expected: ["c4"],
             actual: Keys(
-                definition: batched.Server.Definition,
+                definition: batched.Server.ExportDefinition(),
                 row: "run"
             )
         );
         Assert.Equal(
             expected: ["c5", "c6", "c7"],
             actual: Keys(
-                definition: batched.Server.Definition,
+                definition: batched.Server.ExportDefinition(),
                 row: "slicePile"
             )
         );
@@ -369,7 +369,7 @@ public sealed class BatchComposeLawTests {
             Assert.Equal(
                 expected: (index * 7),
                 actual: Slot(
-                    definition: batched.Server.Definition,
+                    definition: batched.Server.ExportDefinition(),
                     row: $"crossRow{index}"
                 )
             );

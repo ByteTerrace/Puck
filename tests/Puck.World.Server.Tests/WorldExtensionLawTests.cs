@@ -212,7 +212,7 @@ public sealed class WorldExtensionLawTests {
             expected: 1
         );
         Assert.Contains(
-            collection: fixture.Server.Definition.State,
+            collection: fixture.Server.ExportDefinition().State,
             filter: row => (row.Name.Value == "external-result")
         );
         extension.Submit(mutation: Mutation());

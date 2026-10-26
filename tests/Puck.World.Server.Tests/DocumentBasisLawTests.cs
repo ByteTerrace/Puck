@@ -407,14 +407,14 @@ public sealed class DocumentBasisLawTests {
         Assert.Equal(
             expected: 1L,
             actual: WorldDefinitionRows.FindStateRow(
-                rows: fixture.Server.Definition.State,
+                rows: fixture.Server.ExportDefinition().State,
                 name: "flagA"
             )!.Cells![0].Value.Raw
         );
         Assert.Equal(
             expected: 1L,
             actual: WorldDefinitionRows.FindStateRow(
-                rows: fixture.Server.Definition.State,
+                rows: fixture.Server.ExportDefinition().State,
                 name: "flagB"
             )!.Cells![0].Value.Raw
         );

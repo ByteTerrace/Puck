@@ -66,7 +66,7 @@ internal sealed class WorldVerdictCommandModule(WorldServer server) : ICommandMo
         ));
     }
     private string DescribeSeen(WorldStateRow row, CellName key) {
-        _ = WorldStateReader.TryReadValue(
+        _ = WorldStateReader.TryReadValue(arena: server.Arena,
             definition: server.Definition,
             engineTick: server.CompletedEngineTicks,
             key: key.Value,
@@ -82,7 +82,7 @@ internal sealed class WorldVerdictCommandModule(WorldServer server) : ICommandMo
         );
     }
     private long ReadCell(WorldStateRow row, CellName key) {
-        _ = WorldStateReader.TryReadValue(
+        _ = WorldStateReader.TryReadValue(arena: server.Arena,
             definition: server.Definition,
             engineTick: server.CompletedEngineTicks,
             key: key.Value,

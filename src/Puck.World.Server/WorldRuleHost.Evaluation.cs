@@ -120,7 +120,7 @@ public sealed partial class WorldRuleHost {
     // over every declared row. Shared by every tick-path reader that starts from a row name (Carriers/CarrierKeys
     // below, WorldServer.BoardEnforcement.cs) — the handle is handed back too, so a caller that walks the row's own
     // cells afterward reads each one through it rather than resolving the row by name again per cell.
-    internal bool TryResolveDocumentRow(string name, out StateHandle handle, out WorldStateRow? row) {
+    internal bool TryResolveDocumentRow(string name, out StateHandle handle, out StateRow? row) {
         var catalog = Host.Arena.Catalog;
 
         if (
@@ -129,9 +129,9 @@ public sealed partial class WorldRuleHost {
             lane: StateLane.Document,
             name: name
         ) &&
-            (((uint)catalog.Descriptors[handle.Ordinal].LaneOrdinal) < ((uint)Host.Definition.State.Count))
+            (((uint)catalog.Descriptors[handle.Ordinal].LaneOrdinal) < ((uint)Host.Arena.Rows.Count))
         ) {
-            row = Host.Definition.State[catalog.Descriptors[handle.Ordinal].LaneOrdinal];
+            row = Host.Arena.Rows[handle.Ordinal];
 
             return true;
         }
@@ -218,8 +218,7 @@ public sealed partial class WorldRuleHost {
     // interaction's on the same terms. That ordering is the same-tick effect tiebreak: a rule can set up a fact an
     // interaction's gate reads this tick, and two interactions cascade in their own declared order.
     //
-    // The arena is the authoritative state while they run; the installed document becomes the arena's export once
-    // they are done, and one delivery follows a tick that moved anything.
+    // The arena stays authoritative; one journal-driven delivery follows a tick that moved anything.
     internal void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
         BeginUndoEvaluationTick(tick: tick);

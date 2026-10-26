@@ -80,7 +80,7 @@ public sealed partial class StateArena {
         );
         var newBehavior = BehaviorAt(
             name: name,
-            row: row,
+            rowOrdinal: rowOrdinal,
             slot: slot
         );
         var epoch = unchecked((long)time.Tick);
@@ -213,7 +213,7 @@ public sealed partial class StateArena {
             (oldBehavior.Dynamics is not null) &&
             (previous is not null) &&
             (previousCell is not null) &&
-            StateReader.TryEvaluateDynamics(
+            StateSeedReader.TryEvaluateDynamics(
             cell: previousCell,
             dynamics: time.Dynamics,
             row: previous,
@@ -287,7 +287,7 @@ public sealed partial class StateArena {
         if (
             (oldBehavior.Dynamics is not null) &&
             (previousCell is not null) &&
-            StateReader.TryEvaluateDynamics(
+            StateSeedReader.TryEvaluateDynamics(
             cell: previousCell,
             dynamics: time.Dynamics,
             row: previous,

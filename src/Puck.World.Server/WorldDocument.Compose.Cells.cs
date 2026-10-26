@@ -584,18 +584,19 @@ public sealed partial class WorldDocument {
     )
     );
     // A row the document declares and the principal may not read; an undeclared row is absent, not withheld.
-    private static bool IsRowWithheldFromWriter(WorldDefinition definition, Principal principal, string row) => (
-        ReadsThroughDisclosure(principal: principal) &&
-        (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: row
-        ) is not null) &&
-        !WorldStateDisclosure.CanReadRow(
-        definition: definition,
-        recipient: principal,
-        rowName: row
-    )
-    );
+    private static bool IsRowWithheldFromWriter(WorldDefinition definition, Principal principal, string row) {
+        if (!ReadsThroughDisclosure(principal: principal) ||
+            (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row) is not { Visibility: not null })) { return false; }
+        // Declaration edits have a materialized candidate. Evaluate its policy through the same arena reader
+        // as live disclosure, including earlier writes in a composed edit batch.
+        var time = ArenaTime.Origin;
+        if (!TryOpenComposeArena(definition: definition, time: in time, arena: out var arena, mark: out var mark, reason: out _)) { return true; }
+        try {
+            return !WorldStateDisclosure.CanReadRow(arena: arena, recipient: principal, rowName: row);
+        } finally {
+            CloseComposeArena(arena: arena, mark: mark);
+        }
+    }
     // Composes one cell removal onto the row it names, on the same terms as TryApplyCellUpsert.
     private static bool TryApplyCellRemove(StateArena arena, WorldDefinition working, WorldMutation.RemoveStateCell mutation, out string reason) {
         reason = string.Empty;

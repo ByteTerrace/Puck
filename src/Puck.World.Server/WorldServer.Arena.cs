@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Collections.Immutable;
+
 using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Puck.Commands;
@@ -23,99 +23,38 @@ public enum WorldCellWriteVerdict {
     Rejected,
 }
 /// <summary>The server's authoritative columnar store. Bound plain values stream through snapshots; an immutable
-/// document export is materialized for document edits, checkpoints and explicit definition reads.</summary>
+/// document export is materialized for document edits and explicit definition reads.</summary>
 /// <remarks>Construction, document installation, and checkpoint restoration validate the complete state section.
 /// Pool storage is admitted through its typed snapshot; ordinary rows use <see cref="StateArena.TryLoad"/>.</remarks>
 public sealed partial class WorldServer {
-    private bool m_tickInProgress;
-    private bool m_arenaExportOwed;
+    private bool[] m_publicationRows = [];
+    private bool[] m_snapshotRows = [];
 
-    private bool[] m_streamedRows = [];
-    private bool[] m_streamedPending = [];
-    private ulong[] m_streamedVersions = [];
-    private ulong[] m_typedVersions = [];
+    internal void EnterArenaTick() { Array.Clear(m_snapshotRows); }
+    internal void LeaveArenaTick() { }
 
-    internal void EnterArenaTick() {
-        m_tickInProgress = true;
-        Array.Clear(array: m_streamedPending);
-    }
-    internal void LeaveArenaTick() => m_tickInProgress = false;
-    internal WorldDefinition MaterializeArena() {
-        if (m_arenaExportOwed) {
-            var publication = ProposePublication();
+    // Explicit export/edit boundary. The installed definition retains declarations and seeds.
+    internal WorldDefinition MaterializeArena() => WorldStateReader.Export(m_document.Definition, m_arena);
 
-            m_document.CacheArenaExport(definition: publication.Definition);
-            MarkPublished();
-            m_publishEveryRow = false;
-            m_arenaExportOwed = false;
-        }
-        return m_document.Definition;
-    }
-
-    private bool StreamArena() {
-        if ((m_arena.Journal.Length != 0) || m_publishEveryRow) { return false; }
-        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
-            var version = m_arena.RowVersion(rowOrdinal: ordinal);
-
-            if ((m_publishedVersions[ordinal] != version) &&
-                (!m_streamedRows[ordinal] || (m_typedVersions[ordinal] != version))) { return false; }
-        }
-        var moved = false;
-
-        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
-            var version = m_arena.RowVersion(rowOrdinal: ordinal);
-
-            if (!m_streamedRows[ordinal] || (m_streamedVersions[ordinal] == version)) { continue; }
-            m_streamedVersions[ordinal] = version;
-            m_streamedPending[ordinal] = true;
-            NoteMovedRow(ordinal: ordinal, rowCount: m_documentRowCount);
-            moved = true;
-        }
-        if (moved) {
-            m_arenaExportOwed = true;
-            m_document.MarkStateDeliveryPending();
-        }
-        return true;
-    }
-
-    internal int StreamedCellCount(bool full) {
+    internal int PublishedCellCount(bool full) {
         var count = 0;
-
-        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
-            if (m_streamedRows[ordinal] && (full || m_streamedPending[ordinal])) { count += m_arena.CellCount(rowOrdinal: ordinal); }
+        for (var row = 0; row < m_documentRowCount; row++) {
+            if (full || m_snapshotRows[row]) { count += 1 + m_arena.CellCount(rowOrdinal: row); }
         }
         return count;
     }
-    internal void CopyStreamedCells(Span<FieldCellDelta> cells, bool full) {
+    internal void CopyPublishedCells(Span<FieldCellDelta> cells, bool full) {
         var next = 0;
-
-        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) {
-            if (!m_streamedRows[ordinal] || (!full && !m_streamedPending[ordinal])) { continue; }
-            var count = m_arena.CellCount(rowOrdinal: ordinal);
-
-            for (var cell = 0; (cell < count); cell++) {
-                m_arena.TryReadAt(position: cell, rowOrdinal: ordinal, value: out var value);
-                cells[next++] = new FieldCellDelta(Cell: cell, Field: 0, Raw: 0, Row: ordinal, Value: value);
+        for (var row = 0; row < m_documentRowCount; row++) {
+            if (!full && !m_snapshotRows[row]) { continue; }
+            cells[next++] = new FieldCellDelta(Cell: -1, Field: 0, Raw: m_arena.CellCount(rowOrdinal: row), Row: row);
+            var cursor = 0;
+            var position = 0;
+            while (m_arena.TryNextCell(rowOrdinal: row, cursor: ref cursor, key: out var key)) {
+                cells[next++] = new FieldCellDelta(Cell: position++, Field: 0, Raw: 0L, Row: row, Image: m_arena.ReadCellImage(rowOrdinal: row, key: key));
             }
         }
     }
-
-    private bool CanStreamRow(int ordinal) {
-        var declared = m_document.Definition.AuthoredState[ordinal];
-
-        if (declared.GatesDrive || declared.IsRuleWritten || (declared.Advance is not null) ||
-            (declared.Cycle is not null) || (declared.Dynamics is not null) || (declared.Field is not null) ||
-            (declared.Inverse is not null) || (declared.ValuesFrom is not null) || DocumentValueRows().Contains(item: declared.Name.Value)) { return false; }
-        var cells = declared.Cells;
-
-        if (cells is null) { return false; }
-        for (var i = 0; (i < cells.Count); i++) {
-            if ((cells[i].Advance is not null) || (cells[i].Cycle is not null) || (cells[i].Dynamics is not null)) { return false; }
-        }
-        return true;
-    }
-
-    internal bool StreamsArenaValues => m_arenaExportOwed;
 
     private readonly Dictionary<(Principal Principal, GrantSubject Subject), int> m_cellWriteCounts = [];
 
@@ -152,30 +91,18 @@ public sealed partial class WorldServer {
         }
         if ((write is not (WorldDocumentWriteKind.Set or WorldDocumentWriteKind.Add)) ||
             ((text is not null) && (write != WorldDocumentWriteKind.Set)) || descriptor.Generated || descriptor.HostOwned ||
-            m_document.Definition.AuthoredState[descriptor.LaneOrdinal].IsRuleWritten) {
+            m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true }) {
             return WorldCellWriteVerdict.Rejected;
         }
-        var mark = m_arena.BeginScope();
+        if (!WorldGrants.IsTrusted(principal: principal) && !WorldStateDisclosure.CanReadCell(definition: m_document.Definition,
+            arena: m_arena, rowName: descriptor.Name, key: m_arena.Keys[key], recipient: principal)) { return WorldCellWriteVerdict.Rejected; }
+        var mark = BeginStateTransaction();
         var applied = ((text is not null)
             ? m_arena.TryWriteText(row.Ordinal, key, text, out _)
             : m_arena.TryWriteLive(row.Ordinal, key, operand, ((StateWriteKind)write), DeliveryTime, out _));
 
-        if (applied && !m_arena.Journal.OverCeiling) {
-            if (DocumentValueRows().Contains(item: descriptor.Name)) {
-                var publication = ProposePublication();
-
-                if ((publication.RefreshRefusal is not null) ||
-                    !WorldDefinitionValidator.TryValidateLocally(definition: publication.Definition, reason: out _)) {
-                    m_arena.Rewind(mark: mark);
-                    return WorldCellWriteVerdict.Rejected;
-                }
-            }
-            m_arena.Commit(mark: mark);
-            if (!m_streamedRows[row.Ordinal]) { m_streamedRows[row.Ordinal] = CanStreamRow(ordinal: row.Ordinal); }
-            m_typedVersions[row.Ordinal] = m_arena.RowVersion(rowOrdinal: row.Ordinal);
-            return WorldCellWriteVerdict.Applied;
-        }
-        m_arena.Rewind(mark: mark);
+        if (applied && TryCommitStateTransaction(mark: mark, principal: principal, reason: out _)) { return WorldCellWriteVerdict.Applied; }
+        if (!applied) { RewindStateTransaction(mark: mark); }
         return WorldCellWriteVerdict.Rejected;
     }
 
@@ -196,21 +123,10 @@ public sealed partial class WorldServer {
     private StateCatalog? m_arenaCatalog;
 
     private string[] m_drawSites = [];
-    // Each row's version as of the last time the installed document and the arena agreed on it: when the arena was
-    // seeded from the document, and when the row was last published. A row whose version has moved past this is
-    // what the next publication carries, whenever the write happened.
+    // Versions at the last declaration installation, used to reconcile a subsequent edit boundary.
     private ulong[] m_publishedVersions = [];
 
-    // A seeded arena holds the document's rows as authored, and a published row is the arena's own spelling of it:
-    // a row holding no cell carries none rather than an empty list. The first publication after a seed therefore
-    // carries every row, so the installed document is in one spelling from then on.
-    private bool m_publishEveryRow;
-
-    // One flag per catalog ordinal: the rows an open scope has written, as of the proposal in flight.
-    private bool[] m_openRows = [];
-
-    // What the last exports moved that a consumer outside the arena keeps its own copy of, until SettleStateConsumers
-    // brings them up to date.
+    // Journal publication marks the consumers whose derived projections need refreshing.
     private bool m_consumersOwed;
     private bool m_driveGateOwed;
     private bool m_fieldsOwed;
@@ -325,14 +241,11 @@ public sealed partial class WorldServer {
         m_arenaCatalog = definition.StateCatalog;
         m_drawSites = WorldDrawSites.Of(catalog: m_arenaCatalog);
         m_documentRowCount = m_arenaCatalog.Lane(lane: StateLane.Document).Count;
-        m_streamedRows = new bool[m_documentRowCount];
-        m_streamedPending = new bool[m_documentRowCount];
-        m_streamedVersions = new ulong[m_documentRowCount];
-        m_typedVersions = new ulong[m_documentRowCount];
-        m_arenaExportOwed = false;
+        m_publicationRows = new bool[m_arena.Layout.RowCount];
+        m_snapshotRows = new bool[m_documentRowCount];
         m_publishedVersions = new ulong[m_arena.Layout.RowCount];
         MarkPublished();
-        m_publishEveryRow = true;
+        m_arena.CopyChangedRows(m_publicationRows, clear: true);
         m_movedEverything = true;
         m_population.BindActionStateLane(
             arena: m_arena,
@@ -386,7 +299,6 @@ public sealed partial class WorldServer {
         }
 
         LoadInPlace(rows: definition.State);
-        m_publishEveryRow = true;
     }
 
     /// <summary>Re-seeds the arena from an installed document that replaced <paramref name="previous"/> in its state
@@ -399,10 +311,10 @@ public sealed partial class WorldServer {
     /// requires before it reaches here.</remarks>
     /// <param name="definition">The document being installed.</param>
     /// <param name="previous">The document it replaces, which the arena holds.</param>
-    internal void SyncArenaValues(WorldDefinition definition, WorldDefinition previous) => LoadInPlace(rows: ReplacedRows(
-        definition: definition,
-        previous: previous
-    ));
+    internal void SyncArenaValues(WorldDefinition definition, WorldDefinition previous) {
+        LoadInPlace(rows: ReplacedRows(definition: definition, previous: previous));
+        BindArenaDocument();
+    }
 
     private readonly List<StateRow> m_replacedRows = [];
 
@@ -451,7 +363,6 @@ public sealed partial class WorldServer {
     }
     // The document and the arena agree on every row as they stand.
     private void MarkPublished() {
-        m_arenaExportOwed = false;
         var rows = m_arena.Layout.RowCount;
 
         if (m_publishedVersions.Length < rows) {
@@ -484,190 +395,53 @@ public sealed partial class WorldServer {
     /// preflight judges is what the commit installs.</remarks>
     /// <returns>The proposal.</returns>
     public WorldArenaPublication ProposePublication() {
-        var before = m_document.Definition;
-        var count = m_arena.Layout.RowCount;
-
-        if (m_openRows.Length < count) {
-            m_openRows = new bool[count];
+        Array.Clear(m_publicationRows);
+        m_arena.CopyChangedRows(rows: m_publicationRows);
+        if (m_arena.Journal.Scopes != 0) { m_arena.FlagOpenRows(rows: m_publicationRows); }
+        var moved = false;
+        var drive = false;
+        for (var row = 0; row < m_documentRowCount; row++) {
+            if (!m_publicationRows[row]) { continue; }
+            moved = true;
+            drive |= m_arena.Rows[row] is WorldStateRow { GatesDrive: true };
         }
-
-        var open = m_openRows.AsSpan(
-            length: count,
-            start: 0
-        );
-
-        open.Clear();
-
-        if (m_arena.Journal.Length != 0) {
-            m_arena.FlagOpenRows(rows: open);
-        }
-
-        var any = false;
-
-        for (var ordinal = 0; (!any && (ordinal < m_documentRowCount)); ordinal++) {
-            any = (
-                open[ordinal] ||
-                (m_publishedVersions[ordinal] != m_arena.RowVersion(rowOrdinal: ordinal))
-            );
-        }
-        if (!any) {
-            return new WorldArenaPublication(
-                Definition: before,
-                DriveGate: false,
-                Moved: false,
-                RefreshRefusal: null
-            );
-        }
-
-        var installed = before.AuthoredState;
-        var descriptors = m_arena.Catalog.Descriptors;
-        var driveGate = false;
-        var refresh = false;
-        var rows = installed.ToImmutableList();
-
-        // Document rows occupy the catalog's first ordinals in declaration order, which is the order the installed
-        // document lists them in. A row is kept only where that holds by name; anything else is read from the arena.
-        for (var ordinal = 0; (ordinal < rows.Count); ordinal++) {
-            var name = descriptors[ordinal].Name;
-            var moved = (
-                open[ordinal] ||
-                (m_publishedVersions[ordinal] != m_arena.RowVersion(rowOrdinal: ordinal))
-            );
-
-            if (
-                !moved &&
-                !m_publishEveryRow &&
-                (ordinal < installed.Count) &&
-                string.Equals(
-                    a: installed[ordinal].Name.Value,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                continue;
-            }
-
-            var published = ((WorldStateRow)m_arena.ToRow(rowOrdinal: ordinal, previous: installed[ordinal]));
-
-            rows = rows.SetItem(index: ordinal, value: published);
-
-            if (!moved) {
-                continue;
-            }
-
-            // Which of the consumers that keep their own copy of a state value read a row this publication moves.
-            driveGate |= published.GatesDrive;
-            // A document value bound to a state row, a placement's spatial extent or a creation's scale, is
-            // resolved against the row's value, so a moved row re-resolves the values reading it.
-            refresh |= DocumentValueRows().Contains(item: name);
-        }
-
-        var definition = before.WithWorldState(rows: rows, pools: ((before.StateRaw?.Pools is { Count: > 0 }) ? m_arena.ToPools() : null), pairPools: ((before.StateRaw?.PairPools is { Count: > 0 }) ? m_arena.ToPairPools() : null));
-        string? refreshRefusal = null;
-
-        if (refresh) {
-            if (WorldStateDocumentValues.TryRehydrate(
-                definition: definition,
-                reason: out var refreshReason,
-                refreshed: out var refreshed
-            )) {
-                definition = refreshed;
-            } else {
-                refreshRefusal = refreshReason;
-            }
-        }
-
-        return new WorldArenaPublication(
-            Definition: definition,
-            DriveGate: driveGate,
-            Moved: true,
-            RefreshRefusal: refreshRefusal
-        );
+        return new WorldArenaPublication(Definition: m_document.Definition, Moved: moved, DriveGate: drive, RefreshRefusal: null);
     }
-    /// <summary>Publishes what the arena holds into the installed document: the one boundary a state value written
-    /// in the arena crosses to reach everything outside it.</summary>
-    /// <remarks>It installs what <see cref="ProposePublication"/> composes, then does what any installed state value
-    /// owes: marks state delivery pending, and brings the consumers that keep their own copy of a value up to date
-    /// (<see cref="WorldDocument.ReconcileStateConsumers"/>), which is the routine a value mutation ends in.</remarks>
-    /// <param name="reconcile">Whether those consumers are brought up to date now. A publication taken in the
-    /// middle of a firing leaves that owed, and the publication that ends the tick settles it whether or not
-    /// anything moved in between.</param>
-    /// <returns><see langword="true"/> when a row was published.</returns>
+
+    /// <summary>Publishes committed changed positions to every live consumer, without exporting document rows.</summary>
     public bool PublishArena(bool reconcile = true) {
-        if (reconcile && StreamArena()) { return m_arenaExportOwed; }
-        m_arenaExportOwed = false;
-        var applied = AdoptPublication(publication: ProposePublication(), reconcile: reconcile);
-
-        for (var ordinal = 0; (ordinal < m_documentRowCount); ordinal++) { m_streamedVersions[ordinal] = m_arena.RowVersion(rowOrdinal: ordinal); }
-        return applied;
-    }
-    /// <summary>Installs a proposal as the publication it describes.</summary>
-    /// <param name="publication">A proposal taken from the arena as it stands now. One taken inside a scope that
-    /// has since committed, with nothing written between, qualifies: the arena holds what it proposed.</param>
-    /// <param name="reconcile">Whether the consumers that keep their own copy of a value are brought up to date
-    /// now.</param>
-    /// <returns><see langword="true"/> when a row was published.</returns>
-    public bool AdoptPublication(WorldArenaPublication publication, bool reconcile = true) {
-        if (!publication.Moved) {
-            if (reconcile) {
-                SettleStateConsumers();
+        var proposal = ProposePublication();
+        if (proposal.Moved) {
+            m_arena.CopyChangedRows(rows: m_publicationRows, clear: true);
+            for (var row = 0; row < m_documentRowCount; row++) {
+                if (!m_publicationRows[row]) { continue; }
+                m_snapshotRows[row] = true;
+                NoteMovedRow(ordinal: row, rowCount: m_documentRowCount);
+                m_publishedVersions[row] = m_arena.RowVersion(rowOrdinal: row);
+                m_fieldsOwed |= m_arena.Rows[row] is WorldStateRow { Field: not null };
             }
-
-            return false;
+            m_document.MarkStateDeliveryPending();
+            m_driveGateOwed |= proposal.DriveGate;
+            m_consumersOwed = true;
         }
-
-        var before = m_document.Definition;
-
-        m_document.AdoptDefinition(definition: publication.Definition);
-
-        if (
-            (publication.RefreshRefusal is { } refreshReason) &&
-            m_output.HasNarrationSink
-        ) {
-            m_output.Narrate(
-                channel: "world.state",
-                text: $"[world.state: a document value reading a row this tick wrote did not re-resolve — {refreshReason}]"
-            );
-        }
-
-        MarkPublished();
-        m_publishEveryRow = false;
-        m_arenaCatalog = m_document.Definition.StateCatalog;
-        // The installed document now carries values no sink has seen: a rule's own write reaches a client through the
-        // same state delivery a console write does.
-        m_document.MarkStateDeliveryPending();
-        m_driveGateOwed |= publication.DriveGate;
-        // The field section compiles from the state section and is republished only when what it reads changed, so
-        // its reference is what says whether the lattice's input moved.
-        m_fieldsOwed |= !ReferenceEquals(
-            objA: before.Fields,
-            objB: m_document.Definition.Fields
-        );
-        m_consumersOwed = true;
-
-        if (reconcile) {
-            SettleStateConsumers();
-        }
-
-        return true;
+        if (reconcile) { SettleStateConsumers(); }
+        return proposal.Moved;
     }
+
+    /// <summary>Publishes a committed firing's positions; edit proposals materialize only at their edit boundary.</summary>
+    public bool AdoptPublication(WorldArenaPublication publication, bool reconcile = true) => PublishArena(reconcile: reconcile);
 
     private void SettleStateConsumers() {
-        if (!m_consumersOwed) {
-            return;
-        }
-
+        if (!m_consumersOwed) { return; }
         var driveGate = m_driveGateOwed;
         var fields = m_fieldsOwed;
+        m_consumersOwed = false; m_driveGateOwed = false; m_fieldsOwed = false;
+        m_document.ReconcileStateConsumers(definition: m_document.Definition, driveGate: driveGate, fields: fields);
+    }
 
-        m_consumersOwed = false;
-        m_driveGateOwed = false;
-        m_fieldsOwed = false;
-        m_document.ReconcileStateConsumers(
-            definition: m_document.Definition,
-            driveGate: driveGate,
-            fields: fields
-        );
+    private void BindArenaDocument() {
+        var projected = WorldStateDocumentValues.BindLive(definition: m_document.Definition, arena: m_arena, clock: () => m_ruleHost.Time);
+        m_document.AdoptDefinition(definition: projected);
     }
     // Every search job is one resolved plan and one judge over this server's own arena, admitted at install: a
     // judge whose rules the host cannot serve refuses the plan by name rather than at a tick.
@@ -871,7 +645,8 @@ public sealed partial class WorldServer {
             reader: m_ruleHost.EvaluateFlockAffinity
         );
 
-        return definition;
+        BindArenaDocument();
+        return m_document.Definition;
     }
 
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a

@@ -194,13 +194,13 @@ public sealed class WorldDealAndRevealLawTests {
 
         fixture.Step();
         Assert.Null(@object: Fixtures.Disclose(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             recipient: seat
         )?.FirstOrDefault(predicate: r => (r.Name == "hand")));
 
-        var revealed = fixture.Server.Definition with {
-            StateRaw = fixture.Server.Definition.StateRaw! with {
-                World = [.. fixture.Server.Definition.State.Select(selector: r => ((r.Name.Value == "showdown")
+        var revealed = fixture.Server.ExportDefinition() with {
+            StateRaw = fixture.Server.ExportDefinition().StateRaw! with {
+                World = [.. fixture.Server.ExportDefinition().State.Select(selector: r => ((r.Name.Value == "showdown")
             ? r with { Cells = [new StateCell(
                         WorldStateRow.SlotKey,
                         CellValue.Int(value: 1L)
@@ -212,7 +212,7 @@ public sealed class WorldDealAndRevealLawTests {
 
         shown.Step();
         var observed = Fixtures.Disclose(
-            definition: shown.Server.Definition,
+            definition: shown.Server.ExportDefinition(),
             recipient: seat
         )?.FirstOrDefault(predicate: r => (r.Name == "hand"));
 
@@ -222,7 +222,7 @@ public sealed class WorldDealAndRevealLawTests {
             observed!.Cells.Count
         );
         Assert.Null(@object: Fixtures.Disclose(
-            definition: shown.Server.Definition,
+            definition: shown.Server.ExportDefinition(),
             recipient: Principal.Seat(slot: 2)
         )?.FirstOrDefault(predicate: r => (r.Name == "hand")));
 
@@ -310,7 +310,7 @@ public sealed class WorldDealAndRevealLawTests {
         fixture.Step();
 
         var doubled = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "doubled"
         ).Cells!;
 

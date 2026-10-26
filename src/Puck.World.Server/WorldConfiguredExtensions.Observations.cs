@@ -60,7 +60,7 @@ public sealed partial class WorldConfiguredExtensions {
                     field.Value,
                     kind
                 );
-                var row = m_server.Definition.State.First(predicate: row => (row.Name.Value == field.Value));
+                var row = FindRow(field.Value);
 
                 if (
                     !outputs.Add(item: field.Value) ||
@@ -158,7 +158,7 @@ public sealed partial class WorldConfiguredExtensions {
         var mutations = new List<WorldMutation>();
 
         foreach (var field in observation.Settings.Fields) {
-            var row = m_server.Definition.State.First(predicate: row => (row.Name.Value == field.Value));
+            var row = FindRow(field.Value);
             var actual = ReadTable(
                 observation.Client,
                 field.Value,

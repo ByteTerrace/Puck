@@ -143,7 +143,7 @@ public sealed class WorldConfiguredExtensionLawTests {
             settings => { var provider = new Provider(identity: settings.GetProperty(propertyName: "identity").GetString()!); providers.Add(item: provider); return provider; }
         ))
     )]);
-    private static long? Value(WorldServer server, string row) => server.Definition.State.First(predicate: r => (r.Name.Value == row))
+    private static long? Value(WorldServer server, string row) => server.ExportDefinition().State.First(predicate: r => (r.Name.Value == row))
         .Cells?.FirstOrDefault(predicate: cell => (cell.Key.Value == "incarnation-1"))?.Value.AsInt;
 
     [Fact]

@@ -206,6 +206,11 @@ is the live one. How each trait
 computes its value is explained in [Row and cell behavior](traits.md). Pool rows
 aren't read positionally; they're read through instance handles.
 
+The catalog compiles row defaults and per-key trait declarations once. A live
+read combines that lookup with the arena's behavior override; it does not scan
+the seed cells. Retuning a trait replaces the catalog, while changing a stored
+value or its live override keeps bound handles valid.
+
 `StateReader` is the (row, key) → value computation over a list of `StateRow`
 records, the installed document's rows, instead of the arena's columns. It
 applies the same traits, adds the eased read (`TryReadEased`) a presentation
@@ -443,6 +448,13 @@ set of rows folds each row through `AddRowTo` rather than reading values back.
 
 ### Export and import
 
+Definitions hold declarations and seeds. A running world reads columns through
+`StateReader`; it never exports a second live row list for each tick. The
+committed journal marks changed rows for publication. `CaptureSnapshot` retains
+columns, capacities and key names directly, and `RestoreSnapshot` binds stored
+key ordinals to the restored catalog. Export is for document edits and explicit
+read-back or save boundaries.
+
 `ToRows` exports the document lane as the `StateRow` list a section serializes,
 in catalog ordinal order. Each row's declaration (kind, envelope, domain,
 traits, visibility) is carried from the row the arena was built over; only what
@@ -493,13 +505,13 @@ cleared.
 ### Checkpoints
 
 A checkpoint captures what's needed to continue from where the arena stood.
-Exported rows alone aren't enough, because they don't carry orphan key names. A
-complete checkpoint is:
+The native snapshot is independent of row serialization. A complete checkpoint is:
 
-1. The exported rows (`ToRows`, and `ToPools`/`ToPairPools` for pools).
-2. The key ledger (`Keys.Names`), restored with `TryRestoreKeys` at a settled
-   boundary with no scope open. Restoring refuses a ledger past the name or
-   byte limits and changes nothing on refusal.
+1. `CaptureSnapshot`: admitted capacities, numeric and reference columns,
+   vector storage and the complete key ledger, including orphan names.
+2. The declarations the layout was compiled from. `RestoreSnapshot` validates
+   the image in a separately prepared arena and rebinds stored member keys by
+   name when the catalog's intern order differs. Refusal adopts nothing.
 3. The retained undo history (`ExportUndoSnapshot`), when rule groups keep
    one. See [Rule groups and turn undo](rule-groups.md).
 

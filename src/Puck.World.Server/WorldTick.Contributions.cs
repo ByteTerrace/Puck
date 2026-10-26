@@ -1,27 +1,32 @@
 using Puck.Commands;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // Re-stamps one slot's server-owned half through the ordinary pipeline under Principal.World — the same
-    // structural-exemption door a rule effect's own writes use, so the arm/disarm is journalled and undoable.
-    private void StampContribution(WorldPlacement placement, WorldPlacementContribution contribution, ulong tick) {
-        _ = Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: new WorldMutation.UpsertPlacement(
-                Placement: (placement with { Contribution = contribution }),
-                Principal: Principal.World
-            ),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        );
+    private long? TenureDeadline(string placement) {
+        var value = TenureValue(placement);
+        return value >= 0L ? value : null;
     }
-    // Retraction: the host's frame stands, the piece goes. One UpsertPlacement re-points prototypeId back at the
-    // authored slotCreationId and clears the stamped half, and — only when nothing else still names it — one
-    // RemoveCreation releases the contributed row. Both are ordinary mutations, so world.undo puts the piece back.
+    private long? TenureValue(string placement) {
+        if (!Host.Arena.Catalog.TryResolve(StateLane.Document, WorldContributionState.Row, out var row) ||
+            !Host.Arena.Keys.TryResolve(CellName.Parse(placement), out var key) || !Host.Arena.TryRead(row.Ordinal, key, out var value)) { return null; }
+        return value.Raw;
+    }
+    private void StampContribution(WorldPlacement placement, WorldPlacementContribution contribution, ulong tick) {
+        WriteTenure(placement.Id, contribution.RetractDeadlineTick ?? -1L);
+        Host.Document.InstallPlacementProjection([(placement.Id, placement with { Contribution = contribution })]);
+    }
+    private void WriteTenure(string placement, long value) {
+        if (!Host.Arena.Catalog.TryResolve(StateLane.Document, WorldContributionState.Row, out var row)) { throw new InvalidOperationException("The tenure row was not declared at installation."); }
+        var mark = Host.BeginStateTransaction();
+        if (!Host.Arena.TryWrite(rowOrdinal: row.Ordinal, key: Host.Arena.Keys.Intern(CellName.Parse(placement)), write: StateWriteKind.Set, operand: value, reason: out var reason)) {
+            Host.RewindStateTransaction(mark); throw new InvalidOperationException(reason);
+        }
+        if (!Host.TryCommitStateTransaction(mark, Principal.World, out reason)) { throw new InvalidOperationException(reason); }
+        Host.PublishArena();
+    }
+    // Retraction stores the released tenure state and projects the slot's authored creation again. The creation
+    // declaration remains available; no placement or creation edit is submitted by a lifecycle sweep.
     //
     // A slot whose Inhabit facet is bound to a possessed body defers instead: the deadline stays stamped and the next
     // tick's sweep tries again, so a retraction can never destroy a concrete drive grant's binding out from under it
@@ -53,22 +58,11 @@ public sealed partial class WorldTick {
         var retired = placement.PrototypeId;
         var contributor = contribution.Contributor;
 
-        if (!Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: new WorldMutation.UpsertPlacement(
-                Placement: (placement with {
-                    PrototypeId = contribution.SlotCreationId,
-                    Contribution = (contribution with { Contributor = null, RetractDeadlineTick = null }),
-                }),
-                Principal: Principal.World
-            ),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        )) {
-            return;
-        }
+        WriteTenure(placement.Id, -2L);
+        Host.Document.InstallPlacementProjection([(placement.Id, placement with {
+            PrototypeId = contribution.SlotCreationId,
+            Contribution = contribution with { Contributor = null, RetractDeadlineTick = null },
+        })]);
 
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
@@ -77,34 +71,10 @@ public sealed partial class WorldTick {
             );
         }
 
-        // A creation some surviving row still names stays: its removal would be refused, and the stamp this sweep just
-        // cleared would not bring it back to retry.
-        if (WorldDefinitionRows.FindCreationReference(
-            creationId: retired,
-            definition: Host.Document.Definition
-        ) is not null) {
-            return;
-        }
-
-        _ = Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: new WorldMutation.RemoveCreation(
-                Id: retired,
-                Principal: Principal.World
-            ),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        );
     }
 
-    // Presence-tenure slots, indexed by their watched link, rebuilt only when the document itself has changed since
-    // the last rebuild (every mutation swaps the live definition for a new instance — this project never mutates a
-    // document in place — so a reference compare is an exact "did anything change" test). m_tenureLinkDropped is the
-    // liveness each link read AT THAT REBUILD, not the last tick's: a stamp write that is refused leaves the document
-    // unchanged, so the disagreement it was reacting to still stands next tick and the pass retries. A successful
-    // stamp swaps the document, which rebuilds both.
+    // Presence-tenure slots indexed by watched link. Declaration changes or the live tenure row version
+    // rebuild this derived index; deadlines themselves live in the arena.
     private readonly List<string> m_tenureLinks = [];
     private readonly List<bool> m_tenureLinkDropped = [];
     private readonly List<WorldTenureSlot> m_tenureSlots = [];
@@ -112,6 +82,8 @@ public sealed partial class WorldTick {
     private readonly WorldDeadlineTable<string> m_tenureDeadlines = new();
 
     private WorldDefinition? m_tenureSource;
+    private StateArena? m_tenureArena;
+    private ulong m_tenureVersion;
     private int m_tenurePlacementReads;
 
     /// <summary>Gets how many placement rows the contribution-tenure sweep has read since this server booted — the
@@ -120,14 +92,16 @@ public sealed partial class WorldTick {
     /// the sweep decides.</remarks>
     public int TenurePlacementReads => m_tenurePlacementReads;
 
-    // Rebuilds the presence-tenure index from the live document: one walk of `placements`, one liveness read per
-    // distinct watched link, and the deadline table refilled from whatever stamps the document already carries.
+    // One placement walk and one liveness read per watched link; deadlines come from the live tenure row.
     private void RebuildTenureIndex() {
         m_tenureDeadlines.Clear();
         m_tenureLinkDropped.Clear();
         m_tenureLinks.Clear();
         m_tenureSlots.Clear();
         m_tenureSource = Host.Document.Definition;
+        m_tenureArena = Host.Arena;
+        m_tenureVersion = Host.Arena.Catalog.TryResolve(StateLane.Document, WorldContributionState.Row, out var tenure)
+            ? Host.Arena.RowVersion(tenure.Ordinal) : 0UL;
 
         var placements = m_tenureSource.Placements;
 
@@ -143,6 +117,11 @@ public sealed partial class WorldTick {
                 (contribution.Contributor is null) ||
                 (contribution.Link is not { } link)
             ) {
+                continue;
+            }
+
+            if (TenureValue(placement.Id) == -2L) {
+                RetractContribution(placement, contribution, Host.NextInputTick);
                 continue;
             }
 
@@ -164,7 +143,7 @@ public sealed partial class WorldTick {
                 PlacementId: placement.Id
             ));
 
-            if (contribution.RetractDeadlineTick is { } armed) {
+            if (TenureDeadline(placement.Id) is { } armed) {
                 m_tenureDeadlines.Add(
                     dueTick: armed,
                     token: placement.Id
@@ -193,7 +172,7 @@ public sealed partial class WorldTick {
 
             if (!dropped) {
                 // Reconnect-within-grace is nothing happening at all: clear the stamp and leave the piece standing.
-                if (contribution.RetractDeadlineTick is not null) {
+                if (TenureDeadline(placement.Id) is not null) {
                     _ = m_tenureDeadlines.Remove(token: slot.PlacementId);
                     StampContribution(
                         contribution: (contribution with { RetractDeadlineTick = null }),
@@ -205,7 +184,7 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            if (contribution.RetractDeadlineTick is not null) {
+            if (TenureDeadline(placement.Id) is not null) {
                 continue;
             }
 
@@ -239,7 +218,9 @@ public sealed partial class WorldTick {
             return;
         }
 
-        if (!ReferenceEquals(
+        var version = Host.Arena.Catalog.TryResolve(StateLane.Document, WorldContributionState.Row, out var tenure)
+            ? Host.Arena.RowVersion(tenure.Ordinal) : 0UL;
+        if (!ReferenceEquals(m_tenureArena, Host.Arena) || m_tenureVersion != version || !ReferenceEquals(
             objA: Host.Document.Definition,
             objB: m_tenureSource
         )) {

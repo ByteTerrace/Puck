@@ -77,7 +77,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
     }
     private static long Value(WorldFixture fixture, string row) =>
         WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         )!.Cells!.Single().Value.AsInt;
 
@@ -258,7 +258,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
         // The settle a world.save performs: the stored base becomes the live sampled value and the clock's engine
         // epoch returns to zero, so the same value reads back at engine tick zero after a fresh reload.
         var settledRow = WorldDefinitionRows.FindStateRow(
-            rows: live.Server.Definition.State,
+            rows: live.Server.ExportDefinition().State,
             name: "gauge"
         )! with {
             Cells = [new StateCell(

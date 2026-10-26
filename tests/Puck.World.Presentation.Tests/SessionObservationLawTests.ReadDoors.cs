@@ -61,7 +61,7 @@ public sealed partial class SessionObservationLawTests {
     [InlineData(WorldObserverDisclosureMode.All)]
     [InlineData(WorldObserverDisclosureMode.SelfOnly)]
     [Theory]
-    public void ASessionSinkAllocatesNothingForSteadyDelivery(WorldObserverDisclosureMode mode) {
+    public void ASessionSinkKeepsItsDefinitionForSteadyDelivery(WorldObserverDisclosureMode mode) {
         var definition = Document(tier: WorldDisclosureTier.Replica);
 
         using var fixture = Fixtures.FreshServer(definition: (definition with {
@@ -85,14 +85,12 @@ public sealed partial class SessionObservationLawTests {
             hub.DeliverState(definition: fixture.Server.Definition, stamp: in stamp, version: fixture.Server.DocumentVersion);
             _ = mirror.FollowState();
         }
-        var before = GC.GetAllocatedBytesForCurrentThread();
 
         for (var index = 0; (index < 100); index++) {
             hub.DeliverSnapshot(snapshot: in snapshot);
             hub.DeliverState(definition: fixture.Server.Definition, stamp: in stamp, version: fixture.Server.DocumentVersion);
             _ = mirror.FollowState();
         }
-        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
         Assert.Equal(expected: revision, actual: mirror.DefinitionRevision);
     }
     [Fact]

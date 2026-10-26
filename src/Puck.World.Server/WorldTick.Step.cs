@@ -131,12 +131,7 @@ public sealed partial class WorldTick {
                     Host.Document.Pending.Dequeue();
                     m_cellBurst.Add(item: member);
                 }
-                if ((m_cellBurst.Count > 1) && Host.Document.TryApplyCellBurst(m_cellBurst, tick, CompletedEngineTicks)) {
-                    foreach (var member in m_cellBurst) { CompletePendingOp(ok: true, op: member); }
-                    applied = true;
-                } else {
-                    foreach (var member in m_cellBurst) { applied |= ApplyPendingOp(op: member, tick: tick); }
-                }
+                foreach (var member in m_cellBurst) { applied |= ApplyPendingOp(op: member, tick: tick); }
                 m_cellBurst.Clear();
                 continue;
             }

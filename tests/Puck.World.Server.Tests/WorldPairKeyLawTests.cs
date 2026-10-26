@@ -132,14 +132,14 @@ public sealed class WorldPairKeyLawTests {
         Assert.Equal(
             5L,
             CellValue(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 key: "0_1"
             )
         );
         Assert.Equal(
             9L,
             CellValue(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 key: "1_0"
             )
         );
@@ -192,19 +192,19 @@ public sealed class WorldPairKeyLawTests {
         Assert.Equal(
             7L,
             CellValue(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 key: "0_1"
             )
         );
         Assert.Equal(
             7L,
             CellValue(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 key: "2_1"
             )
         );
         Assert.Null(value: CellValue(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             key: "1_1"
         ));
     }

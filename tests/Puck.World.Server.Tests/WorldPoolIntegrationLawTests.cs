@@ -62,12 +62,12 @@ public sealed class WorldPoolIntegrationLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
 
         fixture.Step();
-        var snapshot = Assert.Single(collection: fixture.Server.Definition.StateRaw!.Pools!).Snapshot;
+        var snapshot = Assert.Single(collection: fixture.Server.ExportDefinition().StateRaw!.Pools!).Snapshot;
 
         Assert.NotNull(@object: snapshot);
         Assert.Empty(collection: snapshot.Live!);
         Assert.Equal(1L, snapshot.Generations[0]);
-        var restored = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: fixture.Server.Definition));
+        var restored = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: fixture.Server.ExportDefinition()));
         var arena = new StateArena(catalog: restored.StateCatalog, section: restored.StateRaw, time: ArenaTime.Origin);
 
         Assert.True(condition: arena.TryClaim(handle: out var reclaimed, poolOrdinal: 0, reason: out var reason), userMessage: reason);

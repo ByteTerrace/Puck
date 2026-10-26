@@ -41,7 +41,7 @@ public sealed class TransformAuthorityLawTests {
 
         string Deck() => string.Join(
             separator: ",",
-            values: WorldDefinitionRows.FindStateRow(name: "deck", rows: fixture.Server.Definition.State)!.Cells!.Select(selector: static cell => cell.Key.Value)
+            values: WorldDefinitionRows.FindStateRow(name: "deck", rows: fixture.Server.ExportDefinition().State)!.Cells!.Select(selector: static cell => cell.Key.Value)
         );
 
         fixture.Server.EchoTap = echo => {

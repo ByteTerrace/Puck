@@ -23,7 +23,7 @@ public sealed partial class PlacementDealLawTests {
         ));
         fixture.Step();
         Assert.Contains(
-            collection: fixture.Server.Definition.Placements,
+            collection: fixture.Server.ExportDefinition().Placements,
             filter: placement => (placement.Id == "annex")
         );
         Assert.False(condition: fixture.Server.TryPreviewReflow(
@@ -50,7 +50,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             100,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -140,7 +140,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             (100 - proposal.Cost),
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -160,7 +160,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             100,
             WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
+                fixture.Server.ExportDefinition().State,
                 "credits"
             )!.Cells![0].Value.Raw
         );
@@ -212,7 +212,7 @@ public sealed partial class PlacementDealLawTests {
             Id = "target",
             Parent = null,
             DealSlot = null,
-            Position = fixture.Server.Definition.PlacementFrames[a.Id].Position,
+            Position = fixture.Server.ExportDefinition().PlacementFrames[a.Id].Position,
             Spatial = ReflowSpatial(),
         };
         var provider = a with {
@@ -243,7 +243,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Step();
         Assert.Equal(
             1,
-            fixture.Server.Definition.SpatialQueryIndex.CountInfluences(
+            fixture.Server.ExportDefinition().SpatialQueryIndex.CountInfluences(
                 channel: "water",
                 placementId: target.Id
             )
@@ -336,7 +336,7 @@ public sealed partial class PlacementDealLawTests {
             target
         ));
         fixture.Step();
-        var beforeCoverage = fixture.Server.Definition.SpatialQueryIndex.CountInfluences(
+        var beforeCoverage = fixture.Server.ExportDefinition().SpatialQueryIndex.CountInfluences(
             channel: "water",
             placementId: target.Id
         );
@@ -385,7 +385,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Step();
         Assert.Equal(
             beforeCoverage,
-            fixture.Server.Definition.SpatialQueryIndex.CountInfluences(
+            fixture.Server.ExportDefinition().SpatialQueryIndex.CountInfluences(
                 channel: "water",
                 placementId: target.Id
             )

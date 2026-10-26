@@ -73,7 +73,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         Assert.Equal(actual: (after.Validations - before.Validations), expected: 0L);
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 0L);
         // Settlement is done: the installed document is the very object the receipt was earned for, programs and all.
-        Assert.Same(definition, server.Definition);
+        Assert.Same(definition.StateRaw, server.Definition.StateRaw);
         Assert.Same(admission.Compilation.CostReport, server.CostReport);
 
         // A server that admits for itself reaches the same authoritative state, so reusing the receipt moves no hash.
@@ -180,7 +180,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
 
         Assert.Equal(actual: (after.Validations - before.Validations), expected: 1L);
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
-        Assert.Same(definition, server.Definition);
+        Assert.Same(definition.StateRaw, server.Definition.StateRaw);
     }
     [Fact]
     public void ACheckpointRestoreValidatesOnceAndCompilesOnce() {

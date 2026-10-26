@@ -135,6 +135,7 @@ public sealed class CreationCanonicalFormLawTests(CreationCanonicalFormLawTests.
         WorldDefinition read;
 
         try {
+<<<<<<< HEAD
             read = WorldDefinitionSerialization.Deserialize(
                 documentDirectory: definition.DocumentDirectory,
                 utf8Json: WorldDefinitionSerialization.Serialize(definition: (definition with {
@@ -144,6 +145,14 @@ public sealed class CreationCanonicalFormLawTests(CreationCanonicalFormLawTests.
                     }))],
                 }))
             );
+=======
+            read = WorldDefinitionSerialization.Deserialize(documentDirectory: definition.DocumentDirectory, utf8Json: WorldDefinitionSerialization.Serialize(definition: (definition with {
+                CreationsRaw = [.. prototypes.Select(selector: (prototype, i) => (prototype with {
+                    Document = canonical[i].Document,
+                    HashRaw = canonical[i].Hash,
+                }))],
+            })));
+>>>>>>> lead/catch-up
         } catch (InvalidDataException exception) {
             failures.Add(item: $"{world}: a world carrying its canonical prototypes does not read back: {exception.Message}");
 

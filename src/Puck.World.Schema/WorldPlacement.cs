@@ -170,14 +170,15 @@ public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row
     /// <param name="definition">The document to resolve against.</param>
     /// <param name="tick">The tick this read answers as of.</param>
     /// <param name="engineTick">The engine tick this read answers as of.</param>
-    public long? Resolve(WorldDefinition definition, ulong tick = 0UL, ulong engineTick = 0UL) {
+    /// <param name="arena">The live store, or declaration seeds at an edit boundary.</param>
+    public long? Resolve(WorldDefinition definition, ulong tick = 0UL, ulong engineTick = 0UL, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (Row is not { } row) {
             return Literal;
         }
 
-        return (WorldStateReader.TryRead(
+        return (WorldStateReader.TryRead(arena: arena,
             definition: definition,
             key: Key,
             rawValue: out var raw,

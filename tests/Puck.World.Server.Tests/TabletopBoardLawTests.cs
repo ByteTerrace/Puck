@@ -914,7 +914,7 @@ public sealed class TabletopBoardLawTests {
         }
 
         var board = WorldDefinitionRows.FindStateRow(
-            fixture.Server.Definition.State,
+            fixture.Server.ExportDefinition().State,
             "board"
         )!;
         var cell0 = board.Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw;
@@ -961,7 +961,7 @@ public sealed class TabletopBoardLawTests {
         }
 
         WorldStateRow Row(string name) => WorldDefinitionRows.FindStateRow(
-            fixture.Server.Definition.State,
+            fixture.Server.ExportDefinition().State,
             name
         )!;
         long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
@@ -1078,7 +1078,7 @@ public sealed class TabletopBoardLawTests {
         }
 
         WorldStateRow Row(string name) => WorldDefinitionRows.FindStateRow(
-            fixture.Server.Definition.State,
+            fixture.Server.ExportDefinition().State,
             name
         )!;
         long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;

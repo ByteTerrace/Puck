@@ -269,6 +269,14 @@ public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong En
 /// candidate, because the firing's journal scope already is one.</para>
 /// </remarks>
 public interface IEffectHost : IStateReader {
+    /// <summary>Opens the host's atomic state transaction for one firing.</summary>
+    int BeginStateTransaction() => Arena.BeginScope();
+    /// <summary>Checks the complete state batch before its commit.</summary>
+    bool PrepareStateCommit(out EffectRefusal refusal) { refusal = EffectRefusal.None; return true; }
+    /// <summary>Commits a prepared state batch.</summary>
+    void CommitStateTransaction(int mark) => Arena.Commit(mark: mark);
+    /// <summary>Rewinds a refused state batch.</summary>
+    void RewindStateTransaction(int mark) => Arena.Rewind(mark: mark);
     /// <summary>Runs one mutation through the host's own door, inside the firing's open journal scope.</summary>
     /// <param name="mutation">The mutation.</param>
     /// <param name="refusal">Why the door refused, or <see cref="EffectRefusal.None"/>.</param>

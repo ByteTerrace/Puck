@@ -20,9 +20,9 @@ namespace Puck.World.Client;
 /// </summary>
 /// <param name="definition">Returns the definition currently delivered; read on every call.</param>
 public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : IWorldStateView {
-    private sealed record ValueRow(CellValue[] Values, Dictionary<string, int> Keys);
+    private StateArena m_arena = null!;
 
-    private readonly Dictionary<int, ValueRow> m_valueRows = [];
+
     private readonly int[] m_valueRowsMoved = new int[StateCapacity.MaxRows];
 
     private int m_valueRowsMovedCount;
@@ -161,13 +161,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         var row = rows[ordinal];
 
-        if (m_valueRows.TryGetValue(key: ordinal, value: out var values)) {
-            sample = new WorldStateSample(
-                Value: (values.Keys.TryGetValue(key: (key ?? StateRow.SlotKey.Value), value: out var cellIndex) ? values.Values[cellIndex] : default),
-                Min: row.Min, Max: row.Max, Motion: WorldStateMotion.Still);
-            return true;
-        }
-
         if (m_fieldOfOrdinal[ordinal] is var field and >= 0) {
             var cells = m_cells[field];
 
@@ -188,97 +181,26 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             return true;
         }
 
-        if (
-            !CellName.TryParse(
-            candidate: (key ?? StateRow.SlotKey.Value),
-            name: out var cellKey,
-            reason: out _
-        ) ||
-            (StateRows.FindCell(
-            cells: row.Cells,
-            key: cellKey
-        ) is not { } cell)
-        ) {
-            sample = new WorldStateSample(
-                Max: row.Max,
-                Min: row.Min,
-                Motion: WorldStateMotion.Still,
-                Value: default
-            );
-
-            return true;
-        }
-
-        var behavior = EffectiveBehavior.Resolve(
-            cell: cell,
-            row: row
-        );
-        var motion = (behavior switch {
-            { Advance.PerSecondNumerator: not 0L } => WorldStateMotion.Advancing,
-            { Cycle: not null } => WorldStateMotion.Stepping,
-            _ => WorldStateMotion.Still,
-        });
-
-        StateReader.ReadCell(
-            engineTick: engineTick,
-            key: key,
-            rawValue: out var raw,
-            row: row,
-            text: out var text,
-            tick: tick
-        );
-
-        // The stored truth a .$target read answers never moves between writes; only the eased follower does.
-        if (
-            !target &&
-            (raw is not null) &&
-            (behavior.Dynamics is not null) &&
-            StateReader.TryEvaluateDynamics(
-            cell: cell,
-            dynamics: document.Dynamics,
-            row: row,
-            sample: out var eased,
-            tick: tick,
-            ticksPerSecond: document.SimulationRateHz,
-            trait: out _
-        )
-        ) {
-            var stored = StateReader.DynamicsRowRawToFixed(
-                raw: cell.Value.Raw,
-                row: row
-            );
-
-            if (
-                (eased.Value != stored) ||
-                (eased.Velocity != FixedQ4816.Zero)
-            ) {
+        var time = new ArenaTime(Tick: tick, EngineTick: engineTick, TicksPerSecond: document.SimulationRateHz, Dynamics: document.Dynamics);
+        var value = default(CellValue);
+        var motion = WorldStateMotion.Still;
+        if (CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out _) &&
+            m_arena.Keys.TryResolve(name: name, key: out var cell)) {
+            if (target) { m_arena.TryReadLive(rowOrdinal: ordinal, key: cell, time: in time, value: out value); }
+            else { m_arena.TryReadEased(rowOrdinal: ordinal, key: cell, time: in time, value: out value); }
+            var behavior = m_arena.LiveBehavior(rowOrdinal: ordinal, key: cell);
+            motion = behavior switch {
+                { Advance.PerSecondNumerator: not 0L } => WorldStateMotion.Advancing,
+                { Cycle: not null } => WorldStateMotion.Stepping,
+                _ => WorldStateMotion.Still,
+            };
+            if (!target && m_arena.TryReadDynamics(rowOrdinal: ordinal, key: cell, time: in time, sample: out var eased) &&
+                m_arena.TryRead(rowOrdinal: ordinal, key: cell, value: out var stored) &&
+                ((eased.Velocity != FixedQ4816.Zero) || (eased.Value != StateReader.DynamicsRowRawToFixed(row: row, raw: stored.Raw)))) {
                 motion = WorldStateMotion.Easing;
             }
-
-            raw = row.ClampToEnvelope(value: StateReader.DynamicsFixedToRowRaw(
-                row: row,
-                value: eased.Value
-            ));
         }
-
-        sample = new WorldStateSample(
-            Max: row.Max,
-            Min: row.Min,
-            Motion: motion,
-            Value: (row.Kind switch {
-                CellKind.Vector => cell.Value,
-                CellKind.Text => ((raw is not null)
-                    ? CellValue.Text(value: text)
-                    : default),
-                _ => ((raw is { } number)
-                    ? CellValue.FromNumber(
-                        kind: row.Kind,
-                        raw: number
-                    )
-                    : default),
-            })
-        );
-
+        sample = new WorldStateSample(Value: value, Min: row.Min, Max: row.Max, Motion: motion);
         return true;
     }
     /// <inheritdoc/>
@@ -363,22 +285,10 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         foreach (var delta in deltas) {
             if (delta.Row >= 0) {
-                var rows = m_shaped!.State;
-
-                if ((((uint)delta.Row) >= ((uint)rows.Count)) || (rows[delta.Row].Cells is not { } declared) ||
-                    (((uint)delta.Cell) >= ((uint)declared.Count)) || (delta.Value.Kind != rows[delta.Row].Kind)) { continue; }
-                if (!m_valueRows.TryGetValue(key: delta.Row, value: out var stored)) {
-                    var values = new CellValue[declared.Count];
-                    var keys = new Dictionary<string, int>(capacity: declared.Count, comparer: StringComparer.Ordinal);
-
-                    for (var i = 0; (i < declared.Count); i++) { values[i] = declared[i].Value; keys.Add(key: declared[i].Key.Value, value: i); }
-                    stored = new ValueRow(Keys: keys, Values: values);
-                    m_valueRows.Add(key: delta.Row, value: stored);
-                }
-                if (stored.Values[delta.Cell] != delta.Value) {
-                    stored.Values[delta.Cell] = delta.Value;
-                    if (!valueChanged[delta.Row]) { m_valueRowsMoved[m_valueRowsMovedCount++] = delta.Row; valueChanged[delta.Row] = true; }
-                }
+                if ((uint)delta.Row >= (uint)m_arena.Rows.Count) { continue; }
+                if (delta.Cell < 0) { m_arena.BeginProjectionRow(rowOrdinal: delta.Row, count: checked((int)delta.Raw)); }
+                else { m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image); }
+                if (!valueChanged[delta.Row]) { m_valueRowsMoved[m_valueRowsMovedCount++] = delta.Row; valueChanged[delta.Row] = true; }
                 continue;
             }
             if (delta.Field >= m_cells.Length) {
@@ -511,7 +421,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         }
 
         m_shaped = document;
-        m_valueRows.Clear();
+        m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
         ShapeBodyState(document: document);
 
         var fields = document.Fields;

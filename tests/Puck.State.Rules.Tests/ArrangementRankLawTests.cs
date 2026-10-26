@@ -3,7 +3,7 @@ using Xunit;
 namespace Puck.State.Rules.Tests;
 
 /// <summary>CONTRACT UNDER TEST: an ordered zone's arrangement rank answers the same off its document row
-/// (<see cref="StateReader.ArrangementRank(IReadOnlyList{StateRow}?, StateRow)"/>) as off a live arena
+/// (<see cref="StateSeedReader.ArrangementRank"/>) as off a live arena
 /// (<see cref="RuleReads.ArrangementRank"/>), within 0..k!-1 for k tokens, for every arrangement of every subset of
 /// its domain, and a zone that holds its whole domain ranks the same as the <c>arrangementRank</c> expression
 /// function over its nibble-packed domain ordinals.</summary>
@@ -56,7 +56,7 @@ public sealed class ArrangementRankLawTests {
             section: section
         );
 
-        return (StateReader.ArrangementRank(
+        return (StateSeedReader.ArrangementRank(
             rows: section.Rows,
             zone: section.Rows![1]
         ), RuleReads.ArrangementRank(

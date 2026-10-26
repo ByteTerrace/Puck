@@ -71,7 +71,7 @@ internal static partial class StateFixtures {
     /// <param name="name">The row name.</param>
     /// <returns>The row.</returns>
     public static WorldStateRow Row(this WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(
-        rows: fixture.Server.Definition.State,
+        rows: fixture.Server.ExportDefinition().State,
         name: name
     )!;
     /// <summary>Reads the raw value of slot row <paramref name="row"/> from the fixture's installed document, as every
@@ -81,7 +81,7 @@ internal static partial class StateFixtures {
     /// <returns>The cell's raw value.</returns>
     public static long SlotValue(this WorldFixture fixture, string row) => StateRows.FindCell(
         cells: WorldDefinitionRows.FindStateRow(
-            fixture.Server.Definition.State,
+            fixture.Server.ExportDefinition().State,
             row
         )!.Cells,
         key: WorldStateRow.SlotKey

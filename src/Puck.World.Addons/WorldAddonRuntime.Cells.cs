@@ -51,16 +51,35 @@ public sealed partial class WorldAddonRuntime {
     }
     // The validated batch is reused in place. Receipt-pinned replay derives these writes again before rules.
     private void ApplyCellWrites(MountedAddon addon, ulong tick) {
+        var hasWrites = false;
+        foreach (ref readonly var query in addon.Pump.Queries) {
+            hasWrites |= query.Verb is AddonAbi.RequestVerbs.WriteStateCell or AddonAbi.RequestVerbs.WriteStateText;
+        }
+        var mark = hasWrites ? m_server.BeginStateTransaction() : -1;
+        var accepted = true;
+        var replies = 0;
+        if (m_cellReplies.Length < addon.Pump.Queries.Length) { m_cellReplies = new (ushort Ordinal, AddonVerdict Verdict)[addon.Pump.Queries.Length]; }
         foreach (ref readonly var query in addon.Pump.Queries) {
             if (query.Verb == AddonAbi.RequestVerbs.BindStateCell) {
                 var verdict = BindCells(addon: addon, query: in query);
 
                 QueueAnswer(addon, query.Ordinal, verdict, 0, addon.CellGeneration);
             } else if (query.Verb is AddonAbi.RequestVerbs.WriteStateCell or AddonAbi.RequestVerbs.WriteStateText) {
-                QueueAnswer(addon, query.Ordinal, ApplyCellWrite(addon: addon, query: in query));
+                var verdict = ApplyCellWrite(addon: addon, query: in query);
+                accepted &= verdict == AddonVerdict.Applied;
+                m_cellReplies[replies++] = (query.Ordinal, verdict);
             }
         }
+        if (hasWrites) {
+            if (!accepted) { m_server.RewindStateTransaction(mark: mark); }
+            else { accepted = m_server.TryCommitStateTransaction(mark: mark, principal: addon.Principal, reason: out _); }
+        }
+        for (var i = 0; i < replies; i++) {
+            var reply = m_cellReplies[i];
+            QueueAnswer(addon, reply.Ordinal, !accepted && reply.Verdict == AddonVerdict.Applied ? AddonVerdict.Rejected : reply.Verdict);
+        }
     }
+    private (ushort Ordinal, AddonVerdict Verdict)[] m_cellReplies = [];
     private AddonVerdict ApplyCellWrite(MountedAddon addon, in AddonQuerySubmission query) {
         if ((query.HandleGeneration != addon.CellGeneration) || (query.HandleIndex >= addon.Cells.Length)) {
             return AddonVerdict.StaleHandle;

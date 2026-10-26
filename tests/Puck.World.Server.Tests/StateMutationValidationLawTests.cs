@@ -454,7 +454,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Step();
 
         Assert.Empty(collection: (WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "pile"
         )!.Cells ?? []));
     }

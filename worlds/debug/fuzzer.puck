@@ -52,7 +52,6 @@ addon "fuzzer" {
     { capability: Observe, subject: "state:fuzzerBounds" }
     { capability: Observe, subject: "body:44" }
     { capability: Drive, subject: "body:44" }
-    { capability: Mutate, subject: "section:State" }
     { capability: Edit, subject: "state:fuzzer" }
   ]
 }
@@ -62,6 +61,5 @@ grants [
   { grantee: "addon:fuzzer", capability: Observe, subject: "state:fuzzerBounds", budget: 4 }
   { grantee: "addon:fuzzer", capability: Observe, subject: "body:44", budget: 2 }
   { grantee: "addon:fuzzer", capability: Drive, subject: "body:44", budget: 7 }
-  { grantee: "addon:fuzzer", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 6 }
-  { grantee: "addon:fuzzer", capability: Edit, subject: "state:fuzzer", kindMask: "UpsertStateCell" }
+  { grantee: "addon:fuzzer", capability: Edit, subject: "state:fuzzer", budget: 5, writeMask: "Set" }
 ]

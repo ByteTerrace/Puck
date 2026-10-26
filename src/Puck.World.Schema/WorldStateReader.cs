@@ -1,421 +1,146 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Puck.Maths;
 
 namespace Puck.World;
 
-/// <summary>The document-anchored entrance to <see cref="StateReader"/>: every overload resolves the rows, the
-/// catalog, the dynamics rows, and the simulation rate off one <see cref="WorldDefinition"/>, so a reader holding the
-/// document never re-derives which section the engine reads. The reading itself is the engine's — see
-/// <see cref="StateReader"/> for the pair rule, the computed value, and the allocation contract.</summary>
+/// <summary>The World boundary of the arena reader. Live callers supply their arena; declaration validation reads seeds.</summary>
 public static class WorldStateReader {
-    /// <summary>Finds the winning cell's key over a keyed row (see
-    /// <see cref="StateReader.ArgExtremum(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,ulong,Func{int,bool}?)"/>).</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="op">The extremum to find.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
-    /// <see cref="StateAdvance"/> trait.</param>
-    /// <param name="isCandidateIndex">An optional filter over a cell key's parsed index.</param>
-    public static string? ArgExtremum(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick, Func<int, bool>? isCandidateIndex = null) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Seeds = new();
+    private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Live = new();
+    private static readonly ConditionalWeakTable<StateRow, WorldStateRow> RowMetadata = new();
 
-        return StateReader.ArgExtremum(
-            rows: definition.State,
-            rowName: rowName,
-            op: op,
-            tick: tick,
-            engineTick: engineTick,
-            isCandidateIndex: isCandidateIndex
-        );
+    private static WorldStateRow WorldRow(StateRow row) => row as WorldStateRow ??
+        RowMetadata.GetValue(row, static declaration => new WorldStateRow(declaration, false, null));
+
+    /// <summary>Binds a runtime projection to its sole gameplay store.</summary>
+    public static void Bind(WorldDefinition definition, StateArena arena) => Live.AddOrUpdate(definition, arena);
+    /// <summary>Finds the arena already bound to a runtime projection.</summary>
+    public static bool TryBoundArena(WorldDefinition definition, [NotNullWhen(true)] out StateArena? arena) => Live.TryGetValue(definition, out arena);
+    /// <summary>Resolves the sole arena of a runtime projection, or materializes declaration seeds.</summary>
+    public static StateArena Arena(WorldDefinition definition) => ReadArena(definition);
+
+    /// <summary>Materializes values only at an explicit export or edit boundary.</summary>
+    public static WorldDefinition Export(WorldDefinition definition, StateArena? arena = null) {
+        arena ??= ReadArena(definition);
+        return definition.WithWorldState(rows: arena.ToRows().Select(row => row.HostOwned ? WorldDefinitionRows.FindStateRow(definition.AuthoredState, row.Name)! : row as WorldStateRow ?? new WorldStateRow(row, false, null)).ToArray(),
+            pools: arena.Catalog.Pools.Any(static pool => !pool.IsPair) ? arena.ToPools() : null,
+            pairPools: arena.Catalog.Pools.Any(static pool => pool.IsPair) ? arena.ToPairPools() : null);
     }
-    /// <summary>Finds the winning cell's key over a keyed row with caller state (see
-    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,ulong,TState,Func{int,TState,bool})"/>).</summary>
-    /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="op">The extremum to find.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
-    /// <see cref="StateAdvance"/> trait.</param>
-    /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
-    /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
-    public static string? ArgExtremum<TState>(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick, TState state, Func<int, TState, bool> isCandidateIndex) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return StateReader.ArgExtremum(
-            rows: definition.State,
-            rowName: rowName,
-            op: op,
-            tick: tick,
-            engineTick: engineTick,
-            state: state,
-            isCandidateIndex: isCandidateIndex
-        );
-    }
-    /// <summary>Finds the winning cell's key through a compiled handle (see
-    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow},StateCatalog,StateHandle,StateReduceOp,ulong,ulong,TState,Func{int,TState,bool})"/>).</summary>
-    /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="catalog">The document's current state catalog.</param>
-    /// <param name="handle">The compiled handle for the row to search.</param>
-    /// <param name="op">The extremum to find.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
-    /// <see cref="StateAdvance"/> trait.</param>
-    /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
-    /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
-    public static string? ArgExtremum<TState>(WorldDefinition definition, StateCatalog catalog, StateHandle handle, StateReduceOp op, ulong tick, ulong engineTick, TState state, Func<int, TState, bool> isCandidateIndex) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    private static StateArena ReadArena(WorldDefinition definition) => Live.TryGetValue(definition, out var arena) ? arena : Seed(definition);
 
-        return StateReader.ArgExtremum(
-            rows: definition.State,
-            catalog: catalog,
-            handle: handle,
-            op: op,
-            tick: tick,
-            engineTick: engineTick,
-            state: state,
-            isCandidateIndex: isCandidateIndex
-        );
-    }
-    /// <summary>Reduces a keyed row's cell values (see <see cref="StateReader.Reduce"/>).</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="op">The reduction to apply.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used by each cell's
-    /// <see cref="StateAdvance"/> trait.</param>
-    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    /// <summary>Builds a read-only view of declaration seeds at an admission or edit boundary.</summary>
+    public static StateArena Seed(WorldDefinition definition) => Seeds.GetValue(key: definition, createValueCallback: static source =>
+        new StateArena(catalog: source.StateCatalog, section: source.StateRaw, time: ArenaTime.Origin));
 
-        return StateReader.Reduce(
-            rows: definition.State,
-            rowName: rowName,
-            op: op,
-            tick: tick,
-            engineTick: engineTick
-        );
-    }
-    /// <summary>Evaluates a cell's easing trait against the document's dynamics rows and rate (see
-    /// <see cref="StateReader.TryEvaluateDynamics"/>).</summary>
-    /// <param name="definition">The document to resolve the trait's referenced <c>dynamics</c> row against.</param>
-    /// <param name="row">The carrying row.</param>
-    /// <param name="cell">The addressed cell.</param>
-    /// <param name="tick">The tick to evaluate at.</param>
-    /// <param name="trait">The resolved trait, or <see langword="null"/>.</param>
-    /// <param name="sample">The evaluated value/velocity.</param>
-    /// <returns><see langword="true"/> when a trait resolved and was evaluated.</returns>
-    public static bool TryEvaluateDynamics(WorldDefinition definition, StateRow row, StateCell cell, ulong tick, [NotNullWhen(true)] out StateDynamics? trait, out SecondOrderSample sample) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    private static ArenaTime Time(WorldDefinition definition, ulong tick, ulong engineTick) =>
+        new(Tick: tick, EngineTick: engineTick, TicksPerSecond: definition.SimulationRateHz, Dynamics: definition.Dynamics);
 
-        return StateReader.TryEvaluateDynamics(
-            dynamics: definition.Dynamics,
-            ticksPerSecond: definition.SimulationRateHz,
-            row: row,
-            cell: cell,
-            tick: tick,
-            trait: out trait,
-            sample: out sample
-        );
-    }
-    /// <summary>Resolves one (row, key) pair against the document's live <c>state</c> section (see
-    /// <see cref="StateReader.TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>).</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
-    /// <param name="tick">The simulation tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of — what a <see cref="StateAdvance"/> row's
-    /// value is computed at.</param>
-    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed cell's text payload, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolved.</returns>
-    public static bool TryRead(
-        WorldDefinition definition,
-        string rowName,
-        string? key,
-        ulong tick,
-        ulong engineTick,
-        [NotNullWhen(true)] out WorldStateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        var resolved = StateReader.TryRead(
-            rows: definition.State,
-            rowName: rowName,
-            key: key,
-            tick: tick,
-            engineTick: engineTick,
-            row: out var found,
-            rawValue: out rawValue,
-            text: out text
-        );
-
-        row = ((WorldStateRow?)found);
-
-        return resolved;
-    }
-    /// <summary>Resolves one (row, key) pair, reading an eased cell's follower rather than its stored truth (see
-    /// <see cref="StateReader.TryReadEased"/>).</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used only by the fallback truth read
-    /// (the dynamics evaluation itself stays on <paramref name="tick"/> alone).</param>
-    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed cell's text payload, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolved.</returns>
-    public static bool TryReadEased(
-        WorldDefinition definition,
-        string rowName,
-        string? key,
-        ulong tick,
-        ulong engineTick,
-        [NotNullWhen(true)] out WorldStateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        var resolved = StateReader.TryReadEased(
-            rows: definition.State,
-            dynamics: definition.Dynamics,
-            ticksPerSecond: definition.SimulationRateHz,
-            rowName: rowName,
-            key: key,
-            tick: tick,
-            engineTick: engineTick,
-            row: out var found,
-            rawValue: out rawValue,
-            text: out text
-        );
-
-        row = ((WorldStateRow?)found);
-
+    /// <summary>Reads a live number or text from the supplied arena, or declaration seeds at a cold boundary.</summary>
+    public static bool TryRead(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row, out long? rawValue, out string? text, StateArena? arena = null) {
+        var resolved = StateReader.TryRead(arena: arena ?? ReadArena(definition), rowName: rowName, key: key, tick: tick,
+            engineTick: engineTick, row: out var found, rawValue: out rawValue, text: out text);
+        row = found is null ? null : WorldRow(found);
         return resolved;
     }
 
-    // The row's kind decides which of a cell record's sibling payloads is the live one, so the carrier is composed
-    // here rather than at each reader: a caller switching on CellValue.Kind cannot reach a payload the row does not
-    // declare, and an absent cell is the carrier holding no case rather than a neutral zero.
-    private static CellValue Compose(WorldStateRow row, string? key, long? rawValue, string? text) => row.Kind switch {
-        CellKind.Int or CellKind.Fixed or CellKind.Bool => ((rawValue is { } raw)
-            ? CellValue.FromNumber(
-                kind: row.Kind,
-                raw: raw
-            )
-            : default),
-        // Presence is the raw read's, not the payload's: a scalar reader answers a raw value for every non-vector
-        // cell that exists, and a text cell holding no string is present with a null payload, not absent.
-        CellKind.Text => ((rawValue is not null)
-            ? CellValue.Text(value: text)
-            : default),
-        CellKind.Vector => ComposeVector(
-            key: key,
-            row: row
-        ),
-        _ => throw new InvalidOperationException(message: $"Unknown cell kind '{row.Kind}'."),
-    };
-    // A vector payload never rides the raw/text pair, so it is read off the cell record directly. A key no name can
-    // be parsed from addresses nothing, on this kind exactly as on every other: the scalar read answers absent for
-    // it, and a vector row must not answer the slot cell in its place.
-    private static CellValue ComposeVector(WorldStateRow row, string? key) {
-        CellName addressed;
+    /// <summary>Reads a typed cell, including a vector, without reading a seed cell.</summary>
+    public static bool TryReadValue(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row, out CellValue value, StateArena? arena = null) =>
+        ReadValue(definition, arena ?? ReadArena(definition), rowName, key, tick, engineTick, false, out row, out value);
 
-        if (key is null) {
-            addressed = WorldStateRow.SlotKey;
-        } else if (!CellName.TryParse(
-            candidate: key,
-            name: out addressed,
-            reason: out _
-        )) {
-            return default;
-        }
+    /// <summary>Reads an eased presentation value.</summary>
+    public static bool TryReadEasedValue(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row, out CellValue value, StateArena? arena = null) =>
+        ReadValue(definition, arena ?? ReadArena(definition), rowName, key, tick, engineTick, true, out row, out value);
 
-        return (StateRows.FindCell(
-            cells: row.Cells,
-            key: addressed
-        )?.Value ?? default);
-    }
-
-    /// <summary>Reads a cell as the number a presentation reads it as: an Int's value, a Fixed's value, or a Bool's 0
-    /// or 1.</summary>
-    /// <param name="value">The cell.</param>
-    /// <param name="number">The number, or zero when the cell holds none.</param>
-    /// <returns><see langword="true"/> when the cell holds an Int, Fixed or Bool value.</returns>
-    public static bool TryNumber(CellValue value, out double number) {
-        if (!value.HasValue) {
-            number = 0d;
-
-            return false;
-        }
-
-        switch (value.Kind) {
-            case CellKind.Int:
-                number = value.AsInt;
-
-                return true;
-            case CellKind.Fixed:
-                number = ((double)FixedQ4816.FromRawBits(value: value.AsFixed));
-
-                return true;
-            case CellKind.Bool:
-                number = (value.AsBool
-                    ? 1d
-                    : 0d
-                );
-
-                return true;
-            default:
-                number = 0d;
-
-                return false;
-        }
-    }
-    /// <summary>Resolves one (row, key) pair as the one <see cref="CellValue"/> carrier the row's kind declares.</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
-    /// <param name="tick">The simulation tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of — what a <see cref="StateAdvance"/> row's
-    /// value is computed at.</param>
-    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="value">The addressed cell's live value, or the carrier holding no case when the row declares no
-    /// cell under that key.</param>
-    /// <returns><see langword="true"/> when the row resolved.</returns>
-    public static bool TryReadValue(
-        WorldDefinition definition,
-        string rowName,
-        string? key,
-        ulong tick,
-        ulong engineTick,
-        [NotNullWhen(true)] out WorldStateRow? row,
-        out CellValue value
-    ) {
-        var resolved = TryRead(
-            definition: definition,
-            engineTick: engineTick,
-            key: key,
-            rawValue: out var rawValue,
-            row: out row,
-            rowName: rowName,
-            text: out var text,
-            tick: tick
-        );
-
-        value = (resolved
-            ? Compose(
-                key: key,
-                rawValue: rawValue,
-                row: row!,
-                text: text
-            )
-            : default
-        );
-
-        return resolved;
-    }
-    /// <summary>Resolves one (row, key) pair as a <see cref="CellValue"/>, reading an eased cell's follower rather
-    /// than its stored truth (see <see cref="TryReadEased"/>).</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used only by the fallback truth read.</param>
-    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="value">The addressed cell's live eased value, or the carrier holding no case when the row
-    /// declares no cell under that key.</param>
-    /// <returns><see langword="true"/> when the row resolved.</returns>
-    public static bool TryReadEasedValue(
-        WorldDefinition definition,
-        string rowName,
-        string? key,
-        ulong tick,
-        ulong engineTick,
-        [NotNullWhen(true)] out WorldStateRow? row,
-        out CellValue value
-    ) {
-        var resolved = TryReadEased(
-            definition: definition,
-            engineTick: engineTick,
-            key: key,
-            rawValue: out var rawValue,
-            row: out row,
-            rowName: rowName,
-            text: out var text,
-            tick: tick
-        );
-
-        value = (resolved
-            ? Compose(
-                key: key,
-                rawValue: rawValue,
-                row: row!,
-                text: text
-            )
-            : default
-        );
-
-        return resolved;
-    }
-    /// <summary>Resolves one world-owned row by its compiled typed handle (see
-    /// <see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>).</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <param name="catalog">The document's current state catalog.</param>
-    /// <param name="handle">A world-lane handle minted by <paramref name="catalog"/>.</param>
-    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
-    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
-    /// trait.</param>
-    /// <param name="row">The resolved row.</param>
-    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
-    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolves; the call throws rather than answering
-    /// <see langword="false"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="catalog"/> is not the definition's current catalog, or
-    /// <paramref name="handle"/> does not address a world-owned row in it.</exception>
-    public static bool TryReadHandle(
-        WorldDefinition definition,
-        StateCatalog catalog,
-        StateHandle handle,
-        string? key,
-        ulong tick,
-        ulong engineTick,
-        [NotNullWhen(true)] out WorldStateRow? row,
-        out long? rawValue,
-        out string? text
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-        ArgumentNullException.ThrowIfNull(argument: catalog);
-
-        if (!ReferenceEquals(
-            objA: definition.StateCatalog,
-            objB: catalog
-        )) {
-            throw new ArgumentException(
-                message: "The state catalog is not current for this definition.",
-                paramName: nameof(catalog)
-            );
-        }
-
-        _ = StateReader.TryReadHandle(
-            rows: definition.State,
-            catalog: catalog,
-            handle: handle,
-            key: key,
-            tick: tick,
-            engineTick: engineTick,
-            row: out var resolved,
-            rawValue: out rawValue,
-            text: out text
-        );
-        row = ((WorldStateRow)resolved!);
-
+    private static bool ReadValue(WorldDefinition definition, StateArena arena, string rowName, string? key, ulong tick, ulong engineTick,
+        bool eased, [NotNullWhen(true)] out WorldStateRow? row, out CellValue value) {
+        value = default;
+        if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle)) { row = null; return false; }
+        row = WorldRow(arena.Rows[handle.Ordinal]);
+        if (!CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out _) ||
+            !arena.Keys.TryResolve(name: name, key: out var cell)) { return true; }
+        var time = Time(definition, tick, engineTick);
+        if (eased) { arena.TryReadEased(rowOrdinal: handle.Ordinal, key: cell, time: in time, value: out value); }
+        else { arena.TryReadLive(rowOrdinal: handle.Ordinal, key: cell, time: in time, value: out value); }
         return true;
+    }
+
+    /// <summary>Reads an eased number or text.</summary>
+    public static bool TryReadEased(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row, out long? rawValue, out string? text, StateArena? arena = null) {
+        var resolved = TryReadEasedValue(definition: definition, arena: arena, rowName: rowName, key: key, tick: tick,
+            engineTick: engineTick, row: out row, value: out var value);
+        rawValue = value.HasValue && (value.Kind != CellKind.Vector) ? (value.Kind == CellKind.Text ? 0L : value.Raw) : null;
+        text = value.HasValue && (value.Kind == CellKind.Text) ? value.AsText : null;
+        return resolved;
+    }
+
+    /// <summary>Reads through a catalog-bound handle.</summary>
+    public static bool TryReadHandle(WorldDefinition definition, StateCatalog catalog, StateHandle handle, string? key, ulong tick, ulong engineTick,
+        [NotNullWhen(true)] out WorldStateRow? row, out long? rawValue, out string? text, StateArena? arena = null) {
+        var resolved = StateReader.TryReadHandle(arena: arena ?? ReadArena(definition), catalog: catalog, handle: handle, key: key, tick: tick,
+            engineTick: engineTick, row: out var found, rawValue: out rawValue, text: out text);
+        row = found is null ? null : WorldRow(found);
+        return resolved;
+    }
+
+    /// <summary>Reads a follower's value and velocity from its arena clock.</summary>
+    public static bool TryEvaluateDynamics(WorldDefinition definition, StateRow row, StateCell cell, ulong tick,
+        [NotNullWhen(true)] out StateDynamics? trait, out SecondOrderSample sample, StateArena? arena = null) {
+        arena ??= ReadArena(definition);
+        trait = null; sample = default;
+        if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: row.Name, handle: out var handle) ||
+            !arena.Keys.TryResolve(name: cell.Key, key: out var key)) { return false; }
+        var time = Time(definition, tick, 0UL);
+        if (!arena.TryReadDynamics(rowOrdinal: handle.Ordinal, key: key, time: in time, sample: out sample)) { return false; }
+        trait = arena.LiveBehavior(rowOrdinal: handle.Ordinal, key: key).Dynamics!;
+        return true;
+    }
+
+    /// <summary>Reduces a live row.</summary>
+    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick, StateArena? arena = null) {
+        arena ??= ReadArena(definition);
+        if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle)) { return FixedQ4816.Zero; }
+        var raw = StateReader.ReduceRaw(arena: arena, rowOrdinal: handle.Ordinal, op: op, tick: tick, engineTick: engineTick);
+        return (op == StateReduceOp.Count || op == StateReduceOp.ArrangementRank || arena.Layout[handle.Ordinal].Kind != CellKind.Fixed) ?
+            StateReader.LiftSaturating(raw) : FixedQ4816.FromRawBits(raw);
+    }
+
+    /// <summary>Finds the winning participant key.</summary>
+    public static string? ArgExtremum(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick,
+        Func<int, bool>? isCandidateIndex = null, StateArena? arena = null) => ArgExtremum(definition: definition, arena: arena,
+            rowName: rowName, op: op, tick: tick, engineTick: engineTick, state: isCandidateIndex,
+            isCandidateIndex: static (index, predicate) => predicate?.Invoke(index) ?? true);
+
+    /// <summary>Finds the winning participant key using caller-owned filter state.</summary>
+    public static string? ArgExtremum<TState>(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick,
+        TState state, Func<int, TState, bool> isCandidateIndex, StateArena? arena = null) {
+        arena ??= ReadArena(definition);
+        return arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) ?
+            StateReader.ArgExtremum(arena: arena, handle: handle, op: op, tick: tick, engineTick: engineTick, state: state, isCandidateIndex: isCandidateIndex) : null;
+    }
+
+    /// <summary>Finds the winning participant key through a bound handle.</summary>
+    public static string? ArgExtremum<TState>(WorldDefinition definition, StateCatalog catalog, StateHandle handle, StateReduceOp op, ulong tick,
+        ulong engineTick, TState state, Func<int, TState, bool> isCandidateIndex, StateArena? arena = null) {
+        arena ??= ReadArena(definition);
+        if (!ReferenceEquals(arena.Catalog, catalog)) { throw new ArgumentException(message: "The catalog is stale.", paramName: nameof(catalog)); }
+        return StateReader.ArgExtremum(arena: arena, handle: handle, op: op, tick: tick, engineTick: engineTick, state: state, isCandidateIndex: isCandidateIndex);
+    }
+
+    /// <summary>Converts a numeric cell to its presentation number.</summary>
+    public static bool TryNumber(CellValue value, out double number) {
+        number = 0d;
+        if (!value.HasValue) { return false; }
+        switch (value.Kind) {
+            case CellKind.Int: number = value.AsInt; return true;
+            case CellKind.Fixed: number = (double)FixedQ4816.FromRawBits(value.AsFixed); return true;
+            case CellKind.Bool: number = value.AsBool ? 1d : 0d; return true;
+            default: return false;
+        }
     }
 }

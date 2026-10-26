@@ -25,7 +25,7 @@ public sealed class WorldStateMirrorRowLawTests {
         var slot = mirror.Bind(binding: new StateBinding(Key: null, Row: "tiles", Target: false), conversion: WorldStateConversion.Row);
 
         mirror.Install(tick: 0, engineTick: 0);
-        FieldCellDelta[] cells = [new(Cell: 1, Field: 0, Raw: 0, Row: 0, Value: CellValue.Int(value: 99))];
+        FieldCellDelta[] cells = [new(Cell: 1, Field: 0, Raw: 0, Row: 0, Image: new ArenaCellImage(Key: CellName.Parse("2"), Value: CellValue.Int(value: 99)))];
         var snapshot = new WorldSnapshot(Tick: 1, Revision: 0, StepTicks: 1680, Entries: default,
             FieldCells: cells, EngineTick: 1680);
         var encoded = WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot);
@@ -40,7 +40,7 @@ public sealed class WorldStateMirrorRowLawTests {
         mirror.Advance(engineTick: 1680, tick: 1);
         Assert.Equal(99d, mirror.RowValues(slot: slot)[2]);
         Assert.Equal(3L, definition.State[0].Cells![1].Value.Raw);
-        borrowed[0] = borrowed[0] with { Value = CellValue.Int(value: 17) };
+        borrowed[0] = borrowed[0] with { Image = new ArenaCellImage(Key: CellName.Parse("2"), Value: CellValue.Int(value: 17)) };
         Assert.True(condition: view.TryRead(engineTick: 1680, key: "2", ordinal: 0, sample: out var retained, target: false, tick: 1));
         Assert.Equal(99L, retained.Value.Raw);
     }

@@ -122,7 +122,7 @@ public sealed class DerivedBoardLawTests {
         Assert.Equal(
             5,
             Find(
-                document: fixture.Server.Definition,
+                document: fixture.Server.ExportDefinition(),
                 row: "board"
             ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
         );
@@ -170,7 +170,7 @@ public sealed class DerivedBoardLawTests {
         fixture.Step();
 
         var board = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "board"
         );
 
@@ -225,7 +225,7 @@ public sealed class DerivedBoardLawTests {
         ));
 
         var board = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "board"
         );
 
@@ -279,11 +279,11 @@ public sealed class DerivedBoardLawTests {
         // Identical resolved cell values on both boards; only the declared trait differs.
         Assert.Equal(
             Find(
-                document: plainFixture.Server.Definition,
+                document: plainFixture.Server.ExportDefinition(),
                 row: "board"
             ).Cells,
             Find(
-                document: derivedFixture.Server.Definition,
+                document: derivedFixture.Server.ExportDefinition(),
                 row: "board"
             ).Cells
         );
@@ -325,7 +325,7 @@ public sealed class DerivedBoardLawTests {
         fixture.Step();
 
         var board = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "board"
         );
 

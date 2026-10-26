@@ -27,6 +27,7 @@ namespace Puck.State;
 /// <param name="LaneCapacity">How many lane ordinals a lane slot reserves.</param>
 /// <param name="HasTraits">Whether the row or any of its cells declares a value-over-time trait.</param>
 /// <param name="OptionalColumns">The optional columns this row's declaration reserves.</param>
+/// <param name="ValueTopology">The topology bounding a token-position row's values.</param>
 public readonly record struct ArenaRowLayout(
     int Ordinal,
     StateLane Lane,
@@ -48,7 +49,8 @@ public readonly record struct ArenaRowLayout(
     int LaneSlotStart,
     int LaneCapacity,
     bool HasTraits,
-    ulong OptionalColumns = 0UL
+    ulong OptionalColumns = 0UL,
+    CompiledTopology? ValueTopology = null
 ) {
     /// <summary>Gets a value indicating whether this board's cells are derived from a token row rather than
     /// written directly.</summary>
@@ -612,6 +614,7 @@ public sealed partial class ArenaLayout {
                                 Ordinal: ordinal,
                                 Shape: shape,
                                 Topology: topology,
+                                ValueTopology: row.ValuesFrom is { } valuesFrom ? TopologyCompilation.Find(section: section, name: valuesFrom) : null,
                                 VectorByteStart: ((dimensions > 0)
                                     ? vectorBytes
                                     : 0

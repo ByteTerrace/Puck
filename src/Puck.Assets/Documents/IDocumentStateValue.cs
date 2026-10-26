@@ -23,4 +23,6 @@ public interface IDocumentStateValue {
     void Detach();
     /// <summary>Resolves this value from the referenced Text state cell.</summary>
     bool TryResolve(string text, out string reason);
+    /// <summary>Binds a live projection. The callback reads the owner's store; binding never authorizes that read.</summary>
+    void Bind(Func<string?> read);
 }

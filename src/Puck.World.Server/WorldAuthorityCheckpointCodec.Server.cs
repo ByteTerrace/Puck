@@ -408,10 +408,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer
         );
         writer.WriteInt32(value: section.BaseOrigin.Depth);
-        writer.WriteArray(
-            items: section.ArenaKeys,
-            writeItem: WriteArenaKey
-        );
+        WriteArena(writer: writer, arena: section.Arena);
         writer.WriteOptionalClass(
             value: section.Undo,
             writeValue: WriteUndoHistory
@@ -538,26 +535,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             ));
 
         var baseOrigin = ReadBaseOrigin(reader: ref reader);
-        var arenaKeys = reader.ReadArray(
-            field: "server arena keys",
-            maximum: StateCapacity.MaxCellKeys,
-            readItem: static (ref WireReader r) => ReadArenaKey(reader: ref r)
-        );
-
-        if (!reader.Failed) {
-            var distinct = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            for (var index = 0; (index < arenaKeys.Length); index++) {
-                if (!distinct.Add(item: arenaKeys[index].Value)) {
-                    reader.Fail(
-                        detail: $"server arena key '{arenaKeys[index].Value}' is duplicated",
-                        refusal: WireRefusal.PayloadMalformed
-                    );
-
-                    break;
-                }
-            }
-        }
+        var arena = ReadArena(reader: ref reader);
         var undo = reader.ReadOptionalClass(
             readValue: ReadUndoHistory
         );
@@ -736,7 +714,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldServerCheckpoint(
-            ArenaKeys: arenaKeys,
+            Arena: arena,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,

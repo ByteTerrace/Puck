@@ -432,7 +432,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     }
     /// <summary>Requires an ordinary table of any cell kind and returns which kind it declares.</summary>
     private CellKind RequireTable(string name) {
-        var row = m_server.Definition.State.FirstOrDefault(predicate: row => (row.Name.Value == name));
+        var row = m_server.Arena.Catalog.TryResolve(StateLane.Document, name, out var handle) ? m_server.Arena.Rows[handle.Ordinal] : null;
 
         if (
             (row is null) ||
@@ -470,7 +470,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         return row.Cells.Where(predicate: cell => !cell.Hidden).ToArray();
     }
     private WorldStateRow FindRow(string name) {
-        var row = m_server.Definition.State.FirstOrDefault(predicate: row => (row.Name.Value == name));
+        var row = m_server.Arena.Catalog.TryResolve(StateLane.Document, name, out var handle) ? m_server.Arena.Rows[handle.Ordinal] : null;
 
         if (
             (row is null) ||
@@ -482,7 +482,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         ) {
             throw new InvalidOperationException(message: $"Extension state '{name}' must be an ordinary table.");
         }
-        return row;
+        return row as WorldStateRow ?? new WorldStateRow(row, false, null);
     }
 
     /// <summary>Stops and disposes participants, cancels and drains connection and observation work, drains the shared

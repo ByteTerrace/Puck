@@ -32,7 +32,7 @@ public sealed class EngineTimeClockSequenceLawTests {
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument().WithWorldState(rows: rows);
     private static long ReadLive(WorldFixture fixture) {
         Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             engineTick: fixture.Server.CompletedEngineTicks,
             key: WorldStateRow.SlotKey.Value,
             rawValue: out var value,
@@ -46,7 +46,7 @@ public sealed class EngineTimeClockSequenceLawTests {
     }
     private static StateCellClock ReadClock(WorldFixture fixture, string row = "clock", string key = "$value") =>
         (WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         )!.Cells!.Single(predicate: cell => (cell.Key.Value == key)).Clock ?? new StateCellClock());
     private static void Write(WorldFixture fixture, long value, ulong? stepTicks = null) {
@@ -109,7 +109,7 @@ public sealed class EngineTimeClockSequenceLawTests {
         Assert.Equal(
             expected: 0L,
             actual: WorldDefinitionRows.FindStateRow(
-                rows: fixture.Server.Definition.State,
+                rows: fixture.Server.ExportDefinition().State,
                 name: "clock"
             )!.Cells!.Single().Value.AsInt
         );

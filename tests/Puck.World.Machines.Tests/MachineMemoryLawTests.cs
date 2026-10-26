@@ -177,7 +177,7 @@ public sealed class MachineMemoryLawTests {
         Assert.Equal(
             expected: ((long)readInitial),
             actual: Slot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 name: "pipX"
             )
         );

@@ -588,7 +588,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "0"
             )
@@ -596,7 +596,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "buyoutEscrowItem"
             )
         );
@@ -611,21 +611,21 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "buyoutActive"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "buyoutEscrowItem"
             )
         );
         Assert.Equal(
             expected: 700L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "3"
             )
@@ -633,7 +633,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 270L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "0"
             )
@@ -641,14 +641,14 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 30L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "feeReserve"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "3"
             )
@@ -672,21 +672,21 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "buyoutActive"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "buyoutEscrowItem"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "0"
             )
@@ -694,7 +694,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "feeReserve"
             )
         );
@@ -712,7 +712,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "0"
             )
@@ -725,21 +725,21 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionActive"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionEscrowItem"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "0"
             )
@@ -747,7 +747,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "feeReserve"
             )
         );
@@ -759,25 +759,25 @@ public sealed class EscrowedTransferRuleLawTests {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument());
 
         long TotalCoins() => ((((Read(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             row: "coins",
             key: "1"
         )
             + Read(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             row: "coins",
             key: "2"
         ))
             + ReadSlot(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             row: "auctionEscrowCoin"
         ))
             + ReadSlot(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             row: "feeReserve"
         ))
             + Read(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             row: "coins",
             key: "0"
         ));
@@ -803,14 +803,14 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionActive"
             )
         );
         Assert.Equal(
             expected: 140L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "0"
             )
@@ -818,7 +818,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 15L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "feeReserve"
             )
         ); // floor(155*10%)
@@ -842,7 +842,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "0"
             )
@@ -850,14 +850,14 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionEscrowItem"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionActive"
             )
         );
@@ -872,7 +872,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 500L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "1"
             )
@@ -880,7 +880,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionCurrentBid"
             )
         );
@@ -895,7 +895,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 400L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "1"
             )
@@ -903,21 +903,21 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 100L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionEscrowCoin"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionCurrentBidder"
             )
         );
         Assert.Equal(
             expected: 100L,
             actual: ReadHistoryTop(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionBidHistory"
             )
         );
@@ -932,7 +932,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 500L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "1"
             )
@@ -940,7 +940,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 350L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "2"
             )
@@ -948,14 +948,14 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 150L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionEscrowCoin"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionCurrentBidder"
             )
         );
@@ -971,7 +971,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 500L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "1"
             )
@@ -979,7 +979,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 2L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionCurrentBidder"
             )
         );
@@ -991,7 +991,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionActive"
             )
         );
@@ -1005,35 +1005,35 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionActive"
             )
         );
         Assert.Equal(
             expected: -1L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionCurrentBidder"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionEscrowItem"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "auctionEscrowCoin"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "2"
             )
@@ -1041,7 +1041,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 1L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "goods",
                 key: "0"
             )
@@ -1049,7 +1049,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 135L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "coins",
                 key: "0"
             )
@@ -1057,7 +1057,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(
             expected: 15L,
             actual: ReadSlot(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "feeReserve"
             )
         );

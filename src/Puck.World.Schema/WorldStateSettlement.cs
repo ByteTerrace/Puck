@@ -59,6 +59,7 @@ public static class WorldStateSettlement {
     public static WorldDefinition SettleBeforeAdmission(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        definition = WorldContributionState.Declare(definition);
         try {
             var time = BootTime(definition: definition);
 

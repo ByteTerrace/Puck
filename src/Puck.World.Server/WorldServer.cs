@@ -249,7 +249,10 @@ public sealed partial class WorldServer : IWorldServerHost {
         Tick = m_tick.DeliveryTick,
     });
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
-    public WorldDefinition Definition => (m_tickInProgress ? m_document.Definition : MaterializeArena());
+    public WorldDefinition Definition => m_document.Definition;
+
+    /// <summary>Materializes gameplay cells only for an explicit export or edit boundary.</summary>
+    public WorldDefinition ExportDefinition() => MaterializeArena();
     /// <summary>Gets installed declarations without exporting tick values. State reads use the arena or
     /// <see cref="Definition"/>; scheduling and other declaration-only work use this view.</summary>
     public WorldDefinition Configuration => m_document.Definition;
@@ -594,7 +597,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             kinds: (definition.Groups ?? WorldGroupsSection.Empty).Kinds,
             ownership: (definition.Groups ?? WorldGroupsSection.Empty).Ownership
         );
-        m_grants.SyncState(definition: definition);
+        m_grants.SyncState(definition: definition, arena: m_arena);
 
         // THE BOOT-LOUD CATALOG CHECK: WorldServer is constructed exactly once per world boot (or per replay
         // rehydration), so this is the "at startup" hook the kind catalog's own remarks call for — a broken catalog
@@ -638,7 +641,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             disconnected: disconnectedAtBoot
         );
         // A cell-driven inhabit count starts from its cell's authored value, not from zero waiting for a write.
-        m_population.ReconcileInhabitCounts(
+        m_population.ReconcileInhabitCounts(arena: m_arena,
             admitted: admittedAtBoot,
             definition: definition,
             disconnected: disconnectedAtBoot,

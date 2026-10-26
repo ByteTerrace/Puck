@@ -1200,7 +1200,8 @@ public sealed partial class WorldPopulation {
     /// <param name="tick">The tick this reconcile answers as of.</param>
     /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
     /// <param name="disconnected">Optional sink for the peer generations disconnected by the reconciliation.</param>
-    public void ReconcileInhabitCounts(WorldDefinition definition, ulong tick, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
+    /// <param name="arena">The live store, or declaration seeds during initial population construction.</param>
+    public void ReconcileInhabitCounts(WorldDefinition definition, ulong tick, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var placements = definition.Placements;
@@ -1232,7 +1233,7 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var raw = (inhabit.Count.Resolve(
+            var raw = (inhabit.Count.Resolve(arena: arena,
                 definition: definition,
                 tick: tick
             ) ?? 0L);

@@ -56,7 +56,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
 
     // A reaction scalar's row read: the named row's SLOT cell as Q48.16 raw bits (0 when the row or its slot cell
     // does not exist yet — the slot is minted by its first write).
-    private FixedQ4816 ReadScalarSlot(StateCatalog catalog, StateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(
+    private FixedQ4816 ReadScalarSlot(StateCatalog catalog, StateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(arena: Host.Arena,
         catalog: catalog,
         definition: Host.Document.Definition,
         handle: row,
@@ -78,7 +78,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             return;
         }
 
-        if (!WorldStateReader.TryReadHandle(
+        if (!WorldStateReader.TryReadHandle(arena: Host.Arena,
             catalog: catalog,
             definition: Host.Document.Definition,
             handle: row,
@@ -135,7 +135,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             : FixedQ4816.Zero
         );
     }
-    private long ReadTagCell(StateCatalog catalog, StateHandle row, int body, ulong tick) => ((WorldStateReader.TryReadHandle(
+    private long ReadTagCell(StateCatalog catalog, StateHandle row, int body, ulong tick) => ((WorldStateReader.TryReadHandle(arena: Host.Arena,
         catalog: catalog,
         definition: Host.Document.Definition,
         handle: row,

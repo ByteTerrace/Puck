@@ -16,52 +16,18 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
     // IWorldPersistedSection<WorldBoardEnforcementCheckpoint>.
     private readonly Dictionary<string, long> m_boardVerdictLatch = new(comparer: StringComparer.Ordinal);
 
-    private static bool TryReadSlotValue(WorldStateRow? row, out long value) {
+    private bool TryReadSlotValue(StateRow? row, out long value) => TryReadKeyedCell(row, StateRow.SlotKey.Value, out value);
+    private bool TryReadKeyedCell(StateRow? row, string key, out long value) {
         value = 0;
-
-        if (row?.Cells is not { } cells) {
-            return false;
-        }
-
-        for (var index = 0; (index < cells.Count); index++) {
-            if ((cells[index].Key == StateRow.SlotKey) && (cells[index].Value.Kind is (CellKind.Bool or CellKind.Fixed or CellKind.Int))) {
-                value = cells[index].Value.Raw;
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-    private static bool TryReadKeyedCell(WorldStateRow? row, string key, out long value) {
-        value = 0;
-
-        if (row?.Cells is not { } cells) {
-            return false;
-        }
-
-        for (var index = 0; (index < cells.Count); index++) {
-            if (
-                string.Equals(
-                    a: cells[index].Key.Value,
-                    b: key,
-                    comparisonType: StringComparison.Ordinal
-                ) &&
-                (cells[index].Value.Kind is (CellKind.Bool or CellKind.Fixed or CellKind.Int))
-            ) {
-                value = cells[index].Value.Raw;
-
-                return true;
-            }
-        }
-
-        return false;
+        return row is not null && Host.Arena.Catalog.TryResolve(StateLane.Document, row.Name, out var handle) &&
+            CellName.TryParse(key, out var name, out _) && Host.Arena.Keys.TryResolve(name, out var cell) &&
+            Host.Arena.TryReadLiveNumber(handle.Ordinal, cell, Host.RuleHost.Time, out value);
     }
     // Poses the body sitting on the move's 'to' cell back onto its 'from' cell — the same WorldBody.Pose door
     // FirePoseEffect (WorldServer.RuleHost.cs) already uses for a rule-authored pose. Height rides the body's own
     // current Y and yaw rides its own current heading; pitch/roll reset upright, the resting attitude a settled
     // board piece already carries.
-    private void ReturnBoardMove(WorldPlacementBoard board, WorldStateRow moveRow) {
+    private void ReturnBoardMove(WorldPlacementBoard board, StateRow moveRow) {
         if (
             !TryReadKeyedCell(
             row: moveRow,

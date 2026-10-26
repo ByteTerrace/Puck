@@ -13,6 +13,8 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
     where TValue : struct, IEquatable<TValue> {
     private bool m_isResolved;
     private TValue m_value;
+    private Func<string?>? m_read;
+    private string? m_readText;
 
     private protected DocumentSpatialValue(TValue value) {
         m_isResolved = true;
@@ -25,10 +27,21 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
     /// <inheritdoc/>
     public string? Reference { get; private set; }
     /// <summary>The resolved value.</summary>
-    public TValue Value => (m_isResolved
-        ? m_value
-        : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document.")
-    );
+    public TValue Value {
+        get {
+            if (m_read is { } read) {
+                var text = read();
+                if (!string.Equals(text, m_readText, StringComparison.Ordinal) || !m_isResolved) {
+                    if ((text is null) || !TryResolve(text: text, reason: out _)) { throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has no admissible live value."); }
+                    m_readText = text;
+                }
+            }
+            return m_isResolved ? m_value : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document.");
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Bind(Func<string?> read) { m_read = read; m_readText = null; m_isResolved = false; }
 
     private protected bool EqualsCore(DocumentSpatialValue<TValue>? other) => ((other is not null) && ((Reference is { } reference)
         ? string.Equals(
@@ -44,7 +57,8 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
 
     /// <inheritdoc/>
     public void Detach() {
-        _ = Value;
+        m_value = Value;
+        m_read = null;
         Reference = null;
     }
     /// <inheritdoc/>

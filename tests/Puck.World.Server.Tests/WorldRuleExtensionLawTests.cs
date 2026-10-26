@@ -69,7 +69,7 @@ public sealed class WorldRuleExtensionLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         fixture.Step();
-        var label = fixture.Server.Definition.State.Single(predicate: row => (row.Name == "label"));
+        var label = fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == "label"));
 
         Assert.Equal(
             (refuse
@@ -77,7 +77,7 @@ public sealed class WorldRuleExtensionLawTests {
             : "after"),
             Assert.Single(collection: label.Cells!).Value.AsText
         );
-        var history = fixture.Server.Definition.State.Single(predicate: row => (row.Name == "history"));
+        var history = fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == "history"));
 
         if (refuse) {
             Assert.Empty(collection: (history.Cells ?? []));
@@ -1347,7 +1347,7 @@ public sealed class WorldRuleExtensionLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Value(WorldFixture fixture, string row, string? key = null) {
         var declared = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         )!;
         var cellName = ((key is null)

@@ -398,7 +398,7 @@ public sealed partial class WorldReplayTape {
             _ = m_liveServer.DrainAdministrative();
             m_liveServer.Document.ReinstantiateAddonsOnNextRebuild = false;
             if (!ReferenceEquals(
-                objA: m_liveServer.Definition,
+                objA: m_liveServer.Document.Base,
                 objB: definition
             )) {
                 m_liveServer.Extensions.CompleteReplay();

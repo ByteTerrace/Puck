@@ -117,7 +117,7 @@ public sealed class WorldSiloExtensionLawTests {
             : []),
         Visibility: new()
     );
-    private static long? Status(WorldServer server) => server.Definition.State.First(predicate: static row => (row.Name.Value == "status-a"))
+    private static long? Status(WorldServer server) => server.ExportDefinition().State.First(predicate: static row => (row.Name.Value == "status-a"))
         .Cells?.FirstOrDefault(predicate: static cell => (cell.Key.Value == "incarnation-1"))?.Value.AsInt;
     private static Task PumpAsync(WorldSiloHost host, Task operation) => WorldSiloHost.PumpActivationMailboxesAsync(
         cancellationToken: Cancel,

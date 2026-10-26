@@ -52,12 +52,12 @@ public sealed class MutationIndirectObservationLawTests {
 
         Assert.False(condition: denied.Applied);
         Assert.Contains("cannot observe state:secret", denied.Detail);
-        Assert.Empty(collection: WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "target")!.Cells!);
+        Assert.Empty(collection: WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "target")!.Cells ?? []);
         Observe(fixture: fixture, row: "secret");
         var allowed = Apply(fixture: fixture, mutation: mutation);
 
         Assert.True(condition: allowed.Applied, userMessage: allowed.Detail);
-        Assert.Equal(1, WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "target")!.Cells![0].Value.AsInt);
+        Assert.Equal(1, WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "target")!.Cells![0].Value.AsInt);
     }
     [Fact]
     public void ASubmittedDocumentValueRequiresObservationBeforeResolvingItsStateReference() {
@@ -77,11 +77,11 @@ public sealed class MutationIndirectObservationLawTests {
 
         Assert.False(condition: denied.Applied);
         Assert.Contains("cannot observe state:secret", denied.Detail);
-        Assert.Null(@object: WorldDefinitionRows.FindPlacement(fixture.Server.Definition.Placements, "placed"));
+        Assert.Null(@object: WorldDefinitionRows.FindPlacement(fixture.Server.ExportDefinition().Placements, "placed"));
         Observe(fixture: fixture, row: "secret");
         var allowed = Apply(fixture: fixture, mutation: mutation);
 
         Assert.True(condition: allowed.Applied, userMessage: allowed.Detail);
-        Assert.Equal(new System.Numerics.Vector3(x: 2, y: 3, z: 4), ((System.Numerics.Vector3)WorldDefinitionRows.FindPlacement(fixture.Server.Definition.Placements, "placed")!.Position));
+        Assert.Equal(new System.Numerics.Vector3(x: 2, y: 3, z: 4), ((System.Numerics.Vector3)WorldDefinitionRows.FindPlacement(fixture.Server.ExportDefinition().Placements, "placed")!.Position));
     }
 }

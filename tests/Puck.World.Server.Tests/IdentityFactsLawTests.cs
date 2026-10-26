@@ -633,7 +633,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         )
     );
     private static IReadOnlyList<StateCell> LaneCells(WorldFixture fixture) => (WorldDefinitionRows.FindStateRow(
-        rows: fixture.Server.Definition.State,
+        rows: fixture.Server.ExportDefinition().State,
         name: WorldIdentityFactLane.RowName
     )?.Cells ?? []);
     private static long Lane(WorldFixture fixture, int body, string fact) {
@@ -649,7 +649,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
     }
     private static long Slot(WorldFixture fixture, string row) => StateRows.FindCell(
         cells: WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         )!.Cells,
         key: WorldStateRow.SlotKey

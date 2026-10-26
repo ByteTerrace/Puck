@@ -132,7 +132,7 @@ public sealed class WorldRowFieldEditLawTests {
 
         Assert.True(condition: control.IsError);
         Assert.Contains("privateCard", control.Output);
-        Assert.Equal(37L, row.Server.Definition.State.Single().Cells!.Single().Value.AsInt);
+        Assert.Equal(37L, row.Server.ExportDefinition().State.Single().Cells!.Single().Value.AsInt);
     }
     [InlineData("world.row.step creations.moth.document.shapes[name=missing].rounding 1")]
     [InlineData("world.row.set creations moth document.shapes[name=missing].rounding 1")]

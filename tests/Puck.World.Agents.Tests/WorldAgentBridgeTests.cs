@@ -376,7 +376,7 @@ public sealed class WorldAgentBridgeTests {
         _ = await grantedBridge.WriteVectorAsync(row: "events", key: "g1", components: vec, cancellationToken: TestContext.Current.CancellationToken);
         server.Advance(stepTicks: 1);
 
-        var rowAfterGranted = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "events");
+        var rowAfterGranted = WorldDefinitionRows.FindStateRow(rows: server.ExportDefinition().State, name: "events");
 
         Assert.NotNull(@object: rowAfterGranted);
         Assert.NotNull(@object: rowAfterGranted.Cells);
@@ -386,7 +386,7 @@ public sealed class WorldAgentBridgeTests {
         _ = await ungrantedBridge.WriteVectorAsync(row: "events", key: "u1", components: vec, cancellationToken: TestContext.Current.CancellationToken);
         server.Advance(stepTicks: 1);
 
-        var rowAfterUngranted = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "events");
+        var rowAfterUngranted = WorldDefinitionRows.FindStateRow(rows: server.ExportDefinition().State, name: "events");
 
         Assert.NotNull(@object: rowAfterUngranted);
         Assert.NotNull(@object: rowAfterUngranted.Cells);

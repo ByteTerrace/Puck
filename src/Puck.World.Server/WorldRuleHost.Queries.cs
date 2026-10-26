@@ -392,7 +392,7 @@ public sealed partial class WorldRuleHost {
     // resolve.
     private FixedQ4816 ReadStateCell(string row, string key, ulong tick) {
         if (
-            !WorldStateReader.TryRead(
+            !WorldStateReader.TryRead(arena: Host.Arena,
             definition: Host.Definition,
             key: key,
             rawValue: out var rawValue,

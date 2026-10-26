@@ -198,7 +198,7 @@ public sealed class WorldPhaseOrderLawTests {
         Assert.True(condition: unguarded.Refused);
         Assert.Equal(
             0L,
-            Read(definition: fixture.Server.Definition).Sequence
+            Read(definition: fixture.Server.ExportDefinition()).Sequence
         );
 
         var guarded = Transform(
@@ -216,7 +216,7 @@ public sealed class WorldPhaseOrderLawTests {
         );
         Assert.Equal(
             1L,
-            Read(definition: fixture.Server.Definition).Sequence
+            Read(definition: fixture.Server.ExportDefinition()).Sequence
         );
         Assert.NotEqual(
             before,

@@ -39,7 +39,10 @@ public sealed class WorldProjectionSampler {
             m_pendingFieldsFull = true;
         }
         foreach (var delta in snapshot.FieldCells.Span) {
-            var key = (((long)(delta.Row + 1)) << 40) | (((long)delta.Cell) << 8) | delta.Field;
+            if ((delta.Row >= 0) && (delta.Cell == -1)) {
+                foreach (var pending in m_pendingFields.Where(pair => pair.Value.Row == delta.Row).Select(pair => pair.Key).ToArray()) { m_pendingFields.Remove(pending); }
+            }
+            var key = (((long)(delta.Row + 1)) << 40) | (((long)(uint)(delta.Cell + 1)) << 8) | delta.Field;
 
             m_pendingFields[key] = delta;
         }

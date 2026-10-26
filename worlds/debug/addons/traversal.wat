@@ -6,7 +6,7 @@
   (memory (export "memory") 1)
   (data (i32.const 0x100)
     "\01\00\07\00\00\02\00\00\00\00\00\00\00\00\00\00"
-    "\02\00\06\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\02\00\10\00\00\00\00\00\00\00\00\00\00\00\00\00"
     "\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
   (data (i32.const 0x200) "\07forward\06strafe\04turn\04jump\06flight\08interact\04rise")
 
@@ -199,6 +199,10 @@
     (local $i i32) (local $dx i64) (local $dy i64) (local $dz i64) (local $r i32) (local $p i32)
     (call $drain (local.get $count))
     (global.set $out (i32.const 0))
+    (if (i32.eqz (global.get $boundCells)) (then
+      (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 14)
+        (i64.const 53248) (i64.const 8) (i64.const 0)))
+      (global.set $boundCells (i32.const 1))))
 
     (if (i64.eqz (i64.load (i32.const 17408))) (then (global.set $active (i32.const 0))))
     (if (i32.and (i32.eq (global.get $reads) (i32.const 9)) (i64.ne (i64.load (i32.const 17408)) (i64.const 0))) (then
@@ -206,26 +210,15 @@
         (global.set $active (i32.const 1)) (global.set $waypoint (i64.load (i32.const 17440))) (global.set $age (i64.const 0))
         ;; The old route query belongs to waypoint zero; request the selected start before steering.
         (global.set $poseParts (i32.const 0))
-        (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49677))
-        (call $puts (i32.const 49381)) (call $putInt (i64.const 0)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
+        (call $stateWrite (i32.const 6) (i64.const 0) (i64.const 0))
         (global.set $liftStage (i32.const 0))
         (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49324)) (i64.const 22) (i64.const 0)))))
       (if (i32.and (i32.eq (global.get $poseParts) (i32.const 15)) (i32.eq (global.get $kinParts) (i32.const 3))) (then
         ;; Gallery route entries: 19 calls level one, 20 boards, 21 rides down.
         (if (i32.and (i64.eq (global.get $waypoint) (i64.const 19)) (i32.eqz (global.get $liftStage))) (then
-          (call $beginPayload)
-        (call $puts (i32.const 49356)) (call $puts (i32.const 49347))
-        (call $puts (i32.const 49381))
-        (call $putInt (i64.const 1)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47)) (global.set $liftStage (i32.const 1))))
+          (call $stateWrite (i32.const 7) (i64.const 1) (i64.const 0)) (global.set $liftStage (i32.const 1))))
         (if (i32.and (i64.eq (global.get $waypoint) (i64.const 21)) (i32.eq (global.get $liftStage) (i32.const 1))) (then
-          (call $beginPayload)
-        (call $puts (i32.const 49356)) (call $puts (i32.const 49347))
-        (call $puts (i32.const 49381))
-        (call $putInt (i64.const 0)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47)) (global.set $liftStage (i32.const 2))))
+          (call $stateWrite (i32.const 7) (i64.const 0) (i64.const 0)) (global.set $liftStage (i32.const 2))))
         (local.set $dx (i64.sub (i64.load (i32.const 17472)) (global.get $x)))
         (local.set $dy (i64.sub (i64.load (i32.const 17480)) (global.get $y)))
         (local.set $dz (i64.sub (i64.load (i32.const 17488)) (global.get $z)))
@@ -234,11 +227,7 @@
         (if (i32.and (i64.lt_s (global.get $vy) (i64.const -262144)) (i64.gt_s (local.get $dy) (i64.const 65536))) (then
           (if (i32.eqz (global.get $falling)) (then
             (global.set $falling (i32.const 1)) (global.set $failed (i64.add (global.get $failed) (i64.const 1)))
-            (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49404))
-        (call $puts (i32.const 49438))
-        (call $putInt (i64.const 1)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
+            (call $stateWrite (i32.const 0) (i64.const 1) (i64.const 1))
             (call $beginPayload)
         (call $puts (i32.const 49461)) (call $put (i32.const 34)) (call $putInt (i64.sub (global.get $failed) (i64.const 1))) (call $put (i32.const 34))
         (call $puts (i32.const 49381))
@@ -248,19 +237,11 @@
         (else (global.set $falling (i32.const 0))))
         (if (i32.and (i32.and (i64.lt_s (call $abs (local.get $dx)) (i64.load (i32.const 17432)))
           (i64.lt_s (call $abs (local.get $dz)) (i64.load (i32.const 17432)))) (i64.lt_s (call $abs (local.get $dy)) (i64.const 39322))) (then
-          (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49543))
-        (call $puts (i32.const 49438))
-        (call $putInt (i64.const 1)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
+          (call $stateWrite (i32.const 1) (i64.const 1) (i64.const 1))
           (global.set $waypoint (i64.add (global.get $waypoint) (i64.const 1))) (global.set $age (i64.const 0)))
         (else
           (if (i64.ge_s (global.get $age) (i64.load (i32.const 17424))) (then
-            (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49553))
-        (call $puts (i32.const 49438))
-        (call $putInt (i64.const 1)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
+            (call $stateWrite (i32.const 2) (i64.const 1) (i64.const 1))
             (call $beginPayload)
         (call $puts (i32.const 49562)) (call $put (i32.const 34)) (call $putInt (global.get $waypoint)) (call $put (i32.const 34))
         (call $puts (i32.const 49381))
@@ -274,30 +255,14 @@
             (if (i32.or (i64.ne (global.get $waypoint) (i64.const 20)) (i64.eq (i64.load (i32.const 17448)) (i64.const 72))) (then
               (call $act (i32.const 43) (i32.const 1) (call $clamp (local.get $dx)))
               (call $act (i32.const 43) (i32.const 0) (call $clamp (i64.sub (i64.const 0) (local.get $dz))))))))))
-        (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49653))
-        (call $puts (i32.const 49381))
-        (call $putInt (global.get $waypoint)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
-        (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49664))
-        (call $puts (i32.const 49381))
-        (call $putInt (global.get $tick)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
+        (call $stateWrite (i32.const 3) (global.get $waypoint) (i64.const 0))
+        (call $stateWrite (i32.const 4) (global.get $tick) (i64.const 0))
         ;; A changed waypoint's answers arrive next tick; wait for a complete matching query batch before steering.
         (if (i64.eqz (global.get $age)) (then
           (global.set $poseParts (i32.const 0))))
         (if (i64.ge_s (global.get $waypoint) (i64.load (i32.const 17416))) (then
-          (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49671))
-        (call $puts (i32.const 49381))
-        (call $putInt (i64.const 0)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47))
-          (call $beginPayload)
-        (call $puts (i32.const 49412)) (call $puts (i32.const 49677))
-        (call $puts (i32.const 49381))
-        (call $putInt (i64.const 1)) (call $put (i32.const 125))
-        (call $mutate (i32.const 2) (i64.const 47)) (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49684)) (i64.const 23) (i64.const 0)))))))))
+          (call $stateWrite (i32.const 5) (i64.const 0) (i64.const 0))
+          (call $stateWrite (i32.const 6) (i64.const 1) (i64.const 0)) (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49684)) (i64.const 23) (i64.const 0)))))))))
 
     (call $ask (i32.const 0) (i32.const 5) (i32.const 49152) (i32.const 9) (i64.const 2))
 (call $ask (i32.const 1) (i32.const 5) (i32.const 49162) (i32.const 14) (i64.const 2))
@@ -351,4 +316,11 @@
   (data (i32.const 50000) "start\00")
   (data (i32.const 50016) "liftAt\00")
   (data (i32.const 50024) "$value\00")
+  ;; Bound addresses are declarations; every write still checks its live grant and audience.
+  (global $boundCells (mut i32) (i32.const 0))
+  (func $stateWrite (param $slot i32) (param $value i64) (param $kind i64)
+    (drop (call $emit (i32.const 1) (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 15)
+      (local.get $value) (local.get $kind) (i64.const 0))))
+  (data (i32.const 53248) "\00\e0\00\00\0a\e0\00\00\09\00\05\00\00\00\00\00\00\e0\00\00\10\e0\00\00\09\00\07\00\00\00\00\00\00\e0\00\00\18\e0\00\00\09\00\06\00\00\00\00\00\00\e0\00\00\1f\e0\00\00\09\00\08\00\00\00\00\00\00\e0\00\00\28\e0\00\00\09\00\04\00\00\00\00\00\00\e0\00\00\2d\e0\00\00\09\00\03\00\00\00\00\00\00\e0\00\00\31\e0\00\00\09\00\04\00\00\00\00\00\36\e0\00\00\3f\e0\00\00\08\00\06\00\00\00\00\00")
+  (data (i32.const 57344) "\74\72\61\76\65\72\73\61\6c\00\66\61\6c\6c\73\00\72\65\61\63\68\65\64\00\6d\69\73\73\65\64\00\77\61\79\70\6f\69\6e\74\00\74\69\63\6b\00\72\75\6e\00\64\6f\6e\65\00\6c\69\66\74\43\61\6c\6c\00\24\76\61\6c\75\65\00")
 )

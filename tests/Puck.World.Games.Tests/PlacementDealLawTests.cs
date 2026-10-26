@@ -274,7 +274,7 @@ public sealed partial class PlacementDealLawTests {
                     z: 10f
                 ) + Offset(slot: slot)),
                 actual: WorldDefinitionRows.ResolvedPosition(
-                    definition: fixture.Server.Definition,
+                    definition: fixture.Server.ExportDefinition(),
                     placement: child
                 )
             );
@@ -291,7 +291,7 @@ public sealed partial class PlacementDealLawTests {
 
         control.Step();
 
-        Assert.Single(collection: control.Server.Definition.Placements);
+        Assert.Single(collection: control.Server.ExportDefinition().Placements);
     }
     /// <summary>A fourth cell upserted after the first deal adds exactly the fourth child, at the fourth offset, on
     /// the next sweep; the three already dealt stay where they were.</summary>
@@ -500,49 +500,19 @@ public sealed partial class PlacementDealLawTests {
             );
         }
     }
-    /// <summary>An undo removes the children a sweep added as one journal entry, and they stay removed while the row
-    /// is unchanged — the sweep deals on a row change, never on the mere absence of a child. CONTROL: the next row
-    /// change deals every child again.</summary>
+    /// <summary>Undoing a membership write re-derives the children without journalling their projection.</summary>
     [Fact]
-    public void UndoRemovesTheChildrenASweepAdded() {
-        using var fixture = Fixtures.FreshServer(definition: Dealt(
-            "a",
-            "b",
-            "c"
-        ));
-
+    public void UndoOfMembershipReprojectsChildren() {
+        using var fixture = Fixtures.FreshServer(definition: Dealt("a", "b", "c"));
         fixture.Step();
-
-        Assert.Equal(
-            expected: 3,
-            actual: Children(server: fixture.Server).Count
-        );
-        Assert.Equal(
-            expected: 1,
-            actual: fixture.Server.JournalLength
-        );
-
-        fixture.Server.EnqueueUndo(
-            count: 1,
-            principal: Principal.Console
-        );
+        Assert.Equal(3, Children(fixture.Server).Count);
+        Assert.Equal(0, fixture.Server.JournalLength);
+        fixture.Server.EnqueueMutation(Upsert("d"));
         fixture.Step();
-
-        Assert.Empty(collection: Children(server: fixture.Server));
-
-        for (var index = 0; (index < 1); index++) {
-            fixture.Step();
-        }
-
-        Assert.Empty(collection: Children(server: fixture.Server));
-
-        fixture.Server.EnqueueMutation(mutation: Upsert(key: "d"));
+        Assert.Equal(4, Children(fixture.Server).Count);
+        fixture.Server.EnqueueUndo(1, Principal.Console);
         fixture.Step();
-
-        Assert.Equal(
-            expected: 4,
-            actual: Children(server: fixture.Server).Count
-        );
+        Assert.Equal(3, Children(fixture.Server).Count);
     }
     /// <summary>A recorded session whose cells arrive and leave on given ticks replays to the same children on the
     /// same ticks: the tape carries the cell writes, and the sweep re-derives the children from them.</summary>

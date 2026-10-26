@@ -502,9 +502,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         var descriptor = Host.Arena.Catalog.Descriptors[rowOrdinal];
 
         if (
-            (descriptor.Lane != StateLane.Document) ||
-            (((uint)descriptor.LaneOrdinal) >= ((uint)Host.Definition.State.Count)) ||
-            (Host.Definition.State[descriptor.LaneOrdinal].Field is null)
+            descriptor.Lane != StateLane.Document
         ) {
             return false;
         }

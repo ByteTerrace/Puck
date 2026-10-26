@@ -13,12 +13,13 @@ public sealed partial class WorldPersistence {
             options: WorldSlotLanes.Options(definition: definition), time: in time, arena: out var candidate, reason: out var reason)) {
             throw new InvalidOperationException(message: $"the checkpoint's arena cannot be constructed: {reason}");
         }
+        candidate.RestoreSnapshot(snapshot: server.Arena);
         candidate.ConfigureUndo(plans: compilation.Groups.Where(predicate: group => (group.Undo is not null)).Select(selector: group => group.Undo!).ToArray());
-        if (!candidate.TryRestoreKeys(names: server.ArenaKeys, reason: out reason) ||
+        if (!candidate.TryRestoreKeys(names: server.Arena.Keys, reason: out reason) ||
             !candidate.ValidateUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out reason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not validate: {reason}");
         }
-        if (candidate.Keys.Count != server.ArenaKeys.Count) {
+        if (candidate.Keys.Count != server.Arena.Keys.Length) {
             throw new InvalidOperationException(message: "the checkpoint's key ledger omits an authored key");
         }
         foreach (var group in (server.Undo?.Groups ?? [])) {

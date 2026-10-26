@@ -23,7 +23,7 @@ public sealed class StateCompletionReviewTests {
         fixture.Step();
 
         // At simulation tick zero cosine is exactly 1.0, regardless of the stored phase of zero.
-        Assert.Equal(65536L, fixture.Server.Definition.State.Single().Cells!.Single().Value.Raw);
+        Assert.Equal(65536L, fixture.Server.ExportDefinition().State.Single().Cells!.Single().Value.Raw);
     }
     [Fact]
     public void ChangingRowDefaultDoesNotRestartAnExplicitCellOverride() {

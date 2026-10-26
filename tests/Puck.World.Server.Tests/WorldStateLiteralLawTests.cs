@@ -54,11 +54,11 @@ public sealed class WorldStateLiteralLawTests {
 
         Assert.Equal(
             expected: 0L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == first)).Cells!.Single().Value.Raw
+            actual: fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == first)).Cells!.Single().Value.Raw
         );
         Assert.Equal(
             expected: 0L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == second)).Cells!.Single().Value.Raw
+            actual: fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == second)).Cells!.Single().Value.Raw
         );
     }
     [Fact]
@@ -104,7 +104,7 @@ public sealed class WorldStateLiteralLawTests {
 
         Assert.Equal(
             expected: BeyondBinary32ExactInteger,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value.Raw
+            actual: fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value.Raw
         );
     }
     [Fact]
@@ -151,7 +151,7 @@ public sealed class WorldStateLiteralLawTests {
 
         Assert.Equal(
             expected: 1L,
-            actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value.Raw
+            actual: fixture.Server.ExportDefinition().State.Single(predicate: row => (row.Name == destinationName)).Cells!.Single().Value.Raw
         );
     }
     [Fact]

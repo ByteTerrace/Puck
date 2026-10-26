@@ -2,10 +2,8 @@ using Puck.Commands;
 
 namespace Puck.World.Server;
 
-/// <summary>Composes one submitted state operation through the arena kernels a rule firing fires through. The
-/// operation is resolved to ordinals and interned keys once, applied inside a journal scope, and read back as the
-/// candidate document; the scope is always rewound, so a caller's store is exactly as it was and the ordinary
-/// mutation pipeline installs the candidate.</summary>
+/// <summary>Runs resolved state operations through the rule kernels. Live calls join the caller transaction;
+/// edit previews use a temporary arena and export their candidate before rewinding.</summary>
 public static class WorldArenaTransforms {
     /// <summary>Composes one operation without changing the supplied definition.</summary>
     /// <param name="definition">The validated current definition.</param>
@@ -17,8 +15,10 @@ public static class WorldArenaTransforms {
     /// <param name="reason">The refusal reason, or empty.</param>
     /// <param name="guard">The submitted phase guard, or <see langword="null"/>. A matching guard both admits the
     /// operation and completes it: the composed candidate carries its phase row advanced by one.</param>
+    /// <param name="live">The live transaction arena, or null for an edit preview.</param>
+    /// <param name="engineTick">The engine clock coordinate.</param>
     /// <returns>Whether the operation composed.</returns>
-    public static bool TryApply(WorldDefinition definition, StateTransform transform, Principal actor, ulong tick, string instance, out WorldDefinition candidate, out string reason, PhaseGuard? guard = null) {
+    public static bool TryApply(WorldDefinition definition, StateTransform transform, Principal actor, ulong tick, string instance, out WorldDefinition candidate, out string reason, PhaseGuard? guard = null, StateArena? live = null, ulong? engineTick = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: transform);
 
@@ -67,14 +67,15 @@ public static class WorldArenaTransforms {
         )) {
             return false;
         }
-        if (!StateArena.TryCreate(
-            arena: out var arena,
+        var arena = live;
+        if ((arena is null) && !StateArena.TryCreate(
+            arena: out arena,
             catalog: definition.StateCatalog,
             options: WorldSlotLanes.Options(definition: definition),
             reason: out reason,
             section: definition.StateRaw,
             time: ArenaTime.At(
-                engineTick: tick,
+                engineTick: engineTick ?? tick,
                 tick: tick
             )
         )
@@ -97,7 +98,7 @@ public static class WorldArenaTransforms {
         );
 
         host.Advance(
-            engineTick: tick,
+            engineTick: engineTick ?? tick,
             tick: tick
         );
 
@@ -161,6 +162,7 @@ public static class WorldArenaTransforms {
                 }
             }
 
+            if (live is not null) { reason = string.Empty; return true; }
             var exported = arena.ToRows();
             var rows = new WorldStateRow[exported.Count];
 
@@ -173,7 +175,7 @@ public static class WorldArenaTransforms {
 
             return true;
         } finally {
-            arena.Rewind(mark: mark);
+            if (live is null) { arena.Rewind(mark: mark); } else { arena.Commit(mark: mark); }
         }
     }
 }

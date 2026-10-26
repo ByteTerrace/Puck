@@ -73,7 +73,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
         Assert.NotNull(@object: captured);
 
         var liveRow = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "gauge"
         );
 
@@ -112,7 +112,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
         ));
 
         var restoredRow = WorldDefinitionRows.FindStateRow(
-            rows: restoredServer.Definition.State,
+            rows: restoredServer.ExportDefinition().State,
             name: "gauge"
         );
 

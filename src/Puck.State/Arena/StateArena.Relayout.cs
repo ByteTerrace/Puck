@@ -196,6 +196,8 @@ public sealed partial class StateArena {
         m_rowChangeStamp = source.m_rowChangeStamp;
         m_rowGenerations = source.m_rowGenerations;
         m_rowVersions = source.m_rowVersions;
+        m_deliveryRows = new bool[source.m_layout.RowCount];
+        Array.Fill(m_deliveryRows, true);
         m_rows = source.m_rows;
         m_slotOfKey = source.m_slotOfKey;
         m_texts = source.m_texts;

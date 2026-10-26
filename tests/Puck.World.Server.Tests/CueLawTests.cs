@@ -100,7 +100,7 @@ public sealed class CueLawTests {
     }
     private static long MagnitudeCellRaw(WorldFixture fixture) {
         var row = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: MagnitudeRow
         )!;
 

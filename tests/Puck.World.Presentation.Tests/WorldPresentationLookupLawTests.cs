@@ -366,23 +366,14 @@ public sealed class WorldPresentationLookupLawTests {
             expected: 2
         );
 
-        // Swapping between the two documents from here on allocates nothing.
+        // Declaration swaps rebuild the arena view and retain only the current manifest slots.
         var swaps = 0;
 
-        Assert.Equal(
-            actual: AllocationWindow.Least(window: () => {
-                for (var repetition = 0; (repetition < Repetitions); repetition++) {
-                    definition = (((swaps++ % 2) == 0)
-                        ? withGauge
-                        : withoutGauge);
-                    mirror.Install(
-                        engineTick: 0UL,
-                        tick: 2UL
-                    );
-                }
-            }),
-            expected: 0L
-        );
+        for (var repetition = 0; repetition < Repetitions; repetition++) {
+            definition = ((swaps++ % 2) == 0) ? withGauge : withoutGauge;
+            mirror.Install(engineTick: 0UL, tick: 2UL);
+        }
+        Assert.Equal(2, mirror.SlotCount);
     }
 
     private static WorldMarkerRow Marker(string id, string alpha) => (JsonSerializer.Deserialize<WorldMarkerRow>(

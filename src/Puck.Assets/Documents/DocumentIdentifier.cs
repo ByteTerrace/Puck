@@ -17,6 +17,7 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
 
     private bool m_isResolved;
     private string? m_value;
+    private Func<string?>? m_read;
 
     /// <summary>Creates a literal identifier.</summary>
     public DocumentIdentifier(string value) {
@@ -31,14 +32,18 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
     /// <inheritdoc/>
     public string ExpectedValue => "a non-empty identifier";
     /// <summary>The resolved identifier.</summary>
-    public string Value => (m_isResolved
+    public string Value => m_read is { } read ? (read() ?? throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has no live value.")) : (m_isResolved
         ? m_value!
         : throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has not been resolved by its containing document.")
     );
+    /// <inheritdoc/>
+    public void Bind(Func<string?> read) => m_read = read;
 
     /// <inheritdoc/>
     public void Detach() {
-        _ = Value;
+        m_value = Value;
+        m_read = null;
+        m_isResolved = true;
         Reference = null;
     }
     /// <inheritdoc/>

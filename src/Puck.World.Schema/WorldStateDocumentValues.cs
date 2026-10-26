@@ -23,6 +23,21 @@ namespace Puck.World;
 /// are omitted; document contents are always read afresh, including polymorphic and mutable collections.</para>
 /// </remarks>
 public static class WorldStateDocumentValues {
+    /// <summary>Creates an owned projection whose bound values read the live arena. Seed rows remain declarations.</summary>
+    public static WorldDefinition BindLive(WorldDefinition definition, StateArena arena, Func<ArenaTime> clock) {
+        if (ReferencedRows(definition: definition).Count == 0) { return definition with { }; }
+        var owned = (JsonSerializer.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition),
+            jsonTypeInfo: WorldJsonContext.Default.WorldDefinition) ?? throw new InvalidOperationException(message: "The binding projection did not deserialize."))
+            with { StateRaw = definition.StateRaw, DocumentDirectory = definition.DocumentDirectory };
+        var seen = RentSeen();
+        try {
+            if (!TryVisit(value: owned, path: "definition", definition: owned, walk: Walk.Bind, soughtRow: null, collected: null,
+                seen: seen, deferDrawSites: false, found: out _, reason: out var reason, live: new LiveBindings(arena, clock))) {
+                throw new InvalidOperationException(message: reason);
+            }
+        } finally { ReturnSeen(seen); }
+        return owned;
+    }
     private const int MaxShapeDepth = 64;
 
     // The visited set one walk on this thread reuses; a walk takes it out while it runs, so a walk started from
@@ -50,6 +65,7 @@ public static class WorldStateDocumentValues {
         // Resolve, then drop the reference: the flattening an egress document performs so a receiver that was never
         // handed the state table holds a literal rather than a dangling pointer.
         Flatten,
+        Bind,
     }
 
     // Only a walk that can name a refusal builds the diagnostic path; a search or a collection touches nothing and
@@ -209,7 +225,29 @@ public static class WorldStateDocumentValues {
         seen.Clear();
         Seen = seen;
     }
-    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, ISet<string>? collected, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason) {
+    private sealed record LiveBindings(StateArena Arena, Func<ArenaTime> Clock);
+    private sealed class LiveValue(StateArena arena, StateHandle row, CellName name, Func<ArenaTime> clock) {
+        private ulong m_generation = ulong.MaxValue;
+        private ulong m_tick = ulong.MaxValue;
+        private string? m_text;
+        public string? Read() {
+            var time = clock();
+            var generation = arena.RowGeneration(rowOrdinal: row.Ordinal);
+            var tick = arena.Layout[row.Ordinal].HasTraits ? time.EngineTick : 0UL;
+            if ((m_generation == generation) && (m_tick == tick)) { return m_text; }
+            m_generation = generation; m_tick = tick; m_text = null;
+            if (!arena.Keys.TryResolve(name: name, key: out var key) || !arena.TryReadLive(rowOrdinal: row.Ordinal, key: key, time: in time, value: out var value)) { return null; }
+            m_text = value.Kind switch {
+                CellKind.Text => value.AsText,
+                CellKind.Fixed => FixedQ4816.FromRawBits(value: value.AsFixed).ToString(),
+                CellKind.Bool => value.AsBool ? "1" : "0",
+                CellKind.Int => value.AsInt.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                _ => null,
+            };
+            return m_text;
+        }
+    }
+    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, ISet<string>? collected, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason, LiveBindings? live = null) {
         found = false;
         reason = string.Empty;
 
@@ -248,15 +286,24 @@ public static class WorldStateDocumentValues {
                 return true;
             }
 
+            if (walk == Walk.Bind) {
+                if ((live is null) || !live.Arena.Catalog.TryResolve(lane: StateLane.Document, name: row, handle: out var handle) ||
+                    !CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out reason)) { return false; }
+                var reader = new LiveValue(live.Arena, handle, name, live.Clock);
+                stateValue.Bind(read: reader.Read);
+                return true;
+            }
+
             if (!WorldStateReader.TryRead(
+                arena: live?.Arena,
                 definition: definition,
-                engineTick: 0UL,
+                engineTick: live?.Clock().EngineTick ?? 0UL,
                 key: key,
                 rawValue: out var rawValue,
                 row: out var stateRow,
                 rowName: row,
                 text: out var text,
-                tick: 0UL
+                tick: live?.Clock().Tick ?? 0UL
             )) {
                 reason = $"{path} reference '{reference}' must name a declared state cell";
                 return false;
@@ -346,6 +393,7 @@ public static class WorldStateDocumentValues {
                     collected: collected,
                     value: item,
                     walk: walk
+                    , live: live
                 )) {
                     return false;
                 }
@@ -378,6 +426,7 @@ public static class WorldStateDocumentValues {
                 found: out var propertyFound,
                 reason: out reason,
                 walk: walk
+                , live: live
             )) {
                 return false;
             }
@@ -534,10 +583,12 @@ public static class WorldStateDocumentValues {
     /// rehydrates a private copy first.
     /// </remarks>
     /// <param name="source">The document whose state answers the references.</param>
+    /// <param name="arena">The live store, or null at a seed boundary.</param>
+    /// <param name="time">The live clock coordinate.</param>
     /// <param name="graph">The exclusively-owned graph to flatten.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when every reference resolved and detached.</returns>
-    public static bool TryFlatten(WorldDefinition source, object graph, out string reason) {
+    public static bool TryFlatten(WorldDefinition source, object graph, out string reason, StateArena? arena = null, ArenaTime? time = null) {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: source);
 
@@ -554,7 +605,8 @@ public static class WorldStateDocumentValues {
                 seen: seen,
                 soughtRow: null,
                 value: graph,
-                walk: Walk.Flatten
+                walk: Walk.Flatten,
+                live: arena is null ? null : new LiveBindings(arena, () => time ?? ArenaTime.Origin)
             );
         } finally {
             ReturnSeen(seen: seen);

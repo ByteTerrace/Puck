@@ -159,7 +159,7 @@ public sealed partial class WorldHistory {
             _ = m_server.DrainAdministrative();
 
             if (!ReferenceEquals(
-                objA: m_server.Definition,
+                objA: m_server.Document.Base,
                 objB: definition
             )) {
                 return $"the keyframe's document at tick {segment.KeyframeTick} was refused by the load door (the [world.definition rejected: …] line names why)";

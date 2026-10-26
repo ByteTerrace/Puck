@@ -35,7 +35,7 @@ public sealed record WorldServerCheckpoint(
     byte[] DefinitionJson,
     byte[] BaseDefinitionJson,
     WorldBaseOrigin BaseOrigin,
-    IReadOnlyList<CellName> ArenaKeys,
+    ArenaSnapshot Arena,
     IReadOnlyList<(ulong Tick, ulong EngineTick, WorldMutation Mutation)> Journal,
     ulong LastCompletedTick,
     ulong LastCompletedEngineTicks,
