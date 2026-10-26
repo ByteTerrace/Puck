@@ -64,14 +64,14 @@ hud {
           kind: Text
           rect { x: 0.02, y: 0, width: 0.96, height: 0.5 }
           style: Dim
-          "template": "DEV body {state.scope.body} yQ16 {state.scope.height} vyQ16 {state.scope.velocity} facts {state.scope.facts} contact {state.scope.contacts}"
+          template: "DEV body {state.scope.body} yQ16 {state.scope.height} vyQ16 {state.scope.velocity} facts {state.scope.facts} contact {state.scope.contacts}"
         }
         {
           id: "trace"
           kind: Text
           rect { x: 0.02, y: 0.5, width: 0.96, height: 0.5 }
           style: Accent
-          "template": "{state.scopeTrace}"
+          template: "{state.scopeTrace}"
         }
       ]
     }

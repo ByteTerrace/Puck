@@ -28,7 +28,6 @@ public sealed partial class SessionObservationLawTests {
         return document with {
             Admission = ((tier is { } disclosed)
                 ? [new WorldAdmissionEntry(
-                    Algorithm: string.Empty,
                     Disclosure: disclosed,
                     Domain: WorldAdmissionEntry.AnyAuthority,
                     // A frames-tier row may mint nothing: its observer is handed no document to address a grant against.
@@ -39,9 +38,7 @@ public sealed partial class SessionObservationLawTests {
                             Capability: WorldCapability.Observe,
                             Subject: GrantSubject.All
                         )]),
-                    Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                    PublicKey: string.Empty,
-                    Subject: null
+                    Mode: WorldAdmissionTrustMode.FederatedAuthority
                 )]
                 : []),
             GrantsRaw = [new WorldGrant(

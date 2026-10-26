@@ -389,7 +389,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] S3 structural operand grammar.
 - [x] S3 shipped-source migration: a call argument has one spelling and no source spells a colon channel outside an interpolated string.
 - [x] S8 grammar gaps: explicit named verdict rows retain never-evaluated status, schedules retain refusal expectations and stopped pacing, and all five authored verdict fixtures are `.puck` with exact parsed round trips ([S8](state-and-language.md#s8--tests-are-worlds)).
-- [ ] S6: `puck decompile` refuses the aliased-`use` machine name `arcade$agb-screen`, so the five `tests/Puck.World.Canaries/four-corners-sharded` documents stay JSON ([S6](state-and-language.md#s6--modules-and-the-forcing-world)).
+- [ ] S6: the five `experimental/tests/Puck.World.Canaries/four-corners-sharded` documents declare the aliased-`use` machine `arcade$agb-screen`, which prints back from no document, so they stay JSON until they are authored as `.puck` over the module ([S6](state-and-language.md#s6--modules-and-the-forcing-world)).
 - [x] S3 remainder: an interpolated string computes a name or text and never program text, so an expression is always written bare.
 - [x] The operand tree: sugar operands carry parsed trees, generic members project structurally into them, atoms remain opaque, and module aliases reach bare binding words. Structural binding replaces the emitter's text-rewriting passes; laws cover these paths and source round trips.
 - [x] S8's runner and its `test` construct for a world; S6's expander; S6's multi-world sources, `border`, `door`, and the asset lock.
@@ -414,8 +414,19 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] Entities as records in pools; seats as entities.
   - [ ] Edges as values, versioned facets, explicit order, key reclamation, facets, one work allowance.
 - [ ] S9 the authoring consensus ([S9](state-and-language.md#s9--the-authoring-consensus)), four waves:
-  - [ ] Wave 1: compound assignment, one expression language and the locals' order, one bracket rule; `sql { }` deleted, a wrapping printer, saving through the source tree.
-  - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
+  - [ ] Wave 1:
+    - [ ] Compound assignment, one expression language and the locals' order, one bracket rule.
+    - [x] `sql { }` deleted: the dialect, its lowering, decompiler, LSP, PUCK070–076, sample and suites are gone, and a `sql` block now reads as any unknown section does: validation refuses it as an unknown top-level member (PUCK030), and SQL text inside it is a syntax error (PUCK001).
+    - [x] A wrapping printer: `puck format`, the language server and the decompiler break calls, lists, operator chains and rule operands past 120 columns, formatting stays a fixed point, and every shipped source was reformatted with its compiled documents unchanged.
+    - [x] Saving through the source tree: `world.save <path>.puck` routes each live edit into the source that authors it (a module's row, a `let` literal, an appended or removed keyed row), refuses a row a `for` or template generates, and proves the rewritten tree composes to the live document; simulation state and placement `holding` stay as authored. The decompiler prints back authored rows only (decision P1), so the composition decompile and the generated-row read-back are deleted.
+  - [ ] Wave 2:
+    - [ ] Every condition as an expression (HUD visibility, placement responses, element text).
+    - [ ] No JSON showing through:
+      - [x] Contextual keywords: outside a construct body a member named for a keyword takes no quotes (`when ["Grounded"]`, `template: "…"`, `score:`, `local:`); the document reader's keyword readers decline before `:`, `{` or `[`.
+      - [x] Sections take arrays directly: a section holding only its rows is `kits [ … ]` or `looks: map(…)`, lowering to its `rows`, and the block holding only `rows` is refused (PUCK123).
+      - [x] Admission's empty fields: a keyless row (OAuth, federated authority) authors no algorithm, public key or subject.
+      - [ ] Noise fields that remain: `mode: Level` written in rule bodies where it is the default (waiting for the expression lane's rule-body migration, which rewrites the same lines), and one hash spelling for `hash: "auto"`, `"sha256-64/…"` and a bare digest.
+    - [ ] `function`.
   - [ ] Wave 3: names for bodies and identities, one composition construct, typed test steps with `eventually`.
   - [ ] Wave 4: complete state sugar, one rule grammar for cartridges, one authorization declaration, creation axes and rotations.
 

@@ -61,7 +61,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Block,
             Snippet: "test \"${1:name}\" {\n    when {\n        ticks ${2:1}\n    }\n    expect {\n        $0\n    }\n}",
-            Sugar: WorldConstructSugar.ReadBack(condition: "a generated test world is decompiled whose verdict rows, witnesses and verdict rules stand last and whose schedule is seat steps alone: the block prints over the rest of the document, whose boot values already carry what `given` wrote; a composed test's documents arm one another by file and are refused"),
+            Sugar: WorldConstructSugar.Generator,
             Summary: "Behaviour stated in the world's own language — a world's own, a module's under the arguments the test gives it, or a whole composition's; the document carries no trace of it and each test lowers to a generated test world of its own."
         ),
     ];

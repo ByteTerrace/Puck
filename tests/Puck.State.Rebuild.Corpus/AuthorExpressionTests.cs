@@ -10,8 +10,9 @@ namespace Puck.State.Rebuild.Corpus;
 /// to the same document.</summary>
 /// <remarks>A rebuild of the state substrate may change the lowered document freely, but not what an author wrote:
 /// the invariant this asserts is that compile and decompile stay mutual inverses over the whole shipped corpus. A
-/// source emitting several worlds decompiles as one composition; a module fragment emits no world of its own and is
-/// held through the sources that import it. It runs entirely on the transpiler, so it needs no booted world.</remarks>
+/// composition, which emits several worlds, is written in source and prints back from no document; a module fragment
+/// emits no world of its own and is held through the sources that import it. It runs entirely on the transpiler, so it
+/// needs no booted world.</remarks>
 public partial class AuthorExpressionTests {
     private static WorldCompilation Compile(string relativePath, string sourceText) => WorldCompiler.Compile(
         allowMultiple: true,
@@ -40,11 +41,6 @@ public partial class AuthorExpressionTests {
         (compilation.Json is not null) &&
         !WorldSemanticValidator.IsRootDocument(loweredJson: compilation.Json)
     );
-    // Decompiles the source's documents: one document on its own, a composition's worlds together.
-    private static string Decompile(List<KeyValuePair<string, JsonObject>> documents) => (((documents.Count == 1) && (documents[0].Key.Length == 0))
-        ? WorldDecompiler.Decompile(root: documents[0].Value)
-        : WorldDecompiler.DecompileComposition(worlds: documents)
-    );
     // Compiles, decompiles and recompiles the source, returning the first way the trip fails to close, or null.
     private static string? RoundTrip(string relativePath, out string? decompiled) {
         decompiled = null;
@@ -61,14 +57,14 @@ public partial class AuthorExpressionTests {
         if (Refusal(compilation: compiled, label: relativePath, sourceText: sourceText) is { } refused) {
             return refused;
         }
-        if (IsFragment(compilation: compiled)) {
+        if (IsFragment(compilation: compiled) || (compiled.Worlds.Count > 0)) {
             return null;
         }
 
         var documents = Documents(compilation: compiled);
 
         try {
-            decompiled = Decompile(documents: documents);
+            decompiled = WorldDecompiler.Decompile(root: documents[0].Value);
         } catch (WorldDecompileRefusedException refusal) {
             return $"{relativePath}: the decompiler refused it: {refusal.Message}";
         }

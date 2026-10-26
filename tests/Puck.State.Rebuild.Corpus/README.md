@@ -22,9 +22,8 @@ The corpus is three trees, enumerated where they live rather than copied:
 - Quarantined: the asset packages moved to `experimental/worlds/`, and the laws
   over them to `experimental/tests/Puck.State.Rebuild.Corpus/`, so this tree is
   not enumerated. `worlds/**/*.puck` — the asset packages. A source emitting several worlds
-  (`rulepush.puck`, `beacons.puck`) decompiles as one composition
-  (`WorldDecompiler.DecompileComposition`) and each world must come back as it
-  was. A source emitting no world of its own is a module fragment, held through
+  is a composition, written in source alone, and is held by compiling clean. A
+  source emitting no world of its own is a module fragment, held through
   a source of its package that imports it
   (`EveryPackageFragmentIsImportedByASourceOfItsPackage`).
 - `src/Puck.World.Transpiler/Samples/*.puck` — the transpiler's worked

@@ -459,10 +459,7 @@ internal static partial class Fixtures {
     );
     public static WorldAdmissionEntry AnyAuthorityArrivals() => new(
         Domain: WorldAdmissionEntry.AnyAuthority,
-        Subject: null,
         Mode: WorldAdmissionTrustMode.FederatedAuthority,
-        Algorithm: string.Empty,
-        PublicKey: string.Empty,
         Grants: [
             new WorldAdmissionGrant(
                 Capability: WorldCapability.Control,

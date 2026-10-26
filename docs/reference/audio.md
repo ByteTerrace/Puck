@@ -78,7 +78,7 @@ declared `patches` row referencing a `puck.synthesizer-patch.v1` document:
 
 ```puck
 { id: "note", kind: Text, rect { x: 0, y: 0, width: 1, height: 1 }, style: Primary,
-  "template": "{state.guide.note}",
+  template: "{state.guide.note}",
   voice { patchId: "gallery-guide", cadenceTicks: 16, pitchThousandths: 1100, formantThousandths: 1150, paceThousandths: 1250 } }
 ```
 

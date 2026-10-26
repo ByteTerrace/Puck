@@ -60,14 +60,16 @@ public static class WorldAdmissionDoor {
                 continue;
             }
 
-            var spki = Convert.FromBase64String(s: entry.PublicKey);
+            // Validation requires a keyed row's key and algorithm; an absent one builds an entry the TrustList
+            // constructor below refuses.
+            var spki = Convert.FromBase64String(s: (entry.PublicKey ?? string.Empty));
             // The AUTHORED Domain is what is trusted and later matched against — never a recomputed value. For
             // Vouches mode, TrustListEntry.Validate() (called by the TrustList constructor below) refuses an entry
             // whose Domain does not actually equal ComputeKeyHash(spki) (the root-self-certification rule), so an
             // authored typo refuses the WHOLE trust list rather than silently trusting a different root than the
             // document names.
             var pinnedId = new KeyId {
-                Algorithm = entry.Algorithm,
+                Algorithm = (entry.Algorithm ?? string.Empty),
                 Domain = entry.Domain,
                 KeyHash = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki),
                 Subject = ((entry.Mode == WorldAdmissionTrustMode.Vouches)

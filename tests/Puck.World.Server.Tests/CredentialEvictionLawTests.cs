@@ -121,8 +121,7 @@ public sealed class CredentialEvictionLawTests {
 
         document = document with {
             Admission = [signingEntry, new WorldAdmissionEntry(
-            Domain: identity.Subject, Subject: null, Mode: WorldAdmissionTrustMode.FederatedAuthority,
-            Algorithm: "", PublicKey: "", Grants: [], Disclosure: WorldDisclosureTier.Replica
+            Domain: identity.Subject, Mode: WorldAdmissionTrustMode.FederatedAuthority, Grants: [], Disclosure: WorldDisclosureTier.Replica
         )],
         };
         using var fixture = Fixtures.FreshServer(definition: document);

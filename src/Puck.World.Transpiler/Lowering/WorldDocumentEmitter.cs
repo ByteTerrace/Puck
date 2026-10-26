@@ -399,6 +399,21 @@ public static partial class WorldDocumentEmitter {
                         span: propNode.Span
                     );
 
+                    if (
+                        (propNode.Value is ArrayExpressionNode or CallExpressionNode) &&
+                        (DocumentLowering.MemberContext(scope: scope) is Type holder) &&
+                        (WorldSectionRows.SectionOf(holder: holder, member: propNode.Name) is { } section)
+                    ) {
+                        LowerSectionRows(
+                            pointer: childPointer,
+                            property: propNode,
+                            scope: scope,
+                            section: section,
+                            target: target
+                        );
+                        break;
+                    }
+
                     var lowered = DocumentLowering.LowerMember(
                         fieldKey: propNode.Name,
                         holder: DocumentLowering.MemberContext(scope: scope),
@@ -606,6 +621,22 @@ public static partial class WorldDocumentEmitter {
         );
 
         var position = scope.Vocabulary.MemberContext(context: DocumentLowering.MemberContext(scope: scope), memberName: id);
+
+        // A section holding only its rows has one spelling, the array of them.
+        if (
+            (block.Name is null) &&
+            (block.Target is null) &&
+            (block.NameExpression is null) &&
+            (block.Statements is [PropertyNode { Name: WorldSectionRows.Member, Value: ArrayExpressionNode or CallExpressionNode }]) &&
+            (DocumentLowering.MemberContext(scope: scope) is Type holder) &&
+            (WorldSectionRows.SectionOf(holder: holder, member: id) is not null)
+        ) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.SectionRowsWrapped,
+                message: $"'{id} {{ rows … }}' holds only its rows, so it is written as the array of them: '{id} [ … ]'",
+                span: block.Span
+            );
+        }
 
         // A construct with a lowering of its own reads its own grammar, so its body stands at no position; a
         // generic block stands at the member its identifier names.

@@ -50,7 +50,7 @@ hud {
           kind: Text
           rect { x: 0.03, y: 0, width: 0.94, height: 1 }
           style: Danger
-          "template": "watchdog {state.watchdog.count}: {state.watchdogLog.last}"
+          template: "watchdog {state.watchdog.count}: {state.watchdogLog.last}"
         }
       ]
     }

@@ -43,9 +43,11 @@ forge draft's one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no
 selection, no copy or paste, and no measurement. GPU hover identifies a
 placement but does not select it; `world.place` aims at a surface. `world.nudge` and
 `world.turn` act on a named placement or the one the seat last placed or moved.
-`world.save` writes authored edits back to a `.puck` target through the source
-printer, preserving unrelated text and proving the recomposed document before
-the atomic write. Generated rows refuse by name and offer a JSON delta.
+`world.save` writes each authored edit into the `.puck` source that authors it,
+the root or a document it imports, preserving unrelated text and proving the
+recomposed document before the atomic writes; a value read from a `let` is
+written in the `let` when nothing else reads it, and the simulation's `state`
+stays as authored. Generated rows refuse by name and offer a JSON delta.
 
 `world.history` is deterministic time travel over the boot world (the
 [state reference](../reference/state/worlds.md#travel-through-recorded-time)
