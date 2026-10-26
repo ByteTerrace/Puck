@@ -582,6 +582,18 @@ machine by [`puck qualify`](qualification.md), which takes the `artifacts/world`
 directory as it is. The current release publishes NuGet libraries, the CLI tool, and the
 documentation artifact; Azure deploys the website. Desktop builds are downloadable CI artifacts.
 
+Local desktop installation is exercised by `puck canary self-update
+--keep-transcripts`. It bundles the debug world with `puck world prepare`,
+publishes the complete application into a leg-private development channel,
+signs it with a throwaway development root, and installs it through the normal
+attestation verifier, `UpdateService`, stager, applier and launcher stub. The
+second version is activated by the running baseline and launched by the stub.
+A signed candidate lacking its executable demonstrates health rollback. Stub
+stderr records each actual launch's version, PID and path. This is local
+qualification with development keys; it neither publishes nor deploys a release.
+`puck world release prepare` describes a silo deployment group's inventory and
+engine-image contract; it does not apply to this desktop application install.
+
 ## Azure production deployment
 
 The [runtime and delivery programme](../plans/runtime-and-delivery.md#release-pairs)

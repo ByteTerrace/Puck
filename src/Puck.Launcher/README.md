@@ -98,6 +98,20 @@ version to start and handles the health-based rollback decision. The
 [release guide](../../docs/development/ci.md) owns the shared publishing
 workflow and its environment requirements.
 
+The signed attestation carries the canonical unsigned manifest's content pin,
+which authenticates its complete file inventory without putting that inventory
+inside the attestation's bounded payload. Development releases use a separate
+local key and the same attestation verifier, stager and applier. They grant no
+publisher trust. `SelfUpdateConfigFile.Channel` can select a local development
+channel alongside its explicit source, trust anchor and install root.
+
+The `self-update` canary installs the complete prepared debug application,
+including `puck world prepare`'s documents and assets. Its baseline and candidate
+both pass through `UpdateService`; it never pre-seeds a version directory.
+The positive leg relaunches the activated version. The other leg activates a
+signed payload without its executable, observes the refused launch, and then
+observes the stub return to the last healthy version.
+
 Staging rebuilds the inactive version directory from the manifest's complete
 file set, so a retry cannot inherit files omitted by a replacement manifest.
 Cached objects are still reused and rehashed; a corrupt object is deleted so a
