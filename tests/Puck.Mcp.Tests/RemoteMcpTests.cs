@@ -548,13 +548,14 @@ public sealed class RemoteMcpTests {
 
         server.Advance(stepTicks: 1);
 
-        var embeddingRow = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "embedding");
+        var state = server.ExportDefinition().State;
+        var embeddingRow = WorldDefinitionRows.FindStateRow(name: "embedding", rows: state);
 
         Assert.NotNull(@object: embeddingRow);
         Assert.Contains(collection: (embeddingRow.Cells ?? []), filter: cell => (cell.Key.Value == "g1"));
         Assert.DoesNotContain(collection: (embeddingRow.Cells ?? []), filter: cell => (cell.Key.Value == "u1"));
 
-        var slotRow = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "slot_embedding");
+        var slotRow = WorldDefinitionRows.FindStateRow(name: "slot_embedding", rows: state);
 
         Assert.NotNull(@object: slotRow);
         var slotCell = Assert.Single(collection: (slotRow.Cells ?? []));
