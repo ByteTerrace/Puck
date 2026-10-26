@@ -792,6 +792,7 @@ Every package below carries its own check on the programme page; tick it there a
   - [x] Guards never truncate silently: skins past 255 members refuse before queuing the named bake group, and volume overflow refuses with the creation or frame context.
   - [x] Machine-derived byte budgets retain meshes by size and age; brick storage allocates on its first bake or upload rather than reserving 64 MiB at boot.
   - [x] Corrected the skill map to `SdfLights.MaxLights` 128, removed shape-budget guidance from the sdf-authoring skill and authoring README, and installed the mutation vocabulary for `puck creation stats` on the debug world.
+  - [x] Resolved the shared-geometry review regressions: retained bake owners, complete catalog look revisions, rigid portal followers, stable surface motion history, placement shape anchors and isolation. Updated the offline mesh callers and the handbook's four-scope contract; full CPU suites and the affected debug scenarios cover the corrected paths.
 
 ## [UI](ui.md)
 
