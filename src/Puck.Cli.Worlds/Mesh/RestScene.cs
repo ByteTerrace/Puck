@@ -70,12 +70,14 @@ public sealed class RestScene {
             seatRouter: routes
         );
         var pool = new WorldCreationInstances();
+        var text = new WorldTextCatalog(source: new WorldDefinitionSource(Definition: definition, SourcePath: sourcePath));
+        text.Reconcile(definition: definition);
         var emitter = new WorldSceneEmitter(
             animator: pool,
             audio: inert,
             client: client,
             continuum: new WorldContinuum(client, routes, inert),
-            text: new WorldTextCatalog(source: new WorldDefinitionSource(Definition: definition, SourcePath: sourcePath))
+            text: text
         );
         var dresser = new KeptFrame();
         var frames = new SdfCompositionFrameSource(dresser: dresser, emitters: [emitter]);

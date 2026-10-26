@@ -332,6 +332,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   host's interface, so a kernel reading a field the C# side just gained keeps
   running its previous build. Change the C# layout and the HLSL layout together
   ([sync pairs](references/sync-pairs.md)).
+  Mesh raster and cascade vertex/fragment stages are composition-owned (`SdfMeshRasterPass`), so
+  edits to them need a rebuilt boot too. A shared `frame/sdf-mesh.hlsli` edit can reload its compute
+  readers while the raster stages keep their deployed bytecode; a successful reload is no proof
+  that a vertex-stage performance experiment took effect.
 - **No signed `%` of a value that can be negative.** NVIDIA's Vulkan driver
   answers a signed remainder (`OpSRem`, which DXC emits for `%` on `int`) of a
   negative operand wrongly where Direct3D 12 answers it right: lift the value to
@@ -614,6 +618,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   finished scene, use `world.wait bakes <seconds>` and require its settled
   result, then check for `[sdf.mesh-gi] done` in the log. A tick wait or
   `world.wait ready` alone does not establish that all meshes are present.
+  `world.rate pause` also stops tick waits: several timing reads separated by
+  `world.wait` then repeat the same completed GPU window. Use separate control
+  requests spaced in wall time when measuring a paused scene.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`
   (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. Cross-backend
   parity (`puck parity --world <file>`) needs a parity world with its contract

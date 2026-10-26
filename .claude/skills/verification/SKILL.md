@@ -78,6 +78,12 @@ a helper there), not a guarded statement.
 
 GPU legs require the lead's grant.
 
+A GPU lease does not reserve CPU or memory. Parallel headless replay workers
+can starve startup and decoding while no other windowed World owns the GPU.
+Keep such a functional boot separate from a performance comparison: require
+readiness, settled bakes and completed timestamp windows, and record concurrent
+work when a quiet measurement is unavailable.
+
 An empty shared lease directory can report an unnamed holder indefinitely:
 `CliLease.IsStale` cannot reclaim missing metadata. Diagnose it under the
 existing exclusive `.guard` file, never by the absence of a World alone.
@@ -125,6 +131,11 @@ flag does and the verbs that pass it themselves are in
 Drive a verification World with scripted input only (`player.signal`, `body.*`,
 schedule rows); a stderr naming a `[gamepad]` or `[gameinput]` device means the
 flag was missed.
+
+`puck_world_start` builds in the checkout's ordinary `bin/obj` before copying its run snapshot.
+Do not overlap that start with another build of projects sharing its dependencies: the compiler can
+refuse a locked intermediate DLL (CS2012). Wait for `started` or `refused` before building again;
+once started, the snapshot no longer locks the checkout's output.
 
 ## Build before you test
 

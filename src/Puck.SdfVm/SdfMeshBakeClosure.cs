@@ -41,7 +41,7 @@ public sealed partial class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", null),
         ("Puck.SdfVm", "Puck.SdfVm.SdfFrameBlock", "WriteMeshBake"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "Encode"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "Refusal"),
+
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "TryDecode"),
         // The program packs the words the bake kernel walks; a group's geometry hashes its instructions, not their packing.
         ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.SignedDistance;
+using Puck.Text;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -15,6 +16,41 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
 
     private static (int Selector, SdfMeshGeometry Geometry, int Instances, int First, bool Glass, Vector3 Low, Vector3 High, string Poses) Shape(SdfMeshBakeGroup group) =>
         (group.Selector, group.Sealed, group.Instances, group.FirstInstance, group.Glass, group.Low, group.High, string.Join(separator: ',', values: group.PoseRows));
+
+    [Fact]
+    public void GlyphEligibilityFollowsItsStaticDynamicOrWorldGroup() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+        var atlas = new FontAtlas(FontAtlasKind.Mtsdf, "test://glyph", 32, 8, 2, 2, default, [], []);
+        void Glyph(int? slot = null) {
+            _ = builder.ResetPoint();
+            if (slot is { } dynamicSlot) { _ = builder.TransformDynamic(dynamicSlot); }
+            _ = builder.Glyph(atlas, Vector2.Zero, Vector2.One, 0.5f, 0.5f, 0.02f, 0.25f, material);
+        }
+
+        // World text, a static union with text, a plain static group, and separate dynamic text/plain groups.
+        Glyph();
+        _ = builder.BeginInstance(Vector3.Zero, 1f).ResetPoint().Sphere(0.5f, material).EndInstance();
+        _ = builder.BeginInstance(Vector3.Zero, 1f, bakesWithPrevious: true);
+        Glyph();
+        _ = builder.EndInstance();
+        _ = builder.BeginInstance(Vector3.Zero, 1f).ResetPoint().Sphere(0.5f, material).EndInstance();
+        _ = builder.BeginInstanceDynamic(0, Vector3.Zero, 1f);
+        Glyph(slot: 0);
+        _ = builder.EndInstance();
+        _ = builder.BeginInstanceDynamic(1, Vector3.Zero, 1f).ResetPoint().TransformDynamic(1).Sphere(0.5f, material).EndInstance();
+        var program = builder.Build();
+        DynamicTransform[] transforms = [new(Vector3.Zero, Quaternion.Identity), new(Vector3.Zero, Quaternion.Identity)];
+        var groups = SdfMeshBakeGroup.Plan(program, transforms, 50f, Create);
+        Assert.True(Assert.Single(groups, static group => group.IsWorld).Geometry.ContainsGlyph);
+        Assert.True(Assert.Single(groups, static group => !group.Dynamic && group.FirstInstance == 0).Geometry.ContainsGlyph);
+        Assert.False(Assert.Single(groups, static group => !group.Dynamic && group.FirstInstance == 2).Geometry.ContainsGlyph);
+        Assert.True(Assert.Single(groups, static group => group.Dynamic && group.Slot == 0).Geometry.ContainsGlyph);
+        Assert.False(Assert.Single(groups, static group => group.Dynamic && group.Slot == 1).Geometry.ContainsGlyph);
+        Assert.Equal(2, SdfMeshBakeGroup.Refresh(groups, program, transforms, 50f, static _ => true, Create));
+        Assert.True(Assert.Single(groups, static group => group.Dynamic && group.Slot == 0).Geometry.ContainsGlyph);
+        Assert.False(Assert.Single(groups, static group => group.Dynamic && group.Slot == 1).Geometry.ContainsGlyph);
+    }
 
     [Fact]
     public void ARefreshedPlanHoldsTheWholePlanOfTheGroupsItNames() {

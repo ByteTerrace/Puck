@@ -11,26 +11,120 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshCollapseLawTests {
     [Fact]
+    public void AGlyphCounterKeepsItsOutlineWithinATightBudgetWhileItsFacesSimplify() {
+        const int Cells = 16;
+        var builder = new Builder();
+        var circle = Enumerable.Range(count: Cells, start: 0).Select(selector: i => new Vector2(x: MathF.Cos(x: ((i * MathF.Tau) / Cells)), y: MathF.Sin(x: ((i * MathF.Tau) / Cells)))).ToArray();
+
+        Vector3 Point(float radius, int angle, float z) => new(value: (circle[(angle % Cells)] * radius), z: z);
+        // An extruded O with one material: its front/back and walls share positions but have split normals.
+        // The counter must survive even when text and the surface it carves share their material.
+        builder.Grid(Cells, (x, y) => Point(angle: y, radius: (0.5f + ((0.5f * x) / Cells)), z: 0.1f), static _ => Vector3.UnitZ, static (_, _) => 0u, false);
+        builder.Grid(Cells, (x, y) => Point(angle: y, radius: (1f - ((0.5f * x) / Cells)), z: -0.1f), static _ => -Vector3.UnitZ, static (_, _) => 0u, false);
+        builder.Grid(Cells, (x, y) => Point(angle: x, radius: 1f, z: (-0.1f + ((0.2f * y) / Cells))), static p => Vector3.Normalize(value: new Vector3(x: p.X, y: p.Y, z: 0f)), static (_, _) => 0u, false);
+        builder.Grid(Cells, (x, y) => Point(angle: x, radius: 0.5f, z: (0.1f - ((0.2f * y) / Cells))), static p => -Vector3.Normalize(value: new Vector3(x: p.X, y: p.Y, z: 0f)), static (_, _) => 0u, false);
+        var ring = builder.Mesh(cell: 0.1f);
+        var expected = FeatureEdges(ring, ring.Indices);
+
+        Assert.NotEmpty(collection: expected);
+        var levelled = SdfMeshCollapse.Levels(ring, preserveFeatures: true);
+
+        Assert.NotEmpty(collection: levelled.Levels);
+        Assert.True(condition: (levelled.Levels[0].TriangleCount < (ring.TriangleCount / 2)));
+        foreach (var level in levelled.Levels) {
+            var actual = FeatureEdges(ring, level.Indices);
+
+            CheckLines(budget: (0.1 / 8), source: expected, target: actual);
+            CheckLines(budget: (0.1 / 8), source: actual, target: expected);
+            Assert.Equal(0, OpenEdges(ring.Positions.Span, level.Indices.Span));
+            // No projected triangle may cover the counter's centre, independently of the outline-distance check.
+            for (var at = 0; (at < level.Indices.Length); at += 3) {
+                var a = ring.Positions.Span[((int)level.Indices.Span[at])];
+                var b = ring.Positions.Span[((int)level.Indices.Span[(at + 1)])];
+                var c = ring.Positions.Span[((int)level.Indices.Span[(at + 2)])];
+                var ab = ((a.X * b.Y) - (a.Y * b.X));
+                var bc = ((b.X * c.Y) - (b.Y * c.X));
+                var ca = ((c.X * a.Y) - (c.Y * a.X));
+
+                Assert.False(condition: (((ab > 1e-6f) && (bc > 1e-6f) && (ca > 1e-6f)) || ((ab < -1e-6f) && (bc < -1e-6f) && (ca < -1e-6f))));
+            }
+        }
+        // No detectable outline gives the glyph mode no evidence of a safe counter boundary.
+        var smooth = Sphere(cells: 8);
+
+        Assert.Same(smooth, SdfMeshCollapse.Levels(smooth, preserveFeatures: true));
+    }
+
+    private static void CheckLines(HashSet<(Vector3, Vector3)> source, HashSet<(Vector3, Vector3)> target, double budget) {
+        foreach (var (a, b) in source) {
+            foreach (var point in new[] { a, b, ((a + b) * 0.5f) }) {
+                var nearest = float.PositiveInfinity;
+
+                foreach (var (c, d) in target) {
+                    var direction = (d - c);
+                    var along = Math.Clamp((Vector3.Dot(vector1: (point - c), vector2: direction) / direction.LengthSquared()), 0f, 1f);
+
+                    nearest = MathF.Min(x: nearest, y: Vector3.Distance(value1: point, value2: (c + (along * direction))));
+                }
+                Assert.InRange(actual: nearest, high: (budget + 1e-6), low: 0);
+            }
+        }
+    }
+    private static HashSet<(Vector3, Vector3)> FeatureEdges(SdfMesh mesh, ReadOnlyMemory<uint> indices) {
+        var edges = new Dictionary<(Vector3, Vector3), HashSet<(uint, uint)>>();
+
+        for (var at = 0; (at < indices.Length); at += 3) {
+            for (var corner = 0; (corner < 3); corner++) {
+                var a = indices.Span[(at + corner)];
+                var b = indices.Span[(at + ((corner + 1) % 3))];
+                var pa = mesh.Positions.Span[((int)a)];
+                var pb = mesh.Positions.Span[((int)b)];
+
+                if ((pa.X, pa.Y, pa.Z).CompareTo(other: (pb.X, pb.Y, pb.Z)) > 0) { (pa, pb) = (pb, pa); (a, b) = (b, a); }
+                if (!edges.TryGetValue(key: (pa, pb), value: out var copies)) { copies = []; edges.Add(key: (pa, pb), value: copies); }
+                copies.Add(item: (a, b));
+            }
+        }
+        return edges.Where(predicate: static edge => (edge.Value.Count > 1)).Select(selector: static edge => edge.Key).ToHashSet();
+    }
+
+    [Fact]
     public void IndependentlyLevelledChunksKeepEverySeamEdgeThroughTheStore() {
         var source = Sphere(cells: 24);
-        var large = new SdfMesh(positions: source.Positions.ToArray().Select(static p => p * 12f).ToArray(), indices: source.Indices,
-            normals: source.Normals, triangleMaterials: source.TriangleMaterials) { BakeCell = source.BakeCell * 12f };
+        var large = new SdfMesh(positions: source.Positions.ToArray().Select(selector: static p => (p * 12f)).ToArray(), indices: source.Indices,
+            normals: source.Normals, triangleMaterials: source.TriangleMaterials) { BakeCell = (source.BakeCell * 12f) };
         var mesh = SdfMeshChunks.Bake(large);
-        Assert.True(mesh.Chunks.Count > 1);
-        Assert.Contains(mesh.Chunks, static chunk => chunk.Levels.Count > 0);
+
+        Assert.True(condition: (mesh.Chunks.Count > 1));
+        Assert.Contains(collection: mesh.Chunks, filter: static chunk => (chunk.Levels.Count > 0));
+        var uncollapsed = SdfMeshChunks.Bake(large, preserveFeatures: true);
+
+        Assert.Equal(mesh.Chunks.Count, uncollapsed.Chunks.Count);
+        for (var at = 0; (at < mesh.Chunks.Count); at++) {
+            var levelled = mesh.Chunks[at];
+            var retained = uncollapsed.Chunks[at];
+
+            Assert.Equal(levelled.Positions.ToArray(), retained.Positions.ToArray());
+            Assert.Equal(levelled.Normals.ToArray(), retained.Normals.ToArray());
+            Assert.Equal(levelled.Indices.ToArray(), retained.Indices.ToArray());
+            Assert.Equal(levelled.TriangleMaterials.ToArray(), retained.TriangleMaterials.ToArray());
+        }
         using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-chunk-seams-");
-        var store = new SdfMeshStore(scratch.PathOf("meshes"));
+        var store = new SdfMeshStore(scratch.PathOf(name: "meshes"));
         var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 123);
-        Assert.True(store.Write(7, geometry, mesh, [0]));
-        Assert.True(store.TryRead(7, geometry, out var read, out _, out _));
+
+        Assert.True(condition: store.Write(geometry: geometry, identity: 7, materials: [0], mesh: mesh));
+        Assert.True(condition: store.TryRead(geometry: geometry, identity: 7, materials: out _, mesh: out var read, refusal: out _));
+        Assert.NotNull(@object: read);
         Assert.Equal(mesh.Chunks.Count, read.Chunks.Count);
         Assert.Equal(mesh.Indices.ToArray(), read.Indices.ToArray());
-        for (var at = 0; at < mesh.Chunks.Count; at++) {
+        for (var at = 0; (at < mesh.Chunks.Count); at++) {
             var chunk = mesh.Chunks[at];
             var boundary = Boundary(chunk, chunk.Indices);
+
             Assert.Equal(chunk.Levels.Count, read.Chunks[at].Levels.Count);
-            for (var level = 0; level < chunk.Levels.Count; level++) {
-                Assert.True(boundary.SetEquals(Boundary(chunk, chunk.Levels[level].Indices)));
+            for (var level = 0; (level < chunk.Levels.Count); level++) {
+                Assert.True(condition: boundary.SetEquals(other: Boundary(chunk, chunk.Levels[level].Indices)));
                 Assert.Equal(chunk.Levels[level].Indices.ToArray(), read.Chunks[at].Levels[level].Indices.ToArray());
                 Assert.Equal(chunk.Levels[level].Error, read.Chunks[at].Levels[level].Error);
             }
@@ -39,20 +133,29 @@ public sealed class SdfMeshCollapseLawTests {
 
     private static HashSet<(Vector3, Vector3)> Boundary(SdfMesh mesh, ReadOnlyMemory<uint> indices) {
         var edges = new Dictionary<(Vector3, Vector3), int>();
-        for (var at = 0; at < indices.Length; at += 3) {
-            for (var corner = 0; corner < 3; corner++) {
-                var a = mesh.Positions.Span[(int)indices.Span[at + corner]];
-                var b = mesh.Positions.Span[(int)indices.Span[at + (corner + 1) % 3]];
-                var key = (a.X, a.Y, a.Z).CompareTo((b.X, b.Y, b.Z)) < 0 ? (a, b) : (b, a);
-                edges[key] = edges.GetValueOrDefault(key) + 1;
+
+        for (var at = 0; (at < indices.Length); at += 3) {
+            for (var corner = 0; (corner < 3); corner++) {
+                var a = mesh.Positions.Span[((int)indices.Span[(at + corner)])];
+                var b = mesh.Positions.Span[((int)indices.Span[(at + ((corner + 1) % 3))])];
+                var key = (((a.X, a.Y, a.Z).CompareTo(other: (b.X, b.Y, b.Z)) < 0) ? (a, b) : (b, a));
+
+                edges[key] = (edges.GetValueOrDefault(key: key) + 1);
             }
         }
-        return edges.Where(static edge => edge.Value == 1).Select(static edge => edge.Key).ToHashSet();
+        return edges.Where(predicate: static edge => (edge.Value == 1)).Select(selector: static edge => edge.Key).ToHashSet();
     }
+
     [Fact]
     public void ACurvedSurfaceThinsWithinItsRecordedErrors() {
         var sphere = Sphere(cells: 24);
         var levelled = SdfMeshCollapse.Levels(mesh: sphere);
+        var retained = SdfMeshChunks.Bake(sphere, preserveFeatures: true);
+        var merged = SdfMeshPlanarMerge.Merge(mesh: sphere);
+
+        Assert.Empty(collection: retained.Levels);
+        Assert.Equal(merged.Positions.ToArray(), retained.Positions.ToArray());
+        Assert.Equal(merged.Indices.ToArray(), retained.Indices.ToArray());
 
         Assert.Equal(expected: 2, actual: levelled.Levels.Count);
         Assert.True(condition: (levelled.Levels[0].TriangleCount < (sphere.TriangleCount / 4)));
@@ -74,10 +177,10 @@ public sealed class SdfMeshCollapseLawTests {
         Assert.True(condition: (level.Error < 1e-6f));
         Assert.True(condition: (level.TriangleCount <= 24));
 
-        var kept = new HashSet<Vector3>(collection: level.Indices.ToArray().Select(selector: index => cube.Positions.Span[(int)index]));
+        var kept = new HashSet<Vector3>(collection: level.Indices.ToArray().Select(selector: index => cube.Positions.Span[((int)index)]));
 
         foreach (var corner in Corners()) {
-            Assert.Contains(expected: corner, collection: kept);
+            Assert.Contains(collection: kept, expected: corner);
         }
     }
     [Fact]
@@ -94,11 +197,11 @@ public sealed class SdfMeshCollapseLawTests {
         var positions = plane.Positions.Span;
 
         foreach (var level in levelled.Levels) {
-            var kept = new HashSet<Vector3>(collection: level.Indices.ToArray().Select(selector: index => plane.Positions.Span[(int)index]));
+            var kept = new HashSet<Vector3>(collection: level.Indices.ToArray().Select(selector: index => plane.Positions.Span[((int)index)]));
 
             foreach (var position in positions) {
                 if ((MathF.Abs(x: position.X) == 1f) || (MathF.Abs(x: position.Y) == 1f)) {
-                    Assert.Contains(expected: position, collection: kept);
+                    Assert.Contains(collection: kept, expected: position);
                 }
             }
         }
@@ -160,7 +263,7 @@ public sealed class SdfMeshCollapseLawTests {
             var normal = Vector3.Normalize(value: Vector3.Cross(vector1: (corners[face[1]] - corners[face[0]]), vector2: (corners[face[2]] - corners[face[0]])));
 
             foreach (var corner in face) {
-                indices.Add(item: (uint)positions.Count);
+                indices.Add(item: ((uint)positions.Count));
                 positions.Add(item: corners[corner]);
                 normals.Add(item: normal);
             }
@@ -181,7 +284,6 @@ public sealed class SdfMeshCollapseLawTests {
         from y in new[] { -1f, 1f }
         from z in new[] { -1f, 1f }
         select new Vector3(x: x, y: y, z: z);
-
     // A level's whole contract against its mesh, measured by brute force: its error within the level's bound and at least
     // every vertex's distance to the level's nearest triangle of its material, some such triangle within the error and the
     // angle, no edge opened, and no triangle turned against its normals.
@@ -193,9 +295,9 @@ public sealed class SdfMeshCollapseLawTests {
         var cosine = Math.Cos(d: ((degrees * Math.PI) / 180.0));
 
         Assert.True(condition: (level.Error <= (share * cell)));
-        Assert.Equal(expected: OpenEdges(positions: positions, indices: mesh.Indices.Span), actual: OpenEdges(positions: positions, indices: indices));
+        Assert.Equal(expected: OpenEdges(positions: positions, indices: mesh.Indices.Span), actual: OpenEdges(indices: indices, positions: positions));
         for (var triangle = 0; (triangle < level.TriangleCount); triangle++) {
-            var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+            var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
 
             Assert.True(condition: (Vector3.Dot(vector1: Vector3.Cross(vector1: (positions[b] - positions[a]), vector2: (positions[c] - positions[a])), vector2: ((normals[a] + normals[b]) + normals[c])) > 0f));
         }
@@ -205,7 +307,7 @@ public sealed class SdfMeshCollapseLawTests {
         var own = mesh.Indices.Span;
 
         for (var corner = 0; (corner < own.Length); corner++) {
-            var vertex = (int)own[corner];
+            var vertex = ((int)own[corner]);
             var material = (materials.IsEmpty ? 0u : materials[(corner / 3)]);
             var nearest = double.PositiveInfinity;
             var within = false;
@@ -213,7 +315,7 @@ public sealed class SdfMeshCollapseLawTests {
             for (var triangle = 0; (triangle < level.TriangleCount); triangle++) {
                 if ((levelMaterials.IsEmpty ? 0u : levelMaterials[triangle]) != material) { continue; }
 
-                var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+                var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
                 var (distance, weights) = Nearest(a: positions[a], b: positions[b], c: positions[c], p: positions[vertex]);
                 var normal = Vector3.Normalize(value: (((weights.X * normals[a]) + (weights.Y * normals[b])) + (weights.Z * normals[c])));
 
@@ -228,15 +330,15 @@ public sealed class SdfMeshCollapseLawTests {
         // The other way: each level triangle's centroid and edge midpoints lie within the error of the mesh's own
         // triangles of its material.
         for (var triangle = 0; (triangle < level.TriangleCount); triangle++) {
-            var (a, b, c) = (positions[(int)indices[(3 * triangle)]], positions[(int)indices[((3 * triangle) + 1)]], positions[(int)indices[((3 * triangle) + 2)]]);
+            var (a, b, c) = (positions[((int)indices[(3 * triangle)])], positions[((int)indices[((3 * triangle) + 1)])], positions[((int)indices[((3 * triangle) + 2)])]);
             var material = (levelMaterials.IsEmpty ? 0u : levelMaterials[triangle]);
 
-            foreach (var point in (ReadOnlySpan<Vector3>)[((a + b) + c) / 3f, (a + b) / 2f, (b + c) / 2f, (c + a) / 2f]) {
+            foreach (var point in ((ReadOnlySpan<Vector3>)[(((a + b) + c) / 3f), ((a + b) / 2f), ((b + c) / 2f), ((c + a) / 2f)])) {
                 var nearest = double.PositiveInfinity;
 
                 for (var other = 0; (other < (own.Length / 3)); other++) {
                     if ((materials.IsEmpty ? 0u : materials[other]) == material) {
-                        nearest = Math.Min(val1: nearest, val2: Nearest(a: positions[(int)own[(3 * other)]], b: positions[(int)own[((3 * other) + 1)]], c: positions[(int)own[((3 * other) + 2)]], p: point).Distance);
+                        nearest = Math.Min(val1: nearest, val2: Nearest(a: positions[((int)own[(3 * other)])], b: positions[((int)own[((3 * other) + 1)])], c: positions[((int)own[((3 * other) + 2)])], p: point).Distance);
                     }
                 }
 
@@ -248,8 +350,8 @@ public sealed class SdfMeshCollapseLawTests {
         var edges = new Dictionary<(Vector3, Vector3), int>();
 
         for (var corner = 0; (corner < indices.Length); corner++) {
-            var from = positions[(int)indices[corner]];
-            var to = positions[(int)indices[(((corner % 3) == 2) ? (corner - 2) : (corner + 1))]];
+            var from = positions[((int)indices[corner])];
+            var to = positions[((int)indices[(((corner % 3) == 2) ? (corner - 2) : (corner + 1))])];
 
             edges[(from, to)] = (edges.GetValueOrDefault(key: (from, to)) + 1);
         }
@@ -271,7 +373,7 @@ public sealed class SdfMeshCollapseLawTests {
             best = (Vector3.Distance(value1: foot, value2: p), new Vector3(x: u, y: v, z: ((1f - u) - v)));
         }
 
-        foreach (var (from, to, weights) in (ReadOnlySpan<(Vector3, Vector3, Func<float, Vector3>)>)[(a, b, t => new Vector3(x: (1f - t), y: t, z: 0f)), (b, c, t => new Vector3(x: 0f, y: (1f - t), z: t)), (c, a, t => new Vector3(x: t, y: 0f, z: (1f - t)))]) {
+        foreach (var (from, to, weights) in ((ReadOnlySpan<(Vector3, Vector3, Func<float, Vector3>)>)[(a, b, t => new Vector3(x: (1f - t), y: t, z: 0f)), (b, c, t => new Vector3(x: 0f, y: (1f - t), z: t)), (c, a, t => new Vector3(x: t, y: 0f, z: (1f - t)))])) {
             var along = Math.Clamp(value: (Vector3.Dot(vector1: (p - from), vector2: (to - from)) / (to - from).LengthSquared()), max: 1f, min: 0f);
             var distance = Vector3.Distance(value1: (from + (along * (to - from))), value2: p);
 
@@ -290,6 +392,7 @@ public sealed class SdfMeshCollapseLawTests {
         private readonly List<uint> m_indices = [];
         private readonly List<uint> m_materials = [];
         private readonly Dictionary<Vector3, uint> m_shared = [];
+
         private bool m_carriesMaterials;
 
         public void Grid(int cells, Func<int, int, Vector3> point, Func<Vector3, Vector3> normal, Func<int, int, uint> material, bool shared, bool materials = false) {
@@ -301,7 +404,7 @@ public sealed class SdfMeshCollapseLawTests {
                     var position = point(arg1: x, arg2: y);
 
                     if (!shared || !m_shared.TryGetValue(key: position, value: out at[x, y])) {
-                        at[x, y] = (uint)m_positions.Count;
+                        at[x, y] = ((uint)m_positions.Count);
                         m_positions.Add(item: position);
                         m_normals.Add(item: normal(arg: position));
                         if (shared) { m_shared.Add(key: position, value: at[x, y]); }

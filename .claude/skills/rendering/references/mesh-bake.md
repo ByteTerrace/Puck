@@ -344,6 +344,34 @@ laws exercise that boundary.
 
 ## The mesh region
 
+- **The compact store expands to the fastest GPU layout.** `SdfMeshStoreCodec` chooses bounds-relative
+  16/24-bit positions only when every decoded vertex moves by at most `BakeCell.Length()/1024`;
+  otherwise positions remain floats. Every chunk shares its group's grid and width, so shared seam
+  vertices decode bit-identically. Unit normals use signed oct16 pairs; non-unit authored normals
+  retain their magnitudes. Indices use 16 bits through 65,536 vertices and materials use bytes when
+  their values fit. Delta-predicted attribute byte planes are zlib-compressed. Decode reads planes
+  directly from the decompressed payload into the CPU arrays, avoiding per-plane byte copies.
+  Both backends draw six floats per vertex and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
+  `SdfMeshLibrary.TryLoad` coalesces a set entry's decode across groups and keeps its result with the
+  library's bounded meshes. A failed read is removed so a later derivation can be loaded.
+  Sound entries can also record that a bake found no surface: a successful store read with a null
+  mesh is an empty result, not a miss. `StoreEmpty` persists it under the bake identity so fully warm
+  boots need no bake dispatch or bake-pipeline creation. Offline consumers skip its absent surface.
+  The owner's mesh-compact correction: warm decode must be no slower than the old load, and a
+  smaller GPU region is welcome only when mesh and cascade GPU passes are no slower. Measure
+  repeated `world.gpu-timing` windows at the same pose; do not infer speed from region bytes.
+  Record the presentation target and GPU clocks beside an A/B: the device can downclock at 60 Hz,
+  so compare both variants at the same target and frequency range. Keep ordinary-target readings too.
+
+- **Glyph-bearing groups retain their outlines at every distance.**
+  `SdfMeshGeometryBuilder.ContainsGlyph` recognizes `ShapeBlend/Glyph` in static, dynamic and unowned
+  world groups. `SdfMeshCollapse` caps crease and material-edge error in those groups at the largest
+  bake-cell dimension divided by 8 while face interiors use the ordinary level budget; a mesh
+  without detectable features retains its base surface. Corners and open edges stay fixed.
+  Whole-group collapse exclusion also prevents large scenery sharing a glyph group from coarsening,
+  so its cascade cost must be measured before choosing it. A geometric distance budget alone does
+  not protect text counters and thin strokes: the lift's lit zero lost its hole near 21 m.
+
 - **Meshes keep their words; draws repack only their records.** The tables
   place each mesh whole in an arena past a reserve of draw records
   (`SdfMeshRegionArena`), where it stays while a draw names it, so
@@ -371,7 +399,7 @@ laws exercise that boundary.
   and capped at that ceiling (`SdfWorldTables.MeshRegionGrownBytes`, a pure
   function), so it reads fuller than a doubling would; `world.budget` prints the
   bytes the staged draws use (`MeshRegionUsedBytes`) beside the bytes held and
-  that ceiling. The debug world uses about 1.1 GB of it, and a frame that needs
+  that ceiling. A frame that needs
   more than the ceiling throws `InvalidOperationException` naming the need and
   the ceiling. The ceiling is the whole uints below 4 GiB less the staging
   buffer's header and run table, because a staged region's staging buffer binds
@@ -491,6 +519,8 @@ laws exercise that boundary.
   keeps every entry, and worktrees of one bake share one set. Code the bake
   reaches only through reflection or a runtime callback on a type it does not
   construct is outside the walk: add a root to `SdfMeshBakeClosure` for it.
+  Finish formatting before measuring a new cold set: argument ordering can change IL and therefore
+  the computed bake identity even when the source rewrite preserves semantics.
 - **A miss names its cause.** Each identity's parts and code members are
   recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
   and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity
@@ -502,15 +532,14 @@ laws exercise that boundary.
   its value is the key a cache of the store is saved under.
 - **The store keeps whole sets.** Each identity's entries are one set, in a
   directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
-  world's meshes fill about 1.02 GB in about 1,410 entries under one identity
-  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, about
-  eight such sets), shared by every World and worktree on the machine, a set at a
+  world's set is compressed with its mesh codec; the store keeps `SdfMeshStore.DefaultCapacityBytes`
+  (8 GiB), shared by every World and worktree on the machine, a set at a
   time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
   recently read or written entry's, and a write removes whole sets, least
   recently used first, never its own. A set a World is baking or loading is
   never cut short by another lane's writes, so concurrent lanes on different
-  identities keep each other's complete sets until five newer ones displace
-  them, and a set larger than the cap alone keeps its most recently used
+  identities keep each other's complete sets until newer sets fill the capacity,
+  and a set larger than the cap alone keeps its most recently used
   entries. An entry left directly in the directory is a set of its own and ages
   out first. A boot that bakes nothing shows `done … loaded=N` with
   `dispatches=0`. A program that arrives while groups are pending and takes
@@ -572,6 +601,10 @@ rest-pose and author-frame positions, the worst sample's position with the
 mesh's facing against the field's gradient there, and the shapes nearest them. The
 [CLI reference](../../../../docs/reference/cli.md#puck-mesh-auditbaked-mesh-audit)
 owns its flags.
+
+`RestScene.Compose` reconciles its `WorldTextCatalog` before emitting the frame. A catalog object
+without that call silently omits text and makes the audit miss every glyph group, even when the
+definition carries prepared font assets. Keep this offline scene path aligned with the live emitter.
 
 - **Run it before calling a bake or mesh-path change done**, and on a changed
   creation's groups (`--prototype`, `--group <shape>`); a later run over the
