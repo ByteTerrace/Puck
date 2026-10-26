@@ -1495,18 +1495,18 @@ public static class WorldSearchCompilation {
         }
 
         // One fold of every row is what the search pays a tick before any job moves: the stamp that tells a job its
-        // inputs changed. It comes out of what the sheet leaves before the jobs share the rest equally; a share's
-        // remainder goes unspent, and no job borrows another's.
+        // inputs changed. It comes out of what the sheet leaves, and the rest is every job's allowance: a tick steps
+        // one job with work to do (ArenaSearch.Step), so jobs take turns rather than splitting a tick.
         var position = 0L;
 
         for (var ordinal = 0; (ordinal < definition.StateCatalog.Descriptors.Count); ordinal++) {
             position += context.RowCapacity(rowOrdinal: ordinal);
         }
 
-        var allowance = (Math.Max(
+        var allowance = Math.Max(
             val1: 0L,
             val2: ((RuleCapacity.MaxWorkUnitsPerTick - sheet.Units) - position)
-        ) / rows.Count);
+        );
 
         for (var index = 0; (index < rows.Count); index++) {
             judges[index] = JudgeRules(

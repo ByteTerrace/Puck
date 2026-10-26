@@ -1905,8 +1905,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Camera: camera,
                 Region: region
             ) {
-                StampFade = (((presentedElsewhere is null) && m_animator.TryBodyTransformSlot(bodyIndex: m_anchor.PerceivedBody(slot: slot), transformSlot: out var fadeSlot))
-                    ? new SdfStampFade(fadeSlot, WorldStampPool.SlotsPerPlacement, m_roster.Seat(slot: slot)!.View.BodyOpacity)
+                StampFade = (((presentedElsewhere is null) && m_animator.TryBodyTransformSlot(bodyIndex: m_anchor.PerceivedBody(slot: slot), transformSlot: out var fadeSlot, slotCount: out var fadeSlots))
+                    ? new SdfStampFade(fadeSlot, fadeSlots, m_roster.Seat(slot: slot)!.View.BodyOpacity)
                     : default),
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Elsewhere = (presentedElsewhere is not null),

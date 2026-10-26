@@ -11,7 +11,7 @@ namespace Puck.World.Transpiler.Lowering;
 public static partial class WorldDocumentEmitter {
     // Binding walks parsed names and accesses. Computed atoms and quoted names are terminal values: neither is
     // ever sent back through symbol resolution, so a binding cannot inject an operator or capture another name.
-    private static string BindOperand(OperandExpressionNode operand, DocumentScope scope) =>
+    internal static string BindOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).Bind(operand: operand);
     private static ExpressionNode CompileTimeOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTime(operand: operand);

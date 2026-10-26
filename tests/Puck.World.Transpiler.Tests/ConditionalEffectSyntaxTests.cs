@@ -207,6 +207,8 @@ public class ConditionalEffectSyntaxTests {
                     x = 1
                 } else if a == 2 {
                     x = 2
+                } else if match(bracket, board, N, prefix)[move.play] >= 1 {
+                    board[move.play] = move.play
                 } else {
                     x = 3
                 }
@@ -228,6 +230,16 @@ public class ConditionalEffectSyntaxTests {
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "else if a == 2 {"
+        );
+        Assert.Contains(
+            actualString: decompiled,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "else if match(bracket, board, N, prefix)[move.play] >= 1 {"
+        );
+        Assert.Contains(
+            actualString: decompiled,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "board[move.play] = move.play"
         );
 
         var recompileDiagnostics = new DiagnosticBag();

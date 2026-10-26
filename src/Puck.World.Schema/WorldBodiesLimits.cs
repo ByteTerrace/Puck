@@ -17,7 +17,9 @@ public static class WorldBodiesLimits {
     /// every per-body presentation reservation that scales with detail: the avatar catalog's transform ranges
     /// (<c>Puck.World.Client.WorldRigCatalog.DetailedAvatarCapacity</c>) and the body-rooted creation-stamp pool
     /// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/>), so a creature in the detailed band can always be
-    /// drawn as its creature — there is no separate, smaller ceiling on how many bodies may wear a creation.</summary>
+    /// drawn as its creature. Small creations take the pool's compact registrations first
+    /// (<see cref="WorldPlacementPolicy.MaxCompactStampRegistrations"/>), so many bodies wearing them (a game's pieces)
+    /// leave the full ones to the rest.</summary>
     public const int DetailedRenderBand = 128;
     /// <summary>The most distinct censuses a drawn <see cref="WorldBodiesDefaults.CapacityRow"/> source may span.
     /// Each one is settled into a candidate and put through the whole document validator, so this bound is what keeps

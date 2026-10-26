@@ -527,7 +527,11 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 
 - `WorldPlacementPolicy.MaxShapesPerStamp` is 367 (a panelled shape charges 2).
 - `WorldBodiesLimits.CapacityCeiling` is 4096 bodies; detailed rigs cover the
-  first 128 indices.
+  first 128 indices. A body draws as its creation only while it holds a stamp
+  registration: 128 full ones, shared with animated and attached placements,
+  and 256 compact ones that a creation of at most 8 shapes and no text takes
+  first. A body past them draws as a catalog avatar and stderr says so
+  (`[world.placement: creation-stamp body N has no free stamp slot`).
 - `SdfProgramBuilder.MaxInstances` is 65536; `WorldRenderEnvelope.TryFit` is the
   apply-time capacity gate, counted on the CPU by `WorldSceneEnvelope`, so a
   headless boot and `puck test` see it: every boot prints

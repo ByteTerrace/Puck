@@ -1383,8 +1383,9 @@ row. Its six cells correspond to the `hound` carrier's keys (90-95), and
 `boneHolder` and `reporter` admit the garden's full body-index range. This
 identity data belongs to the garden rather than an imported game.
 
-Physical chess stands in the debug world: its chess table,
-[`chess.puck`](../../worlds/debug/chess.puck), whose
+Physical chess stands in the debug world's board game room beside Go and
+Reversi ([`go.md`](../../worlds/debug/go.md), [`reversi.md`](../../worlds/debug/reversi.md)):
+its chess table, [`chess.puck`](../../worlds/debug/chess.puck), whose
 [notes](../../worlds/debug/chess.md) cover play, its computer opponent, and
 its scenarios. Its board uses the tabletop primitive (see the
 [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),

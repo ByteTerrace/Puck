@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -527,35 +528,24 @@ public static partial class WorldDecompiler {
         "not" => ((node["predicate"] is JsonObject inner) && IsPredicateSafeForGateSugar(node: inner)),
         _ => false,
     };
-    // Whether printing (name, key) through `FormatRowRef` and reparsing it through `ExpressionSpelling.TryParse`
-    // reproduces the SAME pair. Most keys round-trip; the one confirmed exception is a "$expr:" key whose own
-    // expression happens to have exactly the "row[cell]" shape (a live cell read used as a dynamic key) — printing
-    // strips the "$expr:" prefix (`ExpressionSpelling`'s own `Print`), but reparsing then reads "row[cell]" as a
-    // `$cell:` indirection instead, a different key spelling for the same key text. Testing the round trip directly,
-    // rather than re-deriving `ExpressionSpelling`'s own key grammar, is what AGENTS.md rule 7 asks for here.
+    // Whether printing (name, key) through `FormatRowRef`, binding it as a source operand, and reparsing it through
+    // `ExpressionSpelling.TryParse` reproduces the SAME pair. Most keys round-trip; the one confirmed exception is a
+    // "$expr:" key whose own expression happens to have exactly the "row[cell]" shape (a live cell read used as a
+    // dynamic key) — printing strips the "$expr:" prefix (`ExpressionSpelling`'s own `Print`), but reparsing then
+    // reads "row.cell" as a `$cell:` indirection instead, a different key spelling for the same key text. Testing the
+    // round trip directly, rather than re-deriving `ExpressionSpelling`'s own key grammar, is what AGENTS.md rule 7
+    // asks for here.
     private static bool RowRefRoundTrips(string name, string? key) {
         var printed = FormatRowRef(
             key: key,
             name: name
         );
 
-        if (ExpressionSpelling.TryParseSyntax(text: printed, atoms: [], syntax: out var syntax, error: out _)) {
-            if (syntax is ExpressionSpelling.SourceAccess { Target: ExpressionSpelling.SourceName row } access &&
-                row.Name == name && access.Member == key) {
-                return true;
-            }
-            if (syntax is ExpressionSpelling.SourceIndex { Target: ExpressionSpelling.SourceName indexed } index &&
-                indexed.Name == name && key?.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal) == true &&
-                index.Index is not (ExpressionSpelling.Literal or ExpressionSpelling.SourceString or ExpressionSpelling.SourceName { Name: ['$', ..] })) {
-                return true;
-            }
-        }
-
         return (
             ExpressionSpelling.TryParse(
             error: out _,
             program: out var parsed,
-            text: printed
+            text: BindSourceOperand(text: printed)
         ) &&
             (parsed.Instructions.Count == 1) &&
             (parsed.Instructions[0] is { Payload: InstructionPayload.State state }) &&
@@ -571,6 +561,13 @@ public static partial class WorldDecompiler {
         )
         );
     }
+    private static string BindSourceOperand(string text) => WorldDocumentEmitter.BindOperand(
+        operand: PuckParser.CreateOperand(
+            form: DocumentValueForm.Expression,
+            text: text
+        ),
+        scope: new DocumentScope(vocabulary: WorldDocumentVocabulary.Instance)
+    );
     private static string FormatPredicate(JsonObject node) => node["$type"]?.ToString() switch {
         "compareState" => FormatCompareState(node: node),
         "compareValue" => FormatCompareValue(node: node),
@@ -660,8 +657,8 @@ public static partial class WorldDecompiler {
         (!ReadsOnePoolField(program: node["left"]) &&
         !ReadsOnePoolField(program: node["right"]) &&
         (WorldDocumentEmitter.ClassifyBareComparison(
-            WorldExpressionJson.SourceText(node: node["left"]),
-            WorldExpressionJson.SourceText(node: node["right"]),
+            BindSourceOperand(text: WorldExpressionJson.SourceText(node: node["left"])),
+            BindSourceOperand(text: WorldExpressionJson.SourceText(node: node["right"])),
             out _,
             out _
         )
@@ -956,7 +953,7 @@ public static partial class WorldDecompiler {
         if (!ExpressionSpelling.TryParse(
             error: out _,
             program: out var parsed,
-            text: text
+            text: BindSourceOperand(text: text)
         )) {
             return false;
         }

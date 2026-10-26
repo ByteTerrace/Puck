@@ -752,7 +752,9 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
 
-- [ ] A board game room in the gallery (the owner's request, being considered): a room that hosts the landed board games (chess, Go, Reversi and the others in the state programme) on real tables, each playable by seats and addons. The room, which games and how it looks are open with the owner.
+- [x] A board game room in the gallery: the east end of level 2, partitioned from the hall at x = 51 with a doorway as the painting wing is on level 0, under level 2's lights, window band and blinds ([shapes](../../worlds/debug/shapes.md#the-board-game-room)). Chess moved in from the lobby unchanged; Go (9x9) and Reversi joined it, ported from the experimental headless games onto real tables of rigid stones and two-faced discs, each with a seat playing either side and a computer opponent ([go](../../worlds/debug/go.md), [reversi](../../worlds/debug/reversi.md)). The motion rows moved down to level 2 and the form, surface and glass rows up to level 3 to clear the room's footprint. Search jobs now take turns with the whole tick's allowance, so three opponents fit; `poseCell` rolls a body (`rollDegrees`) to turn a disc over; and the stamp pool's 256 compact registrations (`WorldPlacementPolicy.MaxCompactStampRegistrations`) draw the 146 stones and discs as themselves beside the 128 full ones.
+  - [ ] The room's look is for the owner to review: the tables share the chess table's wood and pedestals, the Go board is kaya tiles over dark lines, the Reversi board green felt tiles; the room otherwise wears the hall's finish.
+  - [ ] More games for the room's free table spot at (65, 30.6), from the state programme's landed games; addon seats at the tables.
 
 ## [UI](ui.md)
 

@@ -106,7 +106,6 @@ with — optionally adding rows a sibling district would have supplied
 | bowling | `games/bowling.puck` | spliced | 600 | no |
 | dominoes | `games/dominoes.puck` | spliced | 600 | no |
 | freecell | `games/freecell.puck` | spliced | 610 | yes |
-| go | `games/go.puck` | document | 168 | yes |
 | hexlines | `games/hexlines.puck` | fixture `minimal-hexlines-host.puck` | 600 | yes |
 | hiddenranks | `games/hiddenranks.puck` | fixture `minimal-hiddenranks-host.puck` | 190 | yes |
 | klondike | `games/klondike.puck` | spliced | 680 | yes |
@@ -116,7 +115,6 @@ with — optionally adding rows a sibling district would have supplied
 | paddleball | `games/paddleball.puck` | fixture `minimal-paddleball-host.puck` | 2941 | yes |
 | pipeline | `pipeline.puck` | document | 600 | no |
 | poker | `games/poker.puck` | spliced | 610 | yes |
-| reversi | `games/reversi.puck` | document | 600 | yes |
 | snake | `games/snake.puck` | fixture `minimal-snake-host.puck` | 635 | yes |
 | solitaire | `games/solitaire.puck` | spliced | 600 | no |
 | spider | `games/spider.puck` | spliced | 810 | yes |

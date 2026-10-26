@@ -195,7 +195,9 @@ public sealed partial class WorldStampPool {
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs. Engraved text and its host shapes share one scoped instance so engraving cannot consume
     // another placement's accumulator; embossed text is an instance of its own.
-    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials) {
+    // shapeSlots bounds the shape slots the registration reserves: every shape slot the probe fills, and past every
+    // shape a live creation carries.
+    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials, int shapeSlots = WorldPlacementPolicy.MaxAnimatedStampShapes) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
         // The isolation's hidden shapes emit nothing, and with them the paints they carry, the creation's mesh and its
@@ -299,7 +301,7 @@ public sealed partial class WorldStampPool {
                 ).PushField(compose: SdfBlendOp.Union);
             }
 
-            for (var index = 0; (index < WorldPlacementPolicy.MaxAnimatedStampShapes); index++) {
+            for (var index = 0; (index < shapeSlots); index++) {
                 var placed = ((index < shapes.Count)
                     ? shapes[index]
                     : null

@@ -169,10 +169,11 @@ public sealed class SearchLawTests {
         Assert.InRange(actual: seen, high: 1_000_000L, low: 1L);
         Assert.Equal(expected: seen, actual: fixture.KeyedValue(key: "$value", row: "roll"));
     }
-    // What the sheet and one fold of every row leave is divided equally among the jobs, and a share that cannot
-    // cover a restart, a full replay and one unit is refused by that sum rather than left to stall.
+    // What the sheet and one fold of every row leave is every job's allowance, since a tick steps one job with work to
+    // do, and an allowance that cannot cover a restart, a full replay and one unit is refused by that sum rather than
+    // left to stall.
     [Fact]
-    public void AJobsAllowanceIsItsEqualShareOfWhatTheSheetLeavesAndTooSmallAShareIsRefusedByItsSum() {
+    public void AJobsAllowanceIsWhatTheSheetLeavesAndTooSmallAnAllowanceIsRefusedByItsSum() {
         var one = MiniNegamaxWorld(depth: 3);
         var two = one with {
             SearchRaw = new WorldSearchSection(Jobs: [one.Search.Rows[0], one.Search.Rows[0] with { Name = "second" }]),
@@ -199,7 +200,7 @@ public sealed class SearchLawTests {
         Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
         Assert.True(condition: (alone.Allowance >= alone.Minimum));
         Assert.Equal(
-            (alone.Allowance / 2L),
+            alone.Allowance,
             shared[0].Work.Allowance
         );
         Assert.Equal(
@@ -233,6 +234,41 @@ public sealed class SearchLawTests {
             actualString: refusal,
             expectedSubstring: $"may spend {(alone.Minimum - 1L)}"
         );
+    }
+
+    // Two jobs with work to do take turns: each tick steps one of them, the tick's turn picking which, until both
+    // have answered, and once both have answered no tick spends anything.
+    [Fact]
+    public void JobsWithWorkToDoTakeTurnsOneAStep() {
+        var one = MiniNegamaxWorld(depth: 4, nodes: 1);
+        var two = one with {
+            SearchRaw = new WorldSearchSection(Jobs: [one.Search.Rows[0], one.Search.Rows[0] with { Name = "second" }]),
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: two);
+        var stepped = new int[2];
+
+        for (var tick = 0; ((tick < 4000) && !fixture.Server.SearchStatus().All(predicate: status => status.Done)); tick++) {
+            var before = fixture.Server.SearchStatus().Select(selector: status => status.Work).ToArray();
+
+            fixture.Step();
+
+            var after = fixture.Server.SearchStatus().Select(selector: status => status.Work).ToArray();
+            var moved = Enumerable.Range(start: 0, count: 2).Where(predicate: index => (after[index] != before[index])).ToArray();
+
+            Assert.True(condition: (moved.Length <= 1), userMessage: $"tick {tick} stepped {moved.Length} jobs");
+            foreach (var index in moved) {
+                stepped[index]++;
+            }
+        }
+
+        Assert.All(collection: fixture.Server.SearchStatus(), action: status => Assert.True(condition: status.Done));
+        Assert.All(collection: stepped, action: count => Assert.True(condition: (count > 0)));
+
+        var settled = fixture.Server.SearchStatus().Select(selector: status => status.Work).ToArray();
+
+        fixture.Step();
+        Assert.Equal(expected: settled, actual: fixture.Server.SearchStatus().Select(selector: status => status.Work).ToArray());
     }
 
     // An independent oracle over the SAME declared rule ("any token to any other cell, evicting whoever stood

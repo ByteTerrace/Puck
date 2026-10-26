@@ -6,7 +6,7 @@ shows the World showing the picture, smaller each time, as a camera pointed at
 its own screen does. It shows the display in two places: the `views.graphs` row
 `desktop`, which the `desktop` layout places as a pane over the bottom two
 fifths of the display below the play view, and screen 16, the monitor of a
-desktop computer in the games corner of the gallery hall's lobby (below). Every
+desktop computer in the gallery hall's lobby (below). Every
 line below is typed at the World's console, or sent through the local operator
 attachment (`world.control`, the `puck` MCP server), which is the same console.
 
@@ -19,8 +19,7 @@ them) and the profile's extent to its size.
 
 ## The desktop computer
 
-A desk stands against the lobby's west wall between the chess table
-([`chess.md`](chess.md)) and the big painting to Wonderland ([`wonderland.md`](wonderland.md)), on
+A desk stands against the lobby's west wall south of the big painting to Wonderland ([`wonderland.md`](wonderland.md)), on
 the level 0 floor (y = 0.05), every piece at the size of the real thing and its
 own prototype in `desktop.puck`:
 

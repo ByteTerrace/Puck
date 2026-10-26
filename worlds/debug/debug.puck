@@ -6,9 +6,9 @@
 // this source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals.
 // The skin (skin.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play
 // wheel) are imported documents, as are the gaming devices (devices.puck) in Wonderland, the room a portal pair of two
-// sizes shrinks the Moth into (wonderland.puck), the whole desktop as a pane and a screen
-// (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
-// `debug.go` console command that reaches them (places.puck), each with notes beside it, and the Moth's suit on/off
+// sizes shrinks the Moth into (wonderland.puck), the whole desktop as a pane and a screen (desktop.puck), the board
+// game room's chess, Go and Reversi tables (chess.puck, go.puck, reversi.puck), the paintings (paintings.puck) and the
+// named places with the `debug.go` console command that reaches them (places.puck), each with notes beside it, and the Moth's suit on/off
 // toggle (suit.puck) under her noclip toggle (noclip.puck, which imports the suit and replaces its kit selector).
 
 schema: "puck.world.definition.v1"
@@ -23,6 +23,10 @@ import "controls"
 import "pad"
 import "devices"
 import "desktop"
+// The board game room's Go and Reversi tables, ahead of every other population so their stones and discs take the
+// population's top slots (shapes.puck's boardRoomBodies) and every body below keeps its index.
+import "go"
+import "reversi"
 import "fuzzer"
 import "traversal"
 import "kinematics-scope"
@@ -153,12 +157,13 @@ spawnPoints: concat([
 
 commands: galleryCommands
 
-// The development fuzzer and traversal bot take bodies 44 and 43; the companion keeps 42. The gallery hall and
-// chess imports keep their existing indices. Each import names its population; this body settles the total.
-// The rate range's six walkers, imported last, take the free slots below the pieces (range.puck).
-// Each body's size is its `size` register (size.puck).
+// The board game room's Go and Reversi bodies take the top slots (go.puck, reversi.puck); below them the development
+// fuzzer and traversal bot take bodies 44 and 43 and the companion keeps 42. The gallery hall and chess imports keep
+// their existing indices. Each import names its population; this body settles the total. The rate range's six
+// walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
+// (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2)
+  capacity: (galleryPopulation + 2 + boardRoomBodies)
 }
 
 placements {

@@ -106,7 +106,7 @@ public sealed partial class WorldStampPool {
             return;
         }
 
-        var length = (slotBase + (m_pool.Length * SlotsPerPlacement));
+        var length = (slotBase + DynamicSlotCount);
 
         if (m_slotRateCodes.Length != length) {
             m_slotRateCodes = new byte[length];

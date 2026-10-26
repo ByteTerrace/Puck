@@ -1,12 +1,11 @@
 # Debug world chess table
 
-The debug world stands a chess table in the games corner of the gallery hall's
-lobby ([`shapes.md`](shapes.md#the-hall)), west of the entrance between the map
-board and the desktop computer
-([`desktop.md`](desktop.md)). The board's centre is at (12.2, 0.85, 20) on the
-level 0 floor; the table is 2 m square, its top 0.8 m over the floor. White's
-back rank is on the table's -Z side, toward the entrance, and Black's on the +Z
-side, toward the desk and the devices.
+The debug world stands a chess table in the gallery hall's board game room, the
+east end of level 2 ([`shapes.md`](shapes.md#the-board-game-room)), beside the
+Go and Reversi tables ([`go.md`](go.md), [`reversi.md`](reversi.md)). The
+board's centre is at (56.5, 9.85, 22.6); the table is 2 m square, its top 0.8 m
+over the floor. White's back rank is on the table's -Z side, toward the south
+windows, and Black's on the +Z side, toward the room's doorway aisle.
 [`chess.puck`](chess.puck) holds it and `debug.puck` imports it whole
 (`import "chess"`).
 
@@ -41,7 +40,7 @@ progress, then moves its piece itself and puts a piece it takes beside the board
 Walk up to the table and press the context button (E, or the pad's RB) within
 2.5 m of the board's centre: the Moth sits down, stands still, and the camera
 eases to a view of the whole board from the side she stands on (White's side is
--Z, the side nearer the entrance). `debug.go chess` stands her at White's edge,
+-Z, the side nearer the south windows). `debug.go chess` stands her at White's edge,
 facing the board and close enough to sit. The controls switch to the board page
 while she sits; the same button stands her up again and the camera eases back.
 
@@ -76,17 +75,17 @@ A piece is a body: piece `n` (the `piece<n>` keys of `pieceCell`) is body
 `39 - n`, so White's pieces are bodies 24 to 39 and Black's 8 to 23; piece `n`
 starts on file `n % 8` (piece 4 is the white king, piece 12 the e2 pawn).
 Square (file, rank), counting from a1 = (0, 0), is centred at
-x = 12.9 - 0.2 × file, z = 19.3 + 0.2 × rank: the files run toward -X, so a1
+x = 57.2 - 0.2 × file, z = 21.9 + 0.2 × rank: the files run toward -X, so a1
 lies on +X. Its cell in the board's rows (`pieceCell`, `board`, `move`) is
 8 × rank + 7 - file, so e2 is cell 11 and e4 cell 27: the grid counts its
-columns toward +X. Lift a piece onto a square by posing its body 1.35 m up,
+columns toward +X. Lift a piece onto a square by posing its body at y = 10.35,
 0.5 m over the table's top, over the square's centre; it drops onto the board:
 
 | Move | Console line |
 |---|---|
-| e2-e4 (the e2 pawn, body 27) | `body.pose 12.1 1.35 19.9 0 0 0 27` |
-| Ng1-f3 (body 33) | `body.pose 11.9 1.35 19.7 0 0 0 33` |
-| Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 11.3 1.35 19.7 0 0 0 <body>` |
+| e2-e4 (the e2 pawn, body 27) | `body.pose 56.4 10.35 22.5 0 0 0 27` |
+| Ng1-f3 (body 33) | `body.pose 56.2 10.35 22.3 0 0 0 33` |
+| Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 55.6 10.35 22.3 0 0 0 <body>` |
 
 Seat 1 holds `Drive` over the 32 piece bodies, so it may pose them as well as
 the console.
@@ -102,8 +101,8 @@ the console.
 | Where each piece stands (`-1` off the board or fallen) | `world.state pieceCell` |
 | Check, castling rights, the move clock and repetitions | `world.state inCheck`, `world.state castleRights`, `world.state halfmoveClock`, `world.state repetitionCount` |
 | The opponent's search: running or done, and its answer | `world.search` |
-| Frame the table from White's side | `view.override camera look 12.2 2.05 18.2 12.2 0.85 20`, then `view.override camera auto` |
-| Frame the games corner from the entrance | `view.override camera look 15.5 2.4 15 11.8 0.9 23`, then `view.override camera auto` |
+| Frame the table from White's side | `view.override camera look 56.5 11.05 20.8 56.5 9.85 22.6`, then `view.override camera auto` |
+| Frame the board game room from its doorway | `view.override camera look 52 11.6 26 60 9.6 26.5`, then `view.override camera auto` |
 
 ## The opponent
 

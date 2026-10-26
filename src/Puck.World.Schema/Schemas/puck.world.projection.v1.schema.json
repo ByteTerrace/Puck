@@ -43207,7 +43207,7 @@
                       "title": "WorldEffectSave"
                     },
                     {
-                      "description": "Places a body upright at a live cell of an anchored topology, plus an authored offset.",
+                      "description": "Places a body at a live cell of an anchored topology, plus an authored offset, upright or rolled.",
                       "properties": {
                         "$type": {
                           "const": "poseCell"
@@ -44095,6 +44095,11 @@
                           "description": "Whether the body moves there as continuous motion, which a client interpolates and which keeps the body\u0027s attitude, velocity and contact state, rather than a teleport that snaps it and drops them. For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.",
                           "type": "boolean",
                           "default": false
+                        },
+                        "rollDegrees": {
+                          "description": "The roll a teleport stands the body at, about its forward axis: 180 lays it upside down, as a rule turning a two-faced piece over does. A glide keeps the body\u0027s attitude and ignores it.",
+                          "type": "number",
+                          "default": 0
                         }
                       },
                       "required": [
