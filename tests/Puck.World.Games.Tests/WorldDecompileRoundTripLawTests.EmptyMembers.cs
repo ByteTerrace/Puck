@@ -85,7 +85,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
         return null;
     }
     // The document that holds the member `path` ends at empty, with only the parents on the way to it.
-    private static JsonObject Build(List<Step> path, JsonNode? empty) {
+    private static JsonObject Build(List<Step> path, JsonNode? empty, bool omitLeaf = false) {
         var document = new JsonObject { ["schema"] = "puck.world.definition.v1" };
         var holder = document;
 
@@ -93,7 +93,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
             var step = path[index];
 
             if (index == (path.Count - 1)) {
-                holder[step.Name] = empty;
+                if (!omitLeaf) { holder[step.Name] = empty; }
 
                 break;
             }
@@ -303,7 +303,8 @@ public sealed partial class WorldDecompileRoundTripLawTests {
                 losses.Add(item: $"{pointer}: the printed source does not compile: {string.Join(separator: " | ", values: compilation.Diagnostics.Take(count: 1).Select(selector: static diagnostic => $"{diagnostic.Code}: {diagnostic.Message.Split(separator: '\n')[0]}"))}");
             } else if (FirstDifference(
                 actual: compilation.Json,
-                expected: document,
+                // A null hash carries no pin. Other nulls still clear an inherited member, so they stay present.
+                expected: Build(path: member.Path, empty: null, omitLeaf: (member.Path[^1].Name == "hash")),
                 path: string.Empty
             ) is { } loss) {
                 losses.Add(item: $"{pointer}: {loss}");

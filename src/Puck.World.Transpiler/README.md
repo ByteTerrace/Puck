@@ -750,6 +750,7 @@ converter-owned values follow their converter's shape. Authored hashes are `hash
 `hash: "sha256/<64 lowercase hex>"`; quoted `"auto"`, bare digests and `sha256-64/` pins are refused by name.
 Font pins cover font bytes. Canonical asset rows (creations, patches, tunes, music and tables) carry their canonicalizer's
 digest in the compiled document; the decompiler restores its authored prefix.
+A null document hash carries no pin, so decompilation omits the member.
 
 The engine's validation of a composed world reports each semantic refusal as PUCK030 (an error), a row or record field
 naming an undeclared enum as PUCK119, and each check it deferred to

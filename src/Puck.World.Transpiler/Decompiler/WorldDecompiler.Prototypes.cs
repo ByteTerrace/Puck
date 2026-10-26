@@ -72,10 +72,6 @@ public static partial class WorldDecompiler {
             count: (indentLevel * 4)
         );
         var inner = (indentLevel + 1);
-        var innerIndent = new string(
-            c: ' ',
-            count: (inner * 4)
-        );
         var id = (proto["id"]?.ToString() ?? "");
 
         sb.AppendLine(
@@ -95,13 +91,6 @@ public static partial class WorldDecompiler {
 
         foreach (var (k, v) in proto) {
             if (k is "id" or "document") {
-                continue;
-            }
-            if (v is null) {
-                sb.AppendLine(
-                    CultureInfo.InvariantCulture,
-                    $"{innerIndent}{k}: null"
-                );
                 continue;
             }
             EmitField(

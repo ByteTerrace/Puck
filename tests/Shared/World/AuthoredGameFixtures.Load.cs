@@ -58,7 +58,7 @@ internal static partial class AuthoredGameFixtures {
         Assert.True(
             condition: WorldDefinitionLoader.TryLoadForAdmission(
                 catalog: puckCatalog,
-                definition: out var definition,
+                admission: out var admission,
                 documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path),
                 instanceIdentity: WorldDefinitionLoader.BootInstanceName,
                 neighbours: neighbours,
@@ -71,6 +71,6 @@ internal static partial class AuthoredGameFixtures {
             userMessage: reason
         );
 
-        return definition!;
+        return admission!.Definition;
     }
 }

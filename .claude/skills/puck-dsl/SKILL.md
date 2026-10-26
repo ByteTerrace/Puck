@@ -79,6 +79,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
 - **Hashes have one authored spelling.** Write `hash: auto` for automatic
   hashing, or `hash: "sha256/<64 lowercase hex>"` for a digest. Quoted `"auto"`,
   bare digests and `sha256-64/` pins are refused by name during compilation.
+  A null document hash carries no pin: decompilation omits that member, rather
+  than inventing an empty digest or an automatic hash.
   Font pins cover the font bytes; canonical document rows (creations, patches, tunes,
   music and tables) pin their canonical document, whose compiled identity is
   still the canonicalizer's digest. The printer restores the authored prefix.

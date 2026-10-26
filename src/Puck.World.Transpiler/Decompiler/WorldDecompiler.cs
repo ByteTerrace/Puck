@@ -1137,6 +1137,8 @@ public static partial class WorldDecompiler {
     );
     // One field, in the one spelling its value's shape calls for.
     internal static void EmitField(StringBuilder sb, string key, JsonNode? value, int indentLevel, Type? holder = null) {
+        // A null hash carries no digest; its authored spelling is the absence of a pin.
+        if ((key == "hash") && (value is null)) { return; }
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
@@ -1416,6 +1418,7 @@ public static partial class WorldDecompiler {
 
             sb.AppendLine(value: "{");
             foreach (var (k, v) in obj) {
+                if ((k == "hash") && (v is null)) { continue; }
                 // An object literal follows the same one-spelling rule a block does: no colon in front of a
                 // container. The literal grammar admits `key { }` and `key [ ]` directly.
                 sb.AppendLine(
@@ -1448,6 +1451,7 @@ public static partial class WorldDecompiler {
         var arm = WorldCallArguments.ArmType(baseType: context, discriminator: type);
 
         foreach (var (k, v) in obj) {
+            if ((k == "hash") && (v is null)) { continue; }
             if (string.Equals(
                 a: k,
                 b: "$type",
