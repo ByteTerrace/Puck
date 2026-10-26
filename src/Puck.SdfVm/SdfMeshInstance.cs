@@ -9,6 +9,9 @@ namespace Puck.SdfVm;
 /// <param name="Transform">The copy's root pose.</param>
 /// <param name="Scale">The uniform size of the copy.</param>
 public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTransform Transform, float Scale) {
+    /// <summary>Gets the host's motion-history identity, stable through continuous motion and changed on a pose cut.
+    /// Falls back to <see cref="Identity"/> when absent.</summary>
+    public object? MotionIdentity { get; init; }
     /// <summary>Gets additional local surfaces of the asset, such as its separate glass bake.</summary>
     public IReadOnlyList<int> OtherAssetSlots { get; init; } = [];
     /// <summary>Gets optional authored triangle geometry, shared by all copies.</summary>
@@ -29,5 +32,5 @@ public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTran
     public Matrix4x4 Matrix => ((Matrix4x4.CreateScale(Scale) * Matrix4x4.CreateFromQuaternion(Transform.Orientation)) * Matrix4x4.CreateTranslation(Transform.Position));
 
     /// <summary>Compares the host pose independently of frame-assigned lookup metadata.</summary>
-    public bool SamePose(SdfMeshInstance other) => ((AssetSlot == other.AssetSlot) && Equals(Identity, other.Identity) && (Transform == other.Transform) && (Scale == other.Scale) && (Clip == other.Clip) && ReferenceEquals(Mesh, other.Mesh) && (Material == other.Material) && OtherAssetSlots.SequenceEqual(other.OtherAssetSlots));
+    public bool SamePose(SdfMeshInstance other) => ((AssetSlot == other.AssetSlot) && Equals(Identity, other.Identity) && Equals(MotionIdentity, other.MotionIdentity) && (Transform == other.Transform) && (Scale == other.Scale) && (Clip == other.Clip) && ReferenceEquals(Mesh, other.Mesh) && (Material == other.Material) && OtherAssetSlots.SequenceEqual(other.OtherAssetSlots));
 }

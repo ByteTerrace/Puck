@@ -11,6 +11,44 @@ namespace Puck.World.Client.Tests;
 
 public sealed class WorldRigidAssetLawTests {
     [Fact]
+    public void RigidMotionIdentityChangesOnTeleportAndReseatEvenAtTheSamePose() {
+        var client = ClientFixtures.Client(Fixtures.BuildGradientUpDocument(false));
+        var emitter = new RigidEmitter(client);
+        var frames = new SdfCompositionFrameSource([emitter], new Dresser());
+        var tick = 0UL;
+
+        (SdfProgram Program, SdfMeshInstance Copy) Frame(float x, EntityContinuity continuity, int generation = 1) {
+            client.DeliverSnapshot(new WorldSnapshot(++tick, 1, 1,
+                new[] { new EntitySnapshot(0, new Vector3(x, 0, 0), Quaternion.Identity, Vector3.One, true, 0, 0, 0, continuity, generation) }, "a"));
+            client.UpdateRenderPoses(1);
+            var frame = frames.CaptureFrame(64, 64, 0, 1);
+
+            return (frame.Program, Assert.Single(frame.MeshInstances));
+        }
+        var first = Frame(0, EntityContinuity.Continuous);
+        var moved = Frame(1, EntityContinuity.Continuous);
+
+        Assert.Equal(first.Copy.MotionIdentity, moved.Copy.MotionIdentity);
+        var teleported = Frame(50, EntityContinuity.Teleport);
+
+        Assert.Same(first.Program, teleported.Program);
+        Assert.Equal(moved.Copy.Identity, teleported.Copy.Identity);
+        Assert.NotEqual(moved.Copy.MotionIdentity, teleported.Copy.MotionIdentity);
+        var cutAtRest = Frame(50, EntityContinuity.Teleport);
+
+        Assert.NotEqual(teleported.Copy.MotionIdentity, cutAtRest.Copy.MotionIdentity);
+        var reseated = Frame(50, EntityContinuity.Continuous, generation: 2);
+
+        Assert.NotEqual(cutAtRest.Copy.MotionIdentity, reseated.Copy.MotionIdentity);
+        var continued = Frame(51, EntityContinuity.Continuous, generation: 2);
+
+        Assert.Equal(reseated.Copy.MotionIdentity, continued.Copy.MotionIdentity);
+        var carried = Frame(57, EntityContinuity.Carry(new WorldPoseCarry(Quaternion.Identity, new Vector3(6, 0, 0))), generation: 2);
+
+        Assert.Equal(continued.Copy.MotionIdentity, carried.Copy.MotionIdentity);
+    }
+
+    [Fact]
     public void SixHundredRigidBodiesShareOneBakeAndKeepTheirIdentityWithoutRebuildingTheProgram() {
         var emitter = new RigidEmitter();
         var source = new SdfCompositionFrameSource([emitter], new Dresser());
@@ -67,12 +105,13 @@ public sealed class WorldRigidAssetLawTests {
 
         private readonly WorldPrototype m_creation;
 
-        private readonly StampSource m_source = new();
+        private readonly IWorldStampSource m_source;
         private readonly WorldPickMapBuilder m_picks = new();
 
         public int Count { get; set; } = 1;
 
-        public RigidEmitter() {
+        public RigidEmitter(IWorldStampSource? source = null) {
+            m_source = (source ?? new StampSource());
             var document = CreationCanonicalizer.Canonicalize(new CreationDocument(CreationDocument.CurrentSchema,
                 "stone", CreationFixtures.Grey, [CreationFixtures.UnitSphereShape], null), "stone");
 

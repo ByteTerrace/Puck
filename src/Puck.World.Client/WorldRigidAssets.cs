@@ -205,6 +205,7 @@ public sealed class WorldRigidAssets {
             var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_slotCount));
             var copy = new SdfMeshInstance(firstSlot, target,
                 new DynamicTransform(Position: position, Orientation: orientation, Lanes: lanes) { MaterialScale = body.Scale }, body.Scale) {
+                MotionIdentity = (target, source.EntityAddress(body.BodyIndex), source.PoseEpoch(body.BodyIndex)),
                 OtherAssetSlots = ((endSlot > (firstSlot + 1)) ? new[] { (firstSlot + 1) } : []),
                 Mesh = (((hidden is null) && (body.Creation.Mesh is { } mesh)) ? WorldPlacementStamper.MeshOf(mesh) : null),
                 Material = ((asset < m_materials.Count) ? m_materials[asset] : 0),

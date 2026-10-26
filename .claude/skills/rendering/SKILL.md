@@ -35,7 +35,10 @@ one bake program, not a per-world render budget.
 A retained separate bake group must still ride the newly planned `Slot`, even
 when its instance selector and local geometry stay unchanged. Rigid draw poses
 are picking metadata; `SdfMeshDraw.MotionIdentity` names the stable body/surface
-for both whole-list and changed-record uploads. Rigid root followers observe
+for both whole-list and changed-record uploads. Rigid copies include the entity
+address and pose-discontinuity epoch in that identity, so teleports and reseats
+seed the previous mesh matrix at the new pose, including authored meshes.
+Rigid root followers observe
 portal carry history, reseeding when it expires. Isolation also filters rigid
 templates, parented paints and volumes, text and authored meshes.
 
