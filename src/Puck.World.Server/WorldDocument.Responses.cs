@@ -30,6 +30,7 @@ public sealed partial class WorldDocument {
         }
 
         AdoptDefinition(definition: definition);
+        Host.CarryPlacementOrdinals(definition: definition, previous: previous);
         m_pendingStateDelivery = true;
         m_pendingPlacementProjection = true;
 

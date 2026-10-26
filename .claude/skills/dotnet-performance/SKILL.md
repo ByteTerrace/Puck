@@ -136,6 +136,11 @@ outside this contract and takes the references as written.
 - Record first-use work separately from warm tables, and distinguish allocated
   bytes from retained pools or peak workspace. Use idle, serial runs; sampled
   timings alone never establish an algorithmic or full-domain claim.
+- Keep identities structural on hot read paths: formatting a principal or a parsed
+  channel just to check a public policy or compare a channel name creates garbage
+  even when the check has no work to do. Format only when the policy or output
+  needs text. A response mask change preserves placement ids and order, so carry
+  their resolved addresses across it; refresh live permission checks on every use.
 - No law gates a timing: cost laws state deterministic counts. The managed
   allocation meter is `Puck.Abstractions.Counting.AllocationWindow`: `Least`
   takes the least of up to 16 windows of `GC.GetAllocatedBytesForCurrentThread`
