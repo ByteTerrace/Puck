@@ -7,7 +7,7 @@ using Xunit;
 namespace Puck.Cli.Worlds.Tests;
 
 /// <summary>The migration law: over a fixture carrying a comment in every position the grammar admits one, a
-/// blank-line run, an <c>import</c>, a <c>template</c>, a <c>for</c>, and an <c>sql { }</c> block, a named rewrite
+/// blank-line run, an <c>import</c>, a <c>template</c> and a <c>for</c>, a named rewrite
 /// changes the one thing it names and nothing else — every comment and blank line comes back where its author put
 /// it, the compile-time layer is still source rather than its expansion, the compiled document is unchanged apart
 /// from the members the migration declares, and a second run is a fixed point. A rewrite that moves a member it
@@ -113,10 +113,6 @@ public sealed class PuckMigrationLawTests {
           layout index {
             seatCount: width
           }
-        }
-
-        sql {
-          DECLARE gold INT DEFAULT 10 CHECK (gold >= 0);
         }
 
         host {
@@ -232,7 +228,6 @@ public sealed class PuckMigrationLawTests {
             "let lanes = [1, 2, 3]",
             "import \"shared\"",
             "template lane(index, width = 2)",
-            "sql {",
             "for index in lanes {",
         }) {
             Assert.Contains(

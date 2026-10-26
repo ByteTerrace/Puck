@@ -152,10 +152,28 @@ let hallLightAisles = [[13.6, 19.6, 25.6, 31.6], [14.6, 22.6, 30.6], [14.6, 22.6
 // looks stay one geometry (the strips' slot alone differs) and the slab's bake keeps its trim at the slab's detail.
 template hallStrips(top, aisles) {
   for z in aisles {
-    hallBox(label: $"strip-{z}", x0: 21, x1: 69, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.2), z1: (z + 0.2), slot: hallLight)
+    hallBox(
+      label: $"strip-{z}",
+      x0: 21,
+      x1: 69,
+      y0: (top - 0.06),
+      y1: (top + 0.01),
+      z0: (z - 0.2),
+      z1: (z + 0.2),
+      slot: hallLight
+    )
   }
   for z in [18, 26] {
-    hallBox(label: $"landing-light-{z}", x0: 11.5, x1: 19, y0: (top - 0.06), y1: (top + 0.01), z0: (z - 0.3), z1: (z + 0.3), slot: hallLight)
+    hallBox(
+      label: $"landing-light-{z}",
+      x0: 11.5,
+      x1: 19,
+      y0: (top - 0.06),
+      y1: (top + 0.01),
+      z0: (z - 0.3),
+      z1: (z + 0.3),
+      slot: hallLight
+    )
   }
 }
 
@@ -191,11 +209,25 @@ let liftZ = 38.05
 // back wall: floors 0 to 3, door open and door close from the viewer's left to right (the viewer faces +Z, so left is
 // +X). The Moth's body can stand between x 14.97 and 16.83 in the cab, so the six cells split 14.95 .. 16.85 evenly
 // and the outer two reach to the walls; each cell's button is drawn at its centre.
-let liftPads = map(range(0, 4), k => { level: k, x0: 16.6, x1: 17.4, z0: 34.8, z1: 36, y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
+let liftPads = map(
+  range(0, 4),
+  k => { level: k, x0: 16.6, x1: 17.4, z0: 34.8, z1: 36, y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) }
+)
 let carPadHi = 16.85
 let carPadPitch = (1.9 / 6)
 let carKeys = ["0", "1", "2", "3", "open", "close"]
-let carPads = map(range(0, 6), j => { slot: j, key: carKeys[j], x: (carPadHi - (carPadPitch * (j + 0.5))), x0: ((j == 5) ? 14.6 : (carPadHi - (carPadPitch * (j + 1)))), x1: ((j == 0) ? 17.2 : (carPadHi - (carPadPitch * j))), z0: 38.5, z1: 39.6 })
+let carPads = map(
+  range(0, 6),
+  j => {
+    slot: j
+    key: carKeys[j]
+    x: (carPadHi - (carPadPitch * (j + 0.5)))
+    x0: ((j == 5) ? 14.6 : (carPadHi - (carPadPitch * (j + 1))))
+    x1: ((j == 0) ? 17.2 : (carPadHi - (carPadPitch * j)))
+    z0: 38.5
+    z1: 39.6
+  }
+)
 // The panel's back wall: its plate stands 1.25 m over the car's floor, 5 cm proud of the back wall's inner face.
 let carPanelY = 1.25
 let carPanelZ = (liftZ + 1.395)
@@ -207,9 +239,23 @@ let carPanelZ = (liftZ + 1.395)
 // over the floor, south of the stairs and clear of the device row's engage radius; the context button (`interact`,
 // E or RB on a pad) flips it while seat 1's body stands in the switch's reach box before it.
 let switchZ = 32.5
-let switchReach = map(range(0, 4), k => { level: k, x0: 10.3, x1: 11.8, z0: (switchZ - 0.6), z1: (switchZ + 0.6), y0: (galleryFloor[k] - 0.5), y1: (galleryFloor[k] + 1) })
+let switchReach = map(
+  range(0, 4),
+  k => {
+    level: k
+    x0: 10.3
+    x1: 11.8
+    z0: (switchZ - 0.6)
+    z1: (switchZ + 0.6)
+    y0: (galleryFloor[k] - 0.5)
+    y1: (galleryFloor[k] + 1)
+  }
+)
 // On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
-let hallSwitchStates = [{ name: "on", indicator: "#FFC46B", glow: 300 }, { name: "off", indicator: "#5BE38A", glow: 200 }]
+let hallSwitchStates = [
+  { name: "on", indicator: "#FFC46B", glow: 300 }
+  { name: "off", indicator: "#5BE38A", glow: 200 }
+]
 
 // The blinds, each level's set by its `hallBlinds` cell, Up or Down, apart from its lights: every level's start Down, so
 // the gallery is lit by its own light alone, and `gallery.blinds` raises a level's to see it by daylight. A level's windows open in the south, north and
@@ -227,14 +273,60 @@ let windowStarts = map(range(0, 10), i => 21 + (5 * i))
 let eastStarts = [14.5, 19.5, 24.5, 29.5, 34.5]
 let skylightStarts = [24, 36, 48]
 // Each opening, for its cassette: its level, its face, and its extent along the face (x, or z on the east face).
-let hallOpenings = reduce(range(0, 4), [], (rows, k) => concat(concat(concat(rows, map(concat(((k == 0) ? [] : [14]), windowStarts), x => { level: k, face: "south", a0: x, a1: ((x == 14) ? 18 : (x + 3)) })), map(windowStarts, x => { level: k, face: "north", a0: x, a1: (x + 3) })), map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })))
+let hallOpenings = reduce(
+  range(0, 4),
+  [],
+  (rows, k) => concat(
+    concat(
+      concat(
+        rows,
+        map(
+          concat(((k == 0) ? [] : [14]), windowStarts),
+          x => { level: k, face: "south", a0: x, a1: ((x == 14) ? 18 : (x + 3)) }
+        )
+      ),
+      map(windowStarts, x => { level: k, face: "north", a0: x, a1: (x + 3) })
+    ),
+    map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })
+  )
+)
 // Each blind board: its level, its name, and its world bounds.
 let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
-  { level: k, name: "south", x0: ((k == 0) ? 20.97 : 13.97), x1: 69.03, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 12.03, z1: 12.25 }
-  { level: k, name: "north", x0: 20.97, x1: 69.03, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 39.75, z1: 39.97 }
-  { level: k, name: "east", x0: 69.75, x1: 69.97, y0: ((storey * k) + 0.87), y1: ((storey * k) + 3.33), z0: 14.47, z1: 37.53 }
+  {
+    level: k
+    name: "south"
+    x0: ((k == 0) ? 20.97 : 13.97)
+    x1: 69.03
+    y0: ((storey * k) + 0.87)
+    y1: ((storey * k) + 3.33)
+    z0: 12.03
+    z1: 12.25
+  }
+  {
+    level: k
+    name: "north"
+    x0: 20.97
+    x1: 69.03
+    y0: ((storey * k) + 0.87)
+    y1: ((storey * k) + 3.33)
+    z0: 39.75
+    z1: 39.97
+  }
+  {
+    level: k
+    name: "east"
+    x0: 69.75
+    x1: 69.97
+    y0: ((storey * k) + 0.87)
+    y1: ((storey * k) + 3.33)
+    z0: 14.47
+    z1: 37.53
+  }
 ]
-), map(((k == 3) ? skylightStarts : []), x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 })
+), map(
+  ((k == 3) ? skylightStarts : []),
+  x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 }
+)
 )
 )
 let blindPalette = [{ color: "#CFCFCC", roughness: 0.9, specular: 0.03 }]
@@ -245,7 +337,10 @@ let blindSeams = 8
 // is On: every level's downlights (a high-output LED downlight's 5,000 lm, at the hall's neutral 6500 K), and the stairwell's
 // pendant (800 lm, a 60 W bulb's) on level 1's switch. A fixture stands still, so the irradiance volume traces it: its
 // light bounces about its room and stops at the slab under it.
-let hallLampLevels = concat(map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 5000 }), [{ key: "stairs", level: 1, lumens: 800 }])
+let hallLampLevels = concat(
+  map(range(0, 4), k => { key: $"level{k}", level: k, lumens: 5000 }),
+  [{ key: "stairs", level: 1, lumens: 800 }]
+)
 // Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
@@ -255,13 +350,31 @@ let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // fixture on it; the wing hangs its own.
 let hallDownlightColumns = [[27, 39, 49], [27, 39, 51, 63], [27, 39, 51, 63], [27, 39, 51, 63]]
 let hallDownlightAisles = concat(hallLightAisles, [[15, 21, 26, 31, 37]])
-let hallDownlights = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, reduce(hallDownlightAisles[k], [], (aisle, z) => concat(aisle, map(hallDownlightColumns[k], x => { level: k, x: x, z: z })))), map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })))
+let hallDownlights = reduce(
+  range(0, 4),
+  [],
+  (rows, k) => concat(
+    concat(
+      rows,
+      reduce(
+        hallDownlightAisles[k],
+        [],
+        (aisle, z) => concat(aisle, map(hallDownlightColumns[k], x => { level: k, x: x, z: z }))
+      )
+    ),
+    map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })
+  )
+)
 // The painting wing's own fixtures (paintings.puck), lit whatever level 0's switch says, since the wing is a windowless
 // room whose paintings are its exhibits and its ceiling strips go dark with the lobby's: a grid of 8,000-lumen
 // downlights clear of the endless fall's ceiling canvas at (66, 22.6), and a track of washes 1.2 m off each wall a
 // painting hangs on, each a warm spot aimed down the wall at a canvas's height, so the canvases and the wall about
 // them carry a gallery's light (some 400 lux at a canvas).
-let wingDownlights = reduce([53.5, 60.35, 67.2], [], (rows, x) => concat(rows, map([16, 22.5, 29.5, 36], z => { x: x, z: z })))
+let wingDownlights = reduce(
+  [53.5, 60.35, 67.2],
+  [],
+  (rows, x) => concat(rows, map([16, 22.5, 29.5, 36], z => { x: x, z: z }))
+)
 let wingWashes = concat(
   map([54, 57, 60, 64, 67], x => { x: x, z: 38.2, aim [0, -2.65, 1.2] }),
   [{ x: 52.5, z: 34.5, aim [-1.2, -2.65, 0] }, { x: 68.2, z: 34.5, aim [1.2, -2.65, 0] }]
@@ -289,7 +402,16 @@ prototypes {
       hallBox(label: "south-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
       hallBox(label: "south-sill", x0: 21, x1: 69, y0: 0, y1: 0.9, z0: 12, z1: 12.3, slot: hallWall)
       for (band, index) in upperBands {
-        hallBox(label: $"south-band-{index}", x0: 14, x1: 69, y0: band[0], y1: band[1], z0: 12, z1: 12.3, slot: hallWall)
+        hallBox(
+          label: $"south-band-{index}",
+          x0: 14,
+          x1: 69,
+          y0: band[0],
+          y1: band[1],
+          z0: 12,
+          z1: 12.3,
+          slot: hallWall
+        )
       }
       // North face: solid behind the stairs and the shaft, windows along the halls.
       hallBox(label: "north-core", x0: 10, x1: 21, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
@@ -298,24 +420,69 @@ prototypes {
       }
       hallBox(label: "north-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
       for (band, index) in bands {
-        hallBox(label: $"north-band-{index}", x0: 21, x1: 69, y0: band[0], y1: band[1], z0: 39.7, z1: 40, slot: hallWall)
+        hallBox(
+          label: $"north-band-{index}",
+          x0: 21,
+          x1: 69,
+          y0: band[0],
+          y1: band[1],
+          z0: 39.7,
+          z1: 40,
+          slot: hallWall
+        )
       }
       // East face.
       for (pier, index) in eastPiers {
-        hallBox(label: $"east-pier-{index}", x0: 69.7, x1: 70, y0: 0, y1: parapet, z0: pier[0], z1: pier[1], slot: hallWall)
+        hallBox(
+          label: $"east-pier-{index}",
+          x0: 69.7,
+          x1: 70,
+          y0: 0,
+          y1: parapet,
+          z0: pier[0],
+          z1: pier[1],
+          slot: hallWall
+        )
       }
       for (band, index) in bands {
-        hallBox(label: $"east-band-{index}", x0: 69.7, x1: 70, y0: band[0], y1: band[1], z0: 14.5, z1: 37.5, slot: hallWall)
+        hallBox(
+          label: $"east-band-{index}",
+          x0: 69.7,
+          x1: 70,
+          y0: band[0],
+          y1: band[1],
+          z0: 14.5,
+          z1: 37.5,
+          slot: hallWall
+        )
       }
       // West face, solid.
       hallBox(label: "west", x0: 10, x1: 10.3, y0: 0, y1: parapet, z0: 12.3, z1: 39.7, slot: hallWall)
       // The cassette a window's blind rolls into, under the band over its head, part of the wall so it bakes with it.
       for (opening, n) in hallOpenings {
         for depth in ((opening.face == "south") ? [[12.05, 12.28]] : ((opening.face == "north") ? [[39.72, 39.95]] : [])) {
-          hallBox(label: $"cassette-{n}", x0: opening.a0, x1: opening.a1, y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.33), z0: depth[0], z1: depth[1], slot: hallTrim)
+          hallBox(
+            label: $"cassette-{n}",
+            x0: opening.a0,
+            x1: opening.a1,
+            y0: ((storey * opening.level) + 3.2),
+            y1: ((storey * opening.level) + 3.33),
+            z0: depth[0],
+            z1: depth[1],
+            slot: hallTrim
+          )
         }
         for depth in ((opening.face == "east") ? [[69.72, 69.95]] : []) {
-          hallBox(label: $"cassette-{n}", x0: depth[0], x1: depth[1], y0: ((storey * opening.level) + 3.2), y1: ((storey * opening.level) + 3.33), z0: opening.a0, z1: opening.a1, slot: hallTrim)
+          hallBox(
+            label: $"cassette-{n}",
+            x0: depth[0],
+            x1: depth[1],
+            y0: ((storey * opening.level) + 3.2),
+            y1: ((storey * opening.level) + 3.33),
+            z0: opening.a0,
+            z1: opening.a1,
+            slot: hallTrim
+          )
         }
       }
     }
@@ -343,10 +510,34 @@ prototypes {
           schema: "puck.creation.v1"
           palette: look.palette
           for (piece, n) in ((k == 1) ? fallSlab : [{ x0: 10.3, x1: 69.7, z0: 12.3, z1: stairStart }]) {
-            hallSlab(label: $"slab-{k}-south-{n}", x0: piece.x0, x1: piece.x1, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: piece.z0, z1: piece.z1)
+            hallSlab(
+              label: $"slab-{k}-south-{n}",
+              x0: piece.x0,
+              x1: piece.x1,
+              y0: ((storey * k) - 0.25),
+              y1: ((storey * k) + 0.05),
+              z0: piece.z0,
+              z1: piece.z1
+            )
           }
-          hallSlab(label: $"slab-{k}-north", x0: 17.7, x1: 69.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 39.7)
-          hallSlab(label: $"slab-{k}-landing", x0: 14.1, x1: 17.7, y0: ((storey * k) - 0.25), y1: ((storey * k) + 0.05), z0: stairStart, z1: 36.4)
+          hallSlab(
+            label: $"slab-{k}-north",
+            x0: 17.7,
+            x1: 69.7,
+            y0: ((storey * k) - 0.25),
+            y1: ((storey * k) + 0.05),
+            z0: stairStart,
+            z1: 39.7
+          )
+          hallSlab(
+            label: $"slab-{k}-landing",
+            x0: 14.1,
+            x1: 17.7,
+            y0: ((storey * k) - 0.25),
+            y1: ((storey * k) + 0.05),
+            z0: stairStart,
+            z1: 36.4
+          )
           hallStrips(top: ((storey * k) - 0.25), aisles: hallLightAisles[(k - 1)])
         }
       }
@@ -383,10 +574,48 @@ prototypes {
           { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
           { color: state.indicator, roughness: 0.4, emissive: state.glow }
         ]
-        hallBox(label: "plate", x0: 10.3, x1: 10.34, y0: 1.1, y1: 1.46, z0: (switchZ - 0.13), z1: (switchZ + 0.13), slot: 0)
-        hallBox(label: "rocker", x0: 10.34, x1: 10.39, y0: 1.24, y1: 1.32, z0: (switchZ - 0.035), z1: (switchZ + 0.035), slot: 1)
-        hallBox(label: "indicator", x0: 10.34, x1: 10.355, y0: 1.39, y1: 1.42, z0: (switchZ - 0.02), z1: (switchZ + 0.02), slot: 2)
-        textRuns [{ text: "LIGHTS", position [-10.302, 1.53, (0 - switchZ)], rotation [0, -0.707107, 0, 0.707107], emHeight: 0.06, depth: 0.004, mode: "emboss", material: 1, align: "center" }]
+        hallBox(
+          label: "plate",
+          x0: 10.3,
+          x1: 10.34,
+          y0: 1.1,
+          y1: 1.46,
+          z0: (switchZ - 0.13),
+          z1: (switchZ + 0.13),
+          slot: 0
+        )
+        hallBox(
+          label: "rocker",
+          x0: 10.34,
+          x1: 10.39,
+          y0: 1.24,
+          y1: 1.32,
+          z0: (switchZ - 0.035),
+          z1: (switchZ + 0.035),
+          slot: 1
+        )
+        hallBox(
+          label: "indicator",
+          x0: 10.34,
+          x1: 10.355,
+          y0: 1.39,
+          y1: 1.42,
+          z0: (switchZ - 0.02),
+          z1: (switchZ + 0.02),
+          slot: 2
+        )
+        textRuns [
+          {
+            text: "LIGHTS"
+            position [-10.302, 1.53, (0 - switchZ)]
+            rotation [0, -0.707107, 0, 0.707107]
+            emHeight: 0.06
+            depth: 0.004
+            mode: "emboss"
+            material: 1
+            align: "center"
+          }
+        ]
       }
     }
   }
@@ -404,10 +633,27 @@ prototypes {
             color: blindPalette[0].color
             roughness: blindPalette[0].roughness
             specular: blindPalette[0].specular
-            paints: map(((blind.y0 > 17) ? [] : range(1, blindSeams)), i => { type: "Plane", position [0, ((blind.y0 + 0.03) + ((2.4 / (blindSeams + 1)) * i)), 0], stroke: 0.007, color: "#8C8C89" })
+            paints: map(
+              ((blind.y0 > 17) ? [] : range(1, blindSeams)),
+              i => {
+                type: "Plane"
+                position [0, ((blind.y0 + 0.03) + ((2.4 / (blindSeams + 1)) * i)), 0]
+                stroke: 0.007
+                color: "#8C8C89"
+              }
+            )
           }
         ]
-        hallBox(label: "board", x0: blind.x0, x1: blind.x1, y0: blind.y0, y1: blind.y1, z0: blind.z0, z1: blind.z1, slot: 0)
+        hallBox(
+          label: "board",
+          x0: blind.x0,
+          x1: blind.x1,
+          y0: blind.y0,
+          y1: blind.y1,
+          z0: blind.z0,
+          z1: blind.z1,
+          slot: 0
+        )
       }
     }
   }
@@ -428,18 +674,72 @@ prototypes {
       palette: hallPalette
       for k in range(0, 3) {
         for i in range(1, 8) {
-          hallBox(label: $"flight-a-{k}-{i}", x0: 10.3, x1: 12.1, y0: ((storey * k) + 0.05), y1: (((storey * k) + 0.05) + (riser * i)), z0: (stairStart + (tread * (i - 1))), z1: (stairStart + (tread * i)), slot: hallFloor)
+          hallBox(
+            label: $"flight-a-{k}-{i}",
+            x0: 10.3,
+            x1: 12.1,
+            y0: ((storey * k) + 0.05),
+            y1: (((storey * k) + 0.05) + (riser * i)),
+            z0: (stairStart + (tread * (i - 1))),
+            z1: (stairStart + (tread * i)),
+            slot: hallFloor
+          )
         }
-        hallBox(label: $"landing-{k}", x0: 10.3, x1: 14.1, y0: ((storey * k) + 2), y1: ((storey * k) + 2.3), z0: landingSouth, z1: 39.7, slot: hallFloor)
+        hallBox(
+          label: $"landing-{k}",
+          x0: 10.3,
+          x1: 14.1,
+          y0: ((storey * k) + 2),
+          y1: ((storey * k) + 2.3),
+          z0: landingSouth,
+          z1: 39.7,
+          slot: hallFloor
+        )
         for j in range(1, 8) {
-          hallBox(label: $"flight-b-{k}-{j}", x0: 12.3, x1: 14.1, y0: (((storey * k) + 1.85) + (riser * j)), y1: (((storey * k) + 2.3) + (riser * j)), z0: (landingSouth - (tread * j)), z1: (landingSouth - (tread * (j - 1))), slot: hallFloor)
+          hallBox(
+            label: $"flight-b-{k}-{j}",
+            x0: 12.3,
+            x1: 14.1,
+            y0: (((storey * k) + 1.85) + (riser * j)),
+            y1: (((storey * k) + 2.3) + (riser * j)),
+            z0: (landingSouth - (tread * j)),
+            z1: (landingSouth - (tread * (j - 1))),
+            slot: hallFloor
+          )
         }
-        hallBox(label: $"divider-{k}", x0: 12.1, x1: 12.3, y0: ((storey * k) + 0.05), y1: ((storey * (k + 1)) + 0.05), z0: stairStart, z1: landingSouth, slot: hallTrim)
+        hallBox(
+          label: $"divider-{k}",
+          x0: 12.1,
+          x1: 12.3,
+          y0: ((storey * k) + 0.05),
+          y1: ((storey * (k + 1)) + 0.05),
+          z0: stairStart,
+          z1: landingSouth,
+          slot: hallTrim
+        )
       }
       // Level 3's floor is holed over the whole stairwell, as every level's is, so the Moth (2.06 m tall) keeps her
       // headroom on the last landing; a rail stands round the well where no flight arrives.
-      hallBox(label: "rail-3-divider", x0: 12.1, x1: 12.3, y0: 13.55, y1: 14.55, z0: stairStart, z1: landingSouth, slot: hallTrim)
-      hallBox(label: "rail-3-south", x0: 10.3, x1: 12.3, y0: 13.55, y1: 14.55, z0: (stairStart - 0.1), z1: stairStart, slot: hallTrim)
+      hallBox(
+        label: "rail-3-divider",
+        x0: 12.1,
+        x1: 12.3,
+        y0: 13.55,
+        y1: 14.55,
+        z0: stairStart,
+        z1: landingSouth,
+        slot: hallTrim
+      )
+      hallBox(
+        label: "rail-3-south",
+        x0: 10.3,
+        x1: 12.3,
+        y0: 13.55,
+        y1: 14.55,
+        z0: (stairStart - 0.1),
+        z1: stairStart,
+        slot: hallTrim
+      )
     }
   }
 
@@ -454,7 +754,16 @@ prototypes {
       hallBox(label: "shaft-jamb-west", x0: 14.4, x1: 15, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
       hallBox(label: "shaft-jamb-east", x0: 16.8, x1: 17.4, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
       for k in range(0, 4) {
-        hallBox(label: $"shaft-lintel-{k}", x0: 15, x1: 16.8, y0: ((storey * k) + 2.65), y1: ((k == 3) ? hallTop : ((storey * (k + 1)) + 0.05)), z0: 36.1, z1: 36.4, slot: hallTrim)
+        hallBox(
+          label: $"shaft-lintel-{k}",
+          x0: 15,
+          x1: 16.8,
+          y0: ((storey * k) + 2.65),
+          y1: ((k == 3) ? hallTop : ((storey * (k + 1)) + 0.05)),
+          z0: 36.1,
+          z1: 36.4,
+          slot: hallTrim
+        )
       }
     }
   }
@@ -562,7 +871,19 @@ prototypes {
           position [0, 0, 0.03]
           scale [0.295, 0.105, 0.01]
         }
-        textRuns: map(range(0, 4), d => { text: $"{d}", position [(-0.09 + (0.1 * d)), -0.045, 0.04], rotation [0, 0, 0, 1], emHeight: 0.13, depth: 0.004, mode: "emboss", material: (4 + d), align: "center" })
+        textRuns: map(
+          range(0, 4),
+          d => {
+            text: $"{d}"
+            position [(-0.09 + (0.1 * d)), -0.045, 0.04]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.13
+            depth: 0.004
+            mode: "emboss"
+            material: (4 + d)
+            align: "center"
+          }
+        )
       }
     }
   }
@@ -600,7 +921,16 @@ prototypes {
           palette: concat(liftBase, [liftFaces[lit]])
           liftButtonFace()
           textRuns [
-            { text: $"{j}", position [0, -0.045, 0.033], rotation [0, 0, 0, 1], emHeight: 0.13, depth: 0.004, mode: "emboss", material: liftInk, align: "center" }
+            {
+              text: $"{j}"
+              position [0, -0.045, 0.033]
+              rotation [0, 0, 0, 1]
+              emHeight: 0.13
+              depth: 0.004
+              mode: "emboss"
+              material: liftInk
+              align: "center"
+            }
           ]
         }
       }
@@ -641,7 +971,16 @@ prototypes {
         }
         liftButtonFace()
         textRuns [
-          { text: "CALL", position [0, -0.17, 0.003], rotation [0, 0, 0, 1], emHeight: 0.055, depth: 0.003, mode: "emboss", material: liftInk, align: "center" }
+          {
+            text: "CALL"
+            position [0, -0.17, 0.003]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.055
+            depth: 0.003
+            mode: "emboss"
+            material: liftInk
+            align: "center"
+          }
         ]
       }
     }
@@ -660,8 +999,28 @@ prototypes {
           scale [1.1, 0.3, 0.02]
         }
         textRuns [
-          { text: level.title, position [0, 3.33, -0.405], rotation [0, 0, 0, 1], emHeight: 0.11, depth: 0.004, mode: "emboss", material: hallTrim, align: "center", maxWidth: 2.1 }
-          { text: level.what, position [0, 3.13, -0.405], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.004, mode: "emboss", material: hallTrim, align: "center", maxWidth: 2.1 }
+          {
+            text: level.title
+            position [0, 3.33, -0.405]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.11
+            depth: 0.004
+            mode: "emboss"
+            material: hallTrim
+            align: "center"
+            maxWidth: 2.1
+          }
+          {
+            text: level.what
+            position [0, 3.13, -0.405]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.06
+            depth: 0.004
+            mode: "emboss"
+            material: hallTrim
+            align: "center"
+            maxWidth: 2.1
+          }
         ]
       }
     }
@@ -797,7 +1156,10 @@ placements {
       bodyIndex: liftBody
       localOffset [0, (1.85 - liftRoot), (carPanelZ - liftZ)]
     }
-    respond: map(range(1, 3), v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" })
+    respond: map(
+      range(1, 3),
+      v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
+    )
   }
   placement "lift-car-arrow" {
     prototype: "lift-arrows-0"
@@ -806,7 +1168,10 @@ placements {
       bodyIndex: liftBody
       localOffset [0, (1.85 - liftRoot), (carPanelZ - liftZ)]
     }
-    respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" })
+    respond: map(
+      range(1, 2),
+      v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
+    )
   }
   // The panel's buttons, left to right: floors 0 to 3, door open, door close. A floor button lights while its car call
   // is pending, a door button for a moment after its press.
@@ -819,7 +1184,10 @@ placements {
         localOffset [(pad.x - liftX), (carPanelY - liftRoot), (carPanelZ - liftZ)]
       }
       respond [
-        { "when": state(state: liftCarCall, key: $"level{pad.slot}", comparison: Equal, value: 1), prototypeId: $"lift-btn-{pad.key}-1" }
+        {
+          "when": state(state: liftCarCall, key: $"level{pad.slot}", comparison: Equal, value: 1)
+          prototypeId: $"lift-btn-{pad.key}-1"
+        }
       ]
     }
   }
@@ -832,7 +1200,10 @@ placements {
         localOffset [(pad.x - liftX), (carPanelY - liftRoot), (carPanelZ - liftZ)]
       }
       respond [
-        { "when": state(state: liftLamp, key: pad.key, comparison: Equal, value: 1), prototypeId: $"lift-btn-{pad.key}-1" }
+        {
+          "when": state(state: liftLamp, key: pad.key, comparison: Equal, value: 1)
+          prototypeId: $"lift-btn-{pad.key}-1"
+        }
       ]
     }
   }
@@ -842,7 +1213,10 @@ placements {
       prototype: "lift-call-0"
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.2), 36.1]
       respond [
-        { "when": state(state: liftHall, key: $"level{level.level}", comparison: Equal, value: 1), prototypeId: "lift-call-1" }
+        {
+          "when": state(state: liftHall, key: $"level{level.level}", comparison: Equal, value: 1)
+          prototypeId: "lift-call-1"
+        }
       ]
     }
     placement $"lift-door-{level.level}" {
@@ -850,18 +1224,27 @@ placements {
       position [liftX, (galleryFloor[level.level] - 0.05), 36.22]
       solid
       respond [
-        { "when": state(state: liftDoors, key: $"level{level.level}", comparison: Equal, value: 1), prototypeId: "lift-door-1" }
+        {
+          "when": state(state: liftDoors, key: $"level{level.level}", comparison: Equal, value: 1)
+          prototypeId: "lift-door-1"
+        }
       ]
     }
     placement $"lift-indicator-{level.level}" {
       prototype: "lift-display-0"
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), 36.1]
-      respond: map(range(1, 3), v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" })
+      respond: map(
+        range(1, 3),
+        v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
+      )
     }
     placement $"lift-arrow-{level.level}" {
       prototype: "lift-arrows-0"
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), 36.1]
-      respond: map(range(1, 2), v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" })
+      respond: map(
+        range(1, 2),
+        v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
+      )
     }
     placement $"lift-landing-{level.level}" {
       prototype: $"lift-landing-{level.level}"
@@ -884,27 +1267,101 @@ render {
   lighting {
     lights: concat(
       [
-        directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", illuminance: 100000lx, shadow: always, angularRadius: 0.2)
+        directional(
+          name: "key",
+          direction: [3, 5, -4],
+          color: "#FFF0DC",
+          illuminance: 100000lx,
+          shadow: always,
+          angularRadius: 0.2
+        )
         // The inspection fill (`gallery.inspect`): five unshadowed neutral lights, one from overhead and four low
         // from the sides, each at the `galleryFill.fill` illuminance, zero while the lever is Off. They reach every
         // surface that faces them, shadowed or not, so no exhibit sits in the dark.
-        directional(name: "inspect-fill-top", direction: [0, 1, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-east", direction: [1, 0.3, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-west", direction: [-1, 0.3, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-south", direction: [0, 0.3, 1], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-north", direction: [0, 0.3, -1], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
+        directional(
+          name: "inspect-fill-top",
+          direction: [0, 1, 0],
+          color: "#FFFFFF",
+          illuminance: "state.galleryFill.fill"
+        )
+        directional(
+          name: "inspect-fill-east",
+          direction: [1, 0.3, 0],
+          color: "#FFFFFF",
+          illuminance: "state.galleryFill.fill"
+        )
+        directional(
+          name: "inspect-fill-west",
+          direction: [-1, 0.3, 0],
+          color: "#FFFFFF",
+          illuminance: "state.galleryFill.fill"
+        )
+        directional(
+          name: "inspect-fill-south",
+          direction: [0, 0.3, 1],
+          color: "#FFFFFF",
+          illuminance: "state.galleryFill.fill"
+        )
+        directional(
+          name: "inspect-fill-north",
+          direction: [0, 0.3, -1],
+          color: "#FFFFFF",
+          illuminance: "state.galleryFill.fill"
+        )
         point(name: "hall-stairs", position: [12.2, 7.6, 37], temperature: 2700K, power: "state.hallLamps.stairs")
         // The car's light, just under its luminous ceiling: a spot opening almost to a hemisphere, so it lights the
         // walls up to the ceiling but not the panel above it, riding the car's body, so neither traced nor bounced. It
         // carries enough light (some 200 to 400 lux on the walls above waist height) for the car to read at the darkest
         // exposure, which is what the car takes because the volume cannot see the moving car's own light.
-        spot(name: "hall-lift", anchor: entity(index: liftBody), position: [0, 0.22, 0], direction: [0, -1, 0], angle: 89deg, innerAngle: 75deg, temperature: 6500K, power: 6000lm)
+        spot(
+          name: "hall-lift",
+          anchor: entity(index: liftBody),
+          position: [0, 0.22, 0],
+          direction: [0, -1, 0],
+          angle: 89deg,
+          innerAngle: 75deg,
+          temperature: 6500K,
+          power: 6000lm
+        )
         // Wonderland's one lamp (wonderland.puck), dim enough that its device screens glow under the roof.
         point(name: "wonderland-lamp", position: [5.2, 4.3, 29], temperature: 2700K, power: 300lm)
       ],
-      map(range(0, length(hallDownlights)), i => spot(name: $"hall-down-{i}", position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 6500K, power: $"state.hallLamps.level{hallDownlights[i].level}")),
-      map(range(0, length(wingDownlights)), i => spot(name: $"wing-down-{i}", position: [wingDownlights[i].x, (hallCeilings[0] - 0.1), wingDownlights[i].z], direction: [0, -1, 0], angle: 50deg, innerAngle: 30deg, temperature: 4000K, power: 8000lm)),
-      map(range(0, length(wingWashes)), i => spot(name: $"wing-wash-{i}", position: [wingWashes[i].x, (hallCeilings[0] - 0.1), wingWashes[i].z], direction: wingWashes[i].aim, angle: 35deg, innerAngle: 20deg, temperature: 3500K, power: 4000lm))
+      map(
+        range(0, length(hallDownlights)),
+        i => spot(
+          name: $"hall-down-{i}",
+          position: [hallDownlights[i].x, (hallCeilings[hallDownlights[i].level] - 0.1), hallDownlights[i].z],
+          direction: [0, -1, 0],
+          angle: 50deg,
+          innerAngle: 30deg,
+          temperature: 6500K,
+          power: $"state.hallLamps.level{hallDownlights[i].level}"
+        )
+      ),
+      map(
+        range(0, length(wingDownlights)),
+        i => spot(
+          name: $"wing-down-{i}",
+          position: [wingDownlights[i].x, (hallCeilings[0] - 0.1), wingDownlights[i].z],
+          direction: [0, -1, 0],
+          angle: 50deg,
+          innerAngle: 30deg,
+          temperature: 4000K,
+          power: 8000lm
+        )
+      ),
+      map(
+        range(0, length(wingWashes)),
+        i => spot(
+          name: $"wing-wash-{i}",
+          position: [wingWashes[i].x, (hallCeilings[0] - 0.1), wingWashes[i].z],
+          direction: wingWashes[i].aim,
+          angle: 35deg,
+          innerAngle: 20deg,
+          temperature: 3500K,
+          power: 4000lm
+        )
+      )
     )
   }
   // The inspection lever (`gallery.inspect`). Each of the values below reads a `galleryFill` cell that the lever's
@@ -936,8 +1393,14 @@ render {
 // A spawn on each level's landing, before the lift door and facing it, and one before each level's light switch,
 // facing it.
 spawnPoints: concat(
-  map(galleryLevels, level => { id: $"gallery-level-{level.level}", position [liftX, galleryFloor[level.level], 34], yawDegrees: 180 }),
-  map(galleryLevels, level => { id: $"hall-switch-{level.level}", position [11.1, galleryFloor[level.level], switchZ], yawDegrees: 90 })
+  map(
+    galleryLevels,
+    level => { id: $"gallery-level-{level.level}", position [liftX, galleryFloor[level.level], 34], yawDegrees: 180 }
+  ),
+  map(
+    galleryLevels,
+    level => { id: $"hall-switch-{level.level}", position [11.1, galleryFloor[level.level], switchZ], yawDegrees: 90 }
+  )
 )
 
 // The car's kit: a sphere of radius 0.1 m that touches nothing in the cab or shaft, with no gravity, so it stands wherever
@@ -986,7 +1449,15 @@ looks {
 state {
   // The shaft: one 3 m column of 1/16 m layers from the ground to level 3, the car's root riding liftRoot over each.
   lattices [
-    box(name: "liftShaft", origin: [(liftX - 1.5), 0, (liftZ - 1.5)], cellSize: 3, width: 1, depth: 1, layers: ((3 * liftCells) + 1), layerHeight: 0.0625)
+    box(
+      name: "liftShaft",
+      origin: [(liftX - 1.5), 0, (liftZ - 1.5)],
+      cellSize: 3,
+      width: 1,
+      depth: 1,
+      layers: ((3 * liftCells) + 1),
+      layerHeight: 0.0625
+    )
   ]
 
   enum HallLight {
@@ -1113,7 +1584,13 @@ for k in range(0, 4) {
 // The context button on a landing's CALL plate calls the car there; only seat 1's body (the Moth) presses.
 for pad in liftPads {
   rule $"lift-pad-{pad.level}" {
-    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > pad.y0 and bodyPosition(body, 0, y) < pad.y1
+    when (channel(1, interact) >= 1 and
+      bodyPosition(body, 0, x) > pad.x0 and
+      bodyPosition(body, 0, x) < pad.x1 and
+      bodyPosition(body, 0, z) > pad.z0 and
+      bodyPosition(body, 0, z) < pad.z1 and
+      bodyPosition(body, 0, y) > pad.y0 and
+      bodyPosition(body, 0, y) < pad.y1)
     mode: Edge
     liftHall[$"level{pad.level}"] = 1
   }
@@ -1122,14 +1599,26 @@ for pad in liftPads {
 // The same press in the car, at the button the body stands before: only a body on the car's floor counts.
 for pad in filter(carPads, p => p.slot < 4) {
   rule $"lift-car-pad-{pad.slot}" {
-    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+    when (channel(1, interact) >= 1 and
+      bodyPosition(body, 0, x) > pad.x0 and
+      bodyPosition(body, 0, x) < pad.x1 and
+      bodyPosition(body, 0, z) > pad.z0 and
+      bodyPosition(body, 0, z) < pad.z1 and
+      bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
+      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
     mode: Edge
     liftCarCall[$"level{pad.slot}"] = 1
   }
 }
 for pad in filter(carPads, p => p.slot == 4) {
   rule "lift-car-pad-open" {
-    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+    when (channel(1, interact) >= 1 and
+      bodyPosition(body, 0, x) > pad.x0 and
+      bodyPosition(body, 0, x) < pad.x1 and
+      bodyPosition(body, 0, z) > pad.z0 and
+      bodyPosition(body, 0, z) < pad.z1 and
+      bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
+      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
     mode: Edge
     liftLamp.open = 1
     schedule liftClock.pulse in 0.4s
@@ -1138,7 +1627,13 @@ for pad in filter(carPads, p => p.slot == 4) {
 }
 for pad in filter(carPads, p => p.slot == 5) {
   rule "lift-car-pad-close" {
-    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > pad.x0 and bodyPosition(body, 0, x) < pad.x1 and bodyPosition(body, 0, z) > pad.z0 and bodyPosition(body, 0, z) < pad.z1 and bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5)
+    when (channel(1, interact) >= 1 and
+      bodyPosition(body, 0, x) > pad.x0 and
+      bodyPosition(body, 0, x) < pad.x1 and
+      bodyPosition(body, 0, z) > pad.z0 and
+      bodyPosition(body, 0, z) < pad.z1 and
+      bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
+      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
     mode: Edge
     liftLamp.close = 1
     schedule liftClock.pulse in 0.4s
@@ -1196,7 +1691,9 @@ rule "lift-shut-moving" {
 // and then, if none, the nearest below, turning round; going down it does the reverse.
 template liftPick(f, k, dir, lo, hi) {
   rule $"lift-pick-{lo}-{dir}-{f}-{k}" {
-    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0 and liftDir >= lo and liftDir <= hi
+    when liftAt == (f * liftCells) and liftTarget == liftAt and $tick >= liftClock.dwell and liftOpenReq == 0 and (
+        liftHall[$"level{k}"] + liftCarCall[$"level{k}"]
+      ) > 0 and liftDir >= lo and liftDir <= hi
     mode: Level
     liftDir = dir
     liftTarget = k * liftCells
@@ -1234,14 +1731,18 @@ rule "lift-idle" {
 // A stop lying ahead of a moving car, nearer than its target, is taken on the way.
 for k in range(0, 4) {
   rule $"lift-stop-up-{k}" {
-    when liftTarget > liftAt and liftAt < (k * liftCells) and (k * liftCells) < liftTarget and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0
+    when liftTarget > liftAt and liftAt < (k * liftCells) and (k * liftCells) < liftTarget and (
+        liftHall[$"level{k}"] + liftCarCall[$"level{k}"]
+      ) > 0
     mode: Level
     liftTarget = k * liftCells
   }
 }
 for k in map(range(0, 4), i => 3 - i) {
   rule $"lift-stop-down-{k}" {
-    when liftTarget < liftAt and liftAt > (k * liftCells) and (k * liftCells) > liftTarget and (liftHall[$"level{k}"] + liftCarCall[$"level{k}"]) > 0
+    when liftTarget < liftAt and liftAt > (k * liftCells) and (k * liftCells) > liftTarget and (
+        liftHall[$"level{k}"] + liftCarCall[$"level{k}"]
+      ) > 0
     mode: Level
     liftTarget = k * liftCells
   }
@@ -1310,7 +1811,13 @@ rule "lift-arrow-down" {
 // plate, so standing there puts the plate ahead of the body. The edge fires once a press.
 for reach in switchReach {
   rule $"hall-switch-{reach.level}" {
-    when channel(1, interact) >= 1 and bodyPosition(body, 0, x) > reach.x0 and bodyPosition(body, 0, x) < reach.x1 and bodyPosition(body, 0, z) > reach.z0 and bodyPosition(body, 0, z) < reach.z1 and bodyPosition(body, 0, y) > reach.y0 and bodyPosition(body, 0, y) < reach.y1
+    when (channel(1, interact) >= 1 and
+      bodyPosition(body, 0, x) > reach.x0 and
+      bodyPosition(body, 0, x) < reach.x1 and
+      bodyPosition(body, 0, z) > reach.z0 and
+      bodyPosition(body, 0, z) < reach.z1 and
+      bodyPosition(body, 0, y) > reach.y0 and
+      bodyPosition(body, 0, y) < reach.y1)
     mode: Edge
     hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
   }

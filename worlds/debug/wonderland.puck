@@ -75,7 +75,16 @@ template wonderPaintBox(label, x0, x1, y0, y1, z0, z1, slot) {
 // Three bars round a canvas of half-width `ix`, from `y0` up to `y1` and out by `w`, standing `depth` proud of the
 // wall; the floor closes the fourth side.
 template wonderRing(label, ix, y0, y1, w, depth, slot) {
-  wonderPaintBox(label: $"{label}-left", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  wonderPaintBox(
+    label: $"{label}-left",
+    x0: (0 - (ix + w)),
+    x1: (0 - ix),
+    y0: y0,
+    y1: (y1 + w),
+    z0: 0,
+    z1: depth,
+    slot: slot
+  )
   wonderPaintBox(label: $"{label}-right", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
   wonderPaintBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
 }
@@ -101,8 +110,24 @@ template wonderPainting(label, size) {
     position [0, (1.3125 * size), 0]
     scale [(1.109375 * size), (1.421875 * size), (0.3125 * size)]
   }
-  wonderRing(label: "lip", ix: (1.125 * size), y0: (-0.125 * size), y1: (2.75 * size), w: (0.0625 * size), depth: (0.078125 * size), slot: wonderPaintLip)
-  wonderRing(label: "border", ix: (1.1875 * size), y0: (-0.125 * size), y1: (2.8125 * size), w: (0.21875 * size), depth: (0.109375 * size), slot: wonderPaintGilt)
+  wonderRing(
+    label: "lip",
+    ix: (1.125 * size),
+    y0: (-0.125 * size),
+    y1: (2.75 * size),
+    w: (0.0625 * size),
+    depth: (0.078125 * size),
+    slot: wonderPaintLip
+  )
+  wonderRing(
+    label: "border",
+    ix: (1.1875 * size),
+    y0: (-0.125 * size),
+    y1: (2.8125 * size),
+    w: (0.21875 * size),
+    depth: (0.109375 * size),
+    slot: wonderPaintGilt
+  )
 }
 
 // The same-world destination both paintings lead to: the debug world itself, through paintings.puck's `self`
@@ -186,8 +211,29 @@ prototypes {
       wonderPainting(label: "wonderland-door", size: 1)
       wonderPaintBox(label: "plaque", x0: 1.55, x1: 2.55, y0: 1, y1: 1.4, z0: 0, z1: 0.025, slot: wonderPaintBoard)
       textRuns [
-        { text: "WONDERLAND", position [2.05, 1.31, 0.025], rotation [0, 0, 0, 1], emHeight: 0.06, depth: 0.004, mode: "emboss", material: wonderPaintInk, align: "center", maxWidth: 0.94 }
-        { text: "Step in and you step out of the mouse hole next door, a quarter your size. Back through it, you are big again.", position [2.05, 1.22, 0.025], rotation [0, 0, 0, 1], emHeight: 0.028, depth: 0.003, mode: "emboss", material: wonderPaintInk, align: "center", maxWidth: 0.94, lineSpacing: 1.15 }
+        {
+          text: "WONDERLAND"
+          position [2.05, 1.31, 0.025]
+          rotation [0, 0, 0, 1]
+          emHeight: 0.06
+          depth: 0.004
+          mode: "emboss"
+          material: wonderPaintInk
+          align: "center"
+          maxWidth: 0.94
+        }
+        {
+          text: "Step in and you step out of the mouse hole next door, a quarter your size. Back through it, you are big again."
+          position [2.05, 1.22, 0.025]
+          rotation [0, 0, 0, 1]
+          emHeight: 0.028
+          depth: 0.003
+          mode: "emboss"
+          material: wonderPaintInk
+          align: "center"
+          maxWidth: 0.94
+          lineSpacing: 1.15
+        }
       ]
     }
   }
@@ -219,12 +265,48 @@ prototypes {
       wonderBox(label: "south-east", x0: 5.5, x1: 9.4, y0: wonderFloorTop, y1: 4.55, z0: 23.7, z1: 24, slot: 0)
       wonderBox(label: "lintel", x0: 3.5, x1: 5.5, y0: 3.05, y1: 4.55, z0: 23.7, z1: 24, slot: 0)
       wonderBox(label: "roof", x0: 0.7, x1: 9.7, y0: 4.55, y1: 4.85, z0: 23.7, z1: 34.3, slot: 0)
-      wonderBox(label: "skirting-east-south", x0: 9.38, x1: 9.4, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 29.9, slot: 2)
-      wonderBox(label: "skirting-east-north", x0: 9.38, x1: 9.4, y0: wonderFloorTop, y1: 0.17, z0: 31.1, z1: 34, slot: 2)
+      wonderBox(
+        label: "skirting-east-south",
+        x0: 9.38,
+        x1: 9.4,
+        y0: wonderFloorTop,
+        y1: 0.17,
+        z0: 24,
+        z1: 29.9,
+        slot: 2
+      )
+      wonderBox(
+        label: "skirting-east-north",
+        x0: 9.38,
+        x1: 9.4,
+        y0: wonderFloorTop,
+        y1: 0.17,
+        z0: 31.1,
+        z1: 34,
+        slot: 2
+      )
       wonderBox(label: "skirting-west", x0: 1, x1: 1.02, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 34, slot: 2)
       wonderBox(label: "skirting-north", x0: 1.02, x1: 9.38, y0: wonderFloorTop, y1: 0.17, z0: 33.98, z1: 34, slot: 2)
-      wonderBox(label: "skirting-south-west", x0: 1.02, x1: 3.5, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 24.02, slot: 2)
-      wonderBox(label: "skirting-south-east", x0: 5.5, x1: 9.38, y0: wonderFloorTop, y1: 0.17, z0: 24, z1: 24.02, slot: 2)
+      wonderBox(
+        label: "skirting-south-west",
+        x0: 1.02,
+        x1: 3.5,
+        y0: wonderFloorTop,
+        y1: 0.17,
+        z0: 24,
+        z1: 24.02,
+        slot: 2
+      )
+      wonderBox(
+        label: "skirting-south-east",
+        x0: 5.5,
+        x1: 9.38,
+        y0: wonderFloorTop,
+        y1: 0.17,
+        z0: 24,
+        z1: 24.02,
+        slot: 2
+      )
     }
   }
 
@@ -242,7 +324,16 @@ prototypes {
       ]
       schema: "puck.creation.v1"
       for i in range(1, 10) {
-        wonderBox(label: $"cases-{i}", x0: 1.15, x1: 1.65, y0: wonderFloorTop, y1: (wonderFloorTop + (0.065 * i)), z0: (29.9 - (0.13 * (11 - i))), z1: (29.9 - (0.13 * (10 - i))), slot: wonderCaseSlots[(i - 1)])
+        wonderBox(
+          label: $"cases-{i}",
+          x0: 1.15,
+          x1: 1.65,
+          y0: wonderFloorTop,
+          y1: (wonderFloorTop + (0.065 * i)),
+          z0: (29.9 - (0.13 * (11 - i))),
+          z1: (29.9 - (0.13 * (10 - i))),
+          slot: wonderCaseSlots[(i - 1)]
+        )
       }
     }
   }

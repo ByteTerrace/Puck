@@ -1,7 +1,7 @@
 namespace Puck.World.Transpiler.Vocabulary;
 
 /// <summary>The one description of <c>puck.world.definition.v1</c>'s authoring vocabulary: every construct's
-/// keyword, members, document member, and printing requirement, read by the parser's embedded-language test, the
+/// keyword, members, document member, and printing requirement, read by the parser's bare-modifier test, the
 /// printer's sugar guards, the language server's completion and hover, and the manual's vocabulary tables.</summary>
 /// <remarks>This describes the surface and its mapping onto the document. What a document field means is
 /// <c>puck schema</c>'s, which fields carry names is <c>puck registry</c>'s, and which polymorphic <c>$type</c>

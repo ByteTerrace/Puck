@@ -122,7 +122,7 @@ Every construct of this vocabulary is described once, in
 [`Vocabulary/`](Vocabulary/): its keyword, the members it carries with their
 kinds and defaults, the document member it lowers to, and what the printer
 requires before it may print a document node back as that construct.
-`Puck.Transpiler`'s parser asks it which identifiers open an embedded language,
+`Puck.Transpiler`'s parser asks it which modifiers a declaration writes bare,
 `Decompiler/`'s sugar guards take their admitted and required key sets from it,
 `Lsp/`'s completion and hover are generated from it, and `puck vocabulary`
 writes [the manual's table](../../docs/reference/world-vocabulary.md) from it
@@ -476,93 +476,6 @@ sugar (a second board over a topology a `grid` already declared, or a `pile`/boa
 authored the same way it always has been, nested one level deeper inside `world { }` instead of as one element of
 the `world [ ]` array.
 
-### State SQL dialect (`sql { ... }`)
-
-```puck
-sql {
-    CREATE TABLE characters (
-        id   TEXT PRIMARY KEY,
-        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
-        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
-    ) CAPACITY 32;
-
-    INSERT INTO characters (id, hp, mana) VALUES
-        ('hero', 80, 50),
-        ('goblin', 30, 0);
-
-    DECLARE turnCount INT DEFAULT 0 CHECK (turnCount >= 0) ADVANCE 1 PER SECOND;
-
-    CREATE TABLE deck (id TEXT PRIMARY KEY REFERENCES cardNames) ORDERED CAPACITY 3;
-
-    CREATE RULE healHero ON ENTER AS
-        UPDATE characters SET hp = hp + 10 WHERE id = 'hero';
-
-    CREATE RULE spendMana EVERY TICK AS
-        BEGIN ATOMIC
-            UPDATE characters SET mana = mana - 1 WHERE id = 'hero';
-        END;
-}
-```
-
-A hermetic SQL authoring dialect embedded in `.puck` world documents via `sql { ... }` blocks.
-It compiles directly to native Puck state rows and rules without external or embedded SQLite dependencies.
-A SQL form and its independently authored native equivalent compile byte-identically — this is a spelling, not a
-second engine, so rows emit in column order and cells in `INSERT` order for that reason.
-
-`Puck.Transpiler` stays schema-agnostic through `IDocumentVocabulary.IsEmbeddedLanguage`; the world vocabulary
-registers `sql`, supplies its lexer, and owns parsing and lowering. The cartridge vocabulary never sees it.
-
-### What the dialect does not mean
-
-- **Close to SQL, never falsely SQL.** Where SQL's meaning matches Puck's, the dialect uses SQL's spelling; where
-  it doesn't, it uses a distinct Puck clause (`ADVANCE ... PER SECOND`, `ON OVERFLOW SATURATE`). A construct whose
-  SQL meaning Puck cannot honor is refused (PUCK073), never approximated.
-- **A set-based `UPDATE` cannot read what it writes at another key.** `forEach` fires locals in order, and a
-  later local sees an earlier one's writes, while SQL's `WHERE`/`SET` read a snapshot taken before the
-  statement. Reading a column the statement writes at another key — an aggregate, a subquery, a self-join — is
-  refused as PUCK074; the engine's evaluation order does not change to accommodate it.
-- **`NULL` is an absent cell**, following Puck's absent-fact rules, not SQL's three-valued logic. Aggregates
-  (`COUNT`, `MIN`, `MAX`, `SUM`) are admitted only where `Puck.State.ExpressionVocabulary` already has an
-  equivalent over a row; `GROUP BY`, `HAVING`, `ORDER BY` (outside a `nearest` query), `LIMIT` outside that query,
-  cross-key `JOIN`, `UNION`, window functions, triggers, and views are refused.
-- **`table.column` and native `row.key` don't share a meaning.** Outside `sql { }`, `row.key` keeps its native
-  dot-access meaning; inside the block, `table.column` has SQL's.
-- **A rule body is wholly SQL or wholly native**, never mixed. `cycle`, `draw`, `valuesFrom`, `inverse`, `phase`,
-  `phaseOf`, `knowledge`, `evicts`, `gatesDrive`, ring domains, grids, topologies, generators, patterns, search,
-  and body/identity state stay native; so do `push`, `schedule`, `transform`, `generate`, locals,
-  zones, and decisions. A SQL clause attempting one of them is refused, naming the native spelling instead.
-
-- **Multi-column tables**: `CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT, mana INT) CAPACITY n;` decomposes
-  into prefix-named state rows (`fightersHp`, `fightersMana`) sharing the primary key domain and capacity.
-  Columns admit `NOT NULL`, `DEFAULT <val>`, `CHECK (<col> BETWEEN min AND max | >= min | <= max)`,
-  `ON OVERFLOW SATURATE`, `ADVANCE <rate> PER SECOND`, and `DYNAMICS <row>`.
-- **Scalar slots**: `DECLARE name TYPE [DEFAULT v] [CHECK ...] [ADVANCE r PER SECOND];` compiles directly into
-  a single scalar state row.
-- **Piles**: `CREATE TABLE name (id TEXT PRIMARY KEY REFERENCES target) ORDERED CAPACITY n;` spells an ordered
-  sequence table (native pile).
-- **Rules**: `CREATE RULE name EVERY TICK | ON ENTER AS <statement>` compiles directly into native rules JSON.
-- **Transactions**: `BEGIN ATOMIC <statement>* [EXCEPTION <statement>*] END;` compiles to atomic transaction
-  effects (`transaction` with optional `onFailure`).
-
-| Code | Severity | Refusal |
-|---|---|---|
-| PUCK070 | Error | A column or slot type outside `INT`, `FIXED`, `BOOL`, `TEXT` and `VECTOR` and their aliases; a floating-point type (`REAL`, `FLOAT`, `DOUBLE`) is told that state holds no floats and to use `FIXED`. |
-| PUCK071 | Error | Composite `PRIMARY KEY (a, b)` in a SQL table declaration — a state cell has exactly one key. |
-| PUCK072 | Error | `CHECK` constraint shape outside `BETWEEN a AND b`, `>= a`, or `<= b`. |
-| PUCK073 | Error | Unsupported SQL clause or construct (`GROUP BY`, `HAVING`, `WINDOW`, `LIMIT`, cross-key `JOIN`, `UNION`, `TRIGGER`, etc.). |
-| PUCK074 | Error | Set-based `UPDATE` reading a column it writes at other keys — self-referential multi-key updates are refused. |
-| PUCK075 | Error | Inserted row missing a `NOT NULL` column that declares no default value. |
-| PUCK076 | Error | Syntax or grammatical refusal inside a `sql { ... }` block, including a column with no type and a table with no primary key. |
-
-Each fault is reported once, at the text that carries it. A column written without a type is refused for that alone, not again for the primary key it may have been meant to be, and a comparison naming an unknown column is refused at the column and lowers no further.
-
-Shared state declaration and semantic codes also apply:
-- **PUCK051**: Duplicate table/slot name or duplicate inserted primary key.
-- **PUCK053**: Default value or SET assignment literal that does not fit the target column or slot's kind.
-- **PUCK054**: Table `CAPACITY` smaller than inserted row count.
-- **PUCK058**: `ADVANCE` rate that does not reduce to an exact 64-bit fraction.
-- **PUCK059**: Unknown table, column, or slot reference.
-
 ## Vector embeddings and spaces
 
 `state.world` supports vector state, semantic embedding spaces, and companion offline lock files (`.embeddings.json`).
@@ -571,7 +484,6 @@ Shared state declaration and semantic codes also apply:
 - **Vector tables and slots**: `table <name> space(<name>) [capacity(<n>)] [evicts]` and `slot <name> space(<name>) = "literal text"` — the `space(...)` modifier is what infers the `Vector` kind (see [State declarations](#state-declarations) above).
 - **`embeds(targetRow)`**: applied to Text tables (inferred from their own string cell values, e.g. `table lines embeds(lineVectors)`), automatically coupling text entries to companion vector rows sharing the same keys.
 - **Vector literals & lock resolution**: authored string values in vector slots or `embed("...")` rule expressions are resolved into unit-normalized signed 8-bit vectors (`sbyte[]`, radius 127) using committed companion `.embeddings.json` lock files generated by `puck embed`.
-- **SQL vector columns**: in `sql { ... }` blocks, a vector column is spelled `VECTOR(<space>)`, or bare `VECTOR` to take the document's default space. There is no SQL spelling for `embeds`; a Text table couples to its companion vector row through the non-SQL `table t embeds(vectors)` modifier above.
 
 ### Embedding diagnostics
 
@@ -581,7 +493,7 @@ Shared state declaration and semantic codes also apply:
 | PUCK078 | Error | Vector row names no space and document has no default, names an undeclared space, or a non-Vector row declares a space. |
 | PUCK079 | Error | Authored text in a vector slot or `embed(...)` has no lock entry; run `puck embed`. |
 | PUCK080 | Error | Lock file's model, revision, or dimensions differ from the declared space; run `puck embed`. |
-| PUCK081 | Error | Vector literal is not valid base64url, has a component count other than its space's dimensions, contains prohibited -128, or fails unit sphere admission — wherever it is written, in a native row or rule or in a SQL `INSERT`, `UPDATE` or `DEFAULT`. |
+| PUCK081 | Error | Vector literal is not valid base64url, has a component count other than its space's dimensions, contains prohibited -128, or fails unit sphere admission, wherever it is written. |
 | PUCK082 | Error | Vector literal or `embed(...)` appears where no vector value is admitted. |
 | PUCK083 | Error | Vector row capacity × dimensions exceeds per-row cell ceiling or section budget. |
 | PUCK084 | Error | Vector operation names a non-vector operand, mixes spaces, or provides invalid arguments to `nearest` / `remember`. |
@@ -951,8 +863,7 @@ accepts, and an operator is one token however many characters spell it, the infi
 a name or string follows it and a member when `{` or `[` follows after a space; a word followed by `:` is a member
 anywhere except the row a `slot`, `table` or `grid` declares, whose `: Enum` leaves it the name it is without one.
 Brackets, braces and separators carry no
-token, so an editor's bracket colouring keeps them, and an embedded-language body (`sql { … }`) carries none, so the
-editor's grammar for that language colours it. Classification is lexical and never fails on a source mid-edit; it
+token, so an editor's bracket colouring keeps them. Classification is lexical and never fails on a source mid-edit; it
 does not resolve what a name refers to. Tokens are encoded one line per piece, so a multi-line string or comment
 needs no client support for multi-line tokens. `SemanticTokenTests` holds every token of every sample inside its text
 and free of overlap, and pins the roles case by case.
@@ -967,8 +878,7 @@ handed to the dispatcher the host supplied, which is how a cartridge is diagnose
 
 A finding raised after lowering carries a JSON pointer, which the source map turns into a line. The lowering
 registers every element an author writes at its own pointer — a `rule`, each object in an array written element by
-element (`rules [ { … } ]`, `patterns [ … ]`, `state { world [ … ] }`), each row and rule a `sql` statement lowers
-to, the lattice a `grid` declares — so a finding about one element lands on the construct that wrote it. The validation of a composed world names paths into the composed document, where a
+element (`rules [ { … } ]`, `patterns [ … ]`, `state { world [ … ] }`), the lattice a `grid` declares — so a finding about one element lands on the construct that wrote it. The validation of a composed world names paths into the composed document, where a
 basis's and an import's rows come ahead of the root's own, so `WorldSemanticValidator` traces each path back into
 the root's own lowered document before reading the map (`WorldDocumentBasis.TraceToLayer`, following each list row
 by the key its merge used): a finding about the root's k-th row lands on that row whatever the basis contributes
@@ -1022,7 +932,8 @@ server's formatting request and `puck format` are the same pass and write the sa
 (`Parsing/PuckStrings.cs`) - a backslash, a quote, `n`, `r`, `t`, `0`, a `uXXXX` code unit, and a backslash in
 front of anything else refused - so the printer writes only what the reader reads back and a formatted source
 cannot mean something else. A raw fence carries no escapes and is printed back as a fence whenever it reads
-back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) spaces, Egyptian braces, one statement per line — except for what the parse
+back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) spaces, Egyptian braces, one statement per line, and a
+line that would pass `PuckPrinter.LineWidth` (120) broken after its operators or inside its brackets — except for what the parse
 carries in as trivia: every comment keeps its line, a run of blank lines keeps its length, an array, object or
 argument list keeps the line breaks and the line-end commas its author wrote, a numeric literal keeps its base, and
 a name keeps its bare-or-quoted spelling. Indexed targets retain their parsed operands, so printing never

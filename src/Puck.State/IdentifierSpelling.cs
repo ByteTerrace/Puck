@@ -1,14 +1,14 @@
 namespace Puck.State;
 
 /// <summary>The one lexical identifier rule every Puck source language reads names by: the <c>.puck</c> document
-/// grammar, the expression spelling a rule runs, the pattern, cell-set, and state spellings, and the SQL dialect.
+/// grammar, the expression spelling a rule runs, and the pattern, cell-set, and state spellings.
 /// An identifier opens with an ASCII letter or <c>_</c> and continues with ASCII letters, digits, and <c>_</c>. A
 /// name is an identifier, optionally opened by the <see cref="Sigil"/> that marks an engine-reserved name
 /// (<c>$value</c>, <c>$tick</c>, <c>$replace</c>); the sigil stands only at the front, never inside a name. Inside a
 /// name it marks one Puck generated (<see cref="GeneratedName"/>: <c>turn$east</c>, <c>expect$1</c>), which is never
 /// an identifier and which no author-written name may take, bare or quoted.
-/// <para>What a context reserves on top — keywords, reserved call names, a pattern's reserved words, the SQL
-/// keywords, a dotted path, a reserved channel's <c>:segment</c> continuations — is that context's own named set
+/// <para>What a context reserves on top — keywords, reserved call names, a pattern's reserved words, a dotted
+/// path, a reserved channel's <c>:segment</c> continuations — is that context's own named set
 /// or walk layered over these classes, never a second character rule. A name outside the rule is still every
 /// language's to write: it is quoted, and the quoted spelling reads back the same name. The classes are ASCII so
 /// that whether a name prints bare cannot move with the runtime's Unicode tables, and so that two names that look

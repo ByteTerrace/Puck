@@ -4,7 +4,12 @@ basis: "debug"
 documentId: "relative-input-tests"
 
 channels [
-  { name: "sampleDelta", shape: Relative, composition: true, relative { unit: "units", sensitivity: 0.25, maximumPerStep: 4 } }
+  {
+    name: "sampleDelta"
+    shape: Relative
+    composition: true
+    relative { unit: "units", sensitivity: 0.25, maximumPerStep: 4 }
+  }
 ]
 bindingOverlays [
   {

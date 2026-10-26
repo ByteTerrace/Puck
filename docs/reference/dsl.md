@@ -28,7 +28,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 ## Names
 
 Every Puck source language reads a name by one rule, `Puck.State.IdentifierSpelling`: the document grammar, the
-expression spelling a rule runs, the pattern, cell-set and state spellings, and the `sql { }` dialect.
+expression spelling a rule runs, and the pattern, cell-set and state spellings.
 
 - An **identifier** opens with an ASCII letter or `_` and continues with ASCII letters, digits and `_`:
   `pieceCell`, `_scratch`, `row2`.
@@ -48,7 +48,7 @@ The formatter keeps a block's leading word quoted when the source quoted it, bec
 
 What a position reserves is layered on top of the rule and never changes its characters. Examples are a keyword
 a statement reader would take (`let`, `rule`, `when`), a reserved call name in an expression (`count`, `dot`),
-a pattern's reserved words (`any`, `empty`, `except`, `none`), the SQL keywords, and the dotted path and
+a pattern's reserved words (`any`, `empty`, `except`, `none`), and the dotted path and
 `$name:segment` continuations the expression spelling reads. Such a name prints quoted in that position, and
 bare elsewhere.
 
@@ -481,33 +481,6 @@ classification and reuses the same arithmetic; it never restates that `ms` divid
 The one place the core itself asserts a dimension is `schedule <row> in 250ms`, where the grammar—not a field
 name—says the operand is a time.
 
-## Embedded language blocks: `sql { ... }`
-
-```puck
-sql {
-    CREATE TABLE fighters (
-        id   TEXT PRIMARY KEY,
-        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
-        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
-    ) CAPACITY 32;
-
-    INSERT INTO fighters (id, hp, mana) VALUES
-        ('hero', 80, 50);
-
-    DECLARE turnCount INT DEFAULT 0;
-
-    CREATE RULE healHero ON ENTER AS
-        UPDATE fighters SET hp = hp + 10 WHERE id = 'hero';
-}
-```
-
-The core parser supports embedded language blocks through `IDocumentVocabulary.IsEmbeddedLanguage`. When
-an identifier matches an admitted embedded language (such as `sql`), the parser produces an `EmbeddedBlockNode`
-preserving raw statement text and token spans without running the core Parlot expression parser on its body.
-The owning vocabulary lowers the embedded language directly into document JSON, and which identifiers those are
-is one row each of that vocabulary's own construct table—for the world, the generated
-[world vocabulary](world-vocabulary.md).
-
 ## Rewriting a source: `PuckSyntaxRewriter` and `puck migrate`
 
 A change to the surface syntax is applied to the sources that use it by a
@@ -535,7 +508,7 @@ the identity and prints its input back byte for byte. Every node is rebuilt with
 the record `with` operator, so a node the rewrite did not touch keeps its own
 `SyntaxTrivia`—its author's comments, blank-line runs, and line breaks. Because
 the walk is over source rather than a lowered document, `let`, `template`,
-`for`, `import`, units, and `sql { }` survive as themselves instead of as their
+`for`, `import` and units survive as themselves instead of as their
 expansion; the printer writes the surviving `for` loop, not the rows it would
 produce.
 
@@ -580,7 +553,6 @@ The following members still carry their own text grammar and are handed over who
 
 | Member | Carries |
 |---|---|
-| `EmbeddedBlockNode.Body` | the whole `sql { }` dialect |
 | `CellSetDeclarationNode.Expression` | a `set`'s cell-set algebra |
 | `PatternDeclarationNode.Attribute` | a pattern's source row |
 | `LiteralExpressionNode.RawText` | the author's numeric spelling, which must change with its value |
@@ -611,9 +583,12 @@ of source nesting or active evaluation, and four million work units across evalu
 copies. Copied strings charge their length. These bounds are checked before bulk allocation; `PUCK047` asks the
 author to split excessive generated data. Both vocabulary emitters accept a cancellation token. Raw and
 interpolated string contents survive formatting unchanged, including indentation and blank lines. A source has one
-layout, printed by `PuckPrinter`: `PuckPrinter.IndentWidth` (two) spaces per level, every block body on its own lines, and
-every array or object keeping the line breaks its author wrote. `puck format`, the language server's formatting request, and
-the decompiler all print it; no option or editor setting changes it.
+layout, printed by `PuckPrinter`: `PuckPrinter.IndentWidth` (two) spaces per level, every block body on its own lines,
+every array or object keeping the line breaks its author wrote, and a line that would pass `PuckPrinter.LineWidth` (120)
+broken where the reader takes a line break as white space: inside a call's, array's or object's brackets, after an
+operator, including a gate's `and` or `or`. An expression continues across a newline after an operator or inside
+parentheses and brackets. The printer wraps a local's or an effect's long chain in parentheses. `puck format`, the language
+server's formatting request, and the decompiler all print it; no option or editor setting changes it.
 
 There is no test project of this project's own: `tests/Puck.World.Transpiler.Tests` (parser, formatter, linter,
 emitter, decompiler and LSP against `puck.world.definition.v1`) and `tests/Puck.GamingBricks.Transpiler.Tests` (compile and

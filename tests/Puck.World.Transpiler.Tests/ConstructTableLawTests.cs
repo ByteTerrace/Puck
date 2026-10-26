@@ -36,7 +36,6 @@ public class ConstructTableLawTests {
         ["DecisionBlockNode"] = new(Keyword: "decision", Verdict: Verdict.Construct),
         ["DerivedStateNode"] = new(Keyword: "derive", Verdict: Verdict.Construct),
         ["DrawStatementNode"] = new(Keyword: "draw", Verdict: Verdict.Construct),
-        ["EmbeddedBlockNode"] = new(Keyword: "sql", Verdict: Verdict.Construct),
         ["ErrorStatementNode"] = new(Keyword: "", Verdict: Verdict.Core),
         ["EnumDeclarationNode"] = new(Keyword: "enum", Verdict: Verdict.Construct),
         ["ExportNode"] = new(Keyword: "export", Verdict: Verdict.Core),
@@ -157,12 +156,6 @@ public class ConstructTableLawTests {
                     break;
             }
         }
-    }
-    [Fact]
-    public void TheEmbeddedLanguageRowIsWhatTheVocabularyDelegatesOn() {
-        Assert.True(condition: WorldConstructs.Table.IsEmbeddedLanguage(identifier: "sql"));
-        Assert.False(condition: WorldConstructs.Table.IsEmbeddedLanguage(identifier: "state"));
-        Assert.False(condition: WorldConstructs.Table.IsEmbeddedLanguage(identifier: "nothing"));
     }
     [MemberData(nameof(Described))]
     [Theory]

@@ -93,8 +93,8 @@ comparison. No shipped source compared fractionally against an Int cell, so
 nothing argued for a looser rule.
 
 **D7 — One expression IR.** `ExpressionProgram`, a postfix program, is what a
-world document holds; the `.puck` grammar, the SQL dialect, and infix strings
-are front ends that parse to it. Operator metadata (spelling, arity, kinds,
+world document holds; the `.puck` grammar and infix strings are front ends that
+parse to it. Operator metadata (spelling, arity, kinds,
 cost, fold) lives in one table the parser, compiler, folder, printer, and
 evaluator consume. `puck.cartridge.v1` stays outside: its forge reads its
 vocabulary as text, so it spells a program as infix through one converter
@@ -326,7 +326,7 @@ the sources with no alias.
 **P2 — Two layers, reshaped differently.** The vocabulary layer (`rule`,
 `table`, `pattern`, `local`, a gate, an operand) is a projection of the
 document and reshapes by changing its one description. The compile-time layer
-(`let`, `module`, `for`, `function`, imports, units, `sql { }`) exists only
+(`let`, `module`, `for`, `function`, imports, units) exists only
 in the source, is evaluated away, and reshapes by rewriting the syntax tree. A
 decompiled document shows the expansion.
 
@@ -431,10 +431,6 @@ makes instances. A rule over a pool names its instance on the rule line,
 because the name is what the body reads. A source with `world` statements
 emits several documents and one with none emits one; there is no separate
 file kind.
-
-**`sql { }` is compile-time layer.** One row on the construct table, the
-`sql` keyword delegating to the SQL parser, with the projection law running
-through the expansion. A paradigm earns a parser; a genre earns a library.
 
 **Tests are worlds.** A `test` block lowers to a generated document, so the
 runner is the engine's own boot, verdicts are state, a failing test is a

@@ -384,10 +384,58 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
   // The swept fringe: a thick lock from the parting on her left across her forehead to her right temple, a shorter one
   // back to her left temple, and a lock down each side of her face in front of the ear, her left one to the jaw. Each
   // fringe lock roots inside the scalp, so it leaves the crown already lying flat and nothing stands up from it.
-  mothHairLock("fringe-0", 81, [0.0028, 1.9201, 0.1111], [0.0162, -0.0204, 0.1322], [-0.1416, -0.0968, 0.064], 0.04, 0.016, s, at, parentName, hair)
-  mothHairLock("fringe-1", 82, [0.0056, 1.9201, 0.1103], [0.0461, -0.0232, 0.0743], [0.1623, -0.0612, 0.0393], 0.034, 0.014, s, at, parentName, hair)
-  mothHairLock("sideLock-left", 83, [0.1329, 1.8546, 0.1487], [0.0712, -0.0732, -0.0265], [0.0459, -0.148, -0.0349], 0.026, 0.011, s, at, parentName, hair)
-  mothHairLock("sideLock-right", 84, [-0.1205, 1.8474, 0.1486], [-0.0814, -0.0569, -0.0181], [-0.0604, -0.1146, -0.0282], 0.024, 0.012, s, at, parentName, hair)
+  mothHairLock(
+    "fringe-0",
+    81,
+    [0.0028, 1.9201, 0.1111],
+    [0.0162, -0.0204, 0.1322],
+    [-0.1416, -0.0968, 0.064],
+    0.04,
+    0.016,
+    s,
+    at,
+    parentName,
+    hair
+  )
+  mothHairLock(
+    "fringe-1",
+    82,
+    [0.0056, 1.9201, 0.1103],
+    [0.0461, -0.0232, 0.0743],
+    [0.1623, -0.0612, 0.0393],
+    0.034,
+    0.014,
+    s,
+    at,
+    parentName,
+    hair
+  )
+  mothHairLock(
+    "sideLock-left",
+    83,
+    [0.1329, 1.8546, 0.1487],
+    [0.0712, -0.0732, -0.0265],
+    [0.0459, -0.148, -0.0349],
+    0.026,
+    0.011,
+    s,
+    at,
+    parentName,
+    hair
+  )
+  mothHairLock(
+    "sideLock-right",
+    84,
+    [-0.1205, 1.8474, 0.1486],
+    [-0.0814, -0.0569, -0.0181],
+    [-0.0604, -0.1146, -0.0282],
+    0.024,
+    0.012,
+    s,
+    at,
+    parentName,
+    hair
+  )
 
   mothBlinkLid("left", 1, 284, s, at, parentName, skin, hair)
   mothBlinkLid("right", -1, 286, s, at, parentName, skin, hair)

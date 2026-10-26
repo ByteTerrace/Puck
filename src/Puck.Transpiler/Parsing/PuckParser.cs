@@ -11,10 +11,6 @@ namespace Puck.Transpiler.Parsing;
 public static partial class PuckParser {
     private static readonly PuckWhiteSpaceParser WhiteSpace = new();
 
-    private static bool IsEmbeddedLanguage(string identifier, IDocumentVocabulary? vocabulary) {
-        return ((vocabulary is not null) && vocabulary.IsEmbeddedLanguage(identifier: identifier));
-    }
-
     /// <summary>Reads the top-level schema directive by running the scanner/lexer only, skipping comments, strings, and nested blocks.</summary>
     /// <param name="source">The source text.</param>
     /// <param name="schema">The parsed top-level schema string, or null if omitted.</param>
@@ -811,10 +807,6 @@ public static partial class PuckParser {
 
         // Check if block without name: firstId { ... }
         if (cursor.Current == '{') {
-            if (IsEmbeddedLanguage(identifier: firstId, vocabulary: vocabulary)) {
-                return ParseEmbeddedBlock(col: col, context: context, diagnostics: diagnostics, language: firstId, line: line, startOffset: startOffset);
-            }
-
             return (ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary) with { IdentifierQuoted = firstSpelling.Quoted });
         }
 
@@ -1004,119 +996,6 @@ public static partial class PuckParser {
         var len = (context.Scanner.Cursor.Offset - startOffset);
 
         return new BlockNode(Identifier: identifier, Name: name, Target: target, Statements: statements, Offset: startOffset, Length: len, Line: line, Column: col);
-    }
-    private static StatementNode ParseEmbeddedBlock(
-        ParseContext context,
-        string language,
-        int startOffset,
-        int line,
-        int col,
-        DiagnosticBag? diagnostics
-    ) {
-        var cursor = context.Scanner.Cursor;
-
-        if (!TryConsume(c: '{', context: context)) {
-            throw CreateException(context: context, message: $"Expected '{{' starting embedded '{language}' block");
-        }
-
-        var bodyStartOffset = cursor.Offset;
-
-        var (bodyLine, bodyCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: bodyStartOffset);
-        var buffer = context.Scanner.Buffer;
-        var depth = 1;
-
-        while (!cursor.Eof) {
-            var c = cursor.Current;
-
-            // Handle string literals: single or double quote
-            if (c is '"' or '\'') {
-                var quote = c;
-
-                cursor.Advance();
-                while (!cursor.Eof) {
-                    var ch = cursor.Current;
-
-                    if ((ch == '\\') && (quote == '"')) {
-                        cursor.Advance();
-                        if (!cursor.Eof) {
-                            cursor.Advance();
-                        }
-                        continue;
-                    }
-                    if (ch == quote) {
-                        cursor.Advance();
-                        // SQL allows '' escaping inside single-quoted strings
-                        if ((quote == '\'') && !cursor.Eof && (cursor.Current == '\'')) {
-                            cursor.Advance();
-                            continue;
-                        }
-                        break;
-                    }
-                    cursor.Advance();
-                }
-                continue;
-            }
-
-            // Handle line comments: // or --
-            if (((c == '/') && (cursor.PeekNext() == '/')) || ((c == '-') && (cursor.PeekNext() == '-'))) {
-                cursor.Advance();
-                cursor.Advance();
-                while (!cursor.Eof && (cursor.Current is not '\n' and not '\r')) {
-                    cursor.Advance();
-                }
-                continue;
-            }
-
-            // Handle block comments: /* ... */
-            if ((c == '/') && (cursor.PeekNext() == '*')) {
-                cursor.Advance();
-                cursor.Advance();
-                while (!cursor.Eof) {
-                    if ((cursor.Current == '*') && (cursor.PeekNext() == '/')) {
-                        cursor.Advance();
-                        cursor.Advance();
-                        break;
-                    }
-                    cursor.Advance();
-                }
-                continue;
-            }
-
-            if (c == '{') {
-                depth++;
-                cursor.Advance();
-                continue;
-            }
-
-            if (c == '}') {
-                depth--;
-                if (depth == 0) {
-                    var bodyLen = (cursor.Offset - bodyStartOffset);
-                    var bodyText = buffer.Substring(length: bodyLen, startIndex: bodyStartOffset);
-
-                    cursor.Advance();
-                    var totalLen = (cursor.Offset - startOffset);
-
-                    return new EmbeddedBlockNode(
-                        Body: bodyText,
-                        BodyColumn: bodyCol,
-                        BodyLine: bodyLine,
-                        BodyOffset: bodyStartOffset,
-                        Column: col,
-                        Language: language,
-                        Length: totalLen,
-                        Line: line,
-                        Offset: startOffset
-                    );
-                }
-                cursor.Advance();
-                continue;
-            }
-
-            cursor.Advance();
-        }
-
-        throw CreateException(context: context, message: $"Expected '}}' closing embedded '{language}' block");
     }
     private static void SynchronizeToStatementBoundary(ParseContext context) {
         var cursor = context.Scanner.Cursor;

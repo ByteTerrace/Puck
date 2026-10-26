@@ -16,8 +16,8 @@ public static partial class PuckParser {
 
     /// <summary>Scans one contiguous span of opaque operand text: brackets and parentheses are tracked as one
     /// combined depth counter, a backquoted span and a string literal are passed through uninterpreted, and scanning always stops
-    /// (without consuming) at a top-level ')', ',', ';', '{', '}', a comment opener ('//' or '/*'), a newline, or
-    /// end of input. When <paramref
+    /// (without consuming) at a top-level ')', ',', ';', '{', '}', a comment opener ('//' or '/*'), or
+    /// end of input. A newline ends the span unless the preceding token is an operator. When <paramref
     /// name="stopKeywords"/> names a bare word found at a word boundary, scanning also stops there. When <paramref
     /// name="stopAtComparator"/>, a top-level comparison operator (from <see cref="ComparisonStopOperators"/>) also
     /// stops the scan without being consumed — <paramref name="sawComparator"/> reports whether that happened, so a
@@ -81,6 +81,10 @@ public static partial class PuckParser {
 
             // '{' stops for the same reason '}' does: no operand grammar contains one, and an `if`/`repeat` gate
             // is followed immediately by its block body.
+            if ((c is '\n' or '\r') && EndsWithOperator(buffer.AsSpan(start, cursor.Offset - start))) {
+                cursor.Advance();
+                continue;
+            }
             if (c is ',' or ';' or '{' or '}' or '\n' or '\r') {
                 break;
             }
@@ -127,6 +131,21 @@ public static partial class PuckParser {
         }
 
         return buffer[start..cursor.Offset].Trim();
+    }
+    private static bool EndsWithOperator(ReadOnlySpan<char> text) {
+        text = text.TrimEnd();
+        if (text.IsEmpty) { return false; }
+        foreach (var row in ExpressionOperators.Infix) {
+            if (Matches(text, row.Symbol!)) { return true; }
+        }
+        return Matches(text, ExpressionOperators.Find(ExpressionOp.Not)!.Symbol!) || text[^1] is '~' or '?' or ':';
+
+        static bool Matches(ReadOnlySpan<char> candidate, string symbol) {
+            if (!candidate.EndsWith(symbol, StringComparison.Ordinal)) { return false; }
+            var before = candidate.Length - symbol.Length - 1;
+            return !IdentifierSpelling.IsStart(symbol[0]) || before < 0 ||
+                !(IdentifierSpelling.IsNameCharacter(candidate[before]) || candidate[before] is '.' or ':');
+        }
     }
     private static OperandExpressionNode ValidatedOperand(string text, SourceSpan span, DiagnosticBag? diagnostics) =>
         ValidateOperand(diagnostics: diagnostics, operand: CreateOperand(span: span, text: text));

@@ -43,18 +43,56 @@ template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
 let galleryX = 23
 let gallerySpacing = 2.6
 
-let uniformRow = ["shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone", "shape-cone", "shape-superellipsoid", "shape-plane"]
-let stretchedRow = ["shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz", "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"]
-let extrudeRow = ["shape-trapezoid", "shape-rounded-rectangle", "shape-polygon-6", "shape-polygon-12", "shape-polygon-12-xy", "shape-ellipse", "shape-chamfered-rectangle", "shape-convex", "shape-path-fill", "shape-path-stroke", "shape-path-stroke-xy"]
-let revolveRow = ["shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", "shape-revolve-polygon-6", "shape-revolve-ellipse", "shape-revolve-chamfered-rectangle", "shape-revolve-convex"]
-let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion", "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"]
-let foldRow = ["shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped", "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m", "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"]
-let formRow = ["shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle", "shape-polygon-3", "shape-prism-rounding", "shape-prism-chamfer", "shape-cylinder-chamfer", "shape-revolve-solid", "shape-path-holes", "shape-path-shear", "shape-path-closed-stroke", "shape-path-stroke-ramp", "shape-sweep-braid"]
-let surfaceRow = ["shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed", "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess", "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow", "shape-volume-cloud", "shape-state-color"]
+let uniformRow = [
+  "shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone",
+  "shape-cone", "shape-superellipsoid", "shape-plane"
+]
+let stretchedRow = [
+  "shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz",
+  "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"
+]
+let extrudeRow = [
+  "shape-trapezoid", "shape-rounded-rectangle", "shape-polygon-6", "shape-polygon-12", "shape-polygon-12-xy",
+  "shape-ellipse", "shape-chamfered-rectangle", "shape-convex", "shape-path-fill", "shape-path-stroke",
+  "shape-path-stroke-xy"
+]
+let revolveRow = [
+  "shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", "shape-revolve-polygon-6", "shape-revolve-ellipse",
+  "shape-revolve-chamfered-rectangle", "shape-revolve-convex"
+]
+let facetRow = [
+  "shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion",
+  "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"
+]
+let foldRow = [
+  "shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped",
+  "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m",
+  "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"
+]
+let formRow = [
+  "shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle",
+  "shape-polygon-3", "shape-prism-rounding", "shape-prism-chamfer", "shape-cylinder-chamfer", "shape-revolve-solid",
+  "shape-path-holes", "shape-path-shear", "shape-path-closed-stroke", "shape-path-stroke-ramp", "shape-sweep-braid"
+]
+let surfaceRow = [
+  "shape-metal", "shape-coat", "shape-sheen", "shape-emissive", "shape-wrap-soften", "shape-fill-bleed",
+  "shape-weathering-edge", "shape-weathering-lines", "shape-weathering-settle", "shape-panel-recess",
+  "shape-panel-raise", "shape-trims", "shape-paint-world", "shape-text-engrave", "shape-text-ride", "shape-volume-flow",
+  "shape-volume-cloud", "shape-state-color"
+]
 let glassRow = ["shape-glass"]
-let motionRow = ["motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend", "motion-carve", "motion-mirror", "motion-polar"]
-let motionRowB = ["motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume", "motion-ik", "motion-frames"]
-let warpRow = ["shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere", "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"]
+let motionRow = [
+  "motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend",
+  "motion-carve", "motion-mirror", "motion-polar"
+]
+let motionRowB = [
+  "motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume",
+  "motion-ik", "motion-frames"
+]
+let warpRow = [
+  "shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere",
+  "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"
+]
 
 let foldZ = 33
 let surfaceZ = 25
@@ -77,23 +115,56 @@ let galleryRows = [
   { title: "EXTRUDED", level: 0, z: 28, names: extrudeRow, what: "each prism profile, extruded" }
   { title: "REVOLVED", level: 0, z: 34, names: revolveRow, what: "each prism profile, revolved" }
   { title: "SWEEPS AND FACETS", level: 1, z: 17, names: facetRow, what: "sweeps, rounding, shells, warps, relief" }
-  { title: "BLENDS", level: 1, z: 25, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere" }
+  {
+    title: "BLENDS"
+    level: 1
+    z: 25
+    names: map(blendExhibits, entry => entry.id)
+    what: "every blend of a box and a sphere"
+  }
   { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
   { title: "FORMS", level: 2, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
   { title: "SURFACES", level: 2, z: surfaceZ, names: surfaceRow, what: "palette channels, wear, panels, text" }
   { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
   { title: "MOTION", level: 3, z: 20, names: motionRow, what: "the stamp pool: swings, slides, moving blends" }
   { title: "MOTION II", level: 3, z: motionZB, names: motionRowB, what: "moving paints, twist, bend, cells, IK" }
-  { title: "GLASS", level: 3, z: glassZ, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost" }
+  {
+    title: "GLASS"
+    level: 3
+    z: glassZ
+    names: glassRow
+    what: "glass over the opaque image: tint, depth, refraction, frost"
+  }
 ]
 
 // A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
 // `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to any exhibit by name.
-let gallerySpawns = reduce(galleryRows, [], (spawns, row) => concat(spawns, map(row.names, (name, index) => { id: name, position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)], yawDegrees: 180 })))
+let gallerySpawns = reduce(
+  galleryRows,
+  [],
+  (spawns, row) => concat(
+    spawns,
+    map(
+      row.names,
+      (name, index) => {
+        id: name
+        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)]
+        yawDegrees: 180
+      }
+    )
+  )
+)
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
 // The hex wallpapers' clip: a clockwise pointy-top hexagon of inradius 0.45 (circumradius 0.45 / cos 30 degrees).
-let galleryHexClip = [[0, 0.519615], [0.45, 0.259808], [0.45, -0.259808], [0, -0.519615], [-0.45, -0.259808], [-0.45, 0.259808]]
+let galleryHexClip = [
+  [0, 0.519615]
+  [0.45, 0.259808]
+  [0.45, -0.259808]
+  [0, -0.519615]
+  [-0.45, -0.259808]
+  [-0.45, 0.259808]
+]
 
 // Slot 0 the exhibit, slot 1 the plinth, slot 2 the label, slot 3 an exhibit's own second material (a blend's tool,
 // a palette channel under test) and slots past it whatever else an exhibit appends.
@@ -120,8 +191,32 @@ template exhibit(label, extra = [], runs = [], note = "") {
     scale [0.6, 0.15, 0.25]
   }
   textRuns: concat(
-    [{ text: label, position [0, 0.19, 0.25], rotation [0, 0, 0, 1], emHeight: 0.085, depth: 0.006, mode: "emboss", material: 2, align: "center" }],
-    ((note == "") ? [] : [{ text: note, position [0, 0.085, 0.25], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.004, mode: "emboss", material: 2, align: "center", maxWidth: 1.12, lineSpacing: 1.15 }]),
+    [
+      {
+        text: label
+        position [0, 0.19, 0.25]
+        rotation [0, 0, 0, 1]
+        emHeight: 0.085
+        depth: 0.006
+        mode: "emboss"
+        material: 2
+        align: "center"
+      }
+    ],
+    ((note == "") ? [] : [
+      {
+        text: note
+        position [0, 0.085, 0.25]
+        rotation [0, 0, 0, 1]
+        emHeight: 0.03
+        depth: 0.004
+        mode: "emboss"
+        material: 2
+        align: "center"
+        maxWidth: 1.12
+        lineSpacing: 1.15
+      }
+    ]),
     runs
   )
 }
@@ -147,8 +242,28 @@ template signPrototypes() {
           scale [1.05, 0.3, 0.04]
         }
         textRuns [
-          { text: row.title, position [0, 2.99, 0.04], rotation [0, 0, 0, 1], emHeight: 0.14, depth: 0.004, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
-          { text: row.what, position [0, 2.75, 0.04], rotation [0, 0, 0, 1], emHeight: 0.065, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 2 }
+          {
+            text: row.title
+            position [0, 2.99, 0.04]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.14
+            depth: 0.004
+            mode: "emboss"
+            material: 1
+            align: "center"
+            maxWidth: 2
+          }
+          {
+            text: row.what
+            position [0, 2.75, 0.04]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.065
+            depth: 0.003
+            mode: "emboss"
+            material: 1
+            align: "center"
+            maxWidth: 2
+          }
         ]
       }
     }
@@ -172,13 +287,99 @@ template signPrototypes() {
         scale [0.72, 0.66, 0.015]
       }
       textRuns: map(concat(
-        [{ text: "SHAPE GALLERY", position [0, 2.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.07, depth: 0.004, mode: "emboss", material: 1, align: "center" }],
-        [{ text: galleryMapDirections, position [0, 1.98, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
-        map(galleryLevels, (level, index) => { text: level.title, position [0, (1.84 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.05, depth: 0.003, mode: "emboss", material: 1, align: "center" }),
-        map(galleryLevels, (level, index) => { text: reduce(filter(galleryRows, row => (row.level == level.level)), "", (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")), position [0, (1.775 - (0.19 * index)), 0.015], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }),
-        [{ text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>", position [0, 1.08, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }],
-        [{ text: "PAINTING WING east   WONDERLAND west wall", position [0, 0.95, 0.015], rotation [0, 0, 0, 1], emHeight: 0.026, depth: 0.003, mode: "emboss", material: 1, align: "center", maxWidth: 1.36 }]
-      ), run => { text: run.text, position [run.position[0], (run.position[1] + 0.7), run.position[2]], rotation: run.rotation, emHeight: run.emHeight, depth: run.depth, mode: run.mode, material: run.material, align: run.align, maxWidth: 1.36 }
+        [
+          {
+            text: "SHAPE GALLERY"
+            position [0, 2.08, 0.015]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.07
+            depth: 0.004
+            mode: "emboss"
+            material: 1
+            align: "center"
+          }
+        ],
+        [
+          {
+            text: galleryMapDirections
+            position [0, 1.98, 0.015]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.026
+            depth: 0.003
+            mode: "emboss"
+            material: 1
+            align: "center"
+            maxWidth: 1.36
+          }
+        ],
+        map(
+          galleryLevels,
+          (level, index) => {
+            text: level.title
+            position [0, (1.84 - (0.19 * index)), 0.015]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.05
+            depth: 0.003
+            mode: "emboss"
+            material: 1
+            align: "center"
+          }
+        ),
+        map(
+          galleryLevels,
+          (level, index) => {
+            text: reduce(
+              filter(galleryRows, row => (row.level == level.level)),
+              "",
+              (text, row) => ((text == "") ? row.title : $"{text}, {row.title}")
+            )
+            position [0, (1.775 - (0.19 * index)), 0.015]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.03
+            depth: 0.003
+            mode: "emboss"
+            material: 1
+            align: "center"
+            maxWidth: 1.36
+          }
+        ),
+        [
+          {
+            text: "gallery.go <exhibit>   gallery.next   gallery.flag <exhibit> <note>"
+            position [0, 1.08, 0.015]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.026
+            depth: 0.003
+            mode: "emboss"
+            material: 1
+            align: "center"
+            maxWidth: 1.36
+          }
+        ],
+        [
+          {
+            text: "PAINTING WING east   WONDERLAND west wall"
+            position [0, 0.95, 0.015]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.026
+            depth: 0.003
+            mode: "emboss"
+            material: 1
+            align: "center"
+            maxWidth: 1.36
+          }
+        ]
+      ), run => {
+        text: run.text
+        position [run.position[0], (run.position[1] + 0.7), run.position[2]]
+        rotation: run.rotation
+        emHeight: run.emHeight
+        depth: run.depth
+        mode: run.mode
+        material: run.material
+        align: run.align
+        maxWidth: 1.36
+      }
       )
     }
   }
@@ -244,7 +445,15 @@ let galleryCommands = [
     name: "gallery.view"
     help: "Steps every camera to the next debug view (off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow, indirect, then off again), or selects one by name."
     parameters [
-      { name: "view", kind: Choice, values ["next", "off", "depth", "normals", "raydir", "material-id", "visibility", "motion", "sky-cost", "ao", "shadow", "indirect"], default: "next" }
+      {
+        name: "view"
+        kind: Choice
+        values [
+          "next", "off", "depth", "normals", "raydir", "material-id", "visibility", "motion", "sky-cost", "ao",
+          "shadow", "indirect"
+        ]
+        default: "next"
+      }
     ]
     lines [
       "world.debug-view {view}"
@@ -340,20 +549,132 @@ template clockDriver(key, cadence = 1, ease = 0.3) {
 // Every shape blend: the box first, then the sphere in the accent colour blended into it, so a seam's material winner
 // shows. The intersection family's sphere is larger and nearer the box's centre, so the two overlap enough to read.
 let blendExhibits = [
-  { id: "shape-blend-union", label: "UNION", blend: "Union", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface" }
-  { id: "shape-blend-subtraction", label: "SUBTRACTION", blend: "Subtraction", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp" }
-  { id: "shape-blend-intersection", label: "INTERSECTION", blend: "Intersection", smooth: 0, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4], note: "only where both overlap: a box with spherical corners, the sphere's colour on its own faces" }
-  { id: "shape-blend-xor", label: "XOR", blend: "Xor", smooth: 0, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "either but not both: the overlap is cut away, leaving a void you can see into from the seam" }
-  { id: "shape-smooth-union", label: "SMOOTH UNION", blend: "SmoothUnion", smooth: 0.15, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step" }
-  { id: "shape-smooth-subtraction", label: "SMOOTH SUBTRACT", blend: "SmoothSubtraction", smooth: 0.1, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "the carve's rim rounded over 0.1 m into the box" }
-  { id: "shape-smooth-intersection", label: "SMOOTH INTERSECT", blend: "SmoothIntersection", smooth: 0.1, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4], note: "the intersection's edges rounded over 0.1 m" }
-  { id: "shape-chamfer-union", label: "CHAMFER UNION", blend: "ChamferUnion", smooth: 0.1, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet" }
-  { id: "shape-chamfer-subtraction", label: "CHAMFER SUBTRACT", blend: "ChamferSubtraction", smooth: 0.08, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "the carve's rim bevelled at 45 degrees" }
-  { id: "shape-chamfer-intersection", label: "CHAMFER INTERSECT", blend: "ChamferIntersection", smooth: 0.08, tool [0.1, 1.28, 0.08], radius [0.4, 0.4, 0.4], note: "the intersection's edges bevelled at 45 degrees" }
-  { id: "shape-groove-union", label: "GROOVE UNION", blend: "GrooveUnion", smooth: 0.05, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a round groove cut along the seam curve, 0.05 m: a recessed line following the join" }
-  { id: "shape-pipe-union", label: "PIPE UNION", blend: "PipeUnion", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a round bead laid along the seam curve, 0.04 m: a raised weld following the join" }
-  { id: "shape-groove-subtraction", label: "GROOVE SUBTRACT", blend: "GrooveSubtraction", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a groove cut along the carve's rim" }
-  { id: "shape-pipe-subtraction", label: "PIPE SUBTRACT", blend: "PipeSubtraction", smooth: 0.04, tool [0.22, 1.42, 0.16], radius [0.28, 0.28, 0.28], note: "a bead laid along the carve's rim" }
+  {
+    id: "shape-blend-union"
+    label: "UNION"
+    blend: "Union"
+    smooth: 0
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface"
+  }
+  {
+    id: "shape-blend-subtraction"
+    label: "SUBTRACTION"
+    blend: "Subtraction"
+    smooth: 0
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp"
+  }
+  {
+    id: "shape-blend-intersection"
+    label: "INTERSECTION"
+    blend: "Intersection"
+    smooth: 0
+    tool [0.1, 1.28, 0.08]
+    radius [0.4, 0.4, 0.4]
+    note: "only where both overlap: a box with spherical corners, the sphere's colour on its own faces"
+  }
+  {
+    id: "shape-blend-xor"
+    label: "XOR"
+    blend: "Xor"
+    smooth: 0
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "either but not both: the overlap is cut away, leaving a void you can see into from the seam"
+  }
+  {
+    id: "shape-smooth-union"
+    label: "SMOOTH UNION"
+    blend: "SmoothUnion"
+    smooth: 0.15
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "a 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step"
+  }
+  {
+    id: "shape-smooth-subtraction"
+    label: "SMOOTH SUBTRACT"
+    blend: "SmoothSubtraction"
+    smooth: 0.1
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "the carve's rim rounded over 0.1 m into the box"
+  }
+  {
+    id: "shape-smooth-intersection"
+    label: "SMOOTH INTERSECT"
+    blend: "SmoothIntersection"
+    smooth: 0.1
+    tool [0.1, 1.28, 0.08]
+    radius [0.4, 0.4, 0.4]
+    note: "the intersection's edges rounded over 0.1 m"
+  }
+  {
+    id: "shape-chamfer-union"
+    label: "CHAMFER UNION"
+    blend: "ChamferUnion"
+    smooth: 0.1
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "a flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet"
+  }
+  {
+    id: "shape-chamfer-subtraction"
+    label: "CHAMFER SUBTRACT"
+    blend: "ChamferSubtraction"
+    smooth: 0.08
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "the carve's rim bevelled at 45 degrees"
+  }
+  {
+    id: "shape-chamfer-intersection"
+    label: "CHAMFER INTERSECT"
+    blend: "ChamferIntersection"
+    smooth: 0.08
+    tool [0.1, 1.28, 0.08]
+    radius [0.4, 0.4, 0.4]
+    note: "the intersection's edges bevelled at 45 degrees"
+  }
+  {
+    id: "shape-groove-union"
+    label: "GROOVE UNION"
+    blend: "GrooveUnion"
+    smooth: 0.05
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "a round groove cut along the seam curve, 0.05 m: a recessed line following the join"
+  }
+  {
+    id: "shape-pipe-union"
+    label: "PIPE UNION"
+    blend: "PipeUnion"
+    smooth: 0.04
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "a round bead laid along the seam curve, 0.04 m: a raised weld following the join"
+  }
+  {
+    id: "shape-groove-subtraction"
+    label: "GROOVE SUBTRACT"
+    blend: "GrooveSubtraction"
+    smooth: 0.04
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "a groove cut along the carve's rim"
+  }
+  {
+    id: "shape-pipe-subtraction"
+    label: "PIPE SUBTRACT"
+    blend: "PipeSubtraction"
+    smooth: 0.04
+    tool [0.22, 1.42, 0.16]
+    radius [0.28, 0.28, 0.28]
+    note: "a bead laid along the carve's rim"
+  }
 ]
 
 template blendPrototypes() {
@@ -415,7 +736,10 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.1, 0.1, 0.1]
       }
-      exhibit(label: "REPEAT 5", note: "one sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each")
+      exhibit(
+        label: "REPEAT 5",
+        note: "one sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each"
+      )
     }
   }
   prototype "shape-repeat-grid" {
@@ -444,7 +768,10 @@ template foldPrototypes() {
         position [0.125, 1.2, 0]
         scale [0.09, 0.09, 0.09]
       }
-      exhibit(label: "REPEAT EVEN", note: "an even count from a symmetry over an odd repeat: four spheres, the middle gap closed")
+      exhibit(
+        label: "REPEAT EVEN",
+        note: "an even count from a symmetry over an odd repeat: four spheres, the middle gap closed"
+      )
     }
   }
   // An unbounded lattice clipped by an intersection: the creation-wide scope keeps the clip off every other placement.
@@ -466,7 +793,10 @@ template foldPrototypes() {
         position [0, 1.26, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "REPEAT CLIPPED", note: "an unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut")
+      exhibit(
+        label: "REPEAT CLIPPED",
+        note: "an unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut"
+      )
     }
   }
   prototype "shape-polar-mirror" {
@@ -480,7 +810,10 @@ template foldPrototypes() {
         rotation [0, 0, 0.258819, 0.965926]
         scale [0.05, 0.25, 0.1]
       }
-      exhibit(label: "POLAR MIRROR", note: "five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls")
+      exhibit(
+        label: "POLAR MIRROR",
+        note: "five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls"
+      )
     }
   }
   prototype "shape-polar-z" {
@@ -506,7 +839,18 @@ template foldPrototypes() {
         position [0, 1.2, 0.32]
         scale [0.12, 0.12, 0.12]
       }
-      exhibit(label: "POLAR STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }, { color: "#C23B3B", roughness: 0.45 }, { color: "#8E5BD9", roughness: 0.45 }, { color: "#E3C547", roughness: 0.45 }], note: "six sectors, each striding the palette one row: six colours, one sphere")
+      exhibit(
+        label: "POLAR STRIDE",
+        extra: [
+          accent
+          { color: "#2B7BD9", roughness: 0.45 }
+          { color: "#3FA34D", roughness: 0.45 }
+          { color: "#C23B3B", roughness: 0.45 }
+          { color: "#8E5BD9", roughness: 0.45 }
+          { color: "#E3C547", roughness: 0.45 }
+        ],
+        note: "six sectors, each striding the palette one row: six colours, one sphere"
+      )
     }
   }
   // Each wallpaper tile sits inside its group's fundamental region of the cell (`SdfWallpaperFold.Fold`), in the
@@ -523,7 +867,10 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.07, 0.03, 0.02]
       }
-      exhibit(label: "WALLPAPER PMM", note: "a tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images")
+      exhibit(
+        label: "WALLPAPER PMM",
+        note: "a tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images"
+      )
     }
   }
   prototype "shape-wallpaper-p4m" {
@@ -537,7 +884,10 @@ template foldPrototypes() {
         rotation [0, 0.258819, 0, 0.965926]
         scale [0.07, 0.03, 0.02]
       }
-      exhibit(label: "WALLPAPER P4M", note: "square symmetry with mirrors through the 4-fold centres: eight images per cell")
+      exhibit(
+        label: "WALLPAPER P4M",
+        note: "square symmetry with mirrors through the 4-fold centres: eight images per cell"
+      )
     }
   }
   // A hex group carries no limit: an intersection inside the creation-wide scope bounds the lattice. The clip is a
@@ -565,7 +915,10 @@ template foldPrototypes() {
         }
         scale [1, 1, 0.1]
       }
-      exhibit(label: "WALLPAPER P3M1", note: "a hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases")
+      exhibit(
+        label: "WALLPAPER P3M1",
+        note: "a hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases"
+      )
     }
   }
   prototype "shape-wallpaper-p6m" {
@@ -590,7 +943,10 @@ template foldPrototypes() {
         }
         scale [1, 1, 0.1]
       }
-      exhibit(label: "WALLPAPER P6M", note: "the richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly")
+      exhibit(
+        label: "WALLPAPER P6M",
+        note: "the richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly"
+      )
     }
   }
   prototype "shape-wallpaper-stride" {
@@ -603,7 +959,11 @@ template foldPrototypes() {
         position [0, 1.2, 0]
         scale [0.13, 0.04, 0.13]
       }
-      exhibit(label: "WALLPAPER STRIDE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }], note: "p4m with a material stride: cells alternate colour by parity, a checkerboard")
+      exhibit(
+        label: "WALLPAPER STRIDE",
+        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }],
+        note: "p4m with a material stride: cells alternate colour by parity, a checkerboard"
+      )
     }
   }
   // A static placement supplies no render lanes, so the lane reads zero: halfway through this from/to window.
@@ -1030,7 +1390,10 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "FILL BLEED", extra: [{ color: "#DDDDDD", roughness: 0.8, fill: "#2F5BFF", bleed: "#FF5A1F", receive: 1.5 }])
+      exhibit(
+        label: "FILL BLEED",
+        extra: [{ color: "#DDDDDD", roughness: 0.8, fill: "#2F5BFF", bleed: "#FF5A1F", receive: 1.5 }]
+      )
     }
   }
   prototype "shape-weathering-edge" {
@@ -1041,7 +1404,25 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.38, 0.38, 0.38]
       }
-      exhibit(label: "WEAR EDGE", extra: [{ color: "#2E6B3A", roughness: 0.5, weathering { edge: 1, reach: 0.08, floor: 1, seed: 5, under [{ threshold: 0.25, surface { color: "#B5895B", roughness: 0.8, metal: 0 } }, { threshold: 0.6, surface { color: "#9AA0A6", roughness: 0.3, metal: 1 } }] } }])
+      exhibit(
+        label: "WEAR EDGE",
+        extra: [
+          {
+            color: "#2E6B3A"
+            roughness: 0.5
+            weathering {
+              edge: 1
+              reach: 0.08
+              floor: 1
+              seed: 5
+              under [
+                { threshold: 0.25, surface { color: "#B5895B", roughness: 0.8, metal: 0 } }
+                { threshold: 0.6, surface { color: "#9AA0A6", roughness: 0.3, metal: 1 } }
+              ]
+            }
+          }
+        ]
+      )
     }
   }
   prototype "shape-weathering-lines" {
@@ -1051,7 +1432,22 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "WEAR LINES", extra: [{ color: "#7A2E2E", roughness: 0.5, weathering { lines: 0.6, floor: 1, scale: 4, seed: 9, under [{ threshold: 0.2, surface { color: "#C0C4C8", roughness: 0.3, metal: 1 } }] } }])
+      exhibit(
+        label: "WEAR LINES",
+        extra: [
+          {
+            color: "#7A2E2E"
+            roughness: 0.5
+            weathering {
+              lines: 0.6
+              floor: 1
+              scale: 4
+              seed: 9
+              under [{ threshold: 0.2, surface { color: "#C0C4C8", roughness: 0.3, metal: 1 } }]
+            }
+          }
+        ]
+      )
     }
   }
   prototype "shape-weathering-settle" {
@@ -1061,7 +1457,16 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "WEAR SETTLE", extra: [{ color: "#3B4A5A", roughness: 0.5, weathering { settle: 1, floor: 1, deposit { color: "#F4F1EA", roughness: 0.95, metal: 0 } } }])
+      exhibit(
+        label: "WEAR SETTLE",
+        extra: [
+          {
+            color: "#3B4A5A"
+            roughness: 0.5
+            weathering { settle: 1, floor: 1, deposit { color: "#F4F1EA", roughness: 0.95, metal: 0 } }
+          }
+        ]
+      )
     }
   }
   prototype "shape-panel-recess" {
@@ -1124,7 +1529,25 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "PAINT WORLD", extra: [{ color: "#B9C4D0", roughness: 0.45, specular: 0.3, paints [{ type: "Plane", position [paintX, paintY, surfaceZ], rotation [0, 0, 0.258819, 0.965926], stroke: 0.035, color: "#1F4E79" }] }])
+      exhibit(
+        label: "PAINT WORLD",
+        extra: [
+          {
+            color: "#B9C4D0"
+            roughness: 0.45
+            specular: 0.3
+            paints [
+              {
+                type: "Plane"
+                position [paintX, paintY, surfaceZ]
+                rotation [0, 0, 0.258819, 0.965926]
+                stroke: 0.035
+                color: "#1F4E79"
+              }
+            ]
+          }
+        ]
+      )
     }
   }
   prototype "shape-text-engrave" {
@@ -1134,7 +1557,22 @@ template surfacePrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.25, 0.08]
       }
-      exhibit(label: "TEXT ENGRAVE", extra: [accent], runs: [{ text: "ENGRAVED", position [0, 1.2, 0.08], rotation [0, 0, 0, 1], emHeight: 0.13, depth: 0.012, mode: "engrave", material: accentMaterial, align: "center" }])
+      exhibit(
+        label: "TEXT ENGRAVE",
+        extra: [accent],
+        runs: [
+          {
+            text: "ENGRAVED"
+            position [0, 1.2, 0.08]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.13
+            depth: 0.012
+            mode: "engrave"
+            material: accentMaterial
+            align: "center"
+          }
+        ]
+      )
     }
   }
   prototype "shape-text-ride" {
@@ -1145,7 +1583,25 @@ template surfacePrototypes() {
         rotation [0, 0, 0.173648, 0.984808]
         scale [0.45, 0.3, 0.05]
       }
-      exhibit(label: "TEXT ON SHAPE", extra: [accent], runs: [{ text: "TEXT RIDES A SHAPE", shapeId: 0, position [0, 0, 1], rotation [0, 0, 0, 1], emHeight: 0.08, depth: 0.004, maxWidth: 0.7, tracking: 0.05, lineSpacing: 1.2, material: accentMaterial, align: "center" }])
+      exhibit(
+        label: "TEXT ON SHAPE",
+        extra: [accent],
+        runs: [
+          {
+            text: "TEXT RIDES A SHAPE"
+            shapeId: 0
+            position [0, 0, 1]
+            rotation [0, 0, 0, 1]
+            emHeight: 0.08
+            depth: 0.004
+            maxWidth: 0.7
+            tracking: 0.05
+            lineSpacing: 1.2
+            material: accentMaterial
+            align: "center"
+          }
+        ]
+      )
     }
   }
   // A flow runs from its box's +Y face toward -Y; the half-turn about X puts the mouth on the nozzle and the plume above.
@@ -1271,7 +1727,16 @@ template surfacePrototypes() {
         position [0.46, 1.2, 0]
         scale [0.1, 0.22, 0.004]
       }
-      exhibit(label: "GLASS", extra: [accent, { color: "#F58220", roughness: 0.05, glass { depth: 0.12, ior: 1.49 } }, { color: "#C8F0DC", roughness: 0, glass { depth: 0.01, ior: 1.5 } }, { color: "#F0F0F0", roughness: 0.7, glass { depth: 0.01, ior: 1.5 } }], note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods.")
+      exhibit(
+        label: "GLASS",
+        extra: [
+          accent
+          { color: "#F58220", roughness: 0.05, glass { depth: 0.12, ior: 1.49 } }
+          { color: "#C8F0DC", roughness: 0, glass { depth: 0.01, ior: 1.5 } }
+          { color: "#F0F0F0", roughness: 0.7, glass { depth: 0.01, ior: 1.5 } }
+        ],
+        note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods."
+      )
     }
   }
 }
@@ -1297,7 +1762,22 @@ template motionPrototypes() {
           }
         ]
       }
-      exhibit(label: "SPIN", extra: [{ color: "#7A2E2E", roughness: 0.5, weathering { lines: 0.6, floor: 1, scale: 4, seed: 9, under [{ threshold: 0.2, surface { color: "#C0C4C8", roughness: 0.3, metal: 1 } }] } }])
+      exhibit(
+        label: "SPIN",
+        extra: [
+          {
+            color: "#7A2E2E"
+            roughness: 0.5
+            weathering {
+              lines: 0.6
+              floor: 1
+              scale: 4
+              seed: 9
+              under [{ threshold: 0.2, surface { color: "#C0C4C8", roughness: 0.3, metal: 1 } }]
+            }
+          }
+        ]
+      )
     }
   }
   prototype "motion-rock" {
@@ -1548,7 +2028,47 @@ template motionPrototypesB() {
           }
         ]
       }
-      exhibit(label: "MOVING PAINT", extra: [{ color: "#E8E4DA", roughness: 0.5, paints [{ parent: "panel", type: "Plane", position [0, 0.16, 0], stroke: 0.025, color: "#E4572E" }, { parent: "panel", type: "Prism", position [0.15, -0.08, 0], scale [0.09, 0.09, 0.2], profile { kind: "Ellipse" }, stroke: 0.012, color: "#1F4E79" }, { parent: "panel", type: "Prism", position [-0.17, -0.1, 0], scale [0.08, 0.08, 0.2], profile { kind: "Polygon", sides: 5 }, color: "#3FA34D" }, { parent: "panel", type: "Sweep", curve { a [-0.25, -0.22, 0.1], b [0, -0.12, 0.1], c [0.25, -0.22, 0.1], radiusStart: 0.012, radiusEnd: 0.012 }, color: "#171210" }] }])
+      exhibit(
+        label: "MOVING PAINT",
+        extra: [
+          {
+            color: "#E8E4DA"
+            roughness: 0.5
+            paints [
+              { parent: "panel", type: "Plane", position [0, 0.16, 0], stroke: 0.025, color: "#E4572E" }
+              {
+                parent: "panel"
+                type: "Prism"
+                position [0.15, -0.08, 0]
+                scale [0.09, 0.09, 0.2]
+                profile { kind: "Ellipse" }
+                stroke: 0.012
+                color: "#1F4E79"
+              }
+              {
+                parent: "panel"
+                type: "Prism"
+                position [-0.17, -0.1, 0]
+                scale [0.08, 0.08, 0.2]
+                profile { kind: "Polygon", sides: 5 }
+                color: "#3FA34D"
+              }
+              {
+                parent: "panel"
+                type: "Sweep"
+                curve {
+                  a [-0.25, -0.22, 0.1]
+                  b [0, -0.12, 0.1]
+                  c [0.25, -0.22, 0.1]
+                  radiusStart: 0.012
+                  radiusEnd: 0.012
+                }
+                color: "#171210"
+              }
+            ]
+          }
+        ]
+      )
     }
   }
   // An eye: a radial ramp of pupil, iris, limbus and sclera on a plane under a clear cornea, in the winning slot's
@@ -1577,7 +2097,34 @@ template motionPrototypesB() {
           }
         ]
       }
-      exhibit(label: "MOVING INSET", extra: [{ color: "#FFFFFF", roughness: 0.1, specular: 0.4, coat: 0.6, inset { origin [0, 0, -0.25], rotation [0, 1, 0, 0], depth: 0.05, ior: 1.336, paint { stops [{ radius: 0.03, color: "#0B0B0B" }, { radius: 0.075, color: "#3A7BD5" }, { radius: 0.085, color: "#1A2A40" }, { radius: 0.095, color: "#F5F3EE" }], softness: 0.15, modulationAmplitude: 0.04, modulationFrequency: 40 } } }])
+      exhibit(
+        label: "MOVING INSET",
+        extra: [
+          {
+            color: "#FFFFFF"
+            roughness: 0.1
+            specular: 0.4
+            coat: 0.6
+            inset {
+              origin [0, 0, -0.25]
+              rotation [0, 1, 0, 0]
+              depth: 0.05
+              ior: 1.336
+              paint {
+                stops [
+                  { radius: 0.03, color: "#0B0B0B" }
+                  { radius: 0.075, color: "#3A7BD5" }
+                  { radius: 0.085, color: "#1A2A40" }
+                  { radius: 0.095, color: "#F5F3EE" }
+                ]
+                softness: 0.15
+                modulationAmplitude: 0.04
+                modulationFrequency: 40
+              }
+            }
+          }
+        ]
+      )
     }
   }
   // Twist and bend emit only on the stamp-pool path; a static placement ignores both. The twist's constant-wave swing is
@@ -2382,7 +2929,10 @@ template galleryPrototypes() {
           radiusEnd: 0.08
         }
       }
-      exhibit(label: "SWEEP", note: "a tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable")
+      exhibit(
+        label: "SWEEP",
+        note: "a tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable"
+      )
     }
   }
   prototype "shape-sweep-tapered" {
@@ -2399,7 +2949,10 @@ template galleryPrototypes() {
           bulge: 0.06
         }
       }
-      exhibit(label: "SWEEP TAPER", note: "the radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch")
+      exhibit(
+        label: "SWEEP TAPER",
+        note: "the radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch"
+      )
     }
   }
   prototype "shape-sweep-strands" {
@@ -2418,7 +2971,10 @@ template galleryPrototypes() {
           twist: 1.5
         }
       }
-      exhibit(label: "SWEEP STRANDS", note: "three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced")
+      exhibit(
+        label: "SWEEP STRANDS",
+        note: "three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced"
+      )
     }
   }
   prototype "shape-rounding" {
@@ -2429,7 +2985,10 @@ template galleryPrototypes() {
         rounding: 0.12
         scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "ROUNDING", note: "a cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact")
+      exhibit(
+        label: "ROUNDING",
+        note: "a cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact"
+      )
     }
   }
   prototype "shape-chamfer" {
@@ -2440,7 +2999,10 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "CHAMFER", note: "a box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round")
+      exhibit(
+        label: "CHAMFER",
+        note: "a box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round"
+      )
     }
   }
   prototype "shape-onion" {
@@ -2457,7 +3019,10 @@ template galleryPrototypes() {
         position [0, 1.45, 0.35]
         scale [0.35, 0.3, 0.35]
       }
-      exhibit(label: "ONION", note: "a 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even")
+      exhibit(
+        label: "ONION",
+        note: "a 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even"
+      )
     }
   }
   prototype "shape-dilate" {
@@ -2486,7 +3051,10 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.25, 0.5, 0.25]
       }
-      exhibit(label: "FLARE", note: "a cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here")
+      exhibit(
+        label: "FLARE",
+        note: "a cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here"
+      )
     }
   }
   prototype "shape-shear" {
@@ -2502,7 +3070,10 @@ template galleryPrototypes() {
           driver: 1
         }
       }
-      exhibit(label: "SHEAR", note: "a box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z")
+      exhibit(
+        label: "SHEAR",
+        note: "a box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z"
+      )
     }
   }
   prototype "shape-bumps" {
@@ -2524,7 +3095,10 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "BUMPS", note: "two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring")
+      exhibit(
+        label: "BUMPS",
+        note: "two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring"
+      )
     }
   }
   prototype "shape-cells-f1" {
@@ -2571,7 +3145,10 @@ template galleryPrototypes() {
         position [0, 1.2, 0.35]
         scale [0.1, 0.3, 0.06]
       }
-      exhibit(label: "POLAR FOLD", note: "one box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors")
+      exhibit(
+        label: "POLAR FOLD",
+        note: "one box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors"
+      )
     }
   }
 
@@ -2600,7 +3177,10 @@ template warpPrototypes() {
           amplitude: 0.04
         }
       }
-      exhibit(label: "DOMAIN WARP", note: "a sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases")
+      exhibit(
+        label: "DOMAIN WARP",
+        note: "a sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases"
+      )
     }
   }
   prototype "shape-displace" {
@@ -2614,7 +3194,10 @@ template warpPrototypes() {
         position [0, 1.2, 0]
         scale [0.36, 0.36, 0.36]
       }
-      exhibit(label: "SINE RELIEF", note: "a box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face")
+      exhibit(
+        label: "SINE RELIEF",
+        note: "a box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face"
+      )
     }
   }
   prototype "shape-elongate" {
@@ -2625,7 +3208,10 @@ template warpPrototypes() {
         position [0, 1.2, 0]
         scale [0.16, 0.16, 0.16]
       }
-      exhibit(label: "ELONGATE", note: "a sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere")
+      exhibit(
+        label: "ELONGATE",
+        note: "a sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere"
+      )
     }
   }
   // A jittered lattice of spheres, each cell's copy displaced and recoloured by its hash, clipped by a box whose faces
@@ -2646,7 +3232,11 @@ template warpPrototypes() {
         position [0, 1.26, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "JITTER", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }], note: "a repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall")
+      exhibit(
+        label: "JITTER",
+        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }, { color: "#3FA34D", roughness: 0.45 }],
+        note: "a repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall"
+      )
     }
   }
   prototype "shape-jitter-tumble" {
@@ -2665,7 +3255,11 @@ template warpPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "JITTER TUMBLE", extra: [accent, { color: "#2B7BD9", roughness: 0.45 }], note: "boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped")
+      exhibit(
+        label: "JITTER TUMBLE",
+        extra: [accent, { color: "#2B7BD9", roughness: 0.45 }],
+        note: "boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped"
+      )
     }
   }
   // A Droste fold: a sphere nine-tenths of a metre from the fold's centre repeats inward as halving copies, each shell
@@ -2686,7 +3280,11 @@ template warpPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "LOG SPHERE", extra: [accent], note: "self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward")
+      exhibit(
+        label: "LOG SPHERE",
+        extra: [accent],
+        note: "self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward"
+      )
     }
   }
   prototype "shape-stairs-union" {
@@ -2704,7 +3302,11 @@ template warpPrototypes() {
         smooth: 0.2
         steps: 4
       }
-      exhibit(label: "STAIRS UNION", extra: [accent], note: "a union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet")
+      exhibit(
+        label: "STAIRS UNION",
+        extra: [accent],
+        note: "a union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet"
+      )
     }
   }
   prototype "shape-stairs-subtraction" {
@@ -2722,7 +3324,11 @@ template warpPrototypes() {
         smooth: 0.15
         steps: 3
       }
-      exhibit(label: "STAIRS SUBTRACT", extra: [accent], note: "a carve whose rim steps three times over 0.15 m: terraces into the cut")
+      exhibit(
+        label: "STAIRS SUBTRACT",
+        extra: [accent],
+        note: "a carve whose rim steps three times over 0.15 m: terraces into the cut"
+      )
     }
   }
   // A static placement reads lane 0, halfway through the morph's -1..1 window: the box and the sphere at equal weight.
@@ -2744,7 +3350,11 @@ template warpPrototypes() {
           to: 1
         }
       }
-      exhibit(label: "MORPH", extra: [accent], note: "the box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge")
+      exhibit(
+        label: "MORPH",
+        extra: [accent],
+        note: "the box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge"
+      )
     }
   }
 }

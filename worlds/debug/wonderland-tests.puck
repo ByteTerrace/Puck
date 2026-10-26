@@ -35,7 +35,10 @@ rule "round-trip-away" {
 }
 
 rule "round-trip-home-small" {
-  when away[0] == 1 and bodyState(body, 0, size) == 0.25 and bodyPosition(body, 0, x) > 50 and bodyPosition(body, 0, z) > 38
+  when (away[0] == 1 and
+    bodyState(body, 0, size) == 0.25 and
+    bodyPosition(body, 0, x) > 50 and
+    bodyPosition(body, 0, z) > 38)
   mode: Edge
   homeSmall[0] = 1
 }
