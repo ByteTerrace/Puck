@@ -47,7 +47,10 @@ Keyed and ordered rows keep their order in links between stable cell slots.
 Removing a member changes its neighbors and clears that slot. A FIFO eviction
 reuses the victim's slot for the appended member. Neither operation copies the
 other cells' values or metadata. Positional reads use a derived view of the links;
-key reads keep their direct slot index. Pools retain their fixed identity slots.
+key reads keep their direct slot index. Pools retain their fixed identity slots. A pair pool reserves `MaxLive` slots and
+stores the two endpoint slots beside each live pair; it never reserves the
+Cartesian product of the endpoint capacities. Claims choose the lowest free
+storage slot, refuse duplicate endpoints, and journal endpoint membership.
 
 ## From declarations to storage
 

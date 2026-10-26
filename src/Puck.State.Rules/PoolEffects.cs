@@ -11,7 +11,7 @@ internal static class PoolEffectWork {
         : 1L
     );
     public static long InsertWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = RowMutationWidth(valueWidth: 1L);
+        var units = (pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L);
 
         foreach (var field in pool.Fields) {
             units = BinaryIntegerFunctions.AddSaturating(
@@ -22,7 +22,7 @@ internal static class PoolEffectWork {
         return units;
     }
     public static long ReleaseWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = RowMutationWidth(valueWidth: 1L);
+        var units = (pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L);
 
         units = BinaryIntegerFunctions.AddSaturating(left: units, right: 1L);
         foreach (var field in pool.Fields) {
@@ -81,6 +81,7 @@ public sealed class ClaimEffect : RuleEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) {
         into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.DomainRowOrdinal));
+        if (Pool.IsPair) { into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.LeftRowOrdinal)); into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.RightRowOrdinal)); }
         into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.GenerationRowOrdinal));
         foreach (var field in Pool.Fields) {
             into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: field.RowOrdinal));
@@ -124,12 +125,14 @@ public sealed class ReleaseEffect : RuleEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) {
         into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.DomainRowOrdinal));
+        if (Pool.IsPair) { into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.LeftRowOrdinal)); into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.RightRowOrdinal)); }
         into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.GenerationRowOrdinal));
         foreach (var field in Pool.Fields) {
             into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: field.RowOrdinal));
         }
         foreach (var cascade in m_cascadePools) {
             into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: cascade.DomainRowOrdinal));
+        if (cascade.IsPair) { into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: cascade.LeftRowOrdinal)); into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: cascade.RightRowOrdinal)); }
             into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: cascade.GenerationRowOrdinal));
             foreach (var field in cascade.Fields) {
                 into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: field.RowOrdinal));
@@ -165,6 +168,7 @@ public sealed class ReleaseEffect : RuleEffect {
     private static void CollectPoolReads(StatePoolDescriptor pool, List<CellAccess> into) {
         into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.DomainRowOrdinal));
         into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.GenerationRowOrdinal));
+        if (pool.IsPair) { into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.LeftRowOrdinal)); into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.RightRowOrdinal)); }
         foreach (var field in pool.Fields) {
             into.Add(item: new CellAccess(Key: default, RowOrdinal: field.RowOrdinal));
         }
@@ -223,6 +227,7 @@ public sealed class ClaimPairEffect : RuleEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) {
         into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.DomainRowOrdinal));
+        if (Pool.IsPair) { into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.LeftRowOrdinal)); into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Pool.RightRowOrdinal)); }
         foreach (var field in Pool.Fields) {
             into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: field.RowOrdinal));
         }
@@ -232,9 +237,9 @@ public sealed class ClaimPairEffect : RuleEffect {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
-        // Endpoint validation and pair-slot arithmetic are fixed work; insertion touches one slot per field.
+        // Check live endpoint pairs for duplicates, then select the lowest free storage slot.
         var units = BinaryIntegerFunctions.AddSaturating(
-            left: 512L,
+            left: 512L + (3L * Pool.MaxLive) + PoolEffectWork.OccupancyWords(pool: Pool),
             right: PoolEffectWork.InsertWidth(pool: Pool, context: context)
         );
 

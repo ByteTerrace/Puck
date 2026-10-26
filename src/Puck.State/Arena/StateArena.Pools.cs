@@ -95,12 +95,11 @@ public sealed partial class StateArena {
                 if (!pairPool.IsPair || ((pairPool.LeftPoolOrdinal != handle.PoolOrdinal) && (pairPool.RightPoolOrdinal != handle.PoolOrdinal))) {
                     continue;
                 }
-                var rightCapacity = m_catalog.Pools[pairPool.RightPoolOrdinal].Capacity;
 
                 for (var pairSlot = NextOccupiedPoolSlot(poolOrdinal: pairPool.Ordinal, start: 0); (pairSlot >= 0); pairSlot = NextOccupiedPoolSlot(poolOrdinal: pairPool.Ordinal, start: (pairSlot + 1))) {
                     _ = TryPoolKey(key: out var pairKey, slot: pairSlot);
 
-                    if (((pairPool.LeftPoolOrdinal != handle.PoolOrdinal) || ((pairSlot / rightCapacity) != handle.Slot)) && ((pairPool.RightPoolOrdinal != handle.PoolOrdinal) || ((pairSlot % rightCapacity) != handle.Slot))) {
+                    if (((pairPool.LeftPoolOrdinal != handle.PoolOrdinal) || (m_numbers[m_layout[pairPool.LeftRowOrdinal].CellStart + pairSlot] != handle.Slot)) && ((pairPool.RightPoolOrdinal != handle.PoolOrdinal) || (m_numbers[m_layout[pairPool.RightRowOrdinal].CellStart + pairSlot] != handle.Slot))) {
                         continue;
                     }
                     _ = TryRead(rowOrdinal: pairPool.DomainRowOrdinal, key: pairKey, value: out var pairGeneration);
@@ -116,6 +115,7 @@ public sealed partial class StateArena {
 
             RemovePoolCell(rowOrdinal: field.RowOrdinal, position: position);
         }
+        if (pool.IsPair) { RemovePoolCell(rowOrdinal: pool.LeftRowOrdinal, position: position); RemovePoolCell(rowOrdinal: pool.RightRowOrdinal, position: position); }
         RemovePoolCell(rowOrdinal: pool.DomainRowOrdinal, position: position);
         if (
             !TryWrite(rowOrdinal: pool.GenerationRowOrdinal, key: key, value: CellValue.Int(value: (handle.Generation + 1L)), reason: out reason)
@@ -161,12 +161,14 @@ public sealed partial class StateArena {
             reason = $"State pair pool '{pool.Name.Value}' holds its {pool.MaxLive} live pairs.";
             return false;
         }
-        var slot = checked(((leftSlot * m_catalog.Pools[pool.RightPoolOrdinal].Capacity) + rightSlot));
-
-        if (!TryPoolKey(key: out var key, slot: slot) || TryRead(rowOrdinal: pool.DomainRowOrdinal, key: key, value: out _)) {
-            reason = $"State pair pool '{pool.Name.Value}' already holds that pair.";
-            return false;
+        for (var occupied = NextOccupiedPoolSlot(poolOrdinal: pool.Ordinal, start: 0); occupied >= 0; occupied = NextOccupiedPoolSlot(poolOrdinal: pool.Ordinal, start: occupied + 1)) {
+            if ((m_numbers[m_layout[pool.LeftRowOrdinal].CellStart + occupied] == leftSlot) && (m_numbers[m_layout[pool.RightRowOrdinal].CellStart + occupied] == rightSlot)) {
+                reason = $"State pair pool '{pool.Name.Value}' already holds that pair.";
+                return false;
+            }
         }
+        var slot = FirstFreePoolSlot(pool: pool);
+        if ((slot < 0) || !TryPoolKey(key: out var key, slot: slot)) { reason = "The pair pool has no free identity slot."; return false; }
         if (!TryRead(rowOrdinal: pool.GenerationRowOrdinal, key: key, value: out var generationValue)) {
             reason = $"State pair pool '{pool.Name.Value}' pair slot {slot} has no persistent generation.";
             return false;
@@ -177,6 +179,8 @@ public sealed partial class StateArena {
         m_poolMutationDepth++;
         try {
             InsertPoolCell(rowOrdinal: pool.DomainRowOrdinal, position: position, key: key, value: generationValue);
+            InsertPoolCell(rowOrdinal: pool.LeftRowOrdinal, position: position, key: key, value: CellValue.Int(value: leftSlot));
+            InsertPoolCell(rowOrdinal: pool.RightRowOrdinal, position: position, key: key, value: CellValue.Int(value: rightSlot));
             for (var fieldOrdinal = 0; (fieldOrdinal < pool.Fields.Count); fieldOrdinal++) {
                 var field = pool.Fields[fieldOrdinal];
 
@@ -548,7 +552,7 @@ public sealed partial class StateArena {
                 var values = new StatePoolValue[pool.Fields.Count];
 
                 for (var field = 0; (field < values.Length); field++) { _ = TryRead(fieldOrdinal: field, handle: handle, value: out var value); values[field] = PoolValue(handle: handle, field: pool.Fields[field], value: value); }
-                live.Add(item: new StatePoolSeed(Slot: handle.Slot, Values: values));
+                live.Add(item: new StatePoolSeed(Slot: handle.Slot, Values: values, LeftSlot: (int)m_numbers[m_layout[pool.LeftRowOrdinal].CellStart + handle.Slot], RightSlot: (int)m_numbers[m_layout[pool.RightRowOrdinal].CellStart + handle.Slot]));
             }
             result[index] = new StatePairPool(Name: pool.Name, Record: pool.Record, LeftPool: m_catalog.Pools[pool.LeftPoolOrdinal].Name, RightPool: m_catalog.Pools[pool.RightPoolOrdinal].Name, MaxLive: pool.MaxLive, Directed: pool.Directed, AllowSelf: pool.AllowSelf, Snapshot: new StatePoolSnapshot(Generations: generations, Live: live));
         }

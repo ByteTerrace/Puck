@@ -61,7 +61,7 @@ A few rules apply to every limit on this page:
 
 | Limit | Value | Constant | Explained in |
 |---|---|---|---|
-| Identity universe of one pool (a pair pool's is left capacity times right capacity) | 4,096 | `StateCapacity.MaxCellsPerRow` | [Records, pools, and handles](records-and-pools.md#identity-universe-and-live-capacity) |
+| Storage slots in one pool (a pair pool reserves its `MaxLive` slots) | 4,096 | `StateCapacity.MaxCellsPerRow` | [Records, pools, and handles](records-and-pools.md#identity-universe-and-live-capacity) |
 | Live pool bindings in one rule | 32 | `StateCapacity.MaxInstanceBindings` | [Records, pools, and handles](records-and-pools.md#bindings-and-atomic-claims) |
 | Generations per slot | `long.MaxValue` | none | [Records, pools, and handles](records-and-pools.md#claim-release-and-generations) |
 

@@ -373,7 +373,7 @@ public sealed class StatePoolLawTests {
         Assert.False(condition: arena.TryClaim(handle: out _, poolOrdinal: 1, reason: out var genericReason));
         Assert.Contains(actualString: genericReason, expectedSubstring: "TryClaimPair");
         Assert.True(condition: arena.TryClaimPair(handle: out var pair, leftHandle: b, poolOrdinal: 1, reason: out _, rightHandle: a));
-        Assert.Equal(expected: 1, actual: pair.Slot);
+        Assert.Equal(expected: 0, actual: pair.Slot);
         Assert.False(condition: arena.TryClaimPair(handle: out _, leftHandle: a, poolOrdinal: 1, reason: out _, rightHandle: b));
 
         var before = arena.ComputeHash();
@@ -396,7 +396,7 @@ public sealed class StatePoolLawTests {
         var section = new StateSection(
             Records: [new StateRecord(Name: CellName.Parse(candidate: "node")), new StateRecord(Name: CellName.Parse(candidate: "edge"))],
             Pools: [new StatePool(Name: CellName.Parse(candidate: "nodes"), Record: CellName.Parse(candidate: "node"), Capacity: 2)],
-            PairPools: [new StatePairPool(Name: CellName.Parse(candidate: "edges"), Record: CellName.Parse(candidate: "edge"), LeftPool: CellName.Parse(candidate: "nodes"), RightPool: CellName.Parse(candidate: "nodes"), MaxLive: 1, Snapshot: new StatePoolSnapshot(Generations: new long[4], Live: [new StatePoolSeed(Slot: 1)]))]);
+            PairPools: [new StatePairPool(Name: CellName.Parse(candidate: "edges"), Record: CellName.Parse(candidate: "edge"), LeftPool: CellName.Parse(candidate: "nodes"), RightPool: CellName.Parse(candidate: "nodes"), MaxLive: 1, Snapshot: new StatePoolSnapshot(Generations: new long[1], Live: [new StatePoolSeed(Slot: 0, LeftSlot: 0, RightSlot: 1)]))]);
 
         Assert.Throws<InvalidOperationException>(testCode: () => StateCatalog.Compile(section: section));
     }
