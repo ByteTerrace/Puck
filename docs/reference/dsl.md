@@ -43,14 +43,16 @@ bare spelling reads back as the same name and the position doesn't reserve it. O
 the document grammar that decision is `PuckPrinter.PrintName`, and for a property `PuckPrinter.PrintPropertyName`.
 In the expression spelling it is `ExpressionSpelling.PrintName`, which also backquotes a name that would read as a
 number, a unit-bearing literal or a dotted read of another row.
-The formatter keeps a block's leading word quoted when the source quoted it, because `"for" { }` is a member named
-`for`, while `for` bare opens a loop.
+The formatter keeps a block's leading word quoted when the source quoted it, because in a rule body `"for" { }` is
+a member named `for`, while `for` bare opens a loop.
 
-What a position reserves is layered on top of the rule and never changes its characters. Examples are a keyword
-a statement reader would take (`let`, `rule`, `when`), a reserved call name in an expression (`count`, `dot`),
-a pattern's reserved words (`any`, `empty`, `except`, `none`), and the dotted path and
-`$name:segment` continuations the expression spelling reads. Such a name prints quoted in that position, and
-bare elsewhere.
+What a position reserves is layered on top of the rule and never changes its characters. Keywords are
+contextual: in the document, a plain block and an object, `name:`, `name {` and `name [` are members whatever the
+name spells, so `template: "{state.title}"` and `when ["Grounded"]` take no quotes. A construct body (a rule,
+scope, decision, option, test, workflow or effect body) reserves the keywords its reader takes there (`when`,
+`local`, `score`, `for`). Other positions reserve a call name in an expression (`count`, `dot`), a pattern's
+reserved words (`any`, `empty`, `except`, `none`), and the dotted path and `$name:segment` continuations the
+expression spelling reads. Such a name prints quoted in that position, and bare elsewhere.
 
 ### Generated names
 
@@ -90,13 +92,12 @@ When a document name reaches a directory, its `$` is spelled `~`: the instance a
 `link$west` starts is named for `link~west`. Because no document name carries `~`, that spelling keeps every two
 names apart.
 
-Decompiling reads each generated name back as the construct that generated it, so decompiling a document and
-compiling the source gives the same document: a `ground` block from its prototype and placement, `rules` scopes
-from a joined rule or group name, a `test` block from a generated test world, and `border` and `door` from the
-worlds of one composition decompiled together. A generated name no construct prints back is refused by name
-rather than printed as an authored one. A module instance's rows, placements and prototypes are refused so, since a
-module's use does not print back from the document it expanded into. `GeneratedNameReversalLawTests` holds every minting site to this, one row
-per site, and fails when a minting call appears that no row reads back.
+Decompiling reads a joined rule or group name back as the `rules` scopes that generated it, so decompiling such a
+document and compiling the source gives the same document. Every other generated name is refused by name rather
+than printed as an authored one: a `ground` block, a `test`, a composition's `border` and `door`, and an aliased
+module instance are written in source alone, and a save leaves them as written and refuses an edit to the rows they
+generate. `GeneratedNameReversalLawTests` holds every minting site to this, one row per site, and fails when a
+minting call appears that no row covers.
 
 The classes are ASCII by design. A rule built on the runtime's Unicode letter tables would change which names
 print bare whenever the runtime's Unicode version changed. It would also let two names that look identical be

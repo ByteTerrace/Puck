@@ -47,7 +47,6 @@ public sealed partial class PortalInputLawTests {
 
         return document with {
             Admission = [new WorldAdmissionEntry(
-                Algorithm: string.Empty,
                 Disclosure: WorldDisclosureTier.Replica,
                 Domain: WorldAdmissionEntry.AnyAuthority,
                 Grants: [
@@ -63,9 +62,7 @@ public sealed partial class PortalInputLawTests {
                         )]
                         : []),
                 ],
-                Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                PublicKey: string.Empty,
-                Subject: null
+                Mode: WorldAdmissionTrustMode.FederatedAuthority
             )],
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "portal-copy"),

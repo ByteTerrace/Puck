@@ -3266,27 +3266,27 @@ export type WorldAdmissionEntry = {
    */
   domain: string;
   /**
-   * The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard.
-   */
-  subject: string | null;
-  /**
    * The trusted identity proof this row accepts.
    */
   mode: WorldAdmissionTrustMode;
-  /**
-   * Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door's mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation. OAuth and federated-authority rows require an empty string.
-   */
-  algorithm: string;
-  /**
-   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/architecture/worlds.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.
-   */
-  publicKey: string;
   /**
    * What a peer verified under this entry is minted, INSTEAD OF the blanket Control/all every admitted peer used to receive unconditionally. Empty (never null) is a legitimate authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a socket open, but unable to submit anything the grant table would honor.
    */
   grants: WorldAdmissionGrant[];
   /**
-   * How much of this world's document a peer verified under this entry receives (see WorldDisclosureTier). Absent resolves to Presentation, so an entry authored before this field existed keeps a projection-only wire and nothing has to be edited to stay closed. Replica is reachable only by authoring it.
+   * The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard. Absent pins no subject.
+   */
+  subject?: string | null;
+  /**
+   * Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door's mandatory attestation-v1-base profile, required for a keyed row. Sealing algorithms and optional signing extensions are refused by document validation. OAuth and federated-authority rows are keyless and author none.
+   */
+  algorithm?: string | null;
+  /**
+   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded, required for a keyed row — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/architecture/worlds.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design). OAuth and federated-authority rows author none.
+   */
+  publicKey?: string | null;
+  /**
+   * How much of this world's document a peer verified under this entry receives (see WorldDisclosureTier). Absent resolves to Presentation, so a projection-only wire is the default and nothing has to be edited to stay closed. Replica is reachable only by authoring it.
    */
   disclosure?: WorldDisclosureTier | null;
 };

@@ -30,8 +30,7 @@ let studioCameras = map(studioShots, shot => {
   }
   renderWidth: 1280
   renderHeight: 900
-}
-)
+})
 
 // The motion bench: four cameras that ride body 0 wherever she goes, for judging how she moves. Each eye sits at
 // `eye` in her own axes (forward -Z, right +X) and aims at `aim` above her feet, so the profile stays a profile through
@@ -67,8 +66,7 @@ let motionCameras = map(concat(motionShots, courseShots), shot => {
   }
   renderWidth: 960
   renderHeight: 540
-}
-)
+})
 
 template studioLayouts() {
   layout "motion" {

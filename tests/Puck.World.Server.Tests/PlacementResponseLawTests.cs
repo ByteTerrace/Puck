@@ -352,10 +352,11 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         Assert.Equal(expected: shown, actual: row.ShownPrototypeId);
         Assert.Equal(expected: holding, actual: row.Holding);
     }
-    /// <summary>Every row a tick's sweep moves lands in one mutation: two rows crossing on the same tick, one of them
-    /// solid, install as one journalled batch of holding-only upserts, and both show their entry after it.</summary>
+    /// <summary>A response is derived state, not an edit: two rows crossing on the same tick, one of them solid, both
+    /// show their entry after it with nothing journalled. The solid row's colliders follow the creation it shows, and
+    /// the population revision stands, so a client composes its program once, on the delivered values.</summary>
     [Fact]
-    public void RowsMovingOnOneTickLandAsOneBatch() {
+    public void RowsMovingOnOneTickInstallWithoutAnEdit() {
         var document = CrossingDocument();
         var placement = document.Placements[0];
 
@@ -366,16 +367,86 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
 
         fixture.Server.MutationJournalTap = (_, _, mutation) => journal.Add(item: mutation);
 
-        for (var index = 0; (index < 3); index++) {
+        for (var index = 0; (index < 2); index++) {
             fixture.Step();
         }
 
-        var batch = Assert.IsType<WorldMutation.Batch>(Assert.Single(collection: journal, predicate: static mutation => (mutation is not WorldMutation.UpsertStateCell)));
+        var revision = fixture.Server.Population.Revision;
 
-        Assert.Equal(expected: ["grove", "grove-solid"], actual: batch.Mutations.Select(selector: static member => ((WorldMutation.UpsertPlacement)member).Placement.Id));
+        Assert.All(collection: fixture.Server.Population.DiagnosticColliders, action: static collider => Assert.Equal(expected: BaseCreation, actual: collider.Creation));
+        fixture.Step();
+
+        Assert.DoesNotContain(collection: journal, filter: static mutation => (mutation is not WorldMutation.UpsertStateCell));
         Assert.All(collection: fixture.Server.Definition.Placements, action: static row => Assert.Equal(expected: TargetCreation, actual: row.ShownPrototypeId));
+        Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
+        Assert.NotEmpty(collection: fixture.Server.Population.DiagnosticColliders);
+        Assert.All(collection: fixture.Server.Population.DiagnosticColliders, action: static collider => Assert.Equal(expected: TargetCreation, actual: collider.Creation));
     }
-    /// <summary>A holding-only upsert validates its bits alone, and refuses a bit past the row's entries by name,
+    /// <summary>A solid row whose response shows a creation of another shape collides as that shape from the tick it
+    /// shows it, and back as its authored one when the response lets go, with the population revision standing.</summary>
+    [Fact]
+    public void ASolidRowCollidesAsTheShapeItShows() {
+        var document = CrossingDocument();
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.Sphere(id: TargetCreation, scale: 3f)],
+            PlacementRowsRaw = [(document.Placements[0] with { Solid = new WorldSolid(Margin: 0f) })],
+            Rules = [],
+        }));
+
+        void Set(long value) {
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+                Principal: Principal.Console,
+                Row: CounterRow,
+                Key: StateRow.SlotKey.Value,
+                Value: value,
+                Kind: WorldDocumentWriteKind.Set
+            ));
+            fixture.Step();
+        }
+
+        fixture.Step();
+
+        var revision = fixture.Server.Population.Revision;
+        var authored = Assert.Single(collection: fixture.Server.Population.DiagnosticColliders).Collider;
+
+        Set(value: 5L);
+
+        var shown = Assert.Single(collection: fixture.Server.Population.DiagnosticColliders);
+
+        Assert.Equal(expected: TargetCreation, actual: shown.Creation);
+        Assert.NotEqual(expected: authored, actual: shown.Collider);
+
+        Set(value: 0L);
+
+        Assert.Equal(expected: authored, actual: Assert.Single(collection: fixture.Server.Population.DiagnosticColliders).Collider);
+        Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
+    }
+    /// <summary>Under the field contact provider a solid row's response compiles the solid field again, with the
+    /// creation the row now shows, and the population revision stands.</summary>
+    [Fact]
+    public void ASolidRowRebuildsTheSolidFieldItCollidesThrough() {
+        var document = CrossingDocument();
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            CollisionRaw = document.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.Sphere(id: TargetCreation, scale: 3f)],
+            PlacementRowsRaw = [(document.Placements[0] with { Solid = new WorldSolid(Margin: 0f) })],
+        }));
+
+        fixture.Step();
+
+        var revision = fixture.Server.Population.Revision;
+        var solids = fixture.Server.SolidRevision;
+
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Equal(expected: TargetCreation, actual: PrototypeOf(fixture: fixture));
+        Assert.True(condition: (fixture.Server.SolidRevision > solids));
+        Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
+    }
+    /// <summary>An upsert that writes a holding mask refuses a bit past the row's entries by name,
     /// leaving the row as it was.</summary>
     [Fact]
     public void AHoldingBitPastTheEntriesIsRefused() {

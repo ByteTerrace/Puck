@@ -96,6 +96,8 @@ internal static class WorldBenchmarks {
             stepTicks: stepTicks
         );
         MeasureCellBurst(rows: rows, server: server, stepTicks: stepTicks);
+        MeasureResponseChange(rows: rows, server: server, stepTicks: stepTicks);
+        MeasureSceneEmission(path: path, rows: rows, server: server, stepTicks: stepTicks);
         MeasureMachines(
             bench: bench,
             definition: definition,
@@ -204,6 +206,135 @@ internal static class WorldBenchmarks {
         Array.Sort(array: allocations);
         rows.Add(item: ("world: 13-cell guest burst tick (median)", $"{MedianMilliseconds(samples: samples):F3} ms"));
         rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{allocations[(SampleTicks / 2)]:N0} bytes"));
+    }
+    // gallery.lights.all: every hall light cell written in one tick, which moves the hall's responding rows (floors,
+    // roof, switches) to their lit or dark creations in that tick. The tick is timed and metered beside the population
+    // revisions it moved: a response change moves no body and leaves the revision, so a client composes its program
+    // once, on the values the change delivers.
+    private static void MeasureResponseChange(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+        if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
+            rows.Add(item: ("world: response change", "no hallLights row"));
+
+            return;
+        }
+
+        const int Changes = 24;
+        var samples = new long[Changes];
+        var allocations = new long[Changes];
+        var revisions = new long[Changes];
+
+        // Paced like the game, so a screen machine's full window does not stand in for the swap's own cost.
+        var period = ((long)((((ulong)Stopwatch.Frequency) * stepTicks) / FixedTickConversion.TicksPerSecond));
+        var due = Stopwatch.GetTimestamp();
+
+        void Advance() {
+            while (Stopwatch.GetTimestamp() < due) {
+                Thread.Sleep(millisecondsTimeout: 1);
+            }
+
+            due += period;
+            server.Advance(stepTicks: stepTicks);
+        }
+        for (var change = 0; (change < (Changes + 4)); change++) {
+            var value = (change % 2);
+
+            foreach (var cell in cells) {
+                server.EnqueueMutation(mutation: new Puck.World.Protocol.WorldMutation.UpsertStateCell(Puck.Commands.Principal.World, "hallLights", cell.Key.Value, value, Puck.World.Protocol.WorldDocumentWriteKind.Set));
+            }
+
+            var before = server.Definition;
+            var revision = server.Population.Revision;
+
+            while (Stopwatch.GetTimestamp() < due) {
+                Thread.Sleep(millisecondsTimeout: 1);
+            }
+
+            due += period;
+            var start = Stopwatch.GetTimestamp();
+            var bytes = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
+            var elapsed = (Stopwatch.GetTimestamp() - start);
+
+            if (WorldPlacementResponse.CompareHoldings(after: server.Definition, before: before) == WorldHoldingChange.None) { throw new InvalidOperationException(message: "a hall light change moved no responding row"); }
+            for (var tick = 0; (tick < 4); tick++) {
+                Advance();
+            }
+            if (change >= 4) {
+                samples[(change - 4)] = elapsed;
+                allocations[(change - 4)] = bytes;
+                revisions[(change - 4)] = (server.Population.Revision - revision);
+            }
+        }
+        Array.Sort(array: allocations);
+        Array.Sort(array: revisions);
+        rows.Add(item: ("world: response change tick (median, gallery.lights.all)", $"{MedianMilliseconds(samples: samples):F3} ms"));
+        rows.Add(item: ("world: response change tick allocation (median)", $"{allocations[(Changes / 2)]:N0} bytes"));
+        rows.Add(item: ("world: response change population revisions moved (median)", $"{revisions[(Changes / 2)]}"));
+    }
+    // The program a client composes on the frame thread (WorldSceneEmitter.Emit, the work SdfCompositionFrameSource
+    // hands its background build): composed again with nothing changed, and after each hall light change delivers the
+    // rows holding their new masks.
+    private static void MeasureSceneEmission(string path, Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+        if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
+            rows.Add(item: ("world: scene emission", "no hallLights row"));
+
+            return;
+        }
+
+        var inert = new Puck.Cli.Mesh.RestScene.Inert();
+        var routes = new Puck.World.Client.WorldSeatAuthorityRouter();
+        var client = new Puck.World.Client.WorldClient(
+            composition: new Puck.World.Client.WorldCompositionState(),
+            definition: server.Definition,
+            roster: new Puck.World.Client.PlayerRoster(definition: server.Definition, link: inert, seatBindings: new Puck.World.WorldSeatBindings(definition: server.Definition)),
+            seatRouter: routes
+        );
+        var emitter = new Puck.World.Client.WorldSceneEmitter(
+            animator: new Puck.World.Client.WorldStampPool(),
+            audio: inert,
+            client: client,
+            continuum: new Puck.World.Client.WorldContinuum(client, routes, inert),
+            text: new Puck.World.Client.WorldTextCatalog(source: new WorldDefinitionSource(Definition: server.Definition, SourcePath: path))
+        );
+        var context = new Puck.SdfVm.SdfEmitContext(Probe: false, Time: 0f, RenderOrigin: System.Numerics.Vector3.Zero, ParkPosition: System.Numerics.Vector3.Zero, SlotBase: 0, InterpolationAlpha: 1f);
+        const int Samples = 16;
+        var steady = new long[Samples];
+        var steadyBytes = new long[Samples];
+        var changed = new long[Samples];
+        var changedBytes = new long[Samples];
+
+        // Each builder is sized from the one before it, as the frame source sizes a live rebuild's from the program
+        // it replaces.
+        var (instructions, instances, materials, polygons) = (0, 0, 0, 0);
+
+        void Emit(long[] times, long[] bytes, int sample) {
+            var builder = new Puck.SignedDistance.SdfProgramBuilder(convexPolygonCapacity: polygons, instanceCapacity: instances, instructionCapacity: instructions, materialCapacity: materials);
+            var start = Stopwatch.GetTimestamp();
+
+            bytes[sample] = AllocationWindow.Total(window: () => emitter.Emit(builder: builder, context: in context));
+            times[sample] = (Stopwatch.GetTimestamp() - start);
+            (instructions, instances, materials, polygons) = (builder.InstructionCount, builder.InstanceCount, builder.MaterialCount, builder.ConvexPolygonCount);
+        }
+
+        emitter.Tick(deltaSeconds: 0f);
+        for (var warm = 0; (warm < 4); warm++) {
+            Emit(times: steady, bytes: steadyBytes, sample: 0);
+        }
+        for (var sample = 0; (sample < Samples); sample++) {
+            Emit(times: steady, bytes: steadyBytes, sample: sample);
+        }
+        for (var change = 0; (change < (Samples + 4)); change++) {
+            foreach (var cell in cells) {
+                server.EnqueueMutation(mutation: new Puck.World.Protocol.WorldMutation.UpsertStateCell(Puck.Commands.Principal.World, "hallLights", cell.Key.Value, (change % 2), Puck.World.Protocol.WorldDocumentWriteKind.Set));
+            }
+
+            server.Advance(stepTicks: stepTicks);
+            client.DeliverState(definition: server.Definition, stamp: new Puck.World.Protocol.WorldStateStamp(Tick: 0UL, EngineTick: 0UL, MovedRows: default, Everything: false), version: server.DocumentVersion);
+            Emit(times: changed, bytes: changedBytes, sample: Math.Max(val1: 0, val2: (change - 4)));
+        }
+        Array.Sort(array: steadyBytes);
+        Array.Sort(array: changedBytes);
+        rows.Add(item: ("world: scene emission, nothing changed (median)", $"{MedianMilliseconds(samples: steady):F3} ms, {steadyBytes[(Samples / 2)]:N0} bytes"));
+        rows.Add(item: ("world: scene emission after a hall light change (median)", $"{MedianMilliseconds(samples: changed):F3} ms, {changedBytes[(Samples / 2)]:N0} bytes"));
     }
     // An authored whole-row edit that moves one cell's value: the tick that drains it, timed and metered beside
     // the arena versions and installed rows it replaces. Bound addon writes use the separate typed burst above.

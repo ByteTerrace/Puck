@@ -133,7 +133,7 @@ border left.endpoint, right.endpoint { [center [x, y, z]] [yaw: angle] [pitch: a
 | `height:` | property | length | — | the border window's height | — | The positive height of the border window. |
 | `hysteresis:` | property | length | — | the border transition's hysteresis | — | The nonnegative distance that stabilizes transitions across the border. |
 
-Read back as `border` from the rows it generated when the composition's worlds are decompiled together and the two adjacencies, references and destinations the border generated regenerate from it exactly; otherwise a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses.
+Never printed back; the printer produces a refusal naming the generated row, since the construct is written in source and a save leaves it as written in its place.
 
 ### `cartridge`
 
@@ -171,7 +171,7 @@ door left.endpoint, right.spawn
 | `left` (required) | header | reference | — | door topology and travel fields in the two worlds | — | The source world and its door face. |
 | `right` (required) | header | reference | — | door topology and travel fields in the two worlds | — | The destination world and its named spawn point. |
 
-Read back as `door` from the rows it generated when the composition's worlds are decompiled together and the portals, return arch, references and destinations the door generated regenerate from it exactly; otherwise a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses.
+Never printed back; the printer produces a refusal naming the generated row, since the construct is written in source and a save leaves it as written in its place.
 
 ### `enum`
 
@@ -198,7 +198,7 @@ ground name { size [width, depth] [center [x, y, z]] }
 | `size:` (required) | property | value | — | the generated box scale and boundary dimensions | — | The required positive width and depth. |
 | `center:` | property | point | — | the generated placement position and boundary center | — | The optional center, defaulting to the origin. |
 
-Read back as `ground` from the rows it generated when its `ground$name` prototype and `name` placement are exactly the rows the block writes, standing in the same order in both sections; otherwise a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses.
+Never printed back; the printer produces a refusal naming the generated row, since the construct is written in source and a save leaves it as written in its place.
 
 ### `host`
 
@@ -424,7 +424,7 @@ test "name" [with module(arguments)] { given { row = literal | world { row = lit
 | `expect` (required) | body | statements | — | one generated `state.world[]` verdict row and one generated `rules[]` entry per line: the rule fires on the last reached tick alone, and its effect writes pass or fail from the expectation beside the values it read | — | What the test claims, one rule-gate expression per line. |
 | `world block` | body | statements | — | one generated document per world of the composition, its entry world carrying the `schedule` section whose `instances` arm the rest and whose rows address them by name; a far world's own verdict rule fires one tick before the booted world's export tick, which is where that world stands at the shared export step | — | Inside `given`, `when` or `expect` at the root of a source that emits several worlds: `<world> { … }` addresses one of them by its own name. There is no default world, so every line of such a test stands inside one; `ticks` stays outside, since one grid carries the whole composed run. |
 
-Read back as `test` from the rows it generated when a generated test world is decompiled whose verdict rows, witnesses and verdict rules stand last and whose schedule is seat steps alone: the block prints over the rest of the document, whose boot values already carry what `given` wrote; a composed test's documents arm one another by file and are refused; otherwise a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses.
+Never printed back; the printer produces a refusal naming the generated row, since the construct is written in source and a save leaves it as written in its place.
 
 ### `views`
 
@@ -459,7 +459,7 @@ world name = module(arguments)
 | `name` (required) | header | name | — | the output document's identity and file name | — | The output world's name, written as a name or a plain string and never computed, since a reader resolves a document name to the source that emits it from the source's parse alone (`WorldSourceDeclaration`). |
 | `module` (required) | header | value | — | the complete generated world document | — | The module invocation expanded with these arguments to produce this world's document. |
 
-Read back as `world` from the rows it generated when the composition's worlds are decompiled together (`WorldDecompiler.DecompileComposition`), each world printing as a module of its own name; otherwise a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses.
+Never printed back; the printer produces a refusal naming the generated row, since the construct is written in source and a save leaves it as written in its place.
 
 ### `request`
 

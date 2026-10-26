@@ -98,27 +98,6 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    /// <summary>Validates a responding placement's <see cref="WorldPlacement.Holding"/> bits alone: the check a
-    /// response swap owes, since the row's alternatives were validated with the document.</summary>
-    /// <param name="placement">The placement row.</param>
-    /// <param name="reason">On a refusal, why; empty otherwise.</param>
-    /// <returns><see langword="true"/> when every set bit names one of the row's response entries.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="placement"/> is <see langword="null"/>.</exception>
-    public static bool TryValidateResponseHolding(WorldPlacement placement, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: placement);
-
-        var entries = Math.Min(val1: (placement.Respond?.Count ?? 0), val2: WorldResponseCapacity.MaxEntries);
-
-        if ((placement.Holding < 0) || (placement.Holding >= (1 << entries))) {
-            reason = $"placements['{placement.Id}'].holding {placement.Holding} marks an entry past the {entries} response entries — bit i marks entry i.";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
     private static void ValidateFieldCondition(WorldPlacementResponseCondition.FieldCondition condition, HashSet<string> fieldNames, WorldDefinition definition, string entryPath, List<string> errors) {
         if (
             (condition.Field is null) ||

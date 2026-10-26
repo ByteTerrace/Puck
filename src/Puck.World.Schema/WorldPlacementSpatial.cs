@@ -828,6 +828,13 @@ public static class WorldSpatialQueryCompilation {
             static value => new StrongBox<WorldSpatialQueryIndex>(value: Compile(placements: value.Rows))
         ).Value!;
     }
+    // Hands a section's compiled index to a section whose rows differ from it only in their holding masks
+    // (WorldDefinition.WithPlacementHoldings): the authored volumes it compiles read no shown creation.
+    internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
+        if (Cache.TryGetValue(key: source, value: out var index)) {
+            Cache.AddOrUpdate(key: target, value: index);
+        }
+    }
 
     private readonly record struct SpatialFrame(FixedVector3 Position, FixedQ4816 YawRadians, FixedQ4816 Scale);
 }

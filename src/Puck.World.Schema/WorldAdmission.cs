@@ -122,25 +122,36 @@ public sealed record WorldAdmissionVerdict {
 /// <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> it is not a key id at all: it names the authenticated
 /// source-authority namespace, or <see cref="WorldAdmissionEntry.AnyAuthority"/> for any authority that completes the
 /// federation handshake. For <see cref="WorldAdmissionTrustMode.OAuth"/> it is the exact HTTPS issuer.</param>
-/// <param name="Subject">The platform user id this entry pins, required for <see cref="WorldAdmissionTrustMode.SignsDirectly"/>
-/// and refused for <see cref="WorldAdmissionTrustMode.Vouches"/> (a root vouches for every subject its two-hop chain
-/// resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard.</param>
 /// <param name="Mode">The trusted identity proof this row accepts.</param>
-/// <param name="Algorithm">Exactly <c>ecdsa-p256-sha256</c>, the only signing algorithm enabled by the
-/// admission door's mandatory <c>attestation-v1-base</c> profile. Sealing algorithms and optional signing
-/// extensions are refused by document validation. OAuth and federated-authority rows require an empty string.</param>
-/// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded — carried
-/// alongside the id because offline verification needs the real bytes, never a fetch (docs/architecture/worlds.md, "Signed
-/// attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.</param>
 /// <param name="Grants">What a peer verified under this entry is minted, INSTEAD OF the blanket
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate
 /// authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a
 /// socket open, but unable to submit anything the grant table would honor.</param>
+/// <param name="Subject">The platform user id this entry pins, required for <see cref="WorldAdmissionTrustMode.SignsDirectly"/>
+/// and refused for <see cref="WorldAdmissionTrustMode.Vouches"/> (a root vouches for every subject its two-hop chain
+/// resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard. Absent
+/// pins no subject.</param>
+/// <param name="Algorithm">Exactly <c>ecdsa-p256-sha256</c>, the only signing algorithm enabled by the
+/// admission door's mandatory <c>attestation-v1-base</c> profile, required for a keyed row. Sealing algorithms and
+/// optional signing extensions are refused by document validation. OAuth and federated-authority rows are keyless
+/// and author none.</param>
+/// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded, required for a
+/// keyed row — carried alongside the id because offline verification needs the real bytes, never a fetch
+/// (docs/architecture/worlds.md, "Signed attestation": consulting the issuer at verification time is a ruled-out
+/// design). OAuth and federated-authority rows author none.</param>
 /// <param name="Disclosure">How much of this world's document a peer verified under this entry receives (see
-/// <see cref="WorldDisclosureTier"/>). Absent resolves to <see cref="WorldDisclosureTier.Presentation"/>, so an
-/// entry authored before this field existed keeps a projection-only wire and nothing has to be edited to stay
-/// closed. <see cref="WorldDisclosureTier.Replica"/> is reachable only by authoring it.</param>
-public sealed record WorldAdmissionEntry(string Domain, string? Subject, WorldAdmissionTrustMode Mode, string Algorithm, string PublicKey, IReadOnlyList<WorldAdmissionGrant> Grants, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDisclosureTier? Disclosure = null) {
+/// <see cref="WorldDisclosureTier"/>). Absent resolves to <see cref="WorldDisclosureTier.Presentation"/>, so a
+/// projection-only wire is the default and nothing has to be edited to stay closed.
+/// <see cref="WorldDisclosureTier.Replica"/> is reachable only by authoring it.</param>
+public sealed record WorldAdmissionEntry(
+    string Domain,
+    WorldAdmissionTrustMode Mode,
+    IReadOnlyList<WorldAdmissionGrant> Grants,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Subject = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Algorithm = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDisclosureTier? Disclosure = null
+) {
     /// <summary>Gets the tier this entry mints — <see cref="Disclosure"/>, or
     /// <see cref="WorldDisclosureTier.Presentation"/> when it authors none.</summary>
     [JsonIgnore]

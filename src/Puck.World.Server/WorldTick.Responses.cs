@@ -1,7 +1,5 @@
-using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Fields;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -13,10 +11,10 @@ public sealed partial class WorldTick {
     // is never entered here and is swept in full every tick. The mask catches a write the sweep did not make (an undo,
     // a console upsert), which moves the row without moving any cell.
     private readonly Dictionary<string, (long[] Values, bool[] Present, int Holding)> m_responseObservedValues = [];
-    // The sweep's scratch, reused every tick: each moved row with its new holding and the snapshot that admits a skip
-    // (null when the row cannot be skipped).
-    private readonly List<(WorldPlacement Placement, int Holding, long[]? Values, bool[]? Present)> m_responseMoves = [];
-    private readonly List<WorldMutation> m_responseMutations = [];
+    // The sweep's scratch, reused every tick: each moved row with its index, its new holding and the snapshot that
+    // admits a skip (null when the row cannot be skipped), and the selection the moves install.
+    private readonly List<(WorldPlacement Placement, int Row, int Holding, long[]? Values, bool[]? Present)> m_responseMoves = [];
+    private readonly List<(int Row, int Holding)> m_responseSelection = [];
 
     /// <summary>Describes every placement carrying a response trait: the prototype it shows, its authored one, and
     /// which entries the last sweep recorded as holding.</summary>
@@ -67,8 +65,8 @@ public sealed partial class WorldTick {
     // document directly (WorldStateReader, the same reader every other row-name comparand in this file goes
     // through), so it sees a rule's own write the moment EvaluateWorldRules' end-of-tick fold installs it, and a field
     // reaction's or the console's write the moment it installs, both within this same tick's sweep. Every row whose
-    // holding moved this tick lands in one mutation — the row alone, or a batch of every moved row — so a switch that
-    // flips several rows pays one admission and one install, and the rows land together or not at all.
+    // holding moved this tick lands in one selection install (WorldDocument.InstallResponseSelection), so a switch
+    // that flips several rows replaces the live rows once and delivers them once.
     private void SweepPlacementResponses(ulong tick) {
         var lattice = Host.Population.Fields;
         // Declared once and reused every iteration below — a stackalloc inside the loop body would not release its
@@ -126,49 +124,26 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            m_responseMoves.Add(item: (placement, holding, (skippable ? values[..count].ToArray() : null), (skippable ? present[..count].ToArray() : null)));
+            m_responseMoves.Add(item: (placement, placementIndex, holding, (skippable ? values[..count].ToArray() : null), (skippable ? present[..count].ToArray() : null)));
         }
 
         if (m_responseMoves.Count == 0) {
             return;
         }
 
-        m_responseMutations.Clear();
+        m_responseSelection.Clear();
 
         foreach (var move in m_responseMoves) {
-            // Principal.World — the same structural-exemption door StampContribution/RetractContribution use — so the
-            // write is journalled and undoable through the ordinary UpsertPlacement compose arm.
-            m_responseMutations.Add(item: new WorldMutation.UpsertPlacement(
-                Placement: (move.Placement with { Holding = move.Holding }),
-                Principal: Principal.World
-            ));
+            m_responseSelection.Add(item: (move.Row, move.Holding));
         }
 
-        var applied = Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: ((m_responseMutations.Count == 1)
-                ? m_responseMutations[0]
-                : new WorldMutation.Batch(
-                    Mutations: [.. m_responseMutations],
-                    Principal: Principal.World
-                )),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        );
+        Host.Document.InstallResponseSelection(holdings: m_responseSelection);
 
-        foreach (var (placement, holding, observed, observedPresent) in m_responseMoves) {
+        foreach (var (placement, _, holding, observed, observedPresent) in m_responseMoves) {
             if (observed is not null) {
-                m_responseObservedValues[placement.Id] = (observed, observedPresent!, (applied
-                    ? holding
-                    : placement.Holding));
+                m_responseObservedValues[placement.Id] = (observed, observedPresent!, holding);
             } else if (m_responseObservedValues.Count > 0) {
                 m_responseObservedValues.Remove(key: placement.Id);
-            }
-
-            if (!applied) {
-                continue;
             }
 
             var responses = placement.Respond!;

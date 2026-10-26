@@ -41,16 +41,14 @@ prototypes {
   }
 }
 
-looks {
-  rows [
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "companion"
-      scale: 1
-      source: creation(prototypeId: companion)
-    }
-  ]
-}
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "companion"
+    scale: 1
+    source: creation(prototypeId: companion)
+  }
+]
 
 placements {
   placement "companion" {

@@ -37,8 +37,7 @@ rule "remember-ambush" {
   transform mix(into: stance.guards, terms: [
     { from: stance.guards, weight: 3 }
     { from: events.ambush, weight: 1 }
-  ]
-  )
+  ])
   transform nearest(from: memories, query: situation, into: recalled, k: 3, threshold: 0.5)
   transform nearest(from: lineVectors, query: situation, into: reply, k: 1)
 }

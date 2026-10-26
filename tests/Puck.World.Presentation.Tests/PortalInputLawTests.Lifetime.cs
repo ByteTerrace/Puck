@@ -12,7 +12,6 @@ public sealed partial class PortalInputLawTests {
     private static WorldDefinition Observable(bool admits) => (Fixtures.BuildDocument() with {
         Admission = (admits
             ? [new WorldAdmissionEntry(
-                Algorithm: string.Empty,
                 Disclosure: WorldDisclosureTier.Replica,
                 Domain: WorldAdmissionEntry.AnyAuthority,
                 Grants: [new WorldAdmissionGrant(
@@ -20,9 +19,7 @@ public sealed partial class PortalInputLawTests {
                     Capability: WorldCapability.Observe,
                     Subject: GrantSubject.All
                 )],
-                Mode: WorldAdmissionTrustMode.FederatedAuthority,
-                PublicKey: string.Empty,
-                Subject: null
+                Mode: WorldAdmissionTrustMode.FederatedAuthority
             )]
             : []),
     });

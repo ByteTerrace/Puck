@@ -75,8 +75,8 @@ public sealed partial class WorldPopulation {
     /// directly rather than re-deriving it).</summary>
     public WorldChannelTable Channels => m_channels;
     /// <summary>The live definition's analytic collider census, including placement-derived colliders even when the
-    /// selected provider is the SDF field or collision is disabled.</summary>
-    public WorldContactCensus ContactCensus => m_contactCensus;
+    /// selected provider is the SDF field or collision is disabled, measured on first ask after the definition moved.</summary>
+    public WorldContactCensus ContactCensus => (m_contactCensus ??= WorldColliderSet.Measure(definition: m_censusDefinition!));
     /// <summary>The stored peer intent-source default — a template, not an
     /// aggregate, which is why it stays observable at zero peers: newly activated peers take it, and an explicit
     /// population source command sets it and sweeps every peer. Render-inert: it reshapes only the intent
@@ -210,7 +210,9 @@ public sealed partial class WorldPopulation {
     // policy above so a hold and the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
 
-    private WorldContactCensus m_contactCensus;
+    // The census of the definition the contact field was last compiled from, measured when read (ContactCensus).
+    private WorldContactCensus? m_contactCensus;
+    private WorldDefinition? m_censusDefinition;
     private IContactField? m_contactField;
     // The compiled population distribution (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).

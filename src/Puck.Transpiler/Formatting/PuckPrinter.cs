@@ -107,12 +107,11 @@ public static partial class PuckPrinter {
         );
     }
 
-    /// <summary>Gets the words a statement reader takes for the keyword it spells when one opens a line, because
-    /// nothing in <c>name:</c> defeats the match, so a property spelling one prints quoted. A keyword whose own reader
-    /// first demands a name (<c>table x</c>, <c>enum X</c>, <c>rules x</c>) is not one of these: <c>table: 1</c>
-    /// already reads as a property.</summary>
-    // One set at every depth, though `when`, `if` and `local` are keywords only in rule, scope and test bodies: the
-    // decompiler prints a nested member knowing its depth and not its enclosing construct.
+    /// <summary>Gets the words a construct body's reader (a rule, scope, decision, option, test, workflow or effect
+    /// body) takes for the keyword it spells when one opens a line, because nothing in <c>name:</c> defeats the
+    /// match there, so a property in such a body spelling one prints quoted. The document and every plain block or
+    /// object read <c>name:</c>, <c>name {</c> and <c>name [</c> as a member whatever the name, so a member there
+    /// prints bare.</summary>
     public static IReadOnlySet<string> PropertyKeywords { get; } = System.Collections.Frozen.FrozenSet.ToFrozenSet(
         comparer: StringComparer.Ordinal,
         source: [
@@ -143,13 +142,15 @@ public static partial class PuckPrinter {
     private static string ExportName(string name) => QualifiedName.Parse(text: name).Print(segment: PrintName);
 
     /// <summary>Returns a property name as a statement reader takes it back: bare when it is one name that opens no
-    /// other production where it stands — one of <see cref="PropertyKeywords"/>, or at the top level one of
-    /// <see cref="DocumentHeaders"/> — and a quoted string otherwise.</summary>
+    /// other production where it stands — in a construct body one of <see cref="PropertyKeywords"/>, at the top level
+    /// one of <see cref="DocumentHeaders"/> — and a quoted string otherwise.</summary>
     /// <param name="name">The property name.</param>
     /// <param name="level">The nesting depth the property stands at; 0 is the document's top level.</param>
+    /// <param name="construct">Whether the property stands directly in a construct body rather than in the document,
+    /// a plain block or an object.</param>
     /// <returns>The property name's spelling.</returns>
-    public static string PrintPropertyName(string name, int level) => ((IdentifierSpelling.IsName(text: name) &&
-        !PropertyKeywords.Contains(item: name) &&
+    public static string PrintPropertyName(string name, int level, bool construct = false) => ((IdentifierSpelling.IsName(text: name) &&
+        !(construct && PropertyKeywords.Contains(item: name)) &&
         ((level > 0) || !DocumentHeaders.Contains(item: name)))
         ? name
         : Quote(text: name)
@@ -357,8 +358,13 @@ public static partial class PuckPrinter {
                 );
             }
         }
-        // The body of a braced construct, opened on the line the caller has already begun.
-        private void Body(IReadOnlyList<StatementNode> statements, IReadOnlyList<TriviaPiece> closing, int level, string? opening = null) {
+        // Whether the statements printing now are read by a construct body's reader, where a property spelling one
+        // of PropertyKeywords prints quoted; the document, a plain block and an object read every name as a member.
+        private bool m_construct;
+
+        // The body of a braced construct, opened on the line the caller has already begun. `construct` is false for
+        // a body the document's own statement reader reads: a plain block's, a template's or a border's.
+        private void Body(IReadOnlyList<StatementNode> statements, IReadOnlyList<TriviaPiece> closing, int level, string? opening = null, bool construct = true) {
             m_builder.Append(value: " {");
             if (
                 (statements.Count == 0) &&
@@ -371,10 +377,15 @@ public static partial class PuckPrinter {
             }
             if (opening is not null) { m_builder.Append(value: ' ').Append(value: opening); }
             EndLine();
+
+            var enclosing = m_construct;
+
+            m_construct = construct;
             Statements(
                 level: (level + 1),
                 statements: statements
             );
+            m_construct = enclosing;
             Pieces(
                 level: (level + 1),
                 pieces: closing
@@ -417,7 +428,7 @@ public static partial class PuckPrinter {
                         m_builder.Append(value: ", ");
                         Expression(expression: link.Right, level: level);
                         if (link.Kind == "border") {
-                            Body(closing: link.Trivia.Inner, level: level, opening: link.Trivia.Opening, statements: link.Properties);
+                            Body(closing: link.Trivia.Inner, construct: false, level: level, opening: link.Trivia.Opening, statements: link.Properties);
                         }
 
                         break;
@@ -473,6 +484,7 @@ public static partial class PuckPrinter {
                         m_builder.Append(value: ')');
                         Body(
                             closing: template.Body.Trivia.Inner,
+                            construct: false,
                             level: level,
                             opening: template.Body.Trivia.Opening,
                             statements: template.Body.Statements
@@ -494,8 +506,10 @@ public static partial class PuckPrinter {
                             expression: loop.Sequence,
                             level: level
                         );
+                        // A compile-time loop's body is read by the reader of the body it stands in.
                         Body(
                             closing: loop.Trivia.Inner,
+                            construct: m_construct,
                             level: level,
                             opening: loop.Trivia.Opening,
                             statements: loop.Body
@@ -524,6 +538,7 @@ public static partial class PuckPrinter {
                         }
                         Body(
                             closing: block.Trivia.Inner,
+                            construct: false,
                             level: level,
                             opening: block.Trivia.Opening,
                             statements: block.Statements
@@ -1345,6 +1360,7 @@ public static partial class PuckPrinter {
         }
         private void Property(PropertyNode property, int level) {
             var name = PrintPropertyName(
+                construct: m_construct,
                 level: level,
                 name: property.Name
             );

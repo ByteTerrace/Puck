@@ -6,11 +6,11 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>The decompiler's side of generated names: every site that mints one prints it back as the construct that
-/// minted it, so decompiling a document and compiling the source reproduces the same document, and never prints a
-/// generated name as an authored one. A site whose name no construct prints back (a name the engine seeds at run time,
-/// or a hand-written document spelling a generated name) is refused by name. One row per minting site, each with the
-/// smallest source or document that reaches it.</summary>
+/// <summary>The decompiler's side of generated names: a rule scope's names print back as the scopes that minted them,
+/// so decompiling a document and compiling the source reproduces the same document, and every other generated name (a
+/// ground's, a test's, a composition link's, an aliased module instance's, a name the engine seeds at run time, or one a
+/// hand-written document spells) is refused by name, never printed as an authored one. One row per minting site, each
+/// with the smallest source or document that reaches it.</summary>
 /// <remarks>The table is held to the tree: the minting calls (<see cref="GeneratedName"/>'s <c>Join</c>, <c>Append</c>,
 /// <c>Qualify</c>, <c>JoinFile</c> and <c>AppendFile</c>) are counted per source file under <c>src/</c>, and a file whose count
 /// differs from what <see cref="Sites"/> declares — a new minting site, or one retired — fails
@@ -239,51 +239,6 @@ public sealed class GeneratedNameReversalLawTests {
             }
         }
         """;
-    private const string InterleavedGround = """
-        schema: "puck.world.definition.v1"
-        documentId: "yard"
-
-        prototypes {
-            prototype "post" {
-                document {
-                    name: "post"
-                    schema: "puck.creation.v1"
-                }
-            }
-        }
-
-        placements {
-            placement "gate" {
-                prototype: "post"
-                position [1, 0, 1]
-            }
-        }
-
-        ground floor {
-            size [8m, 8m]
-        }
-
-        placements {
-            placement "fence" {
-                prototype: "post"
-                position [2, 0, 2]
-            }
-        }
-
-        ground lawn {
-            center [0m, 0m, 20m]
-            size [8m, 8m]
-        }
-
-        prototypes {
-            prototype "rail" {
-                document {
-                    name: "rail"
-                    schema: "puck.creation.v1"
-                }
-            }
-        }
-        """;
     private const string ModuleArgument = """
         schema: "puck.world.definition.v1"
         documentId: "guarded"
@@ -406,19 +361,17 @@ public sealed class GeneratedNameReversalLawTests {
     public static IReadOnlyList<Row> Rows { get; } = [
         new(Label: "rule held by a scope", Site: Stabilize, Check: static () => RoundTrip(source: ScopeRules)),
         new(Label: "stabilize group and members, workflow and steps, group held by a scope", Site: Stabilize, Check: static () => RoundTrip(source: Groups)),
-        new(Label: "ground prototype", Site: Endpoints, Check: static () => RoundTrip(source: Ground)),
-        new(Label: "ground beside a border, door return arch, link reference and destination", Site: Links, Check: static () => CompositionRoundTrip(source: Composition)),
-        new(Label: "ground written between other prototypes and placements", Site: Endpoints, Check: static () => RoundTrip(source: InterleavedGround)),
+        new(Label: "ground prototype", Site: Endpoints, Check: static () => RefusedSource(name: "ground$floor", source: Ground)),
         new(Label: "ground of two aliased module instances", Site: Endpoints, Check: static () => RefusedSource(name: "east$ground$floor", source: AliasedGround)),
         new(Label: "row an aliased module instance declares", Site: ModuleNamespace, Check: static () => RefusedSource(name: "left$score", source: QualifiedReference)),
         new(Label: "qualified reference to an aliased instance's row", Site: ModuleInstances, Check: static () => RefusedSource(name: "left$score", source: QualifiedReference)),
         new(Label: "ground prototype a document reshaped", Site: Endpoints, Check: static () => RefusedAltered(alter: static document => document["prototypes"]![0]!["document"]!["palette"]![0]!["color"] = "#FF0000", name: "ground$floor", source: Ground)),
-        new(Label: "link rows of one world read alone", Site: Links, Check: static () => RefusedWorld(name: "link$arch1", source: Composition, world: "island")),
-        new(Label: "return arch of one world read alone", Site: Links, Check: static () => RefusedWorld(name: "return$island$arch1", source: Composition, world: "parlor")),
+        new(Label: "link rows of one world", Site: Links, Check: static () => RefusedWorld(name: "link$arch1", source: Composition, world: "island")),
+        new(Label: "return arch of one world", Site: Links, Check: static () => RefusedWorld(name: "return$island$arch1", source: Composition, world: "parlor")),
         new(Label: "module row argument placeholder", Site: Expansion, Check: static () => [.. RoundTrip(source: ModuleArgument), .. NeverDeclared(head: "arg", source: ModuleArgument)]),
         new(Label: "module row argument placeholder a hand document spells", Site: Expansion, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("arg", "0")), name: GeneratedName.Join("arg", "0"))),
-        new(Label: "verdict row and rule, witness rows, recorded keys, status key, test world", Site: Tests, Check: static () => TestRoundTrip(source: TestBlock)),
-        new(Label: "test world standing up a module", Site: Tests, Check: static () => TestRoundTrip(source: SubjectTest)),
+        new(Label: "verdict row and rule, witness rows, recorded keys, status key, test world", Site: Tests, Check: static () => RefusedTestWorld(source: TestBlock)),
+        new(Label: "test world standing up a module", Site: Tests, Check: static () => RefusedTestWorld(source: SubjectTest)),
         new(Label: "test world and sibling world names stay files", Site: Tests, Check: static () => FileBackedTestWorlds(source: ComposedTest)),
         new(Label: "composed test's boot document", Site: Tests, Check: static () => RefusedComposedTest(source: ComposedTest)),
         new(Label: "pool rows", Site: Catalog, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("$pool", "pieces", "live")), name: GeneratedName.Join("$pool", "pieces", "live"))),
@@ -501,63 +454,6 @@ public sealed class GeneratedNameReversalLawTests {
 
         return violations;
     }
-    private static List<string> CompositionRoundTrip(string source) {
-        var violations = new List<string>();
-        var compiled = Compile(allowMultiple: true, label: "the composition", source: source, violations: violations);
-
-        if (violations.Count > 0) {
-            return violations;
-        }
-
-        var worlds = compiled.Worlds.Select(selector: static output => KeyValuePair.Create(key: output.Name, value: output.Json)).ToList();
-
-        if (Decompile(decompile: () => WorldDecompiler.DecompileComposition(worlds: worlds), label: "the composition's worlds", violations: violations) is not { } decompiled) {
-            return violations;
-        }
-
-        var recompiled = Compile(allowMultiple: true, label: "the decompiled composition", source: decompiled, violations: violations);
-
-        if (violations.Count > 0) {
-            return violations;
-        }
-
-        foreach (var output in compiled.Worlds) {
-            Same(
-                actual: recompiled.Worlds.SingleOrDefault(predicate: candidate => (candidate.Name == output.Name))?.Json,
-                expected: output.Json,
-                label: $"world '{output.Name}'",
-                violations: violations
-            );
-        }
-
-        if (recompiled.Worlds.Count != compiled.Worlds.Count) {
-            violations.Add(item: $"the decompiled composition emits {recompiled.Worlds.Count} worlds, not {compiled.Worlds.Count}");
-        }
-
-        return violations;
-    }
-    private static List<string> TestRoundTrip(string source) {
-        var violations = new List<string>();
-        var compiled = Compile(label: "the source", source: source, violations: violations);
-
-        if (violations.Count > 0) {
-            return violations;
-        }
-
-        var world = Assert.Single(collection: compiled.TestWorlds).Json;
-
-        if (Decompile(decompile: () => WorldDecompiler.Decompile(root: world), label: "the test world", violations: violations) is not { } decompiled) {
-            return violations;
-        }
-
-        var recompiled = Compile(label: "the decompiled test world", source: decompiled, violations: violations);
-
-        if (violations.Count == 0) {
-            Same(actual: recompiled.TestWorlds.SingleOrDefault()?.Json, expected: world, label: "the test world's round trip", violations: violations);
-        }
-
-        return violations;
-    }
     // A name the lowering stands in and replaces never reaches the document.
     private static List<string> NeverDeclared(string source, string head) {
         var violations = new List<string>();
@@ -626,13 +522,32 @@ public sealed class GeneratedNameReversalLawTests {
 
         return RefusedDocument(document: document, name: name);
     }
+    // One world of a composition, less the ground rows the border's endpoints stand on, which refuse first.
     private static List<string> RefusedWorld(string source, string world, string name) {
         var violations = new List<string>();
         var compiled = Compile(allowMultiple: true, label: "the composition", source: source, violations: violations);
 
+        if (violations.Count > 0) {
+            return violations;
+        }
+
+        var document = (JsonObject)compiled.Worlds.Single(predicate: output => (output.Name == world)).Json.DeepClone();
+
+        foreach (var (section, rows) in new[] { ("prototypes", document["prototypes"] as JsonArray), ("placements", document["placements"]?["rows"] as JsonArray) }) {
+            foreach (var row in (rows ?? []).OfType<JsonObject>().Where(predicate: static row => ((row["id"]?.GetValue<string>() is { } id) && (id.StartsWith(value: "ground$", comparisonType: StringComparison.Ordinal) || (row["prototypeId"]?.GetValue<string>()?.StartsWith(value: "ground$", comparisonType: StringComparison.Ordinal) ?? false)))).ToArray()) {
+                _ = rows!.Remove(item: row);
+            }
+        }
+        return RefusedDocument(document: document, name: name);
+    }
+    // A test world's verdict rows are the test's own, and print back as nothing.
+    private static List<string> RefusedTestWorld(string source) {
+        var violations = new List<string>();
+        var compiled = Compile(label: "the source", source: source, violations: violations);
+
         return ((violations.Count > 0)
             ? violations
-            : RefusedDocument(document: compiled.Worlds.Single(predicate: output => (output.Name == world)).Json, name: name)
+            : RefusedDocument(document: Assert.Single(collection: compiled.TestWorlds).Json, name: GeneratedName.Join("expect", "1"))
         );
     }
     private static List<string> RefusedComposedTest(string source) {

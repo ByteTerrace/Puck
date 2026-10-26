@@ -273,9 +273,9 @@ redirect URI, PKCE and consent contract. Other standards-based OIDC issuers use
 
 `allowedSubjects` permits gateway access. It grants no Console, filesystem or
 process authority. The World must separately author an `OAuth` admission row
-whose `domain` is the exact issuer, whose `subject` matches, and whose `algorithm`
-and `publicKey` are empty. The silo requires explicit `Replica` disclosure for
-its text surface: these commands can read the full authored state. This reuses
+whose `domain` is the exact issuer and whose `subject` matches; the row authors
+no `algorithm` and no `publicKey`. The silo requires explicit `Replica`
+disclosure for its text surface: these commands can read the full authored state. This reuses
 the existing disclosure contract; peers cannot hold `Observe/all`.
 
 The remote command surface is `world.wait`, `world.peers`, `world.admission`,

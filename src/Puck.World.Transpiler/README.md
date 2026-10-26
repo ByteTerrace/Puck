@@ -158,6 +158,13 @@ A container value is written as a block and a scalar takes a colon—`host { }`,
 rule is about the punctuation in front of a literal, not about what the value turns out to be; a call's named
 argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a statement.
 
+A section whose model holds a `rows` list beside optional policy members (`kits`, `looks`, `placements`,
+`captures`, `schedule`, `navigation`, a deal's `assignment`) takes the array of its rows directly when it authors
+nothing else: `kits [ { name: "kart", … } ]` lowers to `"kits": { "rows": [ … ] }`, and `looks: map(…)` fills
+`looks.rows` (`WorldSectionRows`). A block holding only `rows` is refused (PUCK123); one that also authors a policy
+member keeps its block (`looks { assignment { … } rows [ … ] }`), and the decompiler prints the array form exactly
+when the rows are all a section holds.
+
 Expressions: the rule language's infix operators, grouped by the binding the operator table
 (`Puck.State.ExpressionOperators`) gives them ([Comparisons are 1 or 0](../../docs/reference/dsl.md#comparisons-are-1-or-0)), `.` member access, `(...)` calls,
 `[a, b]` arrays, `{ k: v }` objects, `a..b` ranges, `#rrggbb[aa]` colors, and number literals with an optional unit
@@ -634,15 +641,12 @@ family index to select it by.
 
 ## Decompiling
 
-A name the compiler generated prints back as the construct that generated it, never as an authored name, which
-PUCK113 would refuse: `Decompiler/WorldDecompiler.GeneratedNames.cs` reads a `ground` block back from its
-prototype and placement (regenerated through the emitter's own `GroundRows` and compared), prints a rule or group
-whose name joins scopes (`outer$inner`) inside one `rules` scope per part, and reads a generated test world's
-verdict rows, witnesses, verdict rules and schedule back as its `test` block. `WorldDecompiler.DecompileComposition`
-takes the worlds one composition emitted and prints the composition source: each world a module and a `world`
-declaration, each `border` and `door` read back from the rows `WorldCompositionLinks` generated and verified by
-reapplying them. Any other generated-form name — a hand-written document spelling one, a pool's catalog row, an
-identity row, one world of a composition read alone — throws `WorldDecompileRefusedException` naming it.
+A name the compiler generated never prints as an authored name, which PUCK113 would refuse:
+`Decompiler/WorldDecompiler.GeneratedNames.cs` prints a rule or group whose name joins scopes (`outer$inner`)
+inside one `rules` scope per part, and any other generated-form name — a `ground`'s, a `test` world's, a
+composition link's, an aliased module instance's, a pool's catalog row, an identity row, a hand-written document
+spelling one — throws `WorldDecompileRefusedException` naming it. Those constructs are written in source alone: a
+save edits the source around them and refuses an edit to a row they generate.
 
 `WorldDecompiler.Decompile` opens every file with a one-time-import header comment (`let`/`template` cannot be
 recovered on a re-run) and inverts `rules`/`shapes`/`placements`/`prototypes` into the sugar above, eliding a
@@ -887,12 +891,19 @@ the root and reports without a span.
 
 `WorldSourceEdits` also uses these spans when a live edit is saved. It prints
 only changed authored values through `WorldDecompiler`, retains neighboring
-expressions and comments, and recompiles the result. Nested values keep their
-final array positions when repeated properties append rows. Structural edits
-fall back to the enclosing authored node, retaining text outside its span. `WorldSourceSave` computes the changed
-document values against the source's composed snapshot and verifies the final
-composition before an atomic write. Generated rows refuse at their owning
-construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes
+expressions and comments, and recompiles the result. A value read bare from a
+top-level `let` is written in the `let` when nothing else reads it, and at its
+own node otherwise; a changed row is edited inside, a removed one leaves with
+its lines, and a new one is printed in the source's layout at the list's end.
+Nested values keep their final array positions when repeated properties append
+rows. Structural edits fall back to the enclosing authored node, retaining text
+outside its span. `WorldSourceSave` composes the source tree with scalar origins
+(`WorldDocumentOrigins`), so each change is made in the document that authors
+it, a basis or an import as readily as the saved root, and a new row joins the
+document that authors the rest of its list, or the root. The simulation's
+`state` and a placement's response mask keep their authored values. The edited
+documents are composed in memory and proved against the snapshot before the
+atomic writes. Generated rows refuse at their owning construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes
 the save workflow.
 
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords (`if`/`else` included), `table`/

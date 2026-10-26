@@ -122,6 +122,10 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Gets the number of materials registered so far — the count <see cref="Build"/> would report in
     /// <see cref="SdfProgram.MaterialCount"/>.</summary>
     public int MaterialCount => m_materials.Count;
+    /// <summary>Gets the number of instructions emitted so far, before <see cref="Build"/> shares or compiles any.</summary>
+    public int InstructionCount => m_instructions.Count;
+    /// <summary>Gets the number of convex-polygon profiles emitted so far.</summary>
+    public int ConvexPolygonCount => m_convexPolygonProfiles.Count;
 
     /// <summary>Opens a static per-object instance: every instruction until the matching <see cref="EndInstance"/>
     /// belongs to it, bounded by <paramref name="boundCenter"/>/<paramref name="boundRadius"/> (a world-space bounding

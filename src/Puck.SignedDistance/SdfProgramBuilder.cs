@@ -122,20 +122,25 @@ public sealed partial class SdfProgramBuilder {
     // patches the instruction's Data0.x offset lane against, and that SdfFieldEvaluator reads directly (no packed-word
     // decode needed on the CPU side). Empty for a program with no convex-polygon profile, so packing and validation
     // both no-op exactly as before this shape existed.
-    private readonly List<(int InstructionIndex, Vector2[] Vertices)> m_convexPolygonProfiles = [];
+    private readonly List<(int InstructionIndex, Vector2[] Vertices)> m_convexPolygonProfiles;
 
     /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
     /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
     /// will be — from a previous build's own counts, e.g. <see cref="SdfProgram.InstructionCount"/>/
-    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfProgram.ScreenSurfaces"/>.Count
-    /// — avoids re-paying <see cref="List{T}"/>'s geometric-growth reallocation from empty on every rebuild. Every hint
+    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfProgram.ScreenSurfaces"/>.Count,
+    /// or the previous builder's <see cref="ConvexPolygonCount"/> — avoids re-paying <see cref="List{T}"/>'s geometric-growth reallocation from empty on every rebuild. Every hint
     /// defaults to 0, matching <see cref="List{T}"/>'s own parameterless-constructor capacity, so a caller that
-    /// supplies none behaves exactly as before this constructor existed.</summary>
+    /// supplies none starts every list empty.</summary>
     /// <param name="instructionCapacity">Initial capacity for the instruction list, or 0 to start empty.</param>
     /// <param name="instanceCapacity">Initial capacity for the instance list, or 0 to start empty.</param>
     /// <param name="materialCapacity">Initial capacity for the material list, or 0 to start empty.</param>
     /// <param name="screenSurfaceCapacity">Initial capacity for the screen-surface list, or 0 to start empty.</param>
-    public SdfProgramBuilder(int instructionCapacity = 0, int instanceCapacity = 0, int materialCapacity = 0, int screenSurfaceCapacity = 0) {
+    /// <param name="convexPolygonCapacity">Initial capacity for the convex-polygon profile list, or 0 to start empty.</param>
+    public SdfProgramBuilder(int instructionCapacity = 0, int instanceCapacity = 0, int materialCapacity = 0, int screenSurfaceCapacity = 0, int convexPolygonCapacity = 0) {
+        m_convexPolygonProfiles = new List<(int InstructionIndex, Vector2[] Vertices)>(capacity: Math.Max(
+            val1: 0,
+            val2: convexPolygonCapacity
+        ));
         m_instances = new List<SdfInstanceRange>(capacity: Math.Max(
             val1: 0,
             val2: instanceCapacity

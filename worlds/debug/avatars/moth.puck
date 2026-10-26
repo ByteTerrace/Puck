@@ -1848,225 +1848,217 @@ host {
   width: 1280
 }
 
-kits {
-  rows [
-    {
-      bodyContact: Solid
-      bodyMotionProgram: "walk"
-      // The capsule stands as tall as the drawn Moth: its 0.35 m spheres span 0 to 2.06 m, the top of the helmet.
-      collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
-      mass: 0
-      motion {
-        facingSnap: false
-        groundSnap: 0.3
-        // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
-        // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
-        // falls with no hover and no thrust, and jumps instead.
-        holds [
-          {
-            name: "groundFlight"
-            bond: Surface
-            hold: Gravity
-            cone [0, 60]
-            reach: 1.2
-            forward: Heading
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            envelope {
-              sinkSpeed: 40
-            }
-            thrust: 1
-            spend {
-              state: "flightFuel"
-              ratePerSecond: 0.001
-            }
+kits [
+  {
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    // The capsule stands as tall as the drawn Moth: its 0.35 m spheres span 0 to 2.06 m, the top of the helmet.
+    collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
+    mass: 0
+    motion {
+      facingSnap: false
+      groundSnap: 0.3
+      // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
+      // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
+      // falls with no hover and no thrust, and jumps instead.
+      holds [
+        {
+          name: "groundFlight"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 1.2
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
           }
-          {
-            name: "ground"
-            bond: Surface
-            hold: Gravity
-            cone [0, 60]
-            reach: 1.2
-            forward: Heading
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            envelope {
-              sinkSpeed: 40
-            }
+          envelope {
+            sinkSpeed: 40
           }
-          {
-            name: "flight"
-            bond: Free
-            hold: Lift
-            forward: Heading
-            lift: 1
-            // She flies at her running pace, and running in the air doubles it.
-            speed: 5
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            thrust: 1
-            spend {
-              state: "flightFuel"
-              ratePerSecond: 0.001
-            }
-          }
-          {
-            name: "fall"
-            bond: Free
-            hold: Gravity
-            forward: Heading
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            envelope {
-              sinkSpeed: 40
-            }
-          }
-        ]
-        moveFrame: World
-        shaping [
-          {
-            along {
-              engage: 40
-              release: 50
-            }
-            turnScale: 1
-          }
-        ]
-        // She walks at 5 m/s and runs at 10 while the run channel is held.
-        speed {
-          value: 5
-          held {
-            channel: "run"
-            multiplier: 2
+          thrust: 1
+          spend {
+            state: "flightFuel"
+            ratePerSecond: 0.001
           }
         }
-        // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
-        stepHeight: 0.3
-        turn {
-          falloff: 1
-          maxPitch: 1.2
-          pitchRate: 0
-          rate: 2.5
+        {
+          name: "ground"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 1.2
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          envelope {
+            sinkSpeed: 40
+          }
+        }
+        {
+          name: "flight"
+          bond: Free
+          hold: Lift
+          forward: Heading
+          lift: 1
+          // She flies at her running pace, and running in the air doubles it.
+          speed: 5
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          thrust: 1
+          spend {
+            state: "flightFuel"
+            ratePerSecond: 0.001
+          }
+        }
+        {
+          name: "fall"
+          bond: Free
+          hold: Gravity
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          envelope {
+            sinkSpeed: 40
+          }
+        }
+      ]
+      moveFrame: World
+      shaping [
+        {
+          along {
+            engage: 40
+            release: 50
+          }
+          turnScale: 1
+        }
+      ]
+      // She walks at 5 m/s and runs at 10 while the run channel is held.
+      speed {
+        value: 5
+        held {
+          channel: "run"
+          multiplier: 2
         }
       }
-      // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
-      // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the
-      // arc short. North or F switches flight mode.
-      actions {
-        jump {
-          onPress {
-            gate: all(predicates: [
-              compareState(state: flightFuel, comparison: Equal, value: 0)
-              compareState(state: jumps, comparison: Greater, value: 0)
-            ]
-            )
-            latchSeconds: 0
+      // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
+      stepHeight: 0.3
+      turn {
+        falloff: 1
+        maxPitch: 1.2
+        pitchRate: 0
+        rate: 2.5
+      }
+    }
+    // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
+    // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the
+    // arc short. North or F switches flight mode.
+    actions {
+      jump {
+        onPress {
+          gate: all(predicates: [
+            compareState(state: flightFuel, comparison: Equal, value: 0)
+            compareState(state: jumps, comparison: Greater, value: 0)
+          ])
+          latchSeconds: 0
+          effects [
+            setVerticalVelocity(velocity: 5.1)
+            addState(state: jumps, value: -1)
+          ]
+        }
+        onRelease {
+          gate: all(predicates: [
+            compareState(state: flightFuel, comparison: Equal, value: 0)
+            now(fact: Rising)
+          ])
+          latchSeconds: 0
+          effects [
+            scaleVerticalVelocity(factor: 0.45)
+          ]
+        }
+        // Leaving the ground without jumping (walking off a ledge) spends the ground jump, so the one left is the
+        // air jump her boot jets push.
+        onFact [
+          {
+            fact: "Airborne"
+            mode: "Edge"
+            gate: compareState(state: jumps, comparison: Equal, value: 2)
             effects [
-              setVerticalVelocity(velocity: 5.1)
               addState(state: jumps, value: -1)
             ]
           }
-          onRelease {
-            gate: all(predicates: [
-              compareState(state: flightFuel, comparison: Equal, value: 0)
-              now(fact: Rising)
-            ]
-            )
-            latchSeconds: 0
-            effects [
-              scaleVerticalVelocity(factor: 0.45)
-            ]
-          }
-          // Leaving the ground without jumping (walking off a ledge) spends the ground jump, so the one left is the
-          // air jump her boot jets push.
-          onFact [
-            {
-              fact: "Airborne"
-              mode: "Edge"
-              gate: compareState(state: jumps, comparison: Equal, value: 2)
-              effects [
-                addState(state: jumps, value: -1)
-              ]
-            }
-          ]
-        }
-        // A press is counted, then flipped on the next tick whether she stands or flies: on to 1000, or off to 0.
-        flight {
-          onPress {
-            latchSeconds: 0
-            effects [
-              setState(state: flightPress, value: 1)
-            ]
-          }
-          onFact [
-            {
-              fact: "Grounded"
-              mode: "Level"
-              gate: all(predicates: [
-                compareState(state: flightPress, comparison: Greater, value: 0)
-                compareState(state: flightFuel, comparison: Equal, value: 0)
-              ]
-              )
-              effects [
-                setState(state: flightFuel, value: 1000)
-                setState(state: flightPress, value: 0)
-              ]
-            }
-            {
-              fact: "Airborne"
-              mode: "Level"
-              gate: all(predicates: [
-                compareState(state: flightPress, comparison: Greater, value: 0)
-                compareState(state: flightFuel, comparison: Equal, value: 0)
-              ]
-              )
-              effects [
-                setState(state: flightFuel, value: 1000)
-                setState(state: flightPress, value: 0)
-              ]
-            }
-            {
-              fact: "Grounded"
-              mode: "Level"
-              gate: all(predicates: [
-                compareState(state: flightPress, comparison: Greater, value: 0)
-                compareState(state: flightFuel, comparison: Greater, value: 0)
-              ]
-              )
-              effects [
-                setState(state: flightFuel, value: 0)
-                setState(state: flightPress, value: 0)
-              ]
-            }
-            {
-              fact: "Airborne"
-              mode: "Level"
-              gate: all(predicates: [
-                compareState(state: flightPress, comparison: Greater, value: 0)
-                compareState(state: flightFuel, comparison: Greater, value: 0)
-              ]
-              )
-              effects [
-                setState(state: flightFuel, value: 0)
-                setState(state: flightPress, value: 0)
-              ]
-            }
-          ]
-        }
+        ]
       }
-
-      name: "walker"
+      // A press is counted, then flipped on the next tick whether she stands or flies: on to 1000, or off to 0.
+      flight {
+        onPress {
+          latchSeconds: 0
+          effects [
+            setState(state: flightPress, value: 1)
+          ]
+        }
+        onFact [
+          {
+            fact: "Grounded"
+            mode: "Level"
+            gate: all(predicates: [
+              compareState(state: flightPress, comparison: Greater, value: 0)
+              compareState(state: flightFuel, comparison: Equal, value: 0)
+            ])
+            effects [
+              setState(state: flightFuel, value: 1000)
+              setState(state: flightPress, value: 0)
+            ]
+          }
+          {
+            fact: "Airborne"
+            mode: "Level"
+            gate: all(predicates: [
+              compareState(state: flightPress, comparison: Greater, value: 0)
+              compareState(state: flightFuel, comparison: Equal, value: 0)
+            ])
+            effects [
+              setState(state: flightFuel, value: 1000)
+              setState(state: flightPress, value: 0)
+            ]
+          }
+          {
+            fact: "Grounded"
+            mode: "Level"
+            gate: all(predicates: [
+              compareState(state: flightPress, comparison: Greater, value: 0)
+              compareState(state: flightFuel, comparison: Greater, value: 0)
+            ])
+            effects [
+              setState(state: flightFuel, value: 0)
+              setState(state: flightPress, value: 0)
+            ]
+          }
+          {
+            fact: "Airborne"
+            mode: "Level"
+            gate: all(predicates: [
+              compareState(state: flightPress, comparison: Greater, value: 0)
+              compareState(state: flightFuel, comparison: Greater, value: 0)
+            ])
+            effects [
+              setState(state: flightFuel, value: 0)
+              setState(state: flightPress, value: 0)
+            ]
+          }
+        ]
+      }
     }
-  ]
-}
+
+    name: "walker"
+  }
+]
 
 looks {
   assignment {
@@ -7213,7 +7205,7 @@ prototypes {
           cadence: 1
           signal: "speed"
           dynamics: "gait-pace"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7227,7 +7219,7 @@ prototypes {
             driver: "pace"
             curve: "moth-stride"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7241,7 +7233,7 @@ prototypes {
             driver: "pace"
             curve: "moth-gait"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7255,7 +7247,7 @@ prototypes {
             driver: "pace"
             curve: "moth-run"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7268,7 +7260,7 @@ prototypes {
             driver: "pace"
             curve: "moth-run"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7277,7 +7269,7 @@ prototypes {
           name: "breath"
           cadence: 1.7
           signal: "time"
-          "when" [
+          when [
             "still"
           ]
         }
@@ -7285,7 +7277,7 @@ prototypes {
           name: "flight"
           cadence: 1
           signal: "state.airPose.$body"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7293,7 +7285,7 @@ prototypes {
           name: "wings"
           cadence: 1
           signal: "state.airWings.$body"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7301,7 +7293,7 @@ prototypes {
           name: "bank"
           cadence: 0.26
           signal: "turnRate"
-          "when" [
+          when [
             "state.airPose.$body"
             "Airborne"
           ]
@@ -7310,7 +7302,7 @@ prototypes {
           name: "cruise"
           cadence: 0.18
           signal: "speed"
-          "when" [
+          when [
             "state.airPose.$body"
             "Airborne"
             "moving"
@@ -7324,7 +7316,7 @@ prototypes {
           signal: "travelDirection"
           blendInSeconds: 0.12
           blendOutSeconds: 0.3
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7336,7 +7328,7 @@ prototypes {
           cadence: 1
           signal: "turnRate"
           dynamics: "body-turn"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7345,7 +7337,7 @@ prototypes {
           cadence: 1
           signal: "lateralAcceleration"
           dynamics: "body-lean"
-          "when" [
+          when [
             "Grounded"
           ]
         }
@@ -7354,7 +7346,7 @@ prototypes {
           cadence: 1
           signal: "forwardAcceleration"
           dynamics: "body-lean"
-          "when" [
+          when [
             "Grounded"
           ]
         }
@@ -7367,7 +7359,7 @@ prototypes {
           dynamics: "body-air"
           blendInSeconds: 0.06
           blendOutSeconds: 0.04
-          "when" [
+          when [
             "Airborne"
           ]
         }
@@ -7380,7 +7372,7 @@ prototypes {
           dynamics: "body-land"
           blendInSeconds: 0
           blendOutSeconds: 0.08
-          "when" [
+          when [
             "Grounded"
           ]
         }
@@ -7557,7 +7549,7 @@ prototypes {
           // The sole stays flat on the ground however far the planted boot sits from its rest offset, so the boot
           // centre's rest height is the standoff that puts the whole sole on the surface.
           align: 1
-          "when" [
+          when [
             "Grounded"
           ]
           target {
@@ -7587,7 +7579,7 @@ prototypes {
           ]
           tip: "boot-right"
           align: 1
-          "when" [
+          when [
             "Grounded"
           ]
           target {
@@ -7648,7 +7640,7 @@ render {
     maximum: 16
     compensation: 2.5
     adaptation: 0.75
-    "local": 0.5
+    local: 0.5
   }
   renderScale: 1
   shadowLights: 1
@@ -7672,8 +7664,7 @@ render {
           color: "#F4EFF2"
           elevation: 1
         }
-      ]
-      )
+      ])
       gradient(
         name: "studio",
         visibility: lighting,

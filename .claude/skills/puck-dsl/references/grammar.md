@@ -25,6 +25,11 @@ punctuation in front of a literal, not what the value turns out to be; a call's
 named argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call
 syntax rather than a statement.
 
+A section holding only its rows is the array of them: `kits [ … ]`,
+`looks: map(…)`, `assignment []` lower to `{ "rows": [ … ] }`. The block form
+`kits { rows [ … ] }` is **PUCK123**; a section that also authors a policy
+member keeps its block (`looks { assignment { … } rows [ … ] }`).
+
 ## Names
 
 One rule, `Puck.State.IdentifierSpelling`, for every Puck language (document
@@ -43,6 +48,14 @@ grammar, expression spelling, pattern/cell-set/state spellings):
   words `any`/`empty`/`except`/`none`, dotted paths, `$x:seg`
   continuations) layer on the rule as that position's own set. They never add
   a character class.
+- Keywords are contextual. In the document, a plain block or an object,
+  `name:`, `name {` and `name [` are members whatever the name spells
+  (`template: "…"`, `when ["Grounded"]`, `local: 0.5`): the document reader's
+  keyword readers (`let`, `for`, `use`, `import`, `export`, `module`,
+  `template`, `rule`, `request`, `watchMemory`) decline before `:`, `{` or
+  `[`. Only a construct body (rule, scope, decision, option, test, workflow,
+  effect) reserves its keywords, `PuckPrinter.PropertyKeywords`, which a
+  property there prints quoted (`PrintPropertyName(construct: true)`).
 - Every printer prints a name bare exactly when the bare spelling reads back as
   that name and the position doesn't reserve it. `IdentifierSpellingLawTests`
   (State) and `IdentifierAgreementLawTests` (World.Transpiler) gate it, over

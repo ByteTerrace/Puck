@@ -124,6 +124,17 @@ public class ContainerSpellingTests {
         ) { Mentions = "'neighbors: {' - a block is written without the ':': use 'neighbors {'" },
     };
 
+    // A section holding only its rows is the array of them (`kits [ … ]`), so the block holding nothing else is
+    // refused by name.
+    [Fact]
+    public void ASectionBlockHoldingOnlyItsRowsIsRefusedByName() => WorldSources.AssertRefused(
+        label: "a kits block holding only its rows",
+        refusal: new(
+            Body: "kits {\n    rows []\n}\n",
+            Code: PuckDiagnosticCodes.SectionRowsWrapped,
+            Needle: "kits {"
+        ) { Mentions = "'kits [ … ]'" }
+    );
     public static TheoryData<string> RefusedColonNames() => new(values: RefusedColons.Keys);
     [MemberData(nameof(RefusedColonNames))]
     [Theory]

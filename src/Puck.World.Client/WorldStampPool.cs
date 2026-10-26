@@ -688,6 +688,12 @@ public sealed partial class WorldStampPool {
         )
     );
     private Registration? FindBody(int bodyIndex) {
+        if (!m_bodySlotsStale) {
+            return ((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0)
+                ? m_pool[slot]
+                : null);
+        }
+
         foreach (var live in m_pool) {
             if (
                 (live is { BodyIndex: { } index }) &&
@@ -1040,6 +1046,20 @@ public sealed partial class WorldStampPool {
         return (row.Position, rotation, row.Scale);
     }
     private bool TryFindBody(int bodyIndex, out int poolIndex, out Registration live) {
+        if (!m_bodySlotsStale) {
+            if ((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0) && (m_pool[slot] is { } registration)) {
+                poolIndex = slot;
+                live = registration;
+
+                return true;
+            }
+
+            poolIndex = -1;
+            live = null!;
+
+            return false;
+        }
+
         for (var index = 0; (index < m_pool.Length); index++) {
             if (
                 (m_pool[index] is { BodyIndex: { } candidate } registration) &&
@@ -1242,6 +1262,35 @@ public sealed partial class WorldStampPool {
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
     public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
+        m_bodySlotsStale = true;
+        ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placements: placements);
+        IndexBodySlots();
+    }
+    // Indexes each body-rooted registration by its body, which only a reconcile moves, so a lookup per body costs no
+    // scan of the pool.
+    private void IndexBodySlots() {
+        Array.Fill(array: m_bodySlots, value: -1);
+        for (var index = 0; (index < m_pool.Length); index++) {
+            if ((m_pool[index] is { BodyIndex: { } body }) && (((uint)body) < ((uint)m_bodySlots.Length)) && (m_bodySlots[body] < 0)) {
+                m_bodySlots[body] = index;
+            }
+        }
+
+        m_bodySlotsStale = false;
+    }
+
+    // The pool slot of each body's registration, or -1, valid while no reconcile is running.
+    private readonly int[] m_bodySlots = NewBodySlots();
+    private bool m_bodySlotsStale;
+
+    private static int[] NewBodySlots() {
+        var slots = new int[WorldBodiesLimits.CapacityCeiling];
+
+        Array.Fill(array: slots, value: -1);
+
+        return slots;
+    }
+    private void ReconcileSlots(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
         // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
         // entry updates in place (clock preserved, and the refreshed Row/Creation carries any edited offset).
