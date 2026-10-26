@@ -469,6 +469,8 @@ public sealed partial class SdfProgram {
     /// mirror the field without decoding the packed word offset. Empty for a program with no convex-polygon
     /// profile.</summary>
     internal IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)> ConvexPolygonProfiles => m_convexPolygonProfiles;
+    /// <summary>Gets the number of convex-polygon profiles the program's side table carries.</summary>
+    public int ConvexPolygonProfileCount => m_convexPolygonProfiles.Length;
     /// <summary>Gets every <see cref="SdfShapeType.Sweep"/> instruction's own control points and radius endpoints,
     /// keyed by that instruction's index in <see cref="Instructions"/> — the host-side twin of the packed side table
     /// <see cref="Words"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can

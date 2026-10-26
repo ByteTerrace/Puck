@@ -382,6 +382,46 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         Assert.NotEmpty(collection: fixture.Server.Population.DiagnosticColliders);
         Assert.All(collection: fixture.Server.Population.DiagnosticColliders, action: static collider => Assert.Equal(expected: TargetCreation, actual: collider.Creation));
     }
+    /// <summary>A solid row whose response shows a creation of another shape collides as that shape from the tick it
+    /// shows it, and back as its authored one when the response lets go, with the population revision standing.</summary>
+    [Fact]
+    public void ASolidRowCollidesAsTheShapeItShows() {
+        var document = CrossingDocument();
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.Sphere(id: TargetCreation, scale: 3f)],
+            PlacementRowsRaw = [(document.Placements[0] with { Solid = new WorldSolid(Margin: 0f) })],
+            Rules = [],
+        }));
+
+        void Set(long value) {
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+                Principal: Principal.Console,
+                Row: CounterRow,
+                Key: StateRow.SlotKey.Value,
+                Value: value,
+                Kind: WorldDocumentWriteKind.Set
+            ));
+            fixture.Step();
+        }
+
+        fixture.Step();
+
+        var revision = fixture.Server.Population.Revision;
+        var authored = Assert.Single(collection: fixture.Server.Population.DiagnosticColliders).Collider;
+
+        Set(value: 5L);
+
+        var shown = Assert.Single(collection: fixture.Server.Population.DiagnosticColliders);
+
+        Assert.Equal(expected: TargetCreation, actual: shown.Creation);
+        Assert.True(condition: (shown.Collider.Radius > authored.Radius));
+
+        Set(value: 0L);
+
+        Assert.Equal(expected: authored, actual: Assert.Single(collection: fixture.Server.Population.DiagnosticColliders).Collider);
+        Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
+    }
     /// <summary>An upsert that writes a holding mask refuses a bit past the row's entries by name,
     /// leaving the row as it was.</summary>
     [Fact]

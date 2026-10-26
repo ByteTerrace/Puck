@@ -302,12 +302,17 @@ internal static class WorldBenchmarks {
         var changed = new long[Samples];
         var changedBytes = new long[Samples];
 
+        // Each builder is sized from the one before it, as the frame source sizes a live rebuild's from the program
+        // it replaces.
+        var (instructions, instances, materials, polygons) = (0, 0, 0, 0);
+
         void Emit(long[] times, long[] bytes, int sample) {
-            var builder = new Puck.SignedDistance.SdfProgramBuilder();
+            var builder = new Puck.SignedDistance.SdfProgramBuilder(convexPolygonCapacity: polygons, instanceCapacity: instances, instructionCapacity: instructions, materialCapacity: materials);
             var start = Stopwatch.GetTimestamp();
 
             bytes[sample] = AllocationWindow.Total(window: () => emitter.Emit(builder: builder, context: in context));
             times[sample] = (Stopwatch.GetTimestamp() - start);
+            (instructions, instances, materials, polygons) = (builder.InstructionCount, builder.InstanceCount, builder.MaterialCount, builder.ConvexPolygonCount);
         }
 
         emitter.Tick(deltaSeconds: 0f);

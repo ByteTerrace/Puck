@@ -117,13 +117,9 @@ journal → echo. Precisely:
    dangling reference, foreign asset hash) rejects loudly, definition
    unchanged.
 3. **Validate.** `WorldDefinitionValidator.TryValidate` over the WHOLE
-   candidate — builders and appliers never repeat semantic checks. Two kinds
-   validate only what they can have changed: a state-value write its touched
-   rows (`TryValidateStateMutation`), and a **response swap**
-   (`WorldDocument.IsResponseSwap`: an `UpsertPlacement`, or a `Batch` of them,
-   moving nothing of an existing responding row but its `holding` bits) its
-   bits alone, since every alternative the row can show, with its colliders
-   and faces, was validated with the document.
+   candidate — builders and appliers never repeat semantic checks. A
+   state-value write validates only the rows it touched
+   (`TryValidateStateMutation`).
 4. **Capacity.** If the kind is render-envelope-affecting
    (`AffectsRenderEnvelope`), `m_envelope.TryFit(candidate)` counts the
    candidate's render scene on the CPU (`WorldSceneEnvelope`, registered on
@@ -137,13 +133,6 @@ journal → echo. Precisely:
 6. **Install.** Swap the live definition; `Install` rebuilds only the changed
    section's derived state, with a population rebuild when
    `AffectsPopulation(mutation)` (or a field change under the field provider).
-   A response swap keeps the live arena, the compiled rules and every other
-   derived product (`InstallResponseSwap`): it marks the definition delivery
-   and rebuilds the population only when a swapped row is solid, whose shown
-   creation's colliders the contact field holds. The response sweep
-   (`WorldTick.SweepPlacementResponses`) lands every row a tick moves as one
-   such mutation, so a switch that flips eight rows pays one admission, one
-   install and one journal entry, and the rows land together or not at all.
 7. **Journal.** Append a `WorldJournalEntry(Tick, EngineTick, Mutation)` to `WorldDocument`'s journal. The `dirty` count in
    `world.status` IS the journal length.
 8. **Echo.** One `[world.mutation: … applied]` stderr line plus a
@@ -153,6 +142,27 @@ journal → echo. Precisely:
 
 A mutation's visual effect is a side effect of the delivered definition —
 rendering derives from it on revision moves, never from a draw call.
+
+**Responses are not mutations.** A placement's `holding` mask is runtime state
+the response sweep (`WorldTick.SweepPlacementResponses`) derives from state
+cells and the field lattice. A tick's moved masks install together through
+`WorldDocument.InstallResponseSelection`: the live rows are replaced by
+`WorldDefinition.WithPlacementHoldings` (frames, spatial index and, for
+face-free creations, the face catalog carry over), nothing is journalled or
+validated, no rule, arena, body or input hold moves, and the change reaches
+sinks as a value delivery (`DeliverState`). A solid row's colliders are
+compiled for every creation it can show when the contact field builds
+(`WorldColliderSet` `Shows`), so a change whose creations compile to the same
+colliders (a lit and an unlit floor) leaves the contact field, navigation and
+the population revision as they were (`WorldColliderSet.TryCarryAcrossHolding`);
+otherwise only the solid consumers compile again
+(`WorldPopulation.InstallResponseSolids`). A client bumps
+`WorldClient.ResponseRevision` for a face-free change, which recomposes the
+program once and rebuilds the presentation field, and its definition revision
+only when a creation shown before or after carries a face, camera or sound
+(`WorldPlacementResponse.CompareHoldings`). A checkpoint carries the masks in
+the exported rows. A console upsert that writes `holding` is an ordinary
+placement edit, and the next sweep derives the mask again.
 
 **Timing classes.** Most kinds apply LIVE on delivery. `IsDocumentDefaults`
 (`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) update document

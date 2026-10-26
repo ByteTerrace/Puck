@@ -430,6 +430,15 @@ public sealed class WorldColliderSet : IContactField {
                     placement: placement,
                     worldSeed: worldSeed
                 );
+
+                if (placement.Respond is { Count: > 0 } responses) {
+                    compiled = CompileShows(
+                        creations: definition.Creations,
+                        placement: placement,
+                        responses: responses,
+                        shown: compiled
+                    );
+                }
             }
 
             placementsCompiled[placement] = compiled;
@@ -468,10 +477,48 @@ public sealed class WorldColliderSet : IContactField {
         };
     }
     // One static solid row's colliders, compiled from the creation it shows at its resolved frame, with the inputs they
-    // were compiled from.
+    // were compiled from. A responding row also holds the colliders of every creation it can show, compiled with it at
+    // the same frame (Shows, keyed by creation and holding this entry too), so a response change compiles nothing.
     private sealed record PlacementColliders(WorldPrototype Creation, CompiledPlacementFrame Frame, ulong WorldSeed, bool DefaultGrip,
         FixedStaticCollider[] Colliders, WorldDiagnosticCollider[] Diagnostics, bool Holdable, bool HoldableIsOverride, int Spheres,
-        int Boxes, int Cylinders, int Planes);
+        int Boxes, int Cylinders, int Planes, IReadOnlyDictionary<WorldPrototype, PlacementColliders>? Shows = null);
+
+    // Compiles a responding row's colliders for its authored creation and every response entry's, beside the one it
+    // shows, and returns the shown entry holding them all.
+    private static PlacementColliders CompileShows(IReadOnlyList<WorldPrototype> creations, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, PlacementColliders shown) {
+        var shows = new Dictionary<WorldPrototype, PlacementColliders>(comparer: ReferenceEqualityComparer.Instance);
+
+        for (var index = -1; (index < responses.Count); index++) {
+            var id = ((index < 0) ? placement.PrototypeId : responses[index]?.PrototypeId);
+
+            if (
+                (id is null) ||
+                (WorldDefinitionRows.FindCreation(creations: creations, id: id) is not { } creation) ||
+                shows.ContainsKey(key: creation)
+            ) {
+                continue;
+            }
+
+            shows[creation] = (ReferenceEquals(objA: creation, objB: shown.Creation)
+                ? shown
+                : CompilePlacement(
+                    creation: creation,
+                    defaultGrip: shown.DefaultGrip,
+                    frame: shown.Frame,
+                    placement: placement,
+                    worldSeed: shown.WorldSeed
+                )
+            );
+        }
+
+        foreach (var creation in shows.Keys.ToArray()) {
+            shows[creation] = (shows[creation] with { Shows = shows });
+        }
+
+        return (shows.TryGetValue(key: shown.Creation, value: out var entry)
+            ? entry
+            : (shown with { Shows = shows }));
+    }
 
     // The static solid rows this set compiled, by row, so a set built from a later definition takes the rows that stand.
     private Dictionary<WorldPlacement, PlacementColliders> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
@@ -507,13 +554,13 @@ public sealed class WorldColliderSet : IContactField {
 
             var next = (ReferenceEquals(objA: creation, objB: compiled.Creation)
                 ? compiled
-                : CompilePlacement(
+                : ((compiled.Shows?.GetValueOrDefault(key: creation)) ?? CompilePlacement(
                     creation: creation,
                     defaultGrip: compiled.DefaultGrip,
                     frame: compiled.Frame,
                     placement: after,
                     worldSeed: compiled.WorldSeed
-                )
+                ))
             );
 
             if (

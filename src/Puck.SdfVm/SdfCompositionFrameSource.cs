@@ -284,7 +284,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             instructionCapacity: (previous?.InstructionCount ?? 0),
             instanceCapacity: (previous?.Instances.Count ?? 0),
             materialCapacity: (previous?.MaterialCount ?? 0),
-            screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0)
+            screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0),
+            convexPolygonCapacity: (previous?.ConvexPolygonProfileCount ?? 0)
         );
 
         Emit(

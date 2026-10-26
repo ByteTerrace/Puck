@@ -2371,6 +2371,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // ReconcileDelivery call always reconciles once, exactly like every later delivery.
         m_builtDefinitionRevision = int.MinValue;
         ObserveShadows();
+        // What a response can show compiles now, off the frame thread, rather than on the frame that first shows it.
+        _ = Task.Run(action: () => PrepareResponses(definition: definition));
+    }
+
+    private static void PrepareResponses(WorldDefinition definition) {
+        try {
+            _ = WorldPlacementStamper.PrepareResponses(definition: definition);
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+            Console.Error.WriteLine(value: $"[world.presentation: the creations responses show were not prepared ahead; each compiles when first shown: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+        }
     }
 
     // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the

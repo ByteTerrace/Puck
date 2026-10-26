@@ -18,7 +18,6 @@
         <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
         <PublishReadyToRun Condition="'$(PublishReadyToRun)' == '' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
         <TieredPGO>false</TieredPGO>
-        <TieredCompilation>false</TieredCompilation>
     </PropertyGroup>
     <!-- A coverage-recording build (puck affected, record mode) stamps the metadata WorldMethodRecorder looks for. -->
     <ItemGroup Condition="'$(PuckRecordMethods)' == 'true'">

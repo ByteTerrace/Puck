@@ -1014,6 +1014,43 @@ public static class WorldPlacementStamper {
             }
         }
     }
+    /// <summary>Emits, into a builder of its own that nothing renders, each static responding row as every creation it
+    /// can show, so the documents those creations compile to, their compiled profiles and meshes, and the code that
+    /// emits them are ready before a response first shows one. Text is left to its first emission. Safe on any thread:
+    /// it reads <paramref name="definition"/> and writes only its own builder and the shared compiled-product caches.</summary>
+    /// <param name="definition">The definition whose responding rows are emitted.</param>
+    /// <returns>How many row-and-creation pairs were emitted.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static int PrepareResponses(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var shows = new List<WorldPlacement>();
+
+        foreach (var placement in definition.Placements) {
+            if (placement.Respond is not { Count: > 0 } responses) {
+                continue;
+            }
+
+            shows.Add(item: (placement with { Holding = 0 }));
+
+            for (var index = 0; (index < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); index++) {
+                shows.Add(item: (placement with { Holding = (1 << index) }));
+            }
+        }
+
+        if (shows.Count > 0) {
+            EmitStatic(
+                builder: new SdfProgramBuilder(),
+                creations: definition.Creations,
+                definition: definition,
+                meshDraws: new List<SdfMeshDraw>(),
+                placements: shows,
+                volumes: new List<SdfVolume>()
+            );
+        }
+
+        return shows.Count;
+    }
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
