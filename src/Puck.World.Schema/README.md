@@ -3145,9 +3145,10 @@ frames, and seed ride the checkpoint and hash.
 Search spends work, not nodes. One judge run costs the sum of the
 frame-evaluable rules' work-sheet lines. What `RuleCapacity.
 MaxWorkUnitsPerTick` leaves after the sheet, less one fold of every row (the
-stamp that tells a job its inputs moved), is divided equally among the jobs;
-a share's remainder goes unspent, no job borrows another's, and nothing carries
-to the next tick. That share is the job's allowance. Every unit of the walk has
+stamp that tells a job its inputs moved), is every job's allowance: a tick
+steps one job with work to do (enabled, and its inputs moved, its walk open or
+its answer not yet landed), the tick's turn picking which when several have it
+(`ArenaSearch.Step`), and nothing carries to the next tick. Every unit of the walk has
 a price: a cursor move, a candidate resolved and refused, a candidate applied,
 judged, scored, keyed and folded, a chance outcome, a tree step. The walk
 reserves its costliest unit before it runs any and yields when that no longer

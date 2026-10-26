@@ -13,11 +13,13 @@ in its `placements` block and `galleryState()` in its `state.world` block,
 concatenates `gallerySpawns` into its `spawnPoints` and `galleryCommands` into
 its `commands`, and declares the font the labels emboss in.
 [`hall.puck`](hall.puck) is the building: its shell, floors, stairs, lift,
-lights, level boards, tour and keys. The lobby holds a games corner: the gaming
-devices stand in a row ([`devices.md`](devices.md)), and west of the entrance
-the chess table ([`chess.md`](chess.md)) and a desktop computer showing the
-whole desktop ([`desktop.md`](desktop.md)). The east end of level 0 is the painting
-wing, five portal paintings behind a doorway ([`paintings.md`](paintings.md)).
+lights, level boards, tour and keys. West of the entrance the lobby holds a
+desktop computer showing the whole desktop ([`desktop.md`](desktop.md)) and the
+big painting to Wonderland, where the gaming devices stand
+([`devices.md`](devices.md)). The east end of level 0 is the painting wing,
+five portal paintings behind a doorway ([`paintings.md`](paintings.md)), and the
+east end of level 2 is the board game room, the chess, Go and Reversi tables
+behind a doorway ([below](#the-board-game-room)).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
 in small type under the label saying what the exhibit demos and what to look
@@ -42,16 +44,16 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
 | x 20 to 70 | The halls: each level's rows run along +X from x = 23; section signs hang above the first exhibit, facing the landing down the hall |
 | x 51 to 69.7, z 12.3 to 39.7, level 0 | The painting wing: a partition at x = 51 with a doorway at z 24 to 28, and five portal paintings ([`paintings.md`](paintings.md)). Level 1's floor is holed and railed over the ceiling painting of the endless fall, at (66, 22.6) |
+| x 51 to 69.7, z 12.3 to 39.7, level 2 | The board game room: a partition at x = 51 with a doorway at z 24 to 28, and the chess, Go and Reversi tables ([below](#the-board-game-room)) |
 | South, north and east walls | A 2.4 m window band on every level, a blind in every window; the roof's skylights light level 3 |
 
 The lobby on level 0, from the entrance north. The walk from the door to the
-lift and the stairs runs at x 14 to 18 and stays clear; the games corner stands
-west of it.
+lift and the stairs runs at x 14 to 18 and stays clear; the desk and the painting
+stand west of it.
 
 | Where | What |
 |---|---|
-| (12.4, 16) | The hanging map board, left of the door, facing it: how to get around, the levels and their rows, and the painting wing (`debug.go portals`) |
-| (12.2, 20), x 11.2 to 13.2, z 19 to 21 | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side |
+| (12.4, 16) | The hanging map board, left of the door, facing it: how to get around, the levels and their rows, the painting wing (`debug.go portals`) and the board game room (`debug.go boardroom`) |
 | x 10.33 to 11.08, z 22.95 to 24.45 | The desktop computer against the west wall, its monitor facing +X and its chair at (11.55, 23.7) ([`desktop.md`](desktop.md)) |
 | West wall, z 30.5 | The big painting to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
 | West wall, z 32.5 | The level's light switch |
@@ -110,7 +112,9 @@ group's material ids; the irradiance volume retraces under the new materials and
 blinds. Each level's switch is a plate on the west wall at z = 32.5, south of
 the stairs, 1.1 to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator
 when on, a green locator glow when off, so it shows in the dark. The two are one
-geometry, so a flip bakes nothing.
+geometry, so a flip bakes nothing. Level 2 has a second plate on the same
+circuit inside the board game room's doorway, as a room with two doors has
+([below](#the-board-game-room)).
 
 Each level's blinds stand apart from its lights: `hallBlinds` holds each level's
 (`Up` or `Down`), every level starts `Down`, and `gallery.blinds <level>
@@ -138,6 +142,36 @@ one in 49,000 and a skylight's in 95,000, so a lowered level adds about
 the device screens' and the entrance's; the lit levels above still light the
 stairwell, which is open between floors.
 
+### The board game room
+
+The east end of level 2, x 51 to 69.7 and z 12.3 to 39.7, is the board game
+room, partitioned from the hall as the painting wing is on level 0: a wall in
+the hall's grey at x 51 to 51.3, from the floor to the slab above, with a
+2.95 m doorway at z 24 to 28 (`boardroom-shell` in [`hall.puck`](hall.puck)).
+A section board in the rows' style hangs before the doorway, facing the landing
+down the hall, and names the room (`BOARD GAMES`). The room is part of level 2:
+it keeps the window band and level 2's blinds, its ceiling strips are level 2's
+and two columns of level 2's downlights hang over its tables (x 56.5 and 65,
+over each aisle's strip), so level 2's switch lights it. A second plate for that
+switch stands on the partition's east face north of the doorway, at z = 29.5
+(`body.pose spawn:boardroom-switch`). `debug.go boardroom` stands a body inside
+the doorway, facing in.
+
+| Where | What |
+|---|---|
+| (56.5, 22.6), 2 m square | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side; `debug.go chess` |
+| (65, 22.6), 3.5 by 1.7 m | The Reversi table ([`reversi.md`](reversi.md)): Black sits on its -Z side, White on its +Z side, each tray at its player's right; `debug.go reversi` |
+| (56.5, 30.6), 3.5 by 1.7 m | The Go table ([`go.md`](go.md)): Black on its -Z side, White on its +Z side; `debug.go go` |
+| (65, 30.6) | Free, for the next game |
+
+Every table is a tabletop: walk within 2.5 m of its board and press the context
+button (E, or RB on a pad) to sit down, the camera easing to the board from the
+side she stands on; the same button stands her up. Seated, the keys, the pad or
+the pointer move a cursor over the board and the pick button plays. Each game has
+a computer opponent on one side by default and either side can be given to it,
+or neither. The pieces are rigid bodies: whatever moves them, the rules read the
+settled table and judge it.
+
 ### Getting around
 
 | To | How |
@@ -147,6 +181,7 @@ stairwell, which is open between floors.
 | Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
 | Ride the lift | Stand in the car facing its back wall, where the brushed panel has a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |
+| Go to the board game room | `debug.go boardroom` (its doorway, facing in), or `debug.go chess`, `go` or `reversi` (a table's edge, close enough to sit) |
 | Raise or lower a level's blinds | `gallery.blinds <level> up\|down`; down, the default, keeps daylight off the exhibits |
 | Inspect without the showcase lighting | `gallery.inspect on\|off`: On lights every surface from five unshadowed neutral directional fills (60 lux each), raises the sky ambient gain to 2.5 against the authored 0.40625, pins the camera at EV100 7 with no local adaptation (about where the lit hall meters) and takes the screens out of the traced light, so a capture reads albedo and form alike at every exhibit, shadowed sides included. The sky ambient barely reaches the baked interior, so the fills do the work there. Off writes the authored values back exactly. It touches only those render values (`galleryFill` cells bound by the fill lights' illuminance, `render.environment.ambient`, `render.exposure.hold` and `render.indirect.sources.screens`), so the fixtures, strips, blinds and traced bounce stay as `gallery.lights` and `gallery.blinds` leave them; turn it Off for a lighting or photometric check |
 | Switch a level's lights | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
@@ -225,11 +260,11 @@ for the moving ones; the rows' arrays in `shapes.puck` list them in order, and
 | Sweeps and facets | 1, 17 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
 | Blends | 1, 25 | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
 | Folds | 1, 33 | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
-| Forms | 2, 17 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
-| Surfaces | 2, 25 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
-| Motion | 3, 20 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
-| Motion II | 3, 30 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
+| Motion | 2, 17 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
+| Motion II | 2, 25 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
 | Warps II | 2, 33 | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
+| Forms | 3, 17 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
+| Surfaces | 3, 25 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
 | Glass | 3, 37 | glass: an orange acrylic box holding a sphere, a thin pane and a thick block of one window glass, a frosted pane, the rods behind them |
 
 ## Coverage
@@ -419,7 +454,7 @@ render clock, eight 60 Hz frames a pose, and answers none of these controls;
 | Cell | Read by | Console line |
 |---|---|---|
 | `probe` | `motion-state-blend`'s sphere position, author frame | `world.state.cell.set galleryInputs probe [0.1, 1.45, 0.05]` |
-| `reach` | `motion-ik`'s target, a world point | `world.state.cell.set galleryInputs reach [41.5, 15.1, 29.7]` |
+| `reach` | `motion-ik`'s target, a world point | `world.state.cell.set galleryInputs reach [41.5, 10.6, 24.7]` |
 | `tint` | `shape-state-color`'s colour | `world.state.cell.set galleryInputs tint #3A7BD5` |
 
 A `probe` write re-emits the creation and rebakes its seam exactly, where
@@ -437,15 +472,15 @@ world.wait bakes 60
 ```
 
 A placement moves the same way, whole, still or moving:
-`world.row.set placements motion-spin position [35, 14.05, 20]`. `world.reload`
+`world.row.set placements motion-spin position [35, 9.05, 17]`. `world.reload`
 discards every such edit.
 
 ## Inspection recipes
 
 Each recipe frames a row's first three exhibits; move the x of both points by
-2.6 to step along it. The motion rows stand on level 3 (f = 13.55).
+2.6 to step along it. The motion rows stand on level 2 (f = 9.05), at z 17 and 25.
 
-- **Motion vectors.** `view.override camera look 25.6 15.85 15.6 25.6 14.55 20`, then
+- **Motion vectors.** `view.override camera look 25.6 11.35 12.6 25.6 10.05 17`, then
   `world.debug-view motion`. The spin, rock and slide exhibits must read their
   own motion and their plinths stationary, and pausing the clock must still
   every vector within a frame. A capture holds the frame it serves and shows
@@ -458,7 +493,7 @@ Each recipe frames a row's first three exhibits; move the x of both points by
   the motion row 60 ticks apart differ in 436 of 1,152,000 pixels, mostly the
   flow volume (which animates on the render clock); two running ones 30 ticks
   apart differ in 17,394.
-- **Moving blend seam.** `view.override camera look 33.4 15.45 17.2 33.4 14.75 20`,
+- **Moving blend seam.** `view.override camera look 33.4 10.95 14.2 33.4 10.25 17`,
   `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
   box and sphere stretches as the sphere slides away from the pose it baked in.
   Pause or scrub `galleryClock` and the group bakes again at the held pose
@@ -476,22 +511,22 @@ Each recipe frames a row's first three exhibits; move the x of both points by
   mirrored wing pair and the eight blades must stay whole and symmetric through
   the swing; a copy that lags, tears or vanishes is the folded slot losing its
   parent's delta.
-- **Paints and inset on a moving surface.** `view.override camera look 23 15.45
-  27.2 23 14.75 30` for `motion-paint`, then x = 25.6 for `motion-inset`: a stripe,
+- **Paints and inset on a moving surface.** `view.override camera look 23 10.95
+  22.2 23 10.25 25` for `motion-paint`, then x = 25.6 for `motion-inset`: a stripe,
   ring or eye that swims across its surface instead of riding it is a paint
   frame bug. `world.temporal off` shows whether the swim is the resolve's.
   Pause the clock and scrub it (`galleryClock $value 0`, then `1.7`) to compare
   two poses. The parented paints ride the panel, the iris turns with the eye,
   and `motion-spin`'s scratches turn with the box: every layer shades in the
   slot of the shape it lies on. Seen from above
-  (`view.override camera look 23 16.95 19.98 23 14.75 20`), scrubbing the clock
+  (`view.override camera look 23 12.45 16.98 23 10.25 17`), scrubbing the clock
   from 0 to 0.9 turns the box about 41 degrees, and the scratch pattern sampled
   in the box's own frame matches its earlier pose.
-- **Twist, bend and cells in motion.** x = 28.2, 30.8 and 36 on the z 30 row, with
+- **Twist, bend and cells in motion.** x = 28.2, 30.8 and 36 on the z 25 row, with
   `world.debug-view normals`: the dynamic path bakes the warped shape once and
   turns it rigidly, so its normals must hold steady on the surface.
-- **IK.** `view.override camera look 41.2 15.45 27.2 41.2 14.95 30`, then write
-  `galleryInputs reach` around `[41.55, 15, 29.75]`: the hand follows, and the
+- **IK.** `view.override camera look 41.2 10.95 22.2 41.2 10.45 25`, then write
+  `galleryInputs reach` around `[41.55, 10.5, 24.75]`: the hand follows, and the
   arm folds rather than stretches.
 
 ## Evidence per operation

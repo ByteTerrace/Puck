@@ -333,8 +333,8 @@ from a key cell (a flood under a settled-cell budget, -2 when it runs out); a pl
 adjacent components whose only boundary cell is the key cell) keyed on the empty cell — admissible iff
 `boundaryAt > 0 || enclosedAt > 0` — and the `clearEnclosed` transform sweeps those components once the value lands;
 a position's exact identity is `$board:fingerprint:<row>` (`$board:canonical` folds symmetric images together, so a
-ko check against a `history` ring reads the fingerprint; the quarantined
-`experimental/src/Puck.World/Assets/worlds/games/go.puck` is the worked example);
+ko check against a `history` ring reads the fingerprint; the debug world's Go table,
+`worlds/debug/go.puck`, is the worked example);
 `world.match` narrates one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.

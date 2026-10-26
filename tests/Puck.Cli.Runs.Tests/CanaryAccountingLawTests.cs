@@ -169,7 +169,7 @@ public sealed class CanaryAccountingLawTests {
             filter: static result => ((result.Detail == "accounted world.state: 1 response(s) for 1 authored occurrence(s)") && result.Passed)
         );
     }
-    // go-capture's shape: back-to-back row reads, each a header plus its cells, while the tick-boundary narration of
+    // A script of back-to-back row reads, each a header plus its cells, while the tick-boundary narration of
     // the script's earlier world.state.cell.set lines lands on stderr and is sequenced between a header and its cells.
     [Fact]
     public void StderrNarrationSequencedInsideBackToBackRowAnswersNeverOpensAnExtraResponse() {

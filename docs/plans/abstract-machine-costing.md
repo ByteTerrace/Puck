@@ -364,9 +364,9 @@ A compiled search job has a deterministic work allowance. A node counter is an
 authored limit and diagnostic, never a unit of computational cost. In the
 heuristic units the allowance is what the rules' work sheet and one fold of
 every row (the stamp that tells a job its inputs changed) leave of the per-tick
-ceiling, divided equally among the declared jobs, with each share's remainder
-unspent and no job borrowing from another (`WorldSearchCompilation.TryPlanAll`).
-Nothing infers available work from idle jobs or host timings.
+ceiling, and every declared job gets the whole of it, since a tick steps one job
+with work to do and several take turns (`WorldSearchCompilation.TryPlanAll`,
+`ArenaSearch.Step`). Nothing infers available work from host timings.
 
 The search walk is resumable bounded units. Every unit is priced, the costliest
 is reserved before any runs, and a walk yields when the next unit does not fit.

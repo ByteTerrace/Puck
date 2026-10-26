@@ -162,7 +162,7 @@ A few prices worth knowing:
   skip per closed verdict the schedule keeps without running the gate
   (`state.rules.skips`), and one firing per committed firing that moved the
   arena (`state.rules.firings`). Puck.World reads them through
-  `WorldRuleHost.RuleWork`; `GoMoveLawTests` pins a Go move's tick by them.
+  `WorldRuleHost.RuleWork`.
 - A pattern over a board costs its ray visits plus one step per cell. When the
   rule asks for the position or length of an occurrence, it adds the square of
   the longest ray in the read's direction, or of the cell count for `any`. A

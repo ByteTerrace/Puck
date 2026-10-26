@@ -183,7 +183,8 @@ case, `stage` when omitted:
 | `devices` | (4, 0.05, 30.5), in Wonderland 2.3 m before the deck's television, at whatever size she is ([`devices.md`](devices.md)) | -X, toward the television |
 | `wonderland` | (13.3, 0.05, 30.5), in the gallery lobby 3 m before the big painting ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
 | `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
-| `chess` | (12.2, 0.05, 18.4), at White's edge of the chess table in the gallery lobby, close enough to sit | +Z, across the board |
+| `boardroom` | (53, 9.05, 26), inside the board game room's doorway on the gallery's level 2 | +X, into the room |
+| `chess`, `go`, `reversi` | (56.5, 9.05, 21), (56.5, 9.05, 29) and (65, 9.05, 21), at White's edge of the chess table and Black's of the Go and Reversi tables in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md)), close enough to sit | +Z, across the board |
 | `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
 | `portals` | (53.5, 0.05, 26), the painting wing's doorway | +X, into the wing |
 | `portal-garden`, `portal-night` | (57, 0.05, 36.3) and (64, 0.05, 36.3), before the garden and night paintings | +Z; walk ahead to cross |
