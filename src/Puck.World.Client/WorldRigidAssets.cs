@@ -11,7 +11,9 @@ namespace Puck.World.Client;
 /// <summary>Local creation geometry shared by rigid bodies. Copies own a root pose and identity, never field instructions.</summary>
 public sealed class WorldRigidAssets {
     private sealed record AssetMetadata(bool Rigid, float Reach, int Slots);
+
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldPrototype, AssetMetadata> MetadataCache = new();
+
     private readonly List<WorldPrototype> m_assets = [];
     private readonly Dictionary<string, int> m_indices = new(StringComparer.Ordinal);
     private readonly List<int> m_slots = [];
@@ -55,19 +57,22 @@ public sealed class WorldRigidAssets {
 
     /// <summary>Returns whether geometry has no independently changing fields or parts.</summary>
     public static bool IsRigid(WorldPrototype creation, WorldLook? look = null) {
-        return Metadata(creation).Rigid && ((look is null) || (look.Motion.PartDynamics is not { Count: > 0 }));
+        return (Metadata(creation).Rigid && ((look is null) || (look.Motion.PartDynamics is not { Count: > 0 })));
     }
+
     // Definitions are immutable. Inspect their fields once, rather than once per wearing body per frame.
     private static AssetMetadata Metadata(WorldPrototype creation) => MetadataCache.GetValue(creation, static prototype => {
         var document = prototype.EngineDocument;
-        var shapes = document.Shapes ?? [];
+        var shapes = (document.Shapes ?? []);
         var rigid = ((document.Frames is not { Count: > 0 }) && (document.Drivers is not { Count: > 0 }) &&
             (document.Effectors is not { Count: > 0 }) && (document.Cameras is not { Count: > 0 }) &&
             (document.Behavior?.Faces is not { Count: > 0 }) &&
             shapes.All(shape => ((shape.Swings is not { Count: > 0 }) && (shape.Slides is not { Count: > 0 }) && (shape.Erode is null) && (shape.Morph is null))));
-        var mixed = shapes.Any(shape => document.IsGlassShape(shape)) && shapes.Any(shape => !document.IsGlassShape(shape));
-        return new AssetMetadata(rigid, rigid ? CreationStampEmitter.RenderReach(document, 1, null, composeBlends: true) : 0, mixed ? 2 : 1);
+        var mixed = (shapes.Any(shape => document.IsGlassShape(shape)) && shapes.Any(shape => !document.IsGlassShape(shape)));
+
+        return new AssetMetadata(rigid, (rigid ? CreationStampEmitter.RenderReach(document, 1, null, composeBlends: true) : 0), (mixed ? 2 : 1));
     });
+
     /// <summary>Retains one template per eligible definition and the live body's lightweight occurrences.</summary>
     public void Reconcile(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldCreationInstances.BodyStamp> bodies, IReadOnlyList<WorldLook>? looks, IReadOnlyList<WorldPlacement> placements) {
         var used = new HashSet<string>(StringComparer.Ordinal);
@@ -87,6 +92,7 @@ public sealed class WorldRigidAssets {
             m_indices.Add(creation.Id, m_assets.Count);
             m_assets.Add(creation);
             var metadata = Metadata(creation);
+
             m_reaches.Add(metadata.Reach);
             m_offsets.Add(m_slotCount);
             m_slotCount += metadata.Slots;

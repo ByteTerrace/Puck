@@ -48,6 +48,7 @@ public sealed class SdfNestedFieldScopeLawTests {
         Assert.Equal(4, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
         Assert.True(condition: program.InstancesComposable);
         var evaluator = new SdfFieldEvaluator(program);
+
         Assert.True(evaluator.TryDistance(FixedPosition.FromLocal(FixedVector3.Zero), out var distance, out var winner));
         Assert.Equal(-FixedQ4816.One, distance);
         Assert.Equal(material, winner);

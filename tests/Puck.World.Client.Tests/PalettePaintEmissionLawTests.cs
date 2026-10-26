@@ -8,8 +8,9 @@ using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>A palette slot's paints reach the program's materials: a pooled placement resolves a parented paint to its
-/// parent shape's own dynamic slot and scales its lengths by the placement, and keeps an unparented paint in the
+/// <summary>A palette slot's paints reach the program's materials: a creation resolves a parented paint into its
+/// parent's motion-owner frame. Rigid templates keep local lengths; articulated emission scales them by the placement.
+/// An unparented paint stays in the
 /// winning frame; a static placement, whose one palette serves every placement and which rides no slot, draws only the
 /// unparented paint.</summary>
 public sealed class PalettePaintEmissionLawTests {
@@ -40,16 +41,28 @@ public sealed class PalettePaintEmissionLawTests {
     private static IReadOnlyList<SdfPaint> PaintsOf(SdfProgram program) =>
         program.Materials.Single(predicate: static material => (material.Paints is { Count: > 0 })).Paints!;
 
-    [Fact]
-    public void APooledPlacementRidesTheParentSlotAndScalesTheParentedPaint() {
-        var paints = PaintsOf(program: CreationDomainParentLawTests.EmitProgram(creation: Creation(), scale: Scale));
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACreationPaintRidesItsParentsMotionFrame(bool articulated) {
+        var creation = Creation();
+        if (articulated) {
+            creation = CreationFixtures.Prototype(id: creation.Id, document: creation.Document with {
+                Drivers = [new CreationDriverDocument(Name: "clock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)]
+            });
+        }
+        var program = CreationDomainParentLawTests.EmitProgram(creation: creation, scale: Scale);
+        var material = program.Instructions.First(instruction => instruction.Op == SdfOp.ShapeBlend).Material;
+        var paints = program.Materials[(int)material].Paints!;
+        var localScale = articulated ? Scale : 1f;
 
         Assert.Equal(expected: 2, actual: paints.Count);
-        Assert.Equal(expected: (CreationDomainParentLawTests.RootSlot + 2), actual: paints[0].Slot);
-        Assert.Equal(expected: new Vector3(x: (0.1f * Scale), y: 0f, z: 0f), actual: paints[0].Origin);
-        Assert.Equal(expected: (0.01f * Scale), actual: paints[0].Stroke);
+        Assert.Equal(expected: articulated ? CreationDomainParentLawTests.RootSlot : SdfPaint.WinningFrame, actual: paints[0].Slot);
+        // The parent's authored +X is -X in the engine's root frame.
+        Assert.Equal(expected: new Vector3(x: (-0.1f * localScale), y: localScale, z: 0f), actual: paints[0].Origin);
+        Assert.Equal(expected: (0.01f * localScale), actual: paints[0].Stroke);
         Assert.Equal(expected: SdfPaint.WinningFrame, actual: paints[1].Slot);
-        Assert.Equal(expected: (0.02f * Scale), actual: paints[1].Stroke);
+        Assert.Equal(expected: (0.02f * localScale), actual: paints[1].Stroke);
     }
     [Fact]
     public void AStaticPlacementDrawsOnlyTheUnparentedPaint() {

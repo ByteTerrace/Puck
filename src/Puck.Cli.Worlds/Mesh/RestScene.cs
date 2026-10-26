@@ -71,6 +71,7 @@ public sealed class RestScene {
         );
         var pool = new WorldCreationInstances();
         var text = new WorldTextCatalog(source: new WorldDefinitionSource(Definition: definition, SourcePath: sourcePath));
+
         text.Reconcile(definition: definition);
         var emitter = new WorldSceneEmitter(
             animator: pool,

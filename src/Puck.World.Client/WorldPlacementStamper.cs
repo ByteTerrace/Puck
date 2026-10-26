@@ -165,7 +165,7 @@ public static class WorldPlacementStamper {
         }
     }
 
-    // A palette slot's paints. A pooled placement resolves a parented paint to its parent shape's own dynamic slot and
+    // A palette slot's paints. A creation resolves a parented paint into its parent's motion-owner frame and
     // scales it by the placement; a static placement shares one palette across its placements and has no slot, so it
     // draws only the paints that ride the winning frame, as authored. A paint parented to a shape the isolation hides
     // goes with it.
