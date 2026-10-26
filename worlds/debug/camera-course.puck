@@ -64,7 +64,16 @@ template courseTunnel() {
 template courseColonnade() {
   courseBox(label: "colonnade-wall", x0: 0, x1: 13, y0: 0, y1: 3, z0: 16.4, z1: 16.6, slot: courseWall)
   for k in range(0, 8) {
-    courseBox(label: $"pillar-{k}", x0: ((1 + (1.6 * k)) - 0.175), x1: ((1 + (1.6 * k)) + 0.175), y0: 0, y1: 3, z0: 14.825, z1: 15.175, slot: coursePillar)
+    courseBox(
+      label: $"pillar-{k}",
+      x0: ((1 + (1.6 * k)) - 0.175),
+      x1: ((1 + (1.6 * k)) + 0.175),
+      y0: 0,
+      y1: 3,
+      z0: 14.825,
+      z1: 15.175,
+      slot: coursePillar
+    )
   }
 }
 

@@ -6,10 +6,23 @@ namespace Puck.Transpiler.Formatting;
 
 public static partial class PuckPrinter {
     private sealed partial class Writer {
-        private void Arguments(IReadOnlyList<ArgumentNode> arguments, int level, bool multiLine = false) {
+        // A call's parenthesized argument list: as its author broke it, or one argument a line, each but the last
+        // keeping its comma, when it does not fit on one.
+        private void ArgumentList(IReadOnlyList<ArgumentNode> arguments, int level, bool multiLine = false) {
+            var everyLine = (!multiLine && (arguments.Count > 0) && !FitsOnOneLine(print: () => ArgumentList(arguments: arguments, level: level)));
+
+            m_builder.Append(value: '(');
+            Arguments(arguments: arguments, everyLine: everyLine, level: level, multiLine: (multiLine || everyLine));
+            if (multiLine || everyLine) {
+                EndLine();
+                Indent(level: level);
+            }
+            m_builder.Append(value: ')');
+        }
+        private void Arguments(IReadOnlyList<ArgumentNode> arguments, int level, bool multiLine = false, bool everyLine = false) {
             for (var index = 0; (index < arguments.Count); index++) {
                 var argument = arguments[index];
-                var breaks = (multiLine && (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0)));
+                var breaks = (everyLine || (multiLine && (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0))));
 
                 if (
                     (index > 0) &&
@@ -34,7 +47,7 @@ public static partial class PuckPrinter {
                 );
                 if (
                     argument.Trivia.Separated &&
-                    (((index + 1) >= arguments.Count) || arguments[(index + 1)].Trivia.OnNewLine || (arguments[(index + 1)].Trivia.Leading.Count > 0))
+                    (everyLine || ((index + 1) >= arguments.Count) || arguments[(index + 1)].Trivia.OnNewLine || (arguments[(index + 1)].Trivia.Leading.Count > 0))
                 ) {
                     m_builder.Append(value: ',');
                 }
@@ -58,7 +71,14 @@ public static partial class PuckPrinter {
 
                 return;
             }
-            if (!array.Trivia.MultiLine) {
+            var everyLine = (!array.Trivia.MultiLine && !FitsOnOneLine(print: () => Array(array: array, level: level)));
+
+            if (everyLine && array.Elements.All(predicate: IsScalar)) {
+                FilledArray(array: array, level: level);
+
+                return;
+            }
+            if (!array.Trivia.MultiLine && !everyLine) {
                 m_builder.Append(value: '[');
                 for (var index = 0; (index < array.Elements.Count); index++) {
                     if (index > 0) { m_builder.Append(value: ", "); }
@@ -72,13 +92,15 @@ public static partial class PuckPrinter {
                 return;
             }
             // The author's own line breaks decide where the rows fall, so a board written eight to a row keeps its
-            // rows and a list written one to a line keeps its lines.
+            // rows and a list written one to a line keeps its lines. One the printer breaks takes an element a line,
+            // as an author writes a list of blocks: the line break separates two elements.
             m_builder.Append(value: '[');
             if (array.Trivia.Opening is not null) { m_builder.Append(value: ' ').Append(value: array.Trivia.Opening); }
             for (var index = 0; (index < array.Elements.Count); index++) {
                 var element = array.Elements[index];
-                var breaks = (element.Trivia.OnNewLine || (element.Trivia.Leading.Count > 0));
+                var breaks = (everyLine || element.Trivia.OnNewLine || (element.Trivia.Leading.Count > 0));
                 var joins = (
+                    !everyLine &&
                     ((index + 1) < array.Elements.Count) &&
                     !(array.Elements[(index + 1)].Trivia.OnNewLine || (array.Elements[(index + 1)].Trivia.Leading.Count > 0))
                 );
@@ -104,7 +126,7 @@ public static partial class PuckPrinter {
                 // A line break does not end an expression: a following element opening with a sign or a parenthesis
                 // would read as this one's continuation, so one takes a separator whether its author wrote it or not.
                 if (!joins && (
-                    element.Trivia.Separated ||
+                    (element.Trivia.Separated && !everyLine) ||
                     (((index + 1) < array.Elements.Count) &&
                     ContinuesPreviousElement(element: array.Elements[(index + 1)], level: (level + 1)))
                 )) {
@@ -128,7 +150,10 @@ public static partial class PuckPrinter {
 
                 return;
             }
-            if (!@object.Trivia.MultiLine) {
+            // One the printer breaks is written as a block: a property a line, no commas.
+            var everyLine = (!@object.Trivia.MultiLine && !FitsOnOneLine(print: () => Object(level: level, @object: @object)));
+
+            if (!@object.Trivia.MultiLine && !everyLine) {
                 m_builder.Append(value: "{ ");
                 for (var index = 0; (index < @object.Properties.Count); index++) {
                     if (index > 0) { m_builder.Append(value: ", "); }
@@ -145,8 +170,9 @@ public static partial class PuckPrinter {
             if (@object.Trivia.Opening is not null) { m_builder.Append(value: ' ').Append(value: @object.Trivia.Opening); }
             for (var index = 0; (index < @object.Properties.Count); index++) {
                 var property = @object.Properties[index];
-                var breaks = (property.Trivia.OnNewLine || (property.Trivia.Leading.Count > 0));
+                var breaks = (everyLine || property.Trivia.OnNewLine || (property.Trivia.Leading.Count > 0));
                 var joins = (
+                    !everyLine &&
                     ((index + 1) < @object.Properties.Count) &&
                     !(@object.Properties[(index + 1)].Trivia.OnNewLine || (@object.Properties[(index + 1)].Trivia.Leading.Count > 0))
                 );
@@ -169,7 +195,7 @@ public static partial class PuckPrinter {
                     level: (level + 1),
                     property: property
                 );
-                if (!joins && property.Trivia.Separated) { m_builder.Append(value: ','); }
+                if (!joins && property.Trivia.Separated && !everyLine) { m_builder.Append(value: ','); }
                 if (property.Trivia.Trailing is not null) {
                     m_builder.Append(value: ' ').Append(value: property.Trivia.Trailing);
                 }
@@ -188,10 +214,14 @@ public static partial class PuckPrinter {
         private void Expression(ExpressionNode expression, int level) {
             if (expression.Parenthesized) {
                 m_builder.Append(value: '(');
-                Expression(expression: expression with { Parenthesized = false }, level: level);
+                Unparenthesized(expression: expression, level: level);
                 m_builder.Append(value: ')');
                 return;
             }
+            Unparenthesized(expression: expression, level: level);
+        }
+        // The expression inside the parentheses its author wrote around it, if any.
+        private void Unparenthesized(ExpressionNode expression, int level) {
             switch (expression) {
                 case AssetExpressionNode asset: {
                         m_builder.Append(value: "asset ").Append(value: Quote(text: asset.Path));
@@ -223,17 +253,22 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case CallExpressionNode call: {
-                        m_builder.Append(value: call.Name).Append(value: '(');
-                        Arguments(
+                        m_builder.Append(value: call.Name);
+                        ArgumentList(
                             arguments: call.Arguments,
                             level: level,
                             multiLine: call.Trivia.MultiLine
                         );
-                        if (call.Trivia.MultiLine) {
-                            EndLine();
-                            Indent(level: level);
-                        }
-                        m_builder.Append(value: ')');
+
+                        break;
+                    }
+                case BinaryExpressionNode binary when !Fits(node: binary, print: () => Unparenthesized(expression: binary, level: level)): {
+                        BrokenChain(binary: binary, level: level);
+
+                        break;
+                    }
+                case ConditionalExpressionNode conditional when !Fits(node: conditional, print: () => Unparenthesized(expression: conditional, level: level)): {
+                        BrokenConditional(conditional: conditional, level: level);
 
                         break;
                     }
@@ -443,10 +478,10 @@ public static partial class PuckPrinter {
         private string Capture(ExpressionNode expression, int level) {
             var start = m_builder.Length;
 
-            Expression(
+            Flat(print: () => Expression(
                 expression: expression,
                 level: level
-            );
+            ));
 
             var text = m_builder.ToString(
                 length: (m_builder.Length - start),

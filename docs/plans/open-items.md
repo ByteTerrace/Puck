@@ -4,6 +4,10 @@ One checkbox per package, grouped by [programme](README.md); the programme page
 holds each package's owner, deliverables, and check, so follow the link before
 starting work, and tick or remove an item in the same change that closes it.
 
+## Bringing `main` up to date
+
+- [ ] The owner's sequence: the current lanes finish and land, the integrated work is vetted by review, quiet-machine readings (frame times and memory) find no regression, and then the owner decides to push `main`, which deploys.
+
 ## Maths law classification
 
 - [ ] Classify the public Maths surface the retired ratchet grandfathered without

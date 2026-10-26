@@ -5,8 +5,7 @@ using Puck.Transpiler.Diagnostics;
 namespace Puck.World.Transpiler;
 
 /// <summary>The one crossing between a world document's expression IR and the infix text the <c>.puck</c> grammar
-/// and the SQL dialect write: lowering parses text to the IR the document holds, and decompiling prints that IR
-/// back.</summary>
+/// writes: lowering parses text to the IR the document holds, and decompiling prints that IR back.</summary>
 /// <remarks>Both directions run through <see cref="ExpressionSpelling"/>, so print-then-parse is the identity over
 /// every program a document can carry. Text that reaches a program-valued member without parsing is reported as
 /// PUCK002 rather than lowered to an empty program, so a lowering arm that writes something the expression grammar
