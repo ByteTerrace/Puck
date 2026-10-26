@@ -59,6 +59,7 @@ public sealed class WorldShapeIsolationLawTests {
         Assert.Equal(3, program.Instructions.Count(instruction => (instruction.Op == SdfOp.ShapeBlend)));
 
         var painted = program.Materials.Where(material => (material.Paints is not null)).ToArray();
+
         Assert.NotEmpty(painted);
         Assert.All(painted, material => {
             var paint = Assert.Single(material.Paints!);
