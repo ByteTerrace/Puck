@@ -1131,6 +1131,15 @@ stored set's 1.74 GB to 1.02 GB and the mesh region's 1.81 GB to 1.11 GB, and a
 lobby frame's mesh pass from 11.5 M triangles to 4.9 M; the done line counts what
 it removed (`merged=`).
 
+The disk store packs positions against each group's bounds within one 1024th of its contour-cell
+diagonal, encodes unit normals as oct16 pairs, narrows indices and materials, and delta-predicts
+attribute byte planes before Brotli compression. Load reconstructs the CPU query arrays. The GPU
+region uses three-word vertices (20-bit bounds-relative positions and oct16 normals), 16-bit indices
+where the vertex count allows, and byte materials where every level fits. Position packing measures
+every vertex against a further cell-diagonal/2048 budget; insufficient precision retains float
+positions. Every chunk of a group shares the position grid, on disk and on the GPU, so seam vertices
+decode identically. Authored non-unit normals retain their magnitudes. Both backends use the same reader.
+
 The merged mesh then gets two coarser levels (`SdfMeshCollapse`, `SdfMesh.Levels`),
 each a triangle list over the merged mesh's own vertices made by half-edge
 collapses. A collapse is taken only where three measured distances stay within

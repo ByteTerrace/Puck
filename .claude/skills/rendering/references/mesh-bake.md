@@ -344,6 +344,20 @@ laws exercise that boundary.
 
 ## The mesh region
 
+- **Compact attributes share one decoder on both backends.** `SdfMeshPacking` chooses bounds-relative
+  grids shared by every chunk of a group (independent grids open seams). `SdfMeshChunks.Join` gives
+  its chunks that common GPU grid; the store likewise chooses one grid and width for all chunks.
+  Shared vertices must decode bit-identically, including when a group's budget requires float fallback.
+  The GPU uses 20-bit positions only when every decoded vertex moves by at most `BakeCell.Length()/2048`; otherwise
+  positions remain floats. Unit normals use signed oct16 pairs; non-unit authored normals retain their
+  magnitudes as floats. `SdfMeshRecord` carries origin, step and width flags, and `frame/sdf-mesh.hlsli`
+  decodes them for every raster and surface reader. Indices use 16 bits up to 65,536 vertices; triangle
+  materials use bytes when every level fits. Levels concatenate before packing, so their first index
+  need not start a word. The store independently chooses 16/24-bit positions within a cell diagonal
+  over 1024, oct16 normals, narrow indices/materials, then delta-predicts attribute byte planes and
+  Brotli-compresses them (`SdfMeshStoreCodec`). Load checks the envelope and reconstructs the query
+  arrays. Both rounding budgets together remain under 3/1024 of the bake half-diagonal.
+
 - **Meshes keep their words; draws repack only their records.** The tables
   place each mesh whole in an arena past a reserve of draw records
   (`SdfMeshRegionArena`), where it stays while a draw names it, so
@@ -371,7 +385,7 @@ laws exercise that boundary.
   and capped at that ceiling (`SdfWorldTables.MeshRegionGrownBytes`, a pure
   function), so it reads fuller than a doubling would; `world.budget` prints the
   bytes the staged draws use (`MeshRegionUsedBytes`) beside the bytes held and
-  that ceiling. The debug world uses about 1.1 GB of it, and a frame that needs
+  that ceiling. A frame that needs
   more than the ceiling throws `InvalidOperationException` naming the need and
   the ceiling. The ceiling is the whole uints below 4 GiB less the staging
   buffer's header and run table, because a staged region's staging buffer binds
@@ -502,9 +516,8 @@ laws exercise that boundary.
   its value is the key a cache of the store is saved under.
 - **The store keeps whole sets.** Each identity's entries are one set, in a
   directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
-  world's meshes fill about 1.02 GB in about 1,410 entries under one identity
-  and backend; the store keeps `SdfMeshStore.DefaultCapacityBytes` (8 GiB, about
-  eight such sets), shared by every World and worktree on the machine, a set at a
+  world's set is compressed with its mesh codec; the store keeps `SdfMeshStore.DefaultCapacityBytes`
+  (8 GiB), shared by every World and worktree on the machine, a set at a
   time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
   recently read or written entry's, and a write removes whole sets, least
   recently used first, never its own. A set a World is baking or loading is

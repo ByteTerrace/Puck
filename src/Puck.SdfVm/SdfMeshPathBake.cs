@@ -636,7 +636,8 @@ public sealed partial class SdfMeshPathBake {
                 meshes++;
                 triangles += mesh.TriangleCount;
                 vertices += mesh.Positions.Length;
-                bytes += (((((long)mesh.Positions.Length) * SdfMeshRegion.VertexBytes) + (((long)mesh.Indices.Length) * sizeof(uint))) + (((long)mesh.TriangleCount) * sizeof(uint)));
+                bytes += (((long)mesh.Positions.Length + mesh.Normals.Length) * 3 * sizeof(float))
+                    + (((long)mesh.Indices.Length + mesh.TriangleMaterials.Length) * sizeof(uint));
             }
 
             return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";

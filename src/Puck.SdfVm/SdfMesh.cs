@@ -275,9 +275,8 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
 /// backend reads the same word offsets: first one record a draw (<see cref="SdfMeshRecord.DrawWords"/> words), then each distinct
-/// <see cref="SdfMesh"/> once, however many draws share it, as its vertices (<see cref="SdfMeshRecord.VertexWords"/> words each:
-/// position and normal), its triangle materials (one word each, for a mesh that has them) and its
-/// indices (one word each), its own triangles' first and then each of its levels' (<see cref="SdfMesh.Levels"/>), so the
+/// <see cref="SdfMesh"/> once, however many draws share it, as its packed vertices (normally <see cref="SdfMeshRecord.VertexWords"/> words each),
+/// byte triangle materials when their values fit, and 16-bit indices for meshes with at most 65,536 vertices, its own triangles' first and then each of its levels' (<see cref="SdfMesh.Levels"/>), so the
 /// triangles of every level are numbered together and a draw chooses its level by the level it pushes above its index
 /// (<see cref="SdfKernelInterfaces.MeshLevelShift"/>, <see cref="LevelOf"/>). <see cref="Plan"/> lays the meshes out section by section, all vertices, then all triangle
 /// materials, then all indices, in the order their first draw names them; a residency's tables place each mesh whole
@@ -291,16 +290,16 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// 22 to 30), which carries an object-space normal to world space under any scale, nonuniform and mirrored included
 /// (a singular matrix, which draws no area, writes its own upper 3×3 instead). Word 31 is the dynamic-transform slot
 /// whose frame the mesh is stored in (<see cref="SdfMeshDraw.FrameSlot"/>), or -1. Its word offsets are counted from
-/// the region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the
-/// word at <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A
-/// vertex without a normal holds zeros there, and the flags say which a mesh has. Word 32 is the word a mesh with
+/// the region's start, so a reader needs nothing but the record to find a draw's triangles: its flags select each attribute width. Bounds-relative positions use three 20-bit coordinates in two words,
+/// unit normals two signed 16-bit octahedral coordinates in one word. Positions without a sufficient bake budget
+/// and non-unit authored normals retain floats. A zero normal uses a packed sentinel. Word 32 is the word a mesh with
 /// members (<see cref="SdfMeshRecord.SkinFlag"/>) keeps them at, past its indices: their count, then <see cref="SdfMeshRecord.MemberWords"/> words a
 /// member (its slot offset, then its position and orientation), then one word a vertex naming its member. Words 33 to 40
 /// are the draw's carry (<see cref="SdfMeshDraw.CarryRotation"/> as x, y, z, w, then
 /// <see cref="SdfMeshDraw.CarryTranslation"/> and <see cref="SdfMeshDraw.CarryScale"/>), which every world position and
 /// normal the draw resolves goes through last, words 41 to 44 its clip plane (<see cref="SdfMeshDraw.ClipPlane"/>), and
 /// words 45 and 46 the first triangle of its mesh's first and second coarser levels (<see cref="LevelOf"/>), which a draw
-/// of a level adds to the triangle its vertex id names. The record is whole words, so it has no padding a
+/// of a level adds to the triangle its vertex id names. Words 47 to 52 hold the position grid origin and step. The record is whole words, so it has no padding a
 /// structured-buffer reader could disagree on.
 /// </para>
 /// </summary>
@@ -311,9 +310,9 @@ public static class SdfMeshRegion {
     /// <see cref="SdfKernelInterfaces.MeshLevelShift"/>, and writes a covered pixel's draw plus one as a float, which holds
     /// 2^24 exactly.</summary>
     public const int MaxDraws = (1 << SdfKernelInterfaces.MeshLevelShift);
-    /// <summary>The bytes of one index.</summary>
+    /// <summary>The bytes of a wide index; a mesh with at most 65,536 vertices uses half as many.</summary>
     public const int IndexBytes = sizeof(uint);
-    /// <summary>The bytes of one vertex (<see cref="SdfMeshRecord.VertexWords"/> words).</summary>
+    /// <summary>The bytes of one compact vertex; authored float attributes can require more.</summary>
     public const int VertexBytes = (SdfMeshRecord.VertexWords * sizeof(float));
 
     /// <summary>Counts the region a list of draws needs.</summary>
@@ -365,20 +364,20 @@ public static class SdfMeshRegion {
                     SkinWord: skins
                 )
             )) {
-                vertices = checked((vertices + mesh.Positions.Length));
+                vertices = checked((vertices + VertexWordsOf(mesh)));
                 materials = checked((materials + MaterialWordsOf(mesh: mesh)));
                 indices = checked((indices + IndexWordsOf(mesh: mesh)));
                 skins = checked((skins + SkinWordsOf(mesh: mesh)));
             }
         }
 
-        _ = checked((((((draws.Count * SdfMeshRecord.DrawWords) + (vertices * SdfMeshRecord.VertexWords)) + materials) + indices) + skins));
+        _ = checked((((((draws.Count * SdfMeshRecord.DrawWords) + vertices) + materials) + indices) + skins));
 
         var layout = new SdfMeshRegionLayout(
             DrawCount: draws.Count,
             IndexCount: indices,
             MaterialCount: materials,
-            VertexCount: vertices,
+            VertexWordCount: vertices,
             SkinCount: skins
         );
 
@@ -390,7 +389,7 @@ public static class SdfMeshRegion {
                 IndexCount: counted.IndexCount,
                 IndexWord: (layout.IndexWordOffset + counted.IndexWord),
                 MaterialWord: (layout.MaterialWordOffset + counted.MaterialWord),
-                VertexWord: (layout.VertexWordOffset + (counted.VertexWord * SdfMeshRecord.VertexWords)),
+                VertexWord: (layout.VertexWordOffset + counted.VertexWord),
                 SkinWord: (mesh.VertexMembers.IsEmpty ? 0 : (layout.SkinWordOffset + counted.SkinWord))
             );
         }
@@ -405,8 +404,10 @@ public static class SdfMeshRegion {
     public static int WordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked(((((mesh.Positions.Length * SdfMeshRecord.VertexWords) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
+        return checked((((VertexWordsOf(mesh) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
     }
+    /// <summary>The words occupied by a mesh's packed vertices.</summary>
+    public static int VertexWordsOf(SdfMesh mesh) => checked(mesh.Positions.Length * SdfMeshPacking.Of(mesh).VertexWords);
     /// <summary>The index words a mesh takes: its own triangles' (level zero), then each of its
     /// <see cref="SdfMesh.Levels"/>' in order, so a level's triangle <c>k</c> is the mesh's triangle
     /// <c>FirstTriangleOf(level) + k</c> for every reader of the region.</summary>
@@ -416,9 +417,9 @@ public static class SdfMeshRegion {
     public static int IndexWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked((3 * mesh.LevelledTriangleCount));
+        return checked((3 * mesh.LevelledTriangleCount + (SdfMeshPacking.Of(mesh).SmallIndices ? 1 : 0)) / (SdfMeshPacking.Of(mesh).SmallIndices ? 2 : 1));
     }
-    /// <summary>The triangle-material words a mesh takes: one a triangle of every level, laid out as its indices are, or
+    /// <summary>The triangle-material words a mesh takes: four byte materials per word when all values fit, otherwise one per word, or
     /// none for a mesh without them.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns>Its triangle-material words.</returns>
@@ -426,7 +427,7 @@ public static class SdfMeshRegion {
     public static int MaterialWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return (mesh.TriangleMaterials.IsEmpty ? 0 : mesh.LevelledTriangleCount);
+        return (mesh.TriangleMaterials.IsEmpty ? 0 : (mesh.LevelledTriangleCount + (SdfMeshPacking.Of(mesh).ByteMaterials ? 3 : 0)) / (SdfMeshPacking.Of(mesh).ByteMaterials ? 4 : 1));
     }
     /// <summary>Returns where one level of a mesh lies among its triangles in the region.</summary>
     /// <param name="mesh">The mesh.</param>
@@ -543,6 +544,15 @@ public static class SdfMeshRegion {
         record[SdfMeshRecord.IndexCountWord] = ((uint)placement.IndexCount);
         record[SdfMeshRecord.VertexWord] = ((uint)placement.VertexWord);
         record[SdfMeshRecord.FlagsWord] = (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag);
+        var packing = SdfMeshPacking.Of(mesh);
+        record[SdfMeshRecord.FlagsWord] |= (packing.Quantized ? SdfMeshRecord.QuantizedFlag : 0u)
+            | (packing.SmallIndices ? SdfMeshRecord.SmallIndicesFlag : 0u)
+            | (packing.ByteMaterials ? SdfMeshRecord.ByteMaterialsFlag : 0u)
+            | (packing.PackedNormals ? 0u : SdfMeshRecord.WideNormalsFlag);
+        for (var axis = 0; axis < 3; axis++) {
+            record[SdfMeshRecord.PositionLowWord + axis] = BitConverter.SingleToUInt32Bits(packing.Low[axis]);
+            record[SdfMeshRecord.PositionStepWord + axis] = BitConverter.SingleToUInt32Bits(packing.Step[axis]);
+        }
         record[SdfMeshRecord.TriangleMaterialWord] = ((uint)placement.MaterialWord);
         WriteNormalMatrix(
             matrix: matrix,
@@ -600,34 +610,39 @@ public static class SdfMeshRegion {
 
         var positions = mesh.Positions.Span;
         var normals = mesh.Normals.Span;
+        var packing = SdfMeshPacking.Of(mesh);
         var vertexWords = destination[placement.VertexWord..];
-
-        for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            var words = vertexWords.Slice(
-                length: SdfMeshRecord.VertexWords,
-                start: (vertex * SdfMeshRecord.VertexWords)
-            );
-            var normal = (normals.IsEmpty ? Vector3.Zero : normals[vertex]);
-
-            words[0] = BitConverter.SingleToUInt32Bits(value: positions[vertex].X);
-            words[1] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Y);
-            words[2] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Z);
-            words[3] = BitConverter.SingleToUInt32Bits(value: normal.X);
-            words[4] = BitConverter.SingleToUInt32Bits(value: normal.Y);
-            words[5] = BitConverter.SingleToUInt32Bits(value: normal.Z);
+        for (var vertex = 0; vertex < positions.Length; vertex++) {
+            var words = vertexWords.Slice(vertex * packing.VertexWords, packing.VertexWords);
+            if (packing.Quantized) {
+                var packed = packing.EncodePosition(positions[vertex]);
+                words[0] = (uint)packed;
+                words[1] = (uint)(packed >> 32);
+            } else {
+                words[0] = BitConverter.SingleToUInt32Bits(positions[vertex].X);
+                words[1] = BitConverter.SingleToUInt32Bits(positions[vertex].Y);
+                words[2] = BitConverter.SingleToUInt32Bits(positions[vertex].Z);
+            }
+            var normal = normals.IsEmpty ? Vector3.Zero : normals[vertex];
+            if (packing.PackedNormals) { words[packing.VertexWords - 1] = SdfMeshPacking.EncodeNormal(normal); }
+            else {
+                var offset = packing.VertexWords - 3;
+                words[offset] = BitConverter.SingleToUInt32Bits(normal.X);
+                words[offset + 1] = BitConverter.SingleToUInt32Bits(normal.Y);
+                words[offset + 2] = BitConverter.SingleToUInt32Bits(normal.Z);
+            }
         }
-
-        mesh.TriangleMaterials.Span.CopyTo(destination: destination[placement.MaterialWord..]);
-        mesh.Indices.Span.CopyTo(destination: destination[placement.IndexWord..]);
-
-        var materialWord = (placement.MaterialWord + mesh.TriangleMaterials.Length);
-        var indexWord = (placement.IndexWord + mesh.Indices.Length);
-
+        var materialWords = destination.Slice(placement.MaterialWord, MaterialWordsOf(mesh));
+        var indexWords = destination.Slice(placement.IndexWord, IndexWordsOf(mesh));
+        materialWords.Clear();
+        indexWords.Clear();
+        var materialAt = 0;
+        var indexAt = 0;
+        WritePacked(mesh.TriangleMaterials.Span, materialWords, packing.ByteMaterials ? 8 : 32, ref materialAt);
+        WritePacked(mesh.Indices.Span, indexWords, packing.SmallIndices ? 16 : 32, ref indexAt);
         foreach (var level in mesh.Levels) {
-            level.TriangleMaterials.Span.CopyTo(destination: destination[materialWord..]);
-            level.Indices.Span.CopyTo(destination: destination[indexWord..]);
-            materialWord += level.TriangleMaterials.Length;
-            indexWord += level.Indices.Length;
+            WritePacked(level.TriangleMaterials.Span, materialWords, packing.ByteMaterials ? 8 : 32, ref materialAt);
+            WritePacked(level.Indices.Span, indexWords, packing.SmallIndices ? 16 : 32, ref indexAt);
         }
         if (mesh.VertexMembers.IsEmpty) { return; }
 
@@ -655,6 +670,14 @@ public static class SdfMeshRegion {
 
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
             perVertex[vertex] = ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]);
+        }
+    }
+
+    private static void WritePacked(ReadOnlySpan<uint> source, Span<uint> destination, int bits, ref int at) {
+        var perWord = 32 / bits;
+        foreach (var value in source) {
+            destination[at / perWord] |= value << ((at % perWord) * bits);
+            at++;
         }
     }
 
@@ -700,19 +723,19 @@ public static class SdfMeshRegion {
 public readonly record struct SdfMeshRegionMesh(int VertexWord, int MaterialWord, int IndexWord, int IndexCount, int SkinWord = 0);
 /// <summary>The sections of one mesh region (<see cref="SdfMeshRegion"/>), in words from the region's start.</summary>
 /// <param name="DrawCount">The draw records, from word zero.</param>
-/// <param name="VertexCount">The vertices, <see cref="SdfMeshRecord.VertexWords"/> words each, from
+/// <param name="VertexWordCount">The packed vertex words, from
 /// <see cref="VertexWordOffset"/>.</param>
-/// <param name="MaterialCount">The triangle materials, one word each, from <see cref="MaterialWordOffset"/>.</param>
-/// <param name="IndexCount">The indices, one word each, from <see cref="IndexWordOffset"/>.</param>
+/// <param name="MaterialCount">The packed triangle-material words, from <see cref="MaterialWordOffset"/>.</param>
+/// <param name="IndexCount">The packed index words, from <see cref="IndexWordOffset"/>.</param>
 /// <param name="SkinCount">The meshes' members' words (<see cref="SdfMeshRegion.SkinWordsOf"/>), from
 /// <see cref="SkinWordOffset"/>.</param>
-public readonly record struct SdfMeshRegionLayout(int DrawCount, int VertexCount, int MaterialCount, int IndexCount, int SkinCount = 0) {
+public readonly record struct SdfMeshRegionLayout(int DrawCount, int VertexWordCount, int MaterialCount, int IndexCount, int SkinCount = 0) {
     /// <summary>Gets the region's size in bytes.</summary>
     public ulong Bytes => (((ulong)Words) * sizeof(uint));
     /// <summary>Gets the word the index section starts at.</summary>
     public int IndexWordOffset => (MaterialWordOffset + MaterialCount);
     /// <summary>Gets the word the triangle-material section starts at, past the vertices.</summary>
-    public int MaterialWordOffset => (VertexWordOffset + (VertexCount * SdfMeshRecord.VertexWords));
+    public int MaterialWordOffset => (VertexWordOffset + VertexWordCount);
     /// <summary>Gets the word the vertex section starts at, past the draw records.</summary>
     public int VertexWordOffset => (DrawCount * SdfMeshRecord.DrawWords);
     /// <summary>Gets the word the members section starts at, past the indices.</summary>

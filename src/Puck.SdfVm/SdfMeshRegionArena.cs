@@ -146,7 +146,7 @@ public sealed class SdfMeshRegionArena {
             var mesh = draw.Mesh;
             var words = SdfMeshRegion.WordsOf(mesh: mesh);
             var vertexWord = m_end;
-            var materialWord = checked(vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
+            var materialWord = checked(vertexWord + SdfMeshRegion.VertexWordsOf(mesh));
             var indexWord = checked(materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh));
             var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : checked(indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
 

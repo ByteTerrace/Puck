@@ -260,7 +260,21 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
             return bake;
         }
-        Vector3[][] Meshes(SdfMeshPathBake bake) => [.. bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh.Positions.ToArray())];
+        void SameMeshes(SdfMeshPathBake expected, SdfMeshPathBake actual) {
+            var first = expected.Dress(frame: frame).MeshDraws;
+            var second = actual.Dress(frame: frame).MeshDraws;
+            Assert.Equal(first.Count, second.Count);
+            for (var draw = 0; draw < first.Count; draw++) {
+                var source = first[draw].Mesh;
+                var decoded = second[draw].Mesh;
+                Assert.Equal(source.Indices.ToArray(), decoded.Indices.ToArray());
+                Assert.Equal(source.TriangleMaterials.ToArray(), decoded.TriangleMaterials.ToArray());
+                Assert.Equal(source.Positions.Length, decoded.Positions.Length);
+                for (var vertex = 0; vertex < source.Positions.Length; vertex++) {
+                    Assert.InRange(Vector3.Distance(source.Positions.Span[vertex], decoded.Positions.Span[vertex]), 0f, source.BakeCell.Length() / 1024f);
+                }
+            }
+        }
 
         var baked = Run(name: "first");
         var entries = Directory.GetFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.mesh").OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
@@ -273,7 +287,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         Assert.Contains(expectedSubstring: "dispatches=0 ", actualString: loaded.Describe());
         Assert.Contains(expectedSubstring: "loaded=2", actualString: loaded.Describe());
-        Assert.Equal(expected: Meshes(bake: baked), actual: Meshes(bake: loaded));
+        SameMeshes(expected: baked, actual: loaded);
 
         // A damaged entry is refused and its group alone bakes, its mesh kept again.
         File.WriteAllBytes(bytes: [1, 2, 3], path: entries[0]);
@@ -283,7 +297,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Contains(expectedSubstring: "loaded=1", actualString: mended.Describe());
         Assert.DoesNotContain(expectedSubstring: "dispatches=0 ", actualString: mended.Describe());
         Assert.True(condition: (new FileInfo(fileName: entries[0]).Length > 3));
-        Assert.Equal(expected: Meshes(bake: baked), actual: Meshes(bake: mended));
+        SameMeshes(expected: baked, actual: mended);
     }
 
     private readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material, float Round = 0f);

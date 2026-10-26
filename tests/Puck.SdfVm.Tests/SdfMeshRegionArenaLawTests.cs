@@ -38,7 +38,7 @@ public sealed class SdfMeshRegionArenaLawTests {
     public void TheArenaPacksDroppedMeshesBeforeAppendingPastWhatARegionHolds() {
         var template = new SdfMesh(
             indices: new uint[] { 0, 0, 0 },
-            positions: new Vector3[4_000_000]
+            positions: new Vector3[6_000_000]
         );
         var kept = Enumerable.Range(count: 25, start: 0).Select(selector: _ => Draw(mesh: (template with { }))).ToArray();
         var dropped = Enumerable.Range(count: 19, start: 0).Select(selector: _ => Draw(mesh: (template with { }))).ToArray();

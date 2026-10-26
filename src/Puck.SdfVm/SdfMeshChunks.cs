@@ -90,6 +90,7 @@ public static class SdfMeshChunks {
             vertex += chunk.Positions.Length;
             triangle += chunk.TriangleCount;
         }
-        return new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { BakeCell = chunks[0].BakeCell, Chunks = chunks };
+        var joined = new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { BakeCell = chunks[0].BakeCell };
+        return joined with { Chunks = SdfMeshPacking.SharePositionGrid(joined, chunks) };
     }
 }
