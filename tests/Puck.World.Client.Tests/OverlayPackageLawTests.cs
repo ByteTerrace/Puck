@@ -300,11 +300,11 @@ public sealed partial class OverlayPackageLawTests {
                 fragmentBytecode: new byte[] { 1 },
                 frameSources: (frameSources ?? new LeasingFrameSources(retire: static () => { })),
                 glyphs: CreateGlyphs(
+                    advance: 1f,
                     atlasCellHeight: 1,
                     atlasCellWidth: 1,
                     distanceRange: 1f,
                     glyphCount: 1,
-                    advance: 1f,
                     words: [0u, 0u, 0x3F800000u]
                 ),
                 sources: new UnifiedOverlaySources(
@@ -317,10 +317,12 @@ public sealed partial class OverlayPackageLawTests {
                     Toast: null
                 ),
                 theme: OverlayThemeValues.Zero with {
-                    Chrome = OverlayThemeValues.Zero.Chrome with {
-                        CursorAlpha = 1f,
-                        CursorDotMaxHalf = 4f,
-                        CursorDotRatio = 0.2f,
+                    Styles = OverlayThemeValues.Zero.Styles with {
+                        Cursor = OverlayThemeValues.Zero.Styles.Cursor with {
+                            Alpha = 1f,
+                            DotMaxHalf = 4f,
+                            DotRatio = 0.2f,
+                        },
                     },
                 },
                 vertexBytecode: new byte[] { 1 }

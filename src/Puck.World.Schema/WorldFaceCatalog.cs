@@ -27,6 +27,8 @@ namespace Puck.World;
 /// unaffected: the face still opens, it just shows nothing.</param>
 /// <param name="Filter">How the face's screen samples its source: the placement's face row's
 /// <see cref="WorldPlacementFace.Filter"/>, or <see cref="GpuSamplerFilter.Nearest"/> when no row overrides the face.</param>
+/// <param name="Material">How the face's screen presents its picture: the placement's face row's
+/// <see cref="WorldPlacementFace.Material"/>, or <see cref="WorldScreenMaterial.Plain"/> when no row overrides the face.</param>
 public readonly record struct WorldFaceRow(
     string PlacementId,
     string FaceName,
@@ -37,7 +39,8 @@ public readonly record struct WorldFaceRow(
     WorldScreenSource Source,
     int ScreenIndex,
     bool SlotStarved,
-    GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
+    GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
+    WorldScreenMaterial Material = WorldScreenMaterial.Plain
 );
 /// <summary>
 /// The one derivation of a document's placement faces — <c>(placements x declared creation faces)</c> walked once,
@@ -105,6 +108,7 @@ public sealed class WorldFaceCatalog {
     // Each row's opening at the crossing floor, built on first ask. The floor reads kits, motion and collision, never a
     // state row, so it holds for every definition CarryAcrossState shares this catalog with.
     private readonly WorldFaceAperture?[] m_apertures;
+
     private StrongBox<FixedQ4816>? m_crossingFloor;
 
     /// <summary>Gets how many rows resolved to a source that renders something, and so asked for a screen slot.</summary>
@@ -198,6 +202,7 @@ public sealed class WorldFaceCatalog {
                     ),
                     Aperture: WorldFaceApertures.For(primitive: shape?.Type),
                     Filter: (faceOverride?.Filter ?? GpuSamplerFilter.Nearest),
+                    Material: (faceOverride?.Material ?? WorldScreenMaterial.Plain),
                     Source: source,
                     ScreenIndex: seated,
                     SlotStarved: starved
@@ -604,6 +609,7 @@ public sealed class WorldFaceCatalog {
 
         return false;
     }
+
     // The catalog reads placements, creations, cameras and the authoring policy, never a state row, so a definition
     // that replaced another's state section alone derives the same catalog.
     internal static void CarryAcrossState(WorldDefinition source, WorldDefinition target) {

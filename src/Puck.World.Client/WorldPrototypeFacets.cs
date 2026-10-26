@@ -51,7 +51,7 @@ public static class WorldPrototypeFacets {
     // the portal trigger it also feeds is simulation state; fixed-to-float is exactly rounded, so every machine draws
     // the slab it collides with. Everything applied here — proud epsilon, interior fraction, the round radius, the
     // minimum half-depth — is render policy over that one geometry, never part of it.
-    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter) {
+    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter, WorldScreenMaterial material) {
         var normal = frame.Normal.ToVector3();
         var halfDepth = ((float)frame.HalfDepth);
 
@@ -85,7 +85,8 @@ public static class WorldPrototypeFacets {
             Round: FaceRound,
             Source: source,
             Route: WorldScreenRoute.Passive,
-            Filter: filter
+            Filter: filter,
+            Material: material
         );
     }
 
@@ -104,12 +105,14 @@ public static class WorldPrototypeFacets {
             derivedFaceScreens: definition.Authoring.DerivedFaceScreens
         ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
     }
+
     // One of an opening's glass half-extents: the face's own, FaceOpeningInset short, never under FaceMinimumHalfDepth.
     private static float OpeningHalf(Puck.Maths.FixedQ4816 half) => MathF.Max(
         x: (((float)half) - FaceOpeningInset),
         y: FaceMinimumHalfDepth
     );
     private static float OpeningHalfDepth(WorldFaceFrame frame) => OpeningHalf(half: frame.HalfDepth);
+
     /// <summary>Returns whether a face's source shows through it as an opening rather than on it as a display: a
     /// session seen through a window projection, whose glass lies inside its face's shape and so fills whatever aperture
     /// is cut through that shape (<see cref="GlassSpan"/>).</summary>
@@ -231,6 +234,7 @@ public static class WorldPrototypeFacets {
             _ = seated.Add(item: row.ScreenIndex);
             faces.Add(item: FaceScreen(
                 filter: row.Filter,
+                material: row.Material,
                 frame: row.Frame,
                 index: row.ScreenIndex,
                 source: row.Source

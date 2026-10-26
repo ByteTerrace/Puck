@@ -62,10 +62,10 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             return;
         }
 
-        var chrome = m_theme.Current.Chrome;
+        var cursor = m_theme.Current.Styles.Cursor;
         var edge = MathF.Min(
             x: MathF.Max(
-                x: m_theme.Current.Elevation.EdgeHairlineWidth,
+                x: m_theme.Current.Stroke.Hairline,
                 y: 1f
             ),
             y: (MathF.Min(
@@ -75,7 +75,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
         );
 
         builder.WriteRect(
-            alpha: chrome.CursorAlpha,
+            alpha: cursor.Alpha,
             h: edge,
             radius: 0f,
             role: OverlayColorRole.Accent,
@@ -84,7 +84,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             y: y
         );
         builder.WriteRect(
-            alpha: chrome.CursorAlpha,
+            alpha: cursor.Alpha,
             h: edge,
             radius: 0f,
             role: OverlayColorRole.Accent,
@@ -93,7 +93,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             y: ((y + h) - edge)
         );
         builder.WriteRect(
-            alpha: chrome.CursorAlpha,
+            alpha: cursor.Alpha,
             h: (h - (2f * edge)),
             radius: 0f,
             role: OverlayColorRole.Accent,
@@ -102,7 +102,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             y: (y + edge)
         );
         builder.WriteRect(
-            alpha: chrome.CursorAlpha,
+            alpha: cursor.Alpha,
             h: (h - (2f * edge)),
             radius: 0f,
             role: OverlayColorRole.Accent,
@@ -123,7 +123,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
 
         // Hover lights the accent tier; the bare cursor keeps the seat's world-authored hue. Geometry scales off
         // the authored ring radius: the center dot rides at roughly a fifth of it, the label clear of the ring.
-        var chrome = m_theme.Current.Chrome;
+        var cursor = m_theme.Current.Styles.Cursor;
         var role = (seat.Hover
             ? OverlayColorRole.Accent
             : seat.Role
@@ -134,11 +134,11 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             max: MaxSizePx
         );
         var dotHalf = Math.Clamp(
-            max: chrome.CursorDotMaxHalf,
+            max: cursor.DotMaxHalf,
             min: 1f,
-            value: (ringRadius * chrome.CursorDotRatio)
+            value: (ringRadius * cursor.DotRatio)
         );
-        var labelOffset = (ringRadius + chrome.CursorLabelGap);
+        var labelOffset = (ringRadius + cursor.LabelGap);
 
         builder.BeginClip(
             h: (region.Height * builder.Height),
@@ -147,7 +147,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             y: (region.Y * builder.Height)
         );
         builder.WriteRing(
-            alpha: chrome.CursorAlpha,
+            alpha: cursor.Alpha,
             centerX: seat.X,
             centerY: seat.Y,
             radius: ringRadius,

@@ -134,14 +134,11 @@ public sealed partial class WorldAddonRuntime {
     }
     // Whether the addon's principal may read the cell now; false for a row the document does not declare. A write door
     // asks this before it looks for the cell, so a hidden cell is refused as an absent one is.
-    private bool IsDisclosed(MountedAddon addon, GrantSubject subject, CellName name) {
-        var definition = m_server.Definition;
-
-        foreach (var candidate in definition.State) {
-            if (string.Equals(a: candidate.Name.Value, b: subject.Id, comparisonType: StringComparison.Ordinal)) {
-                return WorldStateDisclosure.CanRead(arena: m_server.Arena, definition: definition, key: name, row: candidate, recipient: addon.Principal);
-            }
-        }
-        return false;
-    }
+    private bool IsDisclosed(MountedAddon addon, GrantSubject subject, CellName name) => WorldStateDisclosure.CanReadCell(
+        arena: m_server.Arena,
+        definition: m_server.Definition,
+        key: name,
+        recipient: addon.Principal,
+        rowName: subject.Id!
+    );
 }
