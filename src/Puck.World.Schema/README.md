@@ -2707,8 +2707,8 @@ tick. Established relationships are considered first. Setting
 `maxPairsPerBody` to zero disables body-pair begin/end events.
 
 `collision.bodyContacts` independently bounds physical depenetration between
-two `solid` kits. Its `candidateBudget` caps inspected x-overlapping sweep
-pairs per body (default 16, maximum 32); `maxPairsPerBody` caps corrections
+two `solid` kits. Its `candidateBudget` caps inspected box-overlapping sweep
+pairs per body (default 32, maximum 256); `maxPairsPerBody` caps corrections
 incident to one body per tick (default 8, maximum 16). Saturation omits later
 stable-index pairs, so even a fully coincident 4096-body stadium has linear,
 authored work rather than an accidental all-pairs frame. Its

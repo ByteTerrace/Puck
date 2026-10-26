@@ -48,9 +48,6 @@ public static class RuleGroupCapacity {
     public const int DefaultPasses = 8;
     /// <summary>The most members one group may claim: one index and one policy each in the compiled group.</summary>
     public const int MaxMembers = 256;
-    /// <summary>The most passes one fixpoint group may author: the ticks a cascade may take to settle before the
-    /// group reports a breach.</summary>
-    public const int MaxPasses = 256;
 }
 /// <summary>One compiled rule group: which compiled rules it claims, how it runs them, the rows a pass must leave
 /// unchanged to close, its pass ceiling, and the gate that arms it.</summary>
@@ -238,11 +235,8 @@ public static partial class RuleCompiler {
         var passes = (group.Passes ?? RuleGroupCapacity.DefaultPasses);
 
         if (group.Shape == RuleGroupShape.Fixpoint) {
-            if (
-                (passes < 1) ||
-                (passes > RuleGroupCapacity.MaxPasses)
-            ) {
-                throw Malformed(detail: $"declares a pass ceiling of {passes}, outside 1..{RuleGroupCapacity.MaxPasses}");
+            if (passes < 1) {
+                throw Malformed(detail: $"declares a pass ceiling of {passes}, which must be at least 1");
             }
         } else if (group.Passes is not null) {
             throw Malformed(detail: "is staged and declares a pass ceiling — a staged group advances one step at a time and counts no passes");

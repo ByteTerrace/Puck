@@ -55,8 +55,8 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.steps claims {steps.Count} members, past the {RuleGroupCapacity.MaxMembers}-member ceiling.");
             }
             if (group.Shape == RuleGroupShape.Fixpoint) {
-                if ((group.Passes is { } passes) && ((passes < 1) || (passes > RuleGroupCapacity.MaxPasses))) {
-                    errors.Add(item: $"{path}.passes is {passes}, outside 1..{RuleGroupCapacity.MaxPasses}.");
+                if (group.Passes is < 1) {
+                    errors.Add(item: $"{path}.passes is {group.Passes}, which must be at least 1.");
                 }
             } else if (group.Passes is not null) {
                 errors.Add(item: $"{path}.passes is declared on a staged group — a staged group advances one step at a time and counts no passes.");

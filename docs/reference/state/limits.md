@@ -115,7 +115,7 @@ A few rules apply to every limit on this page:
 | Gate tokens | 1,024 | `RuleCapacity.MaxPredicateTokens` | [Rules and firing](rules.md#read-a-compile-refusal) |
 | Evaluations one trace captures | 256 | `RuleEvaluator.MaxTraceEvaluations` | [Rules and firing](rules.md#trace-a-rule-and-read-the-refusal-ledger) |
 | Members per rule group | 256 | `RuleGroupCapacity.MaxMembers` | [Rule groups and turn undo](rule-groups.md) |
-| Fixpoint passes per tick | 8 by default, at most 256 | `RuleGroupCapacity.DefaultPasses`, `RuleGroupCapacity.MaxPasses` | [Rule groups and turn undo](rule-groups.md#fixpoint-groups) |
+| Fixpoint pass ceiling | 8 by default, any positive 32-bit integer | `RuleGroupCapacity.DefaultPasses` | [Rule groups and turn undo](rule-groups.md#fixpoint-groups) |
 | Retained turn history | bounded by the journal ceiling | `ArenaCapacity.MaxJournalBytes` | [Rule groups and turn undo](rule-groups.md#size-the-history) |
 
 ## Transforms

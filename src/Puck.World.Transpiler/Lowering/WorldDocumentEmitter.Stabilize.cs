@@ -3,7 +3,6 @@ using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
-using RuleGroupCapacity = Puck.State.Rules.RuleGroupCapacity;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -315,26 +314,22 @@ public static partial class WorldDocumentEmitter {
             expr: expression,
             scope: scope
         );
-        var passes = 0;
 
-        if ((evaluated is JsonValue value) && DocumentNumbers.TryInteger(
-            node: value,
-            number: out var parsed
-        )) {
-            passes = ((int)Math.Clamp(
-                max: int.MaxValue,
-                min: int.MinValue,
-                value: parsed
-            ));
-        }
-
-        if ((passes >= 1) && (passes <= RuleGroupCapacity.MaxPasses)) {
-            return passes;
+        if (
+            (evaluated is JsonValue value) &&
+            DocumentNumbers.TryInteger(
+                node: value,
+                number: out var parsed
+            ) &&
+            (parsed >= 1) &&
+            (parsed <= int.MaxValue)
+        ) {
+            return ((int)parsed);
         }
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.RuleGroupShapeInadmissible,
-            message: $"stabilize group '{name}' declares maxPasses '{evaluated}', which must evaluate to an integer in 1..{RuleGroupCapacity.MaxPasses} at compile time.",
+            message: $"stabilize group '{name}' declares maxPasses '{evaluated}', which must evaluate to a positive integer at compile time.",
             span: span
         );
 

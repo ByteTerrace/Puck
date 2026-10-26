@@ -106,6 +106,8 @@ public static partial class CreationCommand {
     private static int RunShape(string worldPath, string prototypeId, string[] shapeNames) {
         var fullPath = Path.GetFullPath(path: worldPath);
 
+        _ = CliWorldVocabulary.EnsureInstalled();
+
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
             admission: out var admission,
             contentHash: out _,
@@ -197,6 +199,8 @@ public static partial class CreationCommand {
 
         WorldDefinition definition;
 
+        _ = CliWorldVocabulary.EnsureInstalled();
+
         try {
             definition = WorldDefinitionSerialization.Deserialize(utf8Json: JsonSerializer.SerializeToUtf8Bytes(value: working));
         } catch (Exception exception) when ((exception is InvalidDataException or InvalidOperationException)) {
@@ -226,6 +230,8 @@ public static partial class CreationCommand {
     }
     private static int RunStats(string worldPath, string? prototypeId) {
         var fullPath = Path.GetFullPath(path: worldPath);
+
+        _ = CliWorldVocabulary.EnsureInstalled();
 
         // Stats inspect the document a boot would run, so the file is drawn before it is read; a cross-document
         // claim needs its neighbours, which an offline inspection has none of.
