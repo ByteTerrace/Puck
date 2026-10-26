@@ -105,7 +105,7 @@ public sealed class WorldVerdictDoorLawTests {
     );
     private static long? Seen(WorldFixture fixture) => StateRows.FindCell(
         cells: WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: Witness
         )!.Cells,
         key: CellName.Parse(candidate: "f")
@@ -119,7 +119,7 @@ public sealed class WorldVerdictDoorLawTests {
     ));
     private static long? Cell(WorldFixture fixture, string key) => StateRows.FindCell(
         cells: WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: Verdict
         )!.Cells,
         key: CellName.Parse(candidate: key)

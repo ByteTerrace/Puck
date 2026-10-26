@@ -235,7 +235,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
 
         if (tier == WorldDisclosureTier.Replica) {
-            return definition;
+            return WorldStateDisclosure.Disclose(definition, arena, recipient, unrestricted).Definition;
         }
 
         var time = server.DeliveryTime;
@@ -272,7 +272,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (Tier == WorldDisclosureTier.Replica) {
                 inner.DeliverDefinition(
-                    definition: definition,
+                    definition: Disclose(definition)!,
                     version: version
                 );
             } else {
@@ -319,7 +319,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (Tier == WorldDisclosureTier.Presentation) {
                 Present(
                     delivery: m_feed.Step(
-                        definition: server.Definition,
+                    arena: server!.Arena,
+                    definition: server.Definition,
                         engineTick: engineTick,
                         tick: tick
                     ),
@@ -334,6 +335,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 }
             }
 
+            redacted = redacted with { FieldCells = WorldStateChangeDisclosure.Filter(server, observation.Session, redacted.FieldCells, Tier == WorldDisclosureTier.Replica) };
             inner.DeliverSnapshot(snapshot: in redacted);
             FollowObserverDetach();
         } catch (Exception exception) {

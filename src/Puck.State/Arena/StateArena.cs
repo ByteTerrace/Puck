@@ -169,6 +169,7 @@ public sealed partial class StateArena {
         m_rowChangeStamp = new long[layout.RowCount];
         m_rowGenerations = new ulong[layout.RowCount];
         m_rowVersions = new ulong[layout.RowCount];
+        m_deliveryRows = new bool[layout.RowCount];
         m_rows = NormalizeRows(
             bytes: out m_declarationVisibilityBytes,
             reason: out reason,
@@ -780,9 +781,18 @@ public sealed partial class StateArena {
         }
     }
     private void MarkRowVersion(int rowOrdinal) {
+        m_deliveryRows[rowOrdinal] = true;
         if (m_rowChangeStamp[rowOrdinal] != m_changeEpoch) {
             m_rowChangeStamp[rowOrdinal] = m_changeEpoch;
             m_rowVersions[rowOrdinal]++;
+        }
+    }
+    private bool[] m_deliveryRows = [];
+    /// <summary>Copies rows reached by committed journal positions, and optionally clears the delivery marks.</summary>
+    public void CopyChangedRows(Span<bool> rows, bool clear = false) {
+        for (var i = 0; i < Math.Min(rows.Length, m_deliveryRows.Length); i++) {
+            rows[i] |= m_deliveryRows[i];
+            if (clear) { m_deliveryRows[i] = false; }
         }
     }
     // Reverse-walks the closing scope so the last entry seen for a position is the first write to it, whose

@@ -47,6 +47,7 @@ public static class WorldSessionCapture {
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: machines);
 
+        definition = WorldStateReader.Export(definition);
         return (definition with {
             PopulationRaw = CapturePopulation(
                 definition: definition,

@@ -191,7 +191,7 @@ public sealed partial class WorldTick {
                 lattice: lattice!,
                 tick: tick
             )),
-                WorldPlacementResponseCondition.StateCondition state => state.Holds(
+                WorldPlacementResponseCondition.StateCondition state => state.Holds(arena: Host.Arena,
                 definition: Host.Document.Definition,
                 tick: tick,
                 engineTick: CompletedEngineTicks
@@ -233,7 +233,7 @@ public sealed partial class WorldTick {
     // Reads every State entry's primary (and, when authored, comparand) cell straight off the installed document —
     // the snapshot the skip below compares tick to tick. Returns false (never skippable) the moment any entry is a
     // Field condition, so a mixed respond list is always swept in full.
-    private static bool TryReadResponseSnapshot(WorldDefinition definition, IReadOnlyList<WorldPlacementResponse> responses, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, out int count) {
+    private bool TryReadResponseSnapshot(WorldDefinition definition, IReadOnlyList<WorldPlacementResponse> responses, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, out int count) {
         count = 0;
 
         for (var responseIndex = 0; (responseIndex < responses.Count); responseIndex++) {
@@ -270,8 +270,8 @@ public sealed partial class WorldTick {
 
         return true;
     }
-    private static void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, int index) {
-        var found = (WorldStateReader.TryRead(
+    private void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, int index) {
+        var found = (WorldStateReader.TryRead(arena: Host.Arena,
             definition: definition,
             engineTick: engineTick,
             key: key,

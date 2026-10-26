@@ -65,7 +65,7 @@ public sealed class VectorStateLawTests {
         ));
         fixture.Step();
 
-        var stateRowBefore = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories");
+        var stateRowBefore = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories");
 
         Assert.NotNull(@object: stateRowBefore);
         Assert.True(condition: ((stateRowBefore.Cells is null) || (stateRowBefore.Cells.Count == 0)));
@@ -105,7 +105,7 @@ public sealed class VectorStateLawTests {
         ));
         fixture.Step();
 
-        var stateRowAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories");
+        var stateRowAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories");
 
         Assert.NotNull(@object: stateRowAfter);
         Assert.NotNull(@object: stateRowAfter.Cells);
@@ -140,7 +140,7 @@ public sealed class VectorStateLawTests {
         ));
         fixture.Step();
 
-        var stateRowAfterWrite = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories");
+        var stateRowAfterWrite = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories");
 
         Assert.NotNull(@object: stateRowAfterWrite);
         Assert.NotNull(@object: stateRowAfterWrite.Cells);
@@ -150,7 +150,7 @@ public sealed class VectorStateLawTests {
         fixture.Server.EnqueueUndo(count: 1, principal: Principal.Console);
         fixture.Step();
 
-        var stateRowAfterUndo = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories");
+        var stateRowAfterUndo = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories");
 
         Assert.NotNull(@object: stateRowAfterUndo);
         Assert.True(condition: ((stateRowAfterUndo.Cells is null) || (stateRowAfterUndo.Cells.Count == 0)));
@@ -222,7 +222,7 @@ public sealed class VectorStateLawTests {
         using var tempDirectory = new TemporaryDirectory(prefix: "puck-vector-save-");
         var tempPath = tempDirectory.PathOf(name: "vector.world.json");
 
-        _ = WorldDefinitionSerialization.Save(definition: fixture.Server.Definition, path: tempPath);
+        _ = WorldDefinitionSerialization.Save(definition: fixture.Server.ExportDefinition(), path: tempPath);
         var reloadedDef = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: tempPath));
 
         Assert.NotNull(@object: reloadedDef.Spaces);
@@ -318,7 +318,7 @@ public sealed class VectorStateLawTests {
                 Assert.Equal(recordedHashes[i], replayHash);
             }
 
-            var rowB = WorldDefinitionRows.FindStateRow(rows: serverB.Server.Definition.State, name: "events")!;
+            var rowB = WorldDefinitionRows.FindStateRow(rows: serverB.Server.ExportDefinition().State, name: "events")!;
 
             Assert.Equal(2, rowB.Cells!.Count);
             Assert.Equal("e3", rowB.Cells[0].Key.Value);
@@ -406,7 +406,7 @@ public sealed class VectorStateLawTests {
         fixture.Step();
 
         // Check that remember wrote "ambush" into memories
-        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories")!;
+        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories")!;
 
         Assert.NotNull(@object: memoriesAfter.Cells);
         var ambushMemory = Assert.Single(collection: memoriesAfter.Cells);
@@ -415,7 +415,7 @@ public sealed class VectorStateLawTests {
         Assert.True(condition: ambushMemory.Value.AsVector.Span.SequenceEqual(other: vecAmbush.Components));
 
         // Check that nearest wrote "ambush" into recalled with similarity >= 0.5
-        var recalledAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "recalled")!;
+        var recalledAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "recalled")!;
 
         Assert.NotNull(@object: recalledAfter.Cells);
         var recalledCell = Assert.Single(collection: recalledAfter.Cells);
@@ -439,13 +439,13 @@ public sealed class VectorStateLawTests {
             Name: CellName.Parse(candidate: "remember-duplicate")
         );
 
-        var defWithDup = fixture.Server.Definition with { Rules = [duplicateRule] };
+        var defWithDup = fixture.Server.ExportDefinition() with { Rules = [duplicateRule] };
         using var fixtureDup = Fixtures.FreshServer(definition: defWithDup);
 
         fixtureDup.Step();
 
         // memories still has only the original "ambush", duplicate was refused/skipped
-        var memoriesDup = WorldDefinitionRows.FindStateRow(rows: fixtureDup.Server.Definition.State, name: "memories")!;
+        var memoriesDup = WorldDefinitionRows.FindStateRow(rows: fixtureDup.Server.ExportDefinition().State, name: "memories")!;
 
         Assert.NotNull(@object: memoriesDup.Cells);
         Assert.Single(collection: memoriesDup.Cells);
@@ -696,7 +696,7 @@ public sealed class VectorStateLawTests {
 
         fixture.Step();
 
-        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories")!;
+        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories")!;
 
         Assert.NotNull(@object: memoriesAfter.Cells);
         var k1Cell = Assert.Single(collection: memoriesAfter.Cells);
@@ -757,7 +757,7 @@ public sealed class VectorStateLawTests {
 
         fixture.Step();
 
-        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories")!;
+        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories")!;
         var c1 = StateRows.FindCell(cells: memoriesAfter.Cells, key: CellName.Parse(candidate: "k1"));
         var c2 = StateRows.FindCell(cells: memoriesAfter.Cells, key: CellName.Parse(candidate: "k2"));
 
@@ -817,11 +817,11 @@ public sealed class VectorStateLawTests {
 
         fixture.Step();
 
-        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories")!;
+        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "memories")!;
 
         // A write addresses a cell its row holds; it never mints one, so the row a document declares empty stays
         // empty and the copy is refused by row and cell name.
-        Assert.Empty(collection: memoriesAfter.Cells!);
+        Assert.Empty(collection: memoriesAfter.Cells ?? []);
         Assert.Contains(
             collection: fixture.Server.RuleRuntimeDiagnostics(),
             filter: static diagnostic => diagnostic.Detail.Contains(
@@ -1052,7 +1052,7 @@ public sealed class VectorStateLawTests {
             )
         ));
         fixture.Step();
-        var rowMix = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoMix")!;
+        var rowMix = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "intoMix")!;
 
         Assert.NotNull(@object: rowMix.Cells);
         Assert.NotEmpty(collection: rowMix.Cells);
@@ -1066,7 +1066,7 @@ public sealed class VectorStateLawTests {
             )
         ));
         fixture.Step();
-        var rowMean = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoMean")!;
+        var rowMean = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "intoMean")!;
 
         Assert.NotNull(@object: rowMean.Cells);
         Assert.NotEmpty(collection: rowMean.Cells);
@@ -1082,7 +1082,7 @@ public sealed class VectorStateLawTests {
             )
         ));
         fixture.Step();
-        var rowNearest = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoNearest")!;
+        var rowNearest = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "intoNearest")!;
 
         Assert.NotNull(@object: rowNearest.Cells);
         Assert.Single(collection: rowNearest.Cells);
@@ -1098,7 +1098,7 @@ public sealed class VectorStateLawTests {
             )
         ));
         fixture.Step();
-        var rowRemember = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoRemember")!;
+        var rowRemember = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "intoRemember")!;
 
         Assert.NotNull(@object: rowRemember.Cells);
         Assert.Single(collection: rowRemember.Cells);

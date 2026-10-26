@@ -6,10 +6,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldGrants {
     // The grantees no live row may name, whatever the row grants. Each is refused by name so an author learns why.
     private bool RefusesGrantee(WorldGrant grant, out string reason) {
-        // The world's own authority is structural — TryAdmitMutation admits it before this table is consulted — so
-        // a row naming it would be an inert phantom grant.
-        if (grant.Grantee.Principal.Kind == PrincipalKind.World) {
-            reason = "the world's own authored program holds no grants — its authority is structural (a rule's effects and a kit's generate effect are the document acting on itself, never an actor submitting); a row here would be accepted and inert";
+        // Gameplay writes use the program's Edit grant; its other host operations retain structural admission.
+        if ((grant.Grantee.Principal.Kind == PrincipalKind.World) && (grant.Capability != WorldCapability.Edit)) {
+            reason = "the authored program uses only Edit grants for its gameplay transactions";
 
             return true;
         }

@@ -129,7 +129,7 @@ public sealed class WorldDecisionNeighborLawTests {
     }
     private static WorldDecisionCheckpoint State(WorldFixture fixture) => Assert.Single(collection: Capture(fixture: fixture).Server.Decisions!);
     private static long Entries(WorldFixture fixture) => WorldDefinitionRows.FindStateRow(
-        fixture.Server.Definition.State,
+        fixture.Server.ExportDefinition().State,
         "entries"
     )!.Cells![0].Value.AsInt;
     private static void Appeal(WorldFixture fixture, int index, long value) => fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(

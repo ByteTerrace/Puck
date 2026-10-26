@@ -73,7 +73,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value");
         }
     }
+    private static Grantee ReadCheckpointGrantee(ref WireReader reader) => reader.ReadBoolean() ? Principal.World : WorldWireCodec.ReadGrantee(ref reader);
     private static void WriteGrantee(WireWriter writer, Grantee grantee) {
+        var program = grantee.Kind == GranteeKind.Principal && grantee.Principal == Principal.World;
+        writer.WriteBoolean(program);
+        if (program) { return; }
         if (!WorldWireCodec.TryWriteGrantee(
             grantee: grantee,
             writer: writer

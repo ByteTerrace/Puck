@@ -197,6 +197,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         SeedDomain(principal: Principal.Console);
+        // The authored program owns gameplay writes through the same grant table as every other producer.
+        if (!TryGrant(grant: new WorldGrant(Grantee: Principal.World, Capability: WorldCapability.Edit,
+            Subject: GrantSubject.All, Exclusive: false), reason: out var programGrantReason)) {
+            throw new InvalidOperationException(message: programGrantReason);
+        }
         _ = TryGrant(
             grant: new WorldGrant(
                 Grantee: Principal.Console,
@@ -727,7 +732,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             WorldCapability.Mutate => ((subject.Kind is GrantSubjectKind.Section or GrantSubjectKind.State or GrantSubjectKind.Creation or GrantSubjectKind.Placement) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             WorldCapability.Edit => ((subject.Kind == GrantSubjectKind.State) ||
-                ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
+                ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || principal.Kind == PrincipalKind.World))),
             _ => false,
         };
     }
@@ -1479,7 +1484,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// notes name explicitly — they diverge on <see cref="PrincipalKind.Addon"/>.</remarks>
     /// <param name="principal">The principal to classify.</param>
     /// <returns><see langword="true"/> for <see cref="PrincipalKind.Console"/> and <see cref="PrincipalKind.Seat"/>.</returns>
-    internal static bool IsTrusted(Principal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
+    internal static bool IsTrusted(Principal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat or PrincipalKind.World);
 
     /// <inheritdoc/>
     public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) =>
@@ -1791,7 +1796,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// live <c>world.state.cell.set</c> that flips a gate row's cell is settled before the next tick's intent drain
     /// reads it. Resolves each gatesDrive row once through <see cref="StateCatalog.TryResolve(StateLane,string,out StateHandle)"/>
     /// and reads every candidate cell through that handle
-    /// (<see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow},StateCatalog,StateHandle,string?,ulong,ulong,out StateRow?,out long?,out string?)"/>)
+    /// (<see cref="StateReader.TryReadHandle"/>)
     /// rather than re-resolving the row by name per cell, or a bespoke scan of <see cref="StateCell.Value"/>. The tick
     /// this resolves at is inert for every row this index can ever hold: <see cref="WorldStateRow.GatesDrive"/>
     /// requires a declared <see cref="StateRow.Capacity"/> (WorldDefinitionValidator), and
@@ -1799,58 +1804,21 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// row can never advance; <c>0</c> reads identically to any other tick. First-in-document-order gate wins a body
     /// (declaration-order tiebreak, the same convention same-tick rule effects resolve by).</summary>
     /// <param name="definition">The live document.</param>
-    internal void SyncState(WorldDefinition definition) {
-        var catalog = definition.StateCatalog;
-
+    /// <param name="arena">The live arena; declaration seeds are used only at cold boundaries.</param>
+    internal void SyncState(WorldDefinition definition, StateArena? arena = null) {
+        arena ??= WorldStateReader.Seed(definition);
         m_driveGates.Clear();
-
-        foreach (var row in definition.State) {
-            if (
-                !row.GatesDrive ||
-                !catalog.TryResolve(
-                lane: StateLane.Document,
-                name: row.Name,
-                handle: out var handle
-            )
-            ) {
-                continue;
-            }
-
-            foreach (var cell in (row.Cells ?? [])) {
-                if (
-                    !int.TryParse(
-                    s: cell.Key,
-                    style: NumberStyles.Integer,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var bodyIndex
-                ) ||
-                    (bodyIndex < 0) ||
-                    m_driveGates.ContainsKey(key: bodyIndex)
-                ) {
-                    continue;
-                }
-
-                if (
-                    StateReader.TryReadHandle(
-                    rows: definition.State,
-                    catalog: catalog,
-                    handle: handle,
-                    key: cell.Key.Value,
-                    tick: 0UL,
-                    engineTick: 0UL,
-                    row: out _,
-                    rawValue: out var raw,
-                    text: out _
-                ) &&
-                    (raw is { } value) &&
-                    (value != 0)
-                ) {
-                    m_driveGates[bodyIndex] = row.Name;
-                }
+        var time = ArenaTime.Origin;
+        for (var ordinal = 0; ordinal < arena.Rows.Count; ordinal++) {
+            if (arena.Rows[ordinal] is not WorldStateRow { GatesDrive: true } row) { continue; }
+            var cursor = 0;
+            while (arena.TryNextCell(rowOrdinal: ordinal, cursor: ref cursor, key: out var key)) {
+                if (!int.TryParse(arena.Keys[key].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var body) ||
+                    (body < 0) || m_driveGates.ContainsKey(body)) { continue; }
+                if (arena.TryReadLiveNumber(rowOrdinal: ordinal, key: key, time: in time, value: out var raw) && raw != 0L) { m_driveGates[body] = row.Name; }
             }
         }
     }
-
     /// <inheritdoc/>
     public bool TryGetBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
         TryGetGrantValue(

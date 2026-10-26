@@ -20,7 +20,7 @@ public sealed class StateAuthoringReviewProbeTests {
             Row: row with { Dynamics = null }
         ));
         fixture.Step();
-        var actual = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "reviewGauge")!;
+        var actual = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "reviewGauge")!;
 
         Assert.Equal(expected: 20L, actual: actual.Cells![0].Value.Raw);
     }
@@ -44,7 +44,7 @@ public sealed class StateAuthoringReviewProbeTests {
             Kind: kind
         ));
         fixture.Step();
-        var actual = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "reviewCounter")!;
+        var actual = WorldDefinitionRows.FindStateRow(rows: fixture.Server.ExportDefinition().State, name: "reviewCounter")!;
 
         Assert.Equal(expected: expected, actual: actual.Cells![0].Value.Raw);
     }

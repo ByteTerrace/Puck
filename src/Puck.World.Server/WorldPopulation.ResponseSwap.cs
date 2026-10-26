@@ -37,6 +37,12 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
+        InstallProjectedSolids(definition: definition, solids: solids);
+        return true;
+    }
+
+    /// <summary>Recompiles solid consumers after a derived placement set changes, retaining bodies and grants.</summary>
+    public void InstallProjectedSolids(WorldDefinition definition, WorldSolidField? solids) {
         var previousNavigation = m_navigation;
 
         CompileSolidConsumers(
@@ -60,6 +66,5 @@ public sealed partial class WorldPopulation {
             }
         }
 
-        return true;
     }
 }

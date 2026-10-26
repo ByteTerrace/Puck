@@ -271,11 +271,12 @@ public abstract record WorldPlacementResponseCondition {
         /// <param name="definition">The document to read.</param>
         /// <param name="tick">The tick to read the referenced cell(s) as of.</param>
         /// <param name="engineTick">The engine tick to read the referenced cell(s) as of.</param>
-        public bool Holds(WorldDefinition definition, ulong tick, ulong engineTick) {
+        /// <param name="arena">The live store, or declaration seeds at admission.</param>
+        public bool Holds(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
             ArgumentNullException.ThrowIfNull(argument: definition);
 
             if (
-                !WorldStateReader.TryRead(
+                !WorldStateReader.TryRead(arena: arena,
                 definition: definition,
                 rowName: State,
                 key: Key,
@@ -294,7 +295,7 @@ public abstract record WorldPlacementResponseCondition {
 
             if (ComparandState is { } comparandRow) {
                 if (
-                    !WorldStateReader.TryRead(
+                    !WorldStateReader.TryRead(arena: arena,
                     definition: definition,
                     rowName: comparandRow,
                     key: ComparandKey,

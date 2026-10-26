@@ -92,7 +92,7 @@ public sealed class StateDynamicsRebaseLawTests {
         var beforeRewriteTick = (fixture.Server.NextInputTick - 1UL);
 
         Assert.True(condition: WorldStateReader.TryReadEased(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             key: "0",
             rawValue: out var midFlight,
             row: out _,
@@ -117,7 +117,7 @@ public sealed class StateDynamicsRebaseLawTests {
         fixture.Step();
 
         var rewriteTick = (fixture.Server.NextInputTick - 2UL);
-        var clock = ReadClock(definition: fixture.Server.Definition);
+        var clock = ReadClock(definition: fixture.Server.ExportDefinition());
 
         // The rebased Y0 is the SAME live eased value just sampled above (bit-exact, since no tick elapsed between
         // the sample and the write applying) — a genuine capture of where the follower actually was, never the old
@@ -139,7 +139,7 @@ public sealed class StateDynamicsRebaseLawTests {
 
         // Continuity: reading right back at the rebase tick reports EXACTLY Y0 — the write never jumps the follower.
         Assert.True(condition: WorldStateReader.TryReadEased(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             key: "0",
             rawValue: out var atRebase,
             row: out _,
@@ -156,7 +156,7 @@ public sealed class StateDynamicsRebaseLawTests {
         // Chasing the NEW target: read far in the future (the closed form needs no further Step() calls) and
         // confirm convergence to 600, never back to the old truth of 300.
         Assert.True(condition: WorldStateReader.TryReadEased(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             key: "0",
             rawValue: out var settled,
             row: out _,
@@ -224,7 +224,7 @@ public sealed class StateDynamicsRebaseLawTests {
         fixture.Step();
 
         var appliedTick = (fixture.Server.NextInputTick - 1UL);
-        var clock = ReadClock(definition: fixture.Server.Definition);
+        var clock = ReadClock(definition: fixture.Server.ExportDefinition());
 
         Assert.Equal(
             actual: clock.Y0,
@@ -239,7 +239,7 @@ public sealed class StateDynamicsRebaseLawTests {
             expected: 1
         );
         Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             key: "0",
             rawValue: out var truth,
             row: out _,
@@ -266,7 +266,7 @@ public sealed class StateDynamicsRebaseLawTests {
         ));
         fixture.Step();
 
-        var afterFirstWrite = ReadClock(definition: fixture.Server.Definition);
+        var afterFirstWrite = ReadClock(definition: fixture.Server.ExportDefinition());
 
         for (var index = 0; (index < 3); index++) {
             fixture.Step();
@@ -281,7 +281,7 @@ public sealed class StateDynamicsRebaseLawTests {
         ));
         fixture.Step();
 
-        var afterSecondWrite = ReadClock(definition: fixture.Server.Definition);
+        var afterSecondWrite = ReadClock(definition: fixture.Server.ExportDefinition());
 
         Assert.NotEqual(
             actual: afterSecondWrite,
@@ -294,7 +294,7 @@ public sealed class StateDynamicsRebaseLawTests {
         );
         fixture.Step();
 
-        var afterUndo = ReadClock(definition: fixture.Server.Definition);
+        var afterUndo = ReadClock(definition: fixture.Server.ExportDefinition());
 
         Assert.Equal(
             actual: afterUndo,
@@ -321,7 +321,7 @@ public sealed class StateDynamicsRebaseLawTests {
         // call, then the call completes and advances it — so the tick a just-applied write rebased at trails
         // NextInputTick by two, not one (one Step call: composes at 0, NextInputTick reads 2 afterward).
         var appliedTick = (fixture.Server.NextInputTick - 2UL);
-        var clock = ReadClock(definition: fixture.Server.Definition);
+        var clock = ReadClock(definition: fixture.Server.ExportDefinition());
 
         // The cell was already at rest at its OLD target (0), so the eased sample the rebase captures is exactly
         // (0, 0) before the kick — the whole velocity is the retarget impulse.
@@ -340,7 +340,7 @@ public sealed class StateDynamicsRebaseLawTests {
 
         // Truth moved to exactly what was written — the trait rebases, it never overrides the write.
         Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             key: "0",
             rawValue: out var truth,
             row: out _,

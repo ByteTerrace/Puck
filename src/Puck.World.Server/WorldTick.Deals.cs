@@ -1,7 +1,5 @@
-using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -10,17 +8,12 @@ public sealed partial class WorldTick {
     // variant rows' cells. A tick on which none of it moved skips the template without reading its children.
     private sealed class DealMemo {
         public WorldDistribution? Distribution;
-        public string[] Keys = [];
         public Vector3[] Offsets = [];
-        public WorldStateRow? Row;
+        public ulong RowVersion;
+        public ulong VariantVersion;
+        public StateArena? Arena;
         public bool Swept;
         public WorldPlacement? Template;
-        public string?[] Texts = [];
-        public long[] Values = [];
-        public string[] VariantKeys = [];
-        public WorldStateRow? VariantRow;
-        public string?[] VariantTexts = [];
-        public long[] VariantValues = [];
         public ulong WorldSeed;
     }
     // What one template's deal moved this tick, narrated once the tick's single deal mutation has landed or failed.
@@ -31,11 +24,12 @@ public sealed partial class WorldTick {
     private readonly List<int> m_dealChildSlots = [];
     private readonly List<bool> m_dealChildKept = [];
     private readonly List<int> m_dealPendingCells = [];
-    private readonly List<WorldMutation> m_dealMutations = [];
+    private readonly List<(string Id, WorldPlacement? Placement)> m_dealChanges = [];
+    private readonly List<CellName> m_dealtKeys = [];
     private readonly List<DealReport> m_dealReports = [];
     private bool[] m_dealSlotTaken = [];
 
-    private WorldDefinition? m_dealSweptDefinition;
+
 
     /// <summary>Describes every placement row as one reader's disclosure deals it: its prototype, resolved transform,
     /// parent, facets, and — for a dealt template — the row it deals from with the children present against the row's
@@ -203,18 +197,11 @@ public sealed partial class WorldTick {
     // the sweep opened on (no two templates share a child), and the tick's whole deal applies as one mutation: one
     // composition, one whole-document validation, one journal entry, landing or refused as a unit.
     private void SweepPlacementDeals(ulong tick) {
-        if (ReferenceEquals(
-            objA: Host.Document.Definition,
-            objB: m_dealSweptDefinition
-        )) {
-            return;
-        }
-
         var placements = Host.Document.Definition.Placements;
         var worldSeed = (Host.Document.Definition.Generation?.WorldSeed ?? 0UL);
         var templates = 0;
 
-        m_dealMutations.Clear();
+        m_dealChanges.Clear();
         m_dealReports.Clear();
 
         for (var index = 0; (index < placements.Count); index++) {
@@ -226,18 +213,11 @@ public sealed partial class WorldTick {
 
             templates++;
 
-            var row = WorldDefinitionRows.FindStateRow(
-                rows: Host.Document.Definition.State,
-                name: deal.Row
-            );
-            var variantRow = ((deal.Variants is { } variants)
-                ? WorldDefinitionRows.FindStateRow(
-                    rows: Host.Document.Definition.State,
-                    name: variants.Row
-                )
-                : null
-            );
-
+            var arena = Host.Arena;
+            var rowOrdinal = arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1;
+            var variantOrdinal = deal.Variants is { } variants && arena.Catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle) ? variantHandle.Ordinal : -1;
+            var rowVersion = rowOrdinal < 0 ? 0UL : arena.RowVersion(rowOrdinal);
+            var variantVersion = variantOrdinal < 0 ? 0UL : arena.RowVersion(variantOrdinal);
             if (!m_dealMemos.TryGetValue(
                 key: template.Id,
                 value: out var memo
@@ -253,20 +233,7 @@ public sealed partial class WorldTick {
                 objA: memo.Template,
                 objB: template
             ) || template.Equals(other: memo.Template)) &&
-                RowUnchanged(
-                keys: memo.Keys,
-                memoRow: memo.Row,
-                row: row,
-                texts: memo.Texts,
-                values: memo.Values
-            ) &&
-                RowUnchanged(
-                keys: memo.VariantKeys,
-                memoRow: memo.VariantRow,
-                row: variantRow,
-                texts: memo.VariantTexts,
-                values: memo.VariantValues
-            )
+                ReferenceEquals(memo.Arena, arena) && memo.RowVersion == rowVersion && memo.VariantVersion == variantVersion
             ) {
                 continue;
             }
@@ -274,11 +241,12 @@ public sealed partial class WorldTick {
             Deal(
                 deal: deal,
                 memo: memo,
-                row: row,
+                rowOrdinal: rowOrdinal,
                 template: template,
-                variantRow: variantRow,
+                variantOrdinal: variantOrdinal,
                 worldSeed: worldSeed
             );
+            memo.Arena = arena; memo.RowVersion = rowVersion; memo.VariantVersion = variantVersion;
         }
 
         if (m_dealMemos.Count > templates) {
@@ -293,27 +261,10 @@ public sealed partial class WorldTick {
         }
 
         var applied = true;
-
-        if (m_dealMutations.Count > 0) {
-            // Principal.World, the same structural-exemption door the response sweep uses.
-            applied = Host.TryApplyMutation(
-                connectionId: SubmissionEnvelope.LocalConnectionId,
-                correlationId: 0,
-                mutation: ((m_dealMutations.Count == 1)
-                    ? m_dealMutations[0]
-                    : new WorldMutation.Batch(
-                        Principal: Principal.World,
-                        Mutations: [.. m_dealMutations]
-                    )
-                ),
-                preMetered: false,
-                tick: tick,
-                engineTick: CompletedEngineTicks
-            );
-        }
+        Host.Document.InstallPlacementProjection(changes: m_dealChanges);
 
         if (Host.Output.HasNarrationSink) {
-            var total = m_dealMutations.Count;
+            var total = m_dealChanges.Count;
 
             foreach (var report in m_dealReports) {
                 Host.Output.Narrate(
@@ -327,69 +278,9 @@ public sealed partial class WorldTick {
             }
         }
 
-        m_dealSweptDefinition = Host.Document.Definition;
+
     }
-    private static bool RowUnchanged(WorldStateRow? row, WorldStateRow? memoRow, string[] keys, string?[] texts, long[] values) {
-        if (ReferenceEquals(
-            objA: row,
-            objB: memoRow
-        )) {
-            return true;
-        }
-
-        if (
-            (row is null) ||
-            (memoRow is null)
-        ) {
-            return false;
-        }
-
-        var cells = (row.Cells ?? []);
-
-        if (cells.Count != keys.Length) {
-            return false;
-        }
-
-        for (var index = 0; (index < keys.Length); index++) {
-            var cell = cells[index];
-
-            if (
-                !string.Equals(
-                a: cell.Key.Value,
-                b: keys[index],
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                !string.Equals(
-                a: ((cell.Value.HasValue && (cell.Value.Kind == CellKind.Text)) ? cell.Value.AsText : null),
-                b: texts[index],
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                (((cell.Value.HasValue && (cell.Value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? cell.Value.Raw : 0L) != values[index])
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    private static void Remember(WorldStateRow? row, ref string[] keys, ref string?[] texts, ref long[] values) {
-        var cells = (row?.Cells ?? []);
-
-        if (keys.Length != cells.Count) {
-            keys = new string[cells.Count];
-            texts = new string?[cells.Count];
-            values = new long[cells.Count];
-        }
-
-        for (var index = 0; (index < cells.Count); index++) {
-            keys[index] = cells[index].Key.Value;
-            var cellValue = cells[index].Value;
-
-            texts[index] = ((cellValue.HasValue && (cellValue.Kind == CellKind.Text)) ? cellValue.AsText : null);
-            values[index] = ((cellValue.HasValue && (cellValue.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? cellValue.Raw : 0L);
-        }
-    }
-    private void Deal(WorldPlacement template, WorldPlacementDeal deal, WorldStateRow? row, WorldStateRow? variantRow, DealMemo memo, ulong worldSeed) {
+    private void Deal(WorldPlacement template, WorldPlacementDeal deal, int rowOrdinal, int variantOrdinal, DealMemo memo, ulong worldSeed) {
         if (
             !memo.Swept ||
             (memo.WorldSeed != worldSeed) ||
@@ -429,7 +320,7 @@ public sealed partial class WorldTick {
         m_dealChildKept.Clear();
         m_dealPendingCells.Clear();
 
-        var firstMutation = m_dealMutations.Count;
+        var firstMutation = m_dealChanges.Count;
 
         foreach (var candidate in Host.Document.Definition.Placements) {
             if (!WorldPlacementDeal.IsChild(
@@ -459,11 +350,14 @@ public sealed partial class WorldTick {
             m_dealChildKept.Add(item: false);
         }
 
-        var cells = (row?.Cells ?? []);
+        m_dealtKeys.Clear();
+        var cursor = 0;
+        if (rowOrdinal >= 0) { while (Host.Arena.TryNextCell(rowOrdinal, ref cursor, out var cellKey)) { m_dealtKeys.Add(Host.Arena.Keys[cellKey]); } }
+        var cells = m_dealtKeys;
         var replaced = 0;
 
         for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
-            var key = cells[cellIndex].Key.Value;
+            var key = cells[cellIndex].Value;
             var childIndex = FindChild(
                 template: template.Id,
                 key: key
@@ -486,10 +380,9 @@ public sealed partial class WorldTick {
             }
 
             var child = m_dealChildren[childIndex];
-            var prototype = deal.ResolvePrototype(
+            var prototype = ResolveDealPrototype(deal: deal, variantOrdinal: variantOrdinal,
                 key: key,
-                templatePrototype: template.PrototypeId,
-                variantRow: variantRow
+                templatePrototype: template.PrototypeId
             );
 
             var reconciled = ReconcileChild(
@@ -505,10 +398,7 @@ public sealed partial class WorldTick {
             }
 
             replaced++;
-            m_dealMutations.Add(item: new WorldMutation.UpsertPlacement(
-                Placement: reconciled,
-                Principal: Principal.World
-            ));
+            m_dealChanges.Add((reconciled.Id, reconciled));
         }
 
         var removed = 0;
@@ -525,17 +415,14 @@ public sealed partial class WorldTick {
             }
 
             removed++;
-            m_dealMutations.Add(item: new WorldMutation.RemovePlacement(
-                Id: m_dealChildren[childIndex].Id,
-                Principal: Principal.World
-            ));
+            m_dealChanges.Add((m_dealChildren[childIndex].Id, null));
         }
 
         var added = 0;
         var overflow = 0;
 
         for (var pending = 0; (pending < m_dealPendingCells.Count); pending++) {
-            var key = cells[m_dealPendingCells[pending]].Key.Value;
+            var key = cells[m_dealPendingCells[pending]].Value;
             var slot = FirstFreeSlot(count: offsets.Length);
 
             if (slot < 0) {
@@ -557,16 +444,14 @@ public sealed partial class WorldTick {
                 added++;
             }
 
-            m_dealMutations.Add(item: new WorldMutation.UpsertPlacement(
-                Placement: ((existing >= 0)
+            var nextChild = ((existing >= 0)
                 ? ReconcileChild(
                         m_dealChildren[existing],
                         template,
-                        deal.ResolvePrototype(
+                        ResolveDealPrototype(deal: deal, variantOrdinal: variantOrdinal,
                             key: key,
-                            templatePrototype: template.PrototypeId,
-                            variantRow: variantRow
-                        ),
+                            templatePrototype: template.PrototypeId
+            ),
                         offsets[slot],
                         slot
                     )
@@ -579,19 +464,17 @@ public sealed partial class WorldTick {
                             )),
                         offset: offsets[slot],
                         slot: slot,
-                        prototype: deal.ResolvePrototype(
+                        prototype: ResolveDealPrototype(deal: deal, variantOrdinal: variantOrdinal,
                             key: key,
-                            templatePrototype: template.PrototypeId,
-                            variantRow: variantRow
-                        ),
+                            templatePrototype: template.PrototypeId
+            ),
                         template: template
-                    )),
-                Principal: Principal.World
-            ));
+                    ));
+            m_dealChanges.Add((nextChild.Id, nextChild));
         }
 
         if (
-            (m_dealMutations.Count > firstMutation) ||
+            (m_dealChanges.Count > firstMutation) ||
             (overflow > 0)
         ) {
             m_dealReports.Add(item: new DealReport(
@@ -607,21 +490,16 @@ public sealed partial class WorldTick {
         }
 
         memo.Template = template;
-        memo.Row = row;
-        memo.VariantRow = variantRow;
         memo.Swept = true;
-        Remember(
-            keys: ref memo.Keys,
-            row: row,
-            texts: ref memo.Texts,
-            values: ref memo.Values
-        );
-        Remember(
-            keys: ref memo.VariantKeys,
-            row: variantRow,
-            texts: ref memo.VariantTexts,
-            values: ref memo.VariantValues
-        );
+    }
+    private string ResolveDealPrototype(WorldPlacementDeal deal, int variantOrdinal, string key, string templatePrototype) {
+        if (variantOrdinal < 0 || deal.Variants?.Map is not { } map || !CellName.TryParse(key, out var name, out _) ||
+            !Host.Arena.Keys.TryResolve(name, out var cell) || !Host.Arena.TryRead(variantOrdinal, cell, out var value)) { return templatePrototype; }
+        if (value.Kind == CellKind.Text) { return map.TryGetValue(value.AsText, out var selected) ? selected : templatePrototype; }
+        foreach (var (spelling, prototype) in map) {
+            if (long.TryParse(spelling, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw) && raw == value.Raw) { return prototype; }
+        }
+        return templatePrototype;
     }
     private int FindChild(string template, string key) {
         for (var index = 0; (index < m_dealChildren.Count); index++) {

@@ -66,7 +66,7 @@ public sealed partial class RuleEvaluator {
             Tick: tick
         );
         var queued = m_deferred.Count;
-        var mark = arena.BeginScope();
+        var mark = m_host.BeginStateTransaction();
 
         applied = false;
 
@@ -81,21 +81,21 @@ public sealed partial class RuleEvaluator {
                 ruleName: ruleName
             );
         } catch {
-            arena.Rewind(mark: mark);
+            m_host.RewindStateTransaction(mark: mark);
             DiscardQueued(from: queued);
 
             throw;
         }
 
         if (!proposed) {
-            arena.Rewind(mark: mark);
+            m_host.RewindStateTransaction(mark: mark);
             DiscardQueued(from: queued);
             applied = false;
 
             return RuleOutcome.Refused;
         }
 
-        arena.Commit(mark: mark);
+        m_host.CommitStateTransaction(mark: mark);
 
         // The scope is closed. The transactional arms install first, as the unit the host prepared, and the rest are
         // delivered in authored order: a delivery that refuses is counted, undoes nothing, and stops no later
@@ -195,6 +195,11 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
+        if (!m_host.PrepareStateCommit(refusal: out var stateRefusal)) {
+            ReportRefusal(effect: "the firing's state transaction", fallback: RuleEffectRefusal.MutationRejected,
+                refusal: in stateRefusal, ruleName: ruleName, tick: firing.Tick);
+            return false;
+        }
         return true;
     }
     private bool QueuedTransactional(int from) {

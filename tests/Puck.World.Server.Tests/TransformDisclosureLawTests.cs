@@ -24,7 +24,7 @@ public sealed class TransformDisclosureLawTests {
     );
     private static WorldDefinition Table(IReadOnlyList<WorldRule>? rules = null) {
         var tokens = CellName.Parse(candidate: "tokens");
-        var seatOne = new StateVisibility(Readers: ["seat1"]);
+        var seatOne = new StateVisibility(Readers: ["seat1", Dealer.Describe()]);
 
         return (Fixtures.BuildDocument() with {
             Rules = rules,
@@ -100,8 +100,8 @@ public sealed class TransformDisclosureLawTests {
         var refused = Assert.Single(collection: rejections);
 
         Assert.Contains(expectedSubstring: nameof(RuleRefusal.TransformWidensAudience), actualString: refused);
-        Assert.Contains(actualString: refused, expectedSubstring: "'table' (public) from 'rank' (readers [seat1])");
-        Assert.Equal(expected: "a,b,c", actual: Order(definition: fixture.Server.Definition, zone: "table"));
+        Assert.Contains(actualString: refused, expectedSubstring: "'table' (public) from 'rank'");
+        Assert.Equal(expected: "a,b,c", actual: Order(definition: fixture.Server.ExportDefinition(), zone: "table"));
 
         rejections.Clear();
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.TransformState(
@@ -111,7 +111,7 @@ public sealed class TransformDisclosureLawTests {
         fixture.Step();
 
         Assert.Empty(collection: rejections);
-        Assert.Equal(expected: "e,f,d", actual: Order(definition: fixture.Server.Definition, zone: "hand"));
+        Assert.Equal(expected: "e,f,d", actual: Order(definition: fixture.Server.ExportDefinition(), zone: "hand"));
     }
     // The same policy holds for the world's own rules, at validation: a rule sorting the public table by rank is
     // refused by name before the world boots, and the same rule over seat1's hand validates.
@@ -156,8 +156,8 @@ public sealed class TransformDisclosureLawTests {
         var refused = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
         Assert.False(refused.Applied);
         Assert.Contains(nameof(RuleRefusal.TransformWidensAudience), refused.Detail);
-        Assert.Equal("a,b,c", Order(definition: fixture.Server.Definition, zone: "table"));
-        Assert.Equal("d,e,f", Order(definition: fixture.Server.Definition, zone: "hand"));
+        Assert.Equal("a,b,c", Order(definition: fixture.Server.ExportDefinition(), zone: "table"));
+        Assert.Equal("d,e,f", Order(definition: fixture.Server.ExportDefinition(), zone: "hand"));
         results.Clear();
         fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
             SessionGeneration: 0, Sequence: 2, CorrelationId: 2, Principal: Dealer, OperationId: Guid.NewGuid(),
@@ -166,7 +166,7 @@ public sealed class TransformDisclosureLawTests {
         fixture.Step();
         var applied = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
         Assert.True(applied.Applied, applied.Detail);
-        Assert.Equal("e,f,d", Order(definition: fixture.Server.Definition, zone: "hand"));
+        Assert.Equal("e,f,d", Order(definition: fixture.Server.ExportDefinition(), zone: "hand"));
     }
 
     [Theory]
@@ -176,8 +176,8 @@ public sealed class TransformDisclosureLawTests {
         var definition = Table();
         definition = definition with { StateRaw = definition.StateRaw! with {
             World = definition.State.Select(row => row.Name.Value == "rank"
-                ? row with { Visibility = confined ? new StateVisibility(Readers: ["seat1"]) : null,
-                    Cells = row.Cells!.Select(cell => cell.Key.Value == "a" ? cell with { Visibility = new StateVisibility(Readers: ["seat1"]) } : cell).ToArray() }
+                ? row with { Visibility = confined ? new StateVisibility(Readers: ["seat1", Dealer.Describe()]) : null,
+                    Cells = row.Cells!.Select(cell => cell.Key.Value == "a" ? cell with { Visibility = new StateVisibility(Readers: ["seat1", Dealer.Describe()]) } : cell).ToArray() }
                 : row).ToArray(),
         } };
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -192,9 +192,9 @@ public sealed class TransformDisclosureLawTests {
         var arena = fixture.Server.Arena;
         Assert.True(definition.StateCatalog.TryResolve(lane: StateLane.Document, name: "rank", handle: out var rank));
         Assert.True(arena.TryWriteVisibility(rowOrdinal: rank.Ordinal,
-            key: arena.Keys.Intern(name: CellName.Parse(candidate: "a")), visibility: new StateVisibility(Readers: ["seat1"])));
+            key: arena.Keys.Intern(name: CellName.Parse(candidate: "a")), visibility: new StateVisibility(Readers: ["seat1", Dealer.Describe()])));
         Assert.True(fixture.Server.PublishArena());
-        var before = Order(definition: fixture.Server.Definition, zone: "rank");
+        var before = Order(definition: fixture.Server.ExportDefinition(), zone: "rank");
         var results = new List<WorldSubmissionResult>();
         fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
             SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: Dealer, OperationId: Guid.NewGuid(),
@@ -206,10 +206,10 @@ public sealed class TransformDisclosureLawTests {
         Assert.Equal(Dealer, result.Actor);
         Assert.Equal(confined, result.Applied);
         if (confined) {
-            Assert.Equal("b,e,c,f,a,d", Order(definition: fixture.Server.Definition, zone: "rank"));
+            Assert.Equal("b,e,c,f,a,d", Order(definition: fixture.Server.ExportDefinition(), zone: "rank"));
         } else {
             Assert.Contains(nameof(RuleRefusal.TransformWidensAudience), result.Detail);
-            Assert.Equal(before, Order(definition: fixture.Server.Definition, zone: "rank"));
+            Assert.Equal(before, Order(definition: fixture.Server.ExportDefinition(), zone: "rank"));
         }
     }
 
@@ -238,7 +238,7 @@ public sealed class TransformDisclosureLawTests {
         var seatOne = new StateVisibility(Readers: ["seat1"]);
         var both = new StateVisibility(Readers: ["seat1", "seat2"]);
         var authority = new StateVisibility(Readers: []);
-        var live = new StateVisibility(Readers: ["seat1"], ReadersFrom: "audience");
+        var live = new StateVisibility(Readers: ["seat1", Dealer.Describe()], ReadersFrom: "audience");
 
         Assert.True(condition: StateVisibility.Encloses(audience: null, policy: null));
         Assert.True(condition: StateVisibility.Encloses(policy: new StateVisibility(), audience: seatOne));

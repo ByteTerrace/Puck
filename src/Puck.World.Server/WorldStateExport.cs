@@ -103,6 +103,7 @@ public static class WorldStateExport {
         ArgumentNullException.ThrowIfNull(argument: visitRow);
         ArgumentNullException.ThrowIfNull(argument: visit);
 
+        definition = WorldStateReader.Export(definition);
         var catalog = definition.StateCatalog;
         var rows = definition.State;
 
@@ -155,7 +156,7 @@ public static class WorldStateExport {
     public static byte[] ToCanonicalJson(WorldServer server) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
-        var definition = server.Definition;
+        var definition = server.ExportDefinition();
         var tick = (server.NextInputTick - 1UL);
         // The document's own serializer is the one walk over the row shape; lifting its `state` member keeps this
         // export from becoming a second, drift-prone description of the same rows.

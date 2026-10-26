@@ -1,23 +1,25 @@
 using Puck.Commands;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // Re-stamps one slot's server-owned half through the ordinary pipeline under Principal.World — the same
-    // structural-exemption door a rule effect's own writes use, so the arm/disarm is journalled and undoable.
+    private long? TenureDeadline(string placement) {
+        if (!Host.Arena.Catalog.TryResolve(StateLane.Document, WorldContributionState.Row, out var row) ||
+            !Host.Arena.Keys.TryResolve(CellName.Parse(placement), out var key) || !Host.Arena.TryRead(row.Ordinal, key, out var value)) { return null; }
+        return value.Raw >= 0L ? value.Raw : null;
+    }
     private void StampContribution(WorldPlacement placement, WorldPlacementContribution contribution, ulong tick) {
-        _ = Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: new WorldMutation.UpsertPlacement(
-                Placement: (placement with { Contribution = contribution }),
-                Principal: Principal.World
-            ),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        );
+        WriteTenure(placement.Id, contribution.RetractDeadlineTick ?? -1L);
+        Host.Document.InstallPlacementProjection([(placement.Id, placement with { Contribution = contribution })]);
+    }
+    private void WriteTenure(string placement, long value) {
+        if (!Host.Arena.Catalog.TryResolve(StateLane.Document, WorldContributionState.Row, out var row)) { throw new InvalidOperationException("The tenure row was not declared at installation."); }
+        var mark = Host.BeginStateTransaction();
+        if (!Host.Arena.TryWrite(rowOrdinal: row.Ordinal, key: Host.Arena.Keys.Intern(CellName.Parse(placement)), write: StateWriteKind.Set, operand: value, reason: out var reason)) {
+            Host.RewindStateTransaction(mark); throw new InvalidOperationException(reason);
+        }
+        if (!Host.TryCommitStateTransaction(mark, Principal.World, out reason)) { throw new InvalidOperationException(reason); }
+        Host.PublishArena();
     }
     // Retraction: the host's frame stands, the piece goes. One UpsertPlacement re-points prototypeId back at the
     // authored slotCreationId and clears the stamped half, and — only when nothing else still names it — one
@@ -53,22 +55,11 @@ public sealed partial class WorldTick {
         var retired = placement.PrototypeId;
         var contributor = contribution.Contributor;
 
-        if (!Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: new WorldMutation.UpsertPlacement(
-                Placement: (placement with {
-                    PrototypeId = contribution.SlotCreationId,
-                    Contribution = (contribution with { Contributor = null, RetractDeadlineTick = null }),
-                }),
-                Principal: Principal.World
-            ),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        )) {
-            return;
-        }
+        WriteTenure(placement.Id, -2L);
+        Host.Document.InstallPlacementProjection([(placement.Id, placement with {
+            PrototypeId = contribution.SlotCreationId,
+            Contribution = contribution with { Contributor = null, RetractDeadlineTick = null },
+        })]);
 
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
@@ -77,26 +68,6 @@ public sealed partial class WorldTick {
             );
         }
 
-        // A creation some surviving row still names stays: its removal would be refused, and the stamp this sweep just
-        // cleared would not bring it back to retry.
-        if (WorldDefinitionRows.FindCreationReference(
-            creationId: retired,
-            definition: Host.Document.Definition
-        ) is not null) {
-            return;
-        }
-
-        _ = Host.TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: new WorldMutation.RemoveCreation(
-                Id: retired,
-                Principal: Principal.World
-            ),
-            preMetered: false,
-            tick: tick,
-            engineTick: CompletedEngineTicks
-        );
     }
 
     // Presence-tenure slots, indexed by their watched link, rebuilt only when the document itself has changed since
@@ -164,7 +135,7 @@ public sealed partial class WorldTick {
                 PlacementId: placement.Id
             ));
 
-            if (contribution.RetractDeadlineTick is { } armed) {
+            if (TenureDeadline(placement.Id) is { } armed) {
                 m_tenureDeadlines.Add(
                     dueTick: armed,
                     token: placement.Id
@@ -193,7 +164,7 @@ public sealed partial class WorldTick {
 
             if (!dropped) {
                 // Reconnect-within-grace is nothing happening at all: clear the stamp and leave the piece standing.
-                if (contribution.RetractDeadlineTick is not null) {
+                if (TenureDeadline(placement.Id) is not null) {
                     _ = m_tenureDeadlines.Remove(token: slot.PlacementId);
                     StampContribution(
                         contribution: (contribution with { RetractDeadlineTick = null }),
@@ -205,7 +176,7 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            if (contribution.RetractDeadlineTick is not null) {
+            if (TenureDeadline(placement.Id) is not null) {
                 continue;
             }
 

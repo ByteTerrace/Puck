@@ -956,7 +956,7 @@ public sealed partial class WorldDocument {
         ) ?? []);
         // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
         // the one caller that needs both.
-        var stateCells = Host.StreamedCellCount(full: !consumeContinuity);
+        var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
         var cellCount = (latticeDeltas.Length + stateCells);
 
         if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)cellCount)))); }
@@ -970,7 +970,7 @@ public sealed partial class WorldDocument {
             );
         }
 
-        Host.CopyStreamedCells(fieldCells.Span[latticeDeltas.Length..], full: !consumeContinuity);
+        Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Length..], full: !consumeContinuity);
 
         return new WorldSnapshot(
             Tick: tick,
@@ -1035,7 +1035,7 @@ public sealed partial class WorldDocument {
         // are too varied to cheaply name the one row they touched, unlike the single-cell write InstallRuntimeStateValue
         // below narrows. This is what makes a live world.state.cell.set that flips a gate settle before the SAME
         // tick's later intent drain reads it (Install always runs before the intents loop within one Step).
-        Host.GrantTable.SyncState(definition: definition);
+        Host.GrantTable.SyncState(definition: definition, arena: Host.Arena);
 
         // Field reactions are a compiled runtime product even when the mutation does not require a population
         // rebuild. A compatible replacement swaps the typed plan in place and retains every lattice cell.
@@ -1086,7 +1086,7 @@ public sealed partial class WorldDocument {
             disconnected: disconnected
         );
         // The rebuild re-seeds every cell-driven count to zero; resolve them from their cells before anything reads.
-        Host.Population.ReconcileInhabitCounts(
+        Host.Population.ReconcileInhabitCounts(arena: Host.Arena,
             admitted: admitted,
             definition: definition,
             disconnected: disconnected,
@@ -1135,14 +1135,14 @@ public sealed partial class WorldDocument {
     // writes the arena or opens a scope. Each flag says whether a row that consumer reads moved.
     internal void ReconcileStateConsumers(WorldDefinition definition, bool driveGate, bool fields) {
         if (driveGate) {
-            Host.GrantTable.SyncState(definition: definition);
+            Host.GrantTable.SyncState(definition: definition, arena: Host.Arena);
         }
         if (fields) {
             Host.Population.InstallFields(definition: definition);
         }
         // ReconcileInhabitCounts compares against its own cache and is a no-op walk when no tracked inhabit facet's
         // row moved.
-        Host.Population.ReconcileInhabitCounts(
+        Host.Population.ReconcileInhabitCounts(arena: Host.Arena,
             admitted: m_inhabitCountAdmitted,
             definition: definition,
             disconnected: m_inhabitCountDisconnected,
@@ -1173,7 +1173,7 @@ public sealed partial class WorldDocument {
         foreach (var name in m_touchedRows) {
             if (
                 catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name) &&
-                StateReader.TryResolveRowHandle(rows: definition.State, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out _) &&
+                StateReader.TryResolveRowHandle(arena: Host.Arena, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out _) &&
                 definition.State[ordinal].GatesDrive
             ) {
                 return true;

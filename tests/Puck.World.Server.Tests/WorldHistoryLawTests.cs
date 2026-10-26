@@ -156,7 +156,7 @@ public sealed class WorldHistoryLawTests {
         fired.Step();
         fired.Step();
         var after = Find(
-            document: fired.Server.Definition,
+            document: fired.Server.ExportDefinition(),
             row: "taps"
         );
 
@@ -227,7 +227,7 @@ public sealed class WorldHistoryLawTests {
         fixture.Step();
 
         var row = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "taps"
         );
 

@@ -12,7 +12,7 @@ namespace Puck.State;
 /// <see cref="FixedTickConversion.TicksPerSecond"/> per second.</param>
 /// <param name="TicksPerSecond">The simulation rate a dynamics follower is stepped at when a write re-seeds it; at
 /// zero or below a write stores the new target and leaves the follower's clock where it is. No read consults it: a
-/// dynamics cell always reads its stored target here, and <see cref="StateReader.TryReadEased"/> is the eased
+/// dynamics cell always reads its stored target here, and <see cref="StateArena.TryReadEased"/> is the eased
 /// read.</param>
 /// <param name="Dynamics">The declared dynamics rows a <see cref="StateDynamics"/> trait's reference resolves
 /// against.</param>
@@ -35,6 +35,23 @@ public readonly record struct ArenaTime(ulong Tick, ulong EngineTick, int TicksP
     );
 }
 public sealed partial class StateArena {
+    /// <summary>Samples an eased follower directly from its stored clock and compiled trait.</summary>
+    public bool TryReadDynamics(int rowOrdinal, CellKey key, in ArenaTime time, out SecondOrderSample sample) {
+        sample = default;
+        return TryCellSlot(rowOrdinal: rowOrdinal, key: key, slot: out var slot) && Bit(index: slot, words: m_presence) &&
+            (LiveBehavior(rowOrdinal: rowOrdinal, key: key).Dynamics is { } dynamics) &&
+            TrySampleDynamics(row: m_catalog.Rows[rowOrdinal], dynamics: dynamics, baseValue: m_numbers[slot], slot: slot, time: in time, sample: out sample);
+    }
+
+    /// <summary>Reads a presentation value, sampling dynamics while sharing the ordinary live read for every other trait.</summary>
+    public bool TryReadEased(int rowOrdinal, CellKey key, in ArenaTime time, out CellValue value) {
+        if (!TryReadLive(rowOrdinal: rowOrdinal, key: key, time: in time, value: out value)) { return false; }
+        if (TryReadDynamics(rowOrdinal: rowOrdinal, key: key, time: in time, sample: out var sample)) {
+            var row = m_catalog.Rows[rowOrdinal];
+            value = CellValue.FromNumber(kind: row.Kind, raw: row.ClampToEnvelope(value: StateReader.DynamicsFixedToRowRaw(row: row, value: sample.Value)));
+        }
+        return true;
+    }
     /// <summary>Resolves which value-over-time trait governs one cell — the cell's own authored trait, its row's
     /// default, or none when the cell's stored <see cref="StateCellBehavior"/> opts out.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
@@ -70,7 +87,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Reads one cell's live value: its stored value advanced or rotated by the trait that governs it, at
     /// <paramref name="time"/>. A cell carrying <see cref="StateDynamics"/> reads its stored target — the truth a
-    /// rule, a write's operand, a disclosure and a hash all take; only <see cref="StateReader.TryReadEased"/>
+    /// rule, a write's operand, a disclosure and a hash all take; only <see cref="StateArena.TryReadEased"/>
     /// eases, for a presentation binding.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key, resolved by this arena's key table.</param>

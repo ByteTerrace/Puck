@@ -104,6 +104,7 @@ public sealed partial class WorldDocument {
     /// <param name="definition">The new live definition.</param>
     internal void AdoptDefinition(WorldDefinition definition) {
         m_definition = definition;
+        if (Host.Arena is { } arena) { WorldStateReader.Bind(definition, arena); }
         m_sequence++;
     }
     internal void CacheArenaExport(WorldDefinition definition) => m_definition = definition;
@@ -117,8 +118,7 @@ public sealed partial class WorldDocument {
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared.</summary>
     internal void Compact() {
-        Host.MaterializeArena();
-        m_base = m_definition;
+        m_base = Host.MaterializeArena();
         m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Save);
         m_journal.Clear();
     }

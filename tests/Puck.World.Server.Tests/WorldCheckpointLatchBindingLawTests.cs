@@ -72,7 +72,7 @@ public sealed class WorldCheckpointLatchBindingLawTests : IDisposable {
         };
     }
     private static long Hits(WorldServer server, string key) => (WorldDefinitionRows.FindStateRow(
-        server.Definition.State,
+        server.ExportDefinition().State,
         "hits"
     )!.Cells ?? []).First(predicate: cell => (cell.Key.Value == key)).Value.Raw;
     private WorldServer Restore(WorldAuthorityCheckpoint checkpoint) {
@@ -208,7 +208,7 @@ public sealed class WorldCheckpointLatchBindingLawTests : IDisposable {
             reason: out var refusal
         ), userMessage: refusal);
 
-        var alphaOrdinal = fixture.Server.Definition.StateCatalog.Keys.Names.ToList().FindIndex(match: name => (name.Value == "alpha"));
+        var alphaOrdinal = fixture.Server.ExportDefinition().StateCatalog.Keys.Names.ToList().FindIndex(match: name => (name.Value == "alpha"));
         var swapped = Document(alphaFirst: false);
         var swappedOrdinal = swapped.StateCatalog.Keys.Names.ToList().FindIndex(match: name => (name.Value == "alpha"));
 
@@ -221,7 +221,7 @@ public sealed class WorldCheckpointLatchBindingLawTests : IDisposable {
         // only the intern order moved. A restore that carried the raw ordinal would land 'alpha''s held gate on
         // 'beta'.
         var restored = Restore(checkpoint: checkpoint! with {
-            Server = checkpoint.Server with { DefinitionJson = WorldDefinitionSerialization.Serialize(definition: swapped with { StateRaw = SwapMarksOf(definition: fixture.Server.Definition) }) },
+            Server = checkpoint.Server with { DefinitionJson = WorldDefinitionSerialization.Serialize(definition: swapped with { StateRaw = SwapMarksOf(definition: fixture.Server.ExportDefinition()) }) },
         });
 
         restored.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(

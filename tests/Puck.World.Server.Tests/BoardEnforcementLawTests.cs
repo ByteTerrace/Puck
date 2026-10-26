@@ -131,7 +131,7 @@ public sealed class BoardEnforcementLawTests {
     private static float CellCentreZ() => (0.5f * CellSize);
     private static int CellOf(WorldFixture fixture, WorldBody body) {
         var topology = WorldTopologyCompilation.Find(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             name: TopologyName
         )!;
 
@@ -170,7 +170,7 @@ public sealed class BoardEnforcementLawTests {
     }
     private static WorldBody PieceBody(WorldFixture fixture) {
         var ordinal = -1;
-        var placements = fixture.Server.Definition.Placements;
+        var placements = fixture.Server.ExportDefinition().Placements;
 
         for (var index = 0; (index < placements.Count); index++) {
             if (string.Equals(

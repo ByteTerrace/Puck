@@ -217,7 +217,7 @@ public sealed partial class WorldServer {
             CompletedEngineTicks,
             out _,
             out var raw,
-            out _
+            out _, arena: m_arena
         ) ||
             (raw is not { } value)
         ) {

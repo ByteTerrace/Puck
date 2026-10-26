@@ -66,7 +66,7 @@ public sealed class WorldDecisionLawTests {
             predicate: s => ((s.Rule == rule) && (s.Key == key))
         );
     private static long Value(WorldFixture fixture, string row) => WorldDefinitionRows.FindStateRow(
-        fixture.Server.Definition.State,
+        fixture.Server.ExportDefinition().State,
         row
     )!.Cells![0].Value.AsInt;
     private static void Set(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(

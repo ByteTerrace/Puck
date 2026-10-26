@@ -9,7 +9,7 @@ namespace Puck.World.Server.Tests;
 public sealed class WorldObservationLawTests {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
-    private static StateCell Cell(WorldServer server, string rowName, string key) => server.Definition.State.First(predicate: row => (row.Name.Value == rowName))
+    private static StateCell Cell(WorldServer server, string rowName, string key) => server.ExportDefinition().State.First(predicate: row => (row.Name.Value == rowName))
         .Cells!.Single(predicate: cell => (cell.Key.Value == key));
     private static WorldExtensionConfiguration Configuration() => new(
         "puck.world.extensions.v1",
@@ -102,7 +102,7 @@ public sealed class WorldObservationLawTests {
             new Dictionary<string, string> { ["name"] = name, ["score"] = score, ["depth"] = depth }
         );
     // A row holding no cell carries none rather than an empty list — the one spelling the arena's export uses.
-    private static string[] Names(WorldServer server) => [.. (server.Definition.State.First(predicate: row => (row.Name.Value == "observedNames")).Cells ?? [])
+    private static string[] Names(WorldServer server) => [.. (server.ExportDefinition().State.First(predicate: row => (row.Name.Value == "observedNames")).Cells ?? [])
         .Select(selector: cell => cell.Value.AsText)];
     private static async Task Observe(WorldConfiguredExtensions runtime, WorldServer server, ulong tick, bool fails = false) {
         runtime.Pump(completedTick: tick);

@@ -131,14 +131,16 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// the authority's phase, and nothing otherwise. Observations need no step: each carries the trait that moves it,
     /// which the recipient evaluates, and only a write, which composes, changes one.</summary>
     /// <param name="definition">The authority's installed document.</param>
+    /// <param name="arena">The live arena, or null at a seed boundary.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns>The delivery owed.</returns>
-    public WorldProjectionDelivery Step(WorldDefinition definition, ulong tick, ulong engineTick) {
+    public WorldProjectionDelivery Step(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
         if (
             (m_held?.Timeline is not { Clocks: { } clocks } timeline) ||
             (m_tree is null) ||
             !m_anchors.Step(
+            arena: arena,
             definition: definition,
             engineTick: engineTick,
             tick: tick

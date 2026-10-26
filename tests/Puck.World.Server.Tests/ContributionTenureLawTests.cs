@@ -333,8 +333,8 @@ public sealed class ContributionTenureLawTests {
             expected: ContributionGraceSeconds
         );
 
-        // The contributed creation row is released once nothing names it.
-        Assert.Null(@object: WorldDefinitionRows.FindCreation(
+        // The projection releases its instance; the authored creation remains declared.
+        Assert.NotNull(@object: WorldDefinitionRows.FindCreation(
             creations: fixture.Server.Definition.Creations,
             id: ContributedCreation
         ));

@@ -139,7 +139,7 @@ public sealed class EmbeddingConnectionLawTests {
         server.DrainAdministrative();
     }
     private static StateCell? FindCell(WorldServer server, string row, string key) =>
-        server.Definition.State.FirstOrDefault(predicate: r => (r.Name.Value == row))
+        server.ExportDefinition().State.FirstOrDefault(predicate: r => (r.Name.Value == row))
             ?.Cells?.FirstOrDefault(predicate: c => (c.Key.Value == key));
     private static void UpsertRequest(WorldServer server, string key, string text) {
         using var edit = new WorldRecordedExtension(

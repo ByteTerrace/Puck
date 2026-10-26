@@ -69,7 +69,6 @@ public sealed partial class WorldDocument {
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
     internal IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
         ArgumentNullException.ThrowIfNull(argument: sink);
-        Host.MaterializeArena();
 
         var lease = Host.Output.Subscribe(
             disclosure: in disclosure,

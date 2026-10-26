@@ -152,7 +152,7 @@ public sealed class WorldArenaReplacementLawTests {
         Assert.Equal(expected: keyCount, actual: fixture.Server.Arena.Keys.Count);
         Assert.Equal(expected: keyBytes, actual: fixture.Server.Arena.Keys.Bytes);
         Assert.NotNull(@object: WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "added"
         ));
     }

@@ -374,8 +374,8 @@ internal static class WorldBenchmarks {
 
             due += period;
 
-            var installed = server.Definition.State;
-            var current = WorldDefinitionRows.FindStateRow(rows: installed, name: row.Name.Value)!;
+            var installed = server.Configuration.State;
+            var current = WorldDefinitionRows.FindStateRow(rows: server.ExportDefinition().State, name: row.Name.Value)!;
             var cell = current.Cells![0];
             var written = (current with { Cells = [(cell with { Value = Puck.State.CellValue.Int(value: (cell.Value.Raw + 1L)) })] });
 
@@ -394,7 +394,7 @@ internal static class WorldBenchmarks {
             }
 
             var sample = (tick - WarmupTicks);
-            var after = server.Definition.State;
+            var after = server.Configuration.State;
 
             allocationSamples[sample] = allocated;
             elapsedTicksSamples[sample] = elapsed;

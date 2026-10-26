@@ -63,11 +63,11 @@ public sealed class StateBehaviorWriteLawTests {
         );
 
         Assert.Equal(
-            actual: StoredCell(definition: fixture.Server.Definition).Value.AsInt,
+            actual: StoredCell(definition: fixture.Server.ExportDefinition()).Value.AsInt,
             expected: expected
         );
         Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             engineTick: fixture.Server.CompletedEngineTicks,
             key: "0",
             rawValue: out var live,
@@ -101,7 +101,7 @@ public sealed class StateBehaviorWriteLawTests {
         }
 
         Assert.True(condition: WorldStateReader.TryReadEased(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             engineTick: fixture.Server.CompletedEngineTicks,
             key: "0",
             rawValue: out var easedBefore,
@@ -110,25 +110,25 @@ public sealed class StateBehaviorWriteLawTests {
             text: out _,
             tick: (fixture.Server.NextInputTick - 1UL)
         ));
-        var clockBefore = StoredCell(definition: fixture.Server.Definition).Clock;
+        var clockBefore = StoredCell(definition: fixture.Server.ExportDefinition()).Clock;
 
         Assert.True(
             condition: ((easedBefore > 20L) && (easedBefore < 100L)),
-            userMessage: $"eased={easedBefore} value={StoredCell(definition: fixture.Server.Definition).Value} clock={clockBefore} next={fixture.Server.NextInputTick}"
+            userMessage: $"eased={easedBefore} value={StoredCell(definition: fixture.Server.ExportDefinition()).Value} clock={clockBefore} next={fixture.Server.NextInputTick}"
         );
 
         var row = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "gauge"
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: Principal.Console,
-            Row: (row with { Cells = [(StoredCell(definition: fixture.Server.Definition) with { Dynamics = null })] })
+            Row: (row with { Cells = [(StoredCell(definition: fixture.Server.ExportDefinition()) with { Dynamics = null })] })
         ));
         fixture.Step();
 
-        var frozen = StoredCell(definition: fixture.Server.Definition);
+        var frozen = StoredCell(definition: fixture.Server.ExportDefinition());
 
         Assert.Null(@object: frozen.Dynamics);
         Assert.InRange(
@@ -140,7 +140,7 @@ public sealed class StateBehaviorWriteLawTests {
         fixture.Step();
 
         Assert.Equal(
-            actual: StoredCell(definition: fixture.Server.Definition).Value,
+            actual: StoredCell(definition: fixture.Server.ExportDefinition()).Value,
             expected: frozen.Value
         );
     }
@@ -161,7 +161,7 @@ public sealed class StateBehaviorWriteLawTests {
         }
 
         Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             engineTick: fixture.Server.CompletedEngineTicks,
             key: "0",
             rawValue: out var liveBefore,
@@ -173,24 +173,24 @@ public sealed class StateBehaviorWriteLawTests {
         Assert.True(condition: (liveBefore > 10L));
 
         var row = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "gauge"
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: Principal.Console,
-            Row: (row with { Cells = [(StoredCell(definition: fixture.Server.Definition) with { Advance = null, Dynamics = new StateDynamics(Row: "kickZero") })] })
+            Row: (row with { Cells = [(StoredCell(definition: fixture.Server.ExportDefinition()) with { Advance = null, Dynamics = new StateDynamics(Row: "kickZero") })] })
         ));
         fixture.Step();
 
-        var switched = StoredCell(definition: fixture.Server.Definition);
+        var switched = StoredCell(definition: fixture.Server.ExportDefinition());
 
         Assert.True(
             condition: (switched.Value.AsInt >= liveBefore),
             userMessage: $"target={switched.Value} liveBefore={liveBefore}"
         );
         Assert.True(condition: WorldStateReader.TryReadEased(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             engineTick: fixture.Server.CompletedEngineTicks,
             key: "0",
             rawValue: out var eased,
@@ -223,18 +223,18 @@ public sealed class StateBehaviorWriteLawTests {
         fixture.Step();
 
         var row = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "gauge"
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: Principal.Console,
-            Row: (row with { Cells = [(StoredCell(definition: fixture.Server.Definition) with { Dynamics = new StateDynamics(Row: "kickSlow") })] })
+            Row: (row with { Cells = [(StoredCell(definition: fixture.Server.ExportDefinition()) with { Dynamics = new StateDynamics(Row: "kickSlow") })] })
         ));
         fixture.Step();
 
         Assert.Equal(
-            actual: StoredCell(definition: fixture.Server.Definition).Value.AsInt,
+            actual: StoredCell(definition: fixture.Server.ExportDefinition()).Value.AsInt,
             expected: 100L
         );
     }

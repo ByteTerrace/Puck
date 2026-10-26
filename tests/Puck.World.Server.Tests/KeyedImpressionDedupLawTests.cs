@@ -144,7 +144,7 @@ public sealed class KeyedImpressionDedupLawTests {
         Assert.Equal(
             expected: 32_768L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "trust"
             )
         ); // 0.5
@@ -158,14 +158,14 @@ public sealed class KeyedImpressionDedupLawTests {
         Assert.Equal(
             expected: 32_768L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "trust"
             )
         ); // still 0.5
         Assert.Equal(
             expected: 63_488L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "trustUngated"
             )
         ); // 0.96875
@@ -180,7 +180,7 @@ public sealed class KeyedImpressionDedupLawTests {
         Assert.Equal(
             expected: 49_152L,
             actual: Read(
-                definition: fixture.Server.Definition,
+                definition: fixture.Server.ExportDefinition(),
                 row: "trust"
             )
         ); // 0.75

@@ -198,7 +198,7 @@ public static class WorldProjection {
     //
     // The rows above are the LIVE document's own objects, and their value holders carry the authored reference
     // canonical write-back preserves, so the flattening runs on a rehydrated private copy.
-    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition) {
+    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition, StateArena arena, in ArenaTime time) {
         if (!WorldStateDocumentValues.HasReference(graph: projection)) {
             return projection;
         }
@@ -215,6 +215,8 @@ public static class WorldProjection {
         }
 
         if (!WorldStateDocumentValues.TryFlatten(
+            arena: arena,
+            time: time,
             graph: copy,
             reason: out var flattenReason,
             source: definition
@@ -280,12 +282,12 @@ public static class WorldProjection {
 
         // Placements cross as the recipient's disclosure deals them: a dealt placement reads the cells it was dealt
         // from, so one dealt from a cell this recipient may not read is re-dealt without it.
-        var placements = WorldStateDisclosure.Disclose(
+        var placements = WorldStateDisclosure.PlacementProjection(
             arena: arena,
             definition: definition,
             recipient: recipient,
             unrestricted: unrestricted
-        ).Definition.Placements;
+        );
         var kits = new WorldProjectedKit[definition.Kits.Count];
 
         for (var index = 0; (index < kits.Length); index++) {
@@ -343,6 +345,7 @@ public static class WorldProjection {
                 )
             : null),
             Timeline: CarriedClocks(
+                arena: arena,
                 anchors: anchors,
                 definition: definition,
                 keyed: keyed,
@@ -376,6 +379,8 @@ public static class WorldProjection {
             ),
         };
         return Flatten(
+            arena: arena,
+            time: in time,
             definition: definition,
             projection: projection
         );
@@ -491,7 +496,7 @@ public static class WorldProjection {
     // The timeline a projection carries: each tick clock as authored, each state clock a value keys on as the anchored
     // clock the recipient's ledger carries for it, or, for a one-off composition no recipient holds anchors from, the
     // anchor of its phase now; and nothing else; null when that is no clock.
-    private static WorldTimelineSection? CarriedClocks(WorldDefinition definition, Dictionary<string, string> keyed, WorldClockAnchorLedger? anchors, in ArenaTime time) {
+    private static WorldTimelineSection? CarriedClocks(WorldDefinition definition, Dictionary<string, string> keyed, WorldClockAnchorLedger? anchors, in ArenaTime time, StateArena arena) {
         var clocks = new List<WorldClock>();
 
         foreach (var clock in (definition.Timeline.Clocks ?? [])) {
@@ -504,6 +509,7 @@ public static class WorldProjection {
             } else if (clock.IsStateClock && keyed.ContainsKey(key: clock.Name)) {
                 clocks.Add(item: ((anchors is not null)
                     ? anchors.Carry(
+                        arena: arena,
                         clock: clock,
                         definition: definition,
                         engineTick: time.EngineTick,
@@ -511,6 +517,7 @@ public static class WorldProjection {
                     )
                     : new WorldClock(
                         Anchor: WorldClockAnchors.Read(
+                            arena: arena,
                             clock: clock,
                             definition: definition,
                             engineTick: time.EngineTick,

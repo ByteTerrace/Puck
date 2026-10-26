@@ -234,13 +234,13 @@ public sealed class DiscreteStateLawTests {
         );
         fixture.Step();
         Assert.Empty(collection: (Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "hand"
         ).Cells ?? []));
         Assert.Equal(
             0L,
             Find(
-                document: fixture.Server.Definition,
+                document: fixture.Server.ExportDefinition(),
                 row: "turn"
             ).Phase!.Sequence
         );
@@ -265,13 +265,13 @@ public sealed class DiscreteStateLawTests {
         );
         fixture.Step();
         Assert.Single(collection: Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "hand"
         ).Cells!);
         Assert.Equal(
             1L,
             Find(
-                document: fixture.Server.Definition,
+                document: fixture.Server.ExportDefinition(),
                 row: "turn"
             ).Phase!.Sequence
         );
@@ -402,7 +402,7 @@ public sealed class DiscreteStateLawTests {
             -1L,
             StateRows.FindCell(
                 cells: Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "blocker"
                 ).Cells,
                 key: WorldStateRow.SlotKey
@@ -1015,14 +1015,14 @@ public sealed class DiscreteStateLawTests {
         // (c, a, b) is domain ordinals (2, 0, 1): Lehmer rank 2·2! + 0·1! + 0 = 4 of the six orders.
         Assert.Equal(
             4L,
-            StateReader.ArrangementRank(
+            StateSeedReader.ArrangementRank(
                 rows: definition.State,
                 zone: pile
             )
         );
         Assert.Equal(
             -1L,
-            StateReader.ArrangementRank(
+            StateSeedReader.ArrangementRank(
                 rows: definition.State,
                 zone: Find(
                     document: definition,
@@ -1057,7 +1057,7 @@ public sealed class DiscreteStateLawTests {
         );
         Assert.Equal(
             0L,
-            StateReader.ArrangementRank(
+            StateSeedReader.ArrangementRank(
                 rows: sorted.State,
                 zone: Find(
                     document: sorted,
@@ -1353,21 +1353,21 @@ public sealed class DiscreteStateLawTests {
             Assert.Equal(
                 0,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "position"
                 ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 1,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "allowance"
                 ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 1,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "occupancy"
                 ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
             );
@@ -1380,28 +1380,28 @@ public sealed class DiscreteStateLawTests {
             Assert.Equal(
                 2,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "position"
                 ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 0,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "allowance"
                 ).Cells![0].Value.Raw
             );
             Assert.Equal(
                 0,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "occupancy"
                 ).Cells!.Single(predicate: c => (c.Key.Value == "0")).Value.Raw
             );
             Assert.Equal(
                 1,
                 Find(
-                    document: fixture.Server.Definition,
+                    document: fixture.Server.ExportDefinition(),
                     row: "occupancy"
                 ).Cells!.Single(predicate: c => (c.Key.Value == "2")).Value.Raw
             );
@@ -1469,18 +1469,18 @@ public sealed class DiscreteStateLawTests {
 
         fixture.Step();
         Assert.Single(collection: Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "deck"
         ).Cells!);
         // A row holding no cell exports none, not an empty list.
         Assert.Null(@object: Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "hand"
         ).Cells);
         Assert.Equal(
             1,
             Find(
-                document: fixture.Server.Definition,
+                document: fixture.Server.ExportDefinition(),
                 row: "failed"
             ).Cells![0].Value.Raw
         );
@@ -1646,7 +1646,7 @@ public sealed class DiscreteStateLawTests {
 
         fixture.Step();
         var painted = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "board"
         ).Cells!;
 
@@ -1690,7 +1690,7 @@ public sealed class DiscreteStateLawTests {
         ));
         fixture.Step();
         var repainted = Find(
-            document: fixture.Server.Definition,
+            document: fixture.Server.ExportDefinition(),
             row: "board"
         ).Cells!;
 

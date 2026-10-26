@@ -41,12 +41,13 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
     /// or carries none. A held anchor ahead of <paramref name="engineTick"/> is dropped first.</summary>
     /// <param name="definition">The authority's installed document.</param>
     /// <param name="clock">The state clock.</param>
+    /// <param name="arena">The live arena, or null at a seed boundary.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns>The anchored clock, named and spanned as the state clock is.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="clock"/> is
     /// <see langword="null"/>.</exception>
-    public WorldClock Carry(WorldDefinition definition, WorldClock clock, ulong tick, ulong engineTick) {
+    public WorldClock Carry(WorldDefinition definition, WorldClock clock, ulong tick, ulong engineTick, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: clock);
 
@@ -61,6 +62,7 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
 
         if (Current(
             clock: clock,
+            arena: arena,
             definition: definition,
             engineTick: engineTick,
             tick: tick
@@ -86,12 +88,13 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
     /// <summary>Re-anchors, at an authoritative tick, every carried clock whose held prediction differs from the
     /// authority's phase, and only those, after dropping every held anchor ahead of <paramref name="engineTick"/>.</summary>
     /// <param name="definition">The authority's installed document.</param>
+    /// <param name="arena">The live arena, or null at a seed boundary.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns><see langword="true"/> when an anchor was sent or a stale one dropped: either way the recipient's
     /// timeline changed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public bool Step(WorldDefinition definition, ulong tick, ulong engineTick) {
+    public bool Step(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var sent = false;
@@ -111,7 +114,8 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
                 !clock.IsStateClock ||
                 (Current(
                 clock: clock,
-                definition: definition,
+                arena: arena,
+            definition: definition,
                 engineTick: engineTick,
                 tick: tick
             ) is not { } current)
@@ -161,9 +165,10 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
 
     // The anchor the authority presents a clock at: its row's number, else the seed a recipient holding no anchor of
     // it is sent, else none.
-    private WorldClockAnchor? Current(WorldClock clock, WorldDefinition definition, ulong tick, ulong engineTick) {
+    private WorldClockAnchor? Current(WorldClock clock, WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena) {
         if (WorldClockAnchors.Read(
             clock: clock,
+            arena: arena,
             definition: definition,
             engineTick: engineTick,
             tick: tick

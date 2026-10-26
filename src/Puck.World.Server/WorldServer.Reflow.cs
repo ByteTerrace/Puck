@@ -492,7 +492,8 @@ public sealed partial class WorldServer {
                 CompletedEngineTicks,
                 out var payer,
                 out var value,
-                out _
+                out _,
+                arena: m_arena
             ) ||
                 (payer.Kind != CellKind.Int) ||
                 (value is not { } available) ||

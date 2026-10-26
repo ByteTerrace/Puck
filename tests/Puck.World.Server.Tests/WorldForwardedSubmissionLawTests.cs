@@ -45,7 +45,7 @@ public sealed class WorldForwardedSubmissionLawTests {
         var verdict = Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: answers));
 
         Assert.True(condition: verdict.Outcome.Applied, userMessage: verdict.Outcome.Detail);
-        Assert.Equal(3, WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "counter")!.Cells![0].Value.AsInt);
+        Assert.Equal(3, WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "counter")!.Cells![0].Value.AsInt);
     }
 
     private const string Source = "origin/world";

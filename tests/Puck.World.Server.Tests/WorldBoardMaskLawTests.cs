@@ -183,7 +183,7 @@ public sealed class WorldBoardMaskLawTests {
         // the generic bit operators, then lands back on the target board through the one writeSet transform: no
         // second vocabulary for the same board algebra.
         var both = StateFixtures.Apply(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             transform: new StateTransform.WriteSet(
                 "target",
                 "both",
@@ -203,7 +203,7 @@ public sealed class WorldBoardMaskLawTests {
             row: "target"
         ).Cells!);
         var either = StateFixtures.Apply(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             transform: new StateTransform.WriteSet(
                 "target",
                 "either",
@@ -219,7 +219,7 @@ public sealed class WorldBoardMaskLawTests {
             )
         );
         var onlyLeft = StateFixtures.Apply(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             transform: new StateTransform.WriteSet(
                 "target",
                 "onlyLeft",
@@ -236,7 +236,7 @@ public sealed class WorldBoardMaskLawTests {
         );
         // BitNot complements past the topology's own cell count; writeSet clips the write to the board's real cells.
         var complement = StateFixtures.Apply(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             transform: new StateTransform.WriteSet(
                 "target",
                 "complement",

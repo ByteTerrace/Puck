@@ -68,7 +68,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
     });
     private static StateCell Cell(WorldFixture fixture, string row, string key = "$value") =>
         WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: row
         )!.Cells!.Single(predicate: cell => (cell.Key.Value == key));
     private static void AdminWrite(WorldFixture fixture, string row, long value, WorldDocumentWriteKind kind = WorldDocumentWriteKind.Add, string key = "$value") {
@@ -289,7 +289,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         }
 
         var traitsRow = WorldDefinitionRows.FindStateRow(
-            rows: fixture.Server.Definition.State,
+            rows: fixture.Server.ExportDefinition().State,
             name: "traits"
         )!;
 
@@ -371,15 +371,15 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         );
 
         var advAfter = WorldDefinitionRows.FindStateRow(
-            rows: restored.Definition.State,
+            rows: restored.ExportDefinition().State,
             name: "traits"
         )!.Cells!.Single(predicate: cell => (cell.Key.Value == "adv"));
         var dynAfter = WorldDefinitionRows.FindStateRow(
-            rows: restored.Definition.State,
+            rows: restored.ExportDefinition().State,
             name: "traits"
         )!.Cells!.Single(predicate: cell => (cell.Key.Value == "dyn"));
         var cycAfter = WorldDefinitionRows.FindStateRow(
-            rows: restored.Definition.State,
+            rows: restored.ExportDefinition().State,
             name: "traits"
         )!.Cells!.Single(predicate: cell => (cell.Key.Value == "cyc"));
 
@@ -410,7 +410,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         Assert.Equal(
             expected: 10L,
             actual: WorldDefinitionRows.FindStateRow(
-                rows: restored.Definition.State,
+                rows: restored.ExportDefinition().State,
                 name: "saturating"
             )!.Cells!.Single().Value.Raw
         );

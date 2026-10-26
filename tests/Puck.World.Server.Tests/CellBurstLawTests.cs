@@ -39,7 +39,7 @@ public sealed class CellBurstLawTests {
         Assert.Equal(13, echoes.Count);
         Assert.All(echoes, echo => Assert.False(condition: echo.Rejected));
         Assert.All(journal, entry => Assert.IsType<WorldMutation.UpsertStateCell>(@object: entry.Mutation));
-        Assert.Equal(13, fixture.Server.Definition.State[0].Cells![0].Value.AsInt);
+        Assert.Equal(13, fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
         using var replay = Fixtures.FreshServer(definition);
 
         Grant(fixture: replay, row: "counter");
@@ -50,7 +50,7 @@ public sealed class CellBurstLawTests {
         // Reuse must start from today's row, with neither yesterday's values nor a rejected load left in scratch.
         fixture.Server.EnqueueMutation(Write(kind: WorldDocumentWriteKind.Add, row: "counter", value: 2), sourceAddonInstanceId: 7);
         fixture.Step();
-        Assert.Equal(15, fixture.Server.Definition.State[0].Cells![0].Value.AsInt);
+        Assert.Equal(15, fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
     }
     [Fact]
     public void AnOverwrittenInvalidTextStillReceivesItsOwnRefusal() {
@@ -70,7 +70,7 @@ public sealed class CellBurstLawTests {
         Assert.Equal(2, echoes.Count);
         Assert.True(condition: echoes[0].Rejected);
         Assert.False(condition: echoes[1].Rejected);
-        Assert.Equal("valid", fixture.Server.Definition.State[0].Cells![0].Value.AsText);
+        Assert.Equal("valid", fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsText);
     }
     [Fact]
     public void ARejectedMemberKeepsOrderedPartialSuccessAndItsOwnAuthorityVerdict() {
@@ -89,7 +89,7 @@ public sealed class CellBurstLawTests {
         Assert.True(condition: echoes[1].Rejected);
         Assert.True(condition: echoes[2].Denied);
         Assert.False(condition: echoes[3].Rejected);
-        Assert.Equal(3, fixture.Server.Definition.State[0].Cells![0].Value.AsInt);
-        Assert.Equal(0, fixture.Server.Definition.State[1].Cells![0].Value.AsInt);
+        Assert.Equal(3, fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
+        Assert.Equal(0, fixture.Server.ExportDefinition().State[1].Cells![0].Value.AsInt);
     }
 }

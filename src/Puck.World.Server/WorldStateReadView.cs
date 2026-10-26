@@ -8,6 +8,8 @@ namespace Puck.World.Server;
 /// so a seat, an addon or a peer is shown what its visibility admits and nothing else. The operator — the
 /// <see cref="PrincipalKind.Console"/> principal — reads the live document whole.</para></summary>
 public sealed class WorldStateReadView {
+    private WorldServer? m_server;
+    private StateArena? m_arena;
     private readonly IReadOnlyDictionary<string, WorldWithheldRow> m_withheld;
 
     private WorldStateReadView(Principal reader, WorldStateDisclosed disclosed, ulong completedTick, ulong completedEngineTick, long arenaBytes) {
@@ -39,6 +41,10 @@ public sealed class WorldStateReadView {
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The session has no live disclosed read view.</exception>
     public static WorldStateReadView Of(WorldServer server, Principal reader) {
+        var view = Create(server, reader); view.m_server = reader.Kind == PrincipalKind.Session ? null : server;
+        view.m_arena = view.m_server?.Arena ?? WorldStateReader.Seed(view.Definition); return view;
+    }
+    private static WorldStateReadView Create(WorldServer server, Principal reader) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         if (reader.Kind == PrincipalKind.Session) {
@@ -65,12 +71,12 @@ public sealed class WorldStateReadView {
             completedTick: (server.NextInputTick - 1UL),
             disclosed: ((reader.Kind == PrincipalKind.Console)
                 ? new WorldStateDisclosed(
-                    Definition: server.Definition,
+                    Definition: server.ExportDefinition(),
                     Withheld: new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal)
                 )
                 : WorldStateDisclosure.Disclose(
                     arena: server.Arena,
-                    definition: server.Definition,
+                    definition: server.ExportDefinition(),
                     recipient: reader
                 )),
             reader: reader
@@ -90,11 +96,24 @@ public sealed class WorldStateReadView {
     /// <summary>Returns what the reader's disclosure withheld from one row.</summary>
     /// <param name="row">The row's name.</param>
     /// <returns>The withheld record, or <see langword="null"/> when the row is disclosed whole.</returns>
-    public WorldWithheldRow? Withheld(string row) => (m_withheld.TryGetValue(
+    public WorldWithheldRow? Withheld(string row) {
+        var withheldRows = m_server is null || IsOperator ? m_withheld : WorldStateDisclosure.Disclose(m_server.Configuration, m_server.Arena, Reader).Withheld;
+        return (withheldRows.TryGetValue(
         key: row,
         value: out var withheld
     )
         ? withheld
         : null
     );
+    }
+
+    /// <summary>Reads through the live arena and checks disclosure at this read.</summary>
+    public bool TryReadValue(string rowName, string? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldStateRow? row, out CellValue value, bool eased = false) {
+        var arena = m_server?.Arena ?? m_arena!;
+        if (!IsOperator && m_server is not null && !WorldStateDisclosure.CanReadCell(m_server.Configuration, arena, rowName, CellName.Parse(key ?? StateRow.SlotKey.Value), Reader)) {
+            row = WorldDefinitionRows.FindStateRow(Definition.State, rowName); value = default; return row is not null;
+        }
+        return eased ? WorldStateReader.TryReadEasedValue(Definition, rowName, key, CompletedTick, CompletedEngineTick, out row, out value, arena) :
+            WorldStateReader.TryReadValue(Definition, rowName, key, CompletedTick, CompletedEngineTick, out row, out value, arena);
+    }
 }

@@ -36,7 +36,7 @@ public sealed partial class WorldServer {
 
         foreach (var name in names) {
             if (
-                WorldStateReader.TryRead(
+                WorldStateReader.TryRead(arena: m_arena,
                 definition: m_document.Definition,
                 key: key,
                 rawValue: out var raw,

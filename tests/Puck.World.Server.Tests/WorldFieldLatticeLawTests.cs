@@ -105,7 +105,7 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Equal(
             expected: 2L,
             actual: WorldDefinitionRows.FindStateRow(
-                rows: fixture.Server.Definition.State,
+                rows: fixture.Server.ExportDefinition().State,
                 name: "drawn"
             )!.DrawCursor
         );
@@ -119,7 +119,7 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Equal(
             expected: 0L,
             actual: WorldDefinitionRows.FindStateRow(
-                rows: fixture.Server.Definition.State,
+                rows: fixture.Server.ExportDefinition().State,
                 name: "drawn"
             )!.DrawCursor
         );
@@ -315,7 +315,7 @@ public sealed class WorldFieldLatticeLawTests {
             name: "m_base"
         )!;
         var incompatibleBase = Fixtures.WithLattice(
-            definition: fixture.Server.Definition,
+            definition: fixture.Server.ExportDefinition(),
             composite: Fields(width: 2)
         );
         WorldEditEcho? echo = null;

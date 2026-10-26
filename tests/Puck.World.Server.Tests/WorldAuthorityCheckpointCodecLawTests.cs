@@ -304,7 +304,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var duplicate = CellName.Parse(candidate: "duplicate");
         var captured = CapturedCheckpoint();
         var checkpoint = captured with {
-            Server = captured.Server with { ArenaKeys = [duplicate, duplicate] },
+            Server = captured.Server with { Arena = captured.Server.Arena with { Keys = [duplicate, duplicate] } },
         };
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
 
@@ -323,7 +323,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var captured = CapturedCheckpoint();
         var longName = CellName.Parse(candidate: ("key-" + new string(c: 'x', count: 20_000)));
         var checkpoint = captured with {
-            Server = captured.Server with { ArenaKeys = [longName] },
+            Server = captured.Server with { Arena = captured.Server.Arena with { Keys = [longName] } },
         };
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
 
@@ -333,7 +333,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
             reason: out var reason
         ), reason);
         Assert.Equal(
-            actual: Assert.Single(collection: decoded!.Server.ArenaKeys),
+            actual: Assert.Single(collection: decoded!.Server.Arena.Keys),
             expected: longName
         );
     }
@@ -342,7 +342,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var captured = CapturedCheckpoint();
         var unicode = CellName.Parse(candidate: "key-漢-\uD800-tail");
         var checkpoint = captured with {
-            Server = captured.Server with { ArenaKeys = [unicode] },
+            Server = captured.Server with { Arena = captured.Server.Arena with { Keys = [unicode] } },
         };
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
 
@@ -352,7 +352,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
             reason: out var reason
         ), reason);
         Assert.Equal(
-            actual: Assert.Single(collection: decoded!.Server.ArenaKeys).Value.AsSpan().ToArray(),
+            actual: Assert.Single(collection: decoded!.Server.Arena.Keys).Value.AsSpan().ToArray(),
             expected: unicode.Value.AsSpan().ToArray()
         );
     }

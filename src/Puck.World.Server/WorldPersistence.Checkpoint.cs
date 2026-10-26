@@ -685,13 +685,10 @@ public sealed partial class WorldPersistence {
                 );
             }
 
-            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.MaterializeArena());
+            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
-                ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
-                    keySelector: static name => name.Value,
-                    comparer: StringComparer.Ordinal
-                )],
+                Arena: Host.Arena.CaptureSnapshot(),
                 DefinitionJson: definitionJson,
                 BaseDefinitionJson: BaseJson(definitionJson: definitionJson),
                 BaseOrigin: baseOrigin,
@@ -976,7 +973,7 @@ public sealed partial class WorldPersistence {
                 slot: entry.Index
             );
         }
-        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
+        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation, arena: restoredArena);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }

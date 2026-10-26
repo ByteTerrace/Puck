@@ -113,7 +113,7 @@ public sealed class LinkLivenessLawTests {
     }
 
     private static long AlarmCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value.AsInt;
+        fixture.Server.ExportDefinition().State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value.AsInt;
     private static WorldDefinition GatedSeamDocument(float graceSeconds) {
         var definition = SeamDocument(graceSeconds: graceSeconds);
         var alarm = CellName.Parse(candidate: "alarm");
