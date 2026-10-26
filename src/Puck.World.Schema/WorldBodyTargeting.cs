@@ -199,18 +199,21 @@ public static class BodyTargetConeSense {
 /// <summary>Selects whether authored target decisions require the deterministic solid-field query provider.</summary>
 public static class WorldTargetSelection {
     private static bool EffectReferencesLineOfSight(ActionEffect effect) => effect switch {
-        ActionEffect.SetState set => NamesLineOfSight(name: set.FromState?.Spelling),
-        ActionEffect.AddState add => NamesLineOfSight(name: add.FromState?.Spelling),
+        ActionEffect.SetState set => NamesLineOfSight(reference: set.FromState),
+        ActionEffect.AddState add => NamesLineOfSight(reference: add.FromState),
         ActionEffect.If branch => (PredicateReferencesLineOfSight(predicate: branch.Condition) ||
             branch.Then.Any(predicate: EffectReferencesLineOfSight) || (branch.Else?.Any(predicate: EffectReferencesLineOfSight) == true)),
         _ => false,
     };
-    private static bool NamesLineOfSight(string? name) => ((name is not null) && name.StartsWith(
+    // The parsed channel already names the fact. Printing every unrelated call builds argument strings just to
+    // discard them during each response's solid-field check.
+    private static bool NamesLineOfSight(StateChannelRef? reference) => ((reference?.Call is { Channel: "los", Arguments.Count: > 0 }) ||
+        (reference?.Name?.StartsWith(
         comparisonType: StringComparison.Ordinal,
         value: WorldRuleFacts.LineOfSightPrefix
-    ));
+    ) == true));
     private static bool PredicateReferencesLineOfSight(ActionPredicate? predicate) => predicate switch {
-        ActionPredicate.CompareState compare => (NamesLineOfSight(name: compare.State.Spelling) || NamesLineOfSight(name: compare.ComparandState?.Spelling)),
+        ActionPredicate.CompareState compare => (NamesLineOfSight(reference: compare.State) || NamesLineOfSight(reference: compare.ComparandState)),
         ActionPredicate.All all => all.Predicates.Any(predicate: PredicateReferencesLineOfSight),
         ActionPredicate.Any any => any.Predicates.Any(predicate: PredicateReferencesLineOfSight),
         ActionPredicate.Not not => PredicateReferencesLineOfSight(predicate: not.Predicate),

@@ -40,6 +40,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         )
         : null);
     private EntitySnapshot[] m_redacted = [];
+    private readonly WorldStateChangeDisclosure m_stateDisclosure = new();
 
     private bool m_invalidated;
 
@@ -205,8 +206,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 snapshot: in projected
             );
         }
-        if (server is not null) { projected = projected with { FieldCells = WorldStateChangeDisclosure.Filter(server, recipient, projected.FieldCells, tier == WorldDisclosureTier.Replica) }; }
-        else if (projected.FieldCells.Span.ContainsAnyExcept(default(FieldCellDelta))) { throw new InvalidOperationException("A state change delivery requires its authority arena."); }
+        if (server is not null) { projected = projected with { FieldCells = m_stateDisclosure.Filter(server, recipient, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (projected.FieldCells.Span.ContainsAnyExcept(value: default(FieldCellDelta))) { throw new InvalidOperationException(message: "A state change delivery requires its authority arena."); }
         Write(
             WorldFederationResponse.Snapshot,
             WorldFederationCodec.EncodeSnapshot(snapshot: in projected)
@@ -215,7 +215,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
-        if (m_feed is not null || !stamp.ArenaValues || stamp.PlacementProjection) { DeliverDefinition(definition: definition, version: version); }
+        if ((m_feed is not null) || !stamp.ArenaValues || stamp.PlacementProjection) { DeliverDefinition(definition: definition, version: version); }
     }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,
