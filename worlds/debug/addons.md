@@ -140,7 +140,7 @@ bulk query, and listens for collision begins. It records:
 | `piece-overlap` | Two chess pieces (bodies 8 to 39) begin to overlap |
 | `companion-overlap` | The Moth (body 0) and the companion (body 42) begin to overlap |
 
-The pieces and both walkers are `Solid` kits, whose contact solve separates two
+The pieces, the Moth and the flying companion are `Solid` kits, whose contact solve separates two
 of them within the tick, and the event feed reads the settled tick, so the two
 overlap checks fire only when that solve leaves two of them overlapping; a pose
 cannot force one. Collision begins with other bodies (the Moth inside the lift
@@ -242,20 +242,55 @@ Mount refusals, receipt differences and replay failures still report normally.
 
 ## The companion
 
-The companion stands in for a second player: a plain grey-teal body under the
-Moth's `walker` kit, starting at (-2, 0, 2.5). Each tick it reads both poses,
-drops a breadcrumb wherever she has moved half a metre, and walks the crumbs in
-order, so it takes the stairs and doors she took. It stops 2 m from her. A crumb
-more than 6 m from the one before, which a teleport makes, restarts the trail
-from her, and when it makes no progress for a second at full speed it jumps once
-and skips a crumb. Measured headless: posed 14 m away it closes to 2.5 m in
-about three seconds; it trails her by 2.25 m while she walks at 4.25 m/s and
-settles 1.9 m from her when she stops; and it follows her up both flights of
-the stairs to level 1, stopping 1.9 m from her.
+The companion is a 24 cm faerie: an amber seed held at both tips of an open ivory
+eye, with a lavender cuff. Its warm emissive core lights its shell through the
+world's existing irradiance and exposure. Four connected sweeps share one motion
+owner, so banking keeps every attachment intact. The separate neutral `standIn`
+creation still draws the fuzzer and traversal walkers.
 
-It cannot follow a teleport (`debug.go`, `gallery.go`, a respawn): a guest
-drives a body through intents only and cannot pose it, so the companion walks
-the straight line to her new place.
+Body 42 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
+existing colliding free-flight Lift hold and the ordinary forward, strafe and
+rise channels. The guest reads its pose and the Moth's once per tick and follows
+her half-metre breadcrumbs at about shoulder height. It preserves the approach
+when her pose jumps through a portal, flies through that same opening, and clears
+the old route after its own crossing. A safe point on the route becomes its rest
+anchor, which keeps a stop on a stair from demanding a side offset through the
+divider. It remains an independent body; it is never attached or posed by its guest.
+
+Seeded PCG choices alternate pauses, drifts, loops, a visit near the Moth's face
+and brief inspections of nearby exhibits, lights, screens and portals. Choices
+last 2.2–8.2 seconds and vary their destinations and loop periods. Movement and
+height changes make it attend to a run, jump or stop; the Moth's quaternion keeps
+face inspections aligned when she turns. Nearby bodies supply avoidance and
+approaching-body threats. The world's `companionSense` projection also supplies
+the guide's speech arrival and the lift's door edges as positioned cues. A
+tick-driven glow pulse speeds up and brightens with the guest's flight, and the
+connected shell banks with its acceleration.
+
+`companion.threat <x> <y> <z> <vx> <vy> <vz>` supplies one generic world-space
+threat: point in metres and velocity in metres/second. It arms `motionThreat`
+for 0.6 seconds. The guest predicts closest approach over the next 0.35 seconds,
+flits clear with a seeded lateral choice, pauses startled, then comes back.
+`host.log category addon.log` reports `companion: evade` on each actual dodge.
+A future tracked hand supplies this same authoritative input; camera pixels or
+wall-clock probe values never enter the guest's decisions directly.
+
+The guest retains Drive only over body 42 and Observe over the two poses. One
+additional Observe grant discloses the sensory row (21 reads/tick, budget 24).
+It has no Edit, Mutate, pose or teleport grant. All choices and movement are
+integer simulation work; replay reconstructs its seeded guest memory under the
+existing pinned-module receipt. Captured frames are evidence of presentation,
+not a determinism proof.
+
+A teleport (`debug.go`, `gallery.go`, respawn) supplies no traversable route;
+the companion can try the direct line but cannot find a staircase to another
+floor from that alone. For an inspection capture, initialize both bodies on that
+floor, then drive the Moth normally. Ordinary walks retain the doors and stairs
+she used, and free flight follows a lift's vertical change without needing floor
+attachment. Height changes in place keep a current shoulder-height target instead
+of pursuing an old breadcrumb through a moving car's floor. Its surface takeoff
+hold lets it leave the floor again after an incidental landing. Evasions reflect
+an inward escape away from the Moth and preserve clearance from her whole capsule.
 
 ## Machine debugger
 

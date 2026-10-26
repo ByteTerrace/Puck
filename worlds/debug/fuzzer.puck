@@ -1,5 +1,6 @@
 // Seeded development tool. Toggle fuzzer[enabled] over MCP; it returns to zero after limit driven ticks.
 // Imported before traversal and companion, its stand-in is body 44; no human seat is driven.
+import "stand-in"
 state {
   world {
     table fuzzer {
@@ -23,7 +24,7 @@ state {
 
 placements {
   placement "fuzzer-stand-in" {
-    prototype: "companion"
+    prototype: "standIn"
     position [56, 0.05, -32]
     inhabit {
       count: 1
@@ -36,7 +37,7 @@ placements {
         region: disc(radius: 0.01)
       }
       kit: "walker"
-      look: "companion"
+      look: "standIn"
       source: "Idle"
     }
   }

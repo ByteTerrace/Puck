@@ -1,0 +1,211 @@
+// The faerie's world-authored senses. A tracked hand later writes precisely the same point/velocity threat that
+// companion.threat writes today. Input is authoritative tick data; no presentation clock, microphone level or GPU
+// readback enters its decisions. Observe is the guest's only access to this projection.
+import "shapes"
+exports {
+  reads [companionGlow]
+}
+
+state {
+  world {
+    table motionThreat {
+      active = 0
+      x = 0.0
+      y = 0.0
+      z = 0.0
+      vx = 0.0
+      vy = 0.0
+      vz = 0.0
+    }
+    table companionSense {
+      active = 0
+      x = 0.0
+      y = 0.0
+      z = 0.0
+      vx = 0.0
+      vy = 0.0
+      vz = 0.0
+      ix = 0.0
+      iy = 0.0
+      iz = 0.0
+      kind = 0
+      nx = 0.0
+      ny = 0.0
+      nz = 0.0
+      near = -1
+      turn = 0.0
+      sx = 0.0
+      sy = 0.0
+      sz = 0.0
+      sound = 0.0
+      door = 1
+    }
+    table companionGlow {
+      level = 0.7
+      phase = 0.0
+      x = -1.2
+      y = 1.52
+      z = 1.0
+      speed = 0.0
+    }
+    table companionAttention {
+      distance = 16.0
+      nearDistance = 4.0
+    }
+    table companionCue {
+      guide = -1
+      door = 1
+    }
+    table companionClock {
+      threat = 0
+      sound = 0
+    }
+  }
+}
+
+rule "companion-threat-arm" {
+  when motionThreat.active == 1
+  mode: Edge
+  schedule companionClock.threat in 0.6s
+}
+rule "companion-threat-expire" {
+  when motionThreat.active == 1 and $tick >= companionClock.threat
+  mode: Level
+  motionThreat.active = 0
+}
+
+// Reset the nearest-candidate reductions each tick. The Moth's face is a default curiosity; the guest reads her
+// orientation from its pose query so its face visits stay aligned as she turns.
+rule "companion-senses" {
+  when 1
+  mode: Level
+  companionSense.active = motionThreat.active
+  companionSense.x = motionThreat.x
+  companionSense.y = motionThreat.y
+  companionSense.z = motionThreat.z
+  companionSense.vx = motionThreat.vx
+  companionSense.vy = motionThreat.vy
+  companionSense.vz = motionThreat.vz
+  companionSense.ix = bodyPosition(body, 0, x)
+  companionSense.iy = bodyPosition(body, 0, y) + 1.65
+  companionSense.iz = bodyPosition(body, 0, z)
+  companionSense.kind = 0
+  companionSense.near = -1
+  companionSense.turn = 0
+  companionSense.door = liftDoors.car == 1 ? 1 : 0
+  companionAttention.distance = 16
+  companionAttention.nearDistance = 2.25
+}
+
+// Actual exhibit positions come from the gallery layout, shared with its plinths and guide regions. Inspection is
+// bounded to the Moth's neighbourhood; the guest gives following and collision avoidance priority over curiosity.
+let companionAttractions = concat(
+  reduce(galleryRows, [], (all, row) => concat(all, map(row.names, (name, index) => {
+    x: galleryX + gallerySpacing * index, y: galleryFloor[row.level] + 1.35, z: row.z - 0.85, kind: 1
+  }))),
+  [
+    { x: 7, y: 0.17, z: 29.4, kind: 2 }
+    { x: 5.5, y: 0.96, z: 31.6, kind: 2 }
+    { x: 2, y: 1.15, z: 30.5, kind: 2 }
+    { x: 11.2, y: 1.35, z: 23.7, kind: 2 }
+    { x: 11, y: 2.5, z: 35, kind: 3 }
+    { x: 52.2, y: 1.65, z: 34.5, kind: 4 }
+    { x: 68.5, y: 1.65, z: 34.5, kind: 4 }
+    { x: 57, y: 1.65, z: 38.5, kind: 4 }
+    { x: 64, y: 1.65, z: 38.5, kind: 4 }
+  ]
+)
+for (point, index) in companionAttractions {
+  rule $"companion-interest-{index}" {
+    local dx = bodyPosition(body, 0, x) - point.x
+    local dy = bodyPosition(body, 0, y) + 1.5 - point.y
+    local dz = bodyPosition(body, 0, z) - point.z
+    local distance = dx * dx + dy * dy + dz * dz
+    when distance < companionAttention.distance
+    mode: Level
+    companionAttention.distance = distance
+    companionSense.ix = point.x
+    companionSense.iy = point.y
+    companionSense.iz = point.z
+    companionSense.kind = point.kind
+  }
+}
+
+rule "companion-neighbours" {
+  local dx = bodyPosition(each, x) - bodyPosition(body, 42, x)
+  local dy = bodyPosition(each, y) + 0.8 - bodyPosition(body, 42, y)
+  local dz = bodyPosition(each, z) - bodyPosition(body, 42, z)
+  local distance = dx * dx + dy * dy + dz * dz
+  when (dx or dz) and distance < companionAttention.nearDistance
+  mode: Level
+  forEach: $bodies
+  companionAttention.nearDistance = distance
+  companionSense.near = 1
+  companionSense.nx = bodyPosition(each, x)
+  companionSense.ny = bodyPosition(each, y) + 0.8
+  companionSense.nz = bodyPosition(each, z)
+}
+
+// The guide's spoken arrival and the lift's moving door are authored cue edges. Their points use the same sensory
+// input as a future in-world sound source, never an unrecorded hardware audio callback.
+rule "companion-hears-guide" {
+  when guideAt != companionCue.guide
+  mode: Level
+  companionCue.guide = guideAt
+  companionSense.sx = bodyPosition(body, 0, x)
+  companionSense.sy = bodyPosition(body, 0, y) + 1.7
+  companionSense.sz = bodyPosition(body, 0, z)
+  companionSense.sound = 1
+  schedule companionClock.sound in 0.4s
+}
+rule "companion-hears-door" {
+  when liftDoors.car != companionCue.door
+  mode: Level
+  companionCue.door = liftDoors.car
+  companionSense.sx = 16
+  companionSense.sy = bodyPosition(body, 41, y) + 1.5
+  companionSense.sz = 36.4
+  companionSense.sound = 0.8
+  schedule companionClock.sound in 0.4s
+}
+rule "companion-sound-end" {
+  when $tick >= companionClock.sound
+  mode: Level
+  companionSense.sound = 0
+}
+
+// Pulses are tick-driven, with a speed-dependent cadence and brightness; the guest's pauses let them settle.
+rule "companion-glow" {
+  local dx = bodyPosition(body, 42, x) - companionGlow.x
+  local dy = bodyPosition(body, 42, y) - companionGlow.y
+  local dz = bodyPosition(body, 42, z) - companionGlow.z
+  local speed = clamp((dx * dx + dy * dy + dz * dz) * 300, 0, 1)
+  when 1
+  mode: Level
+  companionGlow.phase += 0.013 + speed * 0.023
+  if companionGlow.phase >= 1 {
+    companionGlow.phase -= 1
+  }
+  companionGlow.level = 0.5 + speed * 0.2 + companionGlow.phase * (1 - companionGlow.phase)
+  companionGlow.speed = speed
+  companionGlow.x = bodyPosition(body, 42, x)
+  companionGlow.y = bodyPosition(body, 42, y)
+  companionGlow.z = bodyPosition(body, 42, z)
+}
+
+commands [
+  {
+    name: "companion.threat"
+    help: "Swing a world-space point and velocity at the faerie (metres and metres/second)."
+    parameters [
+      { name: "x", kind: Number }, { name: "y", kind: Number }, { name: "z", kind: Number }
+      { name: "vx", kind: Number }, { name: "vy", kind: Number }, { name: "vz", kind: Number }
+    ]
+    lines [
+      "world.state.cell.set motionThreat x {x}", "world.state.cell.set motionThreat y {y}"
+      "world.state.cell.set motionThreat z {z}", "world.state.cell.set motionThreat vx {vx}"
+      "world.state.cell.set motionThreat vy {vy}", "world.state.cell.set motionThreat vz {vz}"
+      "world.state.cell.set motionThreat active 0", "world.state.cell.set motionThreat active 1"
+    ]
+  }
+]
