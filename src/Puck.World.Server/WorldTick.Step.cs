@@ -866,7 +866,8 @@ public sealed partial class WorldTick {
     /// tape's own recorded scope already (<see cref="Puck.World.WorldReplayTape"/>'s honest-scope remarks — the
     /// tape records the human/authority command stream, never a raw <see cref="Protocol.WorldMutation"/>), so this
     /// method introduces no new tape interaction.</remarks>
-    /// <returns><see langword="true"/> when anything applied (a definition delivery occurred).</returns>
+    /// <returns><see langword="true"/> when anything applied. The paused tick's snapshot then delivers arena cells
+    /// immediately, before a future simulation tick can clear their publication flags.</returns>
     internal bool DrainAdministrative() {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return false; }
@@ -874,7 +875,10 @@ public sealed partial class WorldTick {
             // A paused or stopped world still ends a session whose observer faulted or detached itself.
             Host.EndObserverEndedSessions();
             Host.Extensions.Drain();
-            return DrainPendingOps(tick: m_lastCompletedTick);
+            var applied = DrainPendingOps(tick: m_lastCompletedTick);
+
+            if (applied) { EmitSnapshot(stepTicks: m_lastStepTicks, tick: m_lastCompletedTick); }
+            return applied;
         }
     }
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>

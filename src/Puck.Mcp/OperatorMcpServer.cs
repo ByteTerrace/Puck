@@ -467,16 +467,17 @@ public static class OperatorMcpServer {
                     },
                 },
                 Handlers = new() {
-                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [new Tool { Name = "puck_adapter", Description = "Report the serving adapter process, moduleId and directory.", Annotations = new() { DestructiveHint = false, IdempotentHint = true, OpenWorldHint = false, ReadOnlyHint = true }, InputSchema = EmptyInput, OutputSchema = JsonElement.Parse("""{"type":"object","properties":{"processId":{"type":"integer"},"moduleId":{"type":"string"},"directory":{"type":"string"}},"required":["processId","moduleId","directory"],"additionalProperties":false}""") }, WorldsTool(), StartTool(), StartWaitTool(), StopTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
+                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [new Tool { Name = "puck_adapter", Description = "Report the serving adapter process, moduleId, directory, live owned Worlds and pending starts.", Annotations = new() { DestructiveHint = false, IdempotentHint = true, OpenWorldHint = false, ReadOnlyHint = true }, InputSchema = EmptyInput, OutputSchema = JsonElement.Parse("""{"type":"object","properties":{"processId":{"type":"integer"},"moduleId":{"type":"string"},"directory":{"type":"string"},"ownedWorlds":{"type":"array","items":{"type":"object","properties":{"processId":{"type":"integer"},"attachmentId":{"type":["string","null"]}},"required":["processId","attachmentId"],"additionalProperties":false}},"pendingStarts":{"type":"array","items":{"type":"string"}}},"required":["processId","moduleId","directory","ownedWorlds","pendingStarts"],"additionalProperties":false}""") }, WorldsTool(), StartTool(), StartWaitTool(), StopTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
                     CallToolHandler = async (context, token) => {
                         if (context.Params?.Name == "puck_adapter") {
                             if (context.Params.Arguments is { Count: > 0 }) { return Error("puck_adapter takes no arguments.", false); }
                             var moduleId = typeof(OperatorMcpServer).Module.ModuleVersionId.ToString();
-                            var data = JsonElement.Parse(new JsonObject {
-                                ["processId"] = Environment.ProcessId,
-                                ["moduleId"] = moduleId,
-                                ["directory"] = AppContext.BaseDirectory.Replace(newChar: '/', oldChar: '\\'),
-                            }.ToJsonString());
+                            var metadata = worlds.Ownership();
+
+                            metadata["processId"] = Environment.ProcessId;
+                            metadata["moduleId"] = moduleId;
+                            metadata["directory"] = AppContext.BaseDirectory.Replace(newChar: '/', oldChar: '\\');
+                            var data = JsonElement.Parse(metadata.ToJsonString());
 
                             return new() { Content = [new TextContentBlock { Text = $"{Environment.ProcessId} {moduleId}" }], StructuredContent = data };
                         }
