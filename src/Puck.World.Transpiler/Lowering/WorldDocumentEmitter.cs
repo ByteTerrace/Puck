@@ -286,7 +286,13 @@ public static partial class WorldDocumentEmitter {
                 break;
             case LetNode:
             case TemplateNode:
+            case EnumDeclarationNode:
+            case DerivedStateNode:
                 // Already indexed in pre-scan
+                break;
+
+            case FlagStatementNode { Name: "solid" }:
+                // LowerPlacementRow consumes the placement's bare solid flag after lowering its members.
                 break;
 
             case RecordDeclarationNode recordNode: {
@@ -604,6 +610,10 @@ public static partial class WorldDocumentEmitter {
                     );
                     break;
                 }
+
+            default:
+                ReportUnrecognizedSectionStatement(section: "document", admitted: "document members and described constructs", stmt: statement, scope: scope);
+                break;
         }
     }
     // The table names which arm a root construct's block takes; a block whose identifier names no root construct
@@ -1298,6 +1308,11 @@ public static partial class WorldDocumentEmitter {
     private static void ResolveAddonHash(JsonObject addon, bool isAddon, DocumentScope scope, SourceSpan span = default) {
         var sourcePath = (addon["modulePath"]?.ToString() ?? (addon["source"]?.ToString() ?? (addon["path"]?.ToString() ?? (addon["rom"]?.ToString() ?? (addon["name"]?.ToString() ?? "addon")))));
         var hashToken = addon["hash"]?.ToString();
+
+        if (!isAddon && ContentPin.TryParse(pin: out var pin, text: hashToken)) {
+            hashToken = AssetContentHash.FromDigest(digest: Convert.FromHexString(s: pin.Hex)).ToString();
+            addon["hash"] = hashToken;
+        }
 
         if (string.IsNullOrEmpty(value: sourcePath)) {
             return;

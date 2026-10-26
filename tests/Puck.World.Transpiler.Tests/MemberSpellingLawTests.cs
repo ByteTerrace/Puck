@@ -80,7 +80,7 @@ public class MemberSpellingLawTests {
     }
     [Fact]
     public void ADirectionIsANameOfItsTopologyWrittenBare() {
-        const string Ray = "patterns [\n    {\n        name: \"p\"\n        kind: Int\n        value: 1\n        symbols [{ name: \"any\", match: 1 }]\n        match: \"any\"\n    }\n]\n\nrule \"r\" {\n    transform setRay(row: deck, from: a, direction: N, pattern: p, value: 1)\n}";
+        const string Ray = "patterns [\n    {\n        name: \"p\"\n        kind: Int\n        value: 1\n        symbols [{ name: \"any\", min: 1, max: 1 }]\n        pattern: symbol(name: any)\n    }\n]\n\nrule \"r\" {\n    transform setRay(row: deck, from: a, direction: N, pattern: p, value: 1)\n}";
 
         Assert.Equal(expected: "N", actual: WorldSources.LowerSourceClean(source: (Rows + Ray))["rules"]![0]!["effects"]![0]!["transform"]!["direction"]!.GetValue<string>());
         Assert.Contains(

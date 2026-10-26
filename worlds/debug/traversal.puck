@@ -100,7 +100,7 @@ placements {
 
 addon "traversal" {
   modulePath: "addons/traversal.wat"
-  hash: "auto"
+  hash: auto
   fuel: 0
   enabled: true
   requests [

@@ -191,7 +191,7 @@ public class DiagnosticsFixTests {
         );
 
         var (json, accepted) = Compile(body: """
-            look {
+            _look {
                 alpha: 50%
             }
             """);
@@ -201,7 +201,7 @@ public class DiagnosticsFixTests {
         );
         Assert.Equal(
             0.5,
-            Assert.IsType<JsonObject>(@object: json["look"])["alpha"].AsNumber()!.Value
+            Assert.IsType<JsonObject>(@object: json["_look"])["alpha"].AsNumber()!.Value
         );
     }
     // ---- units ------------------------------------------------------------------------------------------------

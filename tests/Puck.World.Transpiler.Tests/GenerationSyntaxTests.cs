@@ -21,7 +21,7 @@ public class GenerationSyntaxTests {
             prototypes {
                 for i in range(0, 2) {
                     prototype $"p-{i}" {
-                        span: fixed
+                        document { _span: fixed }
                     }
                 }
             }
@@ -33,11 +33,11 @@ public class GenerationSyntaxTests {
         );
         Assert.Equal(
             99L,
-            Assert.IsType<JsonObject>(@object: rows[0])["span"]?.GetValue<long>()
+            Assert.IsType<JsonObject>(@object: rows[0])["document"]!["_span"]?.GetValue<long>()
         );
         Assert.Equal(
             99L,
-            Assert.IsType<JsonObject>(@object: rows[1])["span"]?.GetValue<long>()
+            Assert.IsType<JsonObject>(@object: rows[1])["document"]!["_span"]?.GetValue<long>()
         );
     }
     [Fact]
@@ -54,12 +54,12 @@ public class GenerationSyntaxTests {
             let a4 = map(range(0, 64), i => a3[i] + 1)
             let a5 = map(range(0, 64), i => a4[i] + 1)
 
-            width: a5[10]
+            _width: a5[10]
             """);
 
         Assert.Equal(
             15L,
-            lowered["width"]?.GetValue<long>()
+            lowered["_width"]?.GetValue<long>()
         );
     }
     [Fact]
@@ -88,11 +88,11 @@ public class GenerationSyntaxTests {
     public void TestAnIndexOnTheNextLineIsTheNextElement() {
         // An array's elements are newline-separated, so a '[' opening a line is never an index on the line above.
         var rows = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
-            curve [
+            _curve [
                 [0, 0]
                 [1, 0.5]
             ]
-            """)["curve"]);
+            """)["_curve"]);
 
         Assert.Equal(
             2,
@@ -153,7 +153,7 @@ public class GenerationSyntaxTests {
             prototypes {
                 for i in range(0, 3) {
                     prototype $"view-{i}" {
-                        span: 100 + i
+                        document { _span: 100 + i }
                     }
                 }
             }
@@ -173,7 +173,7 @@ public class GenerationSyntaxTests {
         );
         Assert.Equal(
             102L,
-            Assert.IsType<JsonObject>(@object: rows[2])["span"]?.GetValue<long>()
+            Assert.IsType<JsonObject>(@object: rows[2])["document"]!["_span"]?.GetValue<long>()
         );
     }
     [Fact]
@@ -204,13 +204,13 @@ public class GenerationSyntaxTests {
             let rows = [10, 20, 30]
             let named = { alpha: "a", beta: "b" }
 
-            width: rows[1]
+            _width: rows[1]
             documentId: named["beta"]
             """);
 
         Assert.Equal(
             20L,
-            lowered["width"]?.GetValue<long>()
+            lowered["_width"]?.GetValue<long>()
         );
         Assert.Equal(
             "b",
@@ -234,37 +234,37 @@ public class GenerationSyntaxTests {
     [Fact]
     public void TestNumberBuiltins() {
         var lowered = WorldSources.LowerClean(body: """
-            a: floor(7 / 2)
-            b: ceiling(7 / 2)
-            c: absolute(0 - 3)
-            d: minimum(4, 9)
-            e: maximum(4, 9)
-            f: round(5 / 2)
+            _a: floor(7 / 2)
+            _b: ceiling(7 / 2)
+            _c: absolute(0 - 3)
+            _d: minimum(4, 9)
+            _e: maximum(4, 9)
+            _f: round(5 / 2)
             """);
 
         Assert.Equal(
             3L,
-            lowered["a"]?.GetValue<long>()
+            lowered["_a"]?.GetValue<long>()
         );
         Assert.Equal(
             4L,
-            lowered["b"]?.GetValue<long>()
+            lowered["_b"]?.GetValue<long>()
         );
         Assert.Equal(
             3L,
-            lowered["c"]?.GetValue<long>()
+            lowered["_c"]?.GetValue<long>()
         );
         Assert.Equal(
             4L,
-            lowered["d"]?.GetValue<long>()
+            lowered["_d"]?.GetValue<long>()
         );
         Assert.Equal(
             9L,
-            lowered["e"]?.GetValue<long>()
+            lowered["_e"]?.GetValue<long>()
         );
         Assert.Equal(
             2L,
-            lowered["f"]?.GetValue<long>()
+            lowered["_f"]?.GetValue<long>()
         );
     }
     [Fact]
@@ -273,7 +273,7 @@ public class GenerationSyntaxTests {
             collection: WorldSources.Diagnose(body: """
             let rows = [1, 2]
 
-            width: rows[5]
+            _width: rows[5]
             """),
             filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.IndexRefused)
         );

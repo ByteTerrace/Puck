@@ -123,7 +123,7 @@ public sealed class IdentifierAgreementLawTests {
     // compiles the print back.
 
     private const string TableBody = "state {\n    world {\n        table probe {\n            a = 1\n        }\n    }\n}\n";
-    private const string ExtensionBody = "extensions {\n    probeExt {\n        seat: 1\n    }\n}\n";
+    private const string ExtensionBody = "_extensions {\n    probeExt {\n        seat: 1\n    }\n}\n";
     private const string GroupBody = "state {\n    world {\n        slot flag = 0\n    }\n}\n\nstabilize settle maxPasses(4) {\n    rule \"collapse\" {\n        flag = 0\n    }\n}\n";
     private const string PatternBody = "pattern hand : Int {\n    value: \"face[$token]\"\n    symbols {\n        face = 1..2\n    }\n    match: face*\n}\n";
     private const string SetBody = (TableBody + "\nset lit: board(probe, 0..1)\n");
@@ -210,12 +210,12 @@ public sealed class IdentifierAgreementLawTests {
             body: ExtensionBody,
             carries: static name => (name.Length > 0),
             label: "decompiled member block",
-            read: static document => ((At(node: document, "extensions") is JsonObject { Count: 1 } extensions)
+            read: static document => ((At(node: document, "_extensions") is JsonObject { Count: 1 } extensions)
                 ? extensions.Single().Key
                 : null
             ),
             rename: static (document, name) => {
-                var extensions = ((JsonObject)document["extensions"]!);
+                var extensions = ((JsonObject)document["_extensions"]!);
                 var member = extensions["probeExt"]!;
 
                 _ = extensions.Remove(propertyName: "probeExt");
@@ -229,12 +229,12 @@ public sealed class IdentifierAgreementLawTests {
             body: ExtensionBody,
             carries: static name => (name.Length > 0),
             label: "decompiled member property",
-            read: static document => ((At(node: document, "extensions", "probeExt") is JsonObject { Count: 1 } member)
+            read: static document => ((At(node: document, "_extensions", "probeExt") is JsonObject { Count: 1 } member)
                 ? member.Single().Key
                 : null
             ),
             rename: static (document, name) => {
-                var member = ((JsonObject)At(node: document, "extensions", "probeExt")!);
+                var member = ((JsonObject)At(node: document, "_extensions", "probeExt")!);
                 var value = member["seat"]!;
 
                 _ = member.Remove(propertyName: "seat");

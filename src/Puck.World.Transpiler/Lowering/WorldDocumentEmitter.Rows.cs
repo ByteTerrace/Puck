@@ -336,8 +336,8 @@ public static partial class WorldDocumentEmitter {
             }
         }
 
-        // The bare `solid` flag (PropertyNode never carries it — FlagStatementNode has no ProcessStatement case, so
-        // it never reached rowObj through LowerBlockToObject) stands in for `solid: { margin: 0 }`. PUCK028 already
+        // The bare `solid` flag (PropertyNode never carries it; ProcessStatement leaves it for this row lowering)
+        // stands in for `solid: { margin: 0 }`. PUCK028 already
         // refused authoring both spellings on the same row; the explicit object wins when it did.
         var sawBareSolid = row.Statements.Any(predicate: static s => (s is FlagStatementNode { Name: "solid" }));
 
