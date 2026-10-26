@@ -44,7 +44,7 @@ the two documents are equal; format, compile and the document is unchanged. It
 runs over every shipped `.puck` source and over `ConstructCorpus`, one generated
 source per construct `ConstructRegistry` reads out of the registries themselves
 — the polymorphic `$type` tables in `Puck.State`, `ExpressionComparisons`'
-comparison operators and `PuckDslVocabulary`'s kinds — so a construct the
+comparison operators — so a construct the
 generator does not cover, or one the printer cannot reproduce, fails under its
 own name.
 

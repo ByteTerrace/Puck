@@ -76,6 +76,8 @@ public static partial class WorldDocumentEmitter {
             statements: rule.Statements
         ).ToList();
 
+        RefuseLateLocals(statements: body.Select(selector: static item => item.Statement), scope: scope);
+
         foreach (var (statement, statementScope) in body) {
             if (statement is LocalStatementNode declared) {
                 _ = localNames.Add(item: DocumentLowering.ResolveLocalName(local: declared, scope: statementScope));
@@ -227,6 +229,21 @@ public static partial class WorldDocumentEmitter {
             ["name"] = DocumentLowering.ResolveLocalName(local: local, scope: scope),
             ["expression"] = DocumentExpression(text: text),
         };
+    }
+
+    private static void RefuseLateLocals(IEnumerable<StatementNode> statements, DocumentScope scope, bool afterGate = false) {
+        foreach (var statement in statements) {
+            if (statement is LocalStatementNode local && afterGate) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.InvalidValue,
+                    message: $"local '{local.Name}' after a gate or effect would read before that statement. Move the local declaration before the first gate or effect.",
+                    span: local.Span
+                );
+            }
+            afterGate |= statement is WhenStatementNode or EffectStatementNode or ExpressionStatementNode or
+                DecisionBlockNode or RuleBlockNode or RuleScopeNode or StabilizeGroupNode or WorkflowNode ||
+                statement is PropertyNode { Name: "gate" or "effects" or "decision" };
+        }
     }
 
     // The text a document holds names a reserved channel and a rule local in full. An expression that reads one is
@@ -521,10 +538,6 @@ public static partial class WorldDocumentEmitter {
         var comparison = Enum.GetName(value: parsedComparison)!;
 
         if (cmp.Left.Syntax is ExpressionSpelling.SourceString || cmp.Right.Syntax is ExpressionSpelling.SourceString) {
-            if (cmp.Kind is not null) {
-                scope.Diagnostics.ReportError(PuckDiagnosticCodes.OperandParse,
-                    "A Text comparison cannot carry a numeric kind annotation", cmp.Span);
-            }
             var literal = (cmp.Right.Syntax as ExpressionSpelling.SourceString) ?? (ExpressionSpelling.SourceString)cmp.Left.Syntax!;
             var stateText = cmp.Right.Syntax is ExpressionSpelling.SourceString ? leftText : rightText;
             if (ClassifyBareComparison(stateText, "0", out var stateToken, out _) == BareComparisonShape.StateAgainstConstant &&
@@ -545,19 +558,6 @@ public static partial class WorldDocumentEmitter {
                 ["comparison"] = comparison,
                 ["left"] = DocumentPoolFieldExpression(scope: scope, text: leftText),
                 ["right"] = DocumentPoolFieldExpression(scope: scope, text: rightText),
-            };
-        }
-
-        // An explicit `: Kind`/`as Kind` suffix always forces compareValue, even for two simple single-token
-        // operands — CompareState carries no Kind field at all, so an authored kind annotation on it is meaningless;
-        // forcing compareValue is the only reading that keeps the annotation.
-        if (cmp.Kind is not null) {
-            return new JsonObject {
-                ["$type"] = "compareValue",
-                ["comparison"] = comparison,
-                ["kind"] = cmp.Kind,
-                ["left"] = DocumentExpression(text: leftText),
-                ["right"] = DocumentExpression(text: rightText),
             };
         }
 
@@ -846,8 +846,9 @@ public static partial class WorldDocumentEmitter {
             context: typeof(ActionEffect),
             lower: () => LowerExpression(call, scope)
         )!,
-        CompoundAssignStatementNode compound => RefuseCompoundAssignment(
+        CompoundAssignStatementNode compound => LowerCompoundAssignment(
             compound: compound,
+            ruleObj: ruleObj,
             scope: scope
         ),
         IfStatementNode ifStmt => LowerIf(
@@ -983,21 +984,35 @@ public static partial class WorldDocumentEmitter {
             span: span
         );
     }
-    // puck.world.definition.v1 carries two assignment effects, setState and addState; every other operator belongs in the
-    // expression on the right, where the state engine evaluates it.
-    private static JsonNode? RefuseCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope) {
-        var target = ((compound.Target.Key is null)
-            ? compound.Target.Name
-            : $"{compound.Target.Name}[{compound.Target.Key}]"
-        );
-
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.UnsupportedAssignmentOperator,
-            message: $"puck.world.definition.v1 has no '{compound.Operator}=' effect - write it as '{target} = {target} {compound.Operator} ...'",
-            span: compound.Span
-        );
-
-        return null;
+    private static JsonNode? LowerCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope, JsonObject? ruleObj) {
+        if ((compound.Operator == "-") && (compound.Rhs is RhsSecondsNode seconds)) {
+            return LowerCellEffect(discriminator: "addState", target: compound.Target,
+                rhs: seconds with { Seconds = -seconds.Seconds }, allowText: false, scope: scope, ruleObj: ruleObj);
+        }
+        if (compound.Rhs is not RhsOperandNode operand) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{compound.Operator}=' requires a numeric expression; durations are admitted only with '+=' and '-='",
+                span: compound.Rhs.Span);
+            return null;
+        }
+        if (compound.Operator == "-") {
+            return LowerCellEffect(discriminator: "addState", target: compound.Target,
+                rhs: operand with { Expression = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
+                    form: DocumentValueForm.Expression, text: $"-({operand.Expression.Text})") },
+                allowText: false, scope: scope, ruleObj: ruleObj);
+        }
+        var resolved = ResolveEffectTarget(target: compound.Target, scope: scope);
+        var obj = new JsonObject { ["$type"] = "setState", ["state"] = resolved.State };
+        if (resolved.Key is not null) { obj["key"] = resolved.Key; }
+        // The write resolves its key before evaluating this expression. Its read uses that same key,
+        // without hoisting the computation into the rule's pre-gate locals.
+        var key = (resolved.Key?.StartsWith(value: '$') == true) ? "$write" : resolved.Key;
+        var left = ExpressionSpelling.Print(program: new ExpressionProgram(Instructions: [Instruction.Operand(
+            name: StateChannelRefJsonConverter.FromNode(node: resolved.State), key: StateChannelRef.OfNullable(spelling: key)
+        )]));
+        var right = BindOperand(operand: operand.Expression, scope: scope);
+        obj["expression"] = DocumentExpression(text: $"{left} {compound.Operator} ({right})");
+        return obj;
     }
     // `if Gate { ... } [else { ... }]` lowers to ActionEffect.If, reusing the same predicate lowering `when` uses
     // for its own condition. An `else if` chain is already one nested IfStatementNode per level (the parser's own
@@ -1362,6 +1377,21 @@ public static partial class WorldDocumentEmitter {
     // Every effect that addresses one cell resolves its target here, so an assignment, a removal and a schedule
     // agree on what a target spelling means and refuse the same targets.
     private static EffectTarget ResolveEffectTarget(RowRefNode target, DocumentScope scope) {
+        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
+        }
+        if (target.Operand is { } operand && !GetOrCreateStateFamilies(scope: scope).ContainsKey(key: target.Name)) {
+            var bound = BindOperand(operand: operand, scope: scope);
+            if (ExpressionSpelling.TryParse(text: bound, program: out var program, error: out _) &&
+                program.Instructions is [{ Payload: InstructionPayload.State state }]) {
+                return new EffectTarget(
+                    Key: state.Key?.Spelling,
+                    Row: state.Name.Spelling,
+                    State: StateChannelRefJsonConverter.ToNode(value: state.Name)
+                );
+            }
+        }
         // A computed key is spelled first, exactly as the same atom in a read is, and the target is that key: a name
         // the bare form cannot carry comes back backquoted, and the key is the name inside the quotes.
         if (target.KeyAtom is { } atom) {
@@ -1384,10 +1414,6 @@ public static partial class WorldDocumentEmitter {
 
         var written = ((target.Key is null) ? target.Name : $"{target.Name}[{target.Key}]");
 
-        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
-            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
-                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
-        }
         if ((target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: target.Name)) {
             return new EffectTarget(
                 Key: null,

@@ -15,7 +15,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | Folder | Owns |
 |---|---|
 | `Ast/` | The syntax tree: documents, blocks, properties, expressions, rules, predicates, effect statements. |
-| `Parsing/` | `PuckParser` (partial, over Parlot): the document reader, its operand scanner, its predicate and rule-body readers. |
+| `Parsing/` | `PuckParser` (partial, over Parlot): the document reader, its operand scanner, its expression gates and rule-body readers. |
 | `Diagnostics/` | `Diagnostic`/`DiagnosticBag`/`SourceSpan`/`SourceMap` and the `PUCK…` code constants. |
 | `Formatting/` | `PuckPrinter`: the one formatter, printing a parsed tree back as source. |
 | `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
@@ -23,7 +23,7 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Editing/` | `LspJson`: the Language Server Protocol items, positions and ranges the editor services answer with. |
 | `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
 | `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `min`, `h`, `m`, `cm`, `mm`, `hz`, `%` represent. |
-| (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s cell-kind enum. |
+| (root) | `CompilationResult<T>`. |
 
 ## Names
 
@@ -144,7 +144,10 @@ lowering does not print and reparse that AST or rewrite identifiers in source te
 
 Binding distinguishes expression names, row names, literal keys and quoted names. An interpolation atom is
 resolved once, so its value cannot inject an operator or become another compile-time binding. Parentheses in
-key position remain significant: `row[key]` names a literal key, while `row[(key)]` reads the key expression.
+key position remain significant: `row.key` names a literal key, while `row[key]` evaluates the lexical value
+`key`. An unknown bare word is an error. `row["key"]` spells a string key. Read a local by its name;
+`local(name)`, the `row[(key)]` wrapper and `row[slot[$value]]` are retired. Functions are recognized only
+in call position, so a local named `sign` reads as `sign`, while `sign(value)` calls the function.
 Family folds retain their runtime subprograms. Embedded vector literals resolve in the instruction program,
 including its subprograms. A vocabulary that classifies nothing leaves values to the compile-time grammar.
 The world vocabulary's [README](../../src/Puck.World.Transpiler/README.md) describes its member positions.
@@ -172,8 +175,7 @@ A few invariants hold across every declaration form the world vocabulary lowers:
   per-player storage.
 - **One trait has one spelling.** Accumulation is `advance`, with the sign carrying direction; there is no
   separate `regen` and `decay`.
-- **Dot access belongs to the state engine's grammar.** `row.key` is an `ExpressionSpelling` spelling of
-  `row[key]`, so the DSL, JSON documents, and every other expression consumer agree on what it means. Row and
+- **Dot access names a literal key.** `row.key` reads the same cell as `row["key"]`. Row and
   cell names themselves forbid dots, so the HUD binding `state.<row>.<key>` stays unambiguous.
 - **Equivalence is classified per form.** A concise declaration must compile byte-identically to its explicit
   JSON equivalent. Dot access keeps the authored operand text, so it is judged by semantic equivalence instead:
@@ -409,31 +411,41 @@ own vocabulary (a cartridge's `map(row:, column:, tile:)` rule step is untouched
 
 Value expressions carry the rule language's infix operators, member access, indexing, calls, arrays, objects,
 ranges and colours. The infix operators and their grouping come from one table, `ExpressionOperators`, which both
-parsers read, so `1 << 2 + 3` groups the same way in a `let` as in a rule. From loosest to tightest, in C's order,
-each infix operator associating to the left:
+parsers read, so `1 << 2 + 3` groups the same way in a `let` as in a rule. From loosest to tightest:
 
-1. `condition ? whenTrue : whenFalse`, which associates to the right, so `a ? x : b ? y : z` is a chain
+1. `condition ? whenTrue : whenFalse`, associating to the right
 2. `??`
-3. `|`
-4. `^`
-5. `&`
+3. `or`
+4. `and`
+5. prefix `not`
 6. `==` `!=`
 7. `<` `<=` `>` `>=`
-8. `..`, a range, which only a value spells
-9. `<<` `>>` `>>>`
-10. `+` `-`
-11. `*` `/` `%`
-12. prefix `-` and `~`
+8. `|`
+9. `^`
+10. `&`
+11. `..`, a range, which only a document value spells
+12. `<<` `>>` `>>>`
+13. `+` `-`
+14. `*` `/` `%`
+15. prefix `-` and `~`
 
-The conditional is the one spelling of a choice in both languages; no call spells it. The prefix operators are the rule language's two: a value is written
-without a `+` sign.
+Binary operators associate to the left. Bitwise operators bind tighter than comparisons:
+`x & 1 == 0` means `(x & 1) == 0`. They read signed 64-bit integers; a shift counts 0 to 63.
+`a ?? b` yields `a` when it is present, otherwise `b`.
 
-As in C, the bitwise operators bind looser than a comparison: `x & 1 == 0` reads as `x & (1 == 0)`, so write
-`(x & 1) == 0`. `&`, `|`, `^`, the shifts and `~` read signed 64-bit whole numbers and are evaluated by the engine's
-own `ExpressionArithmetic`, so a value and a rule cannot disagree on them; a shift counts 0 to 63, and any other count
-is refused. A zero divisor under `/` or `%` is refused, as a rule faults on one. `a ?? b` is `a` unless `a` is
-absent, and then `b`.
+A world gate (`when`, `if`, `expect`) is an ordinary expression. Zero and absence are false;
+nonzero Int and Fixed values are true. `and`, `or`, and `not` yield Int 0 or 1. `and` skips
+its right operand when the left is false; `or` skips it when the left is true. A skipped
+operand neither reads state nor faults, but must still be well-typed. Logical operands may read different
+numeric kinds; arithmetic requires matching kinds. Other arithmetic
+propagates absence. Write `or`, not `||` or `maximum` over Boolean values; write `and`, not `&&`.
 
+Kinds come from state declarations and earlier locals. Numeric literals take their expression's
+kind; an unconstrained integer expression is Int, while an unconstrained decimal expression selects
+Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. There is no implicit conversion between Int and Fixed state reads. A gate needs no
+`: Int` or `as Int` suffix, and a Boolean expression needs no `== 1` wrapper. The emitter chooses
+`compareState` or `compareValue` from the expression; source gates refuse these call spellings
+and name an ordinary comparison such as `left == right` as their replacement.
 A comparison yields `1` or `0`, never a JSON boolean—the rule language has no boolean either, so
 `cleared + (row > 0)` means the same thing on both sides of the compiler. `filter`'s lambda, a conditional's
 condition, and a `for`'s own reads are all read back through the same truth test: a number is true when non-zero, a string
@@ -459,9 +471,7 @@ expression is handed to `ExpressionSpelling.TryParse` rather than re-parsed here
 never disagree about what `a + b * c` means; a scalar function call in ordinary value position is handed to
 `ExpressionVocabulary`/`DocumentScalars` for the reasons above. A comparison's operator and document spellings are
 the same choice: `ExpressionComparisons` reads both from the expression operator table's comparison rows, so a
-comparison operator can never mean one thing in a gate and another in an expression. `PuckDslVocabulary` does the
-same for the cell-kind words—one table, read by the parser, the emitter, the decompiler and the language server
-alike, instead of four hand-typed lists of member names.
+comparison operator can never mean one thing in a gate and another in an expression.
 
 ## Unit conversion boundaries
 
@@ -538,7 +548,7 @@ of one the author commented is the case to watch — carry the old node's
 Every syntax-node child reaches a rewrite hook. Operand-bearing sugar nodes descend through
 `OperandExpressionNode`; `RewriteOperandSyntax` reaches parsed names, accesses, calls and operators, and the
 ordinary expression hook still reaches interpolation holes. The operand hook receives the position's form:
-a bare key is literal, while a grouped key is an expression. A changed tree is printed with its rewritten atoms;
+bracket contents are expressions and dot members are literal keys. A changed tree is printed with its rewritten atoms;
 an unchanged tree keeps the author's spelling. A rewrite must keep `Syntax` and `Text` consistent.
 
 The following members still carry their own text grammar and are handed over whole:
@@ -578,8 +588,8 @@ interpolated string contents survive formatting unchanged, including indentation
 layout, printed by `PuckPrinter`: `PuckPrinter.IndentWidth` (two) spaces per level, every block body on its own lines,
 every array or object keeping the line breaks its author wrote, and a line that would pass `PuckPrinter.LineWidth` (120)
 broken where the reader takes a line break as white space: inside a call's, array's or object's brackets, after an
-operator, and after a gate's `and` or `or`. A rule operand breaks only inside its parentheses, since a line break outside
-them ends it, so a local's or an effect's long chain is first wrapped in parentheses. `puck format`, the language
+operator, including a gate's `and` or `or`. An expression continues across a newline after an operator or inside
+parentheses and brackets. The printer wraps a local's or an effect's long chain in parentheses. `puck format`, the language
 server's formatting request, and the decompiler all print it; no option or editor setting changes it.
 
 There is no test project of this project's own: `tests/Puck.World.Transpiler.Tests` (parser, formatter, linter,

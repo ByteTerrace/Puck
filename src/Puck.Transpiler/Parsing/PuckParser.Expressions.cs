@@ -107,6 +107,13 @@ public static partial class PuckParser {
         var buffer = context.Scanner.Buffer;
         var offset = context.Scanner.Cursor.Offset;
 
+        if (buffer.AsSpan(offset).StartsWith("||", StringComparison.Ordinal)) {
+            throw CreateException(context, "'||' is retired; write 'or'");
+        }
+        if (buffer.AsSpan(offset).StartsWith("&&", StringComparison.Ordinal)) {
+            throw CreateException(context, "'&&' is retired; write 'and'");
+        }
+
         foreach (var row in ExpressionOperators.Infix) {
             if (string.CompareOrdinal(
                 indexA: offset,
@@ -115,6 +122,9 @@ public static partial class PuckParser {
                 strA: buffer,
                 strB: row.Symbol
             ) == 0) {
+                var end = offset + row.Symbol.Length;
+                if (char.IsLetter(row.Symbol[0]) && end < buffer.Length &&
+                    (char.IsLetterOrDigit(buffer[end]) || buffer[end] == '_')) { continue; }
                 return row.Symbol;
             }
         }
@@ -233,6 +243,10 @@ public static partial class PuckParser {
         SkipWhiteSpace(context: context);
         var cursor = context.Scanner.Cursor;
 
+        if (TryMatchKeyword(context: context, keyword: "not")) {
+            var negated = ParseInfixExpression(context: context, minimum: InfixLevel(symbol: "not"));
+            return new UnaryExpressionNode(Operator: "not", Operand: negated);
+        }
         if (cursor.Current == '+') {
             throw CreateException(context: context, message: "'+' is not a prefix operator; a value is written without a sign");
         }

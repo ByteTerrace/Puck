@@ -191,36 +191,39 @@ parsing again gives back the same program for everything the infix grammar can
 spell. A cartridge document (`puck.cartridge.v1`) stores programs as infix
 text instead, because its vocabulary is authored and read as text.
 
-Infix text uses C precedence: the ternary `? :` binds loosest, then `??`, then
-`|`, `^`, `&`, equality, relational comparison, shifts, `+` and `-`, then `*`,
+The ternary `? :` binds loosest, then `??`, `or`, `and`, `not`, equality,
+relational comparison, `|`, `^`, `&`, shifts, `+` and `-`, then `*`,
 `/`, and `%`, then the prefix `-` and `~`. Every level but the ternary's is the
 `Binding` column of `ExpressionOperators`, which the document parser reads too. Literals are decimals (`12`, `0.25`) or
 hexadecimal masks (`0xFF00`), and a leading minus folds into the literal. A
 spelling is at most 16,384 characters and nests at most 256 levels deep.
 
 > [!TIP]
-> Because the bit operators bind looser than comparisons, `mask & 1 == 1` reads
-> as `mask & (1 == 1)`. Parenthesize: `(mask & 1) == 1`.
+> Bit operators bind above comparisons: `mask & 1 == 1` reads as
+> `(mask & 1) == 1`. `not a == b` reads as `not (a == b)`.
+
+`and`, `or`, and `not` convert numeric nonzero to true, and zero or absence to
+false. They produce Int 0 or 1. `and` skips its right operand when the left is
+false; `or` skips it when the left is true, including any fault in that operand.
+These are the same expressions a `when`, `if`, or `expect` gate reads.
 
 ## Locals and their kinds
 
-A `local` computes a value once per evaluation, after any `forEach` key is bound
-and before the gate reads it, so the gate, other locals, and effects can share
-it. A rule declares at most 64 locals, counting the implicit locals computed
-keys create.
+A `local` computes a value once per evaluation, in declaration order after any
+`forEach` key is bound. It may read earlier locals. Declarations precede the
+gate and effects; a late declaration is refused rather than moved. A rule
+declares at most 64 locals. Computed keys evaluate where they are used.
 
 In `.puck` you never write a local's kind; the compiler infers it, and a `: Int`
-or `as Fixed` annotation is refused. Inference works in two steps:
+or `as Fixed` annotation is refused. Rows and earlier locals supply kinds.
+An unconstrained integer literal selects Int; a decimal spelling such as
+`1.0` selects Fixed. A literal can take its operation's numeric kind; state
+values keep their own kind, and arithmetic requires matching kinds.
 
-1. The local picks a numeric **carrier**, Int or Fixed, for its operands. It
-   tries Int first, unless the expression is made only of constants and one of
-   them has a fraction, in which case it starts with Fixed so `1.5` stays exact.
-   If the first carrier doesn't compile (for example, the expression reads a
-   Fixed row), the compiler tries the other.
-2. The local stores the kind of the expression's result. A comparison and
-   `sign` read numeric operands but produce Int, so `1.5 == 1.5` and `sign(0.5)`
-   both bind the Int value 1. That value can feed a later local, gate, or effect
-   without turning a Fixed literal into an Int.
+A local stores the expression's result kind. Comparisons, `sign`, and truth
+operators produce Int while reading numeric operands in their own carriers.
+Thus `1.5 == 1.5` and `sign(0.5)` bind the Int value 1. The operands of `and`
+and `or` may have different numeric kinds.
 
 A hand-written document may set `kind` on a local. The kind then becomes a
 required result kind, which is how a destination that must be Fixed or Int

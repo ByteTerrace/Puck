@@ -195,12 +195,12 @@ public static partial class PuckPrinter {
             }
         }
 
-        // An operand's text. The operand grammar ends at a line break outside parentheses and brackets, so a break
-        // goes only inside parentheses, and never inside a key's brackets. A position that takes a whole expression
+        // An operand's text. The printer groups a broken chain in parentheses and never breaks a key's brackets.
+        // A position that takes a whole expression
         // (`enclose`) wraps an operator chain at the text's own top level in parentheses first, which a program reads
         // the same. The author's own breaks are joined first, so the layout is the printer's.
         private void OperandText(string text, int level, bool enclose) {
-            var line = OperandKeys(text: JoinedOperand(text: text));
+            var line = JoinedOperand(text: text);
 
             if (!Wraps || ((Column() + line.Length) <= LineWidth)) {
                 m_builder.Append(value: line);
@@ -307,7 +307,7 @@ public static partial class PuckPrinter {
                         continue;
                     }
                     m_builder.Append(value: '(');
-                    if (IsIndexTarget(before: index, text: text)) {
+                    if (IsCallTarget(before: index, text: text)) {
                         var arguments = TopLevelCommas(end: close, start: (index + 1), text: text);
                         var argument = (index + 1);
 
@@ -439,6 +439,11 @@ public static partial class PuckPrinter {
                 var symbol = row.Symbol!;
 
                 if (((index + symbol.Length) <= end) && (string.CompareOrdinal(indexA: index, indexB: 0, length: symbol.Length, strA: text, strB: symbol) == 0)) {
+                    if (IdentifierSpelling.IsStart(symbol[0]) &&
+                        ((index > start && (IdentifierSpelling.IsNameCharacter(text[index - 1]) || text[index - 1] == '.')) ||
+                        (index + symbol.Length < end && (IdentifierSpelling.IsNameCharacter(text[index + symbol.Length]) || text[index + symbol.Length] == '.')))) {
+                        continue;
+                    }
                     found.Add(item: (index, (index + symbol.Length), PuckParser.InfixLevel(symbol: symbol)));
 
                     return symbol.Length;
@@ -462,6 +467,24 @@ public static partial class PuckPrinter {
         return [.. ((arms.Count > 0) ? arms : found.Where(predicate: item => (item.Level == loosest))).Select(selector: static item => (item.Start, item.End))];
     }
     private static bool EndsOperand(char previous) => (IdentifierSpelling.IsNameCharacter(character: previous) || (previous is ')' or ']' or '"' or '`'));
+    private static bool IsCallTarget(string text, int before) {
+        var previous = before - 1;
+        while (previous >= 0 && char.IsWhiteSpace(text[previous])) { previous--; }
+        return previous >= 0 && (IdentifierSpelling.IsPart(text[previous]) || text[previous] is ']' or ')' or '`');
+    }
+    private static bool TryMatch(string text, int open, int end, out int close) {
+        var depth = 0;
+        for (var index = open; index < end; index++) {
+            var lexeme = SourceLexemes.End(offset: index, source: text);
+            if (lexeme > index) { index = lexeme - 1; continue; }
+            if (text[index] is '[' or '(') { depth++; }
+            else if (text[index] is ']' or ')') {
+                if (--depth == 0) { close = index; return true; }
+            }
+        }
+        close = -1;
+        return false;
+    }
     // Calls `visit` with each character of text[start..end) that stands outside every nested pair and every string or
     // backquoted name, and the last character before it that is not white space; `visit` answers how far to step.
     private static void Scan(string text, int start, int end, Func<int, char, int> visit) {

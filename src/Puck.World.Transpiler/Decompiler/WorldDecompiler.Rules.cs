@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.World.Transpiler.Lowering;
-using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Parsing;
 
@@ -153,13 +152,6 @@ public static partial class WorldDecompiler {
             count: (indentLevel * 4)
         );
 
-        if (rule["gate"] is JsonObject gate) {
-            AppendGateProperty(
-                gate: gate,
-                indentLevel: indentLevel,
-                sb: sb
-            );
-        }
         if (rule["locals"] is JsonArray locals) {
             if (CanSugarLocals(locals: locals)) {
                 foreach (var l in locals) {
@@ -177,6 +169,9 @@ public static partial class WorldDecompiler {
                     $"{inner}locals{FieldSeparator(value: locals)}{FormatModelField(holder: typeof(WorldRule), indentLevel: indentLevel, key: "locals", node: locals)}"
                 );
             }
+        }
+        if (rule["gate"] is JsonObject gate) {
+            AppendGateProperty(gate: gate, indentLevel: indentLevel, sb: sb);
         }
         if (rule["mode"] is { } mode) {
             sb.AppendLine(
@@ -461,14 +456,8 @@ public static partial class WorldDecompiler {
     }
     // ---- Gate (predicate) inverse (§1.4) ---------------------------------------------------------------------
 
-    // A rule's `gate` is an ordinary rule-body property (§2.2's generic-property fallback), so — unlike `when` on
-    // its own — it has a safe escape hatch: print it as a plain `gate: <value>` property, letting `FormatValue`'s
-    // call-form printer carry every `$type` node, whenever `when <comparison>` sugar could not parse back to the
-    // same tree. This is required, not cosmetic (A11): `ParseAtom` special-cases a LEADING '(' as a parenthesized
-    // sub-gate before a `compareValue` predicate's own `left` reaches the operand parser — a `left` that
-    // itself begins with a parenthesized clause (a `&`/`|`-chain of grouped comparisons,
-    // real in this corpus's own board-legality binds) is truncated at the first ')' no matter where in an
-    // `and`/`or` chain it sits, so it can only be represented by NOT going through the gate grammar at all.
+    // A rule's generic gate property preserves a noncanonical document shape that an inferred-kind
+    // expression would lower differently. Ordinary authored conditions print as expressions.
     private static void AppendGateProperty(StringBuilder sb, JsonObject gate, int indentLevel) {
         var inner = new string(
             c: ' ',
@@ -524,22 +513,14 @@ public static partial class WorldDecompiler {
         (comparandState.ToString() ?? ""),
         node["comparandKey"]?.ToString()
     ))),
-        // A `compareValue` whose two operands are simple enough to re-lower as `compareState` can only keep its
-        // `$type` when the printed text carries a kind annotation forcing it back (`LowerComparison` treats any
-        // annotation as that force), so a node with no `kind` at all in that position has no sugar spelling.
+        // An explicitly encoded kind or a noncanonical lowering uses the document form; ordinary
+        // authored conditions infer their kind and let the emitter choose the comparison representation.
         "compareValue" => (ExpressionComparisons.TryParseName(
         node["comparison"]?.ToString(),
         out _
     )
-            && ((node["kind"] is null) || PuckDslVocabulary.TryParseComparisonKind(
-        node["kind"]!.ToString(),
-        out _
-    ))
-            && ((node["kind"] is not null) || !CompareValueNeedsKindAnnotation(node: node))),
-        // A single-child (or empty) `all`/`any` has no bare-sugar spelling at all: `AndGate`/`OrGate` only ever
-        // build the `All`/`Any` wrapper when MORE than one operand was matched at the same keyword — one operand
-        // (or zero) collapses to that operand directly (or nothing), so the wrapper itself is unrecoverable from
-        // `and`/`or` text no matter where it sits in the tree.
+            && node["kind"] is null && !CompareValueNeedsDocumentForm(node: node)),
+        // An empty or single-child logical wrapper has no expression spelling that preserves the wrapper.
         "all" or "any" => ((node["predicates"] is JsonArray predicates)
             && (predicates.Count >= 2)
             && predicates.All(predicate: static p => ((p is JsonObject o) && IsPredicateSafeForGateSugar(node: o)))),
@@ -557,6 +538,18 @@ public static partial class WorldDecompiler {
             key: key,
             name: name
         );
+
+        if (ExpressionSpelling.TryParseSyntax(text: printed, atoms: [], syntax: out var syntax, error: out _)) {
+            if (syntax is ExpressionSpelling.SourceAccess { Target: ExpressionSpelling.SourceName row } access &&
+                row.Name == name && access.Member == key) {
+                return true;
+            }
+            if (syntax is ExpressionSpelling.SourceIndex { Target: ExpressionSpelling.SourceName indexed } index &&
+                indexed.Name == name && key?.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal) == true &&
+                index.Index is not (ExpressionSpelling.Literal or ExpressionSpelling.SourceString or ExpressionSpelling.SourceName { Name: ['$', ..] })) {
+                return true;
+            }
+        }
 
         return (
             ExpressionSpelling.TryParse(
@@ -663,7 +656,7 @@ public static partial class WorldDecompiler {
     // Whether the operands are simple enough that `LowerComparison` would read the bare `left cmp right` text back
     // as a `compareState` node, so a kindless `compareValue` over them has no bare spelling. A comparison reading a
     // pool field (`t.noun == text`) lowers to a kindless `compareValue` before that shape is asked, so it has one.
-    private static bool CompareValueNeedsKindAnnotation(JsonObject node) =>
+    private static bool CompareValueNeedsDocumentForm(JsonObject node) =>
         (!ReadsOnePoolField(program: node["left"]) &&
         !ReadsOnePoolField(program: node["right"]) &&
         (WorldDocumentEmitter.ClassifyBareComparison(
@@ -673,13 +666,6 @@ public static partial class WorldDecompiler {
             out _
         )
             != WorldDocumentEmitter.BareComparisonShape.CompareValue));
-    // A kind annotation is wrapped in parens around the WHOLE comparison it names, `(left cmp right : Int)`,
-    // unconditionally of where the comparison sits: printed bare, the suffix would trail whatever came textually
-    // last in an `and`/`or` chain (`FormatConjunction` joins operands with no delimiter of its own), leaving a
-    // reader unable to tell whether it annotates that one comparison or the entire chain. Wrapping reuses the
-    // parenthesized-subgate grammar the language already has (`when (Gate)` — `ParseAtom`'s leading-`(` case), so
-    // nothing in `Parsing/` changes. A comparison with no kind infers it, so it prints bare; a declared kind is
-    // always printed, since the bare text would re-lower to an inferred one.
     private static string FormatCompareValue(JsonObject node) {
         // A composed operand is parenthesized: the comparison joins the two printed operands with its own symbol,
         // and an operand whose own top-level operator binds looser than a comparison would otherwise re-parse as a
@@ -689,13 +675,7 @@ public static partial class WorldDecompiler {
         var symbol = ComparisonToSymbol(comparison: node["comparison"]?.ToString());
         var comparison = $"{left} {symbol} {right}";
 
-        if (!PuckDslVocabulary.TryParseComparisonKind(
-            node["kind"]?.ToString(),
-            out var kind
-        )) {
-            return comparison;
-        }
-        return $"({comparison} : {Enum.GetName(value: kind)})";
+        return comparison;
     }
     // Only ever reached for a node `IsPredicateSafeForGateSugar` already accepted, which is what guarantees the wire
     // spelling names an enum member exactly.
@@ -993,6 +973,19 @@ public static partial class WorldDecompiler {
     // fills nothing else), so an object carrying anything more — an explicit `"target": "Self"` the author wrote,
     // or a second RHS key left behind — has no sugar spelling and prints as call form.
     private static string FormatSetOrAddEffect(string discriminator, JsonObject obj) {
+        if ((discriminator == "setState") && CarriesOnly(obj, "$type", "state", "key", "expression") &&
+            IsEffectTargetSafe(obj: obj) && (obj["expression"] is { } expression) &&
+            ExpressionSpelling.TryParseSyntax(text: WorldExpressionJson.SourceText(node: expression), atoms: [],
+                syntax: out var syntax, error: out _) &&
+            (syntax is ExpressionSpelling.Binary {
+                Left: ExpressionSpelling.SourceIndex {
+                    Target: ExpressionSpelling.SourceName row,
+                    Index: ExpressionSpelling.SourceName { Name: "$write" }
+                }
+            } compound) && (compound.Operator is "*" or "/" or "%" or "&" or "|" or "^" or "<<" or ">>" or ">>>") &&
+            (row.Name == FormatStateReference(node: obj["state"]))) {
+            return $"{FormatRowRefTarget(obj: obj)} {compound.Operator}= {ExpressionSpelling.PrintSyntax(syntax: compound.Right, atom: static _ => throw new InvalidOperationException())}";
+        }
         var rhs = (IsEffectTargetSafe(obj: obj)
             ? FormatEffectRhs(
                 obj,
@@ -1161,18 +1154,11 @@ public static partial class WorldDecompiler {
             );
         }
     }
-    // `if Gate { }` mandates a Gate-grammar condition with no property-style escape hatch the way a rule's own
-    // `gate` has: `AppendGateProperty` falls back to a raw `gate: <value>` property (parsed generically, never
-    // re-entering Gate grammar) when the sugar cannot safely reproduce a predicate, but `if` has nowhere to fall
-    // back to — the core parser reads `if(...)` at statement position unconditionally as this same if-statement
-    // grammar, never as a generic call the way every other effect verb is, so no text this method could emit both
-    // preserves an unsafe predicate's exact shape and reparses at all. Refuse to decompile rather than emit text
-    // that silently recompiles to a different predicate tree (a `compareValue` whose `left` itself starts with '(',
-    // misread by `ParseAtom`'s leading-'(' sub-gate case) or fails to reparse at all (an unparseable comparison
-    // name, a single-operand `all`/`any`).
+    // An if condition must be an expression; unlike a rule's generic gate property, it cannot preserve a
+    // document predicate whose kind or wrapper shape has no equivalent expression spelling.
     private static string FormatSafeIfCondition(JsonObject cond, string keyword) {
         if (!IsPredicateSafeForGateSugar(node: cond)) {
-            throw new InvalidOperationException(message: $"cannot decompile this '{keyword}' effect to .puck source: its condition (\"{cond["$type"]}\") has no DSL spelling that reparses back to the same predicate — author or edit this rule as JSON instead");
+            throw new InvalidOperationException(message: $"cannot decompile this '{keyword}' effect to .puck source: its condition (\"{cond["$type"]}\") has no expression spelling that preserves the predicate shape; rewrite the condition as an ordinary expression");
         }
 
         return FormatPredicate(node: cond);

@@ -141,7 +141,7 @@ public sealed class ExpressionIrLawTests {
     [InlineData("a > 1 ? b : c")]
     [InlineData("a ?? 0")]
     [InlineData("isAbsent(a) * 2")]
-    [InlineData("(a & b) == 0 ? 1 : 0")]
+    [InlineData("a & b == 0 ? 1 : 0")]
     [InlineData("all(scores, s -> s == 0)")]
     [InlineData("sum(scores, s -> s * 2)")]
     [InlineData("count(scores, s -> s > 0) + any(scores, s -> s < 0)")]

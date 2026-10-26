@@ -48,6 +48,22 @@ public sealed partial class StateArena {
     }
 
     private bool AdmitReservation(ArenaLayout next, long additionalBytes, out string reason) {
+        var vectorBytes = 0L;
+        for (var ordinal = 0; ordinal < next.RowCount; ordinal++) {
+            if (m_catalog.IsPoolRow(rowOrdinal: ordinal)) { continue; }
+            ref readonly var row = ref next[ordinal];
+            if (!row.IsStored || row.Kind != CellKind.Vector) { continue; }
+            var bytes = (long)row.CellCapacity * row.Dimensions;
+            if (bytes > StateCapacity.MaxVectorRowBytes) {
+                reason = $"State row '{ordinal}' reserves {bytes} vector bytes, past the {StateCapacity.MaxVectorRowBytes}-byte row ceiling.";
+                return false;
+            }
+            vectorBytes += bytes;
+        }
+        if (vectorBytes > StateCapacity.MaxVectorSectionBytes) {
+            reason = $"Vector storage reaches {vectorBytes} bytes, past the {StateCapacity.MaxVectorSectionBytes}-byte section ceiling.";
+            return false;
+        }
         if (next.Bytes + m_declarationVisibilityBytes + m_visibilityBytes + m_keys.Bytes + additionalBytes > ArenaCapacity.MaxBytes) {
             reason = $"arena growth exceeds the {ArenaCapacity.MaxBytes}-byte ceiling";
             return false;

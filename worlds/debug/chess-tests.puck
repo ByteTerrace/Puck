@@ -37,12 +37,12 @@ test "a seated player plays e4 with the keys and e5 with a pointer drag" {
     ticks 190
   }
   expect {
-    pieceCell[piece12] == 27
-    pieceCell[piece20] == 35
+    pieceCell.piece12 == 27
+    pieceCell.piece20 == 35
     verdict == 1
     turn == White
     illegalCount == 0
-    play[held] == -1
+    play.held == -1
   }
 }
 
@@ -93,11 +93,11 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
     ticks 10
   }
   expect {
-    pieceCell[piece12] == 11
-    pieceCell[piece11] == 28
+    pieceCell.piece12 == 11
+    pieceCell.piece11 == 28
     illegalCount == 1
     turn == Black
-    play[held] == -1
+    play.held == -1
     board(engaged, board, 1) == 0
   }
 }
@@ -110,8 +110,8 @@ test "pieces settle and derive initial board cells" {
     ticks 150
   }
   expect {
-    pieceCell[piece12] == 11
-    pieceCode[piece12] == Pawn
+    pieceCell.piece12 == 11
+    pieceCode.piece12 == Pawn
     gameStarted == 1
     boardCollisions == 0
   }
@@ -128,7 +128,7 @@ test "e2e4 records legal" {
   }
   expect {
     verdict == 1
-    pieceCell[piece12] == 27
+    pieceCell.piece12 == 27
     turn == Black
   }
 }
@@ -147,7 +147,7 @@ test "illegal knight move records illegal then legal succeeds" {
   expect {
     verdict == 1
     illegalCount == 1
-    pieceCell[piece6] == 18
+    pieceCell.piece6 == 18
     turn == Black
   }
 }
@@ -167,9 +167,9 @@ test "king step records legal and multi step refused" {
   expect {
     verdict == 1
     illegalCount == 1
-    move[kind] == Quiet
-    move[mover] == King
-    pieceCell[piece4] == 11
+    move.kind == Quiet
+    move.mover == King
+    pieceCell.piece4 == 11
     turn == Black
   }
 }
@@ -187,10 +187,10 @@ test "knight capture records move kind two" {
   }
   expect {
     verdict == 1
-    move[kind] == Capture
-    move[captured] == -Pawn
-    pieceCell[piece1] == 21
-    pieceCell[piece16] == -1
+    move.kind == Capture
+    move.captured == -((Pawn))
+    pieceCell.piece1 == 21
+    pieceCell.piece16 == -1
     turn == Black
   }
 }
@@ -208,11 +208,11 @@ test "pawn diagonal capture records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == Capture
-    move[captured] == -Pawn
-    move[mover] == Pawn
-    pieceCell[piece12] == 20
-    pieceCell[piece19] == -1
+    move.kind == Capture
+    move.captured == -((Pawn))
+    move.mover == Pawn
+    pieceCell.piece12 == 20
+    pieceCell.piece19 == -1
     turn == Black
   }
 }
@@ -229,9 +229,9 @@ test "queen diagonal slide records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == Quiet
-    move[mover] == Queen
-    pieceCell[piece3] == 32
+    move.kind == Quiet
+    move.mover == Queen
+    pieceCell.piece3 == 32
     turn == Black
   }
 }
@@ -254,12 +254,12 @@ test "white kingside castle records legal" {
   }
   expect {
     verdict == 1
-    move[kind] == Castle
-    move[mover] == King
-    move[from] == 3
-    move[to] == 1
-    pieceCell[piece4] == 1
-    pieceCell[piece7] == 2
+    move.kind == Castle
+    move.mover == King
+    move.from == 3
+    move.to == 1
+    pieceCell.piece4 == 1
+    pieceCell.piece7 == 2
     castleRights == 3
     turn == Black
   }
@@ -296,12 +296,12 @@ test "white queenside castle records legal" {
   expect {
     verdict == 1
     illegalCount == 0
-    move[kind] == Castle
-    move[from] == 3
-    move[to] == 5
-    pieceCell[piece4] == 5
-    pieceCell[piece0] == 4
-    castleTransitAttacked[wq] == 0
+    move.kind == Castle
+    move.from == 3
+    move.to == 5
+    pieceCell.piece4 == 5
+    pieceCell.piece0 == 4
+    castleTransitAttacked.wq == 0
     castleRights == 3
     turn == Black
   }
@@ -336,12 +336,12 @@ test "black kingside castle records legal" {
   expect {
     verdict == 1
     illegalCount == 0
-    move[kind] == Castle
-    move[from] == 59
-    move[to] == 57
-    pieceCell[piece28] == 57
-    pieceCell[piece31] == 58
-    castleTransitAttacked[bk] == 0
+    move.kind == Castle
+    move.from == 59
+    move.to == 57
+    pieceCell.piece28 == 57
+    pieceCell.piece31 == 58
+    castleTransitAttacked.bk == 0
     castleRights == 12
     turn == White
   }
@@ -361,7 +361,7 @@ test "castle cannot cross knight attack" {
     ticks 150
   }
   expect {
-    castleTransitAttacked[wk] == 1
+    castleTransitAttacked.wk == 1
     verdict == 0
     turn == White
     castleRights == 0
@@ -382,7 +382,7 @@ test "castle safe when knight does not attack transit" {
     ticks 150
   }
   expect {
-    castleTransitAttacked[wk] == 0
+    castleTransitAttacked.wk == 0
     verdict == 1
     turn == Black
     castleRights == 3
@@ -427,10 +427,10 @@ test "en passant capture records move kind en passant" {
   }
   expect {
     verdict == 1
-    move[kind] == EnPassant
-    move[captured] == -Pawn
-    pieceCell[piece12] == 44
-    pieceCell[piece19] == -1
+    move.kind == EnPassant
+    move.captured == -((Pawn))
+    pieceCell.piece12 == 44
+    pieceCell.piece19 == -1
     turn == Black
   }
 }
@@ -477,9 +477,9 @@ test "AI White makes one legal opening move and waits for Black" {
   expect {
     turn == Black
     verdict == 1
-    ai[pending] == 0
+    ai.pending == 0
     aiEnabled == 0
-    aiBest[token] == -1
+    aiBest.token == -1
     boardCollisions == 0
   }
 }
@@ -493,9 +493,9 @@ test "AI Black replies after a human opening" {
   expect {
     aiSide == Black
     turn == White
-    ai[pending] == 0
+    ai.pending == 0
     aiEnabled == 0
-    aiBest[token] == -1
+    aiBest.token == -1
     boardCollisions == 0
   }
 }
@@ -503,17 +503,17 @@ test "AI Black replies after a human opening" {
 test "a stale AI answer cannot move a piece" {
   given {
     aiSide = White
-    aiBest[token] = 12
-    aiBest[to] = 63
-    aiBest[revision] = 0
+    aiBest.token = 12
+    aiBest.to = 63
+    aiBest.revision = 0
   }
   when {
     ticks 600
   }
   expect {
     turn == Black
-    pieceCell[piece12] != 63
+    pieceCell.piece12 != 63
     boardCollisions == 0
-    ai[pending] == 0
+    ai.pending == 0
   }
 }

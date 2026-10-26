@@ -17,7 +17,7 @@ public static partial class ExpressionSpelling {
     /// <summary>A reference to an atom parsed by the source language.</summary>
     /// <param name="Index">The index in the supplied atom span list.</param>
     public sealed record SourceAtom(int Index) : SourceNode;
-    /// <summary>An explicit group. In key position parentheses distinguish a live expression from a literal key.</summary>
+    /// <summary>An explicit expression group.</summary>
     /// <param name="Value">The grouped expression.</param>
     public sealed record SourceGroup(SyntaxNode Value) : SourceNode;
     /// <summary>An indexed reference whose target and index retain their syntax.</summary>

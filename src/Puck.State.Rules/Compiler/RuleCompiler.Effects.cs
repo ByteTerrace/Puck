@@ -140,7 +140,7 @@ public static partial class RuleCompiler {
         RuleInstanceBinding binding;
 
         try {
-            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool, effectScoped: true);
+            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool);
         } catch (InvalidOperationException error) {
             throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
         }
@@ -192,7 +192,7 @@ public static partial class RuleCompiler {
         RuleInstanceBinding binding;
 
         try {
-            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool, effectScoped: true);
+            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool);
         } catch (InvalidOperationException error) {
             throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
         }
@@ -222,7 +222,7 @@ public static partial class RuleCompiler {
 
         RuleInstanceBinding binding;
 
-        try { binding = context.PushInstanceBinding(name: effect.Binding, pool: pool, effectScoped: true); } catch (InvalidOperationException error) { throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName); }
+        try { binding = context.PushInstanceBinding(name: effect.Binding, pool: pool); } catch (InvalidOperationException error) { throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName); }
         try { return new ForEachPoolEffect(pool: pool, bindingSlot: binding.Slot, effects: CompileEffects(effects: effect.Effects, ruleName: ruleName, context: context, subject: "pool foreach"), describe: $"for each {binding.Name} in {pool.Name.Value}"); } finally { context.PopInstanceBinding(binding: binding); }
     }
 
@@ -904,15 +904,22 @@ public static partial class RuleCompiler {
         if (hasExpression) {
             // A kind=Text destination was refused above. A kind=Bool one computes in Int — the kind a comparison
             // leaves — and lands as 0 for zero and 1 for anything else, which the row's own write door then admits.
-            var program = CompileExpression(
-                context: context,
-                expression: expression,
-                kind: ((row.Kind == CellKind.Bool)
-                ? CellKind.Int
-                : row.Kind),
-                ruleName: ruleName,
-                verb: verb
-            );
+            var bindingScope = context.BindingScope;
+            context.BindingScope = [.. bindingScope ?? [], BoundKey.Write];
+            CompiledExpressionToken[] program;
+            try {
+                program = CompileExpression(
+                    context: context,
+                    expression: expression,
+                    kind: ((row.Kind == CellKind.Bool)
+                    ? CellKind.Int
+                    : row.Kind),
+                    ruleName: ruleName,
+                    verb: verb
+                );
+            } finally {
+                context.BindingScope = bindingScope;
+            }
 
             return new WriteEffect(
                 describe: $"{verb} {rowName}.{destination.Spelling} := expression[{program.Length}]",

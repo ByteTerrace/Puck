@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-hp\s*=\s*hp\s*-\s*damage
+hp\s*-=\s*damage

@@ -31,7 +31,7 @@ public class ConstructTableLawTests {
         ["CellSetDeclarationNode"] = new(Keyword: "set", Verdict: Verdict.Construct),
         ["ClaimPairStatementNode"] = new(Keyword: "claim pair", Verdict: Verdict.Construct),
         ["ClaimStatementNode"] = new(Keyword: "claim", Verdict: Verdict.Construct),
-        ["CompoundAssignStatementNode"] = new(Keyword: "PUCK039 — this vocabulary's effects carry only setState and addState", Verdict: Verdict.Refused),
+        ["CompoundAssignStatementNode"] = new(Keyword: "op=", Verdict: Verdict.Core),
         ["DealStatementNode"] = new(Keyword: "deal", Verdict: Verdict.Construct),
         ["DecisionBlockNode"] = new(Keyword: "decision", Verdict: Verdict.Construct),
         ["DerivedStateNode"] = new(Keyword: "derive", Verdict: Verdict.Construct),

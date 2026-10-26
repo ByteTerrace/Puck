@@ -247,10 +247,10 @@ public sealed class BasisCompositionLawTests {
                 test "inherited state" {
                   given {
                     phase = Active
-                    telemetry[count] = 7
+                    telemetry.count = 7
                   }
                   expect {
-                    phase == Active and telemetry[count] == 7 and ratio == 1.5 and ready == true and guide[title] == "Welcome"
+                    phase == Active and telemetry.count == 7 and ratio == 1.5 and ready == true and guide.title == "Welcome"
                   }
                 }
                 """

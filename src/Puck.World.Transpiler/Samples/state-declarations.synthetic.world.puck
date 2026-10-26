@@ -33,7 +33,7 @@ state {
 rule "spend-mana-or-refuse" {
   when vitals.mana >= 10
   if vitals.mana >= 10 {
-    vitals[mana] = vitals.mana - 10
+    vitals.mana = vitals.mana - 10
   } else {
     gold = gold - 1
   }

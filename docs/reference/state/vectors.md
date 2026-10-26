@@ -332,10 +332,10 @@ hidden mask lands in a row with the mask's audience or is refused with
 client handed a vector row through its projection also receives that row's space
 declaration, so the row loads as a vector row of that space.
 
-Storage is bounded. A row's capacity times its space's dimensions must not exceed
-65,536 bytes; a keyed row without a capacity counts as 128 cells, so at 1,024
-dimensions it needs a capacity of 64 or less. All vector rows in a section
-together must not exceed 4 MiB.
+Storage is bounded. A row's reserved cells times its space's dimensions must not
+exceed 65,536 bytes. An explicit capacity reserves that many cells; a growable
+table starts with its cells or saved reservation and is checked again before
+growth. All vector rows in a section together must not exceed 4 MiB.
 
 A record field can be a vector too (`mood: Vector space(lore)`).
 [Records, pools, and handles](records-and-pools.md) describes how hosts read and

@@ -168,7 +168,7 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         var exprStart = cursor.Offset;
-        var rawExpr = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+        var rawExpr = ScanOperandSpan(context: context, stopKeywords: null);
 
         var (exprLine, exprColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: exprStart);
         var expr = ValidatedOperand(rawExpr, new SourceSpan(exprStart, (cursor.Offset - exprStart), exprLine, exprColumn), diagnostics);

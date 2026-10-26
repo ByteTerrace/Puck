@@ -4397,7 +4397,10 @@
         "RepeatBits",
         "IsAbsent",
         "Coalesce",
-        "Member"
+        "Member",
+        "And",
+        "Or",
+        "Not"
       ]
     },
     "ShapeNonNullable10": {

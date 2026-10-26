@@ -604,7 +604,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case ScoreStatementNode score: {
-                        m_builder.Append(value: "score: ").Append(value: OperandKeys(text: score.Expression.Text));
+                        m_builder.Append(value: "score: ").Append(value: score.Expression.Text);
 
                         break;
                     }
@@ -1396,6 +1396,10 @@ public static partial class PuckPrinter {
             }
         }
         private void Row(RowRefNode row) {
+            if (row.Operand is { } operand) {
+                m_builder.Append(value: operand.Text);
+                return;
+            }
             m_builder.Append(value: row.Name);
             if (row.Key is null) {
                 return;
@@ -1413,7 +1417,8 @@ public static partial class PuckPrinter {
             m_builder.Append(value: '[');
             ExpressionSpelling.AppendSourceKey(
                 into: m_builder,
-                key: row.Key
+                key: row.Key,
+                brackets: true
             );
             m_builder.Append(value: ']');
         }
@@ -1570,13 +1575,17 @@ public static partial class PuckPrinter {
         private void Predicate(PredicateNode predicate, bool parenthesize, int level = 0) {
             switch (predicate) {
                 case ComparisonPredicateNode comparison: {
-                        var annotated = (comparison.Kind is not null);
-
-                        if (annotated) { m_builder.Append(value: '('); }
-                        OperandText(enclose: false, level: level, text: comparison.Left.Text);
+                        if (comparison.Comparator == "!=" &&
+                            comparison.Right.Syntax is ExpressionSpelling.Literal { Value: 0 }) {
+                            var group = comparison.Left.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary;
+                            if (group) { m_builder.Append(value: '('); }
+                            OperandText(enclose: !group, level: level, text: comparison.Left.Text);
+                            if (group) { m_builder.Append(value: ')'); }
+                            break;
+                        }
+                        ComparisonOperand(comparison.Left, level);
                         m_builder.Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ');
-                        OperandText(enclose: false, level: level, text: comparison.Right.Text);
-                        if (annotated) { m_builder.Append(value: " : ").Append(value: comparison.Kind).Append(value: ')'); }
+                        ComparisonOperand(comparison.Right, level);
 
                         break;
                     }
@@ -1623,12 +1632,18 @@ public static partial class PuckPrinter {
                     }
             }
         }
+        private void ComparisonOperand(OperandExpressionNode operand, int level) {
+            var group = operand.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary or ExpressionSpelling.Unary { Operator: "not" };
+            if (group) { m_builder.Append(value: '('); }
+            OperandText(enclose: !group, level: level, text: operand.Text);
+            if (group) { m_builder.Append(value: ')'); }
+        }
         // An `and`/`or` chain on one line, or one operand a line with the keyword ending the line before the
         // operand it joins.
         private void Chain(IReadOnlyList<PredicateNode> operands, string keyword, bool parenthesize, int level) {
             var broken = !Fits(node: operands, print: () => Chain(keyword: keyword, level: level, operands: operands, parenthesize: parenthesize));
 
-            if (parenthesize) { m_builder.Append(value: '('); }
+            if (parenthesize || broken) { m_builder.Append(value: '('); }
             for (var index = 0; (index < operands.Count); index++) {
                 if (index > 0) {
                     if (broken) {
@@ -1644,9 +1659,10 @@ public static partial class PuckPrinter {
                     predicate: operands[index]
                 );
             }
-            if (parenthesize) { m_builder.Append(value: ')'); }
+            if (parenthesize || broken) { m_builder.Append(value: ')'); }
         }
         private static int Precedence(ExpressionNode @operator) => (@operator switch {
+            UnaryExpressionNode { Operator: "not" } => PuckParser.InfixLevel(symbol: "not"),
             BinaryExpressionNode binary => PuckParser.InfixLevel(symbol: binary.Operator),
             RangeExpressionNode => PuckParser.RangeLevel,
             ConditionalExpressionNode => PuckParser.ConditionalLevel,

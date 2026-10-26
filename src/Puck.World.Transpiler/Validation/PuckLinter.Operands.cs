@@ -17,7 +17,7 @@ public static partial class PuckLinter {
                 break;
             case Syntax.SourceIndex index:
                 CollectOperandReferences(index.Target, DocumentValueForm.Name, references, binder);
-                CollectOperandReferences(index.Index, DocumentValueForm.Key, references, binder);
+                CollectOperandReferences(index.Index, DocumentValueForm.Expression, references, binder);
                 break;
             case Syntax.Unary unary: CollectOperandReferences(unary.Operand, DocumentValueForm.Expression, references, binder); break;
             case Syntax.Binary binary:

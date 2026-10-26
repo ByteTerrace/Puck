@@ -3,9 +3,9 @@
 // section.
 template resetTable() {
   rule "reset-table" {
-    when tableState[activeRound] > 8
+    when tableState.activeRound > 8
     mode: Edge
-    tableState[activeRound] = 1
-    tableState[busy] = 0
+    tableState.activeRound = 1
+    tableState.busy = 0
   }
 }

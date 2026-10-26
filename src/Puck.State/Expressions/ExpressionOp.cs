@@ -289,4 +289,10 @@ public enum ExpressionOp : byte {
     Argument,
     /// <summary>Pushes the value of the family member the fold in flight is visiting, inside a fold subprogram.</summary>
     Member,
+    /// <summary>Truth conjunction; evaluates the right operand only when the left is true.</summary>
+    And,
+    /// <summary>Truth disjunction; evaluates the right operand only when the left is false.</summary>
+    Or,
+    /// <summary>Truth negation. Zero and absence are false; other numeric values are true.</summary>
+    Not,
 }

@@ -7718,7 +7718,7 @@ template tetromino() {
         das = 9
       }
     }
-    if mv != 0 {
+    if mv {
       if dasdir == 1 {
         tx -= 1
       } else {
@@ -7760,12 +7760,12 @@ template tetromino() {
       fi = cr
       fi *= 10
       fi += cc
-      if field[fi] != 0 {
+      if field[fi] {
         ok = 0
         break
       }
     }
-    if ok != 0 {
+    if ok {
       px = tx
       py = ty
       pr = tr
@@ -7811,12 +7811,12 @@ template tetromino() {
         fi = cr
         fi *= 10
         fi += cc
-        if field[fi] != 0 {
+        if field[fi] {
           ok = 0
           break
         }
       }
-      if ok != 0 {
+      if ok {
         py = ty
       } else {
         nph = 1
@@ -7846,7 +7846,7 @@ template tetromino() {
       fi = cr
       fi *= 10
       fi += cc
-      field[fi] = pcol
+      field.fi = pcol
       r2 = cr
       r2 += 0
       c2 = cc
@@ -7877,9 +7877,9 @@ template tetromino() {
           break
         }
       }
-      rowfull[cr] = full
-      if full != 0 {
-        fullrows[nfull] = cr
+      rowfull.cr = full
+      if full {
+        fullrows.nfull = cr
         nfull += 1
       }
       rcur += 1
@@ -7887,7 +7887,7 @@ template tetromino() {
     if rcur >= 18 {
       rcur = 0
       w = 17
-      if nfull != 0 {
+      if nfull {
         fcol = 0
         fhold = 0
         nph = 19
@@ -7899,7 +7899,7 @@ template tetromino() {
 
   rule "flash" {
     when ph == 19
-    if fhold != 0 {
+    if fhold {
       fhold = 0
     } else {
       fhold = 1
@@ -7944,7 +7944,7 @@ template tetromino() {
           fi += cc
           r2 = wbase
           r2 += cc
-          field[r2] = field[fi]
+          field.r2 = field[fi]
         }
         w -= 1
       }
@@ -7981,7 +7981,7 @@ template tetromino() {
           dv -= 10
           carryv += 1
         }
-        score[di] = dv
+        score.di = dv
       }
     }
   }
@@ -7997,7 +7997,7 @@ template tetromino() {
       repeat 10 as cc {
         fi = base
         fi += cc
-        field[fi] = 0
+        field.fi = 0
       }
       rcur += 1
     }
@@ -8083,12 +8083,12 @@ template tetromino() {
       fi = cr
       fi *= 10
       fi += cc
-      if field[fi] != 0 {
+      if field[fi] {
         ok = 0
         break
       }
     }
-    if ok != 0 {
+    if ok {
       nph = 0
     } else {
       over = 1
@@ -8138,10 +8138,10 @@ template tetromino() {
       cc -= 4
       cr += 0
       cr *= 8
-      sy[k] = cr
+      sy.k = cr
       cc += 8
       cc *= 8
-      sx[k] = cc
+      sx.k = cc
     }
   }
 
@@ -8200,7 +8200,7 @@ template tetromino() {
     if tcur == 0 and hold == 0 and painted == 0 {
       play(sound: "theme-title")
     }
-    if hold != 0 {
+    if hold {
       hold -= 1
     } else {
       repeat 9 as k {
@@ -8221,7 +8221,7 @@ template tetromino() {
       if tcur >= 117 {
         painted = 1
       }
-      if painted != 0 {
+      if painted {
         painted = 0
         tcur = 0
         hold = 24
@@ -8232,7 +8232,7 @@ template tetromino() {
 
   rule "title-game" {
     when ph == 16
-    if hold != 0 {
+    if hold {
       hold -= 1
     } else {
       repeat 9 as k {
@@ -8253,7 +8253,7 @@ template tetromino() {
       if tcur >= 156 {
         painted = 1
       }
-      if painted != 0 {
+      if painted {
         painted = 0
         tcur = 0
         hold = 16
@@ -8264,7 +8264,7 @@ template tetromino() {
 
   rule "title-rest" {
     when ph == 17
-    if hold != 0 {
+    if hold {
       hold -= 1
     } else {
       repeat 9 as k {
@@ -8285,7 +8285,7 @@ template tetromino() {
       if tcur >= 147 {
         painted = 1
       }
-      if painted != 0 {
+      if painted {
         painted = 0
         tcur = 0
         hold = 0
@@ -8348,7 +8348,7 @@ template tetromino() {
       if key(down, pressed) {
         pick = 1
       }
-      if key(left, pressed) and startlevel != 0 {
+      if key(left, pressed) and startlevel {
         startlevel -= 1
       }
       if key(right, pressed) and startlevel < 9 {
@@ -8407,16 +8407,16 @@ template tetromino() {
       repeat 10 as cc {
         fi = base
         fi += cc
-        field[fi] = 0
+        field.fi = 0
       }
     }
     lines = 0
     level = startlevel
     over = 0
     repeat 5 as k {
-      score[k] = 0
+      score.k = 0
     }
-    if gtype != 0 {
+    if gtype {
       repeat 5 as k {
         cr = 17
         cr -= k
@@ -8434,7 +8434,7 @@ template tetromino() {
           si %= 7
           si += 1
           if cc != dv {
-            field[fi] = si
+            field.fi = si
           }
         }
       }
@@ -8475,7 +8475,7 @@ template tetromino() {
     if tcur >= 165 {
       dressed = 1
     }
-    if dressed != 0 {
+    if dressed {
       nph = 5
     }
   }
@@ -8494,9 +8494,9 @@ template tetromino() {
           break
         }
       }
-      if cmpd != 0 {
+      if cmpd {
         repeat 5 as k {
-          best[k] = score[k]
+          best.k = score[k]
         }
         save()
       }
@@ -8532,7 +8532,7 @@ template tetromino() {
 
   rule "finish" {
     when ph == 0
-    if gtype != 0 and lines >= 25 {
+    if gtype and lines >= 25 {
       balloony = 144
       play(sound: "theme-win")
       nph = 11
@@ -8633,10 +8633,10 @@ template tetromino() {
       cc &= 3
       cr += 14
       cr *= 8
-      ny[k] = cr
+      ny.k = cr
       cc += 1
       cc *= 8
-      nx[k] = cc
+      nx.k = cc
     }
   }
 

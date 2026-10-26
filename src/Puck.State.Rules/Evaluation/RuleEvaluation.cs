@@ -74,7 +74,17 @@ public static class RuleEvaluation {
         var stack = stackLease.Span;
         var top = 0;
 
-        foreach (var predicate in gate) {
+        for (var index = 0; index < gate.Length; index++) {
+            var predicate = gate[index];
+            if (predicate.Op == GateOp.ShortCircuit) {
+                var answer = stack[top - 1];
+                if (answer == predicate.SkipWhen) {
+                    top -= predicate.Arity;
+                    stack[top - 1] = answer;
+                    index += predicate.Skip;
+                }
+                continue;
+            }
             if (predicate.Op == GateOp.Not) {
                 GateProgramEvaluator.Invert(
                     stack: stack,
@@ -105,7 +115,6 @@ public static class RuleEvaluation {
                 var rightText = rightSource.Text;
                 var leftAnswered = leftText is not null || TryReadText(reader, leftSource.Operand, out leftText);
                 var rightAnswered = rightText is not null || TryReadText(reader, rightSource.Operand, out rightText);
-                if ((!leftAnswered || !rightAnswered) && raised == ExpressionFault.None) { raised = ExpressionFault.Absent; }
                 var equal = string.Equals(leftText, rightText, StringComparison.Ordinal);
                 var textHolds = leftAnswered && rightAnswered &&
                     (predicate.Comparison == ExpressionOp.Equal ? equal : !equal);
@@ -132,22 +141,14 @@ public static class RuleEvaluation {
 
             if (raised == ExpressionFault.None) {
                 raised = First(
-                    left: leftFault,
-                    right: rightFault
+                    left: leftFault == ExpressionFault.Absent ? ExpressionFault.None : leftFault,
+                    right: rightFault == ExpressionFault.Absent ? ExpressionFault.None : rightFault
                 );
             }
 
             // An absent side names no cell, so no comparison holds against it — not even NotEqual: "the top card is
-            // not a king" must not read as true of an empty pile. The conjunct also faults, so the author is told
-            // which operation answers the absence instead of reading a silent false.
+            // not a king" must not read as true of an empty pile. Absence converts to false at a gate.
             var absent = (left.IsAbsent || right.IsAbsent);
-
-            if (
-                absent &&
-                (raised == ExpressionFault.None)
-            ) {
-                raised = ExpressionFault.Absent;
-            }
 
             var holds = (
                 leftRead &&
@@ -207,7 +208,7 @@ public static class RuleEvaluation {
         if (source.Expression is { } expression) {
             // A Bool destination's program was compiled in Int, the kind a comparison leaves, so it evaluates in Int
             // and lands as 0 for zero and 1 for anything else.
-            var computedKind = ((kind == CellKind.Bool)
+            var computedKind = source.CarrierKind ?? ((kind == CellKind.Bool)
                 ? CellKind.Int
                 : kind
             );

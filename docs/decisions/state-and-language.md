@@ -507,6 +507,37 @@ order are [S9](../plans/state-and-language.md#s9--the-authoring-consensus).
 - **`sql { }` is deleted.** It is a second spelling of rows and rules that never
   printed back.
 
+### Expression semantics
+
+A condition converts its result to truth: numeric zero and absence are false;
+nonzero Int and Fixed values are true. `and`, `or` and `not` produce Int 0 or 1.
+`and` reads its right operand only when the left is true; `or` reads it only
+when the left is false. A skipped operand neither reads state nor faults.
+Their operands may use different numeric kinds, while each arithmetic operation
+requires matching operand kinds. Both operands must still name declared values
+at compile time. Other arithmetic keeps its existing absence propagation; use `??` to
+provide a missing value or `isAbsent` to test it.
+
+From weakest to strongest, operators bind as: conditional `?:`, `??`, `or`,
+`and`, prefix `not`, equality, ordering, `|`, `^`, `&`, shifts, addition and
+subtraction, multiplication and division, arithmetic prefix operators. Thus
+`mask & flag != 0` compares the masked value, and `not x == y` negates the
+comparison. Parentheses override that order.
+
+State declarations and earlier locals determine operand kinds. Numeric
+literals take the expression's carrier; an Int carrier rounds them to even,
+while a comparison against an Int cell keeps its exact threshold. Comparisons
+and truth operators yield Int even when they read Fixed operands. Int and
+Fixed state reads do not silently convert into one another. An unconstrained
+integral expression infers Int; a decimal spelling such as `1.0` selects Fixed
+for an unconstrained expression. A gate converts its result to truth without
+a kind annotation.
+Rule locals run in declaration order before the rule's gate and effects.
+Declarations after a gate or effect are refused: move the declaration before
+the gate to request that pre-effect read. A local may read earlier locals,
+never a later declaration. This keeps the runtime's existing evaluation
+model visible in the source.
+
 ### The state review
 
 The owner asked every partner for a critical review of the state system as a
@@ -563,6 +594,7 @@ defect was found; the weaknesses are structural and economic.
 - **The row stops being a kitchen sink**: rare traits are optional facets stored
   where declared, and disclosure policy is evaluated per recipient while its
   future-affecting inputs stay authoritative state.
+
 
 ## Costing
 

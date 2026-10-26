@@ -10,7 +10,7 @@ namespace Puck.State;
 /// <list type="bullet">
 /// <item><c>+ - * / %</c>, <c>&amp; | ^ ~</c>, <c>&lt;&lt; &gt;&gt; &gt;&gt;&gt;</c>, <c>== != &lt; &lt;= &gt; &gt;=</c>,
 /// unary <c>-</c> and <c>~</c>, and <c>condition ? whenTrue : whenFalse</c> (<see cref="ExpressionOp.Select"/>), with
-/// C precedence.</item>
+/// the precedence in <see cref="ExpressionOperators"/>, including <c>and</c>, <c>or</c>, and <c>not</c>.</item>
 /// <item>Named forms as calls, spelled as <see cref="ExpressionOperators.Calls"/> keys them: among them
 /// <c>minimum(a, b)</c>, <c>maximum</c>, <c>clamp(value, lower, upper)</c>, <c>absolute</c>, <c>sign</c>,
 /// <c>setBitCount</c>, <c>leadingZeroCount</c>, <c>trailingZeroCount</c>, <c>lowestSetBit</c>,
@@ -127,7 +127,7 @@ public static partial class ExpressionSpelling {
     );
     // The source spelling of a reserved channel: a local by its bare name, a reduction by its operation, and every
     // other channel as a call of its name. A channel with no argument keeps its reserved word.
-    private static bool TryAppendChannel(StringBuilder into, string name, bool keyPosition = false) {
+    private static bool TryAppendChannel(StringBuilder into, string name) {
         // A channel whose name a function already carries keeps its reserved spelling: `pair(...)` is the function.
         if (
             !ChannelSpelling.TryParse(
@@ -140,12 +140,10 @@ public static partial class ExpressionSpelling {
         ) {
             return false;
         }
-        // Inside brackets a bare name is a literal key, so a local keying a cell is written as the call it is.
         if (
-            !keyPosition &&
             (call.Channel == "local") &&
             (call.Count == 1) &&
-            IsBareName(name: call.Text(index: 0)) &&
+            IdentifierSpelling.IsName(text: call.Text(index: 0)) &&
             !call.Text(index: 0).Contains(value: '.')
         ) {
             into.Append(value: call.Text(index: 0));
@@ -426,6 +424,8 @@ public static partial class ExpressionSpelling {
                     )
                     : null
                 );
+            case { Operation: ExpressionOp.Not }:
+                return stack.Count >= 1 ? new Unary(Operator: "not", Operand: stack.Pop()) : null;
         }
         if (BinaryOperator(instruction: instruction) is { } symbol) {
             return ((Pop(
@@ -522,7 +522,8 @@ public static partial class ExpressionSpelling {
     /// when that is what reads back as one.</summary>
     /// <param name="into">The builder to append to.</param>
     /// <param name="key">The key as the document carries it.</param>
-    public static void AppendKey(StringBuilder into, string key) {
+    /// <param name="brackets">Whether this key appears inside an evaluated source index.</param>
+    public static void AppendKey(StringBuilder into, string key, bool brackets = false) {
         ArgumentNullException.ThrowIfNull(argument: into);
         ArgumentNullException.ThrowIfNull(argument: key);
 
@@ -537,6 +538,10 @@ public static partial class ExpressionSpelling {
 
             if (SourceDialect) {
                 text = Reprint(infix: text);
+                if (brackets) {
+                    into.Append(value: text);
+                    return;
+                }
             }
 
             into.Append(value: ((TryParseKey(
@@ -562,6 +567,10 @@ public static partial class ExpressionSpelling {
                 (colon > 0) &&
                 (colon < (rest.Length - 1))
             ) {
+                if (SourceDialect) {
+                    new StateRead(Name: rest[..colon], Key: (rest[(colon + 1)..] == StateRow.SlotKey.Value ? null : rest[(colon + 1)..])).PrintBare(into: into);
+                    return;
+                }
                 into.Append(value: PrintName(name: rest[..colon])).Append(value: '[');
                 AppendKey(
                     into: into,
@@ -575,13 +584,17 @@ public static partial class ExpressionSpelling {
             SourceDialect &&
             TryAppendChannel(
                 into: into,
-                keyPosition: true,
                 name: key
             )
         ) {
             return;
         }
 
+        if (SourceDialect && brackets && !key.StartsWith(value: '$') && !IsNumberLexeme(text: key)) {
+            into.Append(value: '"').Append(value: key.Replace(oldValue: "\\", newValue: "\\\\", comparisonType: StringComparison.Ordinal)
+                .Replace(oldValue: "\"", newValue: "\\\"", comparisonType: StringComparison.Ordinal)).Append(value: '"');
+            return;
+        }
         into.Append(value: ((IsKeyName(name: key) || IsNumberLexeme(text: key))
             ? key
             : $"`{key}`"));
@@ -875,7 +888,8 @@ public static partial class ExpressionSpelling {
     /// (<see cref="TryPrintSource"/>).</summary>
     /// <param name="into">The builder to append to.</param>
     /// <param name="key">The key spelling a document holds.</param>
-    public static void AppendSourceKey(StringBuilder into, string key) {
+    /// <param name="brackets">Whether the key is inside an evaluated bracket expression.</param>
+    public static void AppendSourceKey(StringBuilder into, string key, bool brackets = false) {
         var dialect = SourceDialect;
 
         SourceDialect = true;
@@ -883,7 +897,8 @@ public static partial class ExpressionSpelling {
         try {
             AppendKey(
                 into: into,
-                key: key
+                key: key,
+                brackets: brackets
             );
         } finally {
             SourceDialect = dialect;
@@ -1208,10 +1223,15 @@ public static partial class ExpressionSpelling {
                 ));
             }
             if (key is { } spelled) {
+                if (SourceDialect && !spelled.StartsWith(value: '$') && IdentifierSpelling.IsName(text: spelled)) {
+                    into.Append(value: '.').Append(value: spelled);
+                    return;
+                }
                 into.Append(value: '[');
                 AppendKey(
                     into: into,
-                    key: spelled
+                    key: spelled,
+                    brackets: true
                 );
                 into.Append(value: ']');
             }
@@ -1245,26 +1265,27 @@ public static partial class ExpressionSpelling {
     /// <param name="Operator">The operator spelling.</param>
     /// <param name="Operand">The operand.</param>
     public sealed record Unary(string Operator, SyntaxNode Operand) : SyntaxNode {
-        internal override int Level => UnaryLevel;
+        internal override int Level => Operator == "not" ? ExpressionOperators.Find(ExpressionOp.Not)!.Binding : UnaryLevel;
 
         internal override void Emit(List<Instruction> into, ProgramBuilder builder) {
             Operand.Emit(
                 builder: builder,
                 into: into
             );
-            into.Add(item: Instruction.Of(operation: ((Operator == "-")
-                ? ExpressionOp.Negate
-                : ExpressionOp.BitNot)));
+            into.Add(item: Instruction.Of(operation: Operator switch {
+                "-" => ExpressionOp.Negate, "not" => ExpressionOp.Not, _ => ExpressionOp.BitNot,
+            }));
         }
         internal override void PrintBare(StringBuilder into) {
             into.Append(value: Operator);
+            if (Operator == "not") { into.Append(value: ' '); }
             // A unary or negative-literal operand is parenthesized so "- -a" never prints as "--a".
             var wrap = ((Operand is Unary) || (Operand is Literal { Value: < 0m }));
 
             if (wrap) { into.Append(value: '('); }
             Operand.Print(
                 into: into,
-                parentLevel: UnaryLevel,
+                parentLevel: Level,
                 rightOperand: false
             );
             if (wrap) { into.Append(value: ')'); }
@@ -1595,10 +1616,22 @@ public static partial class ExpressionSpelling {
             ) is var nameLength and > 0) {
                 var end = (m_position + nameLength);
 
+                // The document dialect carries a live zone selector inside one name. In source its
+                // brackets still contain an ordinary expression, whose names must be bound first.
+                if (sourceSyntax && text.AsSpan(m_position, nameLength).StartsWith("$zones[", StringComparison.Ordinal)) {
+                    end = m_position + "$zones".Length;
+                }
+
                 m_kind = Lexeme.Name;
                 m_value = text[m_position..end];
                 m_position = end;
                 return;
+            }
+            if (text.AsSpan(m_position).StartsWith("||", StringComparison.Ordinal)) {
+                throw Fail(message: "'||' is retired; write 'or'");
+            }
+            if (text.AsSpan(m_position).StartsWith("&&", StringComparison.Ordinal)) {
+                throw Fail(message: "'&&' is retired; write 'and'");
             }
             foreach (var punctuation in Punctuations) {
                 if (string.CompareOrdinal(
@@ -1617,15 +1650,26 @@ public static partial class ExpressionSpelling {
             throw Fail(message: $"unexpected character '{character}'");
         }
         private static string? BinaryOperator(string symbol) => (ExpressionOperators.TryFindSymbol(
-            descriptor: out _,
+            descriptor: out var descriptor,
             symbol: symbol
-        )
+        ) && descriptor!.Arity == 2
             ? symbol
             : null
         );
         private void Expect(string punctuation) {
             if (!Accept(punctuation: punctuation)) {
+                RefuseKindSuffix();
                 throw Fail(message: $"expected '{punctuation}'{Found()}");
+            }
+        }
+        private void RefuseKindSuffix() {
+            if (!sourceSyntax || m_value is not (":" or "as")) { return; }
+            var remainder = text.AsSpan(m_position).TrimStart();
+            foreach (var kind in new[] { "Int", "Fixed", "Text" }) {
+                if (remainder.StartsWith(kind, StringComparison.Ordinal) &&
+                    (remainder.Length == kind.Length || !char.IsLetterOrDigit(remainder[kind.Length]))) {
+                    throw Fail(message: $"'{m_value} {kind}' is retired; write the expression without a kind suffix (its kind is inferred)");
+                }
             }
         }
         private void Descend() {
@@ -1650,7 +1694,7 @@ public static partial class ExpressionSpelling {
             while (true) {
                 Prime();
                 if (
-                    (m_kind != Lexeme.Punctuation) ||
+                    (m_kind is not (Lexeme.Punctuation or Lexeme.Name) || m_quoted) ||
                     (BinaryOperator(symbol: m_value) is not { } symbol)
                 ) {
                     m_depth -= spine;
@@ -1941,6 +1985,7 @@ public static partial class ExpressionSpelling {
                         var quoted = m_quoted;
 
                         Advance();
+                        var calling = (m_kind == Lexeme.Punctuation) && (m_value == "(");
                         if (!quoted && (name == "vector")) {
                             if (Accept(punctuation: "(")) {
                                 Prime();
@@ -1985,7 +2030,7 @@ public static partial class ExpressionSpelling {
                                 return new EmbedLiteral(Space: embedSpace, Text: embedText);
                             }
                         }
-                        if (!quoted && (name is "dot" or "similarity" or "identical")) {
+                        if (!quoted && calling && (name is "dot" or "similarity" or "identical")) {
                             return ParseCall(
                                 arity: 2,
                                 name: name,
@@ -1994,13 +2039,13 @@ public static partial class ExpressionSpelling {
                         }
                         if (
                             !quoted &&
-                            IsFoldName(name: name)
+                            calling && IsFoldName(name: name)
                         ) {
                             return ParseFold(name: name);
                         }
                         if (
                             !quoted &&
-                            Calls.TryGetValue(
+                            calling && Calls.TryGetValue(
                             key: name,
                             value: out var call
                         )
@@ -2013,7 +2058,7 @@ public static partial class ExpressionSpelling {
                         }
                         if (
                             !quoted &&
-                            (name is "boardShift" or "boardRay" or "boardImage")
+                            calling && (name is "boardShift" or "boardRay" or "boardImage")
                         ) {
                             return ParseCall(
                                 arity: 1,
@@ -2161,6 +2206,17 @@ public static partial class ExpressionSpelling {
             );
         }
         private SyntaxNode ParseUnary() {
+            Prime();
+            if (m_kind == Lexeme.Name && !m_quoted && m_value is "and" or "or") {
+                throw Fail(message: $"operator '{m_value}' needs a left operand");
+            }
+            if (m_kind == Lexeme.Name && !m_quoted && m_value == "not") {
+                Advance();
+                Descend();
+                var operand = ParseBinary(minimumLevel: ExpressionOperators.Find(ExpressionOp.Not)!.Binding);
+                m_depth--;
+                return new Unary(Operator: "not", Operand: operand);
+            }
             if (Accept(punctuation: "-")) {
                 Descend();
 
@@ -2200,6 +2256,7 @@ public static partial class ExpressionSpelling {
         public void ExpectEnd() {
             Prime();
             if (m_kind != Lexeme.End) {
+                RefuseKindSuffix();
                 throw Fail(message: $"unexpected '{m_value}' after the expression");
             }
         }
@@ -2212,7 +2269,7 @@ public static partial class ExpressionSpelling {
             Prime();
             var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
 
-            if (m_kind is Lexeme.Name or Lexeme.Number) {
+            if (m_kind is Lexeme.Name or Lexeme.Number or Lexeme.String) {
                 var key = m_value;
                 var indexable = ((m_kind == Lexeme.Name) && !m_quoted);
 

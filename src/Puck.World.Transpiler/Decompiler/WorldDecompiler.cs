@@ -1460,7 +1460,7 @@ public static partial class WorldDecompiler {
                 node: v
             )}");
         }
-        return $"{type}({string.Join(
+        return $"{(type == "not" ? "`not`" : type)}({string.Join(
             separator: ", ",
             values: args
         )})";
@@ -1478,7 +1478,9 @@ public static partial class WorldDecompiler {
     // a key is the exception, since its document spelling reads as an operand anywhere outside brackets.
     private static string FormatArgument(JsonNode? node, WorldArgumentForm form, int indentLevel, Type? context = null) {
         if (PrintsAsText(form: form, node: node)) {
-            return WorldExpressionJson.Text(node: node);
+            var text = WorldExpressionJson.Text(node: node);
+            return ExpressionSpelling.TryParse(text: text, program: out var program, error: out _) &&
+                ExpressionSpelling.TryPrintSource(program: program, text: out var source) ? source : text;
         }
         if ((node is JsonObject reference) && (form == WorldArgumentForm.Name) && (reference["field"] is not null)) {
             return StateChannelRefJsonConverter.FromNode(node: reference).Spelling;

@@ -17,8 +17,6 @@ public static class PuckDiagnosticCodes {
     /// cannot evaluate at compile time, or a name that is neither a compile-time function nor an arm the vocabulary
     /// declares (<c>min</c>, where the one spelling is <c>minimum</c>).</summary>
     public const string BuiltinRefused = "PUCK041";
-    /// <summary>A chained comparison in one <c>when</c> clause.</summary>
-    public const string ChainedComparison = "PUCK004";
     /// <summary>PUCK040: a colon in front of a container value. A block or an array is written as a block
     /// (<c>host { }</c>, <c>cameras [ ]</c>); the colon is what marks a scalar leaf, so there is exactly one
     /// spelling for each.</summary>
@@ -150,9 +148,6 @@ public static class PuckDiagnosticCodes {
     public const string UnresolvedLet = "PUCK015";
     /// <summary>A shape or placement parent that resolves to no sibling row in the same collection.</summary>
     public const string UnresolvedParent = "PUCK034";
-    /// <summary>PUCK039: a compound assignment (<c>-=</c>, <c>*=</c>, <c>&gt;&gt;=</c>, …) in a document whose
-    /// effects carry no such operator.</summary>
-    public const string UnsupportedAssignmentOperator = "PUCK039";
     /// <summary>PUCK038: a call-form gate (<c>key(left, held)</c>) in a document whose gates are comparisons
     /// only.</summary>
     public const string UnsupportedCallGate = "PUCK038";

@@ -107,9 +107,8 @@ turn order or a shuffled short deck is one cell, read back with `bitField(packed
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `squareRoot` (both kinds),
 a keyed read is `row[key]` or `row.key` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
-`row[from + 1]` / `row[(from)]` (any other expression as the key — an implicit int binding evaluated before the
-gate, traced as `$key<n>`, one of the rule's locals; identical expression-key spellings share a local within
-the same binding scope, never across rules or pattern-local scopes; parenthesize a bare name to read its row's value);
+`row[from + 1]` / `row[(from)]` (any other expression as the key, evaluated when the read or write executes;
+identical spellings share compiled code but never a pre-gate value; parenthesize a bare name to read its row's value);
 `sine`, `cosine` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
 an overflow does — and is counted: a faulting binding, effect, or `compareValue` conjunct reports `Arithmetic`
 in `world.rule.failures` (narrated once per category on stderr) and `world.rule.trace` shows the conjunct as
