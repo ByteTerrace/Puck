@@ -127,8 +127,8 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
     /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
     /// will be — from a previous build's own counts, e.g. <see cref="SdfProgram.InstructionCount"/>/
-    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfProgram.ScreenSurfaces"/>.Count/
-    /// <see cref="SdfProgram.ConvexPolygonProfileCount"/> — avoids re-paying <see cref="List{T}"/>'s geometric-growth reallocation from empty on every rebuild. Every hint
+    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfProgram.ScreenSurfaces"/>.Count,
+    /// or the previous builder's <see cref="ConvexPolygonCount"/> — avoids re-paying <see cref="List{T}"/>'s geometric-growth reallocation from empty on every rebuild. Every hint
     /// defaults to 0, matching <see cref="List{T}"/>'s own parameterless-constructor capacity, so a caller that
     /// supplies none starts every list empty.</summary>
     /// <param name="instructionCapacity">Initial capacity for the instruction list, or 0 to start empty.</param>

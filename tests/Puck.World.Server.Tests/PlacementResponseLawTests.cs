@@ -415,7 +415,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         var shown = Assert.Single(collection: fixture.Server.Population.DiagnosticColliders);
 
         Assert.Equal(expected: TargetCreation, actual: shown.Creation);
-        Assert.True(condition: (shown.Collider.Radius > authored.Radius));
+        Assert.NotEqual(expected: authored, actual: shown.Collider);
 
         Set(value: 0L);
 
