@@ -2496,7 +2496,7 @@
       }
     },
     "WorldScreenSourceText": {
-      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldTables.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the screen image pipeline, so no image source competes with it on the slot.",
       "properties": {
         "$type": {
           "const": "text"
@@ -7629,6 +7629,15 @@
           ],
           "default": "Nearest",
           "title": "GpuSamplerFilter"
+        },
+        "material": {
+          "description": "How the face\u0027s screen presents its picture, as a screen row\u0027s Material does: Plain, the default, or Crt. Refused on a window. Omitted from the wire when Plain.",
+          "enum": [
+            "Plain",
+            "Crt"
+          ],
+          "default": "Plain",
+          "title": "WorldScreenMaterial"
         }
       },
       "required": [
@@ -10099,7 +10108,7 @@
       "title": "StatePoolSnapshot"
     },
     "WorldThemeScrim": {
-      "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha lies between ScrimMinAlpha and one; a bound alpha a live write moves below the floor presents at it.",
+      "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. A player\u0027s high-contrast preference raises a scrim to HighContrastScrimAlpha when it authors less.",
       "type": "object",
       "properties": {
         "color": {
@@ -10118,49 +10127,46 @@
       "additionalProperties": false,
       "title": "WorldThemeScrim"
     },
-    "WorldThemeBloomHue": {
-      "description": "One elevation bloom hue\u0027s lit ring \u002B outer halo pair (see Puck.Overlays.DesignTokens.Elevation for the composite rule). Each color carries its own baked alpha (#RRGGBBAA).",
-      "type": "object",
-      "properties": {
-        "ring": {
-          "$ref": "#/$defs/BindableColor",
-          "description": "The 1px lit ring color."
-        },
-        "halo": {
-          "$ref": "#/$defs/BindableColor",
-          "description": "The outer distance-falloff halo color."
-        }
-      },
-      "required": [
-        "ring",
-        "halo"
+    "WorldThemeRole": {
+      "enum": [
+        "SurfaceBase",
+        "SurfaceRaised",
+        "SurfaceInset",
+        "ScrimPanel",
+        "ScrimStrip",
+        "ScrimChip",
+        "LineHair",
+        "LineSoft",
+        "TextPrimary",
+        "TextDim",
+        "TextMute",
+        "Accent",
+        "AccentQuiet",
+        "AccentInk",
+        "Positive",
+        "Warning",
+        "Danger",
+        null
       ],
-      "additionalProperties": false,
-      "title": "WorldThemeBloomHue"
+      "title": "WorldThemeRole"
     },
-    "WorldThemeCubicBezier": {
-      "description": "One of the two settled cubic-bezier easings a theme\u0027s motion section authors.",
+    "WorldThemeStyleColor": {
+      "description": "A component style\u0027s color: a core role by name (Role, so the component follows the world\u0027s palette), or its own literal, binding or keys (Color). Exactly one is authored.",
       "type": "object",
       "properties": {
-        "x1": {
-          "description": "The first control point\u0027s x.",
-          "type": "number"
+        "role": {
+          "$ref": "#/$defs/WorldThemeRole",
+          "description": "The core role the component takes, or null when it authors its own color. Omitted from the wire when null.",
+          "default": null
         },
-        "y1": {
-          "description": "The first control point\u0027s y.",
-          "type": "number"
-        },
-        "x2": {
-          "description": "The second control point\u0027s x.",
-          "type": "number"
-        },
-        "y2": {
-          "description": "The second control point\u0027s y.",
-          "type": "number"
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "The component\u0027s own color, or null when it names a role. Omitted from the wire when null.",
+          "default": null
         }
       },
       "additionalProperties": false,
-      "title": "WorldThemeCubicBezier"
+      "title": "WorldThemeStyleColor"
     },
     "PatternNodeSymbol": {
       "description": "One token whose value falls in the named symbol.",

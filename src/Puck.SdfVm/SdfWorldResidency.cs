@@ -696,11 +696,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; }
+
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
     public SdfMeshIrradiance MeshIrradiance { get; } = new();
     /// <summary>Gets the exposure each view of the residency's latest frame maps the luminance it shades by.</summary>
     public SdfViewExposures Exposures { get; } = new();
+
     /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled with indirect light
     /// off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
@@ -899,6 +901,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 screenIndex: screen
             );
             tables.SetScreenMapping(
+                face: sources.FaceOf(screen: screen),
                 mapping: sources.MappingOf(screen: screen),
                 screenIndex: screen
             );

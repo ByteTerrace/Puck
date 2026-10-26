@@ -124,18 +124,17 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.MediumExtinction] = Air(author: s => new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Extinction: s)), present: static e => e.Sky.Atmosphere.MediumExtinction, member: "medium.extinction"),
         [WorldValueFields.ScrimAlpha] = new Case(
             Author: s => Fixtures.BuildDocument() with {
-                ThemeRaw = WorldThemeValidationLawTests.MinimalTheme() with {
-                    Color = WorldThemeValidationLawTests.MinimalColor() with { ScrimPanel = new WorldThemeScrim(Alpha: s, Color: new BindableColor(Raw: "#101010")) },
+                ThemeRaw = WorldThemeSection.Default with {
+                    Color = WorldThemeSection.Default.Color with { ScrimPanel = new WorldThemeScrim(Alpha: s, Color: new BindableColor(Raw: "#101010")) },
                 },
             },
             Path: "theme.color.scrimPanel.alpha",
             Present: static (definition, mirror, domains) => new WorldThemeResolve(domains: domains).Resolve(definition: definition, mirror: mirror, revision: 1).Color.ScrimPanel.Alpha
         ),
-        [WorldValueFields.BloomHaloAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomHaloAlpha), author: static (e, s) => e with { BloomHaloAlpha = s }, present: static e => e.BloomHaloAlpha),
-        [WorldValueFields.BloomRingAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomRingAlpha), author: static (e, s) => e with { BloomRingAlpha = s }, present: static e => e.BloomRingAlpha),
-        [WorldValueFields.BloomNeutralHaloAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomNeutralHaloAlpha), author: static (e, s) => e with { BloomNeutralHaloAlpha = s }, present: static e => e.BloomNeutralHaloAlpha),
-        [WorldValueFields.BloomNeutralRingAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomNeutralRingAlpha), author: static (e, s) => e with { BloomNeutralRingAlpha = s }, present: static e => e.BloomNeutralRingAlpha),
-        [WorldValueFields.BloomHeldInsetAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomHeldInsetAlpha), author: static (e, s) => e with { BloomHeldInsetAlpha = s }, present: static e => e.BloomHeldInsetAlpha),
+        [WorldValueFields.GlowRingAlpha] = Glow(field: nameof(WorldThemeGlowStyle.RingAlpha), author: static (g, s) => g with { RingAlpha = s }, present: static g => g.RingAlpha),
+        [WorldValueFields.GlowHaloAlpha] = Glow(field: nameof(WorldThemeGlowStyle.HaloAlpha), author: static (g, s) => g with { HaloAlpha = s }, present: static g => g.HaloAlpha),
+        [WorldValueFields.GlowNeutralRingAlpha] = Glow(field: nameof(WorldThemeGlowStyle.NeutralRingAlpha), author: static (g, s) => g with { NeutralRingAlpha = s }, present: static g => g.NeutralRingAlpha),
+        [WorldValueFields.GlowNeutralHaloAlpha] = Glow(field: nameof(WorldThemeGlowStyle.NeutralHaloAlpha), author: static (g, s) => g with { NeutralHaloAlpha = s }, present: static g => g.NeutralHaloAlpha),
         [WorldValueFields.MarkerChipAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: s, Size: 12f, RingAlpha: 0.35f, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Chip, member: "chipAlpha"),
         [WorldValueFields.BlendWeight] = new Case(
             Author: static s => Fixtures.BuildDocument() with {
@@ -180,7 +179,7 @@ public sealed class WorldValueDomainLawTests {
                     Name: "probe-rig",
                     Operations: [
                         new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: LowFov),
-                        new WorldCameraProgramOp.FirstPerson(new Vector3(0f, 1.75f, 0.22f), s),
+                        new WorldCameraProgramOp.FirstPerson(new Vector3(x: 0f, y: 1.75f, z: 0.22f), s),
                     ],
                     Version: WorldCameraProgram.CurrentVersion
                 ))],
@@ -280,12 +279,14 @@ public sealed class WorldValueDomainLawTests {
             ? null
             : (definition, mirror, domains) => present(arg: Environment(definition: definition, domains: domains, mirror: mirror)))
     );
-    private static Case Bloom(string field, Func<WorldThemeElevation, BindableScalar, WorldThemeElevation> author, Func<OverlayThemeValues.ElevationSet, float> present) => new(
+    private static Case Glow(string field, Func<WorldThemeGlowStyle, BindableScalar, WorldThemeGlowStyle> author, Func<OverlayThemeValues.GlowStyle, float> present) => new(
         Author: s => Fixtures.BuildDocument() with {
-            ThemeRaw = WorldThemeValidationLawTests.MinimalTheme() with { Elevation = author(arg1: WorldThemeValidationLawTests.MinimalElevation(), arg2: s) },
+            ThemeRaw = WorldThemeSection.Default with {
+                Styles = WorldThemeSection.Default.Styles with { Glow = author(arg1: WorldThemeSection.Default.Styles.Glow, arg2: s) },
+            },
         },
-        Path: $"theme.elevation.{char.ToLowerInvariant(c: field[0])}{field[1..]}",
-        Present: (definition, mirror, domains) => present(arg: new WorldThemeResolve(domains: domains).Resolve(definition: definition, mirror: mirror, revision: 1).Elevation)
+        Path: $"theme.styles.glow.{char.ToLowerInvariant(c: field[0])}{field[1..]}",
+        Present: (definition, mirror, domains) => present(arg: new WorldThemeResolve(domains: domains).Resolve(definition: definition, mirror: mirror, revision: 1).Styles.Glow)
     );
     private static Case Marker(Func<BindableScalar, WorldMarkerStyle> author, Func<WorldMarkerAlphas, float> present, string member) => new(
         Author: s => Fixtures.BuildDocument() with {
@@ -860,7 +861,7 @@ public sealed class WorldValueDomainLawTests {
     public void Admission_judges_the_value_a_binding_presents_not_the_row_it_follows() {
         var slow = new DynamicsRow(Damping: 1f, Frequency: 0.25f, Name: "slow", Response: 0f);
         var scrim = Cases[WorldValueFields.ScrimAlpha];
-        var floor = WorldThemeCapacity.ScrimMinAlpha;
+        var ceiling = 1d;
 
         // A row eased toward `target` from `start`: its follower reads `start` at tick zero, its stored truth `target`.
         WorldDefinition Eased(string token, double target, double start) => EasedDocument(token: token).WithWorldState(rows: [
@@ -887,18 +888,18 @@ public sealed class WorldValueDomainLawTests {
         var eased = $"state.{Row}";
         var stored = $"state.{Row}.$target";
         var inside = 0.9d;
-        var outside = 0d;
+        var outside = 1.5d;
 
-        Assert.True(condition: (outside < floor), userMessage: "the control needs a value below the scrim floor");
+        Assert.True(condition: (outside > ceiling), userMessage: "the control needs a value past the scrim alpha's domain");
 
-        // The binding presents the follower: stored 0 below the floor does not refuse a follower that starts at 0.9.
+        // The binding presents the follower: stored 1.5 past the domain does not refuse a follower that starts at 0.9.
         Assert.True(condition: Admits(definition: Eased(start: inside, target: outside, token: eased), reason: out var easedReason), userMessage: easedReason);
-        // The same row read as stored truth presents 0 and is refused.
+        // The same row read as stored truth presents 1.5 and is refused.
         Laws.Refuses(
             definition: Eased(start: inside, target: outside, token: stored),
             needle: $"theme.color.scrimPanel.alpha binds {stored} whose starting value {outside} lies outside"
         );
-        // Reversed, the follower starts below the floor while the stored truth is inside it.
+        // Reversed, the follower starts past the domain while the stored truth is inside it.
         Laws.Refuses(
             definition: Eased(start: outside, target: inside, token: eased),
             needle: $"theme.color.scrimPanel.alpha binds {eased} whose starting value {outside} lies outside"

@@ -148,11 +148,13 @@ public sealed partial class WorldScreenBinder {
     private Func<Vector3?> EyeOf(SessionFeed feed) => () => CameraOf(feed: feed).Position;
     // The world a feed's destination's glass stands in, read as its view dresses.
     private static Func<WorldDefinition?> DestinationOf(SessionFeed feed) => () => feed.Mirror.Definition;
+
     // Every screen index a program may declare, which a residency of another world binds.
     private static readonly int[] AllScreens = [.. Enumerable.Range(
         count: SdfProgramBuilder.MaxScreenSurfaces,
         start: 0
     )];
+
     // The camera a feed renders its destination with this frame: a window's fit, or its ordinary projection while the fit
     // has no answer and for a camera projection.
     private CameraSnapshot CameraOf(SessionFeed feed) {
@@ -241,6 +243,7 @@ public sealed partial class WorldScreenBinder {
             _ => false,
         };
     }
+
     // What each screen of a session feed's own residency shows, in every view of it, the session's and its destination's
     // cameras' alike: its destination's screens as the feed shows them.
     private sealed class FeedScreenSources(SessionFeed feed) : ISdfScreenSources {
@@ -254,6 +257,8 @@ public sealed partial class WorldScreenBinder {
         );
         /// <inheritdoc/>
         public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: feed.Nested?.RowOf(screen: screen));
+        /// <inheritdoc/>
+        public SdfScreenFace FaceOf(int screen) => WorldScreenBinder.FaceOf(row: feed.Nested?.RowOf(screen: screen));
         /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) => (((feed.Nested is { } screens) && screens.Mappings.TryGet(
             mapping: out var mapping,
@@ -279,6 +284,8 @@ public sealed partial class WorldScreenBinder {
         );
         /// <inheritdoc/>
         public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: binder.m_routedScreens.GetValueOrDefault(key: scene)?.RowOf(screen: screen));
+        /// <inheritdoc/>
+        public SdfScreenFace FaceOf(int screen) => WorldScreenBinder.FaceOf(row: binder.m_routedScreens.GetValueOrDefault(key: scene)?.RowOf(screen: screen));
         /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) {
             if (
@@ -319,5 +326,7 @@ public sealed partial class WorldScreenBinder {
             view: view
         )?.InstanceOf(screen: screen);
     }
+
     // The glass a window among a level's screens stands in: its screen's row in that level, read as its view dresses.
-    private static Func<WorldScreen?> LevelRowOf(WorldNestedScreens<SessionFeed> screens, int screen) => () => screens.RowOf(screen: screen);}
+    private static Func<WorldScreen?> LevelRowOf(WorldNestedScreens<SessionFeed> screens, int screen) => () => screens.RowOf(screen: screen);
+}

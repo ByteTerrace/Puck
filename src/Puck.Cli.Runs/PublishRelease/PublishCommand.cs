@@ -1,6 +1,5 @@
 using System.CommandLine;
 
-using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Launcher.Release;
 
@@ -20,47 +19,12 @@ public static class PublishCommand {
             return 2;
         }
 
-        var objectsStore = new ContentAddressedStore(root: outputRoot);
-        var files = new List<ReleasePayloadFile>();
-        var inputFullPath = Path.GetFullPath(path: input);
-
-        foreach (var filePath in Directory.EnumerateFiles(
-            path: inputFullPath,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: "*"
-        )) {
-            var bytes = File.ReadAllBytes(path: filePath);
-            var hash = objectsStore.Put(content: bytes).ToString();
-            var relativePath = Path.GetRelativePath(
-                path: filePath,
-                relativeTo: inputFullPath
-            ).Replace(
-                newChar: '/',
-                oldChar: Path.DirectorySeparatorChar
-            );
-
-            files.Add(item: new ReleasePayloadFile(
-                Hash: hash,
-                Path: relativePath,
-                Size: bytes.Length
-            ));
-        }
-
-        if (files.Count == 0) {
-            Console.Error.WriteLine(value: $"publish: --input '{input}' contains no files.");
-
-            return 2;
-        }
-
         var manifest = new ReleaseManifest(
             App: app,
             Channel: channel,
             MinimumSupported: minimumSupported,
             Notes: notes,
-            Payloads: [new ReleasePayload(
-                    Files: files,
-                    Rid: rid
-                )],
+            Payloads: [],
             Revoked: null,
             Rollout: new ReleaseRollout(Percent: rolloutPercent),
             Schema: ReleaseManifest.CurrentSchema,
@@ -72,28 +36,15 @@ public static class PublishCommand {
         CanonicalDocument<ReleaseManifest> canonical;
 
         try {
+            manifest = new DirectoryReleaseSource(root: outputRoot).Publish(input, rid, manifest);
             canonical = ReleaseCanonicalizer.Canonicalize(document: manifest);
-        } catch (DocumentValidationException exception) {
+        } catch (Exception exception) when ((exception is DocumentValidationException or IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"publish: {exception.Message}");
 
             return 2;
         }
 
-        var channelDirectory = Path.Combine(
-            path1: outputRoot,
-            path2: channel
-        );
-
-        Directory.CreateDirectory(path: channelDirectory);
-        File.WriteAllBytes(
-            path: Path.Combine(
-                path1: channelDirectory,
-                path2: "manifest.json"
-            ),
-            bytes: canonical.Bytes
-        );
-
-        Console.Out.WriteLine(value: $"publish: wrote {app} {channel} {version} (unsigned, hash {canonical.Hash}) — {files.Count} file(s), rid {rid} — to {outputRoot}.");
+        Console.Out.WriteLine(value: $"publish: wrote {app} {channel} {version} (unsigned, hash {canonical.Hash}) — {manifest.Payloads[0].Files.Count} file(s), rid {rid} — to {outputRoot}.");
 
         return 0;
     }

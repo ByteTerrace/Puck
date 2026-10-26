@@ -704,8 +704,9 @@ demands nothing of its writer, and device loss starts from none.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the
-pixel (its bezel band and an opening, a portal's window, are zero and keep their
-history like any surface, so the face's jittered edge resolves like any edge),
+pixel (its edge band—a CRT's bezel, a plain face's outermost pixel—and an opening, a
+portal's window, are zero and keep their history like any surface, so the face's
+jittered edge resolves like any edge),
 zero for every other surface. Emission is not reactive: an emission that changes
 is a shading change the clip below shows at once, and a steady one, a power light
 smaller than a pixel, needs the history the resolve gathers over the jitter.

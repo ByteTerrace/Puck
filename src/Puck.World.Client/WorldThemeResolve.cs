@@ -1,21 +1,21 @@
-using System.Numerics;
 using Puck.Overlays;
 
 namespace Puck.World.Client;
 
 /// <summary>
-/// Resolves the document's authored <c>theme</c> section (<see cref="WorldDefinition.Theme"/>) against live state
-/// into the mechanism-side <see cref="OverlayThemeValues"/> Puck.Overlays reads — the theme's counterpart to
-/// <see cref="WorldEnvironmentResolve"/>: recomputed only when the definition revision or its timeline moves, a
-/// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens reads changes, or
-/// a clock phase one of its keyed tokens reads moves; never for a slot some
-/// other consumer binds. A keyed token resolves through the mirror as every keyed value does. Every bindable scalar is
-/// mapped into its field's declared domain (<see cref="WorldValueFields"/>), which holds a scrim alpha a live write
-/// moves below <see cref="WorldThemeCapacity.ScrimMinAlpha"/> at that floor.
+/// Resolves the document's <c>theme</c> section (<see cref="WorldDefinition.Theme"/>, the engine's neutral default
+/// when a document authors none) against live state into the mechanism-side <see cref="OverlayThemeValues"/>
+/// Puck.Overlays reads — the theme's counterpart to <see cref="WorldEnvironmentResolve"/>: recomputed only when the
+/// definition revision or its timeline moves, a <see cref="WorldStateMirror"/> slot one of its own
+/// <c>state.&lt;row&gt;</c> tokens reads changes, a clock phase one of its keyed tokens reads moves, or the player's
+/// <see cref="HighContrast"/> preference flips; never for a slot some other consumer binds. A keyed token resolves
+/// through the mirror as every keyed value does. Every bindable scalar is mapped into its field's declared domain
+/// (<see cref="WorldValueFields"/>), and a style color naming a core role takes that role's resolved color.
 /// </summary>
 public sealed class WorldThemeResolve {
     private readonly WorldValueDomainGuard m_domains;
 
+    private bool m_resolvedHighContrast;
     private ThemeReads? m_reads;
     private int m_generation;
     private OverlayThemeValues m_resolved;
@@ -31,19 +31,26 @@ public sealed class WorldThemeResolve {
         public WorldStateMirror Mirror { get; } = mirror;
         public WorldClockReads Clocks { get; } = new();
 
-        public Vector4 Color(in BindableColor color, Vector4 fallback) {
+        public RgbaColor Color(in BindableColor color) {
             Note(
                 binding: color.State,
                 conversion: WorldStateConversion.Color
             );
             NoteKeys(keys: color.Keys);
 
-            return Mirror.Color(
+            var resolved = Mirror.Color(
                 color: in color,
-                fallback: fallback
+                fallback: default
+            );
+
+            return new RgbaColor(
+                A: resolved.W,
+                B: resolved.Z,
+                G: resolved.Y,
+                R: resolved.X
             );
         }
-        public float Scalar(in BindableScalar scalar, float fallback, WorldValueField field, in WorldValueSite site) {
+        public float Scalar(in BindableScalar scalar, WorldValueField field, string section) {
             Note(
                 binding: scalar.State,
                 conversion: WorldStateConversion.Number
@@ -51,13 +58,13 @@ public sealed class WorldThemeResolve {
             NoteKeys(keys: scalar.Keys);
 
             return domains.Resolve(
-                fallback: fallback,
+                fallback: 0f,
                 field: field,
                 mirror: Mirror,
                 scalar: in scalar,
-                site: in site,
+                site: new WorldValueSite(Section: section),
                 value: Mirror.Scalar(
-                    fallback: fallback,
+                    fallback: 0f,
                     scalar: in scalar
                 )
             );
@@ -85,410 +92,220 @@ public sealed class WorldThemeResolve {
         }
     }
 
-    private static CubicBezier ResolveBezier(WorldThemeCubicBezier bezier) => new(
-        X1: bezier.X1,
-        Y1: bezier.Y1,
-        X2: bezier.X2,
-        Y2: bezier.Y2
-    );
-    private static BloomHue ResolveBloomHue(WorldThemeBloomHue hue, ThemeReads mirror) => new(
-        Halo: ResolveColor(
-            color: hue.Halo,
-            mirror: mirror
-        ),
-        Ring: ResolveColor(
-            color: hue.Ring,
-            mirror: mirror
-        )
-    );
-    private static OverlayThemeValues.ChromeSet ResolveChrome(WorldThemeChrome chrome) => new(
-        BarHintAlpha: chrome.BarHintAlpha,
-        BarLabelAlpha: chrome.BarLabelAlpha,
-        CursorAlpha: chrome.CursorAlpha,
-        CursorDotMaxHalf: chrome.CursorDotMaxHalf,
-        CursorDotRatio: chrome.CursorDotRatio,
-        CursorLabelGap: chrome.CursorLabelGap,
-        DimQuietAlpha: chrome.DimQuietAlpha,
-        WheelActiveRingAlpha: chrome.WheelActiveRingAlpha,
-        WheelActiveRingOffset: chrome.WheelActiveRingOffset,
-        WheelHubDotHalf: chrome.WheelHubDotHalf,
-        WheelHubLabelGap: chrome.WheelHubLabelGap,
-        WheelLabelAlpha: chrome.WheelLabelAlpha,
-        WheelMarkerGapRatio: chrome.WheelMarkerGapRatio,
-        WheelMarkerHalf: chrome.WheelMarkerHalf,
-        WheelRingAlpha: chrome.WheelRingAlpha
-    );
-    private static RgbaColor ResolveColor(BindableColor color, ThemeReads mirror) {
-        var resolved = mirror.Color(
-            color: color,
-            fallback: default
-        );
+    /// <summary>Returns the overlay's slab role a core theme role draws from: the one mapping from the document's role
+    /// vocabulary onto <see cref="OverlayColorRole"/>, which Puck.World.Schema cannot reference.</summary>
+    /// <param name="role">The core role.</param>
+    /// <returns>The overlay role.</returns>
+    public static OverlayColorRole RoleOf(WorldThemeRole role) => role switch {
+        WorldThemeRole.SurfaceBase => OverlayColorRole.SurfaceBase,
+        WorldThemeRole.SurfaceRaised => OverlayColorRole.SurfaceRaised,
+        WorldThemeRole.SurfaceInset => OverlayColorRole.SurfaceInset,
+        WorldThemeRole.ScrimPanel => OverlayColorRole.ScrimPanel,
+        WorldThemeRole.ScrimStrip => OverlayColorRole.ScrimStrip,
+        WorldThemeRole.ScrimChip => OverlayColorRole.ScrimChip,
+        WorldThemeRole.LineHair => OverlayColorRole.LineHair,
+        WorldThemeRole.LineSoft => OverlayColorRole.LineSoft,
+        WorldThemeRole.TextDim => OverlayColorRole.TextDim,
+        WorldThemeRole.TextMute => OverlayColorRole.TextMute,
+        WorldThemeRole.Accent => OverlayColorRole.Accent,
+        WorldThemeRole.AccentQuiet => OverlayColorRole.AccentQuiet,
+        WorldThemeRole.AccentInk => OverlayColorRole.AccentInk,
+        WorldThemeRole.Positive => OverlayColorRole.Positive,
+        WorldThemeRole.Warning => OverlayColorRole.Warning,
+        WorldThemeRole.Danger => OverlayColorRole.Danger,
+        _ => OverlayColorRole.TextPrimary,
+    };
 
-        return new RgbaColor(
-            A: resolved.W,
-            B: resolved.Z,
-            G: resolved.Y,
-            R: resolved.X
-        );
-    }
-    private static OverlayThemeValues.ColorSet ResolveColor(WorldThemeColor color, ThemeReads mirror) => new(
-        Accent: ResolveColor(
-            color: color.Accent,
-            mirror: mirror
-        ),
-        AccentInk: ResolveColor(
-            color: color.AccentInk,
-            mirror: mirror
-        ),
-        AccentLine: ResolveColor(
-            color: color.AccentLine,
-            mirror: mirror
-        ),
-        AccentQuiet: ResolveColor(
-            color: color.AccentQuiet,
-            mirror: mirror
-        ),
-        BadgeDark: ResolveColor(
-            color: color.BadgeDark,
-            mirror: mirror
-        ),
-        BadgeLight: ResolveColor(
-            color: color.BadgeLight,
-            mirror: mirror
-        ),
-        Danger: ResolveColor(
-            color: color.Danger,
-            mirror: mirror
-        ),
-        LineHair: ResolveColor(
-            color: color.LineHair,
-            mirror: mirror
-        ),
-        LineInset: ResolveColor(
-            color: color.LineInset,
-            mirror: mirror
-        ),
-        LineSoft: ResolveColor(
-            color: color.LineSoft,
-            mirror: mirror
-        ),
-        LineStrong: ResolveColor(
-            color: color.LineStrong,
-            mirror: mirror
-        ),
-        Phosphor: ResolveColor(
-            color: color.Phosphor,
-            mirror: mirror
-        ),
-        PhosphorCyan: ResolveColor(
-            color: color.PhosphorCyan,
-            mirror: mirror
-        ),
-        PhosphorDim: ResolveColor(
-            color: color.PhosphorDim,
-            mirror: mirror
-        ),
-        Positive: ResolveColor(
-            color: color.Positive,
-            mirror: mirror
-        ),
+    // A core role's resolved color, scrims with their alpha baked in as the slab bakes them.
+    private static RgbaColor ColorOf(WorldThemeRole role, in OverlayThemeValues.ColorSet color) => role switch {
+        WorldThemeRole.SurfaceBase => color.SurfaceBase,
+        WorldThemeRole.SurfaceRaised => color.SurfaceRaised,
+        WorldThemeRole.SurfaceInset => color.SurfaceInset,
+        WorldThemeRole.ScrimPanel => color.ScrimPanel.Color with { A = color.ScrimPanel.Alpha },
+        WorldThemeRole.ScrimStrip => color.ScrimStrip.Color with { A = color.ScrimStrip.Alpha },
+        WorldThemeRole.ScrimChip => color.ScrimChip.Color with { A = color.ScrimChip.Alpha },
+        WorldThemeRole.LineHair => color.LineHair,
+        WorldThemeRole.LineSoft => color.LineSoft,
+        WorldThemeRole.TextDim => color.TextDim,
+        WorldThemeRole.TextMute => color.TextMute,
+        WorldThemeRole.Accent => color.Accent,
+        WorldThemeRole.AccentQuiet => color.AccentQuiet,
+        WorldThemeRole.AccentInk => color.AccentInk,
+        WorldThemeRole.Positive => color.Positive,
+        WorldThemeRole.Warning => color.Warning,
+        WorldThemeRole.Danger => color.Danger,
+        _ => color.TextPrimary,
+    };
+    private static RgbaColor ResolveStyleColor(WorldThemeStyleColor style, in OverlayThemeValues.ColorSet core, ThemeReads mirror) => ((style.Role is { } role)
+        ? ColorOf(
+            color: in core,
+            role: role
+        )
+        : mirror.Color(color: (style.Color ?? default)));
+    private static OverlayThemeValues.ColorSet ResolveColor(WorldThemeColor color, ThemeReads mirror, bool highContrast) => new(
+        Accent: mirror.Color(color: color.Accent),
+        AccentInk: mirror.Color(color: color.AccentInk),
+        AccentQuiet: mirror.Color(color: color.AccentQuiet),
+        Danger: mirror.Color(color: color.Danger),
+        LineHair: mirror.Color(color: color.LineHair),
+        LineSoft: mirror.Color(color: color.LineSoft),
+        Positive: mirror.Color(color: color.Positive),
         ScrimChip: ResolveScrim(
+            highContrast: highContrast,
             mirror: mirror,
             scrim: color.ScrimChip,
             section: "theme.color.scrimChip"
         ),
         ScrimPanel: ResolveScrim(
+            highContrast: highContrast,
             mirror: mirror,
             scrim: color.ScrimPanel,
             section: "theme.color.scrimPanel"
         ),
         ScrimStrip: ResolveScrim(
+            highContrast: highContrast,
             mirror: mirror,
             scrim: color.ScrimStrip,
             section: "theme.color.scrimStrip"
         ),
-        SurfaceBase: ResolveColor(
-            color: color.SurfaceBase,
-            mirror: mirror
-        ),
-        SurfaceInset: ResolveColor(
-            color: color.SurfaceInset,
-            mirror: mirror
-        ),
-        SurfacePanel: ResolveColor(
-            color: color.SurfacePanel,
-            mirror: mirror
-        ),
-        SurfaceRaised: ResolveColor(
-            color: color.SurfaceRaised,
-            mirror: mirror
-        ),
-        TextDim: ResolveColor(
-            color: color.TextDim,
-            mirror: mirror
-        ),
-        TextMute: ResolveColor(
-            color: color.TextMute,
-            mirror: mirror
-        ),
-        TextPrimary: ResolveColor(
-            color: color.TextPrimary,
-            mirror: mirror
-        ),
-        Warning: ResolveColor(
-            color: color.Warning,
-            mirror: mirror
-        )
+        SurfaceBase: mirror.Color(color: color.SurfaceBase),
+        SurfaceInset: mirror.Color(color: color.SurfaceInset),
+        SurfaceRaised: mirror.Color(color: color.SurfaceRaised),
+        TextDim: mirror.Color(color: color.TextDim),
+        TextMute: mirror.Color(color: color.TextMute),
+        TextPrimary: mirror.Color(color: color.TextPrimary),
+        Warning: mirror.Color(color: color.Warning)
     );
-    private static OverlayThemeValues ResolveCore(WorldDefinition definition, ThemeReads mirror) {
+    private static OverlayThemeValues ResolveCore(WorldDefinition definition, ThemeReads mirror, bool highContrast) {
         var theme = definition.Theme;
+        var core = ResolveColor(
+            color: theme.Color,
+            highContrast: highContrast,
+            mirror: mirror
+        );
+        var styles = theme.Styles;
 
         return new OverlayThemeValues(
-            Chrome: ResolveChrome(chrome: theme.Chrome),
-            Color: ResolveColor(
-                color: theme.Color,
-                mirror: mirror
+            Color: core,
+            Icon: new OverlayThemeValues.IconSet(StrokeHalfWidth: theme.Icon.StrokeHalfWidth),
+            Motion: new OverlayThemeValues.MotionSet(DurMed: theme.Motion.DurMed),
+            Radius: new OverlayThemeValues.RadiusSet(
+                Radius1: theme.Radius.Radius1,
+                Radius2: theme.Radius.Radius2,
+                Radius3: theme.Radius.Radius3
             ),
-            Diegetic: ResolveDiegetic(
-                diegetic: theme.Diegetic,
-                mirror: mirror
+            Space: new OverlayThemeValues.SpaceSet(
+                Space2: theme.Space.Space2,
+                Space3: theme.Space.Space3,
+                Space8: theme.Space.Space8
             ),
-            Elevation: ResolveElevation(
-                elevation: theme.Elevation,
-                mirror: mirror
+            Stroke: new OverlayThemeValues.StrokeSet(Hairline: theme.Stroke.Hairline),
+            Styles: new OverlayThemeValues.StyleSet(
+                Bar: new OverlayThemeValues.BarStyle(
+                    HintAlpha: styles.Bar.HintAlpha,
+                    LabelAlpha: styles.Bar.LabelAlpha,
+                    QuietAlpha: styles.Bar.QuietAlpha
+                ),
+                Console: new OverlayThemeValues.ConsoleStyle(
+                    Echo: ResolveStyleColor(
+                        core: in core,
+                        mirror: mirror,
+                        style: styles.Console.Echo
+                    ),
+                    HeadHeight: styles.Console.HeadHeight,
+                    SelectionAlpha: styles.Console.SelectionAlpha
+                ),
+                Cursor: new OverlayThemeValues.CursorStyle(
+                    Alpha: styles.Cursor.Alpha,
+                    DotMaxHalf: styles.Cursor.DotMaxHalf,
+                    DotRatio: styles.Cursor.DotRatio,
+                    LabelGap: styles.Cursor.LabelGap
+                ),
+                Glow: new OverlayThemeValues.GlowStyle(
+                    HaloAlpha: mirror.Scalar(
+                        field: WorldValueFields.GlowHaloAlpha,
+                        scalar: styles.Glow.HaloAlpha,
+                        section: "theme.styles.glow"
+                    ),
+                    HaloBlur: styles.Glow.HaloBlur,
+                    NeutralHaloAlpha: mirror.Scalar(
+                        field: WorldValueFields.GlowNeutralHaloAlpha,
+                        scalar: styles.Glow.NeutralHaloAlpha,
+                        section: "theme.styles.glow"
+                    ),
+                    NeutralRingAlpha: mirror.Scalar(
+                        field: WorldValueFields.GlowNeutralRingAlpha,
+                        scalar: styles.Glow.NeutralRingAlpha,
+                        section: "theme.styles.glow"
+                    ),
+                    RingAlpha: mirror.Scalar(
+                        field: WorldValueFields.GlowRingAlpha,
+                        scalar: styles.Glow.RingAlpha,
+                        section: "theme.styles.glow"
+                    )
+                ),
+                Hud: new OverlayThemeValues.HudStyle(TrackAlpha: styles.Hud.TrackAlpha),
+                Keycap: new OverlayThemeValues.KeycapStyle(
+                    Badge: ResolveStyleColor(
+                        core: in core,
+                        mirror: mirror,
+                        style: styles.Keycap.Badge
+                    ),
+                    BadgeInk: ResolveStyleColor(
+                        core: in core,
+                        mirror: mirror,
+                        style: styles.Keycap.BadgeInk
+                    ),
+                    ReferenceSize: styles.Keycap.ReferenceSize,
+                    RestOpacity: styles.Keycap.RestOpacity,
+                    ToggleMarch: styles.Keycap.ToggleMarch
+                ),
+                Toast: new OverlayThemeValues.ToastStyle(
+                    IconSize: styles.Toast.IconSize,
+                    MinHeight: styles.Toast.MinHeight,
+                    RailWidth: styles.Toast.RailWidth
+                ),
+                Wheel: new OverlayThemeValues.WheelStyle(
+                    ActiveRingAlpha: styles.Wheel.ActiveRingAlpha,
+                    HubLabelGap: styles.Wheel.HubLabelGap,
+                    LabelAlpha: styles.Wheel.LabelAlpha,
+                    RingAlpha: styles.Wheel.RingAlpha
+                )
             ),
-            Icon: ResolveIcon(icon: theme.Icon),
-            Motion: ResolveMotion(motion: theme.Motion),
-            Radius: ResolveRadius(radius: theme.Radius),
-            Space: ResolveSpace(space: theme.Space),
-            Type: ResolveType(type: theme.Type)
-        );
-    }
-    private static OverlayThemeValues.DiegeticSet ResolveDiegetic(WorldThemeDiegetic diegetic, ThemeReads mirror) => new(
-        BezelEdge: ResolveColor(
-            color: diegetic.BezelEdge,
-            mirror: mirror
-        ),
-        BezelInner: ResolveColor(
-            color: diegetic.BezelInner,
-            mirror: mirror
-        ),
-        BezelOuter: ResolveColor(
-            color: diegetic.BezelOuter,
-            mirror: mirror
-        ),
-        EmbossFill: ResolveColor(
-            color: diegetic.EmbossFill,
-            mirror: mirror
-        ),
-        EmbossShadowDropAlpha: diegetic.EmbossShadowDropAlpha,
-        EmbossShadowDropBlur: diegetic.EmbossShadowDropBlur,
-        EmbossShadowDropOffsetY: diegetic.EmbossShadowDropOffsetY,
-        EmbossShadowLitAlpha: diegetic.EmbossShadowLitAlpha,
-        EmbossShadowLitOffsetY: diegetic.EmbossShadowLitOffsetY,
-        EngraveFill: ResolveColor(
-            color: diegetic.EngraveFill,
-            mirror: mirror
-        ),
-        EngraveShadowLipAlpha: diegetic.EngraveShadowLipAlpha,
-        EngraveShadowLipOffsetY: diegetic.EngraveShadowLipOffsetY,
-        EngraveShadowRecessAlpha: diegetic.EngraveShadowRecessAlpha,
-        EngraveShadowRecessBlur: diegetic.EngraveShadowRecessBlur,
-        EngraveShadowRecessOffsetY: diegetic.EngraveShadowRecessOffsetY,
-        PhosphorGlowBlur: diegetic.PhosphorGlowBlur,
-        PlateBottom: ResolveColor(
-            color: diegetic.PlateBottom,
-            mirror: mirror
-        ),
-        PlateMid: ResolveColor(
-            color: diegetic.PlateMid,
-            mirror: mirror
-        ),
-        PlateStripeColor: ResolveColor(
-            color: diegetic.PlateStripeColor,
-            mirror: mirror
-        ),
-        PlateTop: ResolveColor(
-            color: diegetic.PlateTop,
-            mirror: mirror
-        ),
-        ScreenWellInner: ResolveColor(
-            color: diegetic.ScreenWellInner,
-            mirror: mirror
-        ),
-        ScreenWellOuter: ResolveColor(
-            color: diegetic.ScreenWellOuter,
-            mirror: mirror
-        )
-    );
-    private static OverlayThemeValues.ElevationSet ResolveElevation(WorldThemeElevation elevation, ThemeReads mirror) => new(
-        BloomAccent: ResolveBloomHue(
-            hue: elevation.BloomAccent,
-            mirror: mirror
-        ),
-        BloomDanger: ResolveBloomHue(
-            hue: elevation.BloomDanger,
-            mirror: mirror
-        ),
-        BloomHaloAlpha: ResolveScalar(
-            field: WorldValueFields.BloomHaloAlpha,
-            mirror: mirror,
-            scalar: elevation.BloomHaloAlpha
-        ),
-        BloomHaloBlur: elevation.BloomHaloBlur,
-        BloomHaloSpread: elevation.BloomHaloSpread,
-        BloomHeldInsetAlpha: ResolveScalar(
-            field: WorldValueFields.BloomHeldInsetAlpha,
-            mirror: mirror,
-            scalar: elevation.BloomHeldInsetAlpha
-        ),
-        BloomHeldInsetBlur: elevation.BloomHeldInsetBlur,
-        BloomHeldInsetSpread: elevation.BloomHeldInsetSpread,
-        BloomNeutral: ResolveBloomHue(
-            hue: elevation.BloomNeutral,
-            mirror: mirror
-        ),
-        BloomNeutralHaloAlpha: ResolveScalar(
-            field: WorldValueFields.BloomNeutralHaloAlpha,
-            mirror: mirror,
-            scalar: elevation.BloomNeutralHaloAlpha
-        ),
-        BloomNeutralRingAlpha: ResolveScalar(
-            field: WorldValueFields.BloomNeutralRingAlpha,
-            mirror: mirror,
-            scalar: elevation.BloomNeutralRingAlpha
-        ),
-        BloomPositive: ResolveBloomHue(
-            hue: elevation.BloomPositive,
-            mirror: mirror
-        ),
-        BloomRingAlpha: ResolveScalar(
-            field: WorldValueFields.BloomRingAlpha,
-            mirror: mirror,
-            scalar: elevation.BloomRingAlpha
-        ),
-        BloomRingWidth: elevation.BloomRingWidth,
-        BloomWarning: ResolveBloomHue(
-            hue: elevation.BloomWarning,
-            mirror: mirror
-        ),
-        CatchlightColor: ResolveColor(
-            color: elevation.CatchlightColor,
-            mirror: mirror
-        ),
-        CatchlightOffsetY: elevation.CatchlightOffsetY,
-        ChipRestOpacity: elevation.ChipRestOpacity,
-        EdgeHairlineWidth: elevation.EdgeHairlineWidth,
-        PressHeldGlowBlur: elevation.PressHeldGlowBlur,
-        PressHeldGlowColor: ResolveColor(
-            color: elevation.PressHeldGlowColor,
-            mirror: mirror
-        ),
-        PressHeldGlowSpread: elevation.PressHeldGlowSpread,
-        PressHeldShadowBlur: elevation.PressHeldShadowBlur,
-        PressHeldShadowColor: ResolveColor(
-            color: elevation.PressHeldShadowColor,
-            mirror: mirror
-        ),
-        PressHeldShadowOffsetY: elevation.PressHeldShadowOffsetY,
-        PressHeldTranslateY: elevation.PressHeldTranslateY,
-        RingStatusAlpha: elevation.RingStatusAlpha,
-        RingStatusWidth: elevation.RingStatusWidth,
-        ShadowSeatBlur: elevation.ShadowSeatBlur,
-        ShadowSeatColor: ResolveColor(
-            color: elevation.ShadowSeatColor,
-            mirror: mirror
-        ),
-        ShadowSeatOffsetY: elevation.ShadowSeatOffsetY,
-        ShadowSeatSpread: elevation.ShadowSeatSpread,
-        ShadowSeatStripColor: ResolveColor(
-            color: elevation.ShadowSeatStripColor,
-            mirror: mirror
-        ),
-        ShadowSeatStripSpread: elevation.ShadowSeatStripSpread
-    );
-    private static OverlayThemeValues.IconSet ResolveIcon(WorldThemeIcon icon) => new(StrokeHalfWidth: icon.StrokeHalfWidth);
-    private static OverlayThemeValues.MotionSet ResolveMotion(WorldThemeMotion motion) => new(
-        CaretBlink: motion.CaretBlink,
-        DurFast: motion.DurFast,
-        DurMed: motion.DurMed,
-        DurPanel: motion.DurPanel,
-        EaseOut: ResolveBezier(bezier: motion.EaseOut),
-        EaseStd: ResolveBezier(bezier: motion.EaseStd)
-    );
-    private static OverlayThemeValues.RadiusSet ResolveRadius(WorldThemeRadius radius) => new(
-        Radius1: radius.Radius1,
-        Radius2: radius.Radius2,
-        Radius3: radius.Radius3
-    );
-    private static float ResolveScalar(BindableScalar scalar, WorldValueField field, ThemeReads mirror) => mirror.Scalar(
-        fallback: 0f,
-        field: field,
-        scalar: scalar,
-        site: new WorldValueSite(Section: "theme.elevation")
-    );
-    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, string section, ThemeReads mirror) {
-        var alpha = mirror.Scalar(
-            fallback: 0f,
-            field: WorldValueFields.ScrimAlpha,
-            scalar: scrim.Alpha,
-            site: new WorldValueSite(Section: section)
-        );
-
-        return new OverlayThemeValues.Scrim(
-            Alpha: alpha,
-            Color: ResolveColor(
-                color: scrim.Color,
-                mirror: mirror
+            Type: new OverlayThemeValues.TypeSet(
+                MicroSize: theme.Type.MicroSize,
+                MonoSize: theme.Type.MonoSize
             )
         );
     }
-    private static OverlayThemeValues.SpaceSet ResolveSpace(WorldThemeSpace space) => new(
-        HeightBadge: space.HeightBadge,
-        HeightBindBar: space.HeightBindBar,
-        HeightChip: space.HeightChip,
-        HeightConsoleHead: space.HeightConsoleHead,
-        HeightModeRow: space.HeightModeRow,
-        HeightPromptRow: space.HeightPromptRow,
-        HeightTrackerBar: space.HeightTrackerBar,
-        HeightTrackerCell: space.HeightTrackerCell,
-        Space0: space.Space0,
-        Space1: space.Space1,
-        Space2: space.Space2,
-        Space3: space.Space3,
-        Space4: space.Space4,
-        Space5: space.Space5,
-        Space6: space.Space6,
-        Space8: space.Space8
-    );
-    private static OverlayThemeValues.TypeSet ResolveType(WorldThemeType type) => new(
-        BodyLine: type.BodyLine,
-        BodySize: type.BodySize,
-        BodyWeight: type.BodyWeight,
-        LabelLine: type.LabelLine,
-        LabelSize: type.LabelSize,
-        LabelTracking: type.LabelTracking,
-        LabelWeight: type.LabelWeight,
-        MicroLine: type.MicroLine,
-        MicroSize: type.MicroSize,
-        MicroTracking: type.MicroTracking,
-        MicroWeight: type.MicroWeight,
-        MonoBadgeSize: type.MonoBadgeSize,
-        MonoLine: type.MonoLine,
-        MonoReadoutSize: type.MonoReadoutSize,
-        MonoSize: type.MonoSize,
-        MonoTracking: type.MonoTracking,
-        MonoWeight: type.MonoWeight,
-        TitleLine: type.TitleLine,
-        TitleSize: type.TitleSize,
-        TitleTracking: type.TitleTracking,
-        TitleWeight: type.TitleWeight
-    );
+    // A scrim's alpha, raised to the high-contrast floor while the player asks for it.
+    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, string section, ThemeReads mirror, bool highContrast) {
+        var alpha = mirror.Scalar(
+            field: WorldValueFields.ScrimAlpha,
+            scalar: scrim.Alpha,
+            section: section
+        );
+
+        return new OverlayThemeValues.Scrim(
+            Alpha: (highContrast
+                ? MathF.Max(
+                    x: alpha,
+                    y: WorldThemeCapacity.HighContrastScrimAlpha
+                )
+                : alpha),
+            Color: mirror.Color(color: scrim.Color)
+        );
+    }
 
     /// <summary>Initializes a new instance of the <see cref="WorldThemeResolve"/> class.</summary>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     public WorldThemeResolve(WorldValueDomainGuard domains) => m_domains = (domains ?? throw new ArgumentNullException(paramName: nameof(domains)));
 
+    /// <summary>Gets or sets whether the player asks for high contrast: every scrim resolves at least
+    /// <see cref="WorldThemeCapacity.HighContrastScrimAlpha"/> opaque, so text on it stays legible over any scene. A
+    /// presentation preference of this process, never document state; the next <see cref="Resolve"/> applies a
+    /// change.</summary>
+    public bool HighContrast { get; set; }
     /// <summary>Gets how many times this resolver has resolved the theme rather than answering from its cache.</summary>
     public int Resolutions => m_resolutions;
 
@@ -504,6 +321,7 @@ public sealed class WorldThemeResolve {
 
         if (
             (revision != m_revision) ||
+            (HighContrast != m_resolvedHighContrast) ||
             // A delivery that re-anchors a clock replaces the timeline without moving the revision.
             !ReferenceEquals(
             objA: definition.TimelineRaw,
@@ -530,9 +348,11 @@ public sealed class WorldThemeResolve {
             m_reads!.Bound.Clear();
             m_reads.Clocks.Clear();
             m_revision = revision;
+            m_resolvedHighContrast = HighContrast;
             m_timeline = definition.TimelineRaw;
             m_resolved = ResolveCore(
                 definition: definition,
+                highContrast: HighContrast,
                 mirror: m_reads
             );
             m_resolvedAt = mirror.Revision;

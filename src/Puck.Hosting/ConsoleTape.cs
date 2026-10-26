@@ -86,14 +86,14 @@ public sealed class ConsoleTape : ICommandObserver {
 
         Publish();
     }
-    /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each
+    /// <summary>Records one submitted console line and its result: the echoed input then each
     /// output line, each carrying the result's verdict so the panel paints a refusal as a refusal.</summary>
     /// <param name="line">The submitted command line.</param>
     /// <param name="result">The command's result.</param>
     public void Record(string line, CommandResult result) {
         ArgumentNullException.ThrowIfNull(argument: line);
 
-        // The echo keeps the phosphor voice whatever the verdict; only the OUTPUT rows carry the refusal.
+        // The echo is never a refusal whatever the verdict; only the OUTPUT rows carry it.
         Append(
             line: (EchoPrefix + line),
             refused: false

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -288,6 +289,18 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        if (IsWithheldFromWriter(
+            arena: arena,
+            key: cellKey,
+            principal: mutation.Principal,
+            row: mutation.Row,
+            working: working
+        )) {
+            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is not writable by {mutation.Principal.Describe()}";
+
+            return false;
+        }
+
         if (!arena.Catalog.TryResolve(
             handle: out var handle,
             lane: StateLane.Document,
@@ -554,6 +567,35 @@ public sealed partial class WorldDocument {
             )
         );
     }
+    // A write by a principal that reads through disclosure (an addon, a peer or a session) is refused for a cell or row
+    // it may not read, before the write looks at whether the cell or row exists, so the refusal of a hidden one is the
+    // one an absent one gets and a mod cannot probe for it. The console, the seats and the world's own program write
+    // under their grants alone. WorldAddonRuntime's bound cell write asks the same WorldStateDisclosure.CanReadCell.
+    private static bool ReadsThroughDisclosure(Principal principal) =>
+        (principal.Kind is PrincipalKind.Addon or PrincipalKind.Peer or PrincipalKind.Session);
+    private static bool IsWithheldFromWriter(StateArena arena, WorldDefinition working, Principal principal, string row, CellName key) => (
+        ReadsThroughDisclosure(principal: principal) &&
+        !WorldStateDisclosure.CanReadCell(
+        arena: arena,
+        definition: working,
+        key: key,
+        recipient: principal,
+        rowName: row
+    )
+    );
+    // A row the document declares and the principal may not read; an undeclared row is absent, not withheld.
+    private static bool IsRowWithheldFromWriter(WorldDefinition definition, Principal principal, string row) => (
+        ReadsThroughDisclosure(principal: principal) &&
+        (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: row
+        ) is not null) &&
+        !WorldStateDisclosure.CanReadRow(
+        definition: definition,
+        recipient: principal,
+        rowName: row
+    )
+    );
     // Composes one cell removal onto the row it names, on the same terms as TryApplyCellUpsert.
     private static bool TryApplyCellRemove(StateArena arena, WorldDefinition working, WorldMutation.RemoveStateCell mutation, out string reason) {
         reason = string.Empty;
@@ -589,6 +631,13 @@ public sealed partial class WorldDocument {
             candidate: mutation.Key,
             name: out var cellKey,
             reason: out _
+        ) ||
+            IsWithheldFromWriter(
+            arena: arena,
+            key: cellKey,
+            principal: mutation.Principal,
+            row: mutation.Row,
+            working: working
         ) ||
             !arena.Keys.TryResolve(
             key: out var key,

@@ -24,7 +24,7 @@ public sealed record ReleasePayload(string Rid, IReadOnlyList<ReleasePayloadFile
 /// <param name="Percent">The inclusive percentage of installs admitted, 0 through 100.</param>
 public sealed record ReleaseRollout(int Percent);
 /// <summary>
-/// The <c>sequence</c>-route bearer claim over a release manifest's canonical bytes (the manifest with this field
+/// The <c>sequence</c>-route bearer claim over a release manifest's canonical content pin (the manifest with this field
 /// itself held <see langword="null"/>) — the wire form of an ordinary Puck.Attestation claim, carried
 /// as the codec's own transport bytes rather than a second, hand-rolled mirror of
 /// <see cref="Puck.Attestation.AttestationHeader"/>. <see cref="Chain"/> holds the claim's two key-binding
@@ -37,8 +37,8 @@ public sealed record ReleaseSignature(string Claim, IReadOnlyList<string> Chain)
 /// <summary>
 /// The <c>puck.release.manifest.v1</c> document: what one build of a Launcher-based program's release looks like — its
 /// version, its per-RID file manifest, its staged-rollout fraction, and the signed claim that lets a client verify
-/// it without contacting the issuer. Code and content ride separate channels: this document names binaries only,
-/// never a world or library asset.
+/// it without contacting the issuer. Its complete application payload includes runtime binaries and packaged
+/// content; separately distributed content can still use its own channel.
 /// </summary>
 /// <param name="Schema">The document version tag (<see cref="CurrentSchema"/>).</param>
 /// <param name="App">The application id this release belongs to (e.g. <c>puck.world</c>).</param>
@@ -52,7 +52,7 @@ public sealed record ReleaseSignature(string Claim, IReadOnlyList<string> Chain)
 /// <param name="Rollout">The staged-rollout fraction.</param>
 /// <param name="Revoked">Version strings refused outright regardless of rollout bucket.</param>
 /// <param name="Notes">Short release notes text (null = none).</param>
-/// <param name="Signature">The issuing claim over this manifest's unsigned canonical bytes, or <see langword="null"/> for an unsigned draft (a dry-run publish, or a canary's throwaway-chain fixture before signing).</param>
+/// <param name="Signature">The issuing claim over this manifest's unsigned canonical content pin, or <see langword="null"/> for an unsigned draft.</param>
 public sealed record ReleaseManifest(
     string? Schema,
     string App,
@@ -79,6 +79,12 @@ public sealed record ReleaseManifest(
 /// trusted, staged, or signed — the release family's adapter over <see cref="DocumentCanonicalizer"/>.
 /// </summary>
 public static class ReleaseCanonicalizer {
+    /// <summary>The signed payload: the canonical unsigned manifest's content pin. Signing the pin keeps a complete
+    /// application's file inventory outside the attestation envelope's payload ceiling.</summary>
+    /// <param name="document">The manifest whose complete file inventory is authenticated.</param>
+    public static byte[] SigningBytes(ReleaseManifest document) => System.Text.Encoding.UTF8.GetBytes(
+        s: Canonicalize(document with { Signature = null }).Hash.ToString());
+
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "schema", "app", "channel", "version", "stateGeneration", "minimumSupported",
         "payloads", "rollout", "revoked", "notes", "signature",
@@ -110,20 +116,19 @@ public static class ReleaseCanonicalizer {
 
             var stem = segment.Split(separator: '.', count: 2)[0];
 
-            if (stem.Equals(value: "CON", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                stem.Equals(value: "PRN", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                stem.Equals(value: "AUX", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                stem.Equals(value: "NUL", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+            if (stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "CON") ||
+                stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "PRN") ||
+                stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "AUX") ||
+                stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "NUL") ||
                 ((stem.Length == 4) && (stem[3] is >= '1' and <= '9' or '\u00b9' or '\u00b2' or '\u00b3') &&
-                (stem.StartsWith(value: "COM", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                stem.StartsWith(value: "LPT", comparisonType: StringComparison.OrdinalIgnoreCase)))) {
+                (stem.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "COM") ||
+                stem.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "LPT")))) {
                 return false;
             }
         }
 
         return true;
     }
-
     private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile? file, string path, HashSet<string>? seenPaths) {
         if (file is null) {
             errors.Add(item: new(Message: "a file is required.", Path: path));
@@ -131,7 +136,7 @@ public static class ReleaseCanonicalizer {
         }
 
         if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
-            file.Path.Equals(value: "state-generation", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            file.Path.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "state-generation")) {
             errors.Add(item: new(
                 Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved 'state-generation' name, and no device names or alternate streams.",
                 Path: $"{path}.path"

@@ -87,6 +87,57 @@ public static class WorldStateDisclosure {
             rowOrdinal: ordinal
         ));
     }
+    /// <summary>Determines whether the recipient may read one cell of a named row, for a door that must answer a cell
+    /// the recipient may not read exactly as it answers an absent one.</summary>
+    /// <param name="definition">The live document, for the row declarations.</param>
+    /// <param name="arena">The live store.</param>
+    /// <param name="rowName">The name of the row carrying the cell.</param>
+    /// <param name="key">The cell's key.</param>
+    /// <param name="recipient">The recipient.</param>
+    /// <returns><see langword="true"/> when the document declares the row, generated storage included, and the
+    /// recipient may read the cell; <see langword="false"/> for an undeclared row.</returns>
+    public static bool CanReadCell(WorldDefinition definition, StateArena arena, string rowName, CellName key, Principal recipient) {
+        foreach (var row in definition.State) {
+            if (string.Equals(
+                a: row.Name.Value,
+                b: rowName,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return CanRead(
+                    arena: arena,
+                    definition: definition,
+                    key: key,
+                    recipient: recipient,
+                    row: row
+                );
+            }
+        }
+
+        return false;
+    }
+    /// <summary>Determines whether the recipient may read a named row, from the document's own rows: the row's
+    /// visibility admits the recipient by its reader list or by the cells of its live reader row as the document
+    /// holds them.</summary>
+    /// <param name="definition">The document, for the row declarations and the reader row.</param>
+    /// <param name="rowName">The name of the row.</param>
+    /// <param name="recipient">The recipient.</param>
+    /// <returns><see langword="true"/> when the document declares the row and its visibility admits the recipient.</returns>
+    public static bool CanReadRow(WorldDefinition definition, string rowName, Principal recipient) {
+        foreach (var row in definition.State) {
+            if (string.Equals(
+                a: row.Name.Value,
+                b: rowName,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return ((row.Visibility is null) || row.Visibility.Allows(
+                    recipient: recipient.Describe(),
+                    rows: definition.State
+                ));
+            }
+        }
+
+        return false;
+    }
     /// <summary>Projects the rows and cells with explicit observation policies, and every row in
     /// <paramref name="presented"/> whether or not it has one, each under the same per-cell rule; token attributes
     /// inherit their zone's restrictions. Discloses each cell as it is stored, with the value-over-time trait that

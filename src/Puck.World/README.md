@@ -1185,7 +1185,7 @@ Facts a script needs:
   package `worlds/debug/` at the repository root (`--world worlds/debug`): its
   entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
-  imports, the `theme.puck` theme and the `controls.puck` cursor, key hints,
+  imports, the `skin.puck` skin and the `controls.puck` cursor, key hints,
   icons, five-page binding bar and three-ring play wheel it and the garden import
   (with `pad.puck`, the debug world's own Go and Tour pages and Places ring, and
   the `pad-kit.puck` library), and
@@ -1550,7 +1550,7 @@ placement's creation-face override may use `{ "$type": "text", "lines": [...],
 `state.<row>.<key>`). It renders through the engine's per-cell
 glyph-decal tier off the same packed font atlas—a fixed monospace cell grid
 (capped by the engine's per-screen decal cell budget), sampled at shade time
-with no per-glyph geometry cost, bypassing the CRT image pipeline. Signs,
+with no per-glyph geometry cost, bypassing the screen image pipeline. Signs,
 plaques, and monitors belong on this tier; short sculptural lettering stays a
 text run.
 
@@ -1744,7 +1744,8 @@ A route's `input` names where a pointer hit on the screen's source goes:
 receives until GPU picking reaches a screen's surface; see P4) or `Simulation`,
 where a pointer ray arriving as
 `source.pointer.origin`/`source.pointer.direction` command values is mapped in fixed point from the row alone
-(`WorldScreenMappings.Of`, the whole source inset by the glass bezel). The
+(`WorldScreenMappings.Of`: the whole source filling the face, or inset in the
+bezel of a screen whose `material` is `Crt`). The
 validator refuses `Passthrough` by name, because only a source the local user
 opened may send input to a host window. `world.screens` echoes each screen's
 destination as `input:<destination>`. The mapping and its laws are described in
@@ -1984,7 +1985,7 @@ and the same press leaves it (the debug world's devices use the Moth's
 While a seat is captured on a screen, its own camera eases in on the screen's
 picture, square-on, derived from the row's own frame, with nothing between the
 camera and the glass drawn, until each source row is a whole number of window
-pixels; as it settles the CRT treatment, atmosphere and tone map fade out, the
+pixels; as it settles a CRT screen's treatment, atmosphere and tone map fade out, the
 view renders at native scale and the root shows only its picture, and the window shows
 the picture as a desktop emulator does, on the matte its route's `display.fill`
 colours. Leaving fades the in-world look back in
@@ -2550,7 +2551,7 @@ Every scalar or angle a presentation section authors declares one domain
 curvature gains and ink band, a stop's elevation, the sun disc's radius and
 intensity, the stars' brightness and twinkle, the clouds' coverage, softness
 and scale, the atmosphere's fog density, height falloff, haze amount and
-anisotropy and medium extinction, the theme's bloom and scrim alphas, a marker's
+anisotropy and medium extinction, the theme's glow and scrim alphas, a marker's
 chip and ring alphas, and a camera program's operands (blend weight, path
 fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
 its field's domain by name, and a load refuses a field bound to a state row

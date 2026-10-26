@@ -28,8 +28,17 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
     }));
     /// <inheritdoc/>
     public float LuminanceOf(int screen) => LuminanceOf(row: RowOf(screen: screen));
+
     // A screen row's authored peak luminance, or the default display's.
     private static float LuminanceOf(WorldScreen? row) => (row?.Luminance ?? SdfScreenEmission.DefaultLuminance);
+
+    /// <inheritdoc/>
+    public SdfScreenFace FaceOf(int screen) => FaceOf(row: RowOf(screen: screen));
+
+    // A screen row's face: a window opens onto its world, and every other row is a display, drawn through a CRT's glass
+    // only when its material opts in (the same rule WorldScreenMappings.WarpOf maps a hit by).
+    private static SdfScreenFace FaceOf(WorldScreen? row) => (((row is not null) && WorldPrototypeFacets.IsOpening(source: row.Source)) ? SdfScreenFace.Opening : ((row?.Material == WorldScreenMaterial.Crt) ? SdfScreenFace.Crt : SdfScreenFace.Display));
+
     /// <inheritdoc/>
     /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
     public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(
@@ -66,9 +75,9 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
     public string? ReadOf(int view, int screen) {
         var filmed = (view - m_hostViewCount);
 
-        return ((((uint)filmed) < ((uint)m_hostLevels.Count)) && (m_hostLevels[filmed] is { } level))
+        return (((((uint)filmed) < ((uint)m_hostLevels.Count)) && (m_hostLevels[filmed] is { } level))
             ? level.InstanceOf(screen: screen)
-            : InstanceOf(screen: screen);
+            : InstanceOf(screen: screen));
     }
     /// <summary>Returns the name of the instance a screen of the boot world reads: the source it shows, its row's or the
     /// one a live presentation verb bound over the row; the source instance of a producer, machine or probe source, and

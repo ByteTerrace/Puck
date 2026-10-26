@@ -39,7 +39,6 @@ internal sealed class ReleaseChainFixture {
     /// <summary>Signs <paramref name="document"/> (its own <c>Signature</c> field must already be null) as a
     /// sequenced bearer release claim, returning the fully signed manifest.</summary>
     public ReleaseManifest Sign(ReleaseManifest document, ulong sequence, long notBefore, long notAfter) {
-        var canonical = ReleaseCanonicalizer.Canonicalize(document: document);
         var chain = AttestationTestSupport.BuildChain(
             codec: Codec,
             keys: m_keys,
@@ -48,7 +47,7 @@ internal sealed class ReleaseChainFixture {
         );
         var claim = AttestationSigner.SignClaim(
             audience: null,
-            claimBytes: canonical.Bytes,
+            claimBytes: ReleaseCanonicalizer.SigningBytes(document: document),
             codec: Codec,
             domain: RootId.Domain,
             notAfter: notAfter,

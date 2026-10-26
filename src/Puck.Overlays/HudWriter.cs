@@ -247,7 +247,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
         // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the
         // GaugeElementCost records the reservation counts per gauge.
         builder.WriteRect(
-            alpha: (m_theme.Current.Chrome.DimQuietAlpha * m_panelAlpha),
+            alpha: (m_theme.Current.Styles.Hud.TrackAlpha * m_panelAlpha),
             h: h,
             radius: 0f,
             role: OverlayColorRole.SurfaceInset,

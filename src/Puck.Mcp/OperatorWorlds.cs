@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using ModelContextProtocol.Protocol;
 
@@ -39,12 +40,13 @@ public sealed record OperatorWorldBuild(string? Path, IDisposable? Lease, string
 /// so none outlives the adapter that started it.
 /// </summary>
 internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider clock) : IDisposable {
-    internal const int MaxStartSeconds = 540;
+    internal const int MaxStartSeconds = 1800;
 
     private static readonly TimeSpan AttachPoll = TimeSpan.FromMilliseconds(milliseconds: 250);
     private static readonly TimeSpan DisposeGrace = TimeSpan.FromSeconds(seconds: 10);
-
     private readonly ConcurrentDictionary<int, Started> m_started = new();
+    private readonly ConcurrentDictionary<string, (CancellationTokenSource Stop, Task<CallToolResult> Work)> m_starts = new();
+    private readonly CancellationTokenSource m_shutdown = new();
 
     private int m_runs;
 
@@ -71,24 +73,28 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     public bool Owns(int processId) => m_started.ContainsKey(key: processId);
     /// <summary>Stops every World this adapter started: each is asked to quit, then its process tree is killed.</summary>
     public void Dispose() {
+        m_shutdown.Cancel();
+        Task.WhenAll(tasks: m_starts.Values.Select(selector: start => start.Work)).GetAwaiter().GetResult();
         foreach (var started in m_started.Values) {
             try {
                 _ = Stop(grace: DisposeGrace, started: started);
             } catch (Exception error) when ((error is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)) { }
         }
+        foreach (var start in m_starts.Values) { start.Stop.Dispose(); }
+        m_shutdown.Dispose();
     }
-    /// <summary>Starts a World and returns once it accepts an Operator attachment.</summary>
+    /// <summary>Validates a start and returns its pending id. A session-owned job builds and boots the World.</summary>
     /// <param name="arguments">The tool's arguments.</param>
     /// <param name="attachment">The adapter's attachments, which the World's must join.</param>
-    /// <param name="cancellationToken">Cancels the start; a World already launched is stopped.</param>
-    /// <returns>The started World, or a refusal.</returns>
+    /// <param name="cancellationToken">Cancels admission; an admitted job belongs to the session.</param>
+    /// <returns>A pending start id, or a refusal.</returns>
     public async Task<CallToolResult> StartAsync(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment, CancellationToken cancellationToken) {
         string? backend = null;
         string? checkoutArgument = null;
         var document = "worlds/debug";
         var holder = "puck-mcp";
         var ownerPlay = false;
-        var seconds = 300;
+        var seconds = 900;
         var windowed = false;
 
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
@@ -131,9 +137,61 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             return Refuse(output: $"Refused: {path} is not a world document or package under {worlds}; a start boots only the checkout's own worlds.");
         }
 
+        var id = Guid.NewGuid().ToString(format: "N");
+
+        lock (m_starts) {
+            // Retain the last results for repeatable polls, without accumulating an unbounded session history.
+            foreach (var old in m_starts.Where(predicate: entry => entry.Value.Work.IsCompleted).Take(count: Math.Max(val1: 0, val2: (m_starts.Count - 63)))) {
+                if (m_starts.TryRemove(key: old.Key, value: out var removed)) { removed.Stop.Dispose(); }
+            }
+            if (m_starts.Count >= 64) { return Refuse("This session already has 64 active starts; wait or cancel one before starting another."); }
+            var stop = CancellationTokenSource.CreateLinkedTokenSource(token: m_shutdown.Token);
+
+            m_starts[id] = (stop, Task.Run(function: async () => {
+                await using var deadline = clock.CreateTimer(_ => stop.Cancel(), null, TimeSpan.FromSeconds(seconds: seconds), Timeout.InfiniteTimeSpan);
+                CallToolResult result;
+
+                try {
+                    result = await StartWorldAsync(checkout, path, backend, holder, windowed, ownerPlay, seconds, attachment, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                } catch (OperationCanceledException) {
+                    result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
+                } catch (Exception error) {
+                    result = Refuse($"Start {id} failed: {error.Message}");
+                }
+                var data = JsonNode.Parse(result.StructuredContent!.Value.GetRawText())!;
+
+                data["startId"] = id;
+                result.StructuredContent = JsonElement.Parse(data.ToJsonString());
+                result.Content = [new TextContentBlock { Text = result.StructuredContent.Value.GetRawText() }];
+                return result;
+            }));
+        }
+        return Pending(id: id);
+    }
+    /// <summary>Waits briefly for an admitted start, or explicitly cancels it. A request cancellation only ends the poll.</summary>
+    public async Task<CallToolResult> WaitStartAsync(IDictionary<string, JsonElement>? arguments, CancellationToken cancellationToken) {
+        string? id = null;
+        var milliseconds = 1000;
+        var cancel = false;
+
+        foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
+            if ((key == "startId") && (value.ValueKind == JsonValueKind.String)) { id = value.GetString(); } else if ((key == "timeoutMs") && (value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= 20000)) { milliseconds = parsed; } else if ((key == "cancel") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) { cancel = value.GetBoolean(); } else { return Refuse($"Invalid argument: {key}."); }
+        }
+        if ((id is null) || !m_starts.TryGetValue(key: id, value: out var start)) { return Refuse("Unknown startId in this session; inspect puck_worlds before starting again."); }
+        if (cancel && !start.Work.IsCompleted) {
+            try { start.Stop.Cancel(); } catch (ObjectDisposedException) when (start.Work.IsCompleted) { }
+        }
+        try { return await start.Work.WaitAsync(TimeSpan.FromMilliseconds(milliseconds: milliseconds), clock, cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (TimeoutException) { return Pending(id: id); }
+    }
+
+    private static CallToolResult Pending(string id) => Result(metadata: Metadata(
+        $"Start {id} is pending (building, waiting for a lease, or attaching). Poll puck_world_start_wait with this startId; do not repeat puck_world_start.",
+        started: null, status: "pending", startId: id));
+    private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string holder,
+        bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         // The build comes before the GPU lease, so a long build never holds the machine's GPU.
-        var resolved = await launch.ResolveBuild(checkout, (backend == "vulkan"), budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var resolved = await launch!.ResolveBuild(checkout, (backend == "vulkan"), budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         if (resolved.Path is not { } build) {
             resolved.Lease?.Dispose();
@@ -146,11 +204,14 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
         if (windowed) {
             try {
-                lease = await launch.AcquireGpuLease(holder, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                lease = await launch!.AcquireGpuLease(holder, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (TimeoutException error) {
                 resolved.Lease?.Dispose();
 
                 return Refuse(output: $"Refused: the GPU lease stayed held for {seconds} s, so no windowed World was started ({error.Message}). Retry the start, or start headless.");
+            } catch (OperationCanceledException) {
+                resolved.Lease?.Dispose();
+                throw;
             }
         }
 
@@ -196,11 +257,17 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 await Task.Delay(cancellationToken: cancellationToken, delay: AttachPoll, timeProvider: clock).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch (OperationCanceledException) {
+            var stopped = Stop(grace: TimeSpan.Zero, started: started);
+
+            return Result(metadata: Metadata($"Start was cancelled; World process {started.Process.Id} was stopped.",
+                started, status: "refused", stop: stopped));
+        } catch {
             _ = Stop(grace: TimeSpan.Zero, started: started);
 
             throw;
         }
     }
+
     /// <summary>Stops a World this adapter started.</summary>
     /// <param name="arguments">The tool's arguments.</param>
     /// <param name="cancellationToken">Cancels waiting for the World to quit; its process tree is then killed.</param>
@@ -245,7 +312,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path));
     private static CallToolResult Refuse(string output, Started? started = null) => Result(metadata: Metadata(output: output, started: started, status: "refused"));
-    private static OperatorMcpWorldRun Metadata(string output, Started? started, string status, OperatorMcpWorld? world = null, (int? ExitCode, bool Killed, bool LeaseReleased)? stop = null) => new(
+    private static OperatorMcpWorldRun Metadata(string output, Started? started, string status, OperatorMcpWorld? world = null, (int? ExitCode, bool Killed, bool LeaseReleased)? stop = null, string? startId = null) => new(
         Build: started?.Build,
         Checkout: started?.Checkout,
         ExitCode: stop?.ExitCode,
@@ -258,7 +325,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         Status: status,
         StderrLog: started?.StderrLog,
         StdoutLog: started?.StdoutLog,
-        World: world
+        World: world,
+        StartId: startId
     );
     private static CallToolResult Result(OperatorMcpWorldRun metadata) {
         var element = JsonSerializer.SerializeToElement(value: metadata, jsonTypeInfo: OperatorMcpJson.Default.OperatorMcpWorldRun);
