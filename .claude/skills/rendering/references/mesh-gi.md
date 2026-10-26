@@ -10,6 +10,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 | Probe record and generated shader constants | `SdfMeshIrradianceProbe`, `SdfIsaHlsl.DeclareRender` |
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
+- The scene hierarchy fills its packed seven-primitive leaves before adding
+  another pair of boxes. Bounds and triangle tests keep their original precision.
+  Compare `puck mesh scene`'s hits, lit hits and mean distance after changing its
+  storage or traversal, and walk the settled heap to measure retained arrays;
+  working set includes temporary build storage and the mesh arrays as well.
 - Keep `Incoming` and `sdfMeshProbesAt`/`sdfMeshIrradianceAt` together. A sky
   fallback in the CPU read feeds later bounce sweeps even if the final pixel
   read rejects it.
