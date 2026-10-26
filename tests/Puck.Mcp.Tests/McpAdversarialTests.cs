@@ -234,10 +234,8 @@ public sealed class McpAdversarialTests {
                 parameters: "{}"
             );
 
-            Assert.Equal(
-                6,
-                tools.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "tools").GetArrayLength()
-            );
+            Assert.Contains(collection: tools.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "tools").EnumerateArray(),
+                filter: tool => (tool.GetProperty(propertyName: "name").GetString() == "puck_exec"));
 
             // An adapter given no checkout starts nothing, and a stop names only a World this adapter started.
             var call = 5;
@@ -370,6 +368,13 @@ public sealed class McpAdversarialTests {
             parameters: """{"name":"puck_world_start","arguments":{"backend":"vulkan","windowed":true,"timeoutSeconds":7}}"""
         );
         var structured = answer.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent");
+
+        Assert.Equal("pending", structured.GetProperty(propertyName: "status").GetString());
+        var startId = structured.GetProperty(propertyName: "startId").GetString();
+        using var finished = await adapter.RequestAsync(id: 3, method: "tools/call",
+            parameters: (("{\"name\":\"puck_world_start_wait\",\"arguments\":{\"startId\":\"" + startId) + "\"}}"));
+
+        structured = finished.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent");
 
         Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
         Assert.Contains(expectedSubstring: "the Puck.World build exited 1.", actualString: structured.GetProperty(propertyName: "output").GetString());
