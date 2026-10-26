@@ -415,7 +415,14 @@ Every package below carries its own check on the programme page; tick it there a
     - [x] `sql { }` deleted: the dialect, its lowering, decompiler, LSP, PUCK070–076, sample and suites are gone, and a `sql` block now reads as any unknown section does: validation refuses it as an unknown top-level member (PUCK030), and SQL text inside it is a syntax error (PUCK001).
     - [x] A wrapping printer: `puck format`, the language server and the decompiler break calls, lists, operator chains and rule operands past 120 columns, formatting stays a fixed point, and every shipped source was reformatted with its compiled documents unchanged.
     - [x] Saving through the source tree: `world.save <path>.puck` routes each live edit into the source that authors it (a module's row, a `let` literal, an appended or removed keyed row), refuses a row a `for` or template generates, and proves the rewritten tree composes to the live document; simulation state and placement `holding` stay as authored. The decompiler prints back authored rows only (decision P1), so the composition decompile and the generated-row read-back are deleted.
-  - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
+  - [ ] Wave 2:
+    - [ ] Every condition as an expression (HUD visibility, placement responses, element text).
+    - [ ] No JSON showing through:
+      - [x] Contextual keywords: outside a construct body a member named for a keyword takes no quotes (`when ["Grounded"]`, `template: "…"`, `score:`, `local:`); the document reader's keyword readers decline before `:`, `{` or `[`.
+      - [x] Sections take arrays directly: a section holding only its rows is `kits [ … ]` or `looks: map(…)`, lowering to its `rows`, and the block holding only `rows` is refused (PUCK123).
+      - [x] Admission's empty fields: a keyless row (OAuth, federated authority) authors no algorithm, public key or subject.
+      - [ ] Noise fields that remain: `mode: Level` written in rule bodies where it is the default (waiting for the expression lane's rule-body migration, which rewrites the same lines), and one hash spelling for `hash: "auto"`, `"sha256-64/…"` and a bare digest.
+    - [ ] `function`.
   - [ ] Wave 3: names for bodies and identities, one composition construct, typed test steps with `eventually`.
   - [ ] Wave 4: complete state sugar, one rule grammar for cartridges, one authorization declaration, creation axes and rotations.
 
