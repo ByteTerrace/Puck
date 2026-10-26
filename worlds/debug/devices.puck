@@ -1123,7 +1123,7 @@ placements {
     yawDegrees: deviceYaw
     respond [
       {
-        "when": state(state: pilotHold, key: `0`, comparison: Equal, value: 1)
+        when: state(state: pilotHold, key: `0`, comparison: Equal, value: 1)
         prototypeId: "device-humble-gaming-brick-held"
       }
     ]

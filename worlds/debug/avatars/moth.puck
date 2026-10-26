@@ -7213,7 +7213,7 @@ prototypes {
           cadence: 1
           signal: "speed"
           dynamics: "gait-pace"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7227,7 +7227,7 @@ prototypes {
             driver: "pace"
             curve: "moth-stride"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7241,7 +7241,7 @@ prototypes {
             driver: "pace"
             curve: "moth-gait"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7255,7 +7255,7 @@ prototypes {
             driver: "pace"
             curve: "moth-run"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7268,7 +7268,7 @@ prototypes {
             driver: "pace"
             curve: "moth-run"
           }
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7277,7 +7277,7 @@ prototypes {
           name: "breath"
           cadence: 1.7
           signal: "time"
-          "when" [
+          when [
             "still"
           ]
         }
@@ -7285,7 +7285,7 @@ prototypes {
           name: "flight"
           cadence: 1
           signal: "state.airPose.$body"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7293,7 +7293,7 @@ prototypes {
           name: "wings"
           cadence: 1
           signal: "state.airWings.$body"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7301,7 +7301,7 @@ prototypes {
           name: "bank"
           cadence: 0.26
           signal: "turnRate"
-          "when" [
+          when [
             "state.airPose.$body"
             "Airborne"
           ]
@@ -7310,7 +7310,7 @@ prototypes {
           name: "cruise"
           cadence: 0.18
           signal: "speed"
-          "when" [
+          when [
             "state.airPose.$body"
             "Airborne"
             "moving"
@@ -7324,7 +7324,7 @@ prototypes {
           signal: "travelDirection"
           blendInSeconds: 0.12
           blendOutSeconds: 0.3
-          "when" [
+          when [
             "Grounded"
             "moving"
           ]
@@ -7336,7 +7336,7 @@ prototypes {
           cadence: 1
           signal: "turnRate"
           dynamics: "body-turn"
-          "when" [
+          when [
             "always"
           ]
         }
@@ -7345,7 +7345,7 @@ prototypes {
           cadence: 1
           signal: "lateralAcceleration"
           dynamics: "body-lean"
-          "when" [
+          when [
             "Grounded"
           ]
         }
@@ -7354,7 +7354,7 @@ prototypes {
           cadence: 1
           signal: "forwardAcceleration"
           dynamics: "body-lean"
-          "when" [
+          when [
             "Grounded"
           ]
         }
@@ -7367,7 +7367,7 @@ prototypes {
           dynamics: "body-air"
           blendInSeconds: 0.06
           blendOutSeconds: 0.04
-          "when" [
+          when [
             "Airborne"
           ]
         }
@@ -7380,7 +7380,7 @@ prototypes {
           dynamics: "body-land"
           blendInSeconds: 0
           blendOutSeconds: 0.08
-          "when" [
+          when [
             "Grounded"
           ]
         }
@@ -7557,7 +7557,7 @@ prototypes {
           // The sole stays flat on the ground however far the planted boot sits from its rest offset, so the boot
           // centre's rest height is the standoff that puts the whole sole on the surface.
           align: 1
-          "when" [
+          when [
             "Grounded"
           ]
           target {
@@ -7587,7 +7587,7 @@ prototypes {
           ]
           tip: "boot-right"
           align: 1
-          "when" [
+          when [
             "Grounded"
           ]
           target {
@@ -7648,7 +7648,7 @@ render {
     maximum: 16
     compensation: 2.5
     adaptation: 0.75
-    "local": 0.5
+    local: 0.5
   }
   renderScale: 1
   shadowLights: 1

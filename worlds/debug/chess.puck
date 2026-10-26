@@ -1517,7 +1517,7 @@ search {
       ]
       // The score is from the side that just moved. One ply, automatic queen
       // promotion, material first, then central occupation and pawn progress.
-      "score": (2 * turn - 1) * ai[evaluation]
+      score: (2 * turn - 1) * ai[evaluation]
     }
   ]
 }

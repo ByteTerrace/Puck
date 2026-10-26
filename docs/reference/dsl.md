@@ -43,14 +43,16 @@ bare spelling reads back as the same name and the position doesn't reserve it. O
 the document grammar that decision is `PuckPrinter.PrintName`, and for a property `PuckPrinter.PrintPropertyName`.
 In the expression spelling it is `ExpressionSpelling.PrintName`, which also backquotes a name that would read as a
 number, a unit-bearing literal or a dotted read of another row.
-The formatter keeps a block's leading word quoted when the source quoted it, because `"for" { }` is a member named
-`for`, while `for` bare opens a loop.
+The formatter keeps a block's leading word quoted when the source quoted it, because in a rule body `"for" { }` is
+a member named `for`, while `for` bare opens a loop.
 
-What a position reserves is layered on top of the rule and never changes its characters. Examples are a keyword
-a statement reader would take (`let`, `rule`, `when`), a reserved call name in an expression (`count`, `dot`),
-a pattern's reserved words (`any`, `empty`, `except`, `none`), and the dotted path and
-`$name:segment` continuations the expression spelling reads. Such a name prints quoted in that position, and
-bare elsewhere.
+What a position reserves is layered on top of the rule and never changes its characters. Keywords are
+contextual: in the document, a plain block and an object, `name:`, `name {` and `name [` are members whatever the
+name spells, so `template: "{state.title}"` and `when ["Grounded"]` take no quotes. A construct body (a rule,
+scope, decision, option, test, workflow or effect body) reserves the keywords its reader takes there (`when`,
+`local`, `score`, `for`). Other positions reserve a call name in an expression (`count`, `dot`), a pattern's
+reserved words (`any`, `empty`, `except`, `none`), and the dotted path and `$name:segment` continuations the
+expression spelling reads. Such a name prints quoted in that position, and bare elsewhere.
 
 ### Generated names
 

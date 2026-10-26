@@ -144,7 +144,15 @@ public static partial class PuckPrinter {
             Indent(level: level);
             m_builder.Append(value: ']');
         }
+        // An object literal reads each key as a name whatever it spells, so its properties print as a plain block's.
         private void Object(ObjectExpressionNode @object, int level) {
+            var enclosing = m_construct;
+
+            m_construct = false;
+            ObjectCore(level: level, @object: @object);
+            m_construct = enclosing;
+        }
+        private void ObjectCore(ObjectExpressionNode @object, int level) {
             if (@object.Properties.Count == 0) {
                 m_builder.Append(value: "{}");
 

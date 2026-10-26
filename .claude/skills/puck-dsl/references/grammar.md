@@ -43,6 +43,14 @@ grammar, expression spelling, pattern/cell-set/state spellings):
   words `any`/`empty`/`except`/`none`, dotted paths, `$x:seg`
   continuations) layer on the rule as that position's own set. They never add
   a character class.
+- Keywords are contextual. In the document, a plain block or an object,
+  `name:`, `name {` and `name [` are members whatever the name spells
+  (`template: "…"`, `when ["Grounded"]`, `local: 0.5`): the document reader's
+  keyword readers (`let`, `for`, `use`, `import`, `export`, `module`,
+  `template`, `rule`, `request`, `watchMemory`) decline before `:`, `{` or
+  `[`. Only a construct body (rule, scope, decision, option, test, workflow,
+  effect) reserves its keywords, `PuckPrinter.PropertyKeywords`, which a
+  property there prints quoted (`PrintPropertyName(construct: true)`).
 - Every printer prints a name bare exactly when the bare spelling reads back as
   that name and the position doesn't reserve it. `IdentifierSpellingLawTests`
   (State) and `IdentifierAgreementLawTests` (World.Transpiler) gate it, over
