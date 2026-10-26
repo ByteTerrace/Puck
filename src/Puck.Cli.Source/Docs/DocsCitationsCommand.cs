@@ -406,7 +406,7 @@ public static class DocsCitationsCommand {
             path1: runDirectory,
             path2: $"state-{shape}"
         );
-        var input = $"help{Environment.NewLine}wire.errors{Environment.NewLine}";
+        var input = $"help --full{Environment.NewLine}wire.errors{Environment.NewLine}";
 
         Console.Error.WriteLine(value: $"docs citations: booting Puck.World {shape} to read its `help` vocabulary.");
 

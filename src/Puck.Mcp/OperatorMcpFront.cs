@@ -66,7 +66,7 @@ public static class OperatorMcpFront {
         await using var server = McpServer.Create(transport, new McpServerOptions {
             ServerInfo = new() { Name = "puck-operator", Version = "1.0.0" },
             Capabilities = new() { Tools = new() { ListChanged = true } },
-            ServerInstructions = "Trusted local Operator. New activated builds take effect on the next call. Worlds and pending starts remain owned by this session across updates. Name your World in every call; inspect unknown outcomes before retrying.",
+            ServerInstructions = OperatorMcpServer.Instructions,
             Filters = new() {
                 Message = new() {
                     IncomingFilters = [next => (context, token) => {
@@ -99,7 +99,6 @@ public static class OperatorMcpFront {
                             }
                             data = JsonElement.Parse(listed.ToJsonString());
                             result.StructuredContent = data;
-                            result.Content = [new TextContentBlock { Text = data.GetRawText() }];
                         }
                         if (data.TryGetProperty(propertyName: "startId", value: out var id) && (id.ValueKind == JsonValueKind.String)) { starts[id.GetString()!] = selected; }
                         if (data.TryGetProperty(propertyName: "status", value: out var status) && (status.GetString() == "started")) {

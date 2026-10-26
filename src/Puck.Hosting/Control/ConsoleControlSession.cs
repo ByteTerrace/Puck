@@ -294,16 +294,17 @@ public sealed class ConsoleControlSession : IControlSession {
             }
             await completion.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             var failed = results.Any(predicate: static result => result.IsError);
-            var output = string.Join(separator: '\n', values: results.Select(selector: static result => result.Output));
+            var multiline = (request.Command!.IndexOfAny(anyOf: ['\r', '\n']) >= 0);
+            var output = (multiline ? string.Empty : results[0].Output);
 
             return new ControlResponse(
                 request.Id,
-                (failed ? "refused" : (string.IsNullOrEmpty(value: output) ? "submitted" : "completed")),
+                (failed ? "refused" : (results.Any(predicate: static result => !string.IsNullOrEmpty(value: result.Output)) ? "completed" : "submitted")),
                 output,
                 failed,
                 results.Any(predicate: static result => result.ClearTranscript),
                 Truncated: results.Any(predicate: static result => result.Truncated),
-                Commands: ((request.Command!.IndexOfAny(anyOf: ['\r', '\n']) >= 0) ? [.. results] : null)
+                Commands: (multiline ? [.. results] : null)
             ).Bounded();
         } catch (Exception error) when ((error is IOException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException)) {
             return new(

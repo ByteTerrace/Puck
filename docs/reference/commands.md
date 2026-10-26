@@ -653,8 +653,9 @@ commands [
   no argument chooses which verb a line reaches and no argument adds a line.
   A line may call another authored command; a chain that loops is refused.
 
-The registry answers an authored command beside the engine's verbs: `help`,
-`help --names` and `help <prefix>` list it with its usage and the lines it
+The registry answers an authored command beside the engine's verbs: `help` and
+`help --names` list its name, `help --full` and `help <prefix>` list it with its
+usage and the lines it
 runs, `CommandRegistry.Definitions` and `TryGetMetadata` describe it (a
 bindable, Simulation-routed verb taking wire arguments), and a binding row or
 wheel sector names it like any verb, with or without `text` arguments. The
@@ -960,7 +961,8 @@ member-by-member surface.
   before it reads a module's, declared `Unbindable` and `Immediate`. So
   `TryGetId` and `TryGetMetadata` answer for them, `Definitions` is the whole
   dispatchable catalogue rather than the catalogue minus three, and the `help`
-  listing covers every command and description including its own.
+  listing covers every command (names on bare `help` and `help --names`, full
+  descriptions on `help --full` and `help <prefix>`) including its own.
 - **`wire.ack` sets how loud an accepted line is.** `wire.ack on`, the default,
   echoes every accepted command; `wire.ack quiet` drops the bare success
   acknowledgements, and only those. A verb opts into being droppable by

@@ -37,17 +37,28 @@ public sealed class McpAdversarialTests {
         await using var adapter = new InProcessAdapter(() => new ScriptedSession(entered: null, name: output));
         var result = await adapter.ExecAsync(command: "read", id: 1);
 
-        Assert.Equal(output, result.GetProperty(propertyName: "output").GetString());
-        var data = result.GetProperty(propertyName: "data");
-
         if (structured) {
             using var expected = JsonDocument.Parse(output);
 
-            Assert.True(condition: JsonElement.DeepEquals(element1: expected.RootElement, element2: data));
+            Assert.False(condition: result.TryGetProperty(propertyName: "output", value: out _));
+            Assert.True(condition: JsonElement.DeepEquals(element1: expected.RootElement, element2: result.GetProperty(propertyName: "data")));
         } else {
-            Assert.Equal(JsonValueKind.Null, data.ValueKind);
+            Assert.Equal(output, result.GetProperty(propertyName: "output").GetString());
+            Assert.False(condition: result.TryGetProperty(propertyName: "data", value: out _));
         }
-        Assert.Equal(JsonValueKind.Null, result.GetProperty(propertyName: "commands").ValueKind);
+        Assert.False(condition: result.TryGetProperty(propertyName: "commands", value: out _));
+
+        var script = await adapter.ExecAsync(command: "read\nread", id: 2);
+
+        Assert.False(condition: script.TryGetProperty(propertyName: "output", value: out _));
+        Assert.False(condition: script.TryGetProperty(propertyName: "data", value: out _));
+        var commands = script.GetProperty(propertyName: "commands").EnumerateArray().ToArray();
+
+        Assert.Equal(expected: 2, actual: commands.Length);
+        foreach (var line in commands) {
+            Assert.Equal(expected: !structured, actual: line.TryGetProperty(propertyName: "output", value: out _));
+            Assert.Equal(expected: structured, actual: line.TryGetProperty(propertyName: "data", value: out _));
+        }
     }
     // Law: stdin ends the adapter cleanly only at a well-formed EOF. Every input fault fails the adapter with its cause
     // rather than reading as EOF, whatever the read sizes; a UTF-8 scalar may span reads.
@@ -378,7 +389,7 @@ public sealed class McpAdversarialTests {
 
         Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
         Assert.Contains(expectedSubstring: "the Puck.World build exited 1.", actualString: structured.GetProperty(propertyName: "output").GetString());
-        Assert.Equal(expected: JsonValueKind.Null, actual: structured.GetProperty(propertyName: "processId").ValueKind);
+        Assert.False(condition: structured.TryGetProperty(propertyName: "processId", value: out _));
         // A Vulkan start asks for the SPIR-V build.
         Assert.Equal(expected: [(Path.TrimEndingDirectorySeparator(path: scratch.RootPath), true, TimeSpan.FromSeconds(seconds: 7))], actual: asked);
     }
@@ -707,10 +718,16 @@ public sealed class McpAdversarialTests {
                 );
                 throw new UnreachableException();
             }
+            var answer = (name ?? request.Command!);
+            var lines = request.Command!.Split(separator: '\n');
+
             return new(
                 request.Id,
                 "completed",
-                (name ?? request.Command!)
+                ((lines.Length > 1) ? string.Empty : answer),
+                Commands: ((lines.Length > 1)
+                    ? [.. lines.Select(selector: (line, index) => new ControlCommandResult(ClearTranscript: false, Command: line, IsError: false, Line: (index + 1), Output: answer, Status: "completed", Truncated: false))]
+                    : null)
             );
         }
     }
