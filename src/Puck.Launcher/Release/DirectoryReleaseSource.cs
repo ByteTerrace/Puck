@@ -17,21 +17,23 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
     /// Optional signing runs after the complete payload inventory is known.</summary>
     public ReleaseManifest Publish(string input, string rid, ReleaseManifest manifest, Func<ReleaseManifest, ReleaseManifest>? sign = null) {
         var store = new ContentAddressedStore(m_root);
-        var directory = Path.GetFullPath(input);
-        var files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Select(path => {
-            var bytes = File.ReadAllBytes(path);
-            return new ReleasePayloadFile(Path.GetRelativePath(directory, path).Replace('\\', '/'), store.Put(bytes).ToString(), bytes.LongLength);
+        var directory = Path.GetFullPath(path: input);
+        var files = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Select(selector: path => {
+            var bytes = File.ReadAllBytes(path: path);
+
+            return new ReleasePayloadFile(Path.GetRelativePath(path: path, relativeTo: directory).Replace(newChar: '/', oldChar: '\\'), store.Put(content: bytes).ToString(), bytes.LongLength);
         }).ToArray();
-        if (files.Length == 0) { throw new IOException($"No release files under {directory}"); }
+
+        if (files.Length == 0) { throw new IOException(message: $"No release files under {directory}"); }
         manifest = manifest with { Payloads = [new ReleasePayload(rid, files)] };
-        manifest = sign?.Invoke(manifest) ?? manifest;
+        manifest = (sign?.Invoke(manifest) ?? manifest);
         var canonical = ReleaseCanonicalizer.Canonicalize(manifest);
-        var channel = Path.Combine(m_root, manifest.Channel);
-        Directory.CreateDirectory(channel);
-        Puck.Assets.AtomicFile.WriteAllBytes(Path.Combine(channel, "manifest.json"), canonical.Bytes);
+        var channel = Path.Combine(path1: m_root, path2: manifest.Channel);
+
+        Directory.CreateDirectory(path: channel);
+        Puck.Assets.AtomicFile.WriteAllBytes(Path.Combine(path1: channel, path2: "manifest.json"), canonical.Bytes);
         return manifest;
     }
-
     /// <inheritdoc/>
     public async Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, long length, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: destination);
@@ -52,12 +54,12 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
             return false;
         }
 
-        return await ReleaseSourceReader.CopyBoundedAsync(
+        return (await ReleaseSourceReader.CopyBoundedAsync(
             cancellationToken: cancellationToken,
-            source: source,
             destination: destination,
-            maximumBytes: length
-        ).ConfigureAwait(continueOnCapturedContext: false) == length;
+            maximumBytes: length,
+            source: source
+        ).ConfigureAwait(continueOnCapturedContext: false) == length);
     }
     /// <inheritdoc/>
     public async Task<ReleaseSourceResult> TryGetLatestManifestAsync(string channel, CancellationToken cancellationToken) {
@@ -81,8 +83,8 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
         using var buffer = new MemoryStream();
 
         if ((source.Length > ReleaseSourceReader.MaximumManifestBytes) ||
-            (await ReleaseSourceReader.CopyBoundedAsync(source: source, destination: buffer,
-                maximumBytes: ReleaseSourceReader.MaximumManifestBytes, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false) is null)) {
+            (await ReleaseSourceReader.CopyBoundedAsync(cancellationToken: cancellationToken, destination: buffer,
+                maximumBytes: ReleaseSourceReader.MaximumManifestBytes, source: source).ConfigureAwait(continueOnCapturedContext: false) is null)) {
             return new ReleaseSourceResult(Found: false, ManifestBytes: [], RefusalReason: "release manifest exceeds the byte limit");
         }
 

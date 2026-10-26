@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
+using System.Diagnostics;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -13,7 +14,7 @@ public static class OperatorMcpFront {
     /// <summary>Serves an installed operator adapter through the existing application stub.</summary>
     public static async Task RunAsync(Stream input, Stream output, string stub, string[] arguments,
         Func<CancellationToken, Task<string>> activate, CancellationToken cancellationToken) {
-        var workers = new Dictionary<string, McpClient>();
+        var workers = new Dictionary<string, (McpClient Client, Process Process, Task Errors)>();
         var owners = new ConcurrentDictionary<string, McpClient>(comparer: StringComparer.OrdinalIgnoreCase);
         var starts = new ConcurrentDictionary<string, McpClient>(comparer: StringComparer.Ordinal);
         var gate = new SemaphoreSlim(initialCount: 1);
@@ -26,15 +27,33 @@ public static class OperatorMcpFront {
         async Task<McpClient> Active(CancellationToken token) {
             var version = await activate(token).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (workers.TryGetValue(key: version, value: out var existing)) { return existing; }
-            var client = await McpClient.CreateAsync(new StdioClientTransport(new() {
-                Command = stub,
-                Arguments = arguments,
-                Name = $"puck-operator-{version}",
-                StandardErrorLines = line => Console.Error.WriteLine(value: line),
-            }), new() { ClientInfo = new() { Name = "puck-operator-front", Version = "1.0.0" } }, cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
+            if (workers.TryGetValue(key: version, value: out var existing)) { return existing.Client; }
+            var info = new ProcessStartInfo(fileName: stub) {
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            };
 
-            workers.Add(key: version, value: client);
+            foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
+            var process = (Process.Start(startInfo: info) ?? throw new IOException(message: "The application stub did not start."));
+            var errors = ForwardErrors(process: process);
+            McpClient client;
+
+            try {
+                client = await McpClient.CreateAsync(new StreamClientTransport(serverInput: process.StandardInput.BaseStream, serverOutput: process.StandardOutput.BaseStream),
+                    // A slow worker must not turn a discovery timeout into an incompatible initialize fallback.
+                    new() {
+                        ClientInfo = new() { Name = "puck-operator-front", Version = "1.0.0" },
+                        ProtocolVersion = "2025-11-25",
+                        DiscoverProbeTimeout = Timeout.InfiniteTimeSpan,
+                    }, cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
+            } catch {
+                await StopWorker(client: null, errors: errors, process: process).ConfigureAwait(continueOnCapturedContext: false);
+                throw;
+            }
+            workers.Add(key: version, value: (client, process, errors));
             if ((workers.Count > 1) && (endpoint is not null)) {
                 await endpoint.SendNotificationAsync(cancellationToken: token, method: NotificationMethods.ToolListChangedNotification).ConfigureAwait(continueOnCapturedContext: false);
             }
@@ -96,10 +115,26 @@ public static class OperatorMcpFront {
 
         endpoint = server;
         try { await server.RunAsync(cancellationToken: lifetime.Token).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { } finally {
-            // SDK disposal closes worker stdin. The worker stops only the Worlds it started before it exits.
-            foreach (var worker in workers.Values) { await worker.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
+            // Own the pipes: SDK process-transport disposal does not guarantee stdin EOF before killing its child.
+            // EOF lets each worker stop exactly its owned Worlds and release their leases before the stub exits.
+            await Task.WhenAll(tasks: workers.Values.Select(selector: worker => StopWorker(client: worker.Client, errors: worker.Errors, process: worker.Process))).ConfigureAwait(continueOnCapturedContext: false);
             gate.Dispose();
         }
         if (bounded.Failure is { } failure) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: failure).Throw(); }
+    }
+
+    private static async Task ForwardErrors(Process process) {
+        while (await process.StandardError.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) { Console.Error.WriteLine(value: line); }
+    }
+    private static async Task StopWorker(McpClient? client, Process process, Task errors) {
+        try {
+            process.StandardInput.Close();
+            try { await process.WaitForExitAsync().WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 30)).ConfigureAwait(continueOnCapturedContext: false); } catch (TimeoutException) {
+                if (!process.HasExited) { process.Kill(entireProcessTree: true); }
+                await process.WaitForExitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            }
+            if (client is not null) { await client.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
+            await errors.ConfigureAwait(continueOnCapturedContext: false);
+        } finally { process.Dispose(); }
     }
 }

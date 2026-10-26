@@ -181,6 +181,10 @@ public static class McpCommand {
             var siloPath = result.GetValue(option: siloOption);
             var stdio = ((attachmentPath is not null) || (profile is not null));
             var hosted = ((configurationPath is not null) || (siloPath is not null));
+            if (((result.GetValue(option: installOption) is not null) || (result.GetValue(option: checkoutOption) is not null)) &&
+                ((profile != "operator") || hosted)) {
+                result.AddError("Installed adapter options require --profile operator and cannot mix with --silo/--http.");
+            }
 
             if (
                 stdio &&
