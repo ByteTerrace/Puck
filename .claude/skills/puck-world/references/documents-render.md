@@ -76,7 +76,7 @@ Renderer contract: `rendering` skill sync pairs, the sky block and layer table; 
 record.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
-`SdfLights.MaxLights` 8, in slot order, each optionally `name`d) and
+`SdfLights.MaxLights` 128, in slot order, each optionally `name`d) and
 `curvature`. Each light also carries a nonnegative bindable `bounce`, default
 one, which scales its diffuse contribution to indirect transport independently
 of direct shading. Rim and attenuation-only lights have no diffuse term.

@@ -242,9 +242,8 @@ public sealed partial class WorldRoutedPresentationLawTests {
         // A world with no screen, since a program declaring one renders every frame and never stands.
         using var north = Endpoint(definition: (AwayDocument() with { PlacementRowsRaw = [], ScreensRaw = [] }), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
-        // The program holds no shape, so the residency has nothing to bake and its view may stand from its first frame; a
-        // bake still pending renders every frame, which only the passes' own frames advance.
-        var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true, Program = new SdfProgramBuilder().Build() });
+        // No geometry or indirect lighting needs to settle before testing which instance owns the rendered view.
+        var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true, IndirectTier = SdfIndirectTier.Off, Program = new SdfProgramBuilder().Build() });
         var gpu = new FakeGpuDevice();
         var context = new FrameContext(
             AccumulatorTicks: 0UL,

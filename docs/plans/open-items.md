@@ -771,13 +771,13 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] More games for the room's free table spot at (65, 30.6), from the state programme's landed games; addon seats at the tables.
   - [ ] Go on a real 19×19 board with all 361 stones, after the limits work below lets every stone draw as itself. `RuleGroupCapacity.MaxPasses` is removed so area scoring's flood can run as many passes as it needs, and `ResolveDynamicContacts` charges `CandidateBudget` (default 32, max 256) only on full 3D box overlap so stones sharing a tray column's X interval cost nothing when separated in Y or Z.
 
-- [ ] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The interpreter-era scene ceilings are retired; the remaining map audit is below.
+- [x] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The interpreter-era scene ceilings are retired.
   - [x] Rigid creations share local geometry and palettes, with a root transform and draw per copy; articulated creations allocate root and independently moving part slots. Shape caps, fixed full/compact pools, per-shape GPU reservations and the boot probe are deleted. Catalog looks emit only for bodies wearing them. The debug world's actual envelope is 2,697 instances, 2,273 materials and 567 transform slots, including 184 rigid copies; a focused 600-copy check retains every body's identity without rebuilding its program.
   - [x] Delete `WorldDynamicGeometryCeilings` and its validator gate, the noise march-step refusal, and the detail band chosen by body index.
   - [x] Field scope depth 2 → 4; the derived-face screen band follows the authored screens.
   - [x] Guards never truncate silently: skins past 255 members refuse before queuing the named bake group, and volume overflow refuses with the creation or frame context.
   - [x] Machine-derived byte budgets retain meshes by size and age; brick storage allocates on its first bake or upload rather than reserving 64 MiB at boot.
-  - [ ] Remaining map audit: a skill map says `SdfLights.MaxLights` is 8 where the code allows 128. Shape-budget guidance is removed from the sdf-authoring skill and authoring README; `puck creation stats` now installs the mutation vocabulary on the debug world.
+  - [x] Corrected the skill map to `SdfLights.MaxLights` 128, removed shape-budget guidance from the sdf-authoring skill and authoring README, and installed the mutation vocabulary for `puck creation stats` on the debug world.
 
 ## [UI](ui.md)
 
