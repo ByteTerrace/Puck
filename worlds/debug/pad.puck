@@ -62,7 +62,13 @@ bindingOverlays [
               { command: "debug.go", id: "goDesktop", label: "Computer", text: "desktop", sources: padWest }
               { command: "debug.go", id: "goLevel0", label: "Level 0", text: "gallery-level-0", sources: padSouth }
               { command: "debug.go", id: "goLevel1", label: "Level 1", text: "gallery-level-1", sources: padEast }
-              { command: "debug.go", id: "goLevel2", label: "Level 2", text: "gallery-level-2", sources: padRightShoulder }
+              {
+                command: "debug.go"
+                id: "goLevel2"
+                label: "Level 2"
+                text: "gallery-level-2"
+                sources: padRightShoulder
+              }
               { command: "debug.go", id: "goLevel3", label: "Level 3", text: "gallery-level-3", sources: padRightStick }
             ]
           }
@@ -81,12 +87,30 @@ bindingOverlays [
               { command: "world.quality", id: "tourQuality", label: "Quality", text: "next", sources: padLeft }
               { command: "gallery.slice", id: "tourSlice", label: "Slice exhibit", sources: padLeftShoulder }
               { command: "world.rates", id: "tourRates", label: "Update rates", text: "toggle", sources: padLeftStick }
-              { command: "gallery.lights.all", id: "tourLightsOff", label: "Lights off", text: "Off", sources: padNorth }
+              {
+                command: "gallery.lights.all"
+                id: "tourLightsOff"
+                label: "Lights off"
+                text: "Off"
+                sources: padNorth
+              }
               { command: "gallery.lights.all", id: "tourLightsOn", label: "Lights on", text: "On", sources: padWest }
               { command: "gallery.motion", id: "tourMotionOff", label: "Motion off", text: "0", sources: padSouth }
               { command: "gallery.motion", id: "tourMotionOn", label: "Motion on", text: "1", sources: padEast }
-              { command: "debug.go", id: "tourGarden", label: "Garden painting", text: "portal-garden", sources: padRightShoulder }
-              { command: "debug.go", id: "tourNight", label: "Night painting", text: "portal-night", sources: padRightStick }
+              {
+                command: "debug.go"
+                id: "tourGarden"
+                label: "Garden painting"
+                text: "portal-garden"
+                sources: padRightShoulder
+              }
+              {
+                command: "debug.go"
+                id: "tourNight"
+                label: "Night painting"
+                text: "portal-night"
+                sources: padRightStick
+              }
             ]
           }
         }

@@ -1,7 +1,7 @@
 namespace Puck.World.Transpiler.Vocabulary;
 
-// The `state { }` section's constructs: the five `state.world` row declarations, the embedding spaces, and the
-// `sql { }` dialect. The refusals each of these raises are named in src/Puck.World.Transpiler/README.md.
+// The `state { }` section's constructs: the five `state.world` row declarations and the embedding spaces. The
+// refusals each of these raises are named in src/Puck.World.Transpiler/README.md.
 public static partial class WorldConstructs {
     // Computed rather than stored: static field initializers of a partial class run in an unspecified file order,
     // and `Table`'s own initializer reads these.
@@ -397,16 +397,6 @@ public static partial class WorldConstructs {
             Snippet: "row {\n    $0\n}",
             Sugar: new(Fallback: "nothing — a `row { }` is what the four declarations fall back to", Open: true),
             Summary: "The explicit row form, carrying every field the four declarations cannot spell."
-        ),
-        new(
-            DocumentMember: "state",
-            Grammar: "sql { <the state SQL dialect> }",
-            Keyword: "sql",
-            RootArm: WorldRootArm.State,
-            Shape: WorldConstructShape.EmbeddedLanguage,
-            Snippet: "sql {\n    $0\n}",
-            Sugar: new(Fallback: "the native constructs the block expanded into", Open: true, Printed: false),
-            Summary: "A hermetic SQL spelling of rows and rules, parsed by its own dialect and lowered to the same document members the native constructs write."
         ),
     ];
 }

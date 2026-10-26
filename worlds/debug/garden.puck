@@ -251,7 +251,14 @@ render {
   farDistance: 120
   lighting {
     lights [
-      directional(name: "key", direction: [3, 5, -4], color: "#FFC27A", illuminance: 2000lx, shadow: always, angularRadius: 0.2)
+      directional(
+        name: "key",
+        direction: [3, 5, -4],
+        color: "#FFC27A",
+        illuminance: 2000lx,
+        shadow: always,
+        angularRadius: 0.2
+      )
     ]
   }
   sky {

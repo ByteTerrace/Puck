@@ -78,12 +78,11 @@ public static class DecompileCommand {
         IReadOnlyList<string> paths,
         string? output,
         bool overwrite,
-        bool sql = false,
         string? embeddings = null
     ) {
         if (paths.Count > 1) {
-            if (sql || (embeddings is not null)) {
-                Console.Error.WriteLine(value: "error: --sql and --embeddings decompile one document; name one path.");
+            if (embeddings is not null) {
+                Console.Error.WriteLine(value: "error: --embeddings decompiles one document; name one path.");
                 return 2;
             }
 
@@ -149,7 +148,7 @@ public static class DecompileCommand {
             // The document's own schema picks the vocabulary, the same way compiling does.
             puckSource = (((System.Text.Json.Nodes.JsonNode.Parse(json: json) is System.Text.Json.Nodes.JsonObject document) && DecompileCartridge.Handles(document: document))
                 ? DecompileCartridge.Run(document: document)
-                : WorldDecompiler.Decompile(embeddings: lockFile, jsonText: json, sql: sql)
+                : WorldDecompiler.Decompile(embeddings: lockFile, jsonText: json)
             );
             var printed = Puck.Transpiler.Formatting.PuckPrinter.Format(
                 source: puckSource,
@@ -226,7 +225,6 @@ public static class DecompileCommand {
             aliases: ["-o"]
         ) { Description = "Destination output .puck path (defaults to <path>.puck)." };
         var overwriteOption = new Option<bool>(name: "--overwrite") { Description = "Overwrite destination file if it already exists." };
-        var sqlOption = new Option<bool>(name: "--sql") { Description = "Project representable state tables, slots, and rules into an embedded SQL block." };
         var embeddingsOption = new Option<string?>(name: "--embeddings") { Description = "Optional companion embedding lock file (.embeddings.json) for resolving vector literals." };
 
         var command = new Command(
@@ -236,7 +234,6 @@ public static class DecompileCommand {
             pathArgument,
             outputOption,
             overwriteOption,
-            sqlOption,
             embeddingsOption,
         };
 
@@ -244,8 +241,7 @@ public static class DecompileCommand {
             embeddings: parseResult.GetValue(option: embeddingsOption),
             output: parseResult.GetValue(option: outputOption),
             overwrite: parseResult.GetValue(option: overwriteOption),
-            paths: parseResult.GetRequiredValue(argument: pathArgument),
-            sql: parseResult.GetValue(option: sqlOption)
+            paths: parseResult.GetRequiredValue(argument: pathArgument)
         ));
 
         return command;
