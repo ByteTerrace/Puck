@@ -438,8 +438,18 @@ public static class OperatorMcpServer {
                     },
                 },
                 Handlers = new() {
-                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [WorldsTool(), StartTool(), StopTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
+                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [new Tool { Name = "puck_adapter", Description = "Report the serving adapter build, process and executable directory.", Annotations = new() { DestructiveHint = false, IdempotentHint = true, OpenWorldHint = false, ReadOnlyHint = true }, InputSchema = JsonElement.Parse("""{"type":"object","properties":{},"additionalProperties":false}"""), OutputSchema = JsonElement.Parse("""{"type":"object","properties":{"processId":{"type":"integer"},"moduleId":{"type":"string"},"directory":{"type":"string"}},"required":["processId","moduleId","directory"],"additionalProperties":false}""") }, WorldsTool(), StartTool(), StopTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
                     CallToolHandler = async (context, token) => {
+                        if (context.Params?.Name == "puck_adapter") {
+                            if (context.Params.Arguments is { Count: > 0 }) { return Error("puck_adapter takes no arguments.", false); }
+                            var data = JsonElement.Parse(new JsonObject {
+                                ["processId"] = Environment.ProcessId,
+                                ["moduleId"] = typeof(OperatorMcpServer).Module.ModuleVersionId.ToString(),
+                                ["directory"] = AppContext.BaseDirectory.Replace(newChar: '/', oldChar: '\\'),
+                            }.ToJsonString());
+
+                            return new() { Content = [new TextContentBlock { Text = data.GetRawText() }], StructuredContent = data };
+                        }
                         if (context.Params?.Name == "puck_worlds") {
                             return ListWorlds(
                                 arguments: context.Params.Arguments,

@@ -94,6 +94,13 @@ Codex discovers these tools through the session's tool inventory (search for
 Use the tools directly before writing a stdin process wrapper. The headless
 start, named `puck_exec`, `world.wait`, headless capture refusal and stop were
 exercised from a Codex lane's actual MCP tools.
+The hook installs completed CLI builds through the launcher's signed local
+development channel under `.claude/mcp-install`. A persistent front follows
+activated builds without reconnecting the client; earlier backends retain
+their World processes and route their stops until the session ends. Rebuild
+`src/Puck.Cli` to publish adapter changes, then use `puck_adapter` to inspect
+the answering backend's module id and installed directory. No publisher key,
+Azure release or application-copy staging is involved.
 
 `puck_exec.command` also accepts a newline-separated script: at most 64
 nonblank, noncomment lines and 8192 characters total. The entire script reaches

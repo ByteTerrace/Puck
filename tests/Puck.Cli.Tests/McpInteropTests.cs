@@ -92,7 +92,7 @@ public sealed class McpInteropTests {
         var tools = await client.ListToolsAsync(cancellationToken: Token);
 
         Assert.Equal(
-            ["puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_world_start", "puck_world_stop", "puck_worlds"],
+            ["puck_adapter", "puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_world_start", "puck_world_stop", "puck_worlds"],
             tools.Select(selector: tool => tool.Name).Order()
         );
         Assert.All(
@@ -100,7 +100,7 @@ public sealed class McpInteropTests {
             tool => Assert.NotNull(value: tool.ProtocolTool.OutputSchema)
         );
         Assert.All(
-            tools.Where(predicate: tool => (tool.Name is not ("puck_worlds" or "puck_world_start" or "puck_world_stop"))),
+            tools.Where(predicate: tool => (tool.Name is not ("puck_adapter" or "puck_worlds" or "puck_world_start" or "puck_world_stop"))),
             tool => Assert.True(condition: tool.ProtocolTool.InputSchema.GetProperty(propertyName: "properties").TryGetProperty(propertyName: "world", value: out _))
         );
         var worlds = (await client.CallToolAsync(

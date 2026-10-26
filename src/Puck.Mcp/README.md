@@ -98,14 +98,26 @@ of `src/Puck.Cli`. A linked worktree with no build of its own uses its main
 checkout's build, and a checkout with no build at all builds `src/Puck.Cli`
 first (one build at a time per checkout), so the first start on a fresh clone
 takes as long as that build. It never runs the installed `puck`, which keeps
-the commit it was installed at. It copies the build to
-`.claude/mcp-cli/<build stamp>/` first, so a running adapter never locks the
-build output, and a rebuilt CLI reaches agents the next time the client
-restarts the server (`/mcp` in Claude Code). A copy is deleted only once no
-adapter runs from it. The configurations allow ten minutes for that first
+the commit it was installed at. It bootstraps the small application stub under
+`.claude/mcp-install`, then publishes the completed CLI build into a local
+`development` channel with that install's own development key. The normal
+attestation verifier, `UpdateService`, `IUpdateStager` and `IUpdateApplier`
+install and activate its complete file inventory. No publisher key or network
+release is involved. A successful CLI build writes `puck-build-ready` only
+after its output is complete; its timestamp names the development version.
+
+The stub launches a persistent stdio front. Before a call it follows the
+completed build through the same release chain and opens a backend through the
+stub when the activated version changes. The client keeps its connection and
+receives a tool-list notification. Earlier backends retain their own Worlds,
+process streams and leases; stops are routed to the backend that started the
+named World. Session shutdown drains every backend and stops those Worlds.
+No process from the build output is held open. `puck_adapter` reports the
+serving backend's module id, PID and installed directory so an agent can verify
+which build answered. The configurations allow ten minutes for that first
 start: `MCP_TIMEOUT` under `env` in `.claude/settings.json` and
-`startup_timeout_sec` in `.codex/config.toml`. Other clients launch the same
-adapter directly:
+`startup_timeout_sec` in `.codex/config.toml`. Other clients can launch that
+same hook. To run a single backend directly, without live replacement:
 
 ```text
 puck mcp --profile operator

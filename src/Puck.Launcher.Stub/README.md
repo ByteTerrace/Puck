@@ -24,6 +24,10 @@ executable path to stderr. Standard output remains the application's stream,
 including when that stream is an MCP protocol connection.
 Redirected input, output and error are forwarded as bytes; piped console scripts
 and stdio protocol clients reach the selected child on Windows too.
+For the operator MCP install, the selected application hosts a persistent
+stdio front and starts each activated backend through this same stub. The
+front retains earlier backends while they own Worlds, so application updates
+do not end the client's connection or those World processes.
 
 The stub holds the same persistent `update.lock` lease as `UpdateService`
 while reading pointers, deciding rollback and recording the launch attempt. It

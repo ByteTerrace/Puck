@@ -593,6 +593,10 @@ stderr records each actual launch's version, PID and path. This is local
 qualification with development keys; it neither publishes nor deploys a release.
 `puck world release prepare` describes a silo deployment group's inventory and
 engine-image contract; it does not apply to this desktop application install.
+The checkout MCP hook also installs complete signed local builds through that
+chain, under `.claude/mcp-install`. Its stable stdio front follows activated
+versions while retaining World-owning backends. This local development channel
+is independent of publisher signing and Azure releases.
 
 ## Azure production deployment
 

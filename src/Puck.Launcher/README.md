@@ -104,6 +104,10 @@ inside the attestation's bounded payload. Development releases use a separate
 local key and the same attestation verifier, stager and applier. They grant no
 publisher trust. `SelfUpdateConfigFile.Channel` can select a local development
 channel alongside its explicit source, trust anchor and install root.
+`LocalBuildReleaseSource` publishes completed local application builds through
+`DirectoryReleaseSource`'s content-addressed layout, signed by a development
+key outside the payload. The operator MCP launcher uses this source and the
+ordinary update chain; it has no separate application-copy staging path.
 
 The `self-update` canary installs the complete prepared debug application,
 including `puck world prepare`'s documents and assets. Its baseline and candidate
