@@ -168,6 +168,7 @@ public static class SdfIsaHlsl {
             name: "SDF_BOUND_DYNAMIC",
             value: SdfProgram.BoundModeDynamic
         );
+        declarations.Count(name: "SDF_BOUND_DYNAMIC_LOCAL", value: SdfProgram.BoundModeDynamicLocal);
         declarations.Bits(
             name: "SDF_SEGMENT_RIGID_PLAN",
             value: SdfProgram.SegmentRigidPlanFlag
@@ -258,6 +259,7 @@ public static class SdfIsaHlsl {
 
         return declarations;
     }
+
     // Every declaration the renderer's include makes, after it includes the field's.
     internal static string DeclareRender() {
         var declarations = new Declarations(builtOn: DeclareField(), guard: SdfRenderHlsl.Guard, include: FileName);
@@ -365,7 +367,6 @@ public static class SdfIsaHlsl {
 
         return declarations.Text();
     }
-
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
     // lower-case one, or that starts a new word after an upper-case letter or a digit (P4M stays P4M, LogSphere becomes
     // LOG_SPHERE, F2MinusF1 becomes F2_MINUS_F1).
@@ -397,9 +398,12 @@ public static class SdfIsaHlsl {
     // include it builds on declares.
     private sealed class Declarations {
         private readonly string m_guard;
+
         private readonly List<(string Name, string Value)> m_group = [];
         private readonly HashSet<string> m_names = new(comparer: StringComparer.Ordinal);
+
         private readonly HashSet<string> m_reserved;
+
         private readonly StringBuilder m_text = new();
 
         public Declarations(string guard, string? include = null, Declarations? builtOn = null) {

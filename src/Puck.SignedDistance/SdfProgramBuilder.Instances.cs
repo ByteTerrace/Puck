@@ -4,6 +4,7 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBakesSeparately;
+    private bool m_openInstanceBoundInSlotFrame;
 
     /// <summary>Reads a registered material while composing local material frames.</summary>
     public SdfMaterial MaterialAt(int index) => m_materials[index];
@@ -165,16 +166,14 @@ public sealed partial class SdfProgramBuilder {
     }
     /// <summary>Opens a dynamic per-object instance: like <see cref="BeginInstance"/>, but the bound center resolves
     /// on the GPU each frame as (dynamic-transform <paramref name="slot"/>'s position + <paramref name="boundOffset"/>)
-    /// — no quaternion rotate, the entity's orientation is folded into the host-baked <paramref name="boundRadius"/>
+    /// by default; <paramref name="boundInSlotFrame"/> rotates the offset with the slot. Otherwise orientation is folded into the host-baked <paramref name="boundRadius"/>
     /// (as the per-shape/segment bounds gate already does). Pairs with a <see cref="SdfOp.TransformDynamic"/> the
     /// instance's own instructions apply.</summary>
     /// <param name="slot">The dynamic-transform slot index (0-based) this instance's bound tracks.</param>
     /// <param name="boundOffset">The bound's pre-dynamic offset (added to the slot's per-frame position).</param>
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
-    /// <param name="active">Whether the instance contributes to the field. Pass <see langword="false"/> to park a
-    /// reserved-pool slot that carries no live content this rebuild (the classic "hidden below the floor" placeholder):
-    /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the walk skips it
-    /// with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs almost nothing.</param>
+    /// <param name="active">Whether the instance contributes to the field. An inactive entry remains addressable,
+    /// but contributes no field and bakes nothing (<see cref="SdfInstanceRange.Active"/>).</param>
     /// <param name="detail">The finest feature, in world units, the instance carries that its bound does not imply; zero
     /// for none, and a negative or non-finite value reads as zero (<see cref="SdfInstanceRange.Detail"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
@@ -182,7 +181,8 @@ public sealed partial class SdfProgramBuilder {
     /// non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
     /// <param name="separateBake">Keep this geometry's lattice separate from other instances on its motion slot.</param>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false) {
+    /// <param name="boundInSlotFrame">Rotate the bound offset with its slot, for geometry authored in that slot's frame.</param>
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -198,6 +198,7 @@ public sealed partial class SdfProgramBuilder {
         );
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
         m_openInstanceBakesSeparately = separateBake;
+        m_openInstanceBoundInSlotFrame = boundInSlotFrame;
 
         return this;
     }
@@ -277,10 +278,11 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame });
 
         m_openInstanceFirst = -1;
         m_openInstanceBakesSeparately = false;
+        m_openInstanceBoundInSlotFrame = false;
 
         return this;
     }

@@ -41,23 +41,24 @@ public sealed class PalettePaintEmissionLawTests {
     private static IReadOnlyList<SdfPaint> PaintsOf(SdfProgram program) =>
         program.Materials.Single(predicate: static material => (material.Paints is { Count: > 0 })).Paints!;
 
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void ACreationPaintRidesItsParentsMotionFrame(bool articulated) {
         var creation = Creation();
+
         if (articulated) {
             creation = CreationFixtures.Prototype(id: creation.Id, document: creation.Document with {
-                Drivers = [new CreationDriverDocument(Name: "clock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)]
+                Drivers = [new CreationDriverDocument(Name: "clock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)],
             });
         }
         var program = CreationDomainParentLawTests.EmitProgram(creation: creation, scale: Scale);
-        var material = program.Instructions.First(instruction => instruction.Op == SdfOp.ShapeBlend).Material;
-        var paints = program.Materials[(int)material].Paints!;
-        var localScale = articulated ? Scale : 1f;
+        var material = program.Instructions.First(instruction => (instruction.Op == SdfOp.ShapeBlend)).Material;
+        var paints = program.Materials[((int)material)].Paints!;
+        var localScale = (articulated ? Scale : 1f);
 
         Assert.Equal(expected: 2, actual: paints.Count);
-        Assert.Equal(expected: articulated ? CreationDomainParentLawTests.RootSlot : SdfPaint.WinningFrame, actual: paints[0].Slot);
+        Assert.Equal(expected: (articulated ? CreationDomainParentLawTests.RootSlot : SdfPaint.WinningFrame), actual: paints[0].Slot);
         // The parent's authored +X is -X in the engine's root frame.
         Assert.Equal(expected: new Vector3(x: (-0.1f * localScale), y: localScale, z: 0f), actual: paints[0].Origin);
         Assert.Equal(expected: (0.01f * localScale), actual: paints[0].Stroke);

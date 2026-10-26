@@ -11,11 +11,13 @@ public sealed class SdfMeshLibraryLawTests {
         var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
 
         for (var index = 0; (index < 2); index++) {
-            builder.BeginInstanceDynamic(3, new Vector3((index * 10), 0, 0), 1, detail: ((index == 0) ? 0.002f : 0), separateBake: true);
+            builder.BeginInstanceDynamic(3, new Vector3((index * 10), 0, 0), 1, detail: ((index == 0) ? 0.002f : 0), separateBake: true, boundInSlotFrame: true);
             builder.ResetPoint().TransformDynamic(3).Translate(new Vector3((index * 10), 0, 0)).Sphere(material: material, radius: 0.5f);
             builder.EndInstance();
         }
         var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 4).ToArray();
+
+        transforms[3] = new DynamicTransform(Vector3.Zero, Quaternion.CreateFromAxisAngle(Vector3.UnitY, (MathF.PI / 2)));
         var program = builder.Build();
         var groups = SdfMeshBakeGroup.Plan(program, transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic));
 
@@ -25,6 +27,8 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.Equal(0.002f, groups[0].Detail);
         Assert.Equal(0, groups[1].Detail);
         Assert.True((groups[0].High.X < groups[1].Low.X));
+        Assert.Equal(new Vector3(9, -1, -1), groups[1].Low);
+        Assert.Equal(new Vector3(11, 1, 1), groups[1].High);
         var bake = new SdfMeshPathBake();
 
         bake.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });

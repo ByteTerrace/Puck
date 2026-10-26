@@ -58,6 +58,8 @@ public sealed partial class SdfProgram {
     /// <summary>The bound mode of a record whose bound center moves with a dynamic transform slot
     /// (<c>SDF_BOUND_DYNAMIC</c>).</summary>
     public const uint BoundModeDynamic = 2;
+    /// <summary>A bound whose local offset rotates with its dynamic slot (<c>SDF_BOUND_DYNAMIC_LOCAL</c>).</summary>
+    public const uint BoundModeDynamicLocal = 3;
     /// <summary>The bound mode of a record whose bound center is fixed (<c>SDF_BOUND_STATIC</c>).</summary>
     public const uint BoundModeStatic = 1;
     /// <summary>The material float4 stride, written by PackMaterials and read by the kernels' <c>sdfMaterialLoad</c>

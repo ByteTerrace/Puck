@@ -118,7 +118,7 @@ public sealed partial class WorldCreationInstances {
 
         if (ownInstance) {
             _ = builder.BeginInstanceDynamic(
-                    separateBake: true,
+                    separateBake: true, boundInSlotFrame: true,
             slot: boundSlot,
             boundOffset: boundOffset,
             boundRadius: boundRadius,
@@ -299,7 +299,7 @@ public sealed partial class WorldCreationInstances {
             if (round == 1) {
                 if (!coupled) { break; }
                 _ = builder.BeginInstanceDynamic(
-                    separateBake: true,
+                    separateBake: true, boundInSlotFrame: true,
                     slot: rootSlot,
                     boundOffset: Vector3.Zero,
                     boundRadius: ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin),
@@ -402,7 +402,7 @@ public sealed partial class WorldCreationInstances {
 
                 if (ownInstance) {
                     _ = builder.BeginInstanceDynamic(
-                    separateBake: true,
+                    separateBake: true, boundInSlotFrame: true,
                     slot: slot,
                     boundOffset: (hasDomain ? Vector3.Zero : (placed!.Position.Value * placementScale)),
                     boundRadius: boundRadius,
@@ -522,7 +522,7 @@ public sealed partial class WorldCreationInstances {
 
             if (textApart) {
                 _ = builder.BeginInstanceDynamic(
-                    separateBake: true,
+                    separateBake: true, boundInSlotFrame: true,
                     slot: textSlot,
                     boundOffset: Vector3.Zero,
                     boundRadius: (CreationStampEmitter.TextReach(document: document!, fontFor: textCatalog!.Resolve, scale: placementScale, textLayouts: textLayouts) + GroupBoundMargin),

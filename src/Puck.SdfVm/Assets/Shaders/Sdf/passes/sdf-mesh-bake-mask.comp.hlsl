@@ -30,7 +30,7 @@ void CSMain(uint threadIndex : SV_GroupIndex, uint3 group : SV_GroupID) {
                 float4 bound = asfloat(sdfProgramWord(entryBase));
                 uint4 meta = sdfProgramWord(entryBase + 1u);
                 bool chosen = ((selector >= 0)
-                    ? ((meta.x == SDF_BOUND_DYNAMIC) && (meta.y == (uint)selector) && (bound.w >= 0.0))
+                    ? ((meta.x == SDF_BOUND_DYNAMIC || meta.x == SDF_BOUND_DYNAMIC_LOCAL) && (meta.y == (uint)selector) && (bound.w >= 0.0))
                     : ((index - (uint)(-(selector + 1))) < run));
 
                 bits |= (chosen ? (1u << (index & 31u)) : 0u);

@@ -39,7 +39,10 @@ public sealed partial class SdfProgram {
                 var slot = ((int)m_instructions[instruction].Data0.X);
                 var bounded = (finiteOwner && (m_instances[owner].Slot == slot));
 
-                Add(slot, (bounded ? m_instances[owner].Center : Vector3.Zero), (bounded ? radius : float.PositiveInfinity));
+                var localBound = (bounded && m_instances[owner].BoundInSlotFrame);
+
+                Add(slot, ((bounded && !localBound) ? m_instances[owner].Center : Vector3.Zero),
+                    (bounded ? (radius + (localBound ? m_instances[owner].Center.Length() : 0)) : float.PositiveInfinity));
             }
         }
         return bounds;

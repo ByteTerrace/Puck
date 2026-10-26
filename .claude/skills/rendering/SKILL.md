@@ -24,7 +24,9 @@ supplies `SdfMeshInstance` roots and identities. `SdfMeshPathBake.Dress` expands
 the shared mesh into copies without program or palette duplication. Animated
 creation fields use root and motion-owner deltas; CPU pose scratch remains per
 actual shape. Bake groups keep separate bounds and detail even when they share
-a motion slot; the lattice frame and instance selector are independent. A skin
+a motion slot; the lattice frame and instance selector are independent. Use
+`boundInSlotFrame` for rest-pose offsets on a moving owner's slot; a world-axis
+offset would move the bake's box away from the geometry when that owner starts turned. A skin
 past 255 members throws before queuing, instead of attaching excess members
 to the root. Volume overflow is explicit. Scope depth is 4, screen bindings 32,
 and derived faces follow authored screen indices. `SDF_MAX_INSTANCES` bounds

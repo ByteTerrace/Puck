@@ -59,10 +59,12 @@ public sealed partial class SdfProgram {
     /// keeps sagging below the accumulator until the candidate is 1.70711 radii away, unlike every other soft blend,
     /// which saturates at one radius.</summary>
     private const float ChamferUnionHaloScale = 1.7071068f;
+
     /// <summary>The square root of one half: the scale on every chamfer arm's bevel plane, and so the divisor in that arm's
     /// Lipschitz recurrence. <c>SdfIsaHlsl</c> writes it into the kernels as <c>SDF_SQRT_HALF</c>, and the query
     /// evaluator derives its fixed-point copy from it.</summary>
     public const float SqrtHalf = 0.70710678f;
+
     /// <summary>The PARKED-instance sentinel radius (KEEP IN SYNC with the negative-radius skip in field/sdf-layout.hlsli's
     /// <c>sdfNextVisibleInstanceRange</c>). An <see cref="SdfInstanceRange.Active"/> = <see langword="false"/> instance
     /// packs this instead of a real (always non-negative) radius, so the walk skips its segments with one
@@ -911,6 +913,7 @@ public sealed partial class SdfProgram {
         }
         return domainProduct;
     }
+
     /// <summary>Returns whether an instance's instruction slice has an influence no finite sphere can mask. Three
     /// families qualify.
     /// <para>The plane. Its zero set and negative half-space are unbounded, irrespective of its blend or field scope.
@@ -1360,7 +1363,7 @@ public sealed partial class SdfProgram {
             );
 
             m_words[(entryBase + WordsPerVector)] = (instance.IsDynamic
-                ? BoundModeDynamic
+                ? (instance.BoundInSlotFrame ? BoundModeDynamicLocal : BoundModeDynamic)
                 : BoundModeStatic
             );
             m_words[((entryBase + WordsPerVector) + 1)] = ((uint)instance.Slot);

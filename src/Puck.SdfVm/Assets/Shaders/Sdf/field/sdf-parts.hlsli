@@ -24,9 +24,13 @@ float sdfInstanceGap(uint instanceOffset, uint instance, float3 worldPosition) {
     uint4 meta = sdfProgramWord(entry + 1u);
     float4 bound = asfloat(sdfProgramWord(entry));
     if (!(bound.w >= 0.0) || !all(isfinite(bound))) { return -SDF_FAR_DISTANCE; }
-    if (meta.x == SDF_BOUND_DYNAMIC) {
+    if (meta.x == SDF_BOUND_DYNAMIC || meta.x == SDF_BOUND_DYNAMIC_LOCAL) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        bound.xyz = sdfDynamicBoundCenter(bound.xyz, meta.y);
+        if (meta.x == SDF_BOUND_DYNAMIC_LOCAL) {
+            bound.xyz = rotatePointByQuaternion(bound.xyz, sdfDynamicTransformRow(3u * meta.y + 1u)) + sdfDynamicTransformRow(3u * meta.y).xyz;
+        } else {
+            bound.xyz = sdfDynamicBoundCenter(bound.xyz, meta.y);
+        }
 #else
         return -SDF_FAR_DISTANCE;
 #endif

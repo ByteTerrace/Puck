@@ -144,11 +144,12 @@
 #define SDF_WORLD_SEGMENT_COUNT(v)       ((v).x)
 
 // Bound modes, and the flags and masks packed beside them in bound and segment records.
-#define SDF_BOUND_NONE         0u
-#define SDF_BOUND_STATIC       1u
-#define SDF_BOUND_DYNAMIC      2u
-#define SDF_SEGMENT_RIGID_PLAN 0x80000000u
-#define SDF_SEGMENT_BOUND_MASK 0x000000FFu
+#define SDF_BOUND_NONE          0u
+#define SDF_BOUND_STATIC        1u
+#define SDF_BOUND_DYNAMIC       2u
+#define SDF_BOUND_DYNAMIC_LOCAL 3u
+#define SDF_SEGMENT_RIGID_PLAN  0x80000000u
+#define SDF_SEGMENT_BOUND_MASK  0x000000FFu
 
 // The rigid-leaf plan.
 #define SDF_RIGID_LEAF_IDENTITY_ROTATION 0x80000000u
