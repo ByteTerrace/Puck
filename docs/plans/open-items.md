@@ -410,7 +410,11 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] Entities as records in pools; seats as entities.
   - [ ] Edges as values, versioned facets, explicit order, key reclamation, facets, one work allowance.
 - [ ] S9 the authoring consensus ([S9](state-and-language.md#s9--the-authoring-consensus)), four waves:
-  - [ ] Wave 1: compound assignment, one expression language and the locals' order, one bracket rule; `sql { }` deleted, a wrapping printer, saving through the source tree.
+  - [ ] Wave 1:
+    - [ ] Compound assignment, one expression language and the locals' order, one bracket rule.
+    - [x] `sql { }` deleted: the dialect, its lowering, decompiler, LSP, PUCK070–076, sample and suites are gone, and a `sql` block now reads as any unknown section does: validation refuses it as an unknown top-level member (PUCK030), and SQL text inside it is a syntax error (PUCK001).
+    - [x] A wrapping printer: `puck format`, the language server and the decompiler break calls, lists, operator chains and rule operands past 120 columns, formatting stays a fixed point, and every shipped source was reformatted with its compiled documents unchanged.
+    - [x] Saving through the source tree: `world.save <path>.puck` routes each live edit into the source that authors it (a module's row, a `let` literal, an appended or removed keyed row), refuses a row a `for` or template generates, and proves the rewritten tree composes to the live document; simulation state and placement `holding` stay as authored. The decompiler prints back authored rows only (decision P1), so the composition decompile and the generated-row read-back are deleted.
   - [ ] Wave 2: every condition as an expression, no JSON showing through, `function`.
   - [ ] Wave 3: names for bodies and identities, one composition construct, typed test steps with `eventually`.
   - [ ] Wave 4: complete state sugar, one rule grammar for cartridges, one authorization declaration, creation axes and rotations.
