@@ -325,6 +325,19 @@ and none is run until the owner calls for qualification.
 ## Cross-plan maintenance
 
 - [ ] A connected Claude Code session keeps a tool's old output schema when the MCP front switches to a backend whose schemas changed: the first `puck_adapter` call after the MCP quieting activated failed with "Structured content does not match the tool's output schema" until `/mcp` reconnected. The front's tool-list notification does not refresh it. Make a schema change survive the switch (keep output schemas additive across a live switch, or have the front answer with the schemas the client was given until it reconnects).
+- [ ] Review findings left after the pre-`main` reviews, each read from the code and not yet reproduced; confirm with a failing test before fixing:
+  - `replay.record` mid-session re-grants document grants revoked at runtime (`Host.Addons.Finish` after the checkpoint captures grants), and refuses `StartNotCheckpointable` after every pumped addon was removed (`WorldPersistence.Checkpoint`).
+  - `WorldDocumentPaths.RelocateBetween` writes rooted paths into relative-only fields when the test directory and worktree sit on different Windows drives, failing `puck test` there.
+  - `WorldServer.WriteStateCell` throws on a stale `CellKey` instead of returning `StaleAddress`.
+  - `ResolveDevelopmentRequest` and `ResolveBodyPoseRequest` drop a query's reply when host fuel is exhausted, breaking one reply per query.
+  - `WorldStateDocumentValues` formats Bool as `1`/`0` in one path and `true`/`false` in another; `ValidateStateTransaction` validates the unmaterialized definition.
+  - `RuleExpressions.Run` swallows an absent value inside `not`, `and` and `or`.
+  - `StateSeedReader` builds a state section without lattices, spaces, enums or pools.
+  - `ArenaSnapshot` and `ArenaUndo` index rows by non-document lane ordinals, and keep change-window state across `TryRelayout`.
+  - `QueuedMachineWorker` frame-tracking locals are not reset on checkpoint restore or rewind; `HgdMachine.Reset` keeps a latched bus write.
+  - `RuleCompiler` checks control audience twice and validates a transaction's failure branch before its primary branch's reads.
+  - Language: a string literal on the left of a relational gate is not flipped (`WorldDocumentEmitter.Rules`); a header `when` gate makes a body's `local` report PUCK012; `not` loses its source span and recursion depth (`PuckParser.Expressions`); unary `-` or `~` before `not` parses at the wrong precedence and fails the format round trip; `PuckPrinter` drops `!= 0` from a grouped comparison gate.
+  - `ValidateBodyScale` and `ValidateRowSelector` throw on a null `bodyState` entry.
 - [ ] `puck test worlds/debug --reproduce --jobs 1` holds about 3.6 GB in its coordinating process while two headless Worlds run beside it near 1 GB each. Find what the coordinator retains (per-world exports kept for the comparison, or logs) and stream it instead.
 - [ ] Stop committing the built addon guests. The eleven `wasm/*/dist/*.wasm` modules are compiled from the Rust crates beside them, and the owner's ruling makes a derived product a cache that is derived on a miss and never committed ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)). [wasm/README.md](../../wasm/README.md) records them as committed, with provenance no gate enforces. Deriving them on a miss puts the Rust `wasm32` toolchain on every machine and CI job that loads an addon, so measure that cost against edit-to-running before choosing how. A hand-written fixture module (such as the transpiler sample's 8-byte `Samples/addons/rules.wasm`) is source, not a derived product.
 
