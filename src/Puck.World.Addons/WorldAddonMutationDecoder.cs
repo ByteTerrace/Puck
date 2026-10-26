@@ -792,15 +792,20 @@ public static class WorldAddonMutationDecoder {
                 name: "role"
             );
 
+            // The member's own name alone: TryParse also takes a number or a comma-joined list of names.
             if (
-                !Enum.TryParse<WorldHudCursorRole>(
+                !Enum.TryParse<WorldThemeRole>(
                 ignoreCase: false,
                 result: out var role,
                 value: roleToken
             ) ||
-                !Enum.IsDefined(value: role)
+                !string.Equals(
+                a: role.ToString(),
+                b: roleToken,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
-                throw new AddonMutationDecodeException(message: $"SetHudDefaults: cursor.role '{roleToken}' is not a cursor role token");
+                throw new AddonMutationDecodeException(message: $"SetHudDefaults: cursor.role '{roleToken}' is not a core theme role");
             }
 
             cursor = new WorldHudCursor(

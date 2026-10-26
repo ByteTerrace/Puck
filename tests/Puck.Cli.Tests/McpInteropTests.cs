@@ -92,7 +92,7 @@ public sealed class McpInteropTests {
         var tools = await client.ListToolsAsync(cancellationToken: Token);
 
         Assert.Equal(
-            ["puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_world_start", "puck_world_stop", "puck_worlds"],
+            ["puck_adapter", "puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_world_start", "puck_world_start_wait", "puck_world_stop", "puck_worlds"],
             tools.Select(selector: tool => tool.Name).Order()
         );
         Assert.All(
@@ -100,7 +100,7 @@ public sealed class McpInteropTests {
             tool => Assert.NotNull(value: tool.ProtocolTool.OutputSchema)
         );
         Assert.All(
-            tools.Where(predicate: tool => (tool.Name is not ("puck_worlds" or "puck_world_start" or "puck_world_stop"))),
+            tools.Where(predicate: tool => (tool.Name is not ("puck_adapter" or "puck_worlds" or "puck_world_start" or "puck_world_start_wait" or "puck_world_stop"))),
             tool => Assert.True(condition: tool.ProtocolTool.InputSchema.GetProperty(propertyName: "properties").TryGetProperty(propertyName: "world", value: out _))
         );
         var worlds = (await client.CallToolAsync(
@@ -507,7 +507,14 @@ public sealed class McpInteropTests {
                 Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refusal.GetProperty(propertyName: "processId").ValueKind);
             }
 
-            var start = await CallAsync(tool: "puck_world_start", arguments: new() { ["timeoutSeconds"] = 300 });
+            var start = await CallAsync(arguments: [], tool: "puck_world_start");
+
+            while (start.GetProperty(propertyName: "status").GetString() == "pending") {
+                start = await CallAsync("puck_world_start_wait", new() {
+                    ["startId"] = start.GetProperty(propertyName: "startId").GetString(),
+                    ["timeoutMs"] = 20000,
+                });
+            }
 
             Assert.True(condition: (start.GetProperty(propertyName: "status").GetString() == "started"), userMessage: start.ToString());
             startedProcess = start.GetProperty(propertyName: "processId").GetInt32();
@@ -660,7 +667,11 @@ public sealed class McpInteropTests {
                 // The revision is pinned, so the initialize fallback that the discover probe's timeout exists for
                 // is refused anyway; the probe would only misreport a slow adapter startup as a handshake-only
                 // server. InitializationTimeout still bounds the connect.
-                new() { DiscoverProbeTimeout = Timeout.InfiniteTimeSpan, ProtocolVersion = revision },
+                new() {
+                    DiscoverProbeTimeout = Timeout.InfiniteTimeSpan,
+                    ProtocolVersion = revision,
+                    InitializationTimeout = (hook ? TimeSpan.FromMinutes(minutes: 10) : TimeSpan.FromSeconds(seconds: 60)),
+                },
                 cancellationToken: Token
             );
 

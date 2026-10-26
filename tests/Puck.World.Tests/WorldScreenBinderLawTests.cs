@@ -153,6 +153,10 @@ public sealed class WorldScreenBinderLawTests {
         Assert.True(condition: scene.Binder.State(index: BinderScene.Cabinet)?.Assigned);
         Assert.True(condition: scene.Binder.TryExtent(height: out var height, screen: BinderScene.Cabinet, width: out var width));
         Assert.Equal(actual: (width, height), expected: (1, 1));
+        // The cabinet's row opts into the CRT; every other display, and a screen with no row, is plain.
+        Assert.Equal(actual: scene.Binder.FaceOf(screen: BinderScene.Cabinet), expected: SdfScreenFace.Crt);
+        Assert.Equal(actual: scene.Binder.FaceOf(screen: BinderScene.Pattern), expected: SdfScreenFace.Display);
+        Assert.Equal(actual: scene.Binder.FaceOf(screen: 31), expected: SdfScreenFace.Display);
     }
     [Fact]
     public void AScreenVerbRebindsAScreenLiveAndTheRowSourceComesBack() {
@@ -239,6 +243,7 @@ public sealed class WorldScreenBinderLawTests {
 
                 Assert.True(condition: producer.TryOpen(source: Assert.IsType<WorldScreenSource.Producer>(@object: capture), feed: out var feed, fault: out _));
                 using var opened = Assert.IsAssignableFrom<IWorldImportFeed>(@object: feed);
+
                 Assert.True(condition: new WorldCaptureGate(alwaysFills: false, captureArmed: static () => false).FillsFeed(feed: opened));
             }
         }
@@ -443,7 +448,7 @@ public sealed class WorldScreenBinderLawTests {
         var probe = new WorldScreenSource.Probe(Id: "probe");
         var rich = new WorldFeedProfile(Height: 480, RefreshRateHz: 60U, Width: 640);
 
-        foreach (var source in (WorldFrameSource[])[camera, capture, probe]) {
+        foreach (var source in ((WorldFrameSource[])[camera, capture, probe])) {
             binder.DeclareFrameSource(seat: 1, source: source);
             binder.RetainFrameSource(seat: 1, source: source);
             binder.ReleaseFrameSource(seat: 1, source: source);
@@ -611,7 +616,9 @@ public sealed class WorldScreenBinderLawTests {
     // A screen source set that implements only what the interface requires.
     private sealed class QuietSources : ISdfScreenSources {
         public IReadOnlyList<int> Screens => [];
+
         public bool Emits(int screen) => false;
+        public SdfScreenFace FaceOf(int screen) => SdfScreenFace.Display;
         public Puck.Commands.SourceMapping? MappingOf(int screen) => null;
         public string? ReadOf(int view, int screen) => null;
     }
@@ -627,25 +634,24 @@ public sealed class WorldScreenBinderLawTests {
         IReadOnlyList<WorldCamera>? Cameras = null,
         IReadOnlyList<IWorldImageProducer>? Producers = null
     );
-
     // A boot world whose screens observe the destination 'garden' through sessions, plain, through its camera, through a
     // camera it lacks, and the destination 'closed', which admits nobody; the garden's own screens show the destination
     // 'cellar', which has none, and the garden's camera. The binder is over that world's screens and five more: a view of
     // a declared camera, a view of an undeclared one, text, a probe's output and nothing.
     internal sealed class BinderScene : IDisposable {
-        public const int Pattern = 0;
-        public const int Session = 1;
-        public const int View = 2;
-        public const int MissingCamera = 3;
-        public const int Text = 4;
-        public const int Probe = 5;
-        public const int None = 6;
-        public const int CameraSession = 7;
-        public const int GhostSession = 8;
-        public const int ClosedSession = 9;
         public const int Cabinet = 10;
-        public const int GardenSession = 1;
+        public const int CameraSession = 7;
+        public const int ClosedSession = 9;
         public const int GardenCamera = 2;
+        public const int GardenSession = 1;
+        public const int GhostSession = 8;
+        public const int MissingCamera = 3;
+        public const int None = 6;
+        public const int Pattern = 0;
+        public const int Probe = 5;
+        public const int Session = 1;
+        public const int Text = 4;
+        public const int View = 2;
 
         public static readonly ulong Step = FixedTickConversion.PerRate(ratePerSecond: 30u);
         public static readonly WorldCamera DeclaredCamera = new(
@@ -705,7 +711,7 @@ public sealed class WorldScreenBinderLawTests {
             if (options.Cabinet) {
                 boot = (boot with {
                     MachinesRaw = [new WorldMachine("cabinet", CabinetEngine.EngineId, CabinetEngine.Configuration())],
-                    ScreensRaw = [.. boot.Screens, (Template with { Index = Cabinet, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") })],
+                    ScreensRaw = [.. boot.Screens, (Template with { Index = Cabinet, Material = WorldScreenMaterial.Crt, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") })],
                 });
             }
             var bootPath = m_files.PathOf(name: "boot.world.json");
@@ -716,7 +722,7 @@ public sealed class WorldScreenBinderLawTests {
             );
             boot = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: bootPath));
 
-            var cabinet = (Template with { Index = Cabinet, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") });
+            var cabinet = (Template with { Index = Cabinet, Material = WorldScreenMaterial.Crt, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") });
 
             Machines = new WorldMachineHost(
                 engines: (options.Cabinet ? [new CabinetEngine()] : []),
@@ -879,6 +885,7 @@ public sealed class WorldScreenBinderLawTests {
             path: m_files.PathOf(name: WorldDocumentName.DocumentFile(name: name))
         );
     }
+
     // An image producer a host registers beside the engine's, under a shape of its own.
     private sealed class HostProducer : IWorldImageProducer {
         private const string HostId = "binderHost";

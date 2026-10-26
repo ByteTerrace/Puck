@@ -98,14 +98,28 @@ of `src/Puck.Cli`. A linked worktree with no build of its own uses its main
 checkout's build, and a checkout with no build at all builds `src/Puck.Cli`
 first (one build at a time per checkout), so the first start on a fresh clone
 takes as long as that build. It never runs the installed `puck`, which keeps
-the commit it was installed at. It copies the build to
-`.claude/mcp-cli/<build stamp>/` first, so a running adapter never locks the
-build output, and a rebuilt CLI reaches agents the next time the client
-restarts the server (`/mcp` in Claude Code). A copy is deleted only once no
-adapter runs from it. The configurations allow ten minutes for that first
+the commit it was installed at. It bootstraps the small application stub under
+`.claude/mcp-install`, then publishes the completed CLI build into a local
+`development` channel with that install's own development key. The normal
+attestation verifier, `UpdateService`, `IUpdateStager` and `IUpdateApplier`
+install and activate its complete file inventory. No publisher key or network
+release is involved. A successful CLI build writes `puck-build-ready` only
+after its output is complete; its timestamp names the development version.
+
+The stub launches a persistent stdio front. Before a call it follows the
+completed build through the same release chain and opens a backend through the
+stub when the activated version changes. The client keeps its connection and
+receives a tool-list notification. Earlier backends retain their own Worlds,
+process streams and leases; stops are routed to the backend that started the
+named World. Session shutdown drains every backend and stops those Worlds.
+No process from the build output is held open. `puck_adapter` reports the
+serving backend's module id, PID and installed directory so an agent can verify
+which build answered. Use a `world` selector to preserve the target across
+activated versions; each backend has its own current attachment.
+The configurations allow ten minutes for that first
 start: `MCP_TIMEOUT` under `env` in `.claude/settings.json` and
-`startup_timeout_sec` in `.codex/config.toml`. Other clients launch the same
-adapter directly:
+`startup_timeout_sec` in `.codex/config.toml`. Other clients can launch that
+same hook. To run a single backend directly, without live replacement:
 
 ```text
 puck mcp --profile operator
@@ -161,7 +175,8 @@ own:
 An agent that needs a World of its own starts it through the adapter rather
 than writing a boot line:
 
-- `puck_world_start` boots a world `document` (default `worlds/debug`) from the
+- `puck_world_start` admits a start and promptly returns `status: pending`
+  with a `startId`. It boots a world `document` (default `worlds/debug`) from the
   Release build of a `checkout`'s current `src/Puck.World` sources, headless
   unless `windowed`. The build comes from the CLI's World build store, one
   build per source state: an unchanged checkout builds nothing, a changed one
@@ -182,22 +197,29 @@ than writing a boot line:
   directory of its own under `puck-mcp-worlds/` in the temporary directory; and
   `--control`. A windowed start first takes the machine's GPU lease (the one
   `puck lease gpu` takes, recorded under `holder`) and holds it until the World
-  exits. The call returns once the World accepts an attachment, with its
-  identity as `puck_worlds` lists it, the build that runs, and the files its
-  stdout and stderr are copied to; `timeoutSeconds` (1–540, default 300)
-  bounds the lease wait and the boot, and a World that has not attached by
-  then is stopped. It runs from the checkout's build output, so stop it before
-  rebuilding that checkout.
+  exits. `timeoutSeconds` (1–1800, default 900) bounds the whole job, including
+  build, lease wait and boot. The job continues between calls and across
+  activated adapter versions; a client's short call deadline does not bound
+  a cold build. It runs from the build store, leaving the checkout free to rebuild.
   Worktree discovery runs Git with its own closed stdin, because Git for Windows
   probes inherited input during startup and can block behind the adapter's MCP
   read. A discovery refusal distinguishes a 30-second timeout, a failure to start
   Git, and Git's own exit code and stderr.
+- `puck_world_start_wait` takes that `startId` and waits at most `timeoutMs`
+  (1–20000, default 1000). Repeat this wait while `status` is `pending`;
+  repeating the start would admit another World. `started` returns the World
+  identity, build and stdout/stderr paths. `refused` returns the failure or
+  deadline reason. Poll cancellation ends only the poll; `cancel: true`
+  explicitly cancels an unfinished job and stops a World it already launched.
+  A completed result is repeatable. The session retains up to 64 start records,
+  evicting completed records when admitting more; inspect `puck_worlds` if an
+  older id has expired. Stop a completed start with `puck_world_stop`.
 - `puck_world_stop` ends a World this adapter started, by its recorded
   process: it sends `quit`, kills the process tree if the World has not exited
   within `timeoutMs`, releases its lease, deletes its state directory and
   reports the exit code. A World the adapter did not start is refused by name
   and left running.
-- When the adapter exits it stops every World it started, so none outlives it
+- When the session exits it cancels pending starts and stops every World it started, so none outlives it
   holding the GPU.
 
 Every World keeps its newest lines of stdout and stderr in a bounded ring
@@ -362,8 +384,10 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 
 | Tool | Arguments | Result |
 |---|---|---|
+| `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId` and installed `directory`. |
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, `current` and `started`. |
-| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–540, default 300). Local stdio only. | Structured `status` (`started` or `refused`), `output`, `isError`, `world` (as `puck_worlds` lists it), `processId`, `checkout`, `build`, `stateDirectory`, `stdoutLog`, `stderrLog`. |
+| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–1800, default 900). Local stdio only. | `status: pending` and `startId`, or a validation refusal. Poll the id instead of repeating the start. |
+| `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–20000, default 1000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId`, `output`, `isError`, and, once started, `world`, `processId`, `checkout`, `build`, `stateDirectory`, `stdoutLog`, `stderrLog`. Completed results repeat. |
 | `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode`, `killed` and `leaseReleased`. |
 | `puck_exec` | Required `command`: a console line or newline-separated script, at most 8192 characters total and 64 nonblank, noncomment lines. Optional integer `timeoutMs`: 1–120000 for the whole script, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`, `world`, `data` and `commands`. Empty output is `submitted`, not authoritative application. |
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. Optional `mode`: `settled` (default) or `presented`. Optional `tick` (settled): the simulation tick the still shows. Optional `frames` (presented, 1–120, default 1) and `region` (presented: `{x, y, width, height}` in fractions of the frame, origin top-left). No path. | Settled: completed PNG image content, up to 16 MiB, plus completion metadata; the capture holds presentation from the frame it is armed in until it is served, temporal views converge over the held frame, and the PNG is a render of it. The World steps no tick past the one the still is armed at until it is served, and `output` names that tick and its state hashes (`Settled still held at tick=<T> hash=<world.state.hash at T> pose=<pose hash>; the frame shows tick <T>.`). With `tick`, the call holds its session (`world.wait until <tick>`) and arms the still right after that tick completes, so the still is exactly that tick; a tick the World has already completed is refused. Without it, the still is of whichever tick was last completed when the call reached the World. Presented: nothing is held or settled; each frame is read back as the display presented it. One frame returns its PNG inline with a one-frame report in `output`; a burst writes its PNGs to a private temporary directory on the World's machine, kept for the caller, and returns no image: `output` is the report, a line per frame (path, presentation index, the presentation its image was rendered on, tick, and changed pixels and mean and largest absolute Rec. 709 luma change against the frame before, over the region or whole frame) and a summary line. Both include the composed view and overlays and require an initialized renderer. |

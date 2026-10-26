@@ -4,6 +4,18 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
+/// <summary>What a screen's face is, which decides how the screen shading draws its picture. Each value IS the one the
+/// screen's mapping record carries to the kernels (<c>ScreenMappingData.state.w</c>, <c>shade/sdf-environment.hlsli</c>).</summary>
+public enum SdfScreenFace : byte {
+    /// <summary>An opening onto another place (a window): its picture is the world beyond it, shown at that world's own
+    /// luminance with no display treatment.</summary>
+    Opening = 0,
+    /// <summary>A display: its picture as its source made it, filling the face, at the display's luminance.</summary>
+    Display = 1,
+    /// <summary>A cathode-ray tube's display: its picture inset in the tube's bezel and drawn through its glass
+    /// (scanlines, an aperture grille, a bright-pixel bloom), which a framed view's screen fidelity fades out.</summary>
+    Crt = 2,
+}
 /// <summary>
 /// What each diegetic screen an <see cref="SdfWorldResidency"/> renders shows: the render-graph instance whose image it
 /// samples in each view, a source's or a view's, the mapping its face is drawn from, and the light it casts into the
@@ -29,6 +41,10 @@ public interface ISdfScreenSources {
     /// <returns>The peak luminance, in nits; <see cref="SdfScreenEmission.DefaultLuminance"/> unless the screen's row
     /// authors one.</returns>
     float LuminanceOf(int screen) => SdfScreenEmission.DefaultLuminance;
+    /// <summary>Returns what a screen's face is: an opening, a display, or a CRT display.</summary>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <returns>The screen's face.</returns>
+    SdfScreenFace FaceOf(int screen);
     /// <summary>Returns the mapping a screen publishes, which the screen shading draws its face from.</summary>
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>The screen's surface mapping, or <see langword="null"/> when it publishes none: it then shades as unbound

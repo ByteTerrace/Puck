@@ -286,9 +286,9 @@ the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
 `WorldFramePresenter.Dress` hands the row to the seat's `WorldScreenFraming`
 (`src/Puck.World.Client`), refitted from the window's size every frame:
 
-- **The picture, not the slab.** `PictureHalfExtents` is the glass inside its
-  bezel band (`WorldScreenMappings.Glass`); a window-projection session screen
-  has no bezel and uses the whole face. A 4:3 glass showing 256×240 carries the
+- **The picture, not the slab.** `PictureHalfExtents` is the whole face, or for a
+  screen whose `material` is `Crt` the glass inside its bezel band
+  (`WorldScreenMappings.WarpOf`, `CrtGlass`). A 4:3 glass showing 256×240 carries the
   console's 8:7 pixels by its own shape: there is no pixel-aspect field and no
   crop.
 - **The matte.** `Matte` is the rect of the seat's view the picture fills: each
@@ -318,7 +318,7 @@ the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
   (`RenderGraphExtent`), while a whole display or a half is exact.
 - **Fidelity.** The ease's weight is the view's screen fidelity
   (`SdfViewSnapshot.ScreenFidelity`, the `screenFidelity` pass-block value, and
-  the `place` pass's `fidelity`). At 1 the glass's grille, scanlines, bloom,
+  the `place` pass's `fidelity`). At 1 a CRT glass's grille, scanlines, bloom,
   vignette and glint are off and its bezel band is a hard edge
   (`shade/sdf-environment.hlsli`), the views stage and composite clear the
   atmosphere's transmittance, in-scatter and bounded volumes, and the root's
@@ -476,7 +476,8 @@ for a source the local user opened, and a document, authored locally or
 arrived through a portal, never creates one or sends it input. A `Simulation`
 screen maps a pointer ray from the row alone: `WorldScreenMappings.Of(screen,
 source, width, height)` publishes the row's `SourceMapping` (the face frame, the
-whole source, the glass bezel as an exact-inverse warp), and the ray arrives as
+whole source, and a CRT's bezel as an exact-inverse warp on a screen whose
+`material` is `Crt`), and the ray arrives as
 the `source.pointer.origin`/`source.pointer.direction` Axis3D commands
 quantized once at the seat verbs `PlayerCommandModule` registers.
 `SeatController.HeldIntent` folds them into `PlayerIntent.SourceRay`, which
@@ -503,7 +504,7 @@ seat's ray and hits. A machine reads the hit as a light gun: the fold aims each
 screen application's pad (`MachinePadState.Pointer`, a `MachinePointer` in
 1/65536 fractions of the output) with `WorldEngagement.Aim`, which maps the
 applied body's `SourceRay` through the same `WorldScreenMappings.Normalized`
-mapping, cached per row, and leaves the gun off for no ray, a miss, the bezel or
+mapping, cached per row, and leaves the gun off for no ray, a miss, a CRT's bezel or
 a non-`Simulation` screen. So the gun reaches a machine only while the seat holds
 an application onto the screen (mirrored is enough), and its trigger is a kit
 `pad` button. The Humble brick puts the aimed pixel's brightness on its infrared

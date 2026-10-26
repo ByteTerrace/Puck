@@ -1289,6 +1289,11 @@ public sealed partial class WorldDocument {
                         reason = $"state row '{m.Row.Name}' is generated storage; mutate its owning declaration or use a typed instance effect";
                         return false;
                     }
+                    if (IsRowWithheldFromWriter(definition: current, principal: m.Principal, row: m.Row.Name.Value)) {
+                        candidate = current;
+                        reason = $"state row '{m.Row.Name}' is not writable by {m.Principal.Describe()}";
+                        return false;
+                    }
                     if (previousRow is { Inverse: { } existingInverse }) {
                         candidate = current;
                         reason = $"state row '{m.Row.Name}' is a derived board (inverse names '{existingInverse.Tokens}'/'{existingInverse.Codes}') — write those rows instead; the engine recomputes '{m.Row.Name}' on install";
@@ -1351,7 +1356,7 @@ public sealed partial class WorldDocument {
                     }
                 }
             case WorldMutation.RemoveStateRow m:
-                if (!Remove(
+                if (IsRowWithheldFromWriter(definition: current, principal: m.Principal, row: m.Name) || !Remove(
                     list: current.AuthoredState,
                     key: m.Name,
                     keyOf: static row => row.Name,

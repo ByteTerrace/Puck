@@ -1,54 +1,60 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
-/// <summary>One of the two settled cubic-bezier easings a theme's motion section authors.</summary>
-/// <param name="X1">The first control point's x.</param>
-/// <param name="Y1">The first control point's y.</param>
-/// <param name="X2">The second control point's x.</param>
-/// <param name="Y2">The second control point's y.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public readonly record struct WorldThemeCubicBezier(float X1, float Y1, float X2, float Y2) {
-    /// <summary>Gets the inert absence — the identity curve's four zeroed control points.</summary>
-    public static WorldThemeCubicBezier Absent { get; } = new(
-        X1: 0f,
-        X2: 0f,
-        Y1: 0f,
-        Y2: 0f
-    );
-}
-/// <summary>One elevation bloom hue's lit ring + outer halo pair (see <c>Puck.Overlays.DesignTokens.Elevation</c>
-/// for the composite rule). Each color carries its own baked alpha (<c>#RRGGBBAA</c>).</summary>
-/// <param name="Ring">The 1px lit ring color.</param>
-/// <param name="Halo">The outer distance-falloff halo color.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeBloomHue(BindableColor Ring, BindableColor Halo) {
-    /// <summary>Gets the inert absence — a fully transparent ring and halo.</summary>
-    public static WorldThemeBloomHue Absent { get; } = new(
-        Halo: new BindableColor(Raw: "#00000000"),
-        Ring: new BindableColor(Raw: "#00000000")
-    );
+/// <summary>One of the theme's core color roles, by name: what a component style (<see cref="WorldThemeStyleColor"/>)
+/// and the drawn cursor (<see cref="WorldHudCursor.Role"/>) name to take a core color rather than a literal. Each names
+/// a purpose, never a feature, so it still means something with any one component deleted.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldThemeRole>))]
+public enum WorldThemeRole : byte {
+    /// <summary>The deepest surface (a held control's seated plate).</summary>
+    SurfaceBase,
+    /// <summary>A raised surface (a control's resting plate).</summary>
+    SurfaceRaised,
+    /// <summary>A recessed surface (a well inside a panel).</summary>
+    SurfaceInset,
+    /// <summary>The panel scrim.</summary>
+    ScrimPanel,
+    /// <summary>The strip scrim.</summary>
+    ScrimStrip,
+    /// <summary>The chip scrim.</summary>
+    ScrimChip,
+    /// <summary>The hairline rule.</summary>
+    LineHair,
+    /// <summary>The soft rule (a band divider).</summary>
+    LineSoft,
+    /// <summary>The primary text.</summary>
+    TextPrimary,
+    /// <summary>The dimmed text.</summary>
+    TextDim,
+    /// <summary>The muted text.</summary>
+    TextMute,
+    /// <summary>The accent (also the hover and selected tier).</summary>
+    Accent,
+    /// <summary>The quiet accent fill.</summary>
+    AccentQuiet,
+    /// <summary>The ink drawn on the accent.</summary>
+    AccentInk,
+    /// <summary>The positive status.</summary>
+    Positive,
+    /// <summary>The warning status.</summary>
+    Warning,
+    /// <summary>The danger status.</summary>
+    Danger,
 }
 /// <summary>One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of
-/// hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. <see cref="Alpha"/> lies
-/// between <see cref="WorldThemeCapacity.ScrimMinAlpha"/> and one; a bound alpha a live write moves below the floor
-/// presents at it.</summary>
+/// hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. A player's high-contrast
+/// preference raises a scrim to <see cref="WorldThemeCapacity.HighContrastScrimAlpha"/> when it authors less.</summary>
 /// <param name="Color">The scrim's opaque fill color.</param>
 /// <param name="Alpha">The scrim's opacity, in <c>[0, 1]</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeScrim(BindableColor Color, BindableScalar Alpha) {
-    /// <summary>Gets the inert absence — a transparent black scrim.</summary>
-    public static WorldThemeScrim Absent { get; } = new(
-        Alpha: new BindableScalar(literal: 0f),
-        Color: new BindableColor(Raw: "#000000")
-    );
-}
-/// <summary>The theme's semantic color roles — the authored twin of <c>Puck.Overlays.DesignTokens.Color</c>.
-/// Every field is a <see cref="BindableColor"/>: a hex literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding.</summary>
+public sealed record WorldThemeScrim(BindableColor Color, BindableScalar Alpha);
+/// <summary>The theme's core color roles (<see cref="WorldThemeRole"/>). Every field is a <see cref="BindableColor"/>:
+/// a hex literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldThemeColor(
     BindableColor SurfaceBase,
-    BindableColor SurfacePanel,
     BindableColor SurfaceRaised,
     BindableColor SurfaceInset,
     WorldThemeScrim ScrimPanel,
@@ -56,437 +62,253 @@ public sealed record WorldThemeColor(
     WorldThemeScrim ScrimChip,
     BindableColor LineHair,
     BindableColor LineSoft,
-    BindableColor LineStrong,
-    BindableColor LineInset,
     BindableColor TextPrimary,
     BindableColor TextDim,
     BindableColor TextMute,
     BindableColor Accent,
     BindableColor AccentQuiet,
-    BindableColor AccentLine,
     BindableColor AccentInk,
     BindableColor Positive,
     BindableColor Warning,
-    BindableColor Danger,
-    BindableColor Phosphor,
-    BindableColor PhosphorDim,
-    BindableColor PhosphorCyan,
-    BindableColor BadgeDark,
-    BindableColor BadgeLight
-) {
-    /// <summary>Gets the inert absence — every surface, line, and text role transparent black; every scrim
-    /// transparent.</summary>
-    public static WorldThemeColor Absent { get; } = new(
-        Accent: Zero,
-        AccentInk: Zero,
-        AccentLine: Zero,
-        AccentQuiet: Zero,
-        BadgeDark: Zero,
-        BadgeLight: Zero,
-        Danger: Zero,
-        LineHair: Zero,
-        LineInset: Zero,
-        LineSoft: Zero,
-        LineStrong: Zero,
-        Phosphor: Zero,
-        PhosphorCyan: Zero,
-        PhosphorDim: Zero,
-        Positive: Zero,
-        ScrimChip: WorldThemeScrim.Absent,
-        ScrimPanel: WorldThemeScrim.Absent,
-        ScrimStrip: WorldThemeScrim.Absent,
-        SurfaceBase: Zero,
-        SurfaceInset: Zero,
-        SurfacePanel: Zero,
-        SurfaceRaised: Zero,
-        TextDim: Zero,
-        TextMute: Zero,
-        TextPrimary: Zero,
-        Warning: Zero
-    );
-
-    private static BindableColor Zero => new(Raw: "#00000000");
-}
-/// <summary>The theme's 4px spacing grid and grid-locked component heights — the authored twin of
-/// <c>Puck.Overlays.DesignTokens.Space</c>. Every field is a plain float, px.</summary>
+    BindableColor Danger
+);
+/// <summary>The theme's spacing steps on a 4px grid, px.</summary>
+/// <param name="Space2">Two steps (8px in the default theme).</param>
+/// <param name="Space3">Three steps.</param>
+/// <param name="Space8">Eight steps (the stage margin).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeSpace(
-    float Space0,
-    float Space1,
-    float Space2,
-    float Space3,
-    float Space4,
-    float Space5,
-    float Space6,
-    float Space8,
-    float HeightBadge,
-    float HeightBindBar,
-    float HeightChip,
-    float HeightConsoleHead,
-    float HeightModeRow,
-    float HeightPromptRow,
-    float HeightTrackerBar,
-    float HeightTrackerCell
-) {
-    /// <summary>Gets the inert absence — every grid step and component height zero.</summary>
-    public static WorldThemeSpace Absent { get; } = new(
-        HeightBadge: 0f,
-        HeightBindBar: 0f,
-        HeightChip: 0f,
-        HeightConsoleHead: 0f,
-        HeightModeRow: 0f,
-        HeightPromptRow: 0f,
-        HeightTrackerBar: 0f,
-        HeightTrackerCell: 0f,
-        Space0: 0f,
-        Space1: 0f,
-        Space2: 0f,
-        Space3: 0f,
-        Space4: 0f,
-        Space5: 0f,
-        Space6: 0f,
-        Space8: 0f
-    );
-}
-/// <summary>The theme's 3-step radius scale — the authored twin of <c>Puck.Overlays.DesignTokens.Radius</c>.
-/// Every field is a plain float, px.</summary>
+public sealed record WorldThemeSpace(float Space2, float Space3, float Space8);
+/// <summary>The theme's 3-step radius scale, px.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeRadius(float Radius1, float Radius2, float Radius3) {
-    /// <summary>Gets the inert absence — every radius step zero.</summary>
-    public static WorldThemeRadius Absent { get; } = new(
-        Radius1: 0f,
-        Radius2: 0f,
-        Radius3: 0f
-    );
-}
-/// <summary>The theme's 5-step type scale — the authored twin of <c>Puck.Overlays.DesignTokens.Type</c>.
-/// Every size/line field is a plain float, px; every weight field is a plain int; every tracking field is a plain
-/// float, em. <see cref="WorldThemeCapacity.TypeAbsoluteFloorSize"/> is enforced at the validator, never authored
-/// here — a literal size below it refuses at boot, a bound one clamps at resolve.</summary>
+public sealed record WorldThemeRadius(float Radius1, float Radius2, float Radius3);
+/// <summary>The theme's type sizes, px. <see cref="WorldThemeCapacity.TypeAbsoluteFloorSize"/> is enforced at the
+/// validator, never authored here.</summary>
+/// <param name="MicroSize">The small label size.</param>
+/// <param name="MonoSize">The monospace body size.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeType(
-    float BodySize,
-    float BodyLine,
-    int BodyWeight,
-    float LabelSize,
-    float LabelLine,
-    float LabelTracking,
-    int LabelWeight,
-    float MicroSize,
-    float MicroLine,
-    float MicroTracking,
-    int MicroWeight,
-    float MonoSize,
-    float MonoLine,
-    float MonoTracking,
-    int MonoWeight,
-    float MonoBadgeSize,
-    float MonoReadoutSize,
-    float TitleSize,
-    float TitleLine,
-    float TitleTracking,
-    int TitleWeight
-) {
-    /// <summary>Gets the inert absence — every size/line/tracking zero, every weight zero.</summary>
-    public static WorldThemeType Absent { get; } = new(
-        BodyLine: 0f,
-        BodySize: 0f,
-        BodyWeight: 0,
-        LabelLine: 0f,
-        LabelSize: 0f,
-        LabelTracking: 0f,
-        LabelWeight: 0,
-        MicroLine: 0f,
-        MicroSize: 0f,
-        MicroTracking: 0f,
-        MicroWeight: 0,
-        MonoBadgeSize: 0f,
-        MonoLine: 0f,
-        MonoReadoutSize: 0f,
-        MonoSize: 0f,
-        MonoTracking: 0f,
-        MonoWeight: 0,
-        TitleLine: 0f,
-        TitleSize: 0f,
-        TitleTracking: 0f,
-        TitleWeight: 0
-    );
-}
-/// <summary>The theme's two-tier elevation recipe — the authored twin of
-/// <c>Puck.Overlays.DesignTokens.Elevation</c>. Bloom/press/shadow/catchlight geometry scalars are plain
-/// floats; the bloom alphas are <see cref="BindableScalar"/> (the one elevation knob worth live dynamism — a
-/// lit-state pulse); the hue table and the press/shadow/catchlight colors are <see cref="BindableColor"/> with baked
-/// alpha.</summary>
+public sealed record WorldThemeType(float MicroSize, float MonoSize);
+/// <summary>The theme's stroke widths, px.</summary>
+/// <param name="Hairline">The hairline outline width.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeElevation(
-    float BloomHaloBlur,
-    float BloomHaloSpread,
-    BindableScalar BloomHaloAlpha,
-    float BloomRingWidth,
-    BindableScalar BloomRingAlpha,
-    BindableScalar BloomNeutralHaloAlpha,
-    BindableScalar BloomNeutralRingAlpha,
-    float BloomHeldInsetBlur,
-    float BloomHeldInsetSpread,
-    BindableScalar BloomHeldInsetAlpha,
-    WorldThemeBloomHue BloomAccent,
-    WorldThemeBloomHue BloomPositive,
-    WorldThemeBloomHue BloomWarning,
-    WorldThemeBloomHue BloomDanger,
-    WorldThemeBloomHue BloomNeutral,
-    float PressHeldGlowBlur,
-    float PressHeldGlowSpread,
-    BindableColor PressHeldGlowColor,
-    float PressHeldShadowBlur,
-    float PressHeldShadowOffsetY,
-    float PressHeldTranslateY,
-    BindableColor PressHeldShadowColor,
-    float ShadowSeatBlur,
-    float ShadowSeatOffsetY,
-    float ShadowSeatSpread,
-    float ShadowSeatStripSpread,
-    BindableColor ShadowSeatColor,
-    BindableColor ShadowSeatStripColor,
-    float CatchlightOffsetY,
-    BindableColor CatchlightColor,
-    float ChipRestOpacity,
-    float EdgeHairlineWidth,
-    float RingStatusWidth,
-    float RingStatusAlpha
-) {
-    /// <summary>Gets the inert absence — every geometry scalar and alpha zero, every color transparent.</summary>
-    public static WorldThemeElevation Absent { get; } = new(
-        BloomAccent: WorldThemeBloomHue.Absent,
-        BloomDanger: WorldThemeBloomHue.Absent,
-        BloomHaloAlpha: Zero,
-        BloomHaloBlur: 0f,
-        BloomHaloSpread: 0f,
-        BloomHeldInsetAlpha: Zero,
-        BloomHeldInsetBlur: 0f,
-        BloomHeldInsetSpread: 0f,
-        BloomNeutral: WorldThemeBloomHue.Absent,
-        BloomNeutralHaloAlpha: Zero,
-        BloomNeutralRingAlpha: Zero,
-        BloomPositive: WorldThemeBloomHue.Absent,
-        BloomRingAlpha: Zero,
-        BloomRingWidth: 0f,
-        BloomWarning: WorldThemeBloomHue.Absent,
-        CatchlightColor: ZeroColor,
-        CatchlightOffsetY: 0f,
-        ChipRestOpacity: 0f,
-        EdgeHairlineWidth: 0f,
-        PressHeldGlowBlur: 0f,
-        PressHeldGlowColor: ZeroColor,
-        PressHeldGlowSpread: 0f,
-        PressHeldShadowBlur: 0f,
-        PressHeldShadowColor: ZeroColor,
-        PressHeldShadowOffsetY: 0f,
-        PressHeldTranslateY: 0f,
-        RingStatusAlpha: 0f,
-        RingStatusWidth: 0f,
-        ShadowSeatBlur: 0f,
-        ShadowSeatColor: ZeroColor,
-        ShadowSeatOffsetY: 0f,
-        ShadowSeatSpread: 0f,
-        ShadowSeatStripColor: ZeroColor,
-        ShadowSeatStripSpread: 0f
-    );
-
-    private static BindableScalar Zero => new(literal: 0f);
-    private static BindableColor ZeroColor => new(Raw: "#00000000");
-}
-/// <summary>The theme's diegetic material recipe (the world-geometry emboss/engrave physics plus the CRT quote) —
-/// the authored twin of <c>Puck.Overlays.DesignTokens.Diegetic</c>. Shadow scalars are plain floats; every
-/// color is <see cref="BindableColor"/>.</summary>
+public sealed record WorldThemeStroke(float Hairline);
+/// <summary>The theme's durations, ms.</summary>
+/// <param name="DurMed">The medium duration (a transient's fade).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeDiegetic(
-    BindableColor PlateTop,
-    BindableColor PlateMid,
-    BindableColor PlateBottom,
-    BindableColor PlateStripeColor,
-    BindableColor EmbossFill,
-    BindableColor EngraveFill,
-    float EmbossShadowDropAlpha,
-    float EmbossShadowDropBlur,
-    float EmbossShadowDropOffsetY,
-    float EmbossShadowLitAlpha,
-    float EmbossShadowLitOffsetY,
-    float EngraveShadowLipAlpha,
-    float EngraveShadowLipOffsetY,
-    float EngraveShadowRecessAlpha,
-    float EngraveShadowRecessBlur,
-    float EngraveShadowRecessOffsetY,
-    BindableColor ScreenWellOuter,
-    BindableColor ScreenWellInner,
-    BindableColor BezelOuter,
-    BindableColor BezelInner,
-    BindableColor BezelEdge,
-    float PhosphorGlowBlur
-) {
-    /// <summary>Gets the inert absence — every color transparent black, every shadow scalar zero.</summary>
-    public static WorldThemeDiegetic Absent { get; } = new(
-        BezelEdge: Zero,
-        BezelInner: Zero,
-        BezelOuter: Zero,
-        EmbossFill: Zero,
-        EmbossShadowDropAlpha: 0f,
-        EmbossShadowDropBlur: 0f,
-        EmbossShadowDropOffsetY: 0f,
-        EmbossShadowLitAlpha: 0f,
-        EmbossShadowLitOffsetY: 0f,
-        EngraveFill: Zero,
-        EngraveShadowLipAlpha: 0f,
-        EngraveShadowLipOffsetY: 0f,
-        EngraveShadowRecessAlpha: 0f,
-        EngraveShadowRecessBlur: 0f,
-        EngraveShadowRecessOffsetY: 0f,
-        PhosphorGlowBlur: 0f,
-        PlateBottom: Zero,
-        PlateMid: Zero,
-        PlateStripeColor: Zero,
-        PlateTop: Zero,
-        ScreenWellInner: Zero,
-        ScreenWellOuter: Zero
-    );
-
-    private static BindableColor Zero => new(Raw: "#00000000");
-}
-/// <summary>The theme's motion recipe — the authored twin of <c>Puck.Overlays.DesignTokens.Motion</c>.
-/// Durations are plain floats, ms.</summary>
+public sealed record WorldThemeMotion(float DurMed);
+/// <summary>The theme's procedural icon feel (the anti-alias ramps stay engine-side rendering-correctness constants,
+/// never authored).</summary>
+/// <param name="StrokeHalfWidth">The hairline stroke half-width every procedural glyph/icon draws with, in glyph-local
+/// units.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeMotion(
-    float CaretBlink,
-    float DurFast,
-    float DurMed,
-    float DurPanel,
-    WorldThemeCubicBezier EaseStd,
-    WorldThemeCubicBezier EaseOut
-) {
-    /// <summary>Gets the inert absence — every duration zero, both easings the identity curve.</summary>
-    public static WorldThemeMotion Absent { get; } = new(
-        CaretBlink: 0f,
-        DurFast: 0f,
-        DurMed: 0f,
-        DurPanel: 0f,
-        EaseOut: WorldThemeCubicBezier.Absent,
-        EaseStd: WorldThemeCubicBezier.Absent
-    );
-}
-/// <summary>The theme's procedural icon feel — the authored twin of the non-AA-ramp half of
-/// <c>Puck.Overlays.DesignTokens.Icon</c> (the anti-alias ramps stay engine-side rendering-correctness
-/// constants, never authored).</summary>
-/// <param name="StrokeHalfWidth">The hairline stroke half-width every procedural glyph/icon draws with, in
-/// glyph-local units.</param>
+public sealed record WorldThemeIcon(float StrokeHalfWidth);
+/// <summary>A component style's color: a core role by name (<see cref="Role"/>, so the component follows the world's
+/// palette), or its own literal, binding or keys (<see cref="Color"/>). Exactly one is authored.</summary>
+/// <param name="Role">The core role the component takes, or <see langword="null"/> when it authors its own color.
+/// Omitted from the wire when null.</param>
+/// <param name="Color">The component's own color, or <see langword="null"/> when it names a role. Omitted from the wire
+/// when null.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeIcon(float StrokeHalfWidth) {
-    /// <summary>Gets the inert absence — a zero-width stroke.</summary>
-    public static WorldThemeIcon Absent { get; } = new(StrokeHalfWidth: 0f);
-}
-/// <summary>The CPU overlay writers' own chrome — the authored twin of
-/// <c>Puck.Overlays.OverlayThemeValues.ChromeSet</c>: the quiet/lit opacities and the px geometry each writer used to
-/// hold as a private constant. Alphas are <c>[0, 1]</c>, <c>*Half</c>/<c>*Gap</c>/<c>*Offset</c> are px, and
-/// <c>*Ratio</c> is a multiple of the shape it names. Every field is a plain float — none of it is worth live
-/// dynamism, so none is a <see cref="BindableScalar"/>.</summary>
-/// <param name="DimQuietAlpha">The one quiet-dim opacity every writer reaches for: an unbound bar slot, an unheld
-/// modifier indicator, a gauge track, a console selection band.</param>
-/// <param name="BarLabelAlpha">The binding bar's page-name opacity.</param>
-/// <param name="BarHintAlpha">The binding bar's chord-hint opacity.</param>
-/// <param name="CursorAlpha">The drawn cursor's ring opacity.</param>
-/// <param name="CursorDotRatio">The cursor's center-dot half-extent, as a fraction of the ring radius.</param>
-/// <param name="CursorDotMaxHalf">The cursor center dot's half-extent ceiling, px.</param>
-/// <param name="CursorLabelGap">The hover label's clearance outside the ring, px.</param>
-/// <param name="WheelRingAlpha">A non-active wheel ring's stroke and label opacity.</param>
-/// <param name="WheelActiveRingAlpha">The active wheel ring's stroke opacity.</param>
-/// <param name="WheelActiveRingOffset">The second (heavier-shell) stroke's radial offset, px.</param>
-/// <param name="WheelLabelAlpha">The hub dot's, marker's, and active-ring labels' opacity.</param>
-/// <param name="WheelHubDotHalf">The wheel hub dot's half-extent, px.</param>
-/// <param name="WheelMarkerHalf">The hovered-sector marker dot's half-extent, px.</param>
-/// <param name="WheelMarkerGapRatio">The marker's clearance outside the ring, as a multiple of the cell height.</param>
-/// <param name="WheelHubLabelGap">The active-ring label's clearance below the hub dot, px.</param>
+public sealed record WorldThemeStyleColor(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldThemeRole? Role = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null
+);
+/// <summary>The lit-state glow every component's held, selected or echoed state draws: a ring at the shape's edge
+/// plus a halo falling off outside it, in the state's own hue (the keycap's held and accent tiers, a toast's ring, a
+/// wheel piece's selection). The neutral tier is the held keycap's.</summary>
+/// <param name="HaloBlur">The halo's reach, px.</param>
+/// <param name="RingAlpha">The ring's alpha.</param>
+/// <param name="HaloAlpha">The halo's alpha.</param>
+/// <param name="NeutralRingAlpha">The neutral tier's ring alpha.</param>
+/// <param name="NeutralHaloAlpha">The neutral tier's halo alpha.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldThemeChrome(
-    float DimQuietAlpha,
-    float BarLabelAlpha,
-    float BarHintAlpha,
-    float CursorAlpha,
-    float CursorDotRatio,
-    float CursorDotMaxHalf,
-    float CursorLabelGap,
-    float WheelRingAlpha,
-    float WheelActiveRingAlpha,
-    float WheelActiveRingOffset,
-    float WheelLabelAlpha,
-    float WheelHubDotHalf,
-    float WheelMarkerHalf,
-    float WheelMarkerGapRatio,
-    float WheelHubLabelGap
-) {
-    /// <summary>Gets the inert absence — every opacity and every extent zero (no authored theme, no chrome).</summary>
-    public static WorldThemeChrome Absent { get; } = new(
-        BarHintAlpha: 0f,
-        BarLabelAlpha: 0f,
-        CursorAlpha: 0f,
-        CursorDotMaxHalf: 0f,
-        CursorDotRatio: 0f,
-        CursorLabelGap: 0f,
-        DimQuietAlpha: 0f,
-        WheelActiveRingAlpha: 0f,
-        WheelActiveRingOffset: 0f,
-        WheelHubDotHalf: 0f,
-        WheelHubLabelGap: 0f,
-        WheelLabelAlpha: 0f,
-        WheelMarkerGapRatio: 0f,
-        WheelMarkerHalf: 0f,
-        WheelRingAlpha: 0f
-    );
-}
+public sealed record WorldThemeGlowStyle(float HaloBlur, BindableScalar RingAlpha, BindableScalar HaloAlpha, BindableScalar NeutralRingAlpha, BindableScalar NeutralHaloAlpha);
+/// <summary>The keycap: the icon plate the binding bar, the wheel and the chord hints draw, with a physical-button badge
+/// at its corner.</summary>
+/// <param name="ReferenceSize">The plate height the theme's px tokens are measured at, px: a plate of another size
+/// scales its hairline, radius and glow by its own size over this one.</param>
+/// <param name="RestOpacity">A resting plate's opacity.</param>
+/// <param name="Badge">The badge disc's backing.</param>
+/// <param name="BadgeInk">The badge's glyph.</param>
+/// <param name="ToggleMarch">The seconds one march of a latched toggle's border takes around the plate; 0 draws the
+/// border still.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeKeycapStyle(float ReferenceSize, float RestOpacity, WorldThemeStyleColor Badge, WorldThemeStyleColor BadgeInk, float ToggleMarch);
+/// <summary>The binding bar's opacities.</summary>
+/// <param name="LabelAlpha">The page name's opacity.</param>
+/// <param name="HintAlpha">A chord hint's opacity.</param>
+/// <param name="QuietAlpha">An unbound slot's and an unheld modifier's opacity.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeBarStyle(float LabelAlpha, float HintAlpha, float QuietAlpha);
+/// <summary>The console panel.</summary>
+/// <param name="Echo">The color of an echoed input line and of the prompt.</param>
+/// <param name="HeadHeight">The title band's height, px.</param>
+/// <param name="SelectionAlpha">The selected input's highlight opacity.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeConsoleStyle(WorldThemeStyleColor Echo, float HeadHeight, float SelectionAlpha);
+/// <summary>The drawn pointer cursor (its size, reach and role are the <c>hud</c> section's
+/// <see cref="WorldHudCursor"/>).</summary>
+/// <param name="Alpha">The ring's opacity.</param>
+/// <param name="DotRatio">The center dot's half-extent, as a fraction of the ring radius.</param>
+/// <param name="DotMaxHalf">The center dot's half-extent ceiling, px.</param>
+/// <param name="LabelGap">The hover label's clearance outside the ring, px.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeCursorStyle(float Alpha, float DotRatio, float DotMaxHalf, float LabelGap);
+/// <summary>The radial wheel.</summary>
+/// <param name="RingAlpha">A non-active ring's and the active ring label's opacity.</param>
+/// <param name="ActiveRingAlpha">The active ring's and the hub's opacity.</param>
+/// <param name="LabelAlpha">The hovered sector label's opacity.</param>
+/// <param name="HubLabelGap">The gap between the hub's two labels, px.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeWheelStyle(float RingAlpha, float ActiveRingAlpha, float LabelAlpha, float HubLabelGap);
+/// <summary>The toast.</summary>
+/// <param name="MinHeight">The chip's least height, px; zero shows no toast.</param>
+/// <param name="IconSize">The status square's side, px.</param>
+/// <param name="RailWidth">The status rail's width, px.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeToastStyle(float MinHeight, float IconSize, float RailWidth);
+/// <summary>The authored HUD panels' own chrome.</summary>
+/// <param name="TrackAlpha">A gauge track's opacity.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeHudStyle(float TrackAlpha);
+/// <summary>The component styles: each component's own geometry, opacities and recipe, in literals and references to
+/// the core tokens, so the core names only purposes and a component's look stays the component's.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeStyles(
+    WorldThemeGlowStyle Glow,
+    WorldThemeKeycapStyle Keycap,
+    WorldThemeBarStyle Bar,
+    WorldThemeConsoleStyle Console,
+    WorldThemeCursorStyle Cursor,
+    WorldThemeWheelStyle Wheel,
+    WorldThemeToastStyle Toast,
+    WorldThemeHudStyle Hud
+);
 /// <summary>
-/// The <c>theme</c> document section: the baked "Instrument + grafts" design system
-/// (<c>Puck.Overlays.DesignTokens</c>), promoted to document data. A keyless section — one authored theme per
-/// document, structured into the same categories the engine constant table used to hold.
+/// The <c>theme</c> document section: the look the engine's overlay surfaces (the console, the binding bar, the
+/// radial wheel, toasts, HUD panels, the drawn cursor) draw with. A keyless section — one theme per document: the
+/// core tokens (color roles, spacing, radii, type, stroke, motion, icon) name purposes only, and
+/// <see cref="Styles"/> holds each component's own look over them. A document that authors no theme draws the engine's
+/// neutral <see cref="Default"/>; a world's own look is a skin it imports.
 /// </summary>
-/// <param name="Color">The semantic color roles.</param>
-/// <param name="Space">The spacing grid and component heights.</param>
+/// <param name="Color">The core color roles.</param>
+/// <param name="Space">The spacing steps.</param>
 /// <param name="Radius">The radius scale.</param>
-/// <param name="Type">The type scale.</param>
-/// <param name="Elevation">The two-tier elevation recipe.</param>
-/// <param name="Diegetic">The diegetic material recipe.</param>
-/// <param name="Motion">The motion recipe.</param>
+/// <param name="Type">The type sizes.</param>
+/// <param name="Stroke">The stroke widths.</param>
+/// <param name="Motion">The durations.</param>
 /// <param name="Icon">The procedural icon feel.</param>
-/// <param name="Chrome">The CPU writers' own opacity/px chrome.</param>
+/// <param name="Styles">The component styles.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldThemeSection(
     WorldThemeColor Color,
     WorldThemeSpace Space,
     WorldThemeRadius Radius,
     WorldThemeType Type,
-    WorldThemeElevation Elevation,
-    WorldThemeDiegetic Diegetic,
+    WorldThemeStroke Stroke,
     WorldThemeMotion Motion,
     WorldThemeIcon Icon,
-    WorldThemeChrome Chrome
+    WorldThemeStyles Styles
 ) {
-    /// <summary>Gets the inert absence — a fully zeroed token block (no authored theme, no chrome). The engine holds
-    /// no theme of its own: the standard "Instrument + grafts" recipe is authored in <c>Assets/worlds/theme.puck</c>,
-    /// and a world takes it by importing that document.</summary>
-    public static WorldThemeSection Absent { get; } = new(
-        Chrome: WorldThemeChrome.Absent,
-        Color: WorldThemeColor.Absent,
-        Diegetic: WorldThemeDiegetic.Absent,
-        Elevation: WorldThemeElevation.Absent,
-        Icon: WorldThemeIcon.Absent,
-        Motion: WorldThemeMotion.Absent,
-        Radius: WorldThemeRadius.Absent,
-        Space: WorldThemeSpace.Absent,
-        Type: WorldThemeType.Absent
+    /// <summary>Gets the engine's neutral theme, which a document that authors none draws: greys, a blue accent and
+    /// the usual status hues, every component usable and legible over bright and dark scenes alike.</summary>
+    public static WorldThemeSection Default { get; } = new(
+        Color: new WorldThemeColor(
+            Accent: new BindableColor(Raw: "#4C8DFF"),
+            AccentInk: new BindableColor(Raw: "#06101F"),
+            AccentQuiet: new BindableColor(Raw: "#4C8DFF2E"),
+            Danger: new BindableColor(Raw: "#F05252"),
+            LineHair: new BindableColor(Raw: "#FFFFFF1F"),
+            LineSoft: new BindableColor(Raw: "#FFFFFF8C"),
+            Positive: new BindableColor(Raw: "#3FB966"),
+            ScrimChip: new WorldThemeScrim(
+                Alpha: new BindableScalar(literal: 0.92f),
+                Color: new BindableColor(Raw: "#1A1C20")
+            ),
+            ScrimPanel: new WorldThemeScrim(
+                Alpha: new BindableScalar(literal: 0.9f),
+                Color: new BindableColor(Raw: "#141518")
+            ),
+            ScrimStrip: new WorldThemeScrim(
+                Alpha: new BindableScalar(literal: 0.86f),
+                Color: new BindableColor(Raw: "#141518")
+            ),
+            SurfaceBase: new BindableColor(Raw: "#101114"),
+            SurfaceInset: new BindableColor(Raw: "#0A0B0D"),
+            SurfaceRaised: new BindableColor(Raw: "#24262B"),
+            TextDim: new BindableColor(Raw: "#A3A7AE"),
+            TextMute: new BindableColor(Raw: "#686C73"),
+            TextPrimary: new BindableColor(Raw: "#F1F2F4"),
+            Warning: new BindableColor(Raw: "#E0A526")
+        ),
+        Icon: new WorldThemeIcon(StrokeHalfWidth: 0.08f),
+        Motion: new WorldThemeMotion(DurMed: 180f),
+        Radius: new WorldThemeRadius(
+            Radius1: 3f,
+            Radius2: 6f,
+            Radius3: 9f
+        ),
+        Space: new WorldThemeSpace(
+            Space2: 8f,
+            Space3: 12f,
+            Space8: 32f
+        ),
+        Stroke: new WorldThemeStroke(Hairline: 1f),
+        Styles: new WorldThemeStyles(
+            Bar: new WorldThemeBarStyle(
+                HintAlpha: 0.6f,
+                LabelAlpha: 0.9f,
+                QuietAlpha: 0.7f
+            ),
+            Console: new WorldThemeConsoleStyle(
+                Echo: new WorldThemeStyleColor(Role: WorldThemeRole.Accent),
+                HeadHeight: 38f,
+                SelectionAlpha: 0.7f
+            ),
+            Cursor: new WorldThemeCursorStyle(
+                Alpha: 0.9f,
+                DotMaxHalf: 4f,
+                DotRatio: 0.22f,
+                LabelGap: 5f
+            ),
+            Glow: new WorldThemeGlowStyle(
+                HaloAlpha: new BindableScalar(literal: 0.3f),
+                HaloBlur: 12f,
+                NeutralHaloAlpha: new BindableScalar(literal: 0.15f),
+                NeutralRingAlpha: new BindableScalar(literal: 0.3f),
+                RingAlpha: new BindableScalar(literal: 0.6f)
+            ),
+            Hud: new WorldThemeHudStyle(TrackAlpha: 0.7f),
+            Keycap: new WorldThemeKeycapStyle(
+                Badge: new WorldThemeStyleColor(Role: WorldThemeRole.SurfaceInset),
+                BadgeInk: new WorldThemeStyleColor(Role: WorldThemeRole.TextPrimary),
+                ReferenceSize: 40f,
+                RestOpacity: 0.62f,
+                ToggleMarch: 0f
+            ),
+            Toast: new WorldThemeToastStyle(
+                IconSize: 24f,
+                MinHeight: 40f,
+                RailWidth: 2f
+            ),
+            Wheel: new WorldThemeWheelStyle(
+                ActiveRingAlpha: 0.95f,
+                HubLabelGap: 2f,
+                LabelAlpha: 1f,
+                RingAlpha: 0.55f
+            )
+        ),
+        Type: new WorldThemeType(
+            MicroSize: 11f,
+            MonoSize: 12f
+        )
     );
 }
-/// <summary>The theme's two engine-side perceptual floors — never authored, always enforced. A value below either
-/// refuses at boot; a bound scrim alpha a live write moves below its floor clamps to it as the theme resolves.</summary>
+/// <summary>The theme's engine-side perceptual floors — never authored. A type size below its floor refuses at boot;
+/// the scrim floor is a player's high-contrast preference, applied as the theme resolves.</summary>
 public static class WorldThemeCapacity {
-    /// <summary>The scrim opacity floor — the guaranteed-AA contrast contract under a scrim, over both a dark corner
-    /// and a lit CRT.</summary>
-    public const float ScrimMinAlpha = 0.84f;
+    /// <summary>The scrim opacity a player's high-contrast preference raises every scrim to, so text on a scrim stays
+    /// legible over whatever bright or busy scene lies under it.</summary>
+    public const float HighContrastScrimAlpha = 0.84f;
     /// <summary>The type-size floor, px — below it, MSDF glyph coverage degrades over a moving world.</summary>
     public const float TypeAbsoluteFloorSize = 11f;
 }

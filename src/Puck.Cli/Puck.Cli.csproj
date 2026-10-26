@@ -33,6 +33,12 @@
         <ProjectReference Include="../Puck.Cli.Worktrees/Puck.Cli.Worktrees.csproj" />
         <ProjectReference Include="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
     </ItemGroup>
+    <Target Name="MarkCompletedOperatorBuild" AfterTargets="Build">
+        <WriteLinesToFile File="$(TargetDir)puck-build-ready" Lines="$([System.DateTime]::UtcNow.Ticks)" Overwrite="true" />
+    </Target>
+    <Target Name="InvalidateOperatorBuild" BeforeTargets="PrepareForBuild">
+        <Delete Files="$(TargetDir)puck-build-ready" />
+    </Target>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">
         <Copy
             Condition="'$(OS)' == 'Windows_NT'"

@@ -20,12 +20,14 @@ namespace Puck.Launcher.Release;
 /// <param name="TrustAnchorPublicKeySubjectPublicKeyInfoBase64">The pinned root key's SPKI bytes, base64-encoded.</param>
 /// <param name="CacheRoot">Overrides the document-resolved cache root when present — needed only when a leg's own
 /// stub-managed install tree must sit somewhere other than the document's authored (or default) cache root.</param>
+/// <param name="Channel">Optional local development channel override; absent uses the application's channel.</param>
 public sealed record SelfUpdateConfigFile(
     string ReleaseSourceDirectory,
     string TrustAnchorDomain,
     string TrustAnchorAlgorithm,
     string TrustAnchorPublicKeySubjectPublicKeyInfoBase64,
-    string? CacheRoot = null
+    string? CacheRoot = null,
+    string? Channel = null
 ) {
     /// <summary>Builds the <see cref="DirectoryReleaseSource"/> this bundle points at.</summary>
     public DirectoryReleaseSource ToReleaseSource() => new(root: ReleaseSourceDirectory);

@@ -60,7 +60,7 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public SdfViewQuality Quality { get; init; }
     /// <summary>The view's screen fidelity, from 0 to 1, which its pass block carries
     /// (<c>SdfWorldPackage.ScreenFidelity</c>): the share of a screen's own pixels that reaches the view untouched, past
-    /// the CRT glass's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
+    /// a CRT material's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
     /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
     public float ScreenFidelity { get; init; }
     /// <summary>Whether the view publishes the luminance it shades for a window: a window's view of the world beyond its
@@ -192,7 +192,6 @@ public sealed record SdfFrame(
     /// <summary>The revision of <see cref="MeshDraws"/>' content, which a producer that rewrites one list in place moves
     /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
     public long MeshDrawsRevision { get; init; }
-
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights {
@@ -210,6 +209,7 @@ public sealed record SdfFrame(
     // Each default is built on its first read, so a producer that supplies its own allocates none.
     private SdfLights? m_lights;
     private SdfSky? m_sky;
+
     /// <summary>The far distance, in world units: the depth past which a view draws nothing, which bounds its surfaces,
     /// its far shadow cascade and the depth debug ramp. Authored as world data (<c>render.farDistance</c>). Must be
     /// finite and positive — the render frame throws otherwise (a document validator already refuses it by name
@@ -223,8 +223,8 @@ public sealed record SdfFrame(
     /// <summary>The optional opaque-material cel response, applied before temporal reconstruction.</summary>
     public SdfToon Toon { get; init; } = SdfToon.Default;
 
-    /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
-    /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
+    /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic screens stop spilling colored light
+    /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit screens' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. The pass block carries it as <c>disableScreenLights</c>
     /// (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and screen lights stay on.</summary>
     public bool DisableScreenLights { get; init; }

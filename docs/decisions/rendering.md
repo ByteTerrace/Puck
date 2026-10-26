@@ -990,7 +990,7 @@ screen and mattes the window to the screen's picture; no separate 2D image
 stands in for it. Framed, the picture is source-exact: whole window pixels per
 source row, no CRT treatment, post or bezel on those pixels, and the matte's
 fill around it, so the window is indistinguishable from a desktop emulator.
-Easing out fades the screen's glass, the CRT look and the room back in, which
+Easing out fades the room (and a CRT screen's glass and look) back in, which
 is the reveal that the player was in the world all along. One per-view value,
 the screen fidelity the ease drives, turns the treatment and post off, and the
 root's own placement of the seat's view shows only the picture's part of it, so

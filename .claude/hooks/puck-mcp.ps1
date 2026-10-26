@@ -1,10 +1,5 @@
-# Starts the operator MCP adapter from this checkout's existing Release build of src/Puck.Cli, otherwise the main
-# checkout's (the one the live World runs beside); with no build in either, this checkout's CLI is built first. The
-# build is whatever was last built there, possibly older than HEAD: the script names the build it chose and its
-# stamp on stderr. The installed `puck` tool is never used: it keeps the commit it was installed at. The build is
-# copied to .claude/mcp-cli/<build stamp>/ first, so a running adapter holds only its copy, never the build output,
-# and each new build gets a fresh copy the next time a client starts the server. Standard output is the MCP channel,
-# so everything this script says goes to stderr.
+# Launches the completed checkout build through the local signed development release channel and application stub.
+# The persistent MCP front follows activated builds while previous workers retain their owned Worlds.
 $ErrorActionPreference = 'Stop'
 
 function Write-Note([string] $message) {
@@ -13,7 +8,7 @@ function Write-Note([string] $message) {
 
 function Get-CliBuild([string] $checkout) {
     $build = Join-Path $checkout 'src/Puck.Cli/bin/Release/net11.0'
-    if (Test-Path -LiteralPath (Join-Path $build 'Puck.Cli.dll')) {
+    if ((Test-Path -LiteralPath (Join-Path $build 'Puck.Cli.dll')) -and (Test-Path -LiteralPath (Join-Path $build 'puck-build-ready'))) {
         return $build
     }
     return $null
@@ -62,46 +57,22 @@ if ($null -eq $build) {
     }
 }
 
-# The stamp is the newest file in the build, so a rebuild that changes only a dependency (Puck.Mcp.dll) still makes a
-# fresh copy.
-$cache = Join-Path $source '.claude/mcp-cli'
-$stamp = (Get-ChildItem -LiteralPath $build -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).LastWriteTimeUtc.Ticks.ToString()
-$copy = Join-Path $cache $stamp
-$dll = Join-Path $copy 'Puck.Cli.dll'
-Write-Note "adapter build $build (stamp $stamp)."
-if (-not (Test-Path -LiteralPath $dll)) {
-    $staging = "$copy.$PID.partial"
-    try {
-        $null = New-Item -ItemType Directory -Force -Path $staging
-        Copy-Item -Path (Join-Path $build '*') -Destination $staging -Recurse -Force
-        Move-Item -LiteralPath $staging -Destination $copy
-    } catch {
-        # Another client made the same copy first, or the copy failed; the check below tells which.
-        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if (-not (Test-Path -LiteralPath $dll)) {
-        Write-Note "copying $build to $copy failed."
-        exit 1
-    }
+# Only the small BCL stub is bootstrapped here. Application publication, signature verification, staging and
+# activation use the launcher release chain; no private application-copy staging lives in this hook.
+$install = Join-Path $source '.claude/mcp-install'
+$stubBuild = Join-Path $source 'src/Puck.Launcher.Stub/bin/Release/net11.0'
+& dotnet build (Join-Path $source 'src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj') -c Release -nodeReuse:false 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$null = New-Item -ItemType Directory -Force -Path $install
+foreach ($file in Get-ChildItem -LiteralPath $stubBuild -File) {
+    $target = Join-Path $install $file.Name
+    if (-not (Test-Path -LiteralPath $target)) { Copy-Item -LiteralPath $file.FullName -Destination $target }
 }
-
-Get-ChildItem -LiteralPath $cache -Directory | Where-Object { $_.Name -like '*.partial' -and $_.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddDays(-1) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-# An earlier copy goes only once no adapter runs from it. On Windows a running adapter maps its Puck.Cli.dll, so that
-# file cannot be opened exclusively; elsewhere an open file shows no such lock, so earlier copies are left in place.
-if ($IsWindows) {
-    Get-ChildItem -LiteralPath $cache -Directory | Where-Object { ($_.Name -ne $stamp) -and ($_.Name -notlike '*.partial') } | ForEach-Object {
-        $entry = Join-Path $_.FullName 'Puck.Cli.dll'
-        try {
-            if (Test-Path -LiteralPath $entry) {
-                [System.IO.File]::Open($entry, 'Open', 'ReadWrite', 'None').Dispose()
-            }
-            Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
-        } catch { }
-    }
-}
-
-# Start-Process hands the adapter this process's own standard streams, unbuffered and unconverted, as the MCP
-# channel needs. It joins its arguments into one command line, so each is quoted for a path with a space.
-$arguments = (@($dll, 'mcp', '--profile', 'operator') + @($args) | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
-$process = Start-Process -FilePath 'dotnet' -ArgumentList $arguments -NoNewWindow -Wait -PassThru
+'{"AppExecutableFileName":"Puck.Cli.exe","MaxAttempts":3}' | Set-Content -LiteralPath (Join-Path $install 'stub.json') -NoNewline
+$dll = Join-Path $build 'Puck.Cli.dll'
+& dotnet $dll mcp --profile operator --prepare-install --install-root $install --build-source $build 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$stub = Join-Path $install 'Puck.Launcher.Stub.exe'
+$arguments = (@('mcp', '--profile', 'operator', '--install-root', $install, '--build-source', $build, '--checkout', $source) + @($args) | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+$process = Start-Process -FilePath $stub -ArgumentList $arguments -NoNewWindow -Wait -PassThru
 exit $process.ExitCode

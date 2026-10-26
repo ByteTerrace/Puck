@@ -1,36 +1,53 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The semantic color roles the packed overlay records index — resolved to actual RGBA values from the
-/// <see cref="OverlayTokenBlock"/> storage slab inside the fragment shader, never from a hardcoded HLSL table.
-/// Each value IS its color's index in the block (one <c>float4</c>-aligned <c>uint4</c> element per role).
+/// The color roles the packed overlay records index — resolved to actual RGBA values from the
+/// <see cref="OverlayTokenBlock"/> storage slab inside the fragment shader, never from a hardcoded HLSL table. Each
+/// value IS its color's index in the block (one <c>float4</c>-aligned <c>uint4</c> element per role). The core roles
+/// come first; the component slots after them carry a component style's resolved color, which names a core role or
+/// its own.
 /// </summary>
 public enum OverlayColorRole : uint {
+    /// <summary>The primary text.</summary>
     TextPrimary = 0,
+    /// <summary>The dimmed text.</summary>
     TextDim = 1,
-    /// <summary>The muted text tone — CPU-selected; no dedicated HLSL macro.</summary>
+    /// <summary>The muted text.</summary>
     TextMute = 2,
+    /// <summary>The accent.</summary>
     Accent = 3,
+    /// <summary>The positive status.</summary>
     Positive = 4,
+    /// <summary>The warning status.</summary>
     Warning = 5,
+    /// <summary>The danger status.</summary>
     Danger = 6,
-    /// <summary>The phosphor accent tone — CPU-selected; no dedicated HLSL macro.</summary>
-    Phosphor = 7,
-    AccentInk = 8,
-    SurfaceRaised = 9,
-    /// <summary>The inset-surface tone — CPU-selected; no dedicated HLSL macro.</summary>
-    SurfaceInset = 10,
-    AccentQuiet = 11,
-    /// <summary>The cyan phosphor accent tone — CPU-selected; no dedicated HLSL macro.</summary>
-    PhosphorCyan = 12,
-    SurfaceBase = 13,
-    BadgeDark = 14,
-    BadgeLight = 15,
-    LineHair = 16,
-    LineSoft = 17,
-    ScrimPanel = 18,
-    ScrimStrip = 19,
-    ScrimChip = 20,
+    /// <summary>The ink drawn on the accent.</summary>
+    AccentInk = 7,
+    /// <summary>The quiet accent fill.</summary>
+    AccentQuiet = 8,
+    /// <summary>The deepest surface.</summary>
+    SurfaceBase = 9,
+    /// <summary>A raised surface.</summary>
+    SurfaceRaised = 10,
+    /// <summary>A recessed surface.</summary>
+    SurfaceInset = 11,
+    /// <summary>The hairline rule.</summary>
+    LineHair = 12,
+    /// <summary>The soft rule.</summary>
+    LineSoft = 13,
+    /// <summary>The panel scrim, its alpha baked in.</summary>
+    ScrimPanel = 14,
+    /// <summary>The strip scrim, its alpha baked in.</summary>
+    ScrimStrip = 15,
+    /// <summary>The chip scrim, its alpha baked in.</summary>
+    ScrimChip = 16,
+    /// <summary>The console style's echo color: an echoed input line and the prompt.</summary>
+    ConsoleEcho = 17,
+    /// <summary>The keycap style's badge backing.</summary>
+    KeycapBadge = 18,
+    /// <summary>The keycap style's badge ink.</summary>
+    KeycapBadgeInk = 19,
     /// <summary>The ring-element-only sentinel: reads a raw RGB triple packed into the record's own reserved words
     /// instead of indexing this slab (see <see cref="OverlayFrameBuilder.WriteRing(float, float, float, RgbaColor, float)"/>)
     /// — a marker's authored, possibly state-bound ring color. Illegitimate on every other element/panel kind.</summary>
@@ -41,53 +58,49 @@ public enum OverlayColorRole : uint {
 /// words, block at buffer word 0):
 /// <list type="bullet">
 /// <item><description>Words <c>[0, 4×RoleCount)</c> — one RGBA <c>float4</c> per <see cref="OverlayColorRole"/>, in
-/// enum order; role <c>r</c> occupies <c>uint4</c> element <c>r</c> exactly (scrims/quiet roles bake their token
-/// alpha into <c>.a</c>).</description></item>
+/// enum order; role <c>r</c> occupies <c>uint4</c> element <c>r</c> exactly (scrims bake their alpha into
+/// <c>.a</c>).</description></item>
 /// <item><description>Words <c>[4×RoleCount, WordCount)</c> — the geometry scalars, indexed by
 /// <see cref="Scalar"/>.</description></item>
 /// </list>
-/// KEEP IN SYNC with the HLSL accessors <c>OverlayTokenColor</c>/<c>OverlayTokenScalar</c> in
-/// <c>Assets/Shaders/overlay-common.hlsli</c> — this file and those two functions are the one layout contract.
+/// KEEP IN SYNC with the HLSL accessors <c>OverlayTokenColor</c>/<c>OverlayTokenScalar</c> and the role and scalar
+/// indices in <c>Assets/Shaders/overlay-common.hlsli</c> — this file and that one are the one layout contract.
 /// </summary>
 public static class OverlayTokenBlock {
     /// <summary>The geometry-scalar slots, indexed after the color table.</summary>
     public enum Scalar : int {
-        /// <summary>The panel corner radius, px.</summary>
+        /// <summary>The keycap corner radius, px.</summary>
         Radius1 = 0,
-        /// <summary>The strip corner radius, px.</summary>
+        /// <summary>The strip and chip corner radius, px.</summary>
         Radius2 = 1,
-        /// <summary>The chip corner radius, px.</summary>
+        /// <summary>The panel corner radius, px.</summary>
         Radius3 = 2,
         /// <summary>The hairline outline width, px.</summary>
-        EdgeHairlineWidth = 3,
-        /// <summary>The status ring stroke width, px.</summary>
-        RingStatusWidth = 4,
-        /// <summary>The bloom halo's Gaussian blur radius, px.</summary>
-        BloomHaloBlur = 5,
-        /// <summary>The Tier-1 status ring's bloom alpha.</summary>
-        BloomRingAlpha = 6,
-        /// <summary>The Tier-1 status halo's bloom alpha.</summary>
-        BloomHaloAlpha = 7,
-        /// <summary>The neutral-tier status ring's bloom alpha.</summary>
-        BloomNeutralRingAlpha = 8,
-        /// <summary>The neutral-tier status halo's bloom alpha.</summary>
-        BloomNeutralHaloAlpha = 9,
+        Hairline = 3,
+        /// <summary>The glow halo's reach, px.</summary>
+        GlowHaloBlur = 4,
+        /// <summary>The glow ring's alpha.</summary>
+        GlowRingAlpha = 5,
+        /// <summary>The glow halo's alpha.</summary>
+        GlowHaloAlpha = 6,
+        /// <summary>The neutral glow ring's alpha.</summary>
+        GlowNeutralRingAlpha = 7,
+        /// <summary>The neutral glow halo's alpha.</summary>
+        GlowNeutralHaloAlpha = 8,
         /// <summary>The anti-alias ramp width for hairline/rounded-rect edges, px (<see cref="DesignTokens.Icon.EdgeAaRamp"/>).</summary>
-        EdgeAa = 10,
-        /// <summary>The REST-tier chip plate's translucency.</summary>
-        ChipRestOpacity = 11,
-        /// <summary>The procedural icon/glyph stroke half-width, in glyph-local units (<see cref="OverlayThemeValues.IconSet.StrokeHalfWidth"/>).</summary>
-        GlyphStroke = 12,
+        EdgeAa = 9,
+        /// <summary>A resting keycap plate's opacity.</summary>
+        KeycapRestOpacity = 10,
         /// <summary>The procedural icon/glyph anti-alias ramp, in glyph-local units (<see cref="DesignTokens.Icon.AaRamp"/>).</summary>
-        GlyphAa = 13,
-        /// <summary>Half the reference chip height — the denominator that converts an absolute px token into a
-        /// per-chip ratio (the chip recipes scale with each slot's own plate half-size).</summary>
-        ReferenceChipHalf = 14,
+        GlyphAa = 11,
+        /// <summary>Half the keycap's reference height — the denominator that converts an absolute px token into a
+        /// per-plate ratio (the keycap scales with each plate's own half-size).</summary>
+        KeycapReferenceHalf = 12,
     }
 
     /// <summary>The number of color roles in the block.</summary>
-    public const int RoleCount = 21;
-    /// <summary>The number of geometry-scalar slots (one padding slot keeps the block <c>uint4</c>-aligned).</summary>
+    public const int RoleCount = 20;
+    /// <summary>The number of geometry-scalar slots (the unused tail keeps the block <c>uint4</c>-aligned).</summary>
     public const int ScalarCount = 16;
     /// <summary>The slab's total size in 32-bit words (a multiple of 4 — the storage buffer is <c>uint4</c>-strided).</summary>
     public const int WordCount = ((RoleCount * 4) + ScalarCount);
@@ -126,187 +139,57 @@ public static class OverlayTokenBlock {
         }
 
         var color = theme.Color;
+        var styles = theme.Styles;
 
-        WriteColor(
-            color: color.TextPrimary,
-            destination: destination,
-            role: OverlayColorRole.TextPrimary
-        );
-        WriteColor(
-            color: color.TextDim,
-            destination: destination,
-            role: OverlayColorRole.TextDim
-        );
-        WriteColor(
-            color: color.TextMute,
-            destination: destination,
-            role: OverlayColorRole.TextMute
-        );
-        WriteColor(
-            color: color.Accent,
-            destination: destination,
-            role: OverlayColorRole.Accent
-        );
-        WriteColor(
-            color: color.Positive,
-            destination: destination,
-            role: OverlayColorRole.Positive
-        );
-        WriteColor(
-            color: color.Warning,
-            destination: destination,
-            role: OverlayColorRole.Warning
-        );
-        WriteColor(
-            color: color.Danger,
-            destination: destination,
-            role: OverlayColorRole.Danger
-        );
-        WriteColor(
-            color: color.Phosphor,
-            destination: destination,
-            role: OverlayColorRole.Phosphor
-        );
-        WriteColor(
-            color: color.AccentInk,
-            destination: destination,
-            role: OverlayColorRole.AccentInk
-        );
-        WriteColor(
-            color: color.SurfaceRaised,
-            destination: destination,
-            role: OverlayColorRole.SurfaceRaised
-        );
-        WriteColor(
-            color: color.SurfaceInset,
-            destination: destination,
-            role: OverlayColorRole.SurfaceInset
-        );
-        WriteColor(
-            color: color.AccentQuiet,
-            destination: destination,
-            role: OverlayColorRole.AccentQuiet
-        );
-        WriteColor(
-            color: color.PhosphorCyan,
-            destination: destination,
-            role: OverlayColorRole.PhosphorCyan
-        );
-        WriteColor(
-            color: color.SurfaceBase,
-            destination: destination,
-            role: OverlayColorRole.SurfaceBase
-        );
-        WriteColor(
-            color: color.BadgeDark,
-            destination: destination,
-            role: OverlayColorRole.BadgeDark
-        );
-        WriteColor(
-            color: color.BadgeLight,
-            destination: destination,
-            role: OverlayColorRole.BadgeLight
-        );
-        WriteColor(
-            color: color.LineHair,
-            destination: destination,
-            role: OverlayColorRole.LineHair
-        );
-        WriteColor(
-            color: color.LineSoft,
-            destination: destination,
-            role: OverlayColorRole.LineSoft
-        );
-        WriteColor(
-            color: Baked(scrim: color.ScrimPanel),
-            destination: destination,
-            role: OverlayColorRole.ScrimPanel
-        );
-        WriteColor(
-            color: Baked(scrim: color.ScrimStrip),
-            destination: destination,
-            role: OverlayColorRole.ScrimStrip
-        );
-        WriteColor(
-            color: Baked(scrim: color.ScrimChip),
-            destination: destination,
-            role: OverlayColorRole.ScrimChip
-        );
+        foreach (var (role, value) in ((ReadOnlySpan<(OverlayColorRole, RgbaColor)>)[
+            (OverlayColorRole.TextPrimary, color.TextPrimary),
+            (OverlayColorRole.TextDim, color.TextDim),
+            (OverlayColorRole.TextMute, color.TextMute),
+            (OverlayColorRole.Accent, color.Accent),
+            (OverlayColorRole.Positive, color.Positive),
+            (OverlayColorRole.Warning, color.Warning),
+            (OverlayColorRole.Danger, color.Danger),
+            (OverlayColorRole.AccentInk, color.AccentInk),
+            (OverlayColorRole.AccentQuiet, color.AccentQuiet),
+            (OverlayColorRole.SurfaceBase, color.SurfaceBase),
+            (OverlayColorRole.SurfaceRaised, color.SurfaceRaised),
+            (OverlayColorRole.SurfaceInset, color.SurfaceInset),
+            (OverlayColorRole.LineHair, color.LineHair),
+            (OverlayColorRole.LineSoft, color.LineSoft),
+            (OverlayColorRole.ScrimPanel, Baked(scrim: color.ScrimPanel)),
+            (OverlayColorRole.ScrimStrip, Baked(scrim: color.ScrimStrip)),
+            (OverlayColorRole.ScrimChip, Baked(scrim: color.ScrimChip)),
+            (OverlayColorRole.ConsoleEcho, styles.Console.Echo),
+            (OverlayColorRole.KeycapBadge, styles.Keycap.Badge),
+            (OverlayColorRole.KeycapBadgeInk, styles.Keycap.BadgeInk),
+        ])) {
+            WriteColor(
+                color: value,
+                destination: destination,
+                role: role
+            );
+        }
 
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.Radius1,
-            value: theme.Radius.Radius1
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.Radius2,
-            value: theme.Radius.Radius2
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.Radius3,
-            value: theme.Radius.Radius3
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.EdgeHairlineWidth,
-            value: theme.Elevation.EdgeHairlineWidth
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.RingStatusWidth,
-            value: theme.Elevation.RingStatusWidth
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.BloomHaloBlur,
-            value: theme.Elevation.BloomHaloBlur
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.BloomRingAlpha,
-            value: theme.Elevation.BloomRingAlpha
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.BloomHaloAlpha,
-            value: theme.Elevation.BloomHaloAlpha
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.BloomNeutralRingAlpha,
-            value: theme.Elevation.BloomNeutralRingAlpha
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.BloomNeutralHaloAlpha,
-            value: theme.Elevation.BloomNeutralHaloAlpha
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.EdgeAa,
-            value: DesignTokens.Icon.EdgeAaRamp
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.ChipRestOpacity,
-            value: theme.Elevation.ChipRestOpacity
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.GlyphStroke,
-            value: theme.Icon.StrokeHalfWidth
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.GlyphAa,
-            value: DesignTokens.Icon.AaRamp
-        );
-        WriteScalar(
-            destination: destination,
-            scalar: Scalar.ReferenceChipHalf,
-            value: (theme.Space.HeightChip * 0.5f)
-        );
+        foreach (var (scalar, value) in ((ReadOnlySpan<(Scalar, float)>)[
+            (Scalar.Radius1, theme.Radius.Radius1),
+            (Scalar.Radius2, theme.Radius.Radius2),
+            (Scalar.Radius3, theme.Radius.Radius3),
+            (Scalar.Hairline, theme.Stroke.Hairline),
+            (Scalar.GlowHaloBlur, styles.Glow.HaloBlur),
+            (Scalar.GlowRingAlpha, styles.Glow.RingAlpha),
+            (Scalar.GlowHaloAlpha, styles.Glow.HaloAlpha),
+            (Scalar.GlowNeutralRingAlpha, styles.Glow.NeutralRingAlpha),
+            (Scalar.GlowNeutralHaloAlpha, styles.Glow.NeutralHaloAlpha),
+            (Scalar.EdgeAa, DesignTokens.Icon.EdgeAaRamp),
+            (Scalar.KeycapRestOpacity, styles.Keycap.RestOpacity),
+            (Scalar.GlyphAa, DesignTokens.Icon.AaRamp),
+            (Scalar.KeycapReferenceHalf, (styles.Keycap.ReferenceSize * 0.5f)),
+        ])) {
+            WriteScalar(
+                destination: destination,
+                scalar: scalar,
+                value: value
+            );
+        }
     }
 }

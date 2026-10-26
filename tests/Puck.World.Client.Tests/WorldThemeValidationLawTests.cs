@@ -1,217 +1,164 @@
+using Puck.Overlays;
 using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>Pins the <c>theme</c> section's validation: a minimal, fully-authored theme parses and validates; the
-/// two engine-side perceptual floors (type size, scrim alpha) refuse a literal violation by name; a state-bound
-/// scrim alpha starting below its floor is refused at load, and one a live write moves below it clamps to the floor
-/// at resolve time; and absence resolves to the zeroed <see cref="WorldThemeSection.Absent"/> block.</summary>
+/// <summary>Pins the <c>theme</c> section: a document that authors none draws the engine's complete neutral theme; a
+/// component style's color names a core role or its own color, and a role draws exactly what that role's slab slot
+/// draws; the type floor and the style ranges refuse by name; the player's high-contrast preference floors every
+/// scrim; and the resolve re-runs only for the slots its own tokens read.</summary>
 public sealed class WorldThemeValidationLawTests {
-    private static readonly BindableColor OpaqueGray = new(Raw: "#808080");
-    private static readonly BindableColor BakedAlphaWhite = new(Raw: "#FFFFFF80");
+    private static WorldThemeSection Default => WorldThemeSection.Default;
 
-    internal static WorldThemeScrim BoundScrim(string binding) => new(
-        Alpha: new BindableScalar(binding: binding),
-        Color: new BindableColor(Raw: "#101010")
+    private static OverlayThemeValues Resolve(WorldDefinition definition, WorldThemeResolve? resolver = null) => (resolver ?? new WorldThemeResolve(domains: new WorldValueDomainGuard())).Resolve(
+        definition: definition,
+        revision: 1,
+        mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
     );
-
-    private static WorldThemeBloomHue Hue() => new(
-        Halo: BakedAlphaWhite,
-        Ring: BakedAlphaWhite
-    );
-    private static WorldThemeChrome MinimalChrome() => new(
-        BarHintAlpha: 0.6f,
-        BarLabelAlpha: 0.9f,
-        CursorAlpha: 0.9f,
-        CursorDotMaxHalf: 4f,
-        CursorDotRatio: 0.22f,
-        CursorLabelGap: 5f,
-        DimQuietAlpha: 0.35f,
-        WheelActiveRingAlpha: 0.95f,
-        WheelActiveRingOffset: 1.5f,
-        WheelHubDotHalf: 3f,
-        WheelHubLabelGap: 2f,
-        WheelLabelAlpha: 1f,
-        WheelMarkerGapRatio: 1.6f,
-        WheelMarkerHalf: 3.5f,
-        WheelRingAlpha: 0.55f
+    private static WorldDefinition Themed(WorldThemeSection theme) => (Fixtures.BuildDocument() with { ThemeRaw = theme });
+    private static RgbaColor SlabColor(ReadOnlySpan<uint> slab, OverlayColorRole role) => new(
+        A: BitConverter.UInt32BitsToSingle(value: slab[((((int)role) * 4) + 3)]),
+        B: BitConverter.UInt32BitsToSingle(value: slab[((((int)role) * 4) + 2)]),
+        G: BitConverter.UInt32BitsToSingle(value: slab[((((int)role) * 4) + 1)]),
+        R: BitConverter.UInt32BitsToSingle(value: slab[(((int)role) * 4)])
     );
 
-    internal static WorldThemeColor MinimalColor(float scrimAlpha = 0.9f) => new(
-        Accent: OpaqueGray,
-        AccentInk: OpaqueGray,
-        AccentLine: BakedAlphaWhite,
-        AccentQuiet: BakedAlphaWhite,
-        BadgeDark: OpaqueGray,
-        BadgeLight: OpaqueGray,
-        Danger: OpaqueGray,
-        LineHair: BakedAlphaWhite,
-        LineInset: BakedAlphaWhite,
-        LineSoft: BakedAlphaWhite,
-        LineStrong: BakedAlphaWhite,
-        Phosphor: OpaqueGray,
-        PhosphorCyan: OpaqueGray,
-        PhosphorDim: BakedAlphaWhite,
-        Positive: OpaqueGray,
-        ScrimChip: Scrim(alpha: scrimAlpha),
-        ScrimPanel: Scrim(alpha: scrimAlpha),
-        ScrimStrip: Scrim(alpha: scrimAlpha),
-        SurfaceBase: OpaqueGray,
-        SurfaceInset: OpaqueGray,
-        SurfacePanel: OpaqueGray,
-        SurfaceRaised: OpaqueGray,
-        TextDim: OpaqueGray,
-        TextMute: OpaqueGray,
-        TextPrimary: OpaqueGray,
-        Warning: OpaqueGray
-    );
+    public static TheoryData<WorldThemeRole> Roles => [.. Enum.GetValues<WorldThemeRole>()];
 
-    private static WorldThemeDiegetic MinimalDiegetic() => new(
-        BezelEdge: OpaqueGray,
-        BezelInner: OpaqueGray,
-        BezelOuter: OpaqueGray,
-        EmbossFill: OpaqueGray,
-        EmbossShadowDropAlpha: 0.5f,
-        EmbossShadowDropBlur: 2f,
-        EmbossShadowDropOffsetY: 2f,
-        EmbossShadowLitAlpha: 0.3f,
-        EmbossShadowLitOffsetY: -1f,
-        EngraveFill: OpaqueGray,
-        EngraveShadowLipAlpha: 0.2f,
-        EngraveShadowLipOffsetY: 1f,
-        EngraveShadowRecessAlpha: 0.5f,
-        EngraveShadowRecessBlur: 1f,
-        EngraveShadowRecessOffsetY: -1f,
-        PhosphorGlowBlur: 4f,
-        PlateBottom: OpaqueGray,
-        PlateMid: OpaqueGray,
-        PlateStripeColor: BakedAlphaWhite,
-        PlateTop: OpaqueGray,
-        ScreenWellInner: OpaqueGray,
-        ScreenWellOuter: OpaqueGray
-    );
+    /// <summary>A world that authors no theme validates and draws the engine's neutral one: every surface has a color,
+    /// a toast has a height, and the console's echo takes the role the default names.</summary>
+    [Fact]
+    public void AnUnthemedWorldDrawsTheEngineDefault() {
+        var definition = Fixtures.BuildDocument();
 
-    internal static WorldThemeElevation MinimalElevation() => new(
-        BloomHaloBlur: 10f,
-        BloomHaloSpread: -2f,
-        BloomHaloAlpha: new BindableScalar(literal: 0.4f),
-        BloomRingWidth: 1f,
-        BloomRingAlpha: new BindableScalar(literal: 0.5f),
-        BloomNeutralHaloAlpha: new BindableScalar(literal: 0.2f),
-        BloomNeutralRingAlpha: new BindableScalar(literal: 0.3f),
-        BloomHeldInsetBlur: 10f,
-        BloomHeldInsetSpread: -2f,
-        BloomHeldInsetAlpha: new BindableScalar(literal: 0.4f),
-        BloomAccent: Hue(),
-        BloomPositive: Hue(),
-        BloomWarning: Hue(),
-        BloomDanger: Hue(),
-        BloomNeutral: Hue(),
-        PressHeldGlowBlur: 10f,
-        PressHeldGlowSpread: -2f,
-        PressHeldGlowColor: BakedAlphaWhite,
-        PressHeldShadowBlur: 6f,
-        PressHeldShadowOffsetY: 2f,
-        PressHeldTranslateY: 1f,
-        PressHeldShadowColor: BakedAlphaWhite,
-        ShadowSeatBlur: 30f,
-        ShadowSeatOffsetY: 10f,
-        ShadowSeatSpread: -10f,
-        ShadowSeatStripSpread: -10f,
-        ShadowSeatColor: BakedAlphaWhite,
-        ShadowSeatStripColor: BakedAlphaWhite,
-        CatchlightOffsetY: 1f,
-        CatchlightColor: BakedAlphaWhite,
-        ChipRestOpacity: 0.6f,
-        EdgeHairlineWidth: 1f,
-        RingStatusWidth: 2f,
-        RingStatusAlpha: 0.5f
-    );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: definition,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.Same(
+            actual: definition.Theme,
+            expected: Default
+        );
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(
+            definition: Themed(theme: Default),
+            neighbours: null,
+            reason: out var themedReason
+        ), userMessage: themedReason);
 
-    private static WorldThemeIcon MinimalIcon() => new(StrokeHalfWidth: 0.08f);
-    private static WorldThemeMotion MinimalMotion() => new(
-        CaretBlink: 1000f,
-        DurFast: 100f,
-        DurMed: 150f,
-        DurPanel: 250f,
-        EaseStd: new WorldThemeCubicBezier(
-            X1: 0.2f,
-            X2: 0f,
-            Y1: 0f,
-            Y2: 1f
-        ),
-        EaseOut: new WorldThemeCubicBezier(
-            X1: 0.4f,
-            X2: 1f,
-            Y1: 0f,
-            Y2: 1f
-        )
-    );
-    private static WorldThemeRadius MinimalRadius() => new(
-        Radius1: 3f,
-        Radius2: 6f,
-        Radius3: 9f
-    );
-    private static WorldThemeSpace MinimalSpace() => new(
-        HeightBadge: 20f,
-        HeightBindBar: 20f,
-        HeightChip: 20f,
-        HeightConsoleHead: 20f,
-        HeightModeRow: 20f,
-        HeightPromptRow: 20f,
-        HeightTrackerBar: 20f,
-        HeightTrackerCell: 20f,
-        Space0: 0f,
-        Space1: 4f,
-        Space2: 8f,
-        Space3: 12f,
-        Space4: 16f,
-        Space5: 20f,
-        Space6: 24f,
-        Space8: 32f
-    );
+        var resolved = Resolve(definition: definition);
 
-    internal static WorldThemeSection MinimalTheme(float bodySize = 12f, float scrimAlpha = 0.9f) => new(
-        Chrome: MinimalChrome(),
-        Color: MinimalColor(scrimAlpha: scrimAlpha),
-        Space: MinimalSpace(),
-        Radius: MinimalRadius(),
-        Type: MinimalType(bodySize: bodySize),
-        Elevation: MinimalElevation(),
-        Diegetic: MinimalDiegetic(),
-        Motion: MinimalMotion(),
-        Icon: MinimalIcon()
-    );
+        Assert.True(condition: (resolved.Color.TextPrimary.A > 0f));
+        Assert.True(condition: (resolved.Color.ScrimPanel.Alpha > 0f));
+        Assert.True(condition: (resolved.Styles.Toast.MinHeight > 0f));
+        Assert.Equal(
+            actual: resolved.Styles.Console.Echo,
+            expected: resolved.Color.Accent
+        );
+    }
+    /// <summary>A style color naming a core role draws exactly what that role's own slab slot draws, for every role, and
+    /// a style color of its own draws itself.</summary>
+    [Theory]
+    [MemberData(memberName: nameof(Roles))]
+    public void AStyleColorNamingARoleDrawsThatRole(WorldThemeRole role) {
+        var theme = (Default with {
+            Styles = Default.Styles with {
+                Console = Default.Styles.Console with { Echo = new WorldThemeStyleColor(Role: role) },
+                Keycap = Default.Styles.Keycap with { Badge = new WorldThemeStyleColor(Color: new BindableColor(Raw: "#336699")) },
+            },
+        });
+        var definition = Themed(theme: theme);
 
-    private static WorldThemeType MinimalType(float bodySize = 12f) => new(
-        BodyLine: 16f,
-        BodySize: bodySize,
-        BodyWeight: 400,
-        LabelLine: 16f,
-        LabelSize: 12f,
-        LabelTracking: 0.01f,
-        LabelWeight: 400,
-        MicroLine: 16f,
-        MicroSize: 12f,
-        MicroTracking: 0.01f,
-        MicroWeight: 400,
-        MonoBadgeSize: 12f,
-        MonoLine: 16f,
-        MonoReadoutSize: 12f,
-        MonoSize: 12f,
-        MonoTracking: 0.01f,
-        MonoWeight: 400,
-        TitleLine: 16f,
-        TitleSize: 12f,
-        TitleTracking: 0.01f,
-        TitleWeight: 400
-    );
-    private static WorldThemeScrim Scrim(float alpha) => new(
-        Alpha: new BindableScalar(literal: alpha),
-        Color: new BindableColor(Raw: "#101010")
-    );
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(
+            definition: definition,
+            neighbours: null,
+            reason: out var reason
+        ), userMessage: reason);
 
+        var resolved = Resolve(definition: definition);
+        Span<uint> slab = stackalloc uint[OverlayTokenBlock.WordCount];
+
+        OverlayTokenBlock.Write(
+            destination: slab,
+            theme: in resolved
+        );
+        Assert.Equal(
+            actual: SlabColor(role: OverlayColorRole.ConsoleEcho, slab: slab),
+            expected: SlabColor(role: WorldThemeResolve.RoleOf(role: role), slab: slab)
+        );
+        Assert.Equal(
+            actual: SlabColor(role: OverlayColorRole.KeycapBadge, slab: slab),
+            expected: new RgbaColor(A: 1f, B: (0x99 / 255f), G: (0x66 / 255f), R: (0x33 / 255f))
+        );
+    }
+    /// <summary>A style color authors exactly one of a role or its own color; either both or neither refuses by name,
+    /// beside the default's passing control.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AStyleColorAuthoringBothOrNeitherRefusesByName(bool both) {
+        var echo = (both
+            ? new WorldThemeStyleColor(Color: new BindableColor(Raw: "#FFFFFF"), Role: WorldThemeRole.Accent)
+            : new WorldThemeStyleColor());
+
+        Laws.Refuses(
+            definition: Themed(theme: (Default with { Styles = Default.Styles with { Console = Default.Styles.Console with { Echo = echo } } })),
+            needle: "theme.styles.console.echo must author exactly one of role"
+        );
+    }
+    /// <summary>A style's ranges and the type floor are enforced by name: an opacity outside [0, 1], a negative extent
+    /// and a type size under the glyph coverage floor are authoring errors a boot refuses rather than draws.</summary>
+    [Theory]
+    [InlineData("theme.styles.bar.quietAlpha")]
+    [InlineData("theme.styles.cursor.dotMaxHalf")]
+    [InlineData("theme.styles.glow.haloBlur")]
+    [InlineData("theme.type.microSize")]
+    public void AnOutOfRangeTokenRefusesByName(string field) {
+        var styles = Default.Styles;
+        var theme = (field switch {
+            "theme.styles.bar.quietAlpha" => (Default with { Styles = styles with { Bar = styles.Bar with { QuietAlpha = 1.5f } } }),
+            "theme.styles.cursor.dotMaxHalf" => (Default with { Styles = styles with { Cursor = styles.Cursor with { DotMaxHalf = -1f } } }),
+            "theme.styles.glow.haloBlur" => (Default with { Styles = styles with { Glow = styles.Glow with { HaloBlur = 0f } } }),
+            _ => (Default with { Type = Default.Type with { MicroSize = 10f } }),
+        });
+
+        Laws.Refuses(
+            definition: Themed(theme: theme),
+            needle: field
+        );
+    }
+    /// <summary>The player's high-contrast preference raises every scrim to the high-contrast floor and leaves a scrim
+    /// already past it alone; turning it off restores the authored alpha.</summary>
+    [Fact]
+    public void HighContrastFloorsEveryScrim() {
+        var color = Default.Color;
+        var definition = Themed(theme: (Default with {
+            Color = color with {
+                ScrimChip = color.ScrimChip with { Alpha = new BindableScalar(literal: 0.95f) },
+                ScrimPanel = color.ScrimPanel with { Alpha = new BindableScalar(literal: 0.3f) },
+            },
+        }));
+        var resolver = new WorldThemeResolve(domains: new WorldValueDomainGuard());
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+        var normal = resolver.Resolve(definition: definition, mirror: mirror, revision: 1);
+
+        resolver.HighContrast = true;
+
+        var high = resolver.Resolve(definition: definition, mirror: mirror, revision: 1);
+
+        Assert.Equal(actual: normal.Color.ScrimPanel.Alpha, expected: 0.3f);
+        Assert.Equal(actual: high.Color.ScrimPanel.Alpha, expected: WorldThemeCapacity.HighContrastScrimAlpha);
+        Assert.Equal(actual: high.Color.ScrimChip.Alpha, expected: 0.95f);
+        Assert.Equal(actual: resolver.Resolutions, expected: 2);
+
+        resolver.HighContrast = false;
+
+        Assert.Equal(actual: resolver.Resolve(definition: definition, mirror: mirror, revision: 1).Color.ScrimPanel.Alpha, expected: 0.3f);
+    }
     /// <summary>The theme re-resolves only when a slot one of its own tokens reads changes: a row some other consumer
     /// binds moving leaves the cached resolve in place, and the bound row moving resolves it again with the new value.</summary>
     [Fact]
@@ -236,8 +183,8 @@ public sealed class WorldThemeValidationLawTests {
                 value: gauge
             ),
         ]) with {
-            ThemeRaw = MinimalTheme() with {
-                Color = MinimalColor() with { ScrimPanel = BoundScrim(binding: "state.panelAlpha") },
+            ThemeRaw = Default with {
+                Color = Default.Color with { ScrimPanel = Default.Color.ScrimPanel with { Alpha = new BindableScalar(binding: "state.panelAlpha") } },
             },
         };
 
@@ -334,216 +281,6 @@ public sealed class WorldThemeValidationLawTests {
             expected: 0.95f,
             actual: second.Color.ScrimPanel.Alpha,
             precision: 4
-        );
-    }
-    [Fact]
-    public void AbsentThemeResolvesToZeroedBlock() {
-        var definition = Fixtures.BuildDocument();
-
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: definition,
-                neighbours: null,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-        Assert.Equal(
-            expected: WorldThemeSection.Absent,
-            actual: definition.Theme
-        );
-
-        var resolved = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
-            definition: definition,
-            revision: 1,
-            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
-        );
-
-        Assert.Equal(
-            expected: default,
-            actual: resolved.Color.SurfaceBase
-        );
-        Assert.Equal(
-            expected: 0f,
-            actual: resolved.Space.HeightChip
-        );
-        Assert.Equal(
-            expected: 0f,
-            actual: resolved.Chrome.DimQuietAlpha
-        );
-    }
-    /// <summary>The writers' chrome is authored data end to end: what the document declares is what the writers read
-    /// through the resolved theme, so retuning a quiet dim or a wheel marker is a document edit, never a rebuild.</summary>
-    [Fact]
-    public void AuthoredChromeResolvesToWhatTheWritersRead() {
-        var definition = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme() };
-
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: definition,
-                neighbours: null,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        var resolved = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
-            definition: definition,
-            revision: 1,
-            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
-        );
-
-        Assert.Equal(
-            expected: 0.35f,
-            actual: resolved.Chrome.DimQuietAlpha
-        );
-        Assert.Equal(
-            expected: 0.9f,
-            actual: resolved.Chrome.BarLabelAlpha
-        );
-        Assert.Equal(
-            expected: 0.6f,
-            actual: resolved.Chrome.BarHintAlpha
-        );
-        Assert.Equal(
-            expected: 0.9f,
-            actual: resolved.Chrome.CursorAlpha
-        );
-        Assert.Equal(
-            expected: 0.22f,
-            actual: resolved.Chrome.CursorDotRatio
-        );
-        Assert.Equal(
-            expected: 0.55f,
-            actual: resolved.Chrome.WheelRingAlpha
-        );
-        Assert.Equal(
-            expected: 0.95f,
-            actual: resolved.Chrome.WheelActiveRingAlpha
-        );
-        Assert.Equal(
-            expected: 3.5f,
-            actual: resolved.Chrome.WheelMarkerHalf
-        );
-    }
-    [Fact]
-    public void BoundScrimAlphaStartingBelowItsFloorIsRefusedAndOneWrittenBelowItClampsAtResolve() {
-        static WorldDefinition Bound(double alpha) => Fixtures.BuildDocument() with {
-            ThemeRaw = MinimalTheme() with {
-                Color = MinimalColor() with { ScrimPanel = BoundScrim(binding: "state.lowAlpha") },
-            },
-            StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(
-                Name: CellName.Parse(candidate: "lowAlpha"),
-                Kind: CellKind.Fixed,
-                Cells: [
-                    new StateCell(
-                        Key: WorldStateRow.SlotKey,
-                        Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: alpha).Value)
-                    ),
-                ]
-            ),
-            ]),
-        };
-
-        // A load refuses a binding whose row starts below the floor, naming the field; one starting above it is
-        // admitted.
-        Laws.Refuses(
-            definition: Bound(alpha: 0.2d),
-            needle: "theme.color.scrimPanel.alpha binds state.lowAlpha whose starting value"
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: Bound(alpha: 0.9d),
-                neighbours: null,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        // A live write below the floor clamps to it as the theme resolves.
-        var written = Bound(alpha: 0.2d);
-        var resolved = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
-            definition: written,
-            revision: 1,
-            mirror: ClientFixtures.StateMirror(definition: written)
-        );
-
-        Assert.Equal(
-            expected: WorldThemeCapacity.ScrimMinAlpha,
-            actual: resolved.Color.ScrimPanel.Alpha
-        );
-    }
-    /// <summary>The chrome block's ranges are enforced by name, beside a passing control — an opacity outside [0, 1]
-    /// and a negative extent are both authoring errors a boot must refuse rather than draw.</summary>
-    [Theory]
-    [InlineData("theme.chrome.dimQuietAlpha")]
-    [InlineData("theme.chrome.cursorDotMaxHalf")]
-    public void ChromeOutOfRangeRefusesByName(string field) {
-        var chrome = MinimalChrome();
-        var invalid = (string.Equals(
-            a: field,
-            b: "theme.chrome.dimQuietAlpha",
-            comparisonType: StringComparison.Ordinal
-        )
-            ? (chrome with { DimQuietAlpha = 1.5f })
-            : (chrome with { CursorDotMaxHalf = -1f })
-        );
-        var denied = Fixtures.BuildDocument() with { ThemeRaw = (MinimalTheme() with { Chrome = invalid }) };
-        var admitted = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme() };
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: field
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    // A literal below its floor refuses naming both the field and the floor it protects: the scrim's alpha guards the
-    // guaranteed-AA contrast floor, the body type size the MSDF glyph coverage floor.
-    [InlineData("theme.color.scrimPanel.alpha", "guaranteed-AA contrast floor")]
-    [InlineData("theme.type.bodySize", "MSDF glyph coverage floor")]
-    [Theory]
-    public void ALiteralBelowItsFloorRefusesByName(string field, string floor) {
-        var definition = Fixtures.BuildDocument() with {
-            ThemeRaw = ((field == "theme.type.bodySize")
-                ? MinimalTheme(bodySize: 10f)
-                : MinimalTheme(scrimAlpha: 0.5f)),
-        };
-
-        Laws.Refuses(
-            definition: definition,
-            needle: field
-        );
-        Laws.Refuses(
-            definition: definition,
-            needle: floor
-        );
-    }
-    [Fact]
-    public void MinimalThemeParsesAndValidates() {
-        var definition = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme() };
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
-        );
-
-        Assert.True(
-            condition: admitted,
-            userMessage: reason
         );
     }
 }

@@ -59,13 +59,13 @@ public static partial class CanaryCommand {
                 Exclusive: manifest.Exclusive,
                 Gpu: manifest.UsesGpu,
                 Proof: proof,
-                // A stub leg's second launch always boots a World; the positive leg's first launch boots the
-                // baseline, and the discriminating leg's is refused before any World starts (RunStubLeg).
+                // Both legs boot their installed baseline and final selected World. The discriminating leg
+                // additionally observes one refused launch of the fully installed unhealthy release.
                 StubLaunches: (stub
-                    ? 4
+                    ? 5
                     : 0),
                 WorldBoots: (stub
-                    ? 3
+                    ? 4
                     : legs.Sum(selector: LegWorldProcesses)),
                 WorldProcesses: (stub
                     ? 0
@@ -100,12 +100,11 @@ public static partial class CanaryCommand {
             ? 0
             : 1))
     );
-    // A leg runs under the whole timeout its manifest declares for every boot: a stub leg observes two launches, a
-    // relaunching leg boots twice, and when either leg relaunches both are counted as relaunching.
+    // A stub proof has two positive launches and three rollback launches. Other relaunching legs boot twice.
     private static int ProofBudgetSeconds(CanaryManifest manifest) =>
-        ((((manifest.BootShape == CanaryBootShape.Stub)
-            ? 2
-            : 1) * (RelaunchesLeg(manifest: manifest)
+        (((manifest.BootShape == CanaryBootShape.Stub)
+            ? 5
+            : (RelaunchesLeg(manifest: manifest)
             ? 4
             : 2)) * manifest.TimeoutSeconds);
     // Prints the plan on stdout, one proof per line in authored order, then the totals. Every value is a count of the

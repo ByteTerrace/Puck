@@ -4,7 +4,7 @@
 // the night field (night.puck), two facing each other across the room, and the endless fall's floor and ceiling. It is
 // the plain starting point the island is built up from, in engine: boot its package with `--world worlds/debug`, edit
 // this source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals.
-// The standard theme (theme.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play
+// The skin (skin.puck) and the on-screen controls (controls.puck: cursor, key hints, binding bar, play
 // wheel) are imported documents, as are the gaming devices (devices.puck) in Wonderland, the room a portal pair of two
 // sizes shrinks the Moth into (wonderland.puck), the whole desktop as a pane and a screen
 // (desktop.puck), the chess table (chess.puck), the paintings (paintings.puck) and the named places with the
@@ -18,7 +18,7 @@ documentId: "debug"
 import "skies"
 import "shapes"
 import "studio"
-import "theme"
+import "skin"
 import "controls"
 import "pad"
 import "devices"

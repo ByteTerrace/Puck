@@ -296,7 +296,7 @@ resolve handle → `IsRequested` → `Allows` → budget → dispatch. A state r
 (`ReadStateCell`, `ReadStateText`) dispatches through `TryReadDisclosed`, which asks
 `WorldStateDisclosure.CanRead` for the addon's own principal (`addon:<name>`) against the live store on every
 read, so a cell hidden by row, cell or containing-zone visibility answers `NoSuchSubject` exactly like an absent
-one; list `addon:<name>` among the readers to admit a mod. A bound cell write (`WriteStateCell`, `WriteStateText`) asks `IsDisclosed` before it looks for the cell, so an Edit grant never reveals whether a hidden cell exists. No bound address caches that decision.
+one; list `addon:<name>` among the readers to admit a mod. A bound cell write (`WriteStateCell`, `WriteStateText`) asks `IsDisclosed`, and the server's compose of a state mutation by an addon, peer or session asks the same `WorldStateDisclosure.CanReadCell` (`UpsertStateCell`/`RemoveStateCell`, `IsWithheldFromWriter`) or `CanReadRow` (`UpsertStateRow`/`RemoveStateRow`, `IsRowWithheldFromWriter`), before it looks for the cell or row, so neither an Edit grant nor a Mutate grant reveals whether a hidden one exists. A write that would create a cell or row that does not exist yet still applies; only a write to a hidden existing one is refused. No bound address caches that decision.
 `AddonVerdict`: `None`, `HeldConcrete`, `HeldWildcard`, `HeldAsReserver`,
 `NoHold`, `BeatenByReserver`, `AttenuatedToEmpty`, `NoSuchSubject`,
 `QuotaExhausted`, `StaleHandle`, `Applied`, `MalformedPayload`,
