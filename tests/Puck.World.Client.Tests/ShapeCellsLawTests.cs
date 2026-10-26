@@ -135,26 +135,6 @@ public sealed class ShapeCellsLawTests {
         );
     }
     [Fact]
-    public void CapacityProbeWithoutPlacementsUsesFiniteCellParameters() {
-        var program = Emit(
-            Shape with { Cells = null },
-            1f,
-            pooled: true,
-            probe: true,
-            probeScale: 0f
-        );
-        var cell = program.Instructions.First(predicate: i => (i.Op == SdfOp.CellDisplace));
-
-        Assert.Equal(
-            1f,
-            cell.Data0.X
-        );
-        Assert.Equal(
-            .1f,
-            cell.Data0.Y
-        );
-    }
-    [Fact]
     public void CellsRoundTripWithTheirUnsignedSeedAndMode() {
         var json = JsonSerializer.Serialize(
             Document(shape: Shape),

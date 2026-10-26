@@ -349,7 +349,7 @@ public sealed partial class SdfMeshPathBake {
                         foreach (var copy in frame.MeshInstances) {
                             if (!copy.UsesSlot(group.Slot)) { continue; }
                             copy.FirstInstance = group.FirstInstance;
-                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true });
+                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { MotionIdentity = (copy.Identity, group.Selector), FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true });
                         }
                         continue;
                     }
@@ -364,7 +364,7 @@ public sealed partial class SdfMeshPathBake {
                     }
                 }
                 foreach (var copy in frame.MeshInstances) {
-                    if (copy.Mesh is { } mesh) { m_draws.Add(new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { FrameSlot = copy.FrameSlot, IsDynamic = true }); }
+                    if (copy.Mesh is { } mesh) { m_draws.Add(new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { MotionIdentity = (copy.Identity, "mesh"), FrameSlot = copy.FrameSlot, IsDynamic = true }); }
                 }
                 // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
                 SdfSlotClip.Apply(
@@ -854,7 +854,7 @@ public sealed partial class SdfMeshPathBake {
     // so the skinned mesh drawing (or baking) carries on, rides each member's slot, and bakes again only once the members
     // settle away from the pose it was baked at (Settle).
     private static bool Keeps(Group group, Group old) {
-        if (!old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
+        if ((old.Slot != group.Slot) || !old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
 
         return ((old.Sealed == group.Sealed) || (old.Dynamic && group.Dynamic && (old.Form == group.Form) && ((old.Mesh is not null) || !old.Done)));
     }
@@ -863,6 +863,7 @@ public sealed partial class SdfMeshPathBake {
     private static bool Renumbers(Group group, Group old) => (
         old.Dynamic &&
         group.Dynamic &&
+        (old.Slot == group.Slot) &&
         old.Done &&
         (old.Mesh is not null) &&
         (old.Replaces is null) &&

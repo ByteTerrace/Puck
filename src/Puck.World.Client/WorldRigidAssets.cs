@@ -30,6 +30,7 @@ public sealed class WorldRigidAssets {
     private readonly List<WorldCreationInstances.BodyStamp> m_bodies = [];
     private readonly HashSet<int> m_liveBodies = [];
     private readonly Dictionary<int, RootMotion> m_motion = [];
+    private WorldShapeIsolation? m_isolation;
 
     private sealed class RootMotion {
         public SecondOrderFollower3 Position;
@@ -37,6 +38,7 @@ public sealed class WorldRigidAssets {
         public WorldEntityAddress Address;
 
         public int Epoch = -1;
+        public int CarryEpoch;
         public readonly WorldStateLease Reads = new();
     }
 
@@ -108,15 +110,17 @@ public sealed class WorldRigidAssets {
         if (m_copies.Count > m_bodies.Count) { m_copies.RemoveRange(m_bodies.Count, (m_copies.Count - m_bodies.Count)); }
     }
     /// <summary>Emits each local template once. Body membership and styling do not affect this program.</summary>
-    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? text, WorldPickMapBuilder picks) {
+    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? text, WorldPickMapBuilder picks, WorldShapeIsolation? isolation = null) {
 
+        m_isolation = isolation;
         m_slots.Clear();
         m_materials.Clear();
         for (var index = 0; (index < m_assets.Count); index++) {
             var creation = m_assets[index];
             var document = creation.EngineDocument;
             var slot = (slotBase + m_offsets[index]);
-            var palette = WorldPlacementStamper.RegisterPalette(builder, colors, document, tint: null, pool: (slot, 1f));
+            var isolated = isolation?.HiddenFor(creation.Id, document);
+            var palette = WorldPlacementStamper.RegisterPalette(builder, colors, document, tint: null, pool: (slot, 1f), hidden: isolated);
 
             m_materials.Add(palette[Math.Clamp((creation.Mesh?.Material ?? 0), 0, (palette.Length - 1))]);
             picks.Materials(creation.Id, palette);
@@ -135,8 +139,8 @@ public sealed class WorldRigidAssets {
             var hasGlass = shapes.Any(shape => document.IsGlassShape(shape));
             var mixed = (hasGlass && shapes.Any(shape => !document.IsGlassShape(shape)));
 
-            EmitSurface(slot, hidden: (mixed ? shapes.Select(shape => document.IsGlassShape(shape)).ToArray() : null), textRuns: (!hasGlass || mixed));
-            if (mixed) { EmitSurface((slot + 1), hidden: shapes.Select(shape => !document.IsGlassShape(shape)).ToArray(), textRuns: false); }
+            EmitSurface(slot, hidden: (mixed ? shapes.Select((shape, index) => (document.IsGlassShape(shape) || (isolated?[index] ?? false))).ToArray() : isolated), textRuns: ((isolated is null) && (!hasGlass || mixed)));
+            if (mixed) { EmitSurface((slot + 1), hidden: shapes.Select((shape, index) => (!document.IsGlassShape(shape) || (isolated?[index] ?? false))).ToArray(), textRuns: false); }
             picks.Instances(first, builder.InstanceCount, new WorldPickTarget(null, null) { Prototype = creation.Id });
             void EmitSurface(int surfaceSlot, bool[]? hidden, bool textRuns) {
                 m_slots.Add(surfaceSlot);
@@ -180,17 +184,26 @@ public sealed class WorldRigidAssets {
             if (WorldDynamicsResponse.TryResolveResponse(rows: source.Definition.Dynamics, name: body.Look.Motion.Dynamics, response: out var response)) {
                 var address = source.EntityAddress(body.BodyIndex);
                 var epoch = source.PoseEpoch(body.BodyIndex);
+                var crossings = source.Carries.Epoch(body.BodyIndex);
 
+                if ((motion.Address == address) && (motion.Epoch == epoch) && (motion.CarryEpoch != crossings)) {
+                    if (source.Carries.TrySince(index: body.BodyIndex, since: motion.CarryEpoch, carry: out var carry)) {
+                        motion.Position.Carry(carry.Rotation, carry.Translation);
+                        motion.Orientation.Carry(carry.Rotation);
+                    } else { motion.Epoch = -1; }
+                }
+                motion.CarryEpoch = crossings;
                 if ((motion.Address != address) || (motion.Epoch != epoch)) { motion.Position.Reseed(); motion.Orientation.Reseed(); motion.Address = address; motion.Epoch = epoch; }
                 (position, orientation) = SecondOrderPoseFollower.StepPose(ref motion.Position, ref motion.Orientation, in response, deltaSeconds, position, orientation);
             }
             var asset = m_indices[body.Creation.Id];
+            var hidden = m_isolation?.HiddenFor(body.Creation.Id, body.Creation.EngineDocument);
             var firstSlot = (slotBase + m_offsets[asset]);
             var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_slotCount));
             var copy = new SdfMeshInstance(firstSlot, target,
                 new DynamicTransform(Position: position, Orientation: orientation, Lanes: lanes) { MaterialScale = body.Scale }, body.Scale) {
                 OtherAssetSlots = ((endSlot > (firstSlot + 1)) ? new[] { (firstSlot + 1) } : []),
-                Mesh = ((body.Creation.Mesh is { } mesh) ? WorldPlacementStamper.MeshOf(mesh) : null),
+                Mesh = (((hidden is null) && (body.Creation.Mesh is { } mesh)) ? WorldPlacementStamper.MeshOf(mesh) : null),
                 Material = ((asset < m_materials.Count) ? m_materials[asset] : 0),
                 Clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1),
             };
@@ -198,6 +211,7 @@ public sealed class WorldRigidAssets {
             if (!m_copies[index].SamePose(copy)) { m_copies[index] = copy; }
             foreach (var volume in (body.Creation.EngineDocument.Volumes ?? [])) {
                 if (!volume.Enabled) { continue; }
+                if ((volume.Parent is { } parentName) && WorldShapeIsolation.IsHidden(hidden: hidden, name: parentName, shapes: (body.Creation.EngineDocument.Shapes ?? []))) { continue; }
                 if (m_rootVolumes.Count == SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"Creation '{body.Creation.Id}' on body {body.BodyIndex} exceeds the {SdfProgramBuilder.MaxVolumes}-volume frame capacity."); }
                 var parent = body.Creation.EngineDocument.Shapes?.FirstOrDefault(shape => (shape.Name?.Value == volume.Parent));
 

@@ -114,7 +114,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private int m_catalogRevision;
 
-    private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
+    private (int Body, int Rig, WorldLook Look, Vector3 Color)[] m_catalogImage = [];
     // The destination's stamp pool, packed past the avatar catalog's slots, the source it roots on, its creation-stamp
     // census, and the mesh draws: the static placements' the last live Emit fixed, then the pool's.
     private readonly WorldBodyStampCensus m_census = new();
@@ -894,7 +894,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
         }
         var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
-            .Select(index => (index, ((int)m_mirror.CatalogRig(index)), m_mirror.Look(index).Scale, m_bodyColor(index))).ToArray();
+            .Select(index => (index, ((int)m_mirror.CatalogRig(index)), m_mirror.Look(index), m_bodyColor(index))).ToArray();
 
         if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
     }

@@ -679,8 +679,8 @@ public sealed class SdfPackedContractLawTests {
 
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [pop, Shape()]));
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(), push, Shape()]));
-        _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [push, push, push, Shape(), pop, pop, pop]));
-        _ = Build(instructions: [push, push, Shape(), pop, pop]);
+        _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [push, push, push, push, push, Shape(), pop, pop, pop, pop, pop]));
+        _ = Build(instructions: [push, push, push, push, Shape(), pop, pop, pop, pop]);
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(
             instructions: [push, Shape(), pop],
             instances: [Instance(

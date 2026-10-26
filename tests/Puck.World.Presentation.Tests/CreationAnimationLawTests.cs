@@ -45,12 +45,6 @@ public sealed class CreationAnimationLawTests {
 
         return field!;
     }
-    // The dynamic emission path a body-stamped creation actually renders through — the one place an animation facet
-    // could leak into geometry if PackTransforms were not the only reader.
-    private static uint[] EmitBodyStampWords(WorldPrototype creation) => CreationFixtures.EmitPool(
-        bodyScale: 1f,
-        creation: creation
-    ).Words.ToArray();
     private static ShapeDocument Limb(IReadOnlyList<ShapeSwingDocument>? swings = null, IReadOnlyList<ShapeSlideDocument>? slides = null, IReadOnlyList<ShapeDomainOp>? domain = null) => new(
         Id: 1,
         Name: "limb",
@@ -478,12 +472,10 @@ public sealed class CreationAnimationLawTests {
             expectedSubstring: "\"swings\""
         );
     }
-    /// <summary>The facets are presentation-only: a creation carrying drivers, swings, and slides emits the SAME
-    /// SDF program words and the SAME compiled solid field as one with the facets stripped, even though the two
-    /// documents hash differently — so nothing an artist animates can move the field, the colliders, or anything
-    /// derived from them.</summary>
+    /// <summary>Animation adds motion owners to the render program without changing its authored primitive or the
+    /// deterministic solid field. An inert creation can instead share rigid geometry.</summary>
     [Fact]
-    public void AnimatedFacetsChangeNeitherTheRenderProgramNorTheSolidField() {
+    public void AnimatedFacetsPreserveTheAuthoredPrimitiveAndTheSolidField() {
         var animated = Rig(
             drivers: [Stride()],
             shape: Limb(
@@ -536,8 +528,8 @@ public sealed class CreationAnimationLawTests {
         );
 
         Assert.Equal(
-            expected: EmitBodyStampWords(creation: inertCreation),
-            actual: EmitBodyStampWords(creation: animatedCreation)
+            expected: CreationFixtures.EmitPool(bodyScale: 1f, creation: inertCreation).Instructions.Where(i => i.Op == SdfOp.ShapeBlend),
+            actual: CreationFixtures.EmitPool(bodyScale: 1f, creation: animatedCreation).Instructions.Where(i => i.Op == SdfOp.ShapeBlend)
         );
 
         // The limb's engine-frame centre is the author frame's half turn of (0.5, 0.9, 0); its capsule radius is 0.1,

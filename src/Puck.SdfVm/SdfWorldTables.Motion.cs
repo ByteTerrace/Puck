@@ -207,7 +207,7 @@ public sealed partial class SdfWorldTables {
         );
 
         for (var draw = 0; (draw < draws.Count); draw++) {
-            if (draws[draw].Identity is not { } identity) {
+            if ((draws[draw].MotionIdentity ?? draws[draw].Identity) is not { } identity) {
                 throw new ArgumentException(message: $"Mesh draw {draw} names no identity.", paramName: nameof(draws));
             }
             if ((draw >= m_meshIdentityCount) || !identity.Equals(obj: m_meshIdentities[draw])) {
@@ -226,7 +226,7 @@ public sealed partial class SdfWorldTables {
             Array.Resize(array: ref m_meshIdentities, newSize: draws.Count);
         }
         for (var draw = 0; (draw < draws.Count); draw++) {
-            m_meshIdentities[draw] = draws[draw].Identity;
+            m_meshIdentities[draw] = (draws[draw].MotionIdentity ?? draws[draw].Identity);
         }
         Array.Clear(array: m_meshIdentities, index: draws.Count, length: (m_meshIdentityCount - Math.Min(val1: m_meshIdentityCount, val2: draws.Count)));
         m_meshIdentityCount = draws.Count;

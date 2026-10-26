@@ -166,14 +166,14 @@ rule—a scoped field op grows the surface *outward* past the authored geometry
 bound, so the packer inflates the instance's cull bound by that reach (`Onion(t)`
 moves out by `t`, `Dilate(r)` by `r`, `Displace(a)` by `a`) or the bound skip
 would drop the instance where the grown shell reaches and the bake would clip it.
-Scope depth is capped at two. The outer scope can isolate an engraved moving
+Scope depth is capped at four. The outer scope can isolate an engraved moving
 creation while the inner scopes keep its groups' cutters and field operations
 local. Nested distance clamps multiply along each parent/child path. The bound
 includes every level's outward reach and soft halo; sibling paths use their maximum.
 
 The public `SdfProgram` constructor enforces that structure even for a
 hand-assembled instruction stream: every push must have one pop, nesting may not
-exceed the two-level interpreter stack, and a scope may not cross between the
+exceed the four-level interpreter stack, and a scope may not cross between the
 unmasked world stream and an instance-owned slice. A crossing scope would save
 under one mask owner and restore under another, so it is malformed program data,
 not a culling mode.

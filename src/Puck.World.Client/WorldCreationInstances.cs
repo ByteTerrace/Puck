@@ -1138,7 +1138,7 @@ public sealed partial class WorldCreationInstances {
             );
             picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
         }
-        Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()));
+        Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()), Isolation);
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>

@@ -16,6 +16,7 @@ public sealed partial class WorldCreationInstances {
             placementId: placementId
         )
         ) {
+            if (Rigid.TryShapePose(bodyIndex, shapeId, client, out var rigid)) { return rigid; }
             live = FindBody(bodyIndex: bodyIndex);
         }
         var shape = live?.Creation.EngineDocument.Shapes?.FirstOrDefault(predicate: s => (s.Id == shapeId));

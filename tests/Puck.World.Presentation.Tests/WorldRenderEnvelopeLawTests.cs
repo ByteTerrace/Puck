@@ -8,18 +8,16 @@ using Xunit;
 
 namespace Puck.World.Presentation.Tests;
 
-/// <summary>Laws for the render envelope: the world scene's CPU count against what the construction probe and the static
-/// stamper emit, and the oracle's registrations.</summary>
+/// <summary>The authored scene census, material representation refusals and independent renderer registrations.</summary>
 [Collection(SceneProbeCollection.Name)]
 public sealed partial class WorldRenderEnvelopeLawTests {
     [Fact]
-    public void AMeasurerPastAnEngineCeilingIsRefusedByName() {
+    public void MaterialsRefuseByNameWhileInstanceCountsRemainACensus() {
         var envelope = new WorldRenderEnvelope();
         var definition = Fixtures.BuildDocument();
 
         using (envelope.Configure(measure: _ => new WorldRenderCost(Instances: (SdfProgramBuilder.MaxInstances + 1), Materials: 0))) {
-            Assert.False(condition: envelope.TryFit(candidate: definition, reason: out var reason));
-            Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "instances 65537 exceed the engine ceiling");
+            Assert.True(condition: envelope.TryFit(candidate: definition, reason: out var reason), userMessage: reason);
         }
 
         using (envelope.Configure(measure: _ => new WorldRenderCost(Instances: 0, Materials: (SdfProgramBuilder.ScreenMaterialId + 1)))) {
@@ -56,38 +54,13 @@ public sealed partial class WorldRenderEnvelopeLawTests {
         emitter.WriteRevision(destination: after);
         Assert.Equal(before[0], after[0]);
     }
-    /// <summary>The count's reservation is the construction probe's instance count: the boot placements of both
-    /// emission classes, a derived-face band, and the authored headroom.</summary>
-    [InlineData(0)]
-    [InlineData(1000)]
-    [Theory]
-    public void TheCountReservesWhatTheConstructionProbeEmits(int headroom) {
-        var definition = Document(headroom: headroom, placements: [Placed(id: "a", prototype: "plaque"), Placed(id: "b", prototype: "store"), Placed(id: "c", prototype: "seam")]);
-        var (_, scene) = SceneEmitter(definition: definition);
-        var envelope = new WorldSceneEnvelope(boot: definition);
-        var probe = new SdfProgramBuilder();
-
-        using (probe.BeginMaterialScope()) {
-            scene.Emit(builder: probe, context: new(true, 0, Vector3.Zero, Vector3.Zero, 0));
-        }
-
-        Assert.Equal(expected: headroom, actual: envelope.HeadroomInstances);
-        Assert.Equal(expected: envelope.ReservedInstances, actual: probe.InstanceCount);
-        Assert.Contains(expectedSubstring: $"reserves {envelope.ReservedInstances} instances ({headroom} headroom", actualString: envelope.Describe(), comparisonType: StringComparison.Ordinal);
-
-        // A composed document adds its materials and no instances.
-        envelope.DocumentMaterials = static () => 3;
-
-        Assert.Equal(expected: (envelope.Boot.Cost with { Materials = (envelope.Boot.Cost.Materials + 3) }), actual: envelope.Measure(candidate: definition).Cost);
-    }
-    /// <summary>The headroom a document asks for is clamped to what the instance ceiling leaves above its boot scene,
-    /// so asking for more reserves the ceiling and refuses nothing.</summary>
     [Fact]
-    public void HeadroomPastTheCeilingReservesTheCeiling() {
-        var envelope = new WorldSceneEnvelope(boot: Document(headroom: SdfProgramBuilder.MaxInstances, placements: []));
-
-        Assert.Null(@object: envelope.Boot.Cost.Exceeds());
-        Assert.Equal(expected: SdfProgramBuilder.MaxInstances, actual: envelope.ReservedInstances);
+    public void TheAuthoredCensusAddsDocumentMaterialsWithoutReservingLiveBodies() {
+        var definition = Document(headroom: 0, placements: []);
+        var envelope = new WorldSceneEnvelope(definition);
+        envelope.DocumentMaterials = static () => 3;
+        Assert.Equal(envelope.Boot.Cost with { Materials = envelope.Boot.Cost.Materials + 3 }, envelope.Measure(definition).Cost);
+        Assert.Contains("buffers follow the live program", envelope.Describe(), StringComparison.Ordinal);
     }
     /// <summary>The count's placement term covers what the static stamper emits for placements of a panelled, a trimmed
     /// and a plain scope-free creation, and is exact for the plain one: a panelled shape or a trim charges its two
@@ -117,7 +90,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
         var envelope = new WorldRenderEnvelope();
         var definition = Fixtures.BuildDocument();
         var accepting = envelope.Configure(measure: static _ => new WorldRenderCost(Instances: 10, Materials: 10));
-        var refusing = envelope.Configure(measure: static _ => new WorldRenderCost(Instances: (SdfProgramBuilder.MaxInstances + 1), Materials: 10));
+        var refusing = envelope.Configure(measure: static _ => new WorldRenderCost(Instances: 10, Materials: (SdfProgramBuilder.ScreenMaterialId + 1)));
 
         Assert.False(condition: envelope.TryFit(
             candidate: definition,

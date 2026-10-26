@@ -393,7 +393,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     private int m_catalogSlotCount;
 
-    private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
+    private (int Body, int Rig, WorldLook Look, Vector3 Color)[] m_catalogImage = [];
 
     private int m_catalogRevision;
 
@@ -406,7 +406,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
         }
         var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
-            .Select(index => (index, ((int)m_client.CatalogRig(index)), m_client.Look(index).Scale, m_client.BodyColor(index))).ToArray();
+            .Select(index => (index, ((int)m_client.CatalogRig(index)), m_client.Look(index), m_client.BodyColor(index))).ToArray();
 
         if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
     }

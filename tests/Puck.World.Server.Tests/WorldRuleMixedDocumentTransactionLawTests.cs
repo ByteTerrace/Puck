@@ -197,8 +197,8 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: Sequence(new WorldEffect.UpsertPlacement(Placement: created)));
         using var full = fixture.Server.Envelope.Configure(measure: static _ => new WorldRenderCost(
-            Instances: (Puck.SignedDistance.SdfProgramBuilder.MaxInstances + 1),
-            Materials: 0
+            Instances: 0,
+            Materials: (Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId + 1)
         ));
         var installs = 0;
 

@@ -245,6 +245,8 @@ public readonly record struct SdfMeshMember(int SlotOffset, Vector3 Position, Qu
 /// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
 /// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
+    /// <summary>Gets a stable surface identity for motion history when the picking identity also carries changing pose metadata.</summary>
+    public object? MotionIdentity { get; init; }
     /// <summary>Gets whether the draw belongs to a moving body or animated placement, which the irradiance volume's
     /// static scene leaves out (<see cref="SdfMeshIrradianceScene.IsStatic"/>).</summary>
     public bool IsDynamic { get; init; }

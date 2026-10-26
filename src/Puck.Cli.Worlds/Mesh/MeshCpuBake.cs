@@ -79,7 +79,7 @@ public static class MeshCpuBake {
             }
 
             var spacing = MathF.Max(MinimumSpacing, (0.015625f * MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z))));
-            var slot = ((lattice.Selector >= 0) ? lattice.Selector : -1);
+            var slot = lattice.FrameSlot;
 
             _ = Parallel.For(
                 fromInclusive: 0,

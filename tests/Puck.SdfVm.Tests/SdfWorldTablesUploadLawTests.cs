@@ -975,7 +975,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     ) {
         DynamicTransforms = transforms,
     };
-    // The transforms packed as the device-local table holds them: position and a zero word, quaternion, lanes.
+    // The transforms packed as the device-local table holds them: position and material scale, quaternion, lanes.
     private static byte[] Packed(DynamicTransform[] transforms) {
         var packed = new float[(transforms.Length * (DynamicTransformBytes / sizeof(float)))];
 
@@ -983,7 +983,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             var transform = transforms[slot];
             var b = (slot * 12);
 
-            packed[(b + 0)] = transform.Position.X; packed[(b + 1)] = transform.Position.Y; packed[(b + 2)] = transform.Position.Z; packed[(b + 3)] = 0f;
+            packed[(b + 0)] = transform.Position.X; packed[(b + 1)] = transform.Position.Y; packed[(b + 2)] = transform.Position.Z; packed[(b + 3)] = transform.MaterialScale;
             packed[(b + 4)] = transform.Orientation.X; packed[(b + 5)] = transform.Orientation.Y; packed[(b + 6)] = transform.Orientation.Z; packed[(b + 7)] = transform.Orientation.W;
             packed[(b + 8)] = transform.Lanes.X; packed[(b + 9)] = transform.Lanes.Y; packed[(b + 10)] = transform.Lanes.Z; packed[(b + 11)] = transform.Lanes.W;
         }

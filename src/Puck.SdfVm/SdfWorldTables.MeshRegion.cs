@@ -250,7 +250,7 @@ public sealed partial class SdfWorldTables {
 
         for (var index = 0; (index <= draws.Count); index++) {
             if ((index < draws.Count) && (draws[index] is var draw) && !SameDraw(left: in draw, right: in m_stagedDraws[index])) {
-                if (draw.Identity is not { } identity) {
+                if ((draw.MotionIdentity ?? draw.Identity) is not { } identity) {
                     throw new ArgumentException(message: $"Mesh draw {index} names no identity.", paramName: nameof(draws));
                 }
 
@@ -291,6 +291,7 @@ public sealed partial class SdfWorldTables {
             (left.Glass != right.Glass) ||
             (left.IsDynamic != right.IsDynamic) ||
             (left.FrameSlot != right.FrameSlot) ||
+            !Equals(objA: left.MotionIdentity, objB: right.MotionIdentity) ||
             (BitConverter.SingleToInt32Bits(value: left.CarryScale) != BitConverter.SingleToInt32Bits(value: right.CarryScale)) ||
             !Equals(objA: left.Identity, objB: right.Identity)
         ) {

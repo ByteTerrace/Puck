@@ -7,11 +7,12 @@ using Puck.World;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.World.Authoring;
 
 namespace Puck.Cli.Mesh;
 
 /// <summary>A body the rest scene stands: its index, the creation it wears, its pose, its look's scale and the first of its
-/// pool's transform slots, whose next slots carry its creation's shapes in order.</summary>
+/// motion-owner slots.</summary>
 /// <param name="BodyIndex">The body's entity index.</param>
 /// <param name="Creation">The prototype whose creation the body wears.</param>
 /// <param name="Origin">The body's world position.</param>
@@ -19,6 +20,8 @@ namespace Puck.Cli.Mesh;
 /// <param name="RootSlot">The body's root transform slot.</param>
 /// <param name="SlotCount">The transform slots its stamp registration reserves from the root.</param>
 public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Origin, float Scale, int RootSlot, int SlotCount) {
+    /// <summary>Gets each authored shape's actual motion-owner slot relative to the root.</summary>
+    public int[] ShapeSlots { get; init; } = [];
     /// <summary>Returns a world point in the creation's author frame: about the body, unscaled, then turned a half turn
     /// about up (<see cref="Puck.World.Authoring.CreationFrame"/>).</summary>
     /// <param name="world">The world point, in metres.</param>
@@ -33,7 +36,7 @@ public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Or
 /// A world's presentation at rest, composed offline as a World composes its frame (<see cref="WorldSceneEmitter"/> through
 /// <see cref="SdfCompositionFrameSource"/>), with no device: one body per creation look, standing unturned at rest, so
 /// the program and transforms a World's first frame bakes are those its groups are planned from. It names each bake
-/// group and each shape instruction by the body and creation shape a pool's slot carries.
+/// group and each shape instruction by its body's motion owner and authored rest offset.
 /// </summary>
 public sealed class RestScene {
     // The spacing, in metres, between the bodies the scene stands, past any creation's reach.
@@ -128,7 +131,7 @@ public sealed class RestScene {
             var prototype = ((WorldLookSource.Creation)look.Source).PrototypeId.Value;
 
             if (definition.Creations.FirstOrDefault(predicate: creation => string.Equals(a: creation.Id, b: prototype, comparisonType: StringComparison.Ordinal)) is not { } creation) { continue; }
-            bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale, SlotCount: slots));
+            bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale, SlotCount: slots) { ShapeSlots = new CreationMotionPlan(creation.EngineDocument, look.Motion.PartDynamics).ShapeSlots });
         }
 
         return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms);
@@ -148,7 +151,10 @@ public sealed class RestScene {
         if (!group.Dynamic) { return $"instance {-(group.Selector + 1)}{((group.Instances > 1) ? $"+{(group.Instances - 1)}" : string.Empty)}{Placed(instance: -(group.Selector + 1))}"; }
         if (owner is null) { return $"slot {group.Slot}"; }
 
-        return $"slot {group.Slot} {owner.Creation.Id} body {owner.BodyIndex} {SlotName(owner: owner, slot: group.Slot)}";
+        var first = ((group.FirstInstance >= 0) ? Program.Instances[group.FirstInstance].First : 0);
+        var end = ((group.FirstInstance >= 0) ? Program.Instances[group.FirstInstance].End : Program.Instructions.Count);
+        var shape = Enumerable.Range(first, (end - first)).FirstOrDefault(index => Program.Instructions[index].Op == SdfOp.ShapeBlend, -1);
+        return $"slot {group.Slot} {owner.Creation.Id} body {owner.BodyIndex} {((shape >= 0) ? ShapeName(group, shape) : "root")}";
     }
     /// <summary>Returns the name of the creation shape a shape instruction draws: the shape whose pool slot its chain's
     /// dynamic transform reads, or the instruction's index where its chain reads none.</summary>
@@ -158,15 +164,22 @@ public sealed class RestScene {
     public string ShapeName(SdfMeshBakeGroup group, int instruction) {
         var instructions = Program.Instructions;
 
+        var position = Vector3.Zero;
         for (var index = (instruction - 1); (index >= 0); index--) {
             var op = instructions[index].Op;
 
             if (op == SdfOp.ResetPoint) { break; }
+            if (op == SdfOp.Translate) { position = new Vector3(instructions[index].Data0.X, instructions[index].Data0.Y, instructions[index].Data0.Z); }
             if (op != SdfOp.TransformDynamic) { continue; }
 
             var slot = ((int)instructions[index].Data0.X);
 
-            return ((BodyOf(slot: slot) is { } body) ? SlotName(owner: body, slot: slot) : $"slot {slot}");
+            if (BodyOf(slot) is not { } body) { return $"slot {slot}"; }
+            var shapes = (body.Creation.EngineDocument.Shapes ?? []);
+            var matches = Enumerable.Range(0, shapes.Count).Where(shape =>
+                ((body.RootSlot + body.ShapeSlots[shape]) == slot) &&
+                (Vector3.DistanceSquared(shapes[shape].Position.Value * body.Scale, position) < 0.000001f)).ToArray();
+            return ((matches.Length > 0) ? string.Join("/", matches.Select(shape => shapes[shape].Name?.Value ?? $"shape {shape}")) : $"slot {slot}");
         }
 
         return $"shape {instruction}";
@@ -191,14 +204,6 @@ public sealed class RestScene {
             ? $" {placement} ({target.Prototype})"
             : string.Empty);
     private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + body.SlotCount))));
-    private static string SlotName(RestBody owner, int slot) {
-        var shapes = (owner.Creation.EngineDocument.Shapes ?? []);
-        var index = ((slot - owner.RootSlot) - 1);
-
-        return ((index < 0)
-            ? "root"
-            : ((index < shapes.Count) ? (shapes[index].Name?.Value ?? $"shape {index}") : $"shape {index}"));
-    }
 
     // Keeps the program and transforms of the frame it last dressed.
     private sealed class KeptFrame : ISdfFrameDresser {

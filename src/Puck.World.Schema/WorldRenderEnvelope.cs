@@ -22,9 +22,8 @@ public readonly record struct WorldRenderCost(int Instances, int Materials) {
         Materials: checked((cost.Materials * count))
     );
 
-    /// <summary>Names the engine ceiling this cost exceeds, or returns <see langword="null"/> when it fits every one:
-    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxInstances"/> instances and
-    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId"/> materials (the first screen sentinel).</summary>
+    /// <summary>Names material overflow past <see cref="Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId"/>
+    /// (the first screen sentinel). Instance counts describe the authored scene, not a per-world admission budget.</summary>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     public string? Exceeds() {
         return ((Materials > Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId)

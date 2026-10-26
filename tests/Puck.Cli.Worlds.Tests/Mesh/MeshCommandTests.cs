@@ -198,12 +198,15 @@ public sealed class MeshCommandTests {
         SdfMeshBakeGroup Placement(string name) =>
             groups.Single(predicate: group => scene.Label(group: group, owner: null).Contains(value: $" {name} ({name})", comparisonType: StringComparison.Ordinal));
 
+        var storedCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var (placement, samples) in new[] { ("plain", 17), ("hexagonal", 9) }) {
             var group = Placement(name: placement);
             var plain = Placement(name: "plain");
             var mesh = SdfMeshContour.Bake(field: new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: plain, program: scene.Program), reading: SdfFieldReading.Render), high: plain.High, low: plain.Low, samples: samples);
 
             Assert.True(condition: store.Write(geometry: group.Sealed, identity: Identity, materials: group.MaterialOrder, mesh: mesh));
+            Assert.True(store.TryPeek(geometry: group.Sealed, identity: Identity, materials: out _, mesh: out var stored, refusal: out _));
+            storedCounts.Add(placement, stored!.TriangleCount);
         }
 
         var (changed, report) = Invoke("mesh", "scene", "--world", world, "--change", "hexagonal", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
@@ -220,7 +223,9 @@ public sealed class MeshCommandTests {
         var (largest, largestReport) = Invoke("mesh", "scene", "--world", world, "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
         Assert.Equal(expected: 0, actual: largest);
-        Assert.Contains(expectedSubstring: "plain (plain)", actualString: largestReport.Split(separator: '\n')[1]);
+        // The store collapses geometry; choose by the stored triangle count, as the scene command does.
+        var largestPlacement = storedCounts.MaxBy(entry => entry.Value).Key;
+        Assert.Contains(expectedSubstring: $"{largestPlacement} ({largestPlacement})", actualString: largestReport.Split(separator: '\n')[1]);
 
         var malformed = directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]");
 

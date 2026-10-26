@@ -15,7 +15,7 @@ public sealed class WorldShapeIsolationLawTests {
     private static readonly PalettePaintDocument ShinPaint = new(Color: "#FF0000", Parent: "shin-left", Stroke: 0.01f, Type: SdfSolidPrimitive.Plane);
     private static readonly PalettePaintDocument PelvisPaint = new(Color: "#00FF00", Parent: "pelvis", Stroke: 0.01f, Type: SdfSolidPrimitive.Plane);
 
-    // A pelvis carrying two legs, and an arm beside it: indices 0..5, each shape on pool slot 1 + its index.
+    // A pelvis carrying two legs, and an arm beside it: a rigid asset on one shared slot.
     private static WorldPrototype Creature() {
         ShapeDocument Part(int id, string name, string? parent) => (CreationFixtures.UnitSphereShape with {
             Id = id,
@@ -55,11 +55,14 @@ public sealed class WorldShapeIsolationLawTests {
 
         var program = builder.Build();
 
-        Assert.Equal(expected: [2, 3, 4], actual: program.Instances.Select(selector: static instance => instance.Slot));
+        Assert.Equal(0, Assert.Single(program.Instances).Slot);
+        Assert.Equal(3, program.Instructions.Count(instruction => instruction.Op == SdfOp.ShapeBlend));
 
-        var paint = Assert.Single(collection: program.Materials.Single(predicate: static material => (material.Paints is not null)).Paints!);
-
-        Assert.Equal(expected: 3, actual: paint.Slot);
+        Assert.All(program.Materials.Where(material => material.Paints is not null), material => {
+            var paint = Assert.Single(material.Paints!);
+            Assert.Contains(paint.Slot, new[] { -1, 0 }); // shape-local material variants bake their paint coordinates
+            Assert.Equal(new Vector3(1, 0, 0), paint.Color);
+        });
     }
     [Fact]
     public void AStaticCopyEmitsTheKeptShapesAsOneFreshUnion() {
