@@ -24,6 +24,10 @@
 // bounds and writes the author-frame row, so every number below is a world coordinate.
 
 import "shapes"
+// The companion hears the lift's authored door edge through its read-only sensory projection.
+exports {
+  reads [liftDoors]
+}
 
 let storey = galleryStorey
 let hallTop = 18.05

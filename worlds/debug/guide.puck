@@ -4,6 +4,10 @@
 // observes every one of them. It writes the `guide` state row the panel reads; addons.md beside this file says more.
 
 import "shapes"
+// The companion can attend to the same arrival that triggers the guide's spoken note.
+exports {
+  reads [guideAt]
+}
 
 // Every exhibit in walking order, with the centre of the region in front of it: 1.7 m out from the plinth on the
 // label's side, on the level's floor. Regions 2.6 m apart with a 1.29 m radius never overlap.

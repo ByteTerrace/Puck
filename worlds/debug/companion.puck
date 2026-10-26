@@ -1,59 +1,152 @@
-// The companion: a stand-in body that follows the Moth at a comfortable distance, driven by a WebAssembly addon
-// (addons/companion.wat) through Drive and pose queries alone. It walks the trail she leaves, so it takes the stairs and
-// doors she took, stops 2 m from her, and jumps once when it stops making progress. The debug world imports this file
-// before hall.puck so the companion's body takes the population's highest slot and the lift car and chess pieces keep
-// theirs; addons.md beside this file says how to read it.
+// The faerie: a 24 cm seed of warm light in a continuous ivory eye. Its character lives in these world sources
+// and companion.wat. The engine supplies ordinary colliding free flight, Drive and Observe.
+// Imported before hall.puck: body 42 remains the companion and the lift keeps its own population slot.
+import "inputs"
+import "companion-senses"
 
 let companionBody = 42
 let mothBody = 0
 
-// The two development stand-ins use the same model and look.
 exports {
   reads [companion]
 }
 
 prototypes {
-  // A plain grey-teal stand-in, inside the walker kit's capsule (0.35 m radius, 2.06 m tall).
   prototype "companion" {
     document {
-      name: "companion"
+      name: "lantern seed"
       schema: "puck.creation.v1"
       palette [
-        { color: "#5E8C88", roughness: 0.55, specular: 0.1 }
-        { color: "#E8E2D4", roughness: 0.4, specular: 0.2 }
+        { color: "#F2C49A", roughness: 0.4, specular: 0.2 }
+        { color: "#FF9F38", roughness: 0.3, emissive: 900, emissiveLane: 0 }
+        { color: "#744080", roughness: 0.5, specular: 0.15 }
       ]
-      shape Capsule "torso" {
+      // Both curved sides meet the seed at both tips. All pieces ride one root: banking opens no attachment.
+      shape Sweep "husk-left" {
+        position [0, 0, 0]
+        group: 1
         material: 0
-        position [0, 0.95, 0]
-        scale [0.3, 0.6, 0.3]
+        curve {
+          a [-0.025, 0.025, 0]
+          b [0.185, 0.125, 0]
+          c [0.025, 0.235, 0]
+          radiusStart: 0.016
+          radiusEnd: 0.012
+          bulge: 0.005
+        }
+        swings [
+          { driver: "bank", pivot [0, 0.13, 0], axis [0, 0, 1], amplitude: 0.06, wave: "linear" }
+          { driver: "pitch", pivot [0, 0.13, 0], axis [1, 0, 0], amplitude: -0.035, wave: "linear" }
+        ]
       }
-      shape Sphere "head" {
+      shape Sweep "husk-right" {
+        position [0, 0, 0]
+        group: 1
         material: 0
-        position [0, 1.78, 0]
-        scale [0.24, 0.24, 0.24]
+        parent: "husk-left"
+        curve {
+          a [-0.025, 0.025, 0]
+          b [-0.135, 0.135, -0.005]
+          c [0.025, 0.235, 0]
+          radiusStart: 0.016
+          radiusEnd: 0.012
+        }
       }
-      shape Box "visor" {
+      shape Sweep "seed" {
+        position [0, 0, 0]
+        group: 1
         material: 1
-        position [0, 1.8, 0.2]
-        scale [0.16, 0.05, 0.05]
+        parent: "husk-left"
+        curve {
+          a [-0.025, 0.027, 0]
+          b [-0.005, 0.12, 0.012]
+          c [0.025, 0.233, 0]
+          radiusStart: 0.009
+          radiusEnd: 0.009
+          bulge: 0.018
+        }
       }
+      shape Sweep "lavender-cuff" {
+        position [0, 0, 0]
+        group: 1
+        material: 2
+        parent: "husk-left"
+        curve {
+          a [-0.025, 0.025, -0.003]
+          b [0.021, 0.05, -0.003]
+          c [0.039, 0.071, -0.003]
+          radiusStart: 0.018
+          radiusEnd: 0.019
+        }
+      }
+      drivers [
+        { name: "bank", signal: "lateralAcceleration", cadence: 1, when ["always"] }
+        { name: "pitch", signal: "forwardAcceleration", cadence: 1, when ["always"] }
+      ]
     }
   }
 }
 
+kits [
+  {
+    name: "companion-flight"
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: sphere(radius: 0.125)
+    mass: 0
+    motion {
+      facingSnap: false
+      holds [
+        {
+          name: "takeoff"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 0.3
+          forward: Heading
+          gravity { fall: 46, rise: 28 }
+          envelope { sinkSpeed: 40 }
+          thrust: 1
+        }
+        {
+          name: "hover"
+          bond: Free
+          hold: Lift
+          forward: Heading
+          lift: 1
+          speed: 11
+          gravity { fall: 46, rise: 28 }
+          thrust: 1
+        }
+      ]
+      moveFrame: World
+      shaping [{ along { engage: 32, release: 42 }, turnScale: 1 }]
+      speed { value: 11 }
+      stepHeight: 0
+      turn { falloff: 1, maxPitch: 1.2, pitchRate: 0, rate: 5 }
+    }
+  }
+]
+
 looks [
   {
-    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
     name: "companion"
     scale: 1
     source: creation(prototypeId: companion)
+    motion {
+      cues []
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      lanes [companionGlow.level]
+    }
   }
 ]
 
 placements {
   placement "companion" {
     prototype: "companion"
-    position [-2, 0, 2.5]
+    position [-1.2, 1.52, 1]
     inhabit {
       count: 1
       distribution {
@@ -64,7 +157,7 @@ placements {
         }
         region: disc(radius: 0.01)
       }
-      kit: "walker"
+      kit: "companion-flight"
       look: "companion"
       source: "Idle"
     }
@@ -80,12 +173,15 @@ addon "companion" {
     { capability: Drive, subject: $"body:{companionBody}" }
     { capability: Observe, subject: $"body:{companionBody}" }
     { capability: Observe, subject: $"body:{mothBody}" }
+    { capability: Observe, subject: "state:companionSense" }
   ]
 }
 
-// Drive over its own body (forward, strafe and a jump each tick at most) and one pose query a tick over each body.
+// Drive remains confined to its body, with Observe over the two poses and the world's sensory projection.
+// The guest has no pose, edit, teleport or document mutation authority.
 grants [
   { grantee: "addon:companion", capability: Drive, subject: $"body:{companionBody}", budget: 4 }
   { grantee: "addon:companion", capability: Observe, subject: $"body:{companionBody}", budget: 1 }
   { grantee: "addon:companion", capability: Observe, subject: $"body:{mothBody}", budget: 1 }
+  { grantee: "addon:companion", capability: Observe, subject: "state:companionSense", budget: 24 }
 ]
