@@ -78,7 +78,7 @@ public sealed partial class StateArena {
         } else {
             // A lattice word includes its declared empty cells. Pool words contain held identities only.
             var count = (((layout.Shape == RowShape.Lattice) || m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))
-                ? layout.CellCapacity : (int)m_memberCounts[rowOrdinal]);
+                ? layout.CellCapacity : CellCount(rowOrdinal: rowOrdinal));
 
             for (var position = first; (position < count); position++) {
                 var slot = CellSlotAt(layout: layout, position: position);

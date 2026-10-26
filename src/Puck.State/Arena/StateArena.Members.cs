@@ -714,12 +714,14 @@ public sealed partial class StateArena {
         var resolved = m_slotOfKey[rowOrdinal];
 
         resolved.Clear();
-        if (m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
-            // Numeric pool keys address fixed slots directly; no per-row key index is needed.
+        if (!layout.IsStored || m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
+            // Unstored rows and numeric pool keys have no per-row key index.
             return;
         }
-        Visit(lanes: m_memberCounts[rowOrdinal]);
-        for (var position = 0; (position < m_memberCounts[rowOrdinal]); position++) {
+        var extent = ((layout.Shape == RowShape.Slot) ? layout.CellCapacity : m_memberCounts[rowOrdinal]);
+
+        Visit(lanes: extent);
+        for (var position = 0; (position < extent); position++) {
             var slot = CellSlotAt(layout: layout, position: position);
             var ordinal = m_memberKeys[slot];
 
