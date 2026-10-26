@@ -111,8 +111,11 @@ triangle materials, numbered after the merged triangles. A level's error is
 measured, not estimated from the quadric that orders the collapses: every vertex
 of the merged mesh stays within it of a level triangle of its own material, and
 every vertex and edge midpoint of a crease or a material's edge stays within it
-of that line as the level draws it, and a collapse is taken only where both hold
-(a quarter of the contour cell for the first level, two cells for the second).
+of that line as the level draws it, and every level triangle's centroid and edge
+midpoints stay within it of the surface it replaces, so no triangle cuts through
+a thin rod whose samples it passes between; a collapse is taken only where all
+three hold (a quarter of the contour cell for the first level, two cells for the
+second).
 The lines are measured as lines because a surface measure alone misses an
 outline that moves within its face's plane: a triangle filling a notch in a face's
 outline holds the notch's vertices at no distance, and the face shows surface

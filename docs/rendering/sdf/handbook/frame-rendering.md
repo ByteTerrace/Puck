@@ -1149,7 +1149,11 @@ within one of its texels. The draw pushes its level above its index and the
 vertex stage starts at the level's first triangle, which the draw's record holds;
 the surface pass reads the pixel's triangle as it does any other. Glass, a draw
 with no host box and the irradiance trace keep the merged mesh, and
-`world.detail 0`, `1` or `2` draws one level everywhere for comparison.
+`world.detail 0`, `1` or `2` draws one level everywhere for comparison. On the
+debug world the first level keeps 11% of the stored set's triangles and the
+second 6%, for 9% more bytes in the store and the region; in the lobby the mesh
+pass and the two cascades draw 1.3, 2.1 and 2.0 M triangles where the merged
+mesh drew 4.9, 17.9 and 22.8 M.
 
 A body straddling a portal whose counterpart stands in the same world is drawn
 on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding

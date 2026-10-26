@@ -311,7 +311,8 @@ laws exercise that boundary.
   surface samples alone let a slide fill a notch in a face's outline (the notch's
   vertices lie inside the filling triangle, at no distance), which drew surface
   past a raised plate's outline several pixels out. `SdfMeshLevel.Error` is the
-  largest measured distance of either kind (raised to the finer level's where
+  largest distance the surface samples, the line samples and the triangle bound
+  below measure (raised to the finer level's where
   re-tracking measures a coarser level nearer). Places sort per pass into free (at most one
   crease or material edge, ending there), sliding (two copies: only along the
   crease between them; one copy on material edges: along them) and locked
@@ -319,10 +320,14 @@ laws exercise that boundary.
   ring); a refusal also guards the link condition, a fold past `FlipCosine`, and a
   face turning to the other side of its vertices' normals. A pass locks only the
   places a collapse moved triangles onto, since those places' lists miss them;
-  the passes take about half as many collapses each, about twelve a level. On the
-  debug world's merged set it keeps about 10% of the triangles at the first level
-  and 6% to 9% at the second, for about 110 s of CPU over the whole set, which
-  `Land`'s tasks spread across cores. The done line counts `levelled=` meshes and
+  the passes take about half as many collapses each, about twelve a level. A
+  third guard bounds each new triangle: its centroid and edge midpoints are
+  measured against the old fan's same-material triangles, and each triangle
+  carries the largest such distance it inherited, so a collapse cannot cut a
+  triangle through a thin rod the samples straddle. On the debug world's stored
+  set it keeps 11% of the triangles at the first level and 6% at the second, for
+  9% more stored and region bytes and about 208 s of CPU over the whole set,
+  which `Land`'s tasks spread across cores. The done line counts `levelled=` meshes and
   the triangles every mesh draws at `level1=` and `level2=`;
   `SdfMeshCollapseLawTests` measures each level's contract by brute force.
 
