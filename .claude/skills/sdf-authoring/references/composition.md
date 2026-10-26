@@ -157,9 +157,9 @@ for both sides when the band must follow the rendered surface.
 
 ## The three scope rules
 
-The builder allows two levels of field scope. Creation shape and group emission
-uses its existing shared-scope rules below. The extra level isolates a moving
-creation's text and geometry together without flattening its independent groups.
+The builder allows four levels of field scope. Creation shape and group emission
+uses its shared-scope rules below; nested text, group and shape scopes fit without
+flattening independent groups.
 
 **1. A shape takes its own scope** when it carries any of `dilate`, `onion`,
 `panel`, `flare`, `shear`, `bumps`, `erode`, or `cells`. Squashing a sphere or
@@ -175,7 +175,7 @@ symptom alone does not establish the cause.
 The creation emitter does not lower `panel`, `trims`, or `cells` as grouped
 members, so those combinations remain refused by name.
 
-Only the pooled/body path reads `group` at all. Static emission walks the shape
+Only the articulated body path reads `group` at all. Static and rigid template emission walk the shape
 list in declaration order and never looks at it, so on a static placement a group
 isolates nothing and every `Subtraction` composes against the whole creation
 accumulator — order each cut to be spatially local instead. `creation stats`

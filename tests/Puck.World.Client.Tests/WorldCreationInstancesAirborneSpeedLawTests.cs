@@ -74,7 +74,7 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
                 Kit: 0,
                 Look: 0,
                 Orientation: Quaternion.Identity,
-                Position: new Vector3(x: (tick * Speed * frame), y: 10f, z: 0f)
+                Position: new Vector3(x: ((tick * Speed) * frame), y: 10f, z: 0f)
             ) },
             Revision: 0,
             StepTicks: 1UL,
@@ -114,7 +114,7 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
         // 5 m/s at cadence 0.2 is a phase of 1; the weight has eased to one.
         Assert.Equal(expected: (Cadence * Speed), actual: driver.Phase, tolerance: 1e-3f);
         Assert.Equal(expected: 1f, actual: driver.Weight, tolerance: 1e-2f);
-        Assert.Equal(expected: (Amplitude * driver.Phase * driver.Weight), actual: AngleBetween(turned: turned, rest: rest), tolerance: 1e-3f);
+        Assert.Equal(expected: ((Amplitude * driver.Phase) * driver.Weight), actual: AngleBetween(turned: turned, rest: rest), tolerance: 1e-3f);
     }
     // A capture holds the frame it is armed in and renders it again with no time passing, at the pose the display last
     // interpolated to: the body has moved and the frame charges nothing, so a speed read as travel over no time would

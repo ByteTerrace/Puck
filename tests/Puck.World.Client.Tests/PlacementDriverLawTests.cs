@@ -151,6 +151,7 @@ public sealed class PlacementDriverLawTests {
             transforms: transforms
         );
         var root = transforms[0];
+
         Assert.True(pool.TryShapePosition("grass", 0, client, out var initial));
 
         for (ulong tick = 2; (tick <= 31); tick++) {

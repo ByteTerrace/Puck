@@ -274,7 +274,6 @@ public sealed class WorldFaceCatalogLawTests {
             expectedSubstring: ".filter 7 is not a sampler filter"
         );
     }
-
     // THE LAW: a window projection's glass is an opening buried in its face's shape about its mid-plane, where a display's
     // is an inset screen proud of the face; the glass span a counterpart window starts its rays past follows the same
     // split.
@@ -303,17 +302,17 @@ public sealed class WorldFaceCatalogLawTests {
         }
 
         var frame = DoorRow(definition: window).Frame;
-        var halfWidth = (float)(double)frame.HalfWidth;
-        var halfHeight = (float)(double)frame.HalfHeight;
+        var halfWidth = ((float)((double)frame.HalfWidth));
+        var halfHeight = ((float)((double)frame.HalfHeight));
         var opening = Glass(definition: window);
         var inset = Glass(definition: display);
 
         Assert.True(condition: WorldPrototypeFacets.IsOpening(source: opening.Source));
         Assert.False(condition: WorldPrototypeFacets.IsOpening(source: inset.Source));
-        Assert.True(condition: (opening.HalfWidth < halfWidth) && (opening.HalfHeight < halfHeight));
-        Assert.True(condition: (opening.HalfWidth > inset.HalfWidth) && (opening.HalfHeight > inset.HalfHeight));
-        Assert.True(condition: (inset.HalfWidth < halfWidth) && (inset.HalfHeight < halfHeight));
-        Assert.True(condition: (Vector3.Dot(vector1: ((Vector3)inset.Origin - frame.Origin.ToVector3()), vector2: frame.Normal.ToVector3()) > (float)(double)frame.HalfDepth));
+        Assert.True(condition: ((opening.HalfWidth < halfWidth) && (opening.HalfHeight < halfHeight)));
+        Assert.True(condition: ((opening.HalfWidth > inset.HalfWidth) && (opening.HalfHeight > inset.HalfHeight)));
+        Assert.True(condition: ((inset.HalfWidth < halfWidth) && (inset.HalfHeight < halfHeight)));
+        Assert.True(condition: (Vector3.Dot(vector1: (((Vector3)inset.Origin) - frame.Origin.ToVector3()), vector2: frame.Normal.ToVector3()) > ((float)((double)frame.HalfDepth))));
 
         var (back, front) = WorldPrototypeFacets.GlassSpan(frame: frame, source: opening.Source);
         var (insetBack, insetFront) = WorldPrototypeFacets.GlassSpan(frame: frame, source: inset.Source);
@@ -321,9 +320,9 @@ public sealed class WorldFaceCatalogLawTests {
         // The opening's glass is centred on the face's mid-plane and its front face is the glass's sampled origin.
         Assert.Equal(expected: -back, actual: front);
         Assert.Equal(expected: opening.HalfDepth, actual: front);
-        Assert.True(condition: (Vector3.Distance(value1: (Vector3)opening.Origin, value2: (frame.Origin.ToVector3() + (frame.Normal.ToVector3() * front))) < 1e-5f));
-        Assert.True(condition: (front > 0f) && (front < (float)(double)frame.HalfDepth));
-        Assert.True(condition: (insetFront > (float)(double)frame.HalfDepth) && (insetBack < insetFront));
+        Assert.True(condition: (Vector3.Distance(value1: ((Vector3)opening.Origin), value2: (frame.Origin.ToVector3() + (frame.Normal.ToVector3() * front))) < 1e-5f));
+        Assert.True(condition: ((front > 0f) && (front < ((float)((double)frame.HalfDepth)))));
+        Assert.True(condition: ((insetFront > ((float)((double)frame.HalfDepth))) && (insetBack < insetFront)));
     }
 
     // The door placement's face row with its filter replaced.
@@ -642,7 +641,7 @@ public sealed class WorldFaceCatalogLawTests {
             actual: catalog.Rows[0].ScreenIndex
         );
         Assert.Equal(
-            expected: WorldPlacementPolicy.DerivedFaceBase(definition) + 1,
+            expected: (WorldPlacementPolicy.DerivedFaceBase(definition) + 1),
             actual: catalog.Rows[1].ScreenIndex
         );
     }

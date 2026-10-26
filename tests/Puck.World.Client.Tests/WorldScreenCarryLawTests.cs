@@ -148,8 +148,8 @@ public sealed class WorldScreenCarryLawTests {
         // The box sits at its author position turned by the creation frame's half turn about up, and its front face
         // (author -Z) faces the turned +Z, so the picture's normal is the turned box's -Z and its right the turned -X.
         var turned = new Vector3(x: -PictureAt.X, y: PictureAt.Y, z: -PictureAt.Z);
-        var right = (Vector3)carried.Right;
-        var up = (Vector3)carried.Up;
+        var right = ((Vector3)carried.Right);
+        var up = ((Vector3)carried.Up);
         var normal = Vector3.Cross(vector1: right, vector2: up);
 
         Assert.Equal(expected: PictureHalf.X, actual: carried.HalfWidth, tolerance: 1e-6f);
@@ -189,7 +189,7 @@ public sealed class WorldScreenCarryLawTests {
         var resting = restingPool.ScreenSurfaceTransforms(client: restingClient);
 
         Assert.Equal(expected: SdfProgramBuilder.MaxScreenSurfaces, actual: held.Count);
-        Assert.Null(@object: held[ScreenIndex + 1]());
+        Assert.Null(@object: held[(ScreenIndex + 1)]());
         Assert.Equal(expected: ((Vector3)carried.Origin).X, actual: held[ScreenIndex]()!.Value.Origin.X, tolerance: 1e-6f);
         Assert.Equal(expected: 1f, actual: held[ScreenIndex]()!.Value.Right.Length(), tolerance: 1e-5f);
         Assert.Equal(expected: 1f, actual: held[ScreenIndex]()!.Value.Up.Length(), tolerance: 1e-5f);
@@ -219,11 +219,13 @@ public sealed class WorldScreenCarryLawTests {
     public void AStampWhoseCreationLacksThePoseFrameOrTheBoxCarriesNothing() {
         var carry = new WorldScreenCarry(Look: "holder", Pose: "hold", Shape: "picture");
         var world = World(carry: carry, held: FixedQ4816.One.Value, frame: "wave", poses: ["hold", "wave"]);
+
         var (framePool, frameClient) = Pack(world: world);
 
         Assert.False(condition: framePool.TryCarriedScreen(screen: world.Screens[0], client: frameClient, carried: out _));
 
         var heldWorld = World(carry: carry, held: FixedQ4816.One.Value);
+
         var (boxPool, boxClient) = Pack(world: heldWorld, stamped: (heldWorld.Creations[^1] with { Document = Holder(picture: "other") }));
 
         Assert.False(condition: boxPool.TryCarriedScreen(screen: heldWorld.Screens[0], client: boxClient, carried: out _));
@@ -261,10 +263,13 @@ public sealed class WorldScreenCarryLawTests {
         private const float FrameSeconds = (1f / 60f);
 
         private readonly Guid m_activation = Guid.NewGuid();
+
         private readonly WorldScreenCarry m_carry;
         private readonly WorldSceneEmitter m_emitter;
         private readonly SdfCompositionFrameSource m_frames;
+
         private long m_sequence = 1;
+
         private ulong m_tick;
 
         public Scene(WorldScreenCarry carry) {
@@ -305,6 +310,7 @@ public sealed class WorldScreenCarryLawTests {
         }
 
         public WorldClient Client { get; }
+
         public WorldCreationInstances Pool { get; } = new();
 
         // Delivers the held cell's new value the way a mutation's definition delivery reaches the client.

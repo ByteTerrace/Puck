@@ -109,10 +109,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private int m_bakedColorRevision;
     // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
     private int m_articulatedRevision;
-    private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
-    private int m_catalogRevision;
-    private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
 
+    private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
+
+    private int m_catalogRevision;
+
+    private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
     // The destination's stamp pool, packed past the avatar catalog's slots, the source it roots on, its creation-stamp
     // census, and the mesh draws: the static placements' the last live Emit fixed, then the pool's.
     private readonly WorldBodyStampCensus m_census = new();
@@ -601,39 +603,39 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_picks.Clear();
         var colors = BakedColors();
 
-            colors.Begin();
-            // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
-            // (ScreenDecals).
-            var meshDraws = new List<SdfMeshDraw>();
+        colors.Begin();
+        // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
+        // (ScreenDecals).
+        var meshDraws = new List<SdfMeshDraw>();
 
-            WorldPlacementStamper.EmitStatic(
-                builder: builder,
-                colors: colors,
-                definition: definition,
-                creations: definition.Creations,
-                placements: definition.Placements,
-                palettes: m_palettes,
-                meshDraws: meshDraws,
-                picks: m_picks
-            );
-            m_meshDraws.Static = meshDraws;
+        WorldPlacementStamper.EmitStatic(
+            builder: builder,
+            colors: colors,
+            definition: definition,
+            creations: definition.Creations,
+            placements: definition.Placements,
+            palettes: m_palettes,
+            meshDraws: meshDraws,
+            picks: m_picks
+        );
+        m_meshDraws.Static = meshDraws;
 
-            // The destination's screens: its rows, then the faces its creations seat at the reserved band, within what
-            // the probe reserves (WorldSessionRenderEnvelope). The band's unseated placeholders are left out, so a world
-            // with no screen keeps a program that may stand unchanged between frames.
-            WorldStaticSceneEmit.Emit(
-                builder: builder,
-                derivedFaces: WorldPrototypeFacets.Seated(definition: definition),
-                screens: definition.Screens
-            );
-            m_pool.Emit(
-                builder: builder,
-                colors: colors,
-                maxPlacementScale: definition.Authoring.MaxPlacementScale,
-                probeWorstCase: false,
-                slotBase: (context.SlotBase + m_catalogSlotCount),
-                picks: m_picks
-            );
+        // The destination's screens: its rows, then the faces its creations seat at the reserved band, within what
+        // the probe reserves (WorldSessionRenderEnvelope). The band's unseated placeholders are left out, so a world
+        // with no screen keeps a program that may stand unchanged between frames.
+        WorldStaticSceneEmit.Emit(
+            builder: builder,
+            derivedFaces: WorldPrototypeFacets.Seated(definition: definition),
+            screens: definition.Screens
+        );
+        m_pool.Emit(
+            builder: builder,
+            colors: colors,
+            maxPlacementScale: definition.Authoring.MaxPlacementScale,
+            probeWorstCase: false,
+            slotBase: (context.SlotBase + m_catalogSlotCount),
+            picks: m_picks
+        );
 
         EmitAvatars(
             builder: builder,
@@ -679,7 +681,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 )) {
                     WorldTransformOwners.Park(
                         count: WorldRigCatalog.TransformSlotsPerBody,
-                        start: context.SlotBase + m_catalogSlots[index],
+                        start: (context.SlotBase + m_catalogSlots[index]),
                         moved: moved,
                         parkPosition: context.ParkPosition,
                         table: slots
@@ -871,6 +873,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         return true;
     }
+
     /// <summary>Writes five components, never their sum: the definition-delivery revision, the mirrored snapshot's
     /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
     /// able to move down), a counter that moves when a bound color the live build baked moves in the session's state
@@ -879,32 +882,40 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the host's avatar colors — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
     /// identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
     private readonly int[] m_catalogSlots = new int[WorldBodiesLimits.CapacityCeiling];
+
     private int m_catalogSlotCount;
+
     private void PrepareCatalog() {
         m_catalogSlotCount = 0;
         Array.Fill(m_catalogSlots, -1);
-        for (var body = 0; body < m_catalogSlots.Length; body++) {
+        for (var body = 0; (body < m_catalogSlots.Length); body++) {
             if (!HoldsAvatar(body)) { continue; }
             m_catalogSlots[body] = m_catalogSlotCount;
             m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
         }
-        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => m_catalogSlots[index] >= 0)
-            .Select(index => (index, (int)m_mirror.CatalogRig(index), m_mirror.Look(index).Scale, m_bodyColor(index))).ToArray();
+        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
+            .Select(index => (index, ((int)m_mirror.CatalogRig(index)), m_mirror.Look(index).Scale, m_bodyColor(index))).ToArray();
+
         if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
     }
+
     private int m_preparedDefinition = int.MinValue;
     private int m_preparedSnapshot = int.MinValue;
+
     public void PrepareFrame() {
-        if (m_preparedDefinition == m_mirror.DefinitionRevision && m_preparedSnapshot == m_mirror.SnapshotRevision && !m_census.TryTakeMove()) { return; }
+        if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;
         var definition = Scoped(m_mirror.Definition);
+
         m_census.Refresh(m_source);
-        var articulated = (m_onlyPrototypes is null ? m_census.Stamps : []).Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        var articulated = ((m_onlyPrototypes is null) ? m_census.Stamps : []).Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+
         if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
-        m_pool.Reconcile(definition.Placements, definition.Creations, definition.Dynamics, m_onlyPrototypes is null ? m_census.Stamps : [], definition.Looks);
-            PrepareCatalog();
+        m_pool.Reconcile(definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
+        PrepareCatalog();
     }
+
     public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
 

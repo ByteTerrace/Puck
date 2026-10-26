@@ -7,14 +7,15 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     // A residency with no brick work binds a single float. The first real request creates its byte-budgeted pool.
     private void EnsureBrickPool() {
-        if (!m_brickPoolEnabled || m_brickPoolBuffer.SizeBytes > sizeof(float)) { return; }
+        if (!m_brickPoolEnabled || (m_brickPoolBuffer.SizeBytes > sizeof(float))) { return; }
         WaitForUploads();
         var buffer = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "brick-pool"),
-            sizeBytes: checked((ulong)m_brickPoolVoxelCapacity * sizeof(float)), usage: GpuBufferUsage.Storage);
+            sizeBytes: checked((((ulong)m_brickPoolVoxelCapacity) * sizeof(float))), usage: GpuBufferUsage.Storage);
         var region = new GpuRegion(bindings: m_gpu.Bindings, buffers: m_gpu.BufferFactory,
-            byteCount: Math.Min(SdfBrickPoolLayout.VoxelsPerBrick, m_brickPoolVoxelCapacity) * sizeof(float),
+            byteCount: (Math.Min(SdfBrickPoolLayout.VoxelsPerBrick, m_brickPoolVoxelCapacity) * sizeof(float)),
             copyPipeline: m_regionCopyPipeline, copySets: m_regionCopyPool.Region(index: BrickStagingRegionIndex),
             destination: buffer, name: RegionName(region: BrickStagingRegionIndex), recorder: m_gpu.Recorder, slotCount: FrameRingSize);
+
         Retire(replaced: m_brickPoolBuffer);
         m_brickPoolBuffer = buffer;
         m_brickRegion = region;
@@ -23,7 +24,6 @@ public sealed partial class SdfWorldTables {
         }
         m_bindingRevision++;
     }
-
     private static void ValidateBrickDimension(int value, string name) {
         if (
             (value < 1) ||

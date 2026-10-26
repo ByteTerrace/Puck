@@ -273,7 +273,7 @@ public sealed class CreationCommandTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "pooled: globalStepScale 1, scoped clamps 1 (1 shared)"
+            expectedSubstring: "creation: globalStepScale 1, scoped clamps 1 (1 shared)"
         );
         Assert.Contains(
             actualString: output,
@@ -314,7 +314,6 @@ public sealed class CreationCommandTests {
             expectedSubstring: "names no prototype"
         );
     }
-
     /// <summary><c>shape</c> reads the named shapes' laws in the order named, refuses an unknown prototype or shape by
     /// name (exit 2), and a file that does not load (exit 1).</summary>
     [Fact]

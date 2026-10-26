@@ -182,9 +182,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public int LiveProgramWords { get; private set; }
     /// <summary>Gets the last uploaded program's instance count, or 0 before the first upload.</summary>
     public int LiveProgramInstances { get; private set; }
-    public int LiveProgramMaterials => m_frame?.Program.MaterialCount ?? 0;
-    public int LiveDynamicTransforms => m_frame?.DynamicTransforms.Count ?? 0;
-    public long ProgramBuilds => (m_frameSource as SdfCompositionFrameSource)?.ProgramBuilds ?? 0;
+    public int LiveProgramMaterials => (m_frame?.Program.MaterialCount ?? 0);
+    public int LiveDynamicTransforms => (m_frame?.DynamicTransforms.Count ?? 0);
+    public long ProgramBuilds => ((m_frameSource as SdfCompositionFrameSource)?.ProgramBuilds ?? 0);
     /// <summary>Gets the bounded volume count in the latest captured frame, before per-ray rejection.</summary>
     public int LiveVolumes { get; private set; }
     /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first upload.</summary>

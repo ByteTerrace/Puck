@@ -21,6 +21,7 @@ public readonly record struct WorldRenderCost(int Instances, int Materials) {
         Instances: checked((cost.Instances * count)),
         Materials: checked((cost.Materials * count))
     );
+
     /// <summary>Names the engine ceiling this cost exceeds, or returns <see langword="null"/> when it fits every one:
     /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxInstances"/> instances and
     /// <see cref="Puck.SignedDistance.SdfProgramBuilder.ScreenMaterialId"/> materials (the first screen sentinel).</summary>
@@ -31,7 +32,6 @@ public readonly record struct WorldRenderCost(int Instances, int Materials) {
             : null);
     }
 }
-
 /// <summary>
 /// The render-capacity oracle the server consults before it applies a render-relevant mutation. Each consumer that
 /// renders the world registers a measurer that counts a candidate definition's render scene on the CPU

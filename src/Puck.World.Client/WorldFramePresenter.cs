@@ -127,10 +127,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private float m_elapsedSeconds;
     private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
+
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
     private int m_staticFieldNeighbours = -1;
     private int m_staticFieldResponses = -1;
+
     // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
     private Task<SdfFieldEvaluator>? m_staticFieldBuild;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
@@ -144,6 +146,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+
     // The client's document version as the dressed frames' diagnostic source carries it, boxed.
     private Puck.World.Protocol.WorldDocumentVersion m_diagnosticVersion;
     private object? m_diagnosticSource;
@@ -151,9 +154,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Appends volumes to the frame's, up to the engine's ceiling, indexed so the interface's enumerator is never boxed.
     private void AppendVolumes(IReadOnlyList<SdfVolume> volumes) {
         if ((m_volumes.Count + volumes.Count) > SdfProgramBuilder.MaxVolumes) {
-            throw new InvalidOperationException($"The world frame needs {m_volumes.Count + volumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
+            throw new InvalidOperationException($"The world frame needs {(m_volumes.Count + volumes.Count)} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
         }
-        for (var index = 0; index < volumes.Count; index++) {
+        for (var index = 0; (index < volumes.Count); index++) {
             m_volumes.Add(item: volumes[index]);
         }
     }
@@ -182,7 +185,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // chase eye keeps out of when it frames a body of that kit. A definition derived for a state change carries both
     // lists, so the colliders compile again only when a kit or creation row moves.
     private FixedWorldCollider?[] m_subjectColliders = [];
+
     private IReadOnlyList<WorldPrototype>? m_subjectCollidersCreations;
+
     // The drawn volumes of the creation and stamp scale a chase eye last framed (WorldChaseBody.DrawnVolumes).
     private Vector4[] m_subjectDrawn = [];
 
@@ -745,7 +750,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The chase boom eases only while the seat frames through its own chase rig — a camera control application
         // resolves through views.cameraRig, whose framing is the possessed body's own pose and must not lag it. The
         // response is the one the program's dynamics op just reported; None passes eye/target through bit for bit.
-        var viewForward = Vector3.Normalize(target - eye);
+        var viewForward = Vector3.Normalize((target - eye));
+
         view.Follow(
             dynamics: chase.Dynamics,
             enabled: ReferenceEquals(
@@ -2369,7 +2375,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private static void PrepareResponses(WorldDefinition definition) {
         try {
             _ = WorldPlacementStamper.PrepareResponses(definition: definition);
-        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"[world.presentation: the creations responses show were not prepared ahead; each compiles when first shown: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
     }
@@ -2397,8 +2403,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets the composed source every frame is captured through: its frame count, the program it holds and
     /// whether a build of the next is in flight, which a wait for the baked frame reads.</summary>
     public SdfCompositionFrameSource Composed => m_composed;
+
     /// <inheritdoc/>
     public void ObserveBuilds(Action<SdfProgram, IReadOnlyList<DynamicTransform>> built) => m_composed.ObserveBuilds(built: built);
+
     /// <inheritdoc/>
     public SdfGlyphAtlas? GlyphAtlas => m_text.GlyphAtlas;
     /// <summary>The worst-case (all avatars active) instance count — the spec's <c>InstanceCapacity</c> floor.</summary>

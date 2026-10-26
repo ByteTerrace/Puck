@@ -789,6 +789,7 @@ public sealed partial class WorldCreationInstances {
 
         return true;
     }
+
     // The named shape's resolved parent and chained delta as the last pack left them; an absent shape answers with
     // no index, and a registration not yet packed with no parent resolved.
     private static WorldRigShape RigShape(Registration live, IReadOnlyList<ShapeDocument> shapes, string shapeName) {

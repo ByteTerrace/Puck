@@ -68,8 +68,9 @@ public static partial class CreationCommand {
     private static void ReportProgram(string path, SdfProgram program, int dynamicSlots = 0) {
         var transforms = Enumerable.Repeat(new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), dynamicSlots).ToArray();
         var groups = SdfMeshBakeGroup.Plan(program, transforms, SdfFrame.DefaultFarDistance, static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic));
-        Console.Out.WriteLine($"    {path} bake work: {groups.Count} group(s), {program.Instances.Count} field instance(s), {program.InstructionCount} instructions per full field evaluation; encoded program {checked((long)program.Words.Length * sizeof(uint))} B, {program.MaterialCount} materials, root/part poses {checked((long)dynamicSlots * 48)} B");
-        Console.Out.WriteLine("      mesh vertices and resident bytes: derived by the bake; read world.render and world.counters gpu after world.wait bakes");
+
+        Console.Out.WriteLine($"    {path} bake work: {groups.Count} group(s), {program.Instances.Count} field instance(s), {program.InstructionCount} instructions per full field evaluation; encoded program {checked((((long)program.Words.Length) * sizeof(uint)))} B, {program.MaterialCount} materials, root/part poses {checked((((long)dynamicSlots) * 48))} B");
+        Console.Out.WriteLine("      mesh vertices and resident bytes: derived by the bake; read world.budget and world.counters gpu after world.wait bakes");
         Console.Out.WriteLine(value: string.Create(
             CultureInfo.InvariantCulture,
             $"    {path}: globalStepScale {program.StepScale:G6}, scoped clamps {program.FieldScopeClamps.Count} ({program.FieldScopeClamps.Count(predicate: static clamp => (clamp.ShapeCount > 1))} shared)"

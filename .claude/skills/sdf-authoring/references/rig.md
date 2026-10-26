@@ -51,8 +51,8 @@ and its part follower. It reads the latch `PackRegistration` left, the same one
 own. `WorldCreationInstancesLiveRigEditLawTests` pins it to the drawn slot every frame.
 
 A shape carrying `domain` folds may carry neither, since a fold rides its
-parent's frame. It may still carry a `parent`: the folded shape rides its own
-per-shape slot, packed with the rigid delta the parent's chain imparts (identity
+parent's frame. It may still carry a `parent`: the folded shape shares its motion
+owner's slot, packed with the rigid delta the parent's chain imparts (identity
 with no parent, translation in placement units), and its chain applies
 `Scale(placementScale)`, the domain ops, then its own rest pose, so the fold
 plane travels with the parent's driver and effector motion at any look scale.
@@ -230,7 +230,7 @@ the motion vocabulary scales a shape over time.
 | `cameras` | `{ id, shapeId, position, yaw, pitch, fov, focus, feed }` | rides the anchored shape's live pose. `position` converts to the engine frame; `yaw` and `pitch` do not |
 | `parts` | `{ id, shapeId }` | publishes one shape's dynamic transform as a named anchor other things can attach to |
 | `behavior` | `{ locomotion, faces, sounds }` | a face is `{ name, shapeId, defaultSource }` with a source of `none`, `test`, `camera:<name>`, or `feed:<name>`; a sound carries an inline `puck.synth.v1` patch with `level` capped at 8 |
-| `textRuns` | `{ text, position, rotation, emHeight, depth, mode, material, font, maxWidth, align, tracking, lineSpacing, shapeId }` | local +X advances, +Y is ascent, +Z is the relief normal. `mode` is `emboss` (default) or `engrave`; engrave forces the creation-wide scope. Each non-whitespace glyph charges the shape budget. `position` is the first line's baseline; `\n` breaks a line. An embossed run bakes alone, refined toward `min(depth, 0.1 × emHeight)` but no finer than 1.875 mm along the run (a 15 mm cell over `MaxDetailRefinement` 8, `SdfMeshPathBake.OwnFinal`), so a stroke (about a tenth of the em) needs an em near 40 mm and a relief of 2 mm or less to span two cells; smaller lettering drops strokes (`worlds/debug/devices.md`) |
+| `textRuns` | `{ text, position, rotation, emHeight, depth, mode, material, font, maxWidth, align, tracking, lineSpacing, shapeId }` | local +X advances, +Y is ascent, +Z is the relief normal. `mode` is `emboss` (default) or `engrave`; engrave forces the creation-wide scope. Each non-whitespace glyph adds a field operand to bake. `position` is the first line's baseline; `\n` breaks a line. An embossed run bakes alone, refined toward `min(depth, 0.1 × emHeight)` but no finer than 1.875 mm along the run (a 15 mm cell over `MaxDetailRefinement` 8, `SdfMeshPathBake.OwnFinal`), so a stroke (about a tenth of the em) needs an em near 40 mm and a relief of 2 mm or less to span two cells; smaller lettering drops strokes (`worlds/debug/devices.md`) |
 | `noise` | `{ frequency, amplitude, octaves, gain, lacunarity, seed }` | frequency in (0, 8], amplitude in (0, 4], octaves 1 to 8. Static stamps only — framed, attached, inhabited, and body-look placements refuse it. Forces the creation-wide scope. Render only |
 | `volumes` | see `surface.md` | up to 64 |
 

@@ -103,7 +103,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
         for (var frame = 0; (frame < 120); frame++) {
             scene.Frame();
 
-            foreach (var (shapeId, slot) in ((int, int)[])[(0, (ArmSlot - 1)), (1, ArmSlot)]) {
+            foreach (var (shapeId, slot) in (((int, int)[])[(0, (ArmSlot - 1)), (1, ArmSlot)])) {
                 Assert.True(condition: scene.Pool.TryShapePosition(client: scene.Client, placementId: Seat, position: out var read, shapeId: shapeId));
 
                 var drawn = scene.Drawn(slot: slot);
@@ -122,12 +122,17 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
     // The real scene emitter over one client, composed as a presenter composes it, with body 0 wearing the creation.
     private sealed class Scene {
         private readonly Guid m_activation = Guid.NewGuid();
+
         private readonly WorldClient m_client;
+
         private readonly RecordingDresser m_dresser = new();
+
         private readonly WorldSceneEmitter m_emitter;
         private readonly SdfCompositionFrameSource m_frames;
         private readonly string? m_placementId;
+
         private long m_sequence = 1;
+
         private ulong m_tick;
 
         public Scene(WorldPrototype creation, bool background, string? placementId = null) {

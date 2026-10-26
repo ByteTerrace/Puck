@@ -109,6 +109,7 @@ public sealed partial class WorldCreationInstances {
 
         return providers;
     }
+
     // The frame a carried screen's surface takes this frame; null for a screen no body can carry.
     private SdfScreenSurfaceTransform? SurfaceTransform(IWorldStampSource client, int index) {
         var screens = client.Definition.Screens;

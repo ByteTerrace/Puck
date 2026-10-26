@@ -16,7 +16,6 @@ public sealed partial class SdfWorldTables {
     private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
     private IGpuBuffer m_previousDynamicTransforms;
-
     private IGpuBuffer m_previousMeshTransforms;
 
     private readonly GpuUploadRuns m_changedTransforms = new(capacity: GpuRegion.MaxCopyRuns);

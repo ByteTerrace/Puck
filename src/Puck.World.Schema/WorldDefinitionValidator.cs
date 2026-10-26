@@ -1700,7 +1700,7 @@ public static partial class WorldDefinitionValidator {
         // dict-fill, so the range is carved out of the authored screen-index space here. The membership test itself is
         // WorldPrototypeFacets.IsReservedFaceIndex — shared with the authoring-headroom scan, which excludes the same
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
-        if (WorldPlacementPolicy.DerivedFaceBase(definition) + authoring.DerivedFaceScreens > SdfProgramBuilder.MaxScreenSurfaces) {
+        if ((WorldPlacementPolicy.DerivedFaceBase(definition) + authoring.DerivedFaceScreens) > SdfProgramBuilder.MaxScreenSurfaces) {
             errors.Add($"Authored screens and {authoring.DerivedFaceScreens} derived-face bindings exceed the {SdfProgramBuilder.MaxScreenSurfaces} screen bindings.");
         }
         // The kits a screen route may name: only a kit carrying a pad map assigns channels a meaning at a machine,

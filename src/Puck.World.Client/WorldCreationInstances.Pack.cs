@@ -179,6 +179,7 @@ public sealed partial class WorldCreationInstances {
             );
             var document = live.Creation.EngineDocument;
             var shapeCount = (document.Shapes?.Count ?? 0);
+
             if (m_partSpheres.Length < shapeCount) { Array.Resize(ref m_partSpheres, shapeCount); }
             if (m_previousSlots.Length < live.Slots) { Array.Resize(ref m_previousSlots, live.Slots); }
             // The root, the shapes, and the slot text baked apart rides (TextApart).
@@ -327,7 +328,7 @@ public sealed partial class WorldCreationInstances {
             );
         }
 
-        Rigid.Pack(transforms, client, slotBase + ArticulatedSlotCount, deltaSeconds);
+        Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
         EndRateCodes();
 
         // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
@@ -694,14 +695,16 @@ public sealed partial class WorldCreationInstances {
                 Position: worldPosition
             );
         }
-        for (var owner = 0; owner < live.Motion.Owners.Length; owner++) {
+        for (var owner = 0; (owner < live.Motion.Owners.Length); owner++) {
             var shapeIndex = live.Motion.Owners[owner];
             var shape = shapes[shapeIndex];
             var posed = live.ShapeTransforms[shapeIndex];
-            if (shape.Domain is { Count: > 0 }) { transforms[rootSlot + owner + 1] = posed; continue; }
-            var turn = Quaternion.Normalize(posed.Orientation * Quaternion.Inverse(shape.Rotation.Value));
-            transforms[rootSlot + owner + 1] = new DynamicTransform(
-                Position: posed.Position - Vector3.Transform(shape.Position.Value * placementScale, turn),
+
+            if (shape.Domain is { Count: > 0 }) { transforms[((rootSlot + owner) + 1)] = posed; continue; }
+            var turn = Quaternion.Normalize((posed.Orientation * Quaternion.Inverse(shape.Rotation.Value)));
+
+            transforms[((rootSlot + owner) + 1)] = new DynamicTransform(
+                Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),
                 Orientation: turn, Lanes: lanes);
         }
 

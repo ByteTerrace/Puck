@@ -141,21 +141,25 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     /// <inheritdoc/>
     private int[] m_liveSlots = [];
+
     private int m_liveSlotCount;
+
     public void PrepareFrame() {
         if (m_liveSlots.Length != m_emittedEntities.Length) { m_liveSlots = new int[m_emittedEntities.Length]; }
         Array.Fill(m_liveSlots, -1);
         m_liveSlotCount = 0;
         var visuals = m_source.Visuals();
-        for (var band = 0; band < Math.Min(visuals.Count, m_bandCount); band++) {
+
+        for (var band = 0; (band < Math.Min(visuals.Count, m_bandCount)); band++) {
             SelectBand(visuals[band], m_polledEntities);
-            for (var body = 0; body < m_polledEntities.Length; body++) {
+            for (var body = 0; (body < m_polledEntities.Length); body++) {
                 if (!m_polledEntities[body]) { continue; }
-                m_liveSlots[band * WorldBodiesLimits.CapacityCeiling + body] = m_liveSlotCount;
+                m_liveSlots[((band * WorldBodiesLimits.CapacityCeiling) + body)] = m_liveSlotCount;
                 m_liveSlotCount += WorldRigCatalog.TransformSlotsPerBody;
             }
         }
     }
+
     public int DynamicSlotCount => m_liveSlotCount;
     /// <inheritdoc/>
     public bool OwnsMaterialScope => false;
@@ -306,7 +310,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             probeWorstCase: false,
             slotBase: slotBase,
             rigFor: index => m_emittedRigs[(appearanceBase + index)],
-            slotFor: index => m_liveSlots[appearanceBase + index],
+            slotFor: index => m_liveSlots[(appearanceBase + index)],
             scaleFor: index => m_emittedScales[(appearanceBase + index)]
         );
     }
@@ -629,10 +633,12 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             bandIndex++;
         }
     }
+
     /// <summary>Gets the revision of the neighbours' geometry as the last <see cref="WriteRevision"/> polled it: it moves
     /// when a neighbour's definition or snapshot moves, a neighbour becomes reachable or unreachable, or a bound color its
     /// border baked moves, and not when only the bodies each band selects change.</summary>
     public int NeighbourRevision => m_neighbourRevision;
+
     /// <inheritdoc/>
     public void WriteRevision(Span<int> destination) {
         // Poll every band's neighbour reachability/definition-revision — a live neighbour edit (or a neighbour

@@ -71,7 +71,7 @@ public sealed partial class WorldCreationInstances {
 
                 var reference = allShapes![referenceIndex];
 
-                referenceSlot = rootSlot + motion!.ShapeSlots[referenceIndex];
+                referenceSlot = (rootSlot + motion!.ShapeSlots[referenceIndex]);
                 referencePosition = reference.Position;
                 referenceRotation = reference.Rotation;
                 referenceType = reference.Type;
@@ -88,7 +88,7 @@ public sealed partial class WorldCreationInstances {
             }
 
             var eroded = SdfSolidGeometry.AppendScaledPrimitive(
-                chain: builder.ResetPoint().TransformDynamic(slot: slot).Translate(shapePosition * placementScale).Rotate(shapeRotation == default ? Quaternion.Identity : shapeRotation).PushField(compose: SdfBlendOp.Union),
+                chain: builder.ResetPoint().TransformDynamic(slot: slot).Translate((shapePosition * placementScale)).Rotate(((shapeRotation == default) ? Quaternion.Identity : shapeRotation)).PushField(compose: SdfBlendOp.Union),
                 type: type,
                 taper: taper,
                 profile: profile,
@@ -103,7 +103,7 @@ public sealed partial class WorldCreationInstances {
             ).Dilate(radius: inset);
 
             _ = SdfSolidGeometry.AppendScaledPrimitive(
-                chain: eroded.ResetPoint().TransformDynamic(slot: referenceSlot).Translate(referencePosition * placementScale).Rotate(referenceRotation == default ? Quaternion.Identity : referenceRotation),
+                chain: eroded.ResetPoint().TransformDynamic(slot: referenceSlot).Translate((referencePosition * placementScale)).Rotate(((referenceRotation == default) ? Quaternion.Identity : referenceRotation)),
                 type: referenceType,
                 taper: referenceTaper,
                 profile: referenceProfile,

@@ -771,12 +771,12 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] More games for the room's free table spot at (65, 30.6), from the state programme's landed games; addon seats at the tables.
   - [ ] Go on a real 19×19 board with all 361 stones, after the limits work below lets every stone draw as itself. Area scoring's flood needs more passes than `RuleGroupCapacity.MaxPasses` (256) allows, and stones in one tray column share an X interval past the contact broadphase's candidate budget (16): charge a candidate only on a full box overlap.
 
-- [ ] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The ceilings sized for the per-pixel interpreter still stand, and they cap the board room: 19×19 Go needs about 480 creation registrations against 384.
-  - [ ] A rigid creation bakes once and draws per copy through one root transform; an articulated one takes a slot per independently moving part. Delete the per-stamp shape cap, the full and compact registration pools, the per-shape transform reservation and the worst-case boot probe program (56,653 probe instances and 38,395 materials on the debug world today, of which the catalog avatars take 6,528 instances and about 26,000 materials whether or not a body wears them).
-  - [ ] Delete `WorldDynamicGeometryCeilings` and its validator gate, the noise march-step refusal, and the detail band chosen by body index.
-  - [ ] Field scope depth 2 → 4; the derived-face screen band follows the authored screens.
-  - [ ] Guards never truncate silently: skinned bakes past 255 pose entries map the rest to the root (`SdfMeshPathBake.Skinned`), and volumes past 64 drop the later ones.
-  - [ ] Byte budgets from the machine: the mesh library clears all 4,096 entries when full (`SdfMeshLibrary.Capacity`), and brick pools reserve 64 MiB whether or not a world sculpts bricks.
+- [ ] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The interpreter-era scene ceilings are retired; the remaining vocabulary-hook work is below.
+  - [x] Rigid creations share local geometry and palettes, with a root transform and draw per copy; articulated creations allocate root and independently moving part slots. Shape caps, fixed full/compact pools, per-shape GPU reservations and the boot probe are deleted. Catalog looks emit only for bodies wearing them. The debug world's actual envelope is 2,697 instances, 2,273 materials and 567 transform slots, including 184 rigid copies; a focused 600-copy check retains every body's identity without rebuilding its program.
+  - [x] Delete `WorldDynamicGeometryCeilings` and its validator gate, the noise march-step refusal, and the detail band chosen by body index.
+  - [x] Field scope depth 2 → 4; the derived-face screen band follows the authored screens.
+  - [x] Guards never truncate silently: skins past 255 members refuse before queuing the named bake group, and volume overflow refuses with the creation or frame context.
+  - [x] Machine-derived byte budgets retain meshes by size and age; brick storage allocates on its first bake or upload rather than reserving 64 MiB at boot.
   - [ ] Stale maps: a skill map says `SdfLights.MaxLights` is 8 where the code allows 128; the sdf-authoring skill and authoring README describe the 367-shape budget; `puck creation stats` fails to install the mutation vocabulary on the debug world.
 
 ## [UI](ui.md)

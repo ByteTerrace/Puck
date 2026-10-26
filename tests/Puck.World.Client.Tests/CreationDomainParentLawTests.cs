@@ -182,7 +182,7 @@ public sealed class CreationDomainParentLawTests {
     // The fold shape's emitted chain: its own slot, the placement scale, the fold, then its rest translate/rotate —
     // returned as the index of the TransformDynamic that opens it.
     private static int AssertFoldChain(SdfInstruction[] program, float scale, Vector3 engineRestPosition) {
-        var transformIndex = Array.FindIndex(program, instruction => instruction.Op == SdfOp.SymmetryPlane) - 2;
+        var transformIndex = (Array.FindIndex(program, instruction => (instruction.Op == SdfOp.SymmetryPlane)) - 2);
 
         Assert.True(
             condition: (transformIndex >= 0),

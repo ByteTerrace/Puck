@@ -208,7 +208,7 @@ Panels expand to two field operands, trims to two more each, and glyphs to one
 per non-whitespace glyph. These increase bake work rather than consume a stamp
 budget. `puck creation stats` reports field instructions, bake groups and encoded
 bytes. Read actual mesh vertices, draws, baked groups and resident bytes from
-`world.counters gpu` and `world.render` after the bake settles. `detail: true`
+`world.counters gpu` and `world.budget` after the bake settles. `detail: true`
 saves contact work; its render field still bakes normally. Edit-to-running stays
 under 30 seconds, checked on a quiet machine by the lead.
 

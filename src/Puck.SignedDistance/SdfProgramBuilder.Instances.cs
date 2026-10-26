@@ -4,6 +4,7 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBakesSeparately;
+
     /// <summary>Reads a registered material while composing local material frames.</summary>
     public SdfMaterial MaterialAt(int index) => m_materials[index];
     /// <summary>Adds a material to the program palette.</summary>

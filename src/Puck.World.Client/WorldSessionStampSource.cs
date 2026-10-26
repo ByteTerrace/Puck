@@ -50,8 +50,10 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     public string? PlacementId(int index) => m_mirror.PlacementId(index: index);
     /// <inheritdoc/>
     public int PoseEpoch(int index) => m_mirror.PoseEpoch(index: index);
+
     /// <inheritdoc/>
     public WorldPoseCarries Carries => m_mirror.Carries;
+
     /// <inheritdoc/>
     public Vector3 Position(int index) => Vector3.Lerp(
         amount: m_mirror.InterpolationAlpha,

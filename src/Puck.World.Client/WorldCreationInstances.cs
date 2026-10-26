@@ -14,19 +14,25 @@ namespace Puck.World.Client;
 /// <remarks>Articulated instances allocate their actual root and motion-owner slots. Rigid bodies share local geometry through <see cref="WorldRigidAssets"/>.</remarks>
 public sealed partial class WorldCreationInstances {
     private int[] m_catalogSlots = [];
+
     private int m_catalogBase;
+
     /// <summary>Publishes the catalog looks' actual packed slot map for part anchors.</summary>
     public void SetCatalogSlots(int[] slots, int slotBase) { m_catalogSlots = slots; m_catalogBase = slotBase; }
     /// <summary>Reads a procedural look's part through its dense slot map.</summary>
     public bool TryCatalogPartPose(int body, string part, int rig, float scale, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
-        if ((uint)body >= (uint)m_catalogSlots.Length || m_catalogSlots[body] < 0) { pose = default; return false; }
+        if ((((uint)body) >= ((uint)m_catalogSlots.Length)) || (m_catalogSlots[body] < 0)) { pose = default; return false; }
         return WorldRigCatalog.TryPartPose(0, part, rig, transforms[(m_catalogBase + m_catalogSlots[body])..], out pose, scale);
     }
+
     private const float GroupBoundMargin = 0.4f;
 
     private Registration?[] m_pool = [];
+
     public WorldRigidAssets Rigid { get; } = new();
+
     public int ArticulatedSlotCount => RootSlotOffset(index: m_pool.Length);
+
     private int m_packedSlotBase = -1;
 
     /// <summary>Gets the operator's live shape isolation (<c>view.isolate</c>), which every live <see cref="Emit"/>
@@ -97,13 +103,14 @@ public sealed partial class WorldCreationInstances {
 
         private WorldPickTarget? m_pickTarget;
 
-        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { Prototype = Creation.Id, CreationSlots = Slots };
+        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex) { CreationSlots = Slots, Prototype = Creation.Id };
 
         // The dynamic-transform slots the registration's pool index reserves (SlotsAt), set when it takes the index.
         public CreationMotionPlan Motion = new(document);
-        public int Slots => Motion.SlotCount;
-        public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[document.Shapes?.Count ?? 0];
 
+        public int Slots => Motion.SlotCount;
+
+        public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[(document.Shapes?.Count ?? 0)];
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
         // the registration retires, so the mirror stops reading what no body wears any more.
@@ -188,6 +195,7 @@ public sealed partial class WorldCreationInstances {
         // The creation's reach from its root (CreationGeometry.Reach), measured on the first pack that needs it; -1
         // before.
         public float Reach = -1f;
+
         // Each shape's reach about its own slot, in creation units, or -1 for a cutter (WorldCreationInstances.PartSpheres); null
         // before the first pack that needs it.
         public float[]? ShapeReaches;
@@ -196,6 +204,7 @@ public sealed partial class WorldCreationInstances {
         // frame owes that pack whatever wakes the registration.
         public float RateSeconds;
         public bool RateOwed;
+
         // The slowest tier the body was rated at since its last full pack, the tier its next interval is recorded under.
         public int RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
 
@@ -275,12 +284,14 @@ public sealed partial class WorldCreationInstances {
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
-    public int DynamicSlotCount => ArticulatedSlotCount + Rigid.SlotCount;
+    public int DynamicSlotCount => (ArticulatedSlotCount + Rigid.SlotCount);
     public int RegistrationCount => m_pool.Length;
-    public int SlotsAt(int index) => m_pool[index]?.Slots ?? 0;
+
+    public int SlotsAt(int index) => (m_pool[index]?.Slots ?? 0);
     public int RootSlotOffset(int index) {
         var offset = 0;
-        for (var entry = 0; entry < index; entry++) { offset = checked(offset + SlotsAt(entry)); }
+
+        for (var entry = 0; (entry < index); entry++) { offset = checked((offset + SlotsAt(entry))); }
         return offset;
     }
 
@@ -358,7 +369,7 @@ public sealed partial class WorldCreationInstances {
                     ? Quaternion.Identity
                     : Quaternion.Normalize(value: shapeRotation)));
             } else {
-                chain = chain.TransformDynamic(slot: slot).Translate(shapePosition * placementScale).Rotate(shapeRotation == default ? Quaternion.Identity : shapeRotation);
+                chain = chain.TransformDynamic(slot: slot).Translate((shapePosition * placementScale)).Rotate(((shapeRotation == default) ? Quaternion.Identity : shapeRotation));
             }
 
             if (
@@ -686,7 +697,7 @@ public sealed partial class WorldCreationInstances {
     );
     private Registration? FindBody(int bodyIndex) {
         if (!m_bodySlotsStale) {
-            return ((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0)
+            return (((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0))
                 ? m_pool[slot]
                 : null);
         }
@@ -755,14 +766,15 @@ public sealed partial class WorldCreationInstances {
     // A creation that fits a compact registration takes one first, so small creations never crowd the full ones; any
     // creation then takes a free full registration.
     private int FreeSlot(CreationDocument document) {
-        for (var index = 0; index < m_pool.Length; index++) {
+        for (var index = 0; (index < m_pool.Length); index++) {
             if (m_pool[index] is null) { return index; }
         }
         var next = m_pool.Length;
-        Array.Resize(ref m_pool, next + 1);
-        Array.Resize(ref m_packedRegistrations, next + 1);
-        Array.Resize(ref m_meshDraws, next + 1);
-        m_owners.EnsureCapacity(next + 1);
+
+        Array.Resize(ref m_pool, (next + 1));
+        Array.Resize(ref m_packedRegistrations, (next + 1));
+        Array.Resize(ref m_meshDraws, (next + 1));
+        m_owners.EnsureCapacity((next + 1));
         return next;
     }
     private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
@@ -816,6 +828,7 @@ public sealed partial class WorldCreationInstances {
     // retuned lane, a new pose) applies on the next frame; the cue clocks restart only when the cues themselves change.
     private static void LatchLook(Registration live, BodyStamp stamp) {
         var motion = stamp.Look.Motion;
+
         live.Motion = new CreationMotionPlan(live.Creation.EngineDocument, motion.PartDynamics);
         var frames = (stamp.Creation.Document.Frames ?? []);
 
@@ -1125,15 +1138,16 @@ public sealed partial class WorldCreationInstances {
             );
             picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
         }
-        Rigid.Emit(builder, colors, slotBase + ArticulatedSlotCount, textCatalog, picks ?? new WorldPickMapBuilder());
+        Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()));
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
-    public bool HasBodyRegistration(int bodyIndex) => Rigid.ContainsBody(bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null);
+    public bool HasBodyRegistration(int bodyIndex) => (Rigid.ContainsBody(bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null));
 
     /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
     /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
     private readonly List<SdfVolume> m_allVolumes = [];
+
     public IReadOnlyList<SdfVolume> Volumes {
         get {
             m_allVolumes.Clear(); m_allVolumes.AddRange(m_volumes); m_allVolumes.AddRange(Rigid.Volumes);
@@ -1176,7 +1190,7 @@ public sealed partial class WorldCreationInstances {
                         b: parent,
                         comparisonType: StringComparison.Ordinal
                     )) {
-                        slot = rootSlot + live.Motion.ShapeSlots[shapeIndex];
+                        slot = (rootSlot + live.Motion.ShapeSlots[shapeIndex]);
                         origin = shapes[shapeIndex].Position.Value;
                         rotation = shapes[shapeIndex].Rotation.Value;
 
@@ -1187,7 +1201,7 @@ public sealed partial class WorldCreationInstances {
 
             m_volumes.Add(item: volume.ToVolume(
                 dynamicSlot: slot,
-                origin: origin * placementScale,
+                origin: (origin * placementScale),
                 rotation: rotation,
                 scale: placementScale
             ));
@@ -1247,6 +1261,7 @@ public sealed partial class WorldCreationInstances {
         ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placements: placements);
         IndexBodySlots();
     }
+
     // Indexes each body-rooted registration by its body, which only a reconcile moves, so a lookup per body costs no
     // scan of the pool.
     private void IndexBodySlots() {
@@ -1262,6 +1277,7 @@ public sealed partial class WorldCreationInstances {
 
     // The pool slot of each body's registration, or -1, valid while no reconcile is running.
     private readonly int[] m_bodySlots = NewBodySlots();
+
     private bool m_bodySlotsStale;
 
     private static int[] NewBodySlots() {
@@ -1395,7 +1411,6 @@ public sealed partial class WorldCreationInstances {
                 row: placement
             );
 
-
             m_pool[slot] = registered;
         }
 
@@ -1411,7 +1426,6 @@ public sealed partial class WorldCreationInstances {
 
             var fresh = RegisterBody(stamp: stamp);
 
-
             m_pool[slot] = fresh;
             ApplyMotion(
                 live: fresh,
@@ -1420,6 +1434,7 @@ public sealed partial class WorldCreationInstances {
             );
         }
     }
+
     /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds
     /// <see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>, looping 1..N; whole crossed frames subtract so a
     /// hitch lands on the right frame), and latches <paramref name="deltaSeconds"/> for the pool's root/part
@@ -1557,14 +1572,15 @@ public sealed partial class WorldCreationInstances {
     /// <summary>Reads a packed shape's world pose by authored index, independently of the shared transform layout.</summary>
     public DynamicTransform BodyShapePose(int bodyIndex, int shapeIndex) {
         var live = FindBody(bodyIndex);
-        if (live is null || (uint)shapeIndex >= (uint)live.ShapeTransforms.Length) { throw new ArgumentOutOfRangeException(nameof(shapeIndex)); }
+
+        if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(nameof(shapeIndex)); }
         var pose = live.ShapeTransforms[shapeIndex];
         var shape = live.Creation.EngineDocument.Shapes![shapeIndex];
-        return shape.Domain is { Count: > 0 } ? new DynamicTransform(
-            Position: pose.Position + Vector3.Transform(shape.Position.Value * live.Scale, pose.Orientation),
-            Orientation: Quaternion.Normalize(pose.Orientation * shape.Rotation.Value), Lanes: pose.Lanes) : pose;
-    }
 
+        return ((shape.Domain is { Count: > 0 }) ? new DynamicTransform(
+            Position: (pose.Position + Vector3.Transform((shape.Position.Value * live.Scale), pose.Orientation)),
+            Orientation: Quaternion.Normalize((pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) : pose);
+    }
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
@@ -1594,7 +1610,7 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
-        var transformSlot = m_packedSlotBase + RootSlotOffset(index: poolIndex) + live.Motion.ShapeSlots[shapeSlot];
+        var transformSlot = ((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + live.Motion.ShapeSlots[shapeSlot]);
 
         if (((uint)transformSlot) >= ((uint)transforms.Length)) {
             pose = default;
@@ -1604,8 +1620,9 @@ public sealed partial class WorldCreationInstances {
 
         var transform = transforms[transformSlot];
         var shape = live.Creation.EngineDocument.Shapes![shapeSlot];
-        pose = new SdfAnchor(Position: transform.Position + Vector3.Transform(shape.Position.Value * live.Scale, transform.Orientation),
-            Orientation: Quaternion.Normalize(transform.Orientation * shape.Rotation.Value));
+
+        pose = new SdfAnchor(Position: (transform.Position + Vector3.Transform((shape.Position.Value * live.Scale), transform.Orientation)),
+            Orientation: Quaternion.Normalize((transform.Orientation * shape.Rotation.Value)));
 
         return true;
     }
@@ -1653,7 +1670,7 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
-        transformSlot = m_packedSlotBase + RootSlotOffset(index: poolIndex) + live.Motion.ShapeSlots[shapeSlot];
+        transformSlot = ((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + live.Motion.ShapeSlots[shapeSlot]);
 
         return true;
     }
@@ -1781,7 +1798,7 @@ public sealed partial class WorldCreationInstances {
 
             for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
                 if (shapes[shapeIndex].Id == targetShapeId) {
-                    transformSlot = rootSlot + live.Motion.ShapeSlots[shapeIndex];
+                    transformSlot = (rootSlot + live.Motion.ShapeSlots[shapeIndex]);
 
                     return true;
                 }

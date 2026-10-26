@@ -63,7 +63,8 @@ public sealed class BodyStampLookLawTests {
     private static float ShapeHeight(SdfFrame frame) {
         var copy = Assert.Single(frame.MeshInstances);
         var target = Assert.IsType<WorldPickTarget>(copy.Identity);
-        var shape = Document().Creations.Single(creation => creation.Id == target.Prototype).EngineDocument.Shapes![0];
+        var shape = Document().Creations.Single(creation => (creation.Id == target.Prototype)).EngineDocument.Shapes![0];
+
         return Vector3.Transform(shape.Position.Value, copy.Matrix).Y;
     }
 
@@ -114,5 +115,6 @@ public sealed class BodyStampLookLawTests {
             expected: 1f,
             tolerance: 1e-4f
         );
+        Assert.Equal(1, source.ProgramBuilds);
     }
 }

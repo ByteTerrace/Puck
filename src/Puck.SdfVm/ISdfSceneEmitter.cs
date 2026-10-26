@@ -38,6 +38,7 @@ public readonly record struct SdfEmitContext(
 public interface ISdfSceneEmitter {
     /// <summary>Reconciles live instances before the composition reads revisions and slot counts.</summary>
     void PrepareFrame() { }
+
     /// <summary>Gets the local geometry slots whose meshes are templates, drawn only by their copies.</summary>
     IReadOnlyList<int> MeshAssetSlots => [];
     /// <summary>Gets the rigid copies posed by the latest pack.</summary>

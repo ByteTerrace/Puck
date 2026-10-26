@@ -206,7 +206,7 @@ public sealed class CreationEffectorLawTests {
             position += step;
         }
 
-        return pool.BodyShapePose(0, TipSlot - 1).Position;
+        return pool.BodyShapePose(0, (TipSlot - 1)).Position;
     }
     private static ShapeDocument Part(int id, string name, Vector3 position, string? parent, Vector3? pivot, Vector3? joint = null) => new(
         Id: id,
@@ -846,7 +846,7 @@ public sealed class CreationEffectorLawTests {
                 dynamics: [],
                 placements: []
             );
-        var transforms = new DynamicTransform[pool.DynamicSlotCount];
+            var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
             // Settle the effector weight at rest first, so the walk below measures the latch and not the ease-in.
             for (var frame = 0; (frame < 120); frame++) {
@@ -859,7 +859,7 @@ public sealed class CreationEffectorLawTests {
                 );
             }
 
-            var start = pool.BodyShapePose(0, TipSlot - 1).Position;
+            var start = pool.BodyShapePose(0, (TipSlot - 1)).Position;
             var travelled = Vector3.Zero;
 
             for (var frame = 0; (frame < 20); frame++) {
@@ -880,7 +880,7 @@ public sealed class CreationEffectorLawTests {
 
             return (Vector3.Distance(
                 value1: start,
-                value2: pool.BodyShapePose(0, TipSlot - 1).Position
+                value2: pool.BodyShapePose(0, (TipSlot - 1)).Position
             ), travelled.Length());
         }
     }
@@ -1175,7 +1175,7 @@ public sealed class CreationEffectorLawTests {
                 dynamics: [],
                 placements: []
             );
-        var transforms = new DynamicTransform[pool.DynamicSlotCount];
+            var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
             for (var frame = 0; (frame < 120); frame++) {
                 Advance(

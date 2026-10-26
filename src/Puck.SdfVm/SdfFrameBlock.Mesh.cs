@@ -35,7 +35,7 @@ public static partial class SdfFrameBlock {
 
         for (var index = 0; (index < SdfWorldPackage.MeshShadowCascadeCount); index++) {
             var camera = cascades[index];
-            var row = (MeshShadowCascadesOffset + (index * SdfWorldPackage.MeshShadowCascadeRows * 16));
+            var row = (MeshShadowCascadesOffset + ((index * SdfWorldPackage.MeshShadowCascadeRows) * 16));
 
             WriteRow(block: block, offset: row, value: camera.Position, w: camera.HalfHeight);
             WriteRow(block: block, offset: (row + 16), value: camera.Right, w: 1f);
@@ -100,7 +100,7 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (row + 40), value: ((uint)lattice.Dims.Z));
             // The lattice's mode in the low half (three samples the point table with gradients, two without, zero a grid)
             // and, in the high half, the run of instances a static selector names.
-            WriteUInt32(block: block, offset: (row + 44), value: ((lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)lattice.Instances) << 16)));
+            WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)lattice.Instances) << 16));
 
             var (poseFirst, poseRows) = ((index < batch.Poses.Length) ? batch.Poses[index] : (0, ReadOnlyMemory<Vector4>.Empty));
 
@@ -111,7 +111,6 @@ public static partial class SdfFrameBlock {
             first += ((uint)lattice.Samples);
         }
     }
-
     /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>); a disabled
     /// volume writes zeros, and views then light as without indirect light.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
@@ -119,7 +118,7 @@ public static partial class SdfFrameBlock {
     public static void WriteMeshIrradiance(Span<byte> block, in SdfMeshIrradianceParameters volume) {
         var offset = Offset(member: SdfWorldPackage.MeshIrradianceVolume);
         var low = Offset(member: SdfWorldPackage.MeshIrradianceLow);
-        var dims = (volume.Enabled ? (((uint)volume.Dims.X) | (((uint)volume.Dims.Y) << 10) | (((uint)volume.Dims.Z) << 20)) : 0u);
+        var dims = (volume.Enabled ? ((uint)volume.Dims.X) | (((uint)volume.Dims.Y) << 10) | (((uint)volume.Dims.Z) << 20) : 0u);
 
         WriteUInt32(block: block, offset: offset, value: (volume.Enabled ? 1u : 0u));
         WriteSingle(block: block, offset: (offset + sizeof(uint)), value: (volume.Enabled ? volume.Spacing : 0f));

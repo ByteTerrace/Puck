@@ -21,20 +21,20 @@ public sealed partial class SdfWorldTables {
     // options grew the table to. Returns whether the active row count or any packed row changed.
     private void EnsureDynamicTransformCapacity(int count) {
         if (count <= m_dynamicTransformCapacity) { return; }
-        if (count > SdfProgram.MaxDynamicTransformSlot + 1) { throw new InvalidOperationException($"The frame needs {count} transform slots, beyond the packed slot representation."); }
+        if (count > (SdfProgram.MaxDynamicTransformSlot + 1)) { throw new InvalidOperationException($"The frame needs {count} transform slots, beyond the packed slot representation."); }
         m_dynamicTransformCapacity = count;
-        Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: checked((long)count * DynamicTransformByteLength)));
+        Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: checked((((long)count) * DynamicTransformByteLength))));
         Retire(replaced: m_previousDynamicTransforms);
-        m_previousDynamicTransforms = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: (ulong)m_dynamicTransformRegion.ByteCount, usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
+        m_previousDynamicTransforms = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
         m_dynamicHistoryWritten = false;
         m_seedDynamicHistory = true;
         m_dynamicTransformsPacked = false;
         m_bindingRevision++;
     }
-
     private bool PackDynamicTransforms(SdfFrame frame) {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;
+
         EnsureDynamicTransformCapacity(transforms.Count);
         var count = transforms.Count;
         var everything = (

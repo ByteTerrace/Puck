@@ -15,6 +15,7 @@ namespace Puck.World.Client;
 public sealed partial class WorldCreationInstances {
     // The views the last frame rendered the pool's world through: each camera and its image's height in pixels.
     private readonly List<(CameraSnapshot Camera, float Pixels)> m_rateViews = [];
+
     private SdfUpdateRates m_rates;
     private WorkCounterSet? m_rateCounts;
     private SdfUpdateRateIntervals? m_rateIntervals;
@@ -23,6 +24,7 @@ public sealed partial class WorldCreationInstances {
     // Whether the next pack writes its bodies' tiers into m_slotRateCodes, and the codes it wrote, by slot.
     private bool m_writesRateCodes;
     private byte[] m_slotRateCodes = [];
+
     // The latest pack's bodies' readings, published once it ends, and each body's name in them, by body index.
     private readonly List<SdfUpdateRateReadings.Reading> m_bodyReadings = [];
     private readonly Dictionary<int, string> m_bodyNames = [];
@@ -63,6 +65,7 @@ public sealed partial class WorldCreationInstances {
             m_rateViews.Add(item: (views[index].Camera, (((pixels is not null) && (index < pixels.Count)) ? pixels[index] : (views[index].Region.Height * height))));
         }
     }
+
     // The rate a body updates at: its largest pixels per metre over the views that may see the sphere it reaches, every
     // frame while the lever is off or no view is known yet.
     private int BodyHertz(Vector3 center, float radius) => (((m_rates & SdfUpdateRates.Bodies) == 0)
@@ -191,9 +194,10 @@ public sealed partial class WorldCreationInstances {
             });
         }
 
-        for (var shape = 0; shape < live.ShapeTransforms.Length; shape++) {
+        for (var shape = 0; (shape < live.ShapeTransforms.Length); shape++) {
             var held = live.ShapeTransforms[shape];
-            live.ShapeTransforms[shape] = held with { Orientation = Quaternion.Normalize(turn * held.Orientation), Position = rootPosition + Vector3.Transform(held.Position - root.Position, turn) };
+
+            live.ShapeTransforms[shape] = held with { Orientation = Quaternion.Normalize((turn * held.Orientation)), Position = (rootPosition + Vector3.Transform((held.Position - root.Position), turn)) };
         }
         transforms[rootSlot] = (root with {
             Orientation = rootRotation,

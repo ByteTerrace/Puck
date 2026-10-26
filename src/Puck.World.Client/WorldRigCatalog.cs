@@ -124,9 +124,9 @@ public static class WorldRigCatalog {
     }
 
     /// <summary>The compact dynamic-transform lane of the procedural catalog.</summary>
-    public static int DynamicTransformCapacity => WorldBodiesLimits.CapacityCeiling * MaxLeafCount;
+    public static int DynamicTransformCapacity => (WorldBodiesLimits.CapacityCeiling * MaxLeafCount);
     /// <summary>The maximum authored VM instruction total for the procedural catalog representation.</summary>
-    public static int InstructionCapacity => WorldBodiesLimits.CapacityCeiling * MaxInstructionCount;
+    public static int InstructionCapacity => (WorldBodiesLimits.CapacityCeiling * MaxInstructionCount);
     /// <summary>Gets the maximum leaf-cull-instance count of one active catalog body.</summary>
     public static int MaxInstancesPerAvatar => MaxLeafCount;
     public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
@@ -146,7 +146,7 @@ public static class WorldRigCatalog {
     /// <summary>Gets the actual part count of the pinned catalog look.</summary>
     public static int TransformSlotsFor(int rig) => Ranges[rig].Count;
 
-    private static int BodySlotBase(int avatar) => checked(avatar * MaxLeafCount);
+    private static int BodySlotBase(int avatar) => checked((avatar * MaxLeafCount));
     private static AvatarLeaf BuildLeaf(int avatar, int bone) {
         var sampleIndex = ((ulong)(((avatar * MaxLeafCount) + bone) + 1));
 
@@ -332,7 +332,7 @@ public static class WorldRigCatalog {
                 var count = Ranges[RigIndex(avatar: avatar, rigFor: rigFor)].Count;
 
                 leaves = checked((leaves + count));
-                instructions = checked(instructions + count * InstructionsPerLeaf);
+                instructions = checked((instructions + (count * InstructionsPerLeaf)));
             }
         }
 
@@ -396,7 +396,7 @@ public static class WorldRigCatalog {
             }
 
             var firstInstance = builder.InstanceCount;
-            var firstSlot = slotFor?.Invoke(avatar) ?? BodySlotBase(avatar: avatar);
+            var firstSlot = (slotFor?.Invoke(avatar) ?? BodySlotBase(avatar: avatar));
             var scale = (probeWorstCase
                 ? 1f
                 : ScaleFor(
@@ -602,7 +602,7 @@ public static class WorldRigCatalog {
             return false;
         }
 
-        var transformSlot = checked(BodySlotBase(avatar: avatar) + relativeSlot);
+        var transformSlot = checked((BodySlotBase(avatar: avatar) + relativeSlot));
 
         if (((uint)transformSlot) >= ((uint)transforms.Length)) {
             pose = default;
@@ -616,7 +616,7 @@ public static class WorldRigCatalog {
             : rig)];
         var leaf = Leaves[(rigRange.First + relativeSlot)];
 
-        pose = new SdfAnchor(packed.Position + Vector3.Transform(leaf.AuthoredOffset, packed.Orientation), packed.Orientation);
+        pose = new SdfAnchor((packed.Position + Vector3.Transform(leaf.AuthoredOffset, packed.Orientation)), packed.Orientation);
 
         return true;
     }
@@ -635,7 +635,7 @@ public static class WorldRigCatalog {
             return false;
         }
 
-        transformSlot = checked(BodySlotBase(avatar: avatar) + relativeSlot);
+        transformSlot = checked((BodySlotBase(avatar: avatar) + relativeSlot));
 
         return true;
     }

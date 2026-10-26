@@ -37,15 +37,19 @@ public sealed class SdfNestedFieldScopeLawTests {
         Assert.True(condition: ((bounds.Upper.Value - bounds.Lower.Value) <= 16L));
     }
     [Fact]
-    public void TheBuilderAdmitsTwoLevelsAndRefusesAThirdBeforeChangingTheStream() {
+    public void TheBuilderAdmitsFourLevelsAndRefusesAFifthBeforeChangingTheStream() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Vector3.One));
 
-        builder.PushField().PushField().Sphere(1f, material);
+        builder.PushField().PushField().PushField().PushField().Sphere(1f, material);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => builder.PushField());
-        var program = builder.PopField().PopField().Build();
+        var program = builder.PopField().PopField().PopField().PopField().Build();
 
-        Assert.Equal(2, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
+        Assert.Equal(4, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
         Assert.True(condition: program.InstancesComposable);
+        var evaluator = new SdfFieldEvaluator(program);
+        Assert.True(evaluator.TryDistance(FixedPosition.FromLocal(FixedVector3.Zero), out var distance, out var winner));
+        Assert.Equal(-FixedQ4816.One, distance);
+        Assert.Equal(material, winner);
     }
 }

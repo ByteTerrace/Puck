@@ -66,4 +66,5 @@ public sealed partial class WorldScreenBinder {
             : null);
     }
     // Hands an armed crossing capture the frame the renderer last completed.
-    private void PresentCrossing() => CrossingCapture?.Present(previousFrame: (Runtime?.Render ?? FrameRender.Waiting(reason: "the renderer is not built")));}
+    private void PresentCrossing() => CrossingCapture?.Present(previousFrame: (Runtime?.Render ?? FrameRender.Waiting(reason: "the renderer is not built")));
+}

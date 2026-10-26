@@ -49,14 +49,14 @@ public sealed class WorldCreationInstancesBodyDetailLawTests {
             .ToArray();
 
         Assert.Equal(
-            [0f, 0.004f, (0.02f * 0.02f / 0.03f / 3f), 0.005f, 0.005f, 0.01f],
+            [0f, 0.004f, (((0.02f * 0.02f) / 0.03f) / 3f), 0.005f, 0.005f, 0.01f],
             details,
             new FloatTolerance()
         );
     }
 
     private sealed class FloatTolerance : IEqualityComparer<float> {
-        public bool Equals(float x, float y) => (MathF.Abs(x - y) <= 1.0e-6f);
+        public bool Equals(float x, float y) => (MathF.Abs((x - y)) <= 1.0e-6f);
         public int GetHashCode(float obj) => 0;
     }
 }

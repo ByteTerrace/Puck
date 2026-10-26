@@ -22,6 +22,7 @@ public sealed partial class WorldCreationInstances {
 
         return true;
     }
+
     // A body's round section bakes at its radius over this many cells: each cell then turns about 19 degrees, under the
     // contour's 25-degree crease split (SdfContour.SplitAtCreases), so a strand or a finger shades smooth. At the bake's
     // own spacing (SdfMeshPathBake.MinimumCell) a section under 4.5 cm turns past it, and every vertex splits flat.
@@ -170,7 +171,7 @@ public sealed partial class WorldCreationInstances {
                 : (shape.Scale * placementScale)),
                 shapePosition: shape.Position,
                 shapeRotation: shape.Rotation,
-                slot: rootSlot + motion!.ShapeSlots[member],
+                slot: (rootSlot + motion!.ShapeSlots[member]),
                 motion: motion,
                 smooth: ((shape.Smooth ?? 0f) * placementScale),
                 twist: (shape.Twist ?? 0f),
@@ -201,6 +202,7 @@ public sealed partial class WorldCreationInstances {
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials, int shapeSlots = 0) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
+
         shapeSlots = shapes.Count;
         // The isolation's hidden shapes emit nothing, and with them the paints they carry, the creation's mesh and its
         // text; their slots still pack, so a hidden parent still poses what it carries.
@@ -310,31 +312,32 @@ public sealed partial class WorldCreationInstances {
                     ? shapes[index]
                     : null
                 );
-    
+
                 if (!probeWorstCase && (placed is null)) {
                     continue;
                 }
-    
+
                 if (placed is { Group: not null and not 0 }) {
                     continue; // Pass 2 — the shape emits inside its group's instance.
                 }
                 if ((hidden is not null) && hidden[index]) {
                     continue;
                 }
-    
+
                 var glass = ((placed is not null) && (document is not null) && document.IsGlassShape(shape: placed));
                 var ownInstance = (!coupled || glass);
-    
+
                 // Uncoupled, every shape emits in round 0; coupled, the glass shapes do and the rest wait for round 1.
                 if ((round == 0) != (ownInstance)) {
                     continue;
                 }
-    
-                var slot = rootSlot + live!.Motion.ShapeSlots[index];
+
+                var slot = (rootSlot + live!.Motion.ShapeSlots[index]);
                 var scale = ((placed?.Scale ?? Vector3.One) * placementScale);
                 var material = (((screenMaterials is { } carried) && (carried[index] >= 0))
                     ? carried[index]
                     : paletteIds[((placed?.Material ?? 0) % paletteIds.Length)]);
+
                 material = WorldPlacementStamper.MaterialForShape(builder, material, placed!, placementScale);
                 var panelMaterial = ((placed?.Panel is { } placedPanel)
                     ? paletteIds[(placedPanel.Material % paletteIds.Length)]
@@ -358,7 +361,7 @@ public sealed partial class WorldCreationInstances {
                     (probeWorstCase ? new(ShapeFlareDocument.MaxAmount, ShapeFlareDocument.MaxBulge, 1f, StartScale: ShapeFlareDocument.MaxStartScale) : placed?.Flare),
                     (probeWorstCase ? new(ShapeDocument.MaxShear, ShapeDocument.MaxShear, ShapeDocument.MaxShear) : placed?.Shear),
                     (probeWorstCase ? ShapeWarpReach.ProbePointReach : ((placed is null) ? 0f : ShapeWarpReach.PointReach(shape: placed)))) * placementScale);
-    
+
                 // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
                 // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
                 // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
@@ -396,12 +399,12 @@ public sealed partial class WorldCreationInstances {
                             + dilateWorld) + onionWorld))
                     : ((WarpedReach(primitiveReach: tightPrimitiveReach) + dilateWorld) + onionWorld)
                 ) + trimMargin);
-    
+
                 if (ownInstance) {
                     _ = builder.BeginInstanceDynamic(
                     separateBake: true,
                     slot: slot,
-                    boundOffset: hasDomain ? Vector3.Zero : placed!.Position.Value * placementScale,
+                    boundOffset: (hasDomain ? Vector3.Zero : (placed!.Position.Value * placementScale)),
                     boundRadius: boundRadius,
                     active: active,
                     detail: ((probeWorstCase || (placed is null)) ? 0f : BodyDetail(floor: OwnDetailFloor, scale: placementScale, shape: placed))
@@ -486,11 +489,10 @@ public sealed partial class WorldCreationInstances {
             var boundOffset = Vector3.Zero;
             var boundRadius = ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin);
 
-
-            if (!anyPartFollows && live is not null && TryTightGroupRadius(live, document!, index, groupId, out var localRadius)) {
-                boundSlot = rootSlot + live.Motion.ShapeSlots[index];
-                boundOffset = shapes[index].Position.Value * placementScale;
-                boundRadius = localRadius * placementScale;
+            if (!anyPartFollows && (live is not null) && TryTightGroupRadius(live, document!, index, groupId, out var localRadius)) {
+                boundSlot = (rootSlot + live.Motion.ShapeSlots[index]);
+                boundOffset = (shapes[index].Position.Value * placementScale);
+                boundRadius = (localRadius * placementScale);
             }
             EmitGroup(
                 boundOffset: boundOffset,
@@ -515,8 +517,7 @@ public sealed partial class WorldCreationInstances {
         // moves the boxes while the lettering holds its authored surface). Emitted after the shapes so an engrave
         // run's Subtraction carves only this creation's scoped geometry, exactly as the static stamper orders it.
         if (hasText) {
-            // Apart, the text rides its own slot, which holds the root's pose, so its group holds the glyphs alone (a blend
-            // group riding the root would otherwise bake with them at its own spacing), bounded by their reach.
+            // Text and geometry can share the root pose while keeping separate bake groups and detail.
             var textSlot = rootSlot;
 
             if (textApart) {

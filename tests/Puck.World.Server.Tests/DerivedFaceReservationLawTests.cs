@@ -77,7 +77,6 @@ public sealed class DerivedFaceReservationLawTests {
 
         Assert.Empty(collection: refusals);
     }
-
     [Fact]
     public void TheRefusalNamesTheBandAndTheAskedForWidth() {
         using var fixture = FreshServer();

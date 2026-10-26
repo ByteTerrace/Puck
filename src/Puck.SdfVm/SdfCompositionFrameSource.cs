@@ -12,6 +12,7 @@ public interface ISdfFrameDresser {
     /// <summary>Gets whether this frame belongs to a tick-locked presentation, whose content builds finish before the
     /// frame reads them. Ordinary presentation may keep its previous program while a replacement builds.</summary>
     bool TickLocked => false;
+
     /// <summary>Builds this frame's <see cref="SdfFrame"/> from the composed program/transforms.</summary>
     /// <param name="program">This frame's program (freshly rebuilt this call, or the same instance as last call when
     /// the composed content revision hasn't changed — compare by reference against a previous frame's
@@ -81,13 +82,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
 
     private long m_meshDrawsRevision;
-
     // The shared table: it keeps every slot's last packed transform across frames, so an owner at rest costs nothing.
     private DynamicTransform[] m_transforms;
     private int m_programSlots;
+
     private readonly List<SdfMeshInstance> m_meshInstances = [];
     private readonly List<int> m_meshAssetSlots = [];
-
     private readonly SdfMovedTransforms m_moved = new();
 
     // The table as it stood before a repack, which the repack is compared with; made at the first repack.
@@ -108,6 +108,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // What a background build hands the program it finished (ObserveBuilds), and the transforms the build's program was
     // emitted under, copied at the emission: one build runs at a time, so the next emission waits for this one's to finish.
     private Action<SdfProgram, IReadOnlyList<DynamicTransform>>? m_built;
+
     private DynamicTransform[] m_builtTransforms = [];
 
     /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
@@ -219,9 +220,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/>.</summary>
     public int DynamicTransformCapacity => m_transforms.Length;
     /// <summary>Gets the live program's instance count, or zero before its first build.</summary>
-    public int InstanceCapacity => m_program?.Instances.Count ?? 0;
+    public int InstanceCapacity => (m_program?.Instances.Count ?? 0);
     /// <summary>Gets the live program's word count, or zero before its first build.</summary>
-    public int ProgramWordCapacity => m_program?.Words.Length ?? 0;
+    public int ProgramWordCapacity => (m_program?.Words.Length ?? 0);
 
     // A live rebuild's emission, which reads the emitters' live state and so runs in the frame. `previous`, the program
     // this call rebuilds, supplies List capacity hints for the fresh builder: its own counts are exactly what this build's
@@ -480,11 +481,13 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_meshInstances.Clear();
         m_meshAssetSlots.Clear();
         var root = m_programSlots;
+
         foreach (var emitter in m_emitters) {
             m_meshAssetSlots.AddRange(emitter.MeshAssetSlots);
             foreach (var copy in emitter.MeshInstances) {
                 copy.FrameSlot = root;
                 var previous = m_transforms[root];
+
                 m_transforms[root] = copy.Transform;
                 if (previous != copy.Transform) { m_moved.Owe(start: root, count: 1); }
                 m_meshInstances.Add(copy);
@@ -527,21 +530,25 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         foreach (var emitter in m_emitters) { emitter.PrepareFrame(); }
         var slots = 0;
         var layoutChanged = false;
-        for (var index = 0; index < m_emitters.Count; index++) {
-            layoutChanged |= m_slotBases[index] != slots;
+
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            layoutChanged |= (m_slotBases[index] != slots);
             m_slotBases[index] = slots;
-            slots = checked(slots + m_emitters[index].DynamicSlotCount);
+            slots = checked((slots + m_emitters[index].DynamicSlotCount));
         }
-        layoutChanged |= slots != m_programSlots;
+        layoutChanged |= (slots != m_programSlots);
         m_programSlots = slots;
         var roots = m_emitters.Sum(emitter => emitter.MeshInstances.Count);
-        if (m_transforms.Length != slots + roots) {
-            Array.Resize(ref m_transforms, slots + roots);
+
+        if (m_transforms.Length != (slots + roots)) {
+            Array.Resize(ref m_transforms, (slots + roots));
             m_transformsPacked = false;
         }
-        var moved = CaptureRevisions() || layoutChanged;
-        if (layoutChanged && m_building is { } pending) { pending.GetAwaiter().GetResult(); }
+        var moved = (CaptureRevisions() || layoutChanged);
+
+        if (layoutChanged && (m_building is { } pending)) { pending.GetAwaiter().GetResult(); }
         var rebuilt = AdoptBuild(moved: ref moved);
+
         moved |= layoutChanged;
 
         if ((m_building is null) && ((m_program is null) || moved)) {

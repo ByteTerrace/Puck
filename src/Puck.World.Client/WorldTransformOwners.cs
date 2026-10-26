@@ -41,7 +41,6 @@ public sealed class WorldTransformOwners {
         Array.Resize(ref m_restless, capacity);
         Array.Resize(ref m_version, capacity);
     }
-
     /// <summary>Decides whether an owner repacks this frame, and records the inputs it is packed from.</summary>
     /// <param name="owner">The owner's index in the band.</param>
     /// <param name="moved">The frame's moved set; a frame owing everything repacks every owner.</param>
@@ -120,7 +119,7 @@ public sealed class WorldTransformOwners {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var (first, count) = WorldRigCatalog.BodySlots(avatar: avatar);
-        var start = catalogBase + (firstSlot ?? first);
+        var start = (catalogBase + (firstSlot ?? first));
         Span<DynamicTransform> previous = stackalloc DynamicTransform[count];
 
         table.Slice(
@@ -128,15 +127,15 @@ public sealed class WorldTransformOwners {
             start: start
         ).CopyTo(destination: previous);
         WorldRigCatalog.PackTransforms(
-            avatar: firstSlot is null ? avatar : 0,
+            avatar: ((firstSlot is null) ? avatar : 0),
             gaitPhase: gaitPhase,
             rig: rig,
             rootOrientation: rootOrientation,
             rootPosition: rootPosition,
             scale: scale,
             transforms: table.Slice(
-                length: firstSlot is null ? WorldRigCatalog.DynamicTransformCapacity : count,
-                start: firstSlot is null ? catalogBase : start
+                length: ((firstSlot is null) ? WorldRigCatalog.DynamicTransformCapacity : count),
+                start: ((firstSlot is null) ? catalogBase : start)
             )
         );
 

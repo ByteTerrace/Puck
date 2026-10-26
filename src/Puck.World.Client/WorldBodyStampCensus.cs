@@ -43,6 +43,7 @@ public sealed class WorldBodyStampCensus {
             scaleRow: m_scaleRow
         );
     }
+
     /// <summary>Returns the creation a body renders as a stamp: an inhabitant wears its look's creation (a creation
     /// look) or its placement's own creation, and a crowd body wears its look's creation (a creation look).</summary>
     /// <param name="source">The world whose body is read.</param>
@@ -92,6 +93,7 @@ public sealed class WorldBodyStampCensus {
 
         return (creation is not null);
     }
+
     // The creation a body renders as a stamp, or null (it renders as a catalog avatar). The uniform scale folds the
     // placement scale, the look scale, and the body's own live scale (see LiveBodyScale) — the same bodies.scale register
     // WorldPopulation.SyncBodyScale reads server-side.

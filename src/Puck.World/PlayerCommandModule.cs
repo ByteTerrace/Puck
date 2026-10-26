@@ -91,11 +91,13 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // The seat camera's pointer adapter, whose drag gate applies player.orbit and player.steer edges; a headless boot
     // registers none, having no pointer to drag.
     private readonly WorldSeatViewInput? m_viewInput = viewInput;
+
     // The boot instance's live channel table — name→ordinal resolution for a typed press, fly or tether on a body
     // the boot world owns. It is the population's own table, so a world.load, world.reload or channels edit retargets
     // it at the same tick boundary the kit ordinals move. Never the source a bound channel verb dispatches against —
     // see m_seatBindings.
     private WorldChannelTable Channels => m_population.Channels;
+
     // The per-seat CURRENTLY ROUTED channel vocabulary (WorldSeatBindings.Channels, kept in sync with each seat's
     // WorldSeatAuthorityRouter claim by WorldSimulation's post-step sync). WorldSeatBindings lowers an authored
     // channel NAME through that table to one of the fixed ordinal commands registered below; ChannelVerb checks the

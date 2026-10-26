@@ -398,7 +398,7 @@ public sealed class VolumeLawTests {
 
         Assert.Empty(collection: CreationCanonicalizer.Validate(document: Document(cone)));
         Assert.Equal(expected: (3f, 2f, 0.2f, 0.2f, 0.4f), actual: (volume.Spread, volume.Fade, volume.NoiseScale!.Value, volume.NoiseCell, volume.NoiseDepth));
-        Assert.Equal(expected: (0f, 1f, (float?)null, plain.Width, 1f), actual: (plain.Spread, plain.Fade, plain.NoiseScale, plain.NoiseCell, plain.NoiseDepth));
+        Assert.Equal(expected: (0f, 1f, ((float?)null), plain.Width, 1f), actual: (plain.Spread, plain.Fade, plain.NoiseScale, plain.NoiseCell, plain.NoiseDepth));
         AssertRefusesNaming(document: Document(Flow() with { Spread = -1f }), needle: "volumes[0].spread");
         AssertRefusesNaming(document: Document(Flow() with { Fade = float.NaN }), needle: "volumes[0].fade");
         AssertRefusesNaming(document: Document(Flow() with { NoiseScale = 0f }), needle: "volumes[0].noiseScale");

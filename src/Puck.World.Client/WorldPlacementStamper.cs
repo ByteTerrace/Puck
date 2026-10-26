@@ -196,30 +196,35 @@ public static class WorldPlacementStamper {
             if ((hidden is not null) && hidden[shapeIndex]) {
                 continue;
             }
-            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0));
+            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: (frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0)));
             var shape = shapes[shapeIndex];
+
             resolved.Add(authored with {
-                Origin = shape.Position.Value * frames.Scale + Vector3.Transform(authored.Origin, shape.Rotation.Value),
-                Rotation = Quaternion.Normalize(shape.Rotation.Value * authored.Rotation)
+                Origin = ((shape.Position.Value * frames.Scale) + Vector3.Transform(authored.Origin, shape.Rotation.Value)),
+                Rotation = Quaternion.Normalize((shape.Rotation.Value * authored.Rotation)),
             });
         }
 
         return [.. resolved];
     }
+
     // Material layers authored in the old winning shape frame are composed into its motion owner's frame.
     internal static int MaterialForShape(SdfProgramBuilder builder, int material, ShapeDocument shape, float scale, bool rigid = false) {
         if (material >= SdfProgramBuilder.ScreenMaterialId) { return material; }
         var source = builder.MaterialAt(material);
-        if (source.Inset is null && source.Paints is not { Count: > 0 }) { return material; }
+
+        if ((source.Inset is null) && (source.Paints is not { Count: > 0 })) { return material; }
         var rotation = shape.Rotation.Value;
-        var origin = shape.Position.Value * scale;
-        var inset = source.Inset is { } layer ? layer with {
-            Origin = origin + Vector3.Transform(layer.Origin, rotation),
-            Rotation = Quaternion.Normalize(rotation * layer.Rotation)
-        } : null;
-        var paints = source.Paints?.Select(paint => paint.Slot == SdfPaint.WinningFrame ? paint with {
-            Origin = origin + Vector3.Transform(paint.Origin, rotation), Rotation = Quaternion.Normalize(rotation * paint.Rotation)
-        } : rigid ? paint with { Slot = SdfPaint.WinningFrame } : paint).ToArray();
+        var origin = (shape.Position.Value * scale);
+        var inset = ((source.Inset is { } layer) ? layer with {
+            Origin = (origin + Vector3.Transform(layer.Origin, rotation)),
+            Rotation = Quaternion.Normalize((rotation * layer.Rotation)),
+        } : null);
+        var paints = source.Paints?.Select(paint => ((paint.Slot == SdfPaint.WinningFrame) ? paint with {
+            Origin = (origin + Vector3.Transform(paint.Origin, rotation)),
+            Rotation = Quaternion.Normalize((rotation * paint.Rotation)),
+        } : (rigid ? paint with { Slot = SdfPaint.WinningFrame } : paint))).ToArray();
+
         return builder.AddMaterial(source with { Inset = inset, Paints = paints });
     }
 

@@ -9,52 +9,60 @@ public sealed class SdfMeshLibraryLawTests {
     public void BakeGroupsKeepTheirOwnDetailWhileSharingOneMotionSlot() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
-        for (var index = 0; index < 2; index++) {
-            builder.BeginInstanceDynamic(3, new Vector3(index * 10, 0, 0), 1, detail: index == 0 ? 0.002f : 0, separateBake: true);
-            builder.ResetPoint().TransformDynamic(3).Translate(new Vector3(index * 10, 0, 0)).Sphere(material: material, radius: 0.5f);
+
+        for (var index = 0; (index < 2); index++) {
+            builder.BeginInstanceDynamic(3, new Vector3((index * 10), 0, 0), 1, detail: ((index == 0) ? 0.002f : 0), separateBake: true);
+            builder.ResetPoint().TransformDynamic(3).Translate(new Vector3((index * 10), 0, 0)).Sphere(material: material, radius: 0.5f);
             builder.EndInstance();
         }
         var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 4).ToArray();
         var program = builder.Build();
         var groups = SdfMeshBakeGroup.Plan(program, transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic));
+
         Assert.Equal(2, groups.Count);
         Assert.All(groups, group => Assert.Equal(3, group.Slot));
         Assert.NotEqual(groups[0].Selector, groups[1].Selector);
         Assert.Equal(0.002f, groups[0].Detail);
         Assert.Equal(0, groups[1].Detail);
-        Assert.True(groups[0].High.X < groups[1].Low.X);
+        Assert.True((groups[0].High.X < groups[1].Low.X));
         var bake = new SdfMeshPathBake();
+
         bake.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
         Assert.True(bake.TryTakeForFrame(0, out var batch));
         Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
     }
-
     [Fact]
     public void AnUnrepresentableSkinIsRefusedBeforeAnyBakeIsQueued() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+
         builder.BeginInstanceDynamic(0, Vector3.Zero, 1);
-        for (var slot = 1; slot <= 256; slot++) { builder.ResetPoint().TransformDynamic(slot).Sphere(material: material, radius: 0.01f); }
+        for (var slot = 1; (slot <= 256); slot++) { builder.ResetPoint().TransformDynamic(slot).Sphere(material: material, radius: 0.01f); }
         builder.EndInstance();
         var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 257).ToArray();
         var refusal = Assert.Throws<InvalidOperationException>(() => SdfMeshBakeGroup.Plan(builder.Build(), transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+
         Assert.Contains("instance 0", refusal.Message);
         Assert.Contains("256 skin members", refusal.Message);
     }
+
     private static readonly Vector2[] Triangle = [new(x: 0f, y: 0.5f), new(x: 0.5f, y: -0.5f), new(x: -0.5f, y: -0.5f)];
 
     [Fact]
     public void ByteBudgetEvictsOnlyTheOldestGeometryAndKeepsAMissDerivable() {
         var library = new SdfMeshLibrary(byteBudget: 512);
+
         static SdfMeshGeometry Key(float x) {
             var builder = new SdfMeshGeometryBuilder(dynamic: false);
             var field = new SdfProgramBuilder();
             var material = field.AddMaterial(new SdfMaterial(Vector3.One));
             var program = field.ResetPoint().Translate(new Vector3(x, 0, 0)).Sphere(material: material, radius: 1).Build();
-            for (var index = 0; index < program.Instructions.Count; index++) { builder.AppendInstruction(index: index, program: program, transforms: []); }
+
+            for (var index = 0; (index < program.Instructions.Count); index++) { builder.AppendInstruction(index: index, program: program, transforms: []); }
             return builder.Geometry;
         }
         var first = Key(0); var recent = Key(1); var incoming = Key(2);
+
         library.StoreEmpty(first); library.StoreEmpty(recent);
         library.StoreEmpty(incoming);
         Assert.False(library.HoldsEmpty(first));
@@ -65,11 +73,11 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.True(library.HoldsEmpty(first));
         Assert.Equal(2, library.Count);
     }
-
     [Fact]
     public void OneBodyHashesAlikeInEveryProgramThatCarriesIt() {
         var crowded = Body(crowd: true, slot: 3, offset: new Vector3(x: 1f, y: 0f, z: 0f));
         var alone = Body(crowd: false, slot: 7, offset: new Vector3(x: 0f, y: 1f, z: 0f));
+
         var (crowdedGeometry, crowdedMaterials) = Geometry(program: crowded, instance: 1);
         var (aloneGeometry, aloneMaterials) = Geometry(program: alone, instance: 0);
 
@@ -89,12 +97,12 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.NotEqual(expected: crowdedGeometry, actual: other.Geometry);
         Assert.NotEqual(expected: crowdedGeometry.Hash, actual: world.Geometry.Hash);
     }
-
     [Fact]
     public void ABakeTakesAGroupAnotherBakeOfItsLibraryMeshedRatherThanBakingIt() {
         var library = new SdfMeshLibrary();
         var crowded = Body(crowd: true, slot: 3, offset: Vector3.Zero);
         var alone = Body(crowd: false, slot: 7, offset: Vector3.Zero);
+
         var (geometry, materials) = Geometry(program: crowded, instance: 1);
 
         library.Store(geometry: geometry, materials: [.. materials], mesh: Mesh(materials: [1u, 2u, 2u]));
@@ -111,10 +119,10 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.Equal(expected: 7, actual: draw.FrameSlot);
         Assert.Equal(expected: [0u, 1u, 1u], actual: draw.Mesh.TriangleMaterials.ToArray());
     }
-
     [Fact]
     public void APooledGroupKeysEveryShapesPlaceTurnBlendAndSizeAndSharesWhereverItStands() {
         var plate = Plate.Rest;
+
         var (geometry, _) = PlateGeometry(plate: plate);
 
         // A later shape rides its own slot inside the group's instance, so the frame's transforms place and turn it.
@@ -136,6 +144,7 @@ public sealed class SdfMeshLibraryLawTests {
     [Fact]
     public void ABakeTakesAPooledGroupOnlyWhileItsShapesStandWhereTheStoredMeshHadThem() {
         var library = new SdfMeshLibrary();
+
         var (geometry, materials) = PlateGeometry(plate: Plate.Rest);
 
         library.Store(geometry: geometry, materials: materials, mesh: Mesh(materials: [0u, 0u, 1u]));
@@ -229,6 +238,7 @@ public sealed class SdfMeshLibraryLawTests {
             return transforms;
         }
     }
+
     private static (SdfMeshGeometry Geometry, int[] Materials) PlateGeometry(Plate plate) {
         var builder = new SdfMeshGeometryBuilder(dynamic: true);
 

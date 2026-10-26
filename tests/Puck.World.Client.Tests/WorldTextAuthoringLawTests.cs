@@ -63,7 +63,7 @@ public sealed class WorldTextAuthoringLawTests {
         // The box has independent timeline motion; text uses the existing root, without an extra transform.
         Assert.Equal(expected: 0, actual: text.Slot);
         Assert.Equal(expected: 1, actual: box.Slot);
-        Assert.True(box.BakesSeparately && text.BakesSeparately);
+        Assert.True((box.BakesSeparately && text.BakesSeparately));
         var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);

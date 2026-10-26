@@ -92,6 +92,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // filler). Each slot owns a host-visible request buffer (header + carve list) and a static descriptor set binding
     // that buffer + the shared pool (as a UAV). The per-slot state advances one slice per upload (RecordBrickBakeSlices).
     private readonly IGpuComputePipeline? m_brickBakePipeline;
+
     // The host-baked brick path: a region staging one brick at a time into the brick pool, its external destination,
     // and a queue of pending uploads drained one per upload (RecordBrickUpload). Null without a brick pool.
     private GpuRegion? m_brickRegion;
@@ -101,10 +102,12 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // The device's region-copy pipeline, leased from the pass-pipeline cache's GpuRegionCopyPass, which every staged
     // region records its copy with; the tables never own it.
     private readonly IGpuComputePipeline m_regionCopyPipeline;
+
     // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and the mesh bake samples.
     // Always allocated (a 1-float filler when the pool is disabled), always bound, since the mesh bake compiles the
     // sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
     private IGpuBuffer m_brickPoolBuffer;
+
     private readonly bool m_brickPoolEnabled;
     private readonly int m_brickPoolVoxelCapacity;
     private readonly IGpuBindings m_bindings;
@@ -114,7 +117,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_dummyBuffer;
     private readonly IGpuImage m_storageFiller;
     private readonly IGpuImage m_sampledFiller;
+
     private int m_dynamicTransformCapacity;
+
     private readonly GpuDeviceServices m_gpu;
 
     private int m_instanceCapacity;
@@ -275,7 +280,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         );
         m_brickPoolVoxelCapacity = Math.Max(
             val1: 0,
-            val2: Math.Min(options.BrickPoolVoxelCapacity, (int)Math.Min(int.MaxValue, Math.Max(SdfBrickPoolLayout.VoxelsPerBrick, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))
+            val2: Math.Min(options.BrickPoolVoxelCapacity, ((int)Math.Min(int.MaxValue, Math.Max(SdfBrickPoolLayout.VoxelsPerBrick, (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))))
         );
         m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
 

@@ -20,7 +20,7 @@ internal static partial class CreationFixtures {
         // Rigid template sharing and copy scaling have their own end-to-end tests.
         if (articulated && WorldRigidAssets.IsRigid(creation)) {
             creation = Prototype(id: creation.Id, document: creation.Document with {
-                Drivers = [new CreationDriverDocument(Name: "fixtureClock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)]
+                Drivers = [new CreationDriverDocument(Name: "fixtureClock", Signal: CreationDriverDocument.SignalTime, Cadence: 1f)],
             });
         }
         var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {

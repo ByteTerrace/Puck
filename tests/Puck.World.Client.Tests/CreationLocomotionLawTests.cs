@@ -16,6 +16,7 @@ namespace Puck.World.Client.Tests;
 /// slides — each presentation-only, read by the stamp pool's pack path.</summary>
 public sealed class CreationLocomotionLawTests {
     private const float Frame = (1f / 60f);
+
     private static readonly WorldEntityAddress Body = new(
         Authority: "a",
         Generation: 1,
@@ -449,12 +450,13 @@ public sealed class CreationLocomotionLawTests {
     public void AnAlignedPlantedTipStaysLevelAndItsSwingIsUntouched() {
         const int Boot = (1 + 2);
         const float Toe = 0.3f;
+
         var (alignedClient, aligned, alignedTransforms) = Stage(align: 1f, toe: Toe);
         var (plainClient, plain, plainTransforms) = Stage(toe: Toe);
         var position = Vector3.Zero;
         var tick = 0UL;
 
-        Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: (ReferenceEquals(transforms, alignedTransforms) ? aligned : plain).BodyShapePose(0, Boot - 1).Orientation, value: Vector3.UnitY);
+        Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: (ReferenceEquals(transforms, alignedTransforms) ? aligned : plain).BodyShapePose(0, (Boot - 1)).Orientation, value: Vector3.UnitY);
         void Step() {
             Advance(client: alignedClient, pool: aligned, position: position, tick: tick, transforms: alignedTransforms, yaw: 0f);
             Advance(client: plainClient, pool: plain, position: position, tick: tick, transforms: plainTransforms, yaw: 0f);
@@ -473,8 +475,8 @@ public sealed class CreationLocomotionLawTests {
         Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: alignedTransforms)) < 1e-4f), userMessage: $"aligned up {Up(transforms: alignedTransforms)}");
         Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: plainTransforms)) > 0.05f), userMessage: $"control up {Up(transforms: plainTransforms)}");
         Assert.True(
-            condition: (Vector3.Distance(value1: aligned.BodyShapePose(0, Boot - 1).Position, value2: plain.BodyShapePose(0, Boot - 1).Position) < 1e-4f),
-            userMessage: $"aligned {aligned.BodyShapePose(0, Boot - 1).Position}, control {plain.BodyShapePose(0, Boot - 1).Position}"
+            condition: (Vector3.Distance(value1: aligned.BodyShapePose(0, (Boot - 1)).Position, value2: plain.BodyShapePose(0, (Boot - 1)).Position) < 1e-4f),
+            userMessage: $"aligned {aligned.BodyShapePose(0, (Boot - 1)).Position}, control {plain.BodyShapePose(0, (Boot - 1)).Position}"
         );
         Assert.Null(@object: Rig(pool: plain).Effectors[0].Align);
 

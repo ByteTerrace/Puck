@@ -57,6 +57,7 @@ internal static class WorldBenchmarks {
         MeasureGallery(catalog: catalog, definition: definition!, rows: rows);
 
         var server = bench.Server;
+
         rows.Add(item: ("world: arena storage", $"{server.Arena.Bytes:N0} bytes"));
         if (!server.TryCaptureCheckpoint(Puck.World.Server.WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var checkpointReason)) {
             throw new InvalidOperationException(checkpointReason);

@@ -307,7 +307,7 @@ public sealed class WorldCatalogAllocationLawTests {
             WorldRigCatalog.InstructionCount(Rig),
             program.Instructions.Count
         );
-        Assert.True(program.Instances.Count > 1);
+        Assert.True((program.Instances.Count > 1));
         Assert.All(
             program.Instances,
             instance => Assert.InRange(

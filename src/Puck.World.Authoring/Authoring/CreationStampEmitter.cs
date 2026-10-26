@@ -76,6 +76,7 @@ public static class CreationStampEmitter {
     // it is the same number the stamper laid the creation's text out with.
     private readonly record struct StampFrame(FixedVector3 Origin, FixedQuaternion Rotation, FixedQ4816 Scale, float FacetScale, FixedVector3? ReflectionNormal, FixedQuaternion? ReflectionAlignment) {
         public int? DynamicSlot { get; init; }
+
         public static StampFrame Of(CreationStampTransform transform) =>
             Of(
                 facetScale: transform.Scale,
@@ -554,6 +555,7 @@ public static class CreationStampEmitter {
     // applies the same H(n) in the same place: after the stamp's scale, before the stamp's rotation.
     private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, in StampFrame frame) {
         var chain = builder.ResetPoint();
+
         if (frame.DynamicSlot is { } slot) { chain = chain.TransformDynamic(slot); }
         chain = chain
             .Translate(offset: frame.Origin.ToVector3())

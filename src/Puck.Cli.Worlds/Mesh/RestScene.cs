@@ -29,7 +29,6 @@ public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Or
         return new Vector3(x: -local.X, y: local.Y, z: -local.Z);
     }
 }
-
 /// <summary>
 /// A world's presentation at rest, composed offline as a World composes its frame (<see cref="WorldSceneEmitter"/> through
 /// <see cref="SdfCompositionFrameSource"/>), with no device: one body per creation look, standing unturned at rest, so
@@ -100,7 +99,7 @@ public sealed class RestScene {
                 Generation: 1,
                 Index: entries.Count,
                 Kit: 0,
-                Look: (byte)look,
+                Look: ((byte)look),
                 Orientation: Quaternion.Identity,
                 Position: new Vector3(x: (entries.Count * BodySpacing), y: 0f, z: 0f),
                 State: state
@@ -143,7 +142,7 @@ public sealed class RestScene {
     /// <returns>The label.</returns>
     public string Label(SdfMeshBakeGroup group, RestBody? owner) {
         if (group.IsWorld) { return "world segments"; }
-        if (!group.Dynamic) { return $"instance {-(group.Selector + 1)}{((group.Instances > 1) ? $"+{group.Instances - 1}" : string.Empty)}{Placed(instance: -(group.Selector + 1))}"; }
+        if (!group.Dynamic) { return $"instance {-(group.Selector + 1)}{((group.Instances > 1) ? $"+{(group.Instances - 1)}" : string.Empty)}{Placed(instance: -(group.Selector + 1))}"; }
         if (owner is null) { return $"slot {group.Slot}"; }
 
         return $"slot {group.Slot} {owner.Creation.Id} body {owner.BodyIndex} {SlotName(owner: owner, slot: group.Slot)}";
@@ -162,7 +161,7 @@ public sealed class RestScene {
             if (op == SdfOp.ResetPoint) { break; }
             if (op != SdfOp.TransformDynamic) { continue; }
 
-            var slot = (int)instructions[index].Data0.X;
+            var slot = ((int)instructions[index].Data0.X);
 
             return ((BodyOf(slot: slot) is { } body) ? SlotName(owner: body, slot: slot) : $"slot {slot}");
         }
@@ -185,7 +184,7 @@ public sealed class RestScene {
     // The placement and prototype a static instance stands for, as the frame's pick map names it; empty where it names
     // none.
     private string Placed(int instance) =>
-        ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: (uint)(instance + 1))) is WorldPickTarget { Placement: { } placement } target)
+        ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: ((uint)(instance + 1)))) is WorldPickTarget { Placement: { } placement } target)
             ? $" {placement} ({target.Prototype})"
             : string.Empty);
     private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + body.SlotCount))));

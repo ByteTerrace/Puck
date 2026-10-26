@@ -43,7 +43,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             : string.Empty)}";
     // A gamepad's battery and accessories text for world.devices, or null without a manager or a report.
     private string? DescribeGamepadStatus(InputDeviceId device) =>
-        ((gamepads is not null) &&
+        (((gamepads is not null) &&
             gamepads.TryGetPower(
                 deviceId: device,
                 power: out var power
@@ -57,7 +57,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 accessories: accessories,
                 power: power
             )
-            : null;
+            : null);
     // What the render graph runtime scheduled in its latest frame, read from that schedule and each instance's work
     // ledger (RenderGraphLiveBudget), or why there is none.
     private string DescribeLiveBudget() {
@@ -115,7 +115,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private string DescribeBudget() {
         var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
-            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {renderProbe.ProgramBuildsSource?.Invoke() ?? 0} program build(s), globalStepScale {node.LiveProgramStepScale.ToString(
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {(renderProbe.ProgramBuildsSource?.Invoke() ?? 0)} program build(s), globalStepScale {node.LiveProgramStepScale.ToString(
                 format: "G6",
                 provider: CultureInfo.InvariantCulture
             )}{((node.LiveProgramStepScale is > 0f and < 1f)
@@ -362,7 +362,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         ));
         var looks = server.Definition.Looks;
         var workload = WorldRigCatalog.ActiveWorkload(
-            isActive: population.IsActive,
+            isActive: index => (population.IsActive(index) && (WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index)).Source is WorldLookSource.Catalog)),
             capacity: population.Capacity,
             rigFor: index => WorldRigCatalog.RigFor(
                 WorldDefinitionRows.ResolveLook(

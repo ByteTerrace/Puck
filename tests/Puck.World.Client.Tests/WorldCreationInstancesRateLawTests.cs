@@ -20,6 +20,7 @@ namespace Puck.World.Client.Tests;
 public sealed class WorldCreationInstancesRateLawTests {
     private const float Frame = (1f / 60f);
     private const float Step = 0.05f;
+
     // A 60 Hz display on a fixed signal.
     private static readonly PresentationRate Paced60 = new(DisplayHertz: 60, GridHertz: 60d);
 
@@ -142,7 +143,7 @@ public sealed class WorldCreationInstancesRateLawTests {
 
         for (var frame = 1; (frame < roots.Count); frame++) {
             // The root follows the body every frame; the head rides it rigidly.
-            Assert.Equal(expected: Step, actual: (roots[frame].X - roots[frame - 1].X), tolerance: 1e-4f);
+            Assert.Equal(expected: Step, actual: (roots[frame].X - roots[(frame - 1)].X), tolerance: 1e-4f);
             Assert.Equal(expected: offsets[0].Y, actual: offsets[frame].Y, tolerance: 1e-4f);
         }
     }
@@ -168,7 +169,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
 
         for (var frame = 1; (frame < roots.Count); frame++) {
-            Assert.True(condition: (roots[frame].X > roots[frame - 1].X));
+            Assert.True(condition: (roots[frame].X > roots[(frame - 1)].X));
             Assert.Equal(expected: offsets[0].Y, actual: offsets[frame].Y, tolerance: 1e-4f);
         }
     }
@@ -246,7 +247,7 @@ public sealed class WorldCreationInstancesRateLawTests {
 
         for (var tick = 1UL; (tick <= 5UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
-            codes.Add(item: (SdfUpdateRateCode)pool.SlotRateCodes.Span[0]);
+            codes.Add(item: ((SdfUpdateRateCode)pool.SlotRateCodes.Span[0]));
             Assert.Single(pool.SlotRateCodes.ToArray());
         }
 

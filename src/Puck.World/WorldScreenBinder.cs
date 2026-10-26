@@ -429,7 +429,6 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
 
         return (Ok: true, Message: $"screen {index} text ({text.Lines.Count} line(s))");
     }
-
     // Retires the Vulkan camera route's headless device after the feeds retired their target sets: it is disposed once
     // the last image made on it is released, which a submitted frame's lease can defer.
     private void RetireCameraTargetDevice() {

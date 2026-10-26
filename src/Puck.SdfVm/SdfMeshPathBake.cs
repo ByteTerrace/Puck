@@ -19,18 +19,22 @@ namespace Puck.SdfVm;
 /// samples of the final lattice its contour reads one at.</param>
 public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (int X, int Y, int Z) Dims, int Selector, bool Gradients) {
     /// <summary>Gets the lattice's local frame, independently of the instances selected by its mask.</summary>
-    public int FrameSlot { get; init; } = Selector >= 0 ? Selector : -1;
+    public int FrameSlot { get; init; } = ((Selector >= 0) ? Selector : -1);
+
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => ((Dims.X * Dims.Y) * Dims.Z);
     /// <summary>Gets the field evaluations the dispatch makes: five a sample that measures the gradient, one
     /// otherwise.</summary>
     public int Taps => (Gradients ? (5 * Samples) : Samples);
+
     /// <summary>Gets the first plane along Z of its group's final lattice that a slab of it samples, or -1 for any other
     /// lattice.</summary>
     public int Slab { get; init; } = -1;
+
     /// <summary>Gets the surface points a points lattice samples, one a sample, in place of a grid, in the frame
     /// <see cref="Origin"/> is in; empty for a grid lattice.</summary>
     public ReadOnlyMemory<Vector4> Points { get; init; }
+
     /// <summary>Gets the run of instances a static selector names, from the instance <c>-(Selector + 1)</c> on: the
     /// instances of one rigid copy, which bake as one mesh (<see cref="SdfInstanceRange.BakesWithPrevious"/>). One for
     /// every other selector.</summary>
@@ -174,10 +178,12 @@ public sealed partial class SdfMeshPathBake {
     private const int RefineMinimum = 17;
     private const int FinalMinimum = 9;
     private const int MaxRefinements = 5;
+
     /// <summary>The finest spacing, in metres, of a final lattice along its longest axis: a part smaller than the lattice
     /// would resolve bakes at this spacing unless an instance declares a finer detail (<see cref="SdfInstanceRange.Detail"/>).
     /// A detail at or past it refines nothing the lattice does not already resolve.</summary>
     public const float MinimumCell = 0.015f;
+
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
     // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
@@ -198,7 +204,6 @@ public sealed partial class SdfMeshPathBake {
     /// than baking the group again: in a later program of the residency, or in another residency holding the same
     /// library.</summary>
     public SdfMeshLibrary Library { get; init; } = new();
-
     /// <summary>Gets or sets the identity of the bake on the kernels it dispatches (<see cref="SdfMeshStore.IdentityOf"/>),
     /// under which a new program's groups load from the library's store and its meshes are written there; the residency
     /// sets it from its kernel set. A group keeps the identity its program started under. A program that misses groups
@@ -207,8 +212,10 @@ public sealed partial class SdfMeshPathBake {
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
+
     // How many of the first groups Pending found done; every write of a group lowers it to that group's index (Replace).
     private int m_doneThrough;
+
     private readonly List<SdfMeshDraw> m_draws = [];
     private readonly Stopwatch m_clock = new();
 
@@ -256,7 +263,6 @@ public sealed partial class SdfMeshPathBake {
             }
         }
     }
-
     /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
     /// frame. Only these groups enter the irradiance scene: animated groups, glass and diagnostic field slices must
     /// not hold its first lighting measurement or a later static-scene refresh behind unrelated work.</summary>
@@ -308,9 +314,10 @@ public sealed partial class SdfMeshPathBake {
             Settle(frame: frame);
 
             var finished = 0;
-            var copiesChanged = m_drawnCopies.Length != frame.MeshInstances.Count;
+            var copiesChanged = (m_drawnCopies.Length != frame.MeshInstances.Count);
+
             if (!copiesChanged) {
-                for (var index = 0; index < m_drawnCopies.Length; index++) {
+                for (var index = 0; (index < m_drawnCopies.Length); index++) {
                     if (m_drawnCopies[index] != frame.MeshInstances[index]) { copiesChanged = true; break; }
                 }
             }
@@ -342,7 +349,7 @@ public sealed partial class SdfMeshPathBake {
                         foreach (var copy in frame.MeshInstances) {
                             if (!copy.UsesSlot(group.Slot)) { continue; }
                             copy.FirstInstance = group.FirstInstance;
-                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, IsDynamic = true, Glass = group.Glass });
+                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true });
                         }
                         continue;
                     }
@@ -350,9 +357,10 @@ public sealed partial class SdfMeshPathBake {
                         ? (Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
                         : Matrix4x4.Identity);
 
-                    for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
-                        var part = (mesh.Chunks.Count == 0 ? mesh : mesh.Chunks[piece]);
-                        m_draws.Add(item: new SdfMeshDraw(Identity: (mesh.Chunks.Count == 0 ? group : part), Material: 0, Mesh: part, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic, Glass = group.Glass });
+                    for (var piece = 0; (piece < Math.Max(1, mesh.Chunks.Count)); piece++) {
+                        var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
+
+                        m_draws.Add(item: new SdfMeshDraw(Identity: ((mesh.Chunks.Count == 0) ? group : part), Material: 0, Mesh: part, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, IsDynamic = group.Dynamic });
                     }
                 }
                 foreach (var copy in frame.MeshInstances) {
@@ -698,6 +706,7 @@ public sealed partial class SdfMeshPathBake {
             m_prepared = (program, farDistance, groups);
         }
     }
+
     // Puts a group at an index of the list, under the gate.
     private void Replace(int index, Group group) {
         m_groups[index] = group;
@@ -836,7 +845,7 @@ public sealed partial class SdfMeshPathBake {
         if (m_clock.IsRunning) { Finish(); }
         // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
         // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        if (((rebaked + loading + renumbered + formed) > 0) || (previous.Count != m_groups.Count)) {
+        if (((((rebaked + loading) + renumbered) + formed) > 0) || (previous.Count != m_groups.Count)) {
             m_drawnMeshes = -1;
         }
     }
@@ -893,7 +902,7 @@ public sealed partial class SdfMeshPathBake {
         var dims = (X: Samples(length: extent.X), Y: Samples(length: extent.Y), Z: Samples(length: extent.Z));
         var cell = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
 
-        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances, FrameSlot = group.Dynamic ? group.Slot : -1 };
+        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
     }
     // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
     private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
@@ -1044,7 +1053,7 @@ public sealed partial class SdfMeshPathBake {
             if (detail > 0f) { detailed = MathF.Min(x: detailed, y: detail); }
         }
 
-        var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances, FrameSlot = group.Dynamic ? group.Slot : -1 };
+        var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
 
         return new FinalLattice(lattice: lattice) {
             Factor = ((regions.Count > 0) ? Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / target))), min: 2, max: (float.IsFinite(f: detailed) ? MaxDetailRefinement : MaxRefinement)) : 0),
@@ -1177,7 +1186,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Clamp(value: (FrameTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
-            FrameSlot = group.Dynamic ? group.Slot : -1,
+            FrameSlot = (group.Dynamic ? group.Slot : -1),
             Instances = group.Instances,
             Points = final.Points.AsMemory(length: count, start: final.Answered),
         };
@@ -1284,7 +1293,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (FrameTaps / 5));
 
         return new SdfMeshBakeRequest(Cell: group.CreaseSpacing, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
-            FrameSlot = group.Dynamic ? group.Slot : -1,
+            FrameSlot = (group.Dynamic ? group.Slot : -1),
             Instances = group.Instances,
             Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
         };
@@ -1368,7 +1377,7 @@ public sealed partial class SdfMeshPathBake {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: FrameTaps);
 
         return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
-            FrameSlot = group.Dynamic ? group.Slot : -1,
+            FrameSlot = (group.Dynamic ? group.Slot : -1),
             Instances = group.Instances,
             Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
         };
@@ -1451,6 +1460,7 @@ public sealed partial class SdfMeshPathBake {
         var mesh = group.Skin!;
         var slots = group.PointMaterials;
         var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).ToArray();
+
         if (others.Length > SdfMesh.MaxMembers) {
             throw new InvalidOperationException($"Mesh group {group.FirstInstance} needs {others.Length} independently moving skin members; the representation holds {SdfMesh.MaxMembers}.");
         }
@@ -1479,9 +1489,9 @@ public sealed partial class SdfMeshPathBake {
             var contoured = mesh.TriangleCount;
 
             mesh = mesh with { BakeCell = group.DiagnosticCell };
-            mesh = (!group.Dynamic && !group.Glass && (group.Instances > 1))
+            mesh = ((!group.Dynamic && !group.Glass && (group.Instances > 1))
                 ? SdfMeshChunks.Bake(mesh)
-                : (group.Glass ? SdfMeshPlanarMerge.Merge(mesh) : SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh)));
+                : (group.Glass ? SdfMeshPlanarMerge.Merge(mesh) : SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh))));
             merged = (contoured - mesh.TriangleCount);
             Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
@@ -1543,10 +1553,10 @@ public sealed partial class SdfMeshPathBake {
         var skinned = m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
         // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its
         // coarsest where it has fewer).
-        var pieces = m_groups.Where(static group => group.Mesh is not null).SelectMany(static group => group.Mesh!.Chunks.Count == 0 ? (IReadOnlyList<SdfMesh>)[group.Mesh!] : group.Mesh.Chunks).ToArray();
-        var levelled = pieces.Count(static mesh => mesh.Levels.Count > 0);
-        var first = pieces.Sum(static mesh => (long)SdfMeshRegion.LevelOf(level: 1, mesh: mesh).TriangleCount);
-        var second = pieces.Sum(static mesh => (long)SdfMeshRegion.LevelOf(level: 2, mesh: mesh).TriangleCount);
+        var pieces = m_groups.Where(static group => (group.Mesh is not null)).SelectMany(static group => ((group.Mesh!.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[group.Mesh!] : group.Mesh.Chunks)).ToArray();
+        var levelled = pieces.Count(static mesh => (mesh.Levels.Count > 0));
+        var first = pieces.Sum(static mesh => ((long)SdfMeshRegion.LevelOf(level: 1, mesh: mesh).TriangleCount));
+        var second = pieces.Sum(static mesh => ((long)SdfMeshRegion.LevelOf(level: 2, mesh: mesh).TriangleCount));
 
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
@@ -1694,7 +1704,9 @@ public sealed partial class SdfMeshPathBake {
         public ContourProjection? Projection { get; set; }
 
         public Vector3 CreaseSpacing { get; set; } = Vector3.One;
+
         public Vector3 DiagnosticCell { get; set; }
+
         public float CreaseSlope { get; set; } = 1f;
 
         public Vector4[]? Points { get; set; }

@@ -997,7 +997,7 @@ public static partial class CreationCanonicalizer {
         if ((shape.Group ?? 0) is var group and not 0) {
             for (var other = 0; (other < shapes.Count); other++) {
                 if ((other != index) && ((shapes[other].Group ?? 0) == group) && !document.IsGlassShape(shape: shapes[other])) {
-                    errors.Add(item: new(Message: $"a glass shape cannot share group {group} with the opaque shape '{shapes[other].Name?.Value ?? other.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}': a group bakes as one mesh, which is glass or opaque whole.", Path: $"shapes[{index}].group"));
+                    errors.Add(item: new(Message: $"a glass shape cannot share group {group} with the opaque shape '{(shapes[other].Name?.Value ?? other.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))}': a group bakes as one mesh, which is glass or opaque whole.", Path: $"shapes[{index}].group"));
                     break;
                 }
             }

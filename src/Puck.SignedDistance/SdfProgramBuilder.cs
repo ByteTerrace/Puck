@@ -544,7 +544,6 @@ public sealed partial class SdfProgramBuilder {
             )
         );
     }
-
     /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
     /// never past the profile's own inradius, and — for <see cref="SdfLift.Extrude"/> — never past the lift
     /// half-height.</summary>
@@ -1061,7 +1060,6 @@ public sealed partial class SdfProgramBuilder {
 
         return this;
     }
-
     private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default, uint shape = 0u, uint blend = 0u) {
         m_instructions.Add(item: new SdfInstruction(
             Blend: blend,

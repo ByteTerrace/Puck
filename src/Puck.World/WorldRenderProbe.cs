@@ -21,6 +21,7 @@ namespace Puck.World;
 public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     /// <summary>Gets or sets the live composition's program-build counter.</summary>
     public Func<long>? ProgramBuildsSource { get; set; }
+
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
     private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);

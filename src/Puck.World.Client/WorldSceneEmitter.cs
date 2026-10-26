@@ -160,6 +160,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         );
 
         var meshDraws = new List<SdfMeshDraw>();
+
         m_staticVolumes.Clear();
         WorldPlacementStamper.EmitStatic(builder: builder, definition: client.Definition, creations: creations,
             placements: placements, textCatalog: m_text.Catalog, tintFor: null, volumes: m_staticVolumes,
@@ -350,6 +351,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         route = null!;
         return false;
     }
+
     // The boot screens padded with headroom slabs at free engine indices (bounded by the engine surface ceiling), so a
     // runtime UpsertScreen of a NEW index fits the probed envelope. BOOT-CONSUMED: reads the frozen
     // m_authoringHeadroomScreens field.
@@ -382,35 +384,49 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             slotBase: context.SlotBase
         );
     }
+
     private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
+
     private int m_articulatedRevision;
+
     private readonly int[] m_catalogSlots = new int[WorldBodiesLimits.CapacityCeiling];
+
     private int m_catalogSlotCount;
+
     private (int Body, int Rig, float Scale, Vector3 Color)[] m_catalogImage = [];
+
     private int m_catalogRevision;
+
     private void PrepareCatalog() {
         m_catalogSlotCount = 0;
         Array.Fill(m_catalogSlots, -1);
-        for (var body = 0; body < m_catalogSlots.Length; body++) {
+        for (var body = 0; (body < m_catalogSlots.Length); body++) {
             if (!IsAvatarPresented(body)) { continue; }
             m_catalogSlots[body] = m_catalogSlotCount;
             m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
         }
-        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => m_catalogSlots[index] >= 0)
-            .Select(index => (index, (int)m_client.CatalogRig(index), m_client.Look(index).Scale, m_client.BodyColor(index))).ToArray();
+        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
+            .Select(index => (index, ((int)m_client.CatalogRig(index)), m_client.Look(index).Scale, m_client.BodyColor(index))).ToArray();
+
         if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
     }
+
     private readonly int[] m_preparedRevision = new int[WorldClient.RevisionComponentCount];
+
     private bool m_prepared;
+
     private int m_preparedPresentation = -1;
+
     public void PrepareFrame() {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
+
         m_client.WriteRevision(revision);
-        if (m_prepared && revision.SequenceEqual(m_preparedRevision) && m_preparedPresentation == m_continuum.PresentationRevision && !m_census.TryTakeMove()) { return; }
+        if (m_prepared && revision.SequenceEqual(m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && !m_census.TryTakeMove()) { return; }
         revision.CopyTo(m_preparedRevision);
         m_prepared = true;
         m_preparedPresentation = m_continuum.PresentationRevision;
         var definition = m_client.Definition;
+
         m_census.Refresh(source: m_client);
         m_presentedStamps.Clear();
         foreach (var stamp in m_census.Stamps) {
@@ -419,6 +435,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             }
         }
         var articulated = m_presentedStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+
         if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Reconcile(
             looks: definition.Looks,
@@ -427,8 +444,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             dynamics: definition.Dynamics,
             bodyStamps: m_presentedStamps
         );
-            PrepareCatalog();
+        PrepareCatalog();
     }
+
     public IReadOnlyList<int> MeshAssetSlots => m_animator.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_animator.Rigid.Copies;
 
@@ -476,7 +494,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 )) {
                     WorldTransformOwners.Park(
                         count: WorldRigCatalog.TransformSlotsPerBody,
-                        start: context.SlotBase + m_catalogSlots[index],
+                        start: (context.SlotBase + m_catalogSlots[index]),
                         moved: moved,
                         parkPosition: context.ParkPosition,
                         table: slots
@@ -689,6 +707,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
     }
+
     // The screens a body carries this frame, one bit per screen index (WorldCreationInstances.TryCarriedScreen).
     private uint CarriedScreens() {
         var carried = 0u;
@@ -772,6 +791,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // snapshot).
         m_census.Refresh(source: m_client);
         var articulated = m_presentedStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+
         if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Reconcile(
             looks: definition.Looks,

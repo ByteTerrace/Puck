@@ -207,7 +207,6 @@ public sealed class InPlaceCarryPresentationLawTests {
         position.Y -= Step;
         Assert.Equal(expected: FallSpeed, actual: Fall(continuity: EntityContinuity.Continuous), tolerance: Tolerance);
     }
-
     [Fact]
     public void AChaseBoomThroughASameWorldDoorLooksBackThroughItsCounterpart() {
         var (client, _, _) = Stage(shaft: true);
