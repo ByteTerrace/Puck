@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "puck": {
+    "operator": {
       "command": "pwsh",
       "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "& (Join-Path (git rev-parse --show-toplevel) '.claude/hooks/puck-mcp.ps1')"],
       "timeoutSeconds": 600

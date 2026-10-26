@@ -130,7 +130,7 @@ macOS, and nothing here is verified there.
 
 ### Antigravity user settings
 
-The owner approved recording this home settings file verbatim, and ruled that Antigravity and Codex have effectively the same rights as the lead: every command (`command(regex:.*)`, with git-safety still refusing lane pushes and shared-state git) and the `puck` MCP tools, which the workspace plugin registers as `puck_puck`. The D:/Source
+The owner approved recording this home settings file verbatim, and ruled that Antigravity and Codex have effectively the same rights as the lead: every command (`command(regex:.*)`, with git-safety still refusing lane pushes and shared-state git) and the `puck` MCP tools, which Antigravity names `puck_operator` (a plugin's server is `<plugin>_<server>`: the workspace plugin `puck` registers the server `operator`). The D:/Source
 paths name this machine's checkout; use the actual checkout paths on another
 machine. Login and trust state stays local; the workspace trust entry below
 records the approved configuration, not portable login or trust state.
@@ -147,8 +147,7 @@ records the approved configuration, not portable login or trust state.
       "command(pwsh)",
       "command(node)",
       "read_url(*)",
-      "mcp(puck/*)",
-      "mcp(puck_puck/*)",
+      "mcp(puck_operator/*)",
       "write_file(D:/Source/ByteTerrace/Puck)",
       "write_file(D:/Source/ByteTerrace/Puck/.git)"
     ],
