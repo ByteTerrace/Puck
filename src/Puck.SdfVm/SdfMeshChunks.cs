@@ -12,8 +12,9 @@ public static class SdfMeshChunks {
 
     /// <summary>Merges and levels a static union in spatial pieces when it spans more than one chunk.</summary>
     /// <param name="mesh">The contour, with its actual bake cell.</param>
+    /// <param name="preserveFeatures">Whether coarser levels keep every crease and material-edge place fixed.</param>
     /// <returns>The merged mesh, holding independently levelled chunks when larger than one chunk.</returns>
-    public static SdfMesh Bake(SdfMesh mesh) {
+    public static SdfMesh Bake(SdfMesh mesh, bool preserveFeatures = false) {
         ArgumentNullException.ThrowIfNull(mesh);
         var positions = mesh.Positions.Span;
         var low = positions[0];
@@ -24,7 +25,7 @@ public static class SdfMeshChunks {
         }
         var size = high - low;
         if (MathF.Max(size.X, MathF.Max(size.Y, size.Z)) <= Side) {
-            return SdfMeshCollapse.Levels(SdfMeshPlanarMerge.Merge(mesh));
+            return Merge(mesh, preserveFeatures);
         }
 
         var bins = new Dictionary<(int X, int Y, int Z), List<int>>();
@@ -38,7 +39,7 @@ public static class SdfMeshChunks {
             }
             triangles.Add(triangle);
         }
-        if (bins.Count == 1) { return SdfMeshCollapse.Levels(SdfMeshPlanarMerge.Merge(mesh)); }
+        if (bins.Count == 1) { return Merge(mesh, preserveFeatures); }
 
         var chunks = new List<SdfMesh>(bins.Count);
         foreach (var bin in bins.Values) {
@@ -62,9 +63,14 @@ public static class SdfMeshChunks {
                 }
             }
             var part = new SdfMesh(positions: points.ToArray(), indices: triangles, normals: normals.ToArray(), triangleMaterials: materials) { BakeCell = mesh.BakeCell };
-            chunks.Add(SdfMeshCollapse.Levels(SdfMeshPlanarMerge.Merge(part)));
+            chunks.Add(Merge(part, preserveFeatures));
         }
         return Join(chunks);
+    }
+
+    private static SdfMesh Merge(SdfMesh mesh, bool preserveFeatures) {
+        var merged = SdfMeshPlanarMerge.Merge(mesh);
+        return SdfMeshCollapse.Levels(merged, preserveFeatures);
     }
 
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined
@@ -91,6 +97,6 @@ public static class SdfMeshChunks {
             triangle += chunk.TriangleCount;
         }
         var joined = new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { BakeCell = chunks[0].BakeCell };
-        return joined with { Chunks = SdfMeshPacking.SharePositionGrid(joined, chunks) };
+        return joined with { Chunks = chunks };
     }
 }

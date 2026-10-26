@@ -316,12 +316,6 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
         declarations.Count(name: "SDF_MESH_LEVEL_TRIANGLE_WORD", value: SdfMeshRecord.LevelTriangleWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
-        declarations.Count(name: "SDF_MESH_POSITION_LOW_WORD", value: SdfMeshRecord.PositionLowWord);
-        declarations.Count(name: "SDF_MESH_POSITION_STEP_WORD", value: SdfMeshRecord.PositionStepWord);
-        declarations.Bits(name: "SDF_MESH_QUANTIZED_FLAG", value: SdfMeshRecord.QuantizedFlag);
-        declarations.Bits(name: "SDF_MESH_SMALL_INDICES_FLAG", value: SdfMeshRecord.SmallIndicesFlag);
-        declarations.Bits(name: "SDF_MESH_BYTE_MATERIALS_FLAG", value: SdfMeshRecord.ByteMaterialsFlag);
-        declarations.Bits(name: "SDF_MESH_WIDE_NORMALS_FLAG", value: SdfMeshRecord.WideNormalsFlag);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
         declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);

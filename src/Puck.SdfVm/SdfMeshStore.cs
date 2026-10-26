@@ -54,7 +54,7 @@ public sealed class SdfMeshStore {
     public long CapacityBytes { get; }
     /// <summary>Gets the absolute directory the entries are kept in.</summary>
     public string Directory { get; }
-    /// <summary>Gets the entry format's eight-byte version tag (<c>PUCKMSH6</c>). A bump already moves the bake identity,
+    /// <summary>Gets the entry format's eight-byte version tag (<c>PUCKMSH8</c>). A bump already moves the bake identity,
     /// because the tag is inlined into the entry codec the closure hashes; <see cref="Record"/> writes it beside the
     /// identity's parts so <see cref="ExplainMisses"/> can name the bump.</summary>
     public static string EntryVersion { get; } = VersionText(magic: Magic);

@@ -1133,12 +1133,12 @@ it removed (`merged=`).
 
 The disk store packs positions against each group's bounds within one 1024th of its contour-cell
 diagonal, encodes unit normals as oct16 pairs, narrows indices and materials, and delta-predicts
-attribute byte planes before Brotli compression. Load reconstructs the CPU query arrays. The GPU
-region uses three-word vertices (20-bit bounds-relative positions and oct16 normals), 16-bit indices
-where the vertex count allows, and byte materials where every level fits. Position packing measures
-every vertex against a further cell-diagonal/2048 budget; insufficient precision retains float
-positions. Every chunk of a group shares the position grid, on disk and on the GPU, so seam vertices
-decode identically. Authored non-unit normals retain their magnitudes. Both backends use the same reader.
+attribute byte planes before zlib compression. Every chunk shares its group's position grid and
+width so seam vertices decode identically. Load reconstructs the CPU query arrays directly from
+the decompressed planes. Both backends draw six-float vertices with 32-bit indices and materials:
+the compact GPU decoder cost more mesh and cascade time than that layout. Storage compression
+does not require paying that decode cost in every vertex stage. Authored non-unit normals retain
+their magnitudes.
 
 The merged mesh then gets two coarser levels (`SdfMeshCollapse`, `SdfMesh.Levels`),
 each a triangle list over the merged mesh's own vertices made by half-edge
@@ -1148,7 +1148,10 @@ for the second: every merged vertex to a level triangle of its material whose
 interpolated normal there is within 2 or 6 degrees of its own, every crease and
 material edge vertex and edge midpoint to that line as the level draws it, and
 every new triangle's centroid and edge midpoints to the surface it replaces. The
-level records the largest (`SdfMeshLevel.Error`). The region lays each level's
+level records the largest (`SdfMeshLevel.Error`). Glyph-bearing groups keep their crease and
+material-edge vertices fixed while their face interiors simplify, preserving counters and thin-stroke
+outlines even when glyph and housing share a material. Without detectable features they retain the
+merged surface. The region lays each level's
 indices after the merged triangles', and a raster pass chooses each draw's level
 beside its box cull (`SdfMeshDetail`): a view the coarsest level whose error,
 scaled by the draw and projected over the nearest depth of its box at the

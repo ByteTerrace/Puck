@@ -76,7 +76,7 @@ public sealed class SdfMeshLawTests {
             ],
         };
 
-        Assert.Equal(expected: (4, 6, 1), actual: (mesh.LevelledTriangleCount, SdfMeshRegion.IndexWordsOf(mesh: mesh), SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
+        Assert.Equal(expected: (4, 12, 4), actual: (mesh.LevelledTriangleCount, SdfMeshRegion.IndexWordsOf(mesh: mesh), SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
         Assert.Equal(expected: [(0, 2), (2, 1), (3, 1), (3, 1)], actual: [SdfMeshRegion.LevelOf(level: 0, mesh: mesh), SdfMeshRegion.LevelOf(level: 1, mesh: mesh), SdfMeshRegion.LevelOf(level: 2, mesh: mesh), SdfMeshRegion.LevelOf(level: 5, mesh: mesh)]);
 
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
@@ -85,8 +85,8 @@ public sealed class SdfMeshLawTests {
         var words = new uint[layout.Words];
 
         SdfMeshRegion.Write(destination: words, draws: draws, layout: layout, meshes: placements);
-        Assert.Equal(expected: [0x00010000u, 2u, 0x00010002u, 0x00010002u, 0x00010000u, 0x00020000u], actual: words.AsSpan(length: 6, start: placements[mesh].IndexWord).ToArray());
-        Assert.Equal(expected: 0x04030201u, actual: words[placements[mesh].MaterialWord]);
+        Assert.Equal(expected: [0u, 1u, 2u, 0u, 2u, 1u, 2u, 1u, 0u, 1u, 0u, 2u], actual: words.AsSpan(length: 12, start: placements[mesh].IndexWord).ToArray());
+        Assert.Equal(expected: [1u, 2u, 3u, 4u], actual: words.AsSpan(length: 4, start: placements[mesh].MaterialWord).ToArray());
         Assert.Equal(expected: layout.Words - SdfMeshRecord.DrawWords, actual: SdfMeshRegion.WordsOf(mesh: mesh));
 
         // A level without the mesh's materials, with materials the mesh lacks, empty, naming no vertex, or finer in error

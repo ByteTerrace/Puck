@@ -1453,9 +1453,10 @@ public sealed partial class SdfMeshPathBake {
             var contoured = mesh.TriangleCount;
 
             mesh = mesh with { BakeCell = group.DiagnosticCell };
+            var collapse = !group.Glass;
             mesh = (!group.Dynamic && !group.Glass && (group.Instances > 1))
-                ? SdfMeshChunks.Bake(mesh)
-                : (group.Glass ? SdfMeshPlanarMerge.Merge(mesh) : SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh)));
+                ? SdfMeshChunks.Bake(mesh, preserveFeatures: group.Geometry.ContainsGlyph)
+                : (collapse ? SdfMeshCollapse.Levels(mesh: SdfMeshPlanarMerge.Merge(mesh: mesh), preserveFeatures: group.Geometry.ContainsGlyph) : SdfMeshPlanarMerge.Merge(mesh));
             merged = (contoured - mesh.TriangleCount);
             Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }

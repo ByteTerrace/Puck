@@ -166,6 +166,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// transforms.</summary>
     public bool ReadsSlots { get; private set; }
 
+    /// <summary>Gets whether an appended shape samples a glyph. Such groups keep their crease and material-edge
+    /// vertices fixed at every distance: a geometric collapse budget alone does not preserve counters and thin strokes.</summary>
+    public bool ContainsGlyph { get; private set; }
+
     /// <summary>Gets the geometry of everything appended so far.</summary>
     public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: ((m_hash is { } hash) ? hash.GetCurrentHashAsUInt128() : m_sealedHash));
     /// <summary>Gets the form of everything appended so far: the geometry without the poses of the slots besides the
@@ -244,6 +248,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // Appends an instruction: a transform into the group's own slot by that role and into another slot with that slot's
     // pose in the group's frame, a lane erosion with the lanes it reads, and a side-table entry's values for its offset.
     private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms) {
+        ContainsGlyph |= instruction.Op == SdfOp.ShapeBlend && instruction.Shape == (uint)SdfShapeType.Glyph;
         switch (instruction.Op) {
             case SdfOp.ResetPoint:
                 m_chainSlot = -1;

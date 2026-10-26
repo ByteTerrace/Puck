@@ -11,6 +11,49 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshCollapseLawTests {
     [Fact]
+    public void AGlyphCounterKeepsItsExactOutlineWhileItsFacesSimplify() {
+        const int Cells = 16;
+        var builder = new Builder();
+        var circle = Enumerable.Range(0, Cells).Select(i => new Vector2(MathF.Cos(i * MathF.Tau / Cells), MathF.Sin(i * MathF.Tau / Cells))).ToArray();
+        Vector3 Point(float radius, int angle, float z) => new(circle[angle % Cells] * radius, z);
+        // An extruded O with one material: its front/back and walls share positions but have split normals.
+        // The counter must survive even when text and the surface it carves share their material.
+        builder.Grid(Cells, (x, y) => Point(0.5f + 0.5f * x / Cells, y, 0.1f), static _ => Vector3.UnitZ, static (_, _) => 0u, false);
+        builder.Grid(Cells, (x, y) => Point(1f - 0.5f * x / Cells, y, -0.1f), static _ => -Vector3.UnitZ, static (_, _) => 0u, false);
+        builder.Grid(Cells, (x, y) => Point(1f, x, -0.1f + 0.2f * y / Cells), static p => Vector3.Normalize(new Vector3(p.X, p.Y, 0f)), static (_, _) => 0u, false);
+        builder.Grid(Cells, (x, y) => Point(0.5f, x, 0.1f - 0.2f * y / Cells), static p => -Vector3.Normalize(new Vector3(p.X, p.Y, 0f)), static (_, _) => 0u, false);
+        var ring = builder.Mesh(0.1f);
+        var expected = FeatureEdges(ring, ring.Indices);
+        Assert.NotEmpty(expected);
+        var levelled = SdfMeshCollapse.Levels(ring, preserveFeatures: true);
+        Assert.NotEmpty(levelled.Levels);
+        Assert.True(levelled.Levels[0].TriangleCount < ring.TriangleCount / 2);
+        foreach (var level in levelled.Levels) {
+            Assert.True(expected.SetEquals(FeatureEdges(ring, level.Indices)));
+            Assert.Equal(0, OpenEdges(ring.Positions.Span, level.Indices.Span));
+        }
+        // No detectable outline gives the glyph mode no evidence of a safe counter boundary.
+        var smooth = Sphere(8);
+        Assert.Same(smooth, SdfMeshCollapse.Levels(smooth, preserveFeatures: true));
+    }
+
+    private static HashSet<(Vector3, Vector3)> FeatureEdges(SdfMesh mesh, ReadOnlyMemory<uint> indices) {
+        var edges = new Dictionary<(Vector3, Vector3), HashSet<(uint, uint)>>();
+        for (var at = 0; at < indices.Length; at += 3) {
+            for (var corner = 0; corner < 3; corner++) {
+                var a = indices.Span[at + corner];
+                var b = indices.Span[at + (corner + 1) % 3];
+                var pa = mesh.Positions.Span[(int)a];
+                var pb = mesh.Positions.Span[(int)b];
+                if ((pa.X, pa.Y, pa.Z).CompareTo((pb.X, pb.Y, pb.Z)) > 0) { (pa, pb) = (pb, pa); (a, b) = (b, a); }
+                if (!edges.TryGetValue((pa, pb), out var copies)) { copies = []; edges.Add((pa, pb), copies); }
+                copies.Add((a, b));
+            }
+        }
+        return edges.Where(static edge => edge.Value.Count > 1).Select(static edge => edge.Key).ToHashSet();
+    }
+
+    [Fact]
     public void IndependentlyLevelledChunksKeepEverySeamEdgeThroughTheStore() {
         var source = Sphere(cells: 24);
         var large = new SdfMesh(positions: source.Positions.ToArray().Select(static p => p * 12f).ToArray(), indices: source.Indices,
@@ -18,6 +61,16 @@ public sealed class SdfMeshCollapseLawTests {
         var mesh = SdfMeshChunks.Bake(large);
         Assert.True(mesh.Chunks.Count > 1);
         Assert.Contains(mesh.Chunks, static chunk => chunk.Levels.Count > 0);
+        var uncollapsed = SdfMeshChunks.Bake(large, preserveFeatures: true);
+        Assert.Equal(mesh.Chunks.Count, uncollapsed.Chunks.Count);
+        for (var at = 0; at < mesh.Chunks.Count; at++) {
+            var levelled = mesh.Chunks[at];
+            var retained = uncollapsed.Chunks[at];
+            Assert.Equal(levelled.Positions.ToArray(), retained.Positions.ToArray());
+            Assert.Equal(levelled.Normals.ToArray(), retained.Normals.ToArray());
+            Assert.Equal(levelled.Indices.ToArray(), retained.Indices.ToArray());
+            Assert.Equal(levelled.TriangleMaterials.ToArray(), retained.TriangleMaterials.ToArray());
+        }
         using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-chunk-seams-");
         var store = new SdfMeshStore(scratch.PathOf("meshes"));
         var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 123);
@@ -53,6 +106,11 @@ public sealed class SdfMeshCollapseLawTests {
     public void ACurvedSurfaceThinsWithinItsRecordedErrors() {
         var sphere = Sphere(cells: 24);
         var levelled = SdfMeshCollapse.Levels(mesh: sphere);
+        var retained = SdfMeshChunks.Bake(sphere, preserveFeatures: true);
+        var merged = SdfMeshPlanarMerge.Merge(sphere);
+        Assert.Empty(retained.Levels);
+        Assert.Equal(merged.Positions.ToArray(), retained.Positions.ToArray());
+        Assert.Equal(merged.Indices.ToArray(), retained.Indices.ToArray());
 
         Assert.Equal(expected: 2, actual: levelled.Levels.Count);
         Assert.True(condition: (levelled.Levels[0].TriangleCount < (sphere.TriangleCount / 4)));

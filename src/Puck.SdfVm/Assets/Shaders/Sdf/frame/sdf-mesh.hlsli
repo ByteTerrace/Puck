@@ -3,14 +3,13 @@
 // index sits at, its index count, the word its first vertex sits at, its attribute flags, the word its first triangle
 // material sits at, its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, the dynamic-transform
 // slot whose frame its mesh is stored in, or -1, the word its mesh's members sit at, its carry, its clip plane and the
-// first triangle of each coarser level and the position grid origin/step), then compact vertices
-// (three 20-bit coordinates and oct16 normals, with float fallbacks), packed triangle materials and indices, then members. Every offset and
+// first triangle of each coarser level), then the vertices, six words
+// each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
 // flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, and the frame's dynamic transforms,
 // sdfDynamicTransforms: sdf-world and sdf-mesh both do.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
-#include "../field/sdf-octahedral.hlsli"
 #include "../isa/sdf-render.hlsli"
 
 // The bits below the level of detail (SDF_MESH_LEVEL_SHIFT) in the index a mesh draw call pushes: the draw.
@@ -34,26 +33,18 @@ int sdfMeshMaterial(uint draw, uint triangleIndex) {
     int material = asint(sdfMeshRegion[(record + SDF_MESH_MATERIAL_WORD)]);
 
     if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_MATERIALS_FLAG) != 0u) {
-        uint base = sdfMeshRegion[record + SDF_MESH_TRIANGLE_MATERIAL_WORD];
-        bool packed = (sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_BYTE_MATERIALS_FLAG) != 0u;
-        uint value = sdfMeshRegion[base + (packed ? triangleIndex / 4u : triangleIndex)];
-        material += asint(packed ? ((value >> ((triangleIndex % 4u) * 8u)) & 255u) : value);
+        material += asint(sdfMeshRegion[(sdfMeshRegion[(record + SDF_MESH_TRIANGLE_MATERIAL_WORD)] + triangleIndex)]);
     }
 
     return material;
 }
 // The vertex a draw's index `k` names.
 uint sdfMeshIndexAt(uint record, uint k) {
-    bool packed = (sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_SMALL_INDICES_FLAG) != 0u;
-    uint value = sdfMeshRegion[sdfMeshRegion[record + SDF_MESH_INDEX_WORD] + (packed ? k / 2u : k)];
-    return packed ? ((value >> ((k % 2u) * 16u)) & 65535u) : value;
+    return sdfMeshRegion[(sdfMeshRegion[(record + SDF_MESH_INDEX_WORD)] + k)];
 }
 // The first word of the vertex a draw's index `k` names.
 uint sdfMeshVertexAt(uint record, uint k) {
-    uint flags = sdfMeshRegion[record + SDF_MESH_FLAGS_WORD];
-    uint stride = ((flags & SDF_MESH_QUANTIZED_FLAG) != 0u ? 2u : 3u)
-        + ((flags & SDF_MESH_WIDE_NORMALS_FLAG) != 0u ? 3u : 1u);
-    return sdfMeshRegion[record + SDF_MESH_VERTEX_WORD] + stride * sdfMeshIndexAt(record, k);
+    return (sdfMeshRegion[(record + SDF_MESH_VERTEX_WORD)] + (SDF_MESH_VERTEX_WORDS * sdfMeshIndexAt(record, k)));
 }
 // The first word of the member a draw's vertex rides (its slot offset, then its baked position and orientation), or zero
 // for a vertex that rides the draw's matrix: a baked group's shape on a slot of its own moves its vertices as that slot
@@ -93,14 +84,7 @@ float3 sdfMeshWorldDirection(uint record, float3 v) {
 // The object position of the vertex a draw's index `k` names.
 float3 sdfMeshObjectPosition(uint record, uint k) {
     uint word = sdfMeshVertexAt(record, k);
-    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_QUANTIZED_FLAG) == 0u)
-        return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[word + 1u], sdfMeshRegion[word + 2u]));
-    uint lo = sdfMeshRegion[word], hi = sdfMeshRegion[word + 1u];
-    uint3 q = uint3(lo & 1048575u, ((lo >> 20u) | (hi << 12u)) & 1048575u, (hi >> 8u) & 1048575u);
-    uint low = record + SDF_MESH_POSITION_LOW_WORD, step = record + SDF_MESH_POSITION_STEP_WORD;
-    precise float3 position = asfloat(uint3(sdfMeshRegion[low], sdfMeshRegion[low + 1u], sdfMeshRegion[low + 2u]))
-        + float3(q) * asfloat(uint3(sdfMeshRegion[step], sdfMeshRegion[step + 1u], sdfMeshRegion[step + 2u]));
-    return position;
+    return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
 }
 // A world direction under the draw's carry rotation (SDF_MESH_CARRY_ROTATION_WORD).
 float3 sdfMeshCarryDirection(uint record, float3 v) {
@@ -152,14 +136,8 @@ float3 sdfMeshNormalToWorld(uint record, float3 n) {
 // The world normal of a draw's index `k`: the normal the vertex it names carries, under the draw's normal matrix, or
 // turned with its member's slot for a vertex riding one. Meaningful only for a mesh that carries normals.
 float3 sdfMeshWorldNormal(uint record, uint k) {
-    uint offset = (sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_QUANTIZED_FLAG) != 0u ? 2u : 3u;
-    uint packed = sdfMeshRegion[sdfMeshVertexAt(record, k) + offset];
-    float2 oct = float2((int)(packed << 16u) >> 16, (int)packed >> 16) / 32767.0;
-    float3 normal = packed == 0x80008000u ? float3(0, 0, 0) : sdfOctDecode(oct);
-    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_WIDE_NORMALS_FLAG) != 0u) {
-        uint word = sdfMeshVertexAt(record, k) + offset;
-        normal = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[word + 1u], sdfMeshRegion[word + 2u]));
-    }
+    uint word = (sdfMeshVertexAt(record, k) + 3u);
+    float3 normal = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
     uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
 
     if (entry != 0u) {

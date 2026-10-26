@@ -344,19 +344,25 @@ laws exercise that boundary.
 
 ## The mesh region
 
-- **Compact attributes share one decoder on both backends.** `SdfMeshPacking` chooses bounds-relative
-  grids shared by every chunk of a group (independent grids open seams). `SdfMeshChunks.Join` gives
-  its chunks that common GPU grid; the store likewise chooses one grid and width for all chunks.
-  Shared vertices must decode bit-identically, including when a group's budget requires float fallback.
-  The GPU uses 20-bit positions only when every decoded vertex moves by at most `BakeCell.Length()/2048`; otherwise
-  positions remain floats. Unit normals use signed oct16 pairs; non-unit authored normals retain their
-  magnitudes as floats. `SdfMeshRecord` carries origin, step and width flags, and `frame/sdf-mesh.hlsli`
-  decodes them for every raster and surface reader. Indices use 16 bits up to 65,536 vertices; triangle
-  materials use bytes when every level fits. Levels concatenate before packing, so their first index
-  need not start a word. The store independently chooses 16/24-bit positions within a cell diagonal
-  over 1024, oct16 normals, narrow indices/materials, then delta-predicts attribute byte planes and
-  Brotli-compresses them (`SdfMeshStoreCodec`). Load checks the envelope and reconstructs the query
-  arrays. Both rounding budgets together remain under 3/1024 of the bake half-diagonal.
+- **The compact store expands to the fastest GPU layout.** `SdfMeshStoreCodec` chooses bounds-relative
+  16/24-bit positions only when every decoded vertex moves by at most `BakeCell.Length()/1024`;
+  otherwise positions remain floats. Every chunk shares its group's grid and width, so shared seam
+  vertices decode bit-identically. Unit normals use signed oct16 pairs; non-unit authored normals
+  retain their magnitudes. Indices use 16 bits through 65,536 vertices and materials use bytes when
+  their values fit. Delta-predicted attribute byte planes are zlib-compressed. Decode reads planes
+  directly from the decompressed payload into the CPU arrays, avoiding per-plane byte copies.
+  Both backends draw six-float vertices and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
+  The owner's mesh-compact correction: warm decode must be no slower than the old load, and a
+  smaller GPU region is welcome only when mesh and cascade GPU passes are no slower. Measure
+  repeated `world.gpu-timing` windows at the same pose; do not infer speed from region bytes.
+
+- **Glyph-bearing groups retain their outlines at every distance.**
+  `SdfMeshGeometryBuilder.ContainsGlyph` recognizes `ShapeBlend/Glyph` in static, dynamic and unowned
+  world groups. `SdfMeshCollapse` fixes crease and material-edge places in those groups while
+  simplifying face interiors; a mesh without detectable features retains its base surface.
+  Whole-group collapse exclusion also prevents large scenery sharing a glyph group from coarsening,
+  so its cascade cost must be measured before choosing it. A geometric distance budget alone does
+  not protect text counters and thin strokes: the lift's lit zero lost its hole near 21 m.
 
 - **Meshes keep their words; draws repack only their records.** The tables
   place each mesh whole in an arena past a reserve of draw records
@@ -585,6 +591,10 @@ rest-pose and author-frame positions, the worst sample's position with the
 mesh's facing against the field's gradient there, and the shapes nearest them. The
 [CLI reference](../../../../docs/reference/cli.md#puck-mesh-auditbaked-mesh-audit)
 owns its flags.
+
+`RestScene.Compose` reconciles its `WorldTextCatalog` before emitting the frame. A catalog object
+without that call silently omits text and makes the audit miss every glyph group, even when the
+definition carries prepared font assets. Keep this offline scene path aligned with the live emitter.
 
 - **Run it before calling a bake or mesh-path change done**, and on a changed
   creation's groups (`--prototype`, `--group <shape>`); a later run over the

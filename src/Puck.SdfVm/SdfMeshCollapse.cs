@@ -41,11 +41,13 @@ public static class SdfMeshCollapse {
 
     /// <summary>Returns a mesh with its coarser levels of detail.</summary>
     /// <param name="mesh">The merged mesh.</param>
+    /// <param name="preserveFeatures">Keeps every crease and material-edge place fixed, preserving glyph outlines
+    /// while simplifying face interiors. A mesh without detectable features retains its base surface.</param>
     /// <returns>The mesh with <see cref="SdfMesh.Levels"/> set; <paramref name="mesh"/> itself when it carries no vertex
     /// normals, no contour cell, members (whose draws no host box bounds, so none chooses a level), or no level saves
     /// enough (<see cref="KeptShare"/>).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static SdfMesh Levels(SdfMesh mesh) {
+    public static SdfMesh Levels(SdfMesh mesh, bool preserveFeatures = false) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
         var cell = MathF.Max(x: mesh.BakeCell.X, y: MathF.Max(x: mesh.BakeCell.Y, y: mesh.BakeCell.Z));
@@ -54,7 +56,8 @@ public static class SdfMeshCollapse {
             return mesh;
         }
 
-        var collapser = new Collapser(mesh: mesh);
+        var collapser = new Collapser(mesh: mesh, preserveFeatures: preserveFeatures);
+        if (preserveFeatures && !collapser.HasFeatures) { return mesh; }
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
         var kept = mesh.TriangleCount;
 
@@ -123,6 +126,7 @@ public static class SdfMeshCollapse {
         private readonly int[] m_changed;
         private readonly int[] m_stamp;
         private readonly byte[] m_kind;
+        private readonly bool m_preserveFeatures;
         private readonly double[] m_candidateCosts;
         private readonly int[] m_candidatePlaces;
         private int m_pass;
@@ -147,7 +151,10 @@ public static class SdfMeshCollapse {
         private Candidate[] m_previous = new Candidate[16];
         private int[] m_laid = new int[16];
 
-        public Collapser(SdfMesh mesh) {
+        public bool HasFeatures => m_kind.Contains(Locked) || m_kind.Contains(Slides);
+
+        public Collapser(SdfMesh mesh, bool preserveFeatures) {
+            m_preserveFeatures = preserveFeatures;
             var positions = mesh.Positions.Span;
             var indices = mesh.Indices.Span;
             var materials = mesh.TriangleMaterials.Span;
@@ -469,6 +476,7 @@ public static class SdfMeshCollapse {
                 }
             }
             if (!OneRing(count: count)) { return Locked; }
+            if (m_preserveFeatures && (seams.Count != 0 || m_features.Count != 0)) { return Locked; }
 
             // A collapse maps each of the place's vertices to the neighbour's vertex on its side of the collapsed edge, so
             // a place with three or more never moves, and one with two moves only along the crease between them.

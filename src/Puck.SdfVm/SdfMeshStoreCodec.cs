@@ -6,10 +6,10 @@ using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
 
-// Mesh streams use independent attribute planes, delta predicted within each plane, then Brotli.
+// Mesh streams use independent attribute planes, delta predicted within each plane, then zlib.
 // The envelope checks compressed bytes before allocation; decoded counts are bounded by remaining bytes.
 internal static class SdfMeshStoreCodec {
-    internal const ulong Magic = 0x3648534D4B435550ul; // PUCKMSH6
+    internal const ulong Magic = 0x3848534D4B435550ul; // PUCKMSH8
     internal const int HeaderBytes = 28;
     private const int ChecksumBytes = 16;
 
@@ -32,7 +32,7 @@ internal static class SdfMeshStoreCodec {
         }
         using var output = new MemoryStream();
         output.Write(new byte[HeaderBytes]);
-        using (var compressor = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true)) {
+        using (var compressor = new ZLibStream(output, CompressionLevel.Fastest, leaveOpen: true)) {
             compressor.Write(payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
         }
         var length = checked((int)output.Length);
@@ -63,10 +63,13 @@ internal static class SdfMeshStoreCodec {
         if (length <= 0 || length > 1_073_741_824) { return false; }
         try {
             var decoded = new byte[length];
-            using var decoder = new BrotliDecoder();
-            if (decoder.Decompress(body[HeaderBytes..], decoded, out var consumed, out var written) != System.Buffers.OperationStatus.Done ||
-                consumed != body.Length - HeaderBytes || written != length) { return false; }
-            using var input = new MemoryStream(decoded, writable: false);
+            try {
+                using var compressed = new MemoryStream(bytes, HeaderBytes, body.Length - HeaderBytes, writable: false);
+                using var decoder = new ZLibStream(compressed, CompressionMode.Decompress);
+                decoder.ReadExactly(decoded);
+                if (decoder.ReadByte() != -1) { return false; }
+            } catch (Exception exception) when (exception is IOException or InvalidDataException) { return false; }
+            using var input = new MemoryStream(decoded, 0, decoded.Length, writable: false, publiclyVisible: true);
             using var reader = new BinaryReader(input);
             var palette = new int[Count(reader, 4)];
             for (var index = 0; index < palette.Length; index++) { palette[index] = reader.ReadInt32(); }
@@ -79,7 +82,7 @@ internal static class SdfMeshStoreCodec {
             materials = palette;
             refusal = null;
             return true;
-        } catch (Exception exception) when (exception is IOException or ArgumentException or OverflowException) {
+        } catch (Exception exception) when (exception is IOException or InvalidDataException or ArgumentException or OverflowException) {
             refusal = $"is no mesh: {exception.Message}";
             return false;
         }
@@ -134,6 +137,7 @@ internal static class SdfMeshStoreCodec {
         }
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static SdfMesh ReadMesh(BinaryReader reader) {
         var cell = ReadVector(reader);
         if (!float.IsFinite(cell.LengthSquared()) || Vector3.Min(cell, Vector3.Zero) != Vector3.Zero) { throw new InvalidDataException("Invalid contour cell."); }
@@ -168,15 +172,26 @@ internal static class SdfMeshStoreCodec {
         return new SdfMesh(positions, indices, normals, materials, members, vertexMembers) { BakeCell = cell, Levels = levels };
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static Vector3[] ReadVectors(BinaryReader reader, int width, Vector3 low, Vector3 high) {
         var x = ReadPlane(reader);
         var y = ReadPlane(reader);
         var z = ReadPlane(reader);
         if (x.Length != y.Length || x.Length != z.Length) { throw new InvalidDataException("Invalid vector counts."); }
         var vectors = new Vector3[x.Length];
-        for (var index = 0; index < vectors.Length; index++) {
-            vectors[index] = width == 4 ? new Vector3(BitConverter.UInt32BitsToSingle(x[index]), BitConverter.UInt32BitsToSingle(y[index]), BitConverter.UInt32BitsToSingle(z[index])) :
-                new Vector3(Expand(x[index], low.X, high.X, width), Expand(y[index], low.Y, high.Y, width), Expand(z[index], low.Z, high.Z, width));
+        if (width == 4) {
+            for (var index = 0; index < vectors.Length; index++) {
+                vectors[index] = new Vector3(BitConverter.UInt32BitsToSingle(x[index]), BitConverter.UInt32BitsToSingle(y[index]), BitConverter.UInt32BitsToSingle(z[index]));
+            }
+        } else {
+            var divisor = (double)((1u << (width * 8)) - 1);
+            var extentX = (double)high.X - low.X;
+            var extentY = (double)high.Y - low.Y;
+            var extentZ = (double)high.Z - low.Z;
+            for (var index = 0; index < vectors.Length; index++) {
+                vectors[index] = new Vector3((float)(low.X + extentX * x[index] / divisor),
+                    (float)(low.Y + extentY * y[index] / divisor), (float)(low.Z + extentZ * z[index] / divisor));
+            }
         }
         return vectors;
     }
@@ -221,18 +236,36 @@ internal static class SdfMeshStoreCodec {
         }
         writer.Write(bytes);
     }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static uint[] ReadPlane(BinaryReader reader) {
         var width = reader.ReadByte();
         if (width is < 1 or > 4) { throw new InvalidDataException("Invalid attribute width."); }
         var count = Count(reader, width);
-        var bytes = reader.ReadBytes(checked(count * width));
+        // Attribute bytes already live in the decoded payload. Slicing it avoids another allocation and copy per plane.
+        var input = (MemoryStream)reader.BaseStream;
+        var bytes = input.GetBuffer().AsSpan(checked((int)input.Position), checked(count * width));
+        input.Position += bytes.Length;
         var words = new uint[count];
-        var mask = width == 4 ? uint.MaxValue : (1u << (width * 8)) - 1;
         uint previous = 0;
-        for (var index = 0; index < count; index++) {
-            uint delta = 0;
-            for (var plane = 0; plane < width; plane++) { delta |= (uint)bytes[plane * count + index] << (plane * 8); }
-            words[index] = previous = unchecked(previous + delta) & mask;
+        switch (width) {
+            case 1:
+                for (var index = 0; index < count; index++) { words[index] = previous = unchecked(previous + bytes[index]) & 255; }
+                break;
+            case 2:
+                var second = bytes[count..];
+                for (var index = 0; index < count; index++) { words[index] = previous = unchecked(previous + bytes[index] + ((uint)second[index] << 8)) & 65535; }
+                break;
+            case 3:
+                second = bytes[count..];
+                var third = bytes[(2 * count)..];
+                for (var index = 0; index < count; index++) { words[index] = previous = unchecked(previous + bytes[index] + ((uint)second[index] << 8) + ((uint)third[index] << 16)) & 16777215; }
+                break;
+            default:
+                second = bytes[count..];
+                third = bytes[(2 * count)..];
+                var fourth = bytes[(3 * count)..];
+                for (var index = 0; index < count; index++) { words[index] = previous = unchecked(previous + bytes[index] + ((uint)second[index] << 8) + ((uint)third[index] << 16) + ((uint)fourth[index] << 24)); }
+                break;
         }
         return words;
     }

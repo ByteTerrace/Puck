@@ -110,6 +110,6 @@ public sealed class SdfSlotClipLawTests {
         Assert.Equal(expected: Straddle.CopyScale, actual: Word(index: SdfMeshRecord.CarryScaleWord));
         Assert.Equal(expected: Straddle.CopyPlane, actual: new Vector4(x: Word(index: SdfMeshRecord.ClipPlaneWord), y: Word(index: (SdfMeshRecord.ClipPlaneWord + 1)), z: Word(index: (SdfMeshRecord.ClipPlaneWord + 2)), w: Word(index: (SdfMeshRecord.ClipPlaneWord + 3))));
         Assert.Equal(actual: (SdfMeshRecord.ClipPlaneWord + 4), expected: SdfMeshRecord.LevelTriangleWord);
-        Assert.Equal(actual: (SdfMeshRecord.LevelTriangleWord + 2), expected: SdfMeshRecord.PositionLowWord);
+        Assert.Equal(actual: (SdfMeshRecord.LevelTriangleWord + 2), expected: SdfMeshRecord.DrawWords);
     }
 }

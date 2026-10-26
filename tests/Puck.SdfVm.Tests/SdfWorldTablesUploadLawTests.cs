@@ -742,14 +742,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // triangle's three vertices, its one triangle material and its three indices.
         var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRecord.DrawWords);
         var quadVertices = ((uint)arena);
-        var quadIndices = (quadVertices + (4u * 4u));
-        var triangleVertices = (quadIndices + 3u);
-        var triangleMaterials = (triangleVertices + (3u * 4u));
+        var quadIndices = (quadVertices + (4u * SdfMeshRecord.VertexWords));
+        var triangleVertices = (quadIndices + 6u);
+        var triangleMaterials = (triangleVertices + (3u * SdfMeshRecord.VertexWords));
         var triangleIndices = (triangleMaterials + 1u);
-        var words = ((int)(triangleIndices + 2u));
+        var words = ((int)(triangleIndices + 3u));
         var bytes = (((ulong)words) * sizeof(uint));
 
-        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord, SdfMesh mesh) {
+        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
                 matrix.M21, matrix.M22, matrix.M23, matrix.M24,
@@ -770,29 +770,26 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
             // A mesh without coarser levels draws its own triangles at every level, from its first.
             expected.AddRange(collection: [0u, 0u]);
-            var packing = SdfMeshPacking.Of(mesh);
-            expected.AddRange(collection: new[] { packing.Low.X, packing.Low.Y, packing.Low.Z, packing.Step.X, packing.Step.Y, packing.Step.Z }.Select(selector: BitConverter.SingleToUInt32Bits));
         }
-        // An authored vertex retains float positions and packs its normal, with a sentinel when absent.
+        // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {
             for (var vertex = 0; (vertex < mesh.Positions.Length); vertex++) {
                 var position = mesh.Positions.Span[vertex];
                 var normal = (mesh.Normals.IsEmpty ? Vector3.Zero : mesh.Normals.Span[vertex]);
 
-                expected.AddRange(collection: new[] { position.X, position.Y, position.Z }.Select(selector: BitConverter.SingleToUInt32Bits));
-                expected.Add(item: normal == Vector3.Zero ? 0x80008000u : 0x7fff0000u);
+                expected.AddRange(collection: new[] { position.X, position.Y, position.Z, normal.X, normal.Y, normal.Z }.Select(selector: BitConverter.SingleToUInt32Bits));
             }
         }
 
-        Record(flags: SdfMeshRecord.SmallIndicesFlag | SdfMeshRecord.ByteMaterialsFlag, indexCount: 6, indexWord: quadIndices, material: 4, materialWord: quadIndices, matrix: moved, vertexWord: quadVertices, mesh: quad);
-        Record(flags: SdfMeshRecord.NormalsFlag | SdfMeshRecord.MaterialsFlag | SdfMeshRecord.SmallIndicesFlag | SdfMeshRecord.ByteMaterialsFlag, indexCount: 3, indexWord: triangleIndices, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices, mesh: triangle);
-        Record(flags: SdfMeshRecord.SmallIndicesFlag | SdfMeshRecord.ByteMaterialsFlag, indexCount: 6, indexWord: quadIndices, material: 6, materialWord: quadIndices, matrix: Matrix4x4.Identity, vertexWord: quadVertices, mesh: quad);
+        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 4, materialWord: quadIndices, matrix: moved, vertexWord: quadVertices);
+        Record(flags: SdfMeshRecord.NormalsFlag | SdfMeshRecord.MaterialsFlag, indexCount: 3, indexWord: triangleIndices, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices);
+        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 6, materialWord: quadIndices, matrix: Matrix4x4.Identity, vertexWord: quadVertices);
         expected.AddRange(collection: new uint[(arena - expected.Count)]);
         Vertices(mesh: quad);
-        expected.AddRange(collection: [0x00010000u, 2u, 0x00030002u]);
+        expected.AddRange(collection: quad.Indices.ToArray());
         Vertices(mesh: triangle);
         expected.Add(item: 2u);
-        expected.AddRange(collection: [0x00010000u, 2u]);
+        expected.AddRange(collection: triangle.Indices.ToArray());
 
         rig.Warm();
         rig.Render(time: 0f);
@@ -866,13 +863,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray()[(arena * sizeof(uint))..],
             actual: landedWords[(arena * sizeof(uint))..((int)bytes)]
         );
-        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: (((words + SdfMeshPacking.Of(landed).VertexWords) + 1) * sizeof(uint)), value: landedWords));
+        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: (((words + SdfMeshRecord.VertexWords) + 1) * sizeof(uint)), value: landedWords));
     }
     // A relocation that leaves the mesh region holding more than half again what its draws need shrinks it to the need
     // plus an eighth, and the shrunk region holds the words of a region that never grew.
     [Fact]
     public void ARelocationShrinksAnOversizedMeshRegionToItsNeed() {
-        const int BigVertices = ((40 << 20) / (4 * sizeof(uint)));
+        const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
         var big = new SdfMesh(
             indices: new uint[] { 0, 1, 2 },
             positions: Enumerable.Range(count: BigVertices, start: 0).Select(selector: static index => new Vector3(x: index, y: index & 1, z: 0f)).ToArray()

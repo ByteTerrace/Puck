@@ -9,11 +9,11 @@ namespace Puck.SdfVm;
 /// frame slot or -1, the word the mesh's members sit at, the carry every world position and normal the draw resolves
 /// goes through last (a unit rotation quaternion, a translation, then the uniform scale a position takes before the
 /// translation), the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
-/// draws everything), the first triangle of each coarser level of detail, and the bounds-relative position grid origin and step.
+/// draws everything), and the first triangle of each coarser level of detail.
 /// </summary>
 public static class SdfMeshRecord {
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 53;
+    public const int DrawWords = 47;
     /// <summary>The first of two words: the first triangle of the mesh's first and second coarser levels of detail among
     /// its levelled triangles (<c>SdfMesh.Levels</c>; a level past the mesh's coarsest names the coarsest). A draw of a
     /// level (<see cref="SdfKernelInterfaces.MeshLevelShift"/>) draws its triangles from there, its vertex id counting
@@ -46,8 +46,8 @@ public static class SdfMeshRecord {
     public const int FrameSlotWord = 31;
     /// <summary>The word the mesh's members sit at.</summary>
     public const int SkinWord = 32;
-    /// <summary>The words of one compact vertex: three 20-bit coordinates and an octahedral normal.</summary>
-    public const int VertexWords = 3;
+    /// <summary>The words of one vertex: its position and its normal, as floats.</summary>
+    public const int VertexWords = 6;
     /// <summary>The words of one member in a mesh's members: its slot offset, its position and its orientation.</summary>
     public const int MemberWords = 8;
     /// <summary>The flag a record carries when its mesh has a normal a vertex.</summary>
@@ -56,16 +56,4 @@ public static class SdfMeshRecord {
     public const uint MaterialsFlag = 2u;
     /// <summary>The flag a record carries when its mesh has a member a vertex.</summary>
     public const uint SkinFlag = 4u;
-    /// <summary>The position grid origin's first word.</summary>
-    public const int PositionLowWord = 47;
-    /// <summary>The position grid step's first word.</summary>
-    public const int PositionStepWord = 50;
-    /// <summary>The flag for bounds-relative 20-bit positions.</summary>
-    public const uint QuantizedFlag = 8u;
-    /// <summary>The flag for two indices per word.</summary>
-    public const uint SmallIndicesFlag = 16u;
-    /// <summary>The flag for four triangle materials per word.</summary>
-    public const uint ByteMaterialsFlag = 32u;
-    /// <summary>The flag for authored normals whose magnitudes must remain floats.</summary>
-    public const uint WideNormalsFlag = 64u;
 }
