@@ -49,6 +49,8 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["min"] = KindConditionalEnvelopeSchema(),
             ["max"] = KindConditionalEnvelopeSchema(),
             ["capacity"] = new JsonObject { ["type"] = "integer" },
+            ["cellSlots"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0 } },
+            ["reservedCapacity"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0 },
             ["overflow"] = exportType(typeof(StateOverflow)),
             ["evicts"] = new JsonObject { ["type"] = "boolean" },
             ["advance"] = exportType(typeof(StateAdvance)),

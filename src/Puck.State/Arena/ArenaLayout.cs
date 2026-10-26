@@ -83,7 +83,7 @@ public readonly record struct ArenaColumnRange(StateLane Lane, RowShape Shape, C
 /// <para>Offsets are a function of the catalog and the authored rows alone, so two runs of the same document lay
 /// out identically and a hash folded in layout order compares across hosts.</para>
 /// </remarks>
-public sealed class ArenaLayout {
+public sealed partial class ArenaLayout {
     // A settle keeps one eight-byte stamp and one flag for every position a journal entry can name.
     private const long ChangeBytesPerPosition = (sizeof(long) + sizeof(bool));
     private const long ArrayOverheadBytes = 32L;
@@ -98,6 +98,8 @@ public sealed class ArenaLayout {
     private const long TextBytesPerTextSlot = (StringOverheadBytes + (2L * StateCapacity.MaxTextValueLength));
 
     private readonly ulong[] m_rowColumns;
+    private readonly int m_poolCount;
+    private readonly int m_poolWordCount;
     private readonly ArenaColumnRange[] m_columns;
     private readonly int[] m_columnRows;
     private readonly Dictionary<int, int[]> m_codeDependents;
@@ -140,6 +142,8 @@ public sealed class ArenaLayout {
         m_rowOfMaskWord = rowOfMaskWord;
         m_rows = rows;
         m_rowColumns = rowColumns;
+        m_poolCount = poolCount;
+        m_poolWordCount = poolWordCount;
 
         CellSlotCount = cellSlotCount;
         LaneRosterCount = laneRosterCount;
@@ -276,7 +280,7 @@ public sealed class ArenaLayout {
 
     /// <summary>Returns whether a column is reserved only by rows declaring its trait.</summary>
     /// <param name="column">The column.</param>
-    public static bool IsOptional(ArenaColumn column) => column is ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot or ArenaColumn.Text or ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence;
+    public static bool IsOptional(ArenaColumn column) => column is ArenaColumn.CellCapacity or ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot or ArenaColumn.Text or ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence;
 
     /// <summary>Returns the optional columns declared by a row and its seed cells.</summary>
     /// <param name="row">The declaration.</param>
@@ -284,6 +288,7 @@ public sealed class ArenaLayout {
         var columns = 0UL;
         foreach (var column in ArenaColumns.All) {
             var held = column switch {
+                ArenaColumn.CellCapacity => (row.Capacity is null) && (row.Shape is RowShape.Keyed or RowShape.Ordered),
                 ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot => row.Shape is RowShape.Keyed or RowShape.Ordered,
                 ArenaColumn.Text => row.Kind == CellKind.Text,
                 ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => (row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null) || (row.Cells ?? []).Any(static cell => (cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)),
@@ -365,7 +370,7 @@ public sealed class ArenaLayout {
         RowShape.Lattice => (topology
             ?? throw new InvalidOperationException(message: $"State row '{row.Name.Value}' lies over topology '{((StateDomain.CellsOf)row.EffectiveDomain).Topology}', which the section does not declare.")
         ).CellCount,
-        _ => row.CellCeiling,
+        _ => row.InitialCellCapacity,
     });
 
     /// <summary>Builds the column plan for one compiled catalog and the section it was compiled from.</summary>

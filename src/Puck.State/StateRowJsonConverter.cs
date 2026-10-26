@@ -25,6 +25,10 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         /// <summary>Gets the raw <c>capacity</c> member, when authored.</summary>
         public JsonElement? Capacity { get; internal set; }
+        /// <summary>Gets the runtime room of a growable row.</summary>
+        public JsonElement? ReservedCapacity { get; internal set; }
+        /// <summary>Gets the exported members' physical slots.</summary>
+        public JsonElement? CellSlots { get; internal set; }
         /// <summary>Gets the raw <c>cells</c> member, when authored.</summary>
         public JsonElement? Cells { get; internal set; }
         /// <summary>Gets the raw <c>cycle</c> member, when authored.</summary>
@@ -532,6 +536,12 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 case "max":
                     max = JsonElement.ParseValue(reader: ref reader);
                     break;
+                case "cellSlots":
+                    members.CellSlots = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "reservedCapacity":
+                    members.ReservedCapacity = JsonElement.ParseValue(reader: ref reader);
+                    break;
                 case "capacity":
                     capacity = JsonElement.ParseValue(reader: ref reader);
                     break;
@@ -844,7 +854,8 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             candidate: symbols,
             name: name
         )
-        );
+        ) { ReservedCapacity = members.ReservedCapacity is { } reserved ? RequireInt32(element: reserved, context: "reservedCapacity") : null,
+            CellSlots = members.CellSlots is { } slots ? slots.EnumerateArray().Select(element => RequireInt32(element: element, context: "cellSlots")).ToArray() : null };
 
         return Create(
             members: members,
@@ -892,6 +903,14 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             raw: value.Max
         );
 
+        if (value.CellSlots is { } slots) {
+            writer.WriteStartArray(propertyName: "cellSlots");
+            foreach (var slot in slots) { writer.WriteNumberValue(value: slot); }
+            writer.WriteEndArray();
+        }
+        if (value.ReservedCapacity is { } reservedCapacity) {
+            writer.WriteNumber(propertyName: "reservedCapacity", value: reservedCapacity);
+        }
         if (value.Capacity is { } declaredCapacity) {
             writer.WriteNumber(
                 propertyName: "capacity",
@@ -1131,7 +1150,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"reservedCapacity\":…,\"cellSlots\":[…],\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

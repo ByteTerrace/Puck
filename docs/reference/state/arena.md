@@ -72,12 +72,24 @@ check a write uses. If the document authors a value that no write could store,
 construction fails, and the reason names the row and cell. `ToRows` reads the
 columns back out as the row list a section serializes.
 
-Layout is a function of the catalog and the authored rows alone. Optional columns
+The initial layout is a function of the catalog and the authored rows. Optional columns
 reserve storage only on rows declaring their trait, including traits on seed
 cells. A metadata write cannot introduce a trait that the row does not hold;
 changing that declaration requires a relayout. Two hosts that
 load the same document lay it out identically, which is what lets a hash folded
 in layout order compare across machines.
+
+A keyed row without an explicit capacity reserves its seed count, including zero.
+When a mint needs more room, the arena proposes twice the current room (one from
+zero), up to the row's cell ceiling. Memory, retained-journal storage, and the
+world's repriced work sheet must all admit the proposal before a key or cell
+changes. The work allowance also charges the copy and a possible rollback.
+`forEach` and reductions use the admitted room. Reservation changes are journaled,
+so a refused firing or rewind restores them. Exports carry `reservedCapacity` for
+growable rows so a checkpoint preserves the same reservation and future admission.
+Exports also carry `cellSlots` when members occupy different physical slots than
+their logical positions, so retained undo resumes over the same addresses.
+Growth invalidates borrowed vector views; carry their values before reserving room.
 
 ### The catalog and its descriptors
 

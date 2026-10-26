@@ -1,6 +1,21 @@
 namespace Puck.State;
 
 public sealed partial class StateArena {
+    /// <summary>Finds a held key's logical position in its row.</summary>
+    /// <param name="rowOrdinal">The row ordinal.</param>
+    /// <param name="key">The held key.</param>
+    /// <param name="position">Its position, or -1 when absent.</param>
+    public bool TryPositionOf(int rowOrdinal, CellKey key, out int position) {
+        position = -1;
+        if (!TryCellSlot(rowOrdinal: rowOrdinal, key: key, slot: out var slot)) { return false; }
+        ref readonly var layout = ref m_layout[rowOrdinal];
+        if (!UsesLinks(layout: layout)) { position = slot - layout.CellStart; return true; }
+        var count = (int)m_memberCounts[rowOrdinal];
+        for (var index = 0; index < count; index++) {
+            if (CellSlotAt(layout: layout, position: index) == slot) { position = index; return true; }
+        }
+        return false;
+    }
     private static bool UsesLinks(in ArenaRowLayout layout) => layout.HasColumn(column: ArenaColumn.NextSlot);
     private static bool IsLinkColumn(ArenaColumn column) => ((ArenaLayout.LinkColumns & (1UL << (int)column)) != 0UL);
     private int HashCellExtent(in ArenaRowLayout layout) => UsesLinks(layout: layout) ? (int)m_memberCounts[layout.Ordinal] : layout.CellCapacity;
@@ -30,16 +45,21 @@ public sealed partial class StateArena {
         return positions[position];
     }
 
-    private void InitializeMemberLinks(int rowOrdinal, int count) {
+    private void InitializeMemberLinks(int rowOrdinal, int count, IReadOnlyList<int>? slots = null) {
         ref readonly var layout = ref m_layout[rowOrdinal];
         if (!UsesLinks(layout: layout)) { return; }
         for (var position = 0; position < layout.CellCapacity; position++) {
-            var slot = layout.CellStart + position;
-            WriteNumber(column: ArenaColumn.PreviousSlot, index: slot, value: ((position < count) && (position > 0)) ? position : 0);
-            WriteNumber(column: ArenaColumn.NextSlot, index: slot, value: position + 1 < count ? position + 2 : 0);
+            WriteNumber(column: ArenaColumn.PreviousSlot, index: layout.CellStart + position, value: 0);
+            WriteNumber(column: ArenaColumn.NextSlot, index: layout.CellStart + position, value: 0);
         }
-        WriteNumber(column: ArenaColumn.HeadSlot, index: rowOrdinal, value: count == 0 ? 0 : 1);
-        WriteNumber(column: ArenaColumn.TailSlot, index: rowOrdinal, value: count);
+        int Local(int position) => (slots?[position] ?? position) + 1;
+        for (var position = 0; position < count; position++) {
+            var slot = layout.CellStart + Local(position) - 1;
+            WriteNumber(column: ArenaColumn.PreviousSlot, index: slot, value: position > 0 ? Local(position - 1) : 0);
+            WriteNumber(column: ArenaColumn.NextSlot, index: slot, value: position + 1 < count ? Local(position + 1) : 0);
+        }
+        WriteNumber(column: ArenaColumn.HeadSlot, index: rowOrdinal, value: count == 0 ? 0 : Local(0));
+        WriteNumber(column: ArenaColumn.TailSlot, index: rowOrdinal, value: count == 0 ? 0 : Local(count - 1));
     }
 
     private int InsertMemberSlot(int rowOrdinal, int position, int reusableSlot) {

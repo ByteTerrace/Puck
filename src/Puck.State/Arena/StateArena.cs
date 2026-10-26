@@ -651,8 +651,9 @@ public sealed partial class StateArena {
 
         for (var index = (m_journal.Length - 1); (index >= mark); index--) {
             var entry = m_journal[index];
-
+            m_restoreJournalLimit = index;
             Restore(entry: entry);
+            m_restoreJournalLimit = -1;
             BumpGeneration(
                 column: entry.Column,
                 index: entry.Index

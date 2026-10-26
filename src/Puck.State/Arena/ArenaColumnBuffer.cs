@@ -10,11 +10,20 @@ internal sealed class ArenaColumnBuffer<T>(ArenaLayout layout, ArenaColumn colum
     public T this[int index] {
         get {
             Address(index: index, row: out var row, position: out var position, size: out _);
-            return ((m_rows[row] is { } values) ? values[position] : default!);
+            return ((m_rows[row] is { } values) && (position < values.Length) ? values[position] : default!);
         }
         set {
             Address(index: index, row: out var row, position: out var position, size: out var size);
             (m_rows[row] ??= new T[size])[position] = value;
+        }
+    }
+
+    public void ChangeLayout(ArenaLayout next) {
+        layout = next;
+        for (var row = 0; row < next.RowCount; row++) {
+            if ((m_rows[row] is { } values) && (ArenaColumns.Space(column: column) == ArenaIndexSpace.Cell) && (values.Length != next[row].CellCapacity)) {
+                Array.Resize(array: ref m_rows[row], newSize: next[row].CellCapacity);
+            }
         }
     }
 

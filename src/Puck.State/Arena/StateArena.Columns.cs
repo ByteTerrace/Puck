@@ -53,6 +53,7 @@ public sealed partial class StateArena {
     });
     private long ReadNumberRaw(ArenaColumn column, int index) => (column switch {
         ArenaColumn.Number => m_numbers[index],
+        ArenaColumn.CellCapacity => m_layout[index].CellCapacity,
         ArenaColumn.NextSlot => m_nextSlots[index],
         ArenaColumn.PreviousSlot => m_previousSlots[index],
         ArenaColumn.HeadSlot => m_headSlots[index],
@@ -102,6 +103,7 @@ public sealed partial class StateArena {
             case ArenaColumn.PreviousSlot: m_previousSlots[index] = (int)value; break;
             case ArenaColumn.HeadSlot: m_headSlots[index] = (int)value; break;
             case ArenaColumn.TailSlot: m_tailSlots[index] = (int)value; break;
+            case ArenaColumn.CellCapacity: InstallReservation(next: m_layout.WithCellCapacity(rowOrdinal: index, capacity: (int)value)); break;
             case ArenaColumn.Number:
                 m_numbers[index] = value;
 

@@ -84,6 +84,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     /// <summary>Invalidates observations captured against a replaced arena while preserving edge latch state.</summary>
     internal void InvalidateArenaScheduling() {
+        ConfigureGrowthAdmission();
         m_ruleGateHeld.InvalidateScheduler();
         m_interactionGateHeld.InvalidateScheduler();
     }
@@ -574,6 +575,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// cannot answer.</exception>
     internal void Install(WorldRuleCompilation compilation) {
         ArgumentNullException.ThrowIfNull(argument: compilation);
+        m_growthCompilation = compilation;
+        ConfigureGrowthAdmission();
 
         m_groups = compilation.Groups;
         m_interactions = compilation.Interactions;

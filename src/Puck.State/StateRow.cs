@@ -356,6 +356,7 @@ public record StateRow(
     /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
     /// <see cref="StateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
     public int CellCeiling => EffectiveDomain switch {
+        StateDomain.Slot => 1,
         StateDomain.Ring ring => Math.Clamp(
         ring.Capacity,
         1,
@@ -374,8 +375,17 @@ public record StateRow(
             min: 1,
             value: capacity
         )
-        : StateCapacity.DefaultCellRoom),
+        : StateCapacity.MaxCellsPerRow),
     };
+    /// <summary>Gets the initial room reserved by a keyed row: its explicit capacity or its authored cells.
+    /// Further growth is admitted and charged by the arena before a mint lands.</summary>
+    [JsonIgnore]
+    public int InitialCellCapacity => (Capacity is not null) ? CellCeiling : Math.Min(val1: CellCeiling, val2: Math.Max(val1: (Cells?.Count ?? 0), val2: ReservedCapacity ?? 0));
+    /// <summary>Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes
+    /// with the same memory and work reservation. Authored rows normally omit it.</summary>
+    public int? ReservedCapacity { get; init; }
+    /// <summary>Gets the physical slots of exported members in logical order. Null uses contiguous slots.</summary>
+    public IReadOnlyList<int>? CellSlots { get => field; init => field = StateLists.Freeze(items: value); }
     /// <summary>Gets the effective domain: the authored <see cref="Domain"/>, or <see cref="InferDomain"/>'s answer
     /// when unauthored.</summary>
     [JsonIgnore]
@@ -584,7 +594,7 @@ public record StateRow(
     /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="StateDomain.Slot"/>. A plain row
     /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
     public StateDomain InferDomain() =>
-        (((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)))
+        (((Phase is not null) || (Capacity is not null) || (ReservedCapacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)))
             ? StateDomain.Keys.Instance
             : StateDomain.Slot.Instance
         );
@@ -640,9 +650,6 @@ public static class StateCapacity {
     /// holds a compact handle for every slot, so nested claims and pool sweeps remain bounded without reusing a
     /// global binding such as <c>$each</c>.</summary>
     public const int MaxInstanceBindings = 32;
-    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
-    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
-    public const int DefaultCellRoom = 128;
     /// <summary>The combined body- and identity-state slot ceiling. Compilation allocates fixed parallel arrays of
     /// this authored length per body, so the document gate bounds both memory and checkpoint width before runtime.</summary>
     public const int MaxBodySlots = 128;

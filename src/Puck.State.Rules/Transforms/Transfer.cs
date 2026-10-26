@@ -102,7 +102,7 @@ public static partial class ArenaTransforms {
         }
         if (
             (fromOrdinal != toOrdinal) &&
-            ((arena.CellCount(rowOrdinal: toOrdinal) + transfer.Count) > to.CellCapacity)
+            !arena.TryReserveCells(rowOrdinal: toOrdinal, required: arena.CellCount(rowOrdinal: toOrdinal) + transfer.Count, reason: out _)
         ) {
             return Refuse(
                 code: TransformRefusal.TransferDestinationFull,
@@ -134,12 +134,12 @@ public static partial class ArenaTransforms {
             var selected = transfer.Selector switch {
                 ZoneSelector.First => 0,
                 ZoneSelector.Last => (remaining - 1),
-                ZoneSelector.Key => (arena.TryCellSlot(
+                ZoneSelector.Key => (arena.TryPositionOf(
                 key: key,
                 rowOrdinal: fromOrdinal,
-                slot: out var slot
+                position: out var selectedPosition
             )
-                    ? (slot - from.CellStart)
+                    ? selectedPosition
                     : -1
                 ),
                 _ => 0,
@@ -223,12 +223,11 @@ public static partial class ArenaTransforms {
         moved = false;
 
         var arena = context.Arena;
-        ref readonly var from = ref arena.Layout[fromOrdinal];
 
-        if (!arena.TryCellSlot(
+        if (!arena.TryPositionOf(
             key: key,
             rowOrdinal: fromOrdinal,
-            slot: out var slot
+            position: out var start
         )) {
             return Refuse(
                 code: TransformRefusal.TransferTokenAbsent,
@@ -238,7 +237,6 @@ public static partial class ArenaTransforms {
         }
 
         var count = arena.CellCount(rowOrdinal: fromOrdinal);
-        var start = (slot - from.CellStart);
         var run = (count - start);
 
         if (fromOrdinal == toOrdinal) {
@@ -266,7 +264,7 @@ public static partial class ArenaTransforms {
                 rowOrdinal: fromOrdinal
             );
         }
-        if ((arena.CellCount(rowOrdinal: toOrdinal) + run) > arena.Layout[toOrdinal].CellCapacity) {
+        if (!arena.TryReserveCells(rowOrdinal: toOrdinal, required: arena.CellCount(rowOrdinal: toOrdinal) + run, reason: out _)) {
             return Refuse(
                 code: TransformRefusal.TransferDestinationFull,
                 reason: "destination zone is full",

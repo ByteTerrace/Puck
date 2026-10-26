@@ -394,6 +394,10 @@ public sealed partial class StateArena {
             reason = "carries a member link outside its row";
             return false;
         }
+        if ((entry.Column == ArenaColumn.CellCapacity) && ((entry.Number < 0L) || (entry.Number > m_rows[row].CellCeiling))) {
+            reason = "carries a reservation outside its row ceiling";
+            return false;
+        }
         if (entry.Column == ArenaColumn.Number) {
             var declaration = m_rows[row];
             StateEnum? symbols = null;
@@ -596,6 +600,7 @@ public sealed partial class StateArena {
         var poolFieldRow = catalog.IsPoolFieldRow(rowOrdinal: row);
 
         return (column switch {
+            ArenaColumn.CellCapacity => 1,
             ArenaColumn.NextSlot or ArenaColumn.PreviousSlot => layout.CellCapacity,
             ArenaColumn.HeadSlot or ArenaColumn.TailSlot => 1,
             ArenaColumn.Number => ((layout.Kind is (CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? layout.CellCapacity : 0),
@@ -648,6 +653,7 @@ public sealed partial class StateArena {
         for (var index = (segment.Count - 1); (index >= 0); index--) {
             var retained = segment[index];
             var entry = retained.Entry;
+            segment.RestoreLimit = index;
 
             // A retained member-key entry carries its key's ledger ordinal: the ledger only ever sheds keys a rewound
             // scope minted, and a retained turn holds committed writes, so the ordinal still names the same key.
@@ -825,13 +831,24 @@ public sealed partial class StateArena {
             hash.Add(value: ((Pending is null) ? 0UL : 1UL));
             Pending?.AddTo(hash: ref hash);
         }
+        public void RemapLayout(ArenaLayout previous, ArenaLayout next, int entryCapacity, int componentCapacity) {
+            foreach (var segment in m_segments) { segment.RemapLayout(previous: previous, next: next, entryCapacity: entryCapacity, componentCapacity: componentCapacity); }
+            m_seen.Clear();
+            if (Pending is { } pending) {
+                for (var index = 0; index < pending.Count; index++) {
+                    var entry = pending[index].Entry;
+                    m_seen.Add(key: ((long)(byte)entry.Column << 32) | (uint)entry.Index, value: index);
+                }
+            }
+        }
     }
     private sealed class ArenaUndoSegment {
-        private readonly sbyte[] m_components;
-        private readonly ArenaUndoEntry[] m_entries;
+        private sbyte[] m_components;
+        private ArenaUndoEntry[] m_entries;
 
         private int m_componentCount;
         private int m_count;
+        public int RestoreLimit { get; set; } = -1;
 
         public ArenaUndoSegment(int entryCapacity, int componentCapacity) {
             m_entries = new ArenaUndoEntry[entryCapacity];
@@ -843,8 +860,16 @@ public sealed partial class StateArena {
 
         public ArenaUndoEntry this[int index] => m_entries[index];
 
+        public void RemapLayout(ArenaLayout previous, ArenaLayout next, int entryCapacity, int componentCapacity) {
+            var count = RestoreLimit >= 0 ? RestoreLimit : m_count;
+            for (var index = 0; index < count; index++) { m_entries[index] = m_entries[index] with { Entry = previous.Remap(entry: m_entries[index].Entry, next: next) }; }
+            Array.Resize(array: ref m_entries, newSize: Math.Max(val1: m_count, val2: entryCapacity));
+            Array.Resize(array: ref m_components, newSize: Math.Max(val1: m_componentCount, val2: componentCapacity));
+        }
+
         public ReadOnlySpan<sbyte> Components(ArenaUndoEntry entry) => m_components.AsSpan(entry.ComponentOffset, entry.ComponentLength);
         public void Reset(bool rewindable) {
+            RestoreLimit = -1;
             Array.Clear(array: m_entries, index: 0, length: m_count);
             m_count = 0;
             m_componentCount = 0;

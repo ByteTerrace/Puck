@@ -246,7 +246,23 @@ public sealed partial class StateArena {
 
         return masks;
     }
+    private IReadOnlyList<int>? ExportCellSlots(in ArenaRowLayout layout) {
+        if (!UsesLinks(layout: layout)) { return null; }
+        var count = (int)m_memberCounts[layout.Ordinal];
+        int[]? slots = null;
+        for (var position = 0; position < count; position++) {
+            var slot = CellSlotAt(layout: layout, position: position) - layout.CellStart;
+            if (slots is null && slot != position) {
+                slots = new int[count];
+                for (var prior = 0; prior < position; prior++) { slots[prior] = prior; }
+            }
+            if (slots is not null) { slots[position] = slot; }
+        }
+        return slots;
+    }
     private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) => (row with {
+        CellSlots = ExportCellSlots(layout: layout),
+        ReservedCapacity = ((row.Capacity is null) && UsesLinks(layout: layout)) ? layout.CellCapacity : null,
         Cells = ExportCells(
         layout: layout,
         previous: previous,

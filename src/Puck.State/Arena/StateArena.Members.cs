@@ -76,6 +76,10 @@ public sealed partial class StateArena {
         }
 
         var count = ((int)m_memberCounts[rowOrdinal]);
+        if ((count >= layout.CellCapacity) && (DocumentRow(rowOrdinal: rowOrdinal).Capacity is null) && (layout.CellCapacity < DocumentRow(rowOrdinal: rowOrdinal).CellCeiling)) {
+            if (!TryGrowRow(rowOrdinal: rowOrdinal, required: count + 1, name: name, reason: out reason)) { return false; }
+            layout = m_layout[rowOrdinal];
+        }
         var at = ((position < 0)
             ? count
             : position
@@ -150,6 +154,7 @@ public sealed partial class StateArena {
         ) &&
             (((int)m_memberCounts[rowOrdinal]) >= layout.CellCapacity) &&
             (layout.CellCapacity > 0) &&
+            ((DocumentRow(rowOrdinal: rowOrdinal).Capacity is not null) || (layout.CellCapacity == DocumentRow(rowOrdinal: rowOrdinal).CellCeiling)) &&
             DocumentRow(rowOrdinal: rowOrdinal).Evicts &&
             TryKeyAt(
             key: out key,
@@ -521,8 +526,10 @@ public sealed partial class StateArena {
         )) {
             return false;
         }
+        _ = TryPositionOf(rowOrdinal: fromOrdinal, key: key, position: out var sourcePosition);
+        if (!TryReserveCells(rowOrdinal: toOrdinal, required: CellCount(rowOrdinal: toOrdinal) + 1, reason: out reason)) { return false; }
         if (!TryRemoveAt(
-            position: (slot - from.CellStart),
+            position: sourcePosition,
             reason: out reason,
             rowOrdinal: fromOrdinal
         )) {
@@ -594,7 +601,7 @@ public sealed partial class StateArena {
     /// position.</param>
     /// <param name="reason">Why the reorder was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the row was reordered.</returns>
-    /// <remarks>A member carries every column it owns to its new position — value, cell clock, provenance,
+    /// <remarks>A member carries every column it owns to its new position — value, cell clock,
     /// visibility, observation, and behavior override — so a reorder changes order and nothing else. The
     /// permutation is checked whole before one byte moves, so a refused reorder leaves the row as it was.
     /// <para>A board derived from the row is recomputed, because two members naming one cell are resolved by their
@@ -768,6 +775,7 @@ public sealed partial class StateArena {
         }
         if (
             (count >= layout.CellCapacity) &&
+            !((row.Capacity is null) && (count < row.CellCeiling)) &&
             (
                 !row.Evicts ||
                 (layout.CellCapacity == 0)

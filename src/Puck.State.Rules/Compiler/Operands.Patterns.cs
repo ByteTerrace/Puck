@@ -358,26 +358,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             return 0;
         }
 
-        if (arena.TryCellSlot(
-            key: key,
-            rowOrdinal: rowOrdinal,
-            slot: out var slot
-        )) {
-            var position = (slot - arena.Layout[rowOrdinal].CellStart);
-            var cursor = position;
-
-            if (
-                arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var held,
-                rowOrdinal: rowOrdinal
-            ) &&
-                (cursor == (position + 1)) &&
-                (held == key)
-            ) {
-                return position;
-            }
-        }
+        if (arena.TryPositionOf(rowOrdinal: rowOrdinal, key: key, position: out var position)) { return position; }
 
         return int.MaxValue;
     }
