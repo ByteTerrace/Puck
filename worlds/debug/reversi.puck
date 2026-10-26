@@ -69,62 +69,57 @@ let reversiHome = map(range(0, reversiDiscs), i => (reversiHomeRow[i] * reversiT
 let reversiTop = (((galleryPopulation + 2 + boardRoomBodies) - 1) - goBodies)
 grants: map(range(0, reversiDiscs), i => { capability: Drive, grantee: "seat1", subject: $"body:{reversiTop - 1 - i}" })
 
-looks {
-  rows: map(["reversiDisc", "reversiCursor"], name => {
-    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-    name: name
-    scale: 1
-    source: creation(prototypeId: name)
-  }
-  )
-}
+looks: map(["reversiDisc", "reversiCursor"], name => {
+  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  name: name
+  scale: 1
+  source: creation(prototypeId: name)
+})
 
-kits {
-  rows [
-    {
-      bodyContact: Solid
-      bodyMotionProgram: "walk"
-      collider: box(halfExtents: [0.055, 0.016, 0.055], rotation: [0, 0, 0, 1])
-      motion {
-        facingSnap: true
-        holds [
-          {
-            bond: Free
-            envelope {
-              sinkSpeed: 40
-            }
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            hold: Gravity
-            name: "air"
+kits [
+  {
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: box(halfExtents: [0.055, 0.016, 0.055], rotation: [0, 0, 0, 1])
+    motion {
+      facingSnap: true
+      holds [
+        {
+          bond: Free
+          envelope {
+            sinkSpeed: 40
           }
-        ]
-        shaping [
-          {
-            along {}
+          gravity {
+            fall: 46
+            rise: 28
           }
-        ]
-        speed {
-          value: 0.001
+          hold: Gravity
+          name: "air"
         }
-        turn {
-          rate: 0.001
+      ]
+      shaping [
+        {
+          along {}
         }
+      ]
+      speed {
+        value: 0.001
       }
-      name: "reversiDisc"
-      rigid {
-        angularDamping: 0.05
-        friction: 0.6
-        linearDamping: 0.05
-        mass: 0.04
-        restitution: 0.05
-        rollingFriction: 0.2
+      turn {
+        rate: 0.001
       }
     }
-  ]
-}
+    name: "reversiDisc"
+    rigid {
+      angularDamping: 0.05
+      friction: 0.6
+      linearDamping: 0.05
+      mass: 0.04
+      restitution: 0.05
+      rollingFriction: 0.2
+    }
+  }
+]
 
 placements {
   placement "reversiTable" {
@@ -806,7 +801,7 @@ search {
       shapes [drop(), relocate(displace: false)]
       // From the side that just moved, the one reversiTurn no longer names: its discs less the other side's, and a
       // corner worth ten discs.
-      "score": (2 * reversiTurn - 3) * ((reversiBlack - reversiWhite) + 10 * (setBitCount(
+      score: (2 * reversiTurn - 3) * ((reversiBlack - reversiWhite) + 10 * (setBitCount(
         board(mask, reversiBoard, 1, 1) & 0x8100000000000081
       ) - setBitCount(board(mask, reversiBoard, 2, 2) & 0x8100000000000081)))
     }

@@ -248,7 +248,7 @@ let switchReach = concat(
   map(
     range(0, 4),
     k => {
-      "rule": $"hall-switch-{k}"
+      rule: $"hall-switch-{k}"
       level: k
       x0: 10.3
       x1: 11.8
@@ -260,7 +260,7 @@ let switchReach = concat(
   ),
   [
     {
-      "rule": "boardroom-switch"
+      rule: "boardroom-switch"
       level: 2
       x0: 51.3
       x1: 52.8
@@ -1149,7 +1149,7 @@ placements {
     position [0, roomFloor, 0]
     respond [
       {
-        "when": state(state: hallLights, key: `level2`, comparison: Equal, value: 0)
+        when: state(state: hallLights, key: `level2`, comparison: Equal, value: 0)
         prototypeId: "boardroom-switch-off"
       }
     ]

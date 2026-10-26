@@ -79,62 +79,57 @@ let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
 let goTop = ((galleryPopulation + 2 + boardRoomBodies) - 1)
 grants: map(range(0, goStones), i => { capability: Drive, grantee: "seat1", subject: $"body:{goTop - 1 - i}" })
 
-looks {
-  rows: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {
-    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-    name: name
-    scale: 1
-    source: creation(prototypeId: name)
-  }
-  )
-}
+looks: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {
+  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  name: name
+  scale: 1
+  source: creation(prototypeId: name)
+})
 
-kits {
-  rows [
-    {
-      bodyContact: Solid
-      bodyMotionProgram: "walk"
-      collider: box(halfExtents: [0.06, 0.024, 0.06], rotation: [0, 0, 0, 1])
-      motion {
-        facingSnap: true
-        holds [
-          {
-            bond: Free
-            envelope {
-              sinkSpeed: 40
-            }
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            hold: Gravity
-            name: "air"
+kits [
+  {
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: box(halfExtents: [0.06, 0.024, 0.06], rotation: [0, 0, 0, 1])
+    motion {
+      facingSnap: true
+      holds [
+        {
+          bond: Free
+          envelope {
+            sinkSpeed: 40
           }
-        ]
-        shaping [
-          {
-            along {}
+          gravity {
+            fall: 46
+            rise: 28
           }
-        ]
-        speed {
-          value: 0.001
+          hold: Gravity
+          name: "air"
         }
-        turn {
-          rate: 0.001
+      ]
+      shaping [
+        {
+          along {}
         }
+      ]
+      speed {
+        value: 0.001
       }
-      name: "goStone"
-      rigid {
-        angularDamping: 0.05
-        friction: 0.6
-        linearDamping: 0.05
-        mass: 0.05
-        restitution: 0.05
-        rollingFriction: 0.2
+      turn {
+        rate: 0.001
       }
     }
-  ]
-}
+    name: "goStone"
+    rigid {
+      angularDamping: 0.05
+      friction: 0.6
+      linearDamping: 0.05
+      mass: 0.05
+      restitution: 0.05
+      rollingFriction: 0.2
+    }
+  }
+]
 
 placements {
   placement "goTable" {
@@ -884,7 +879,7 @@ search {
       depth: 3
       shapes [drop(), relocate(displace: false)]
       // The side that just moved is the one goTurn no longer names: its stones less the other side's.
-      "score": (2 * goTurn - 3) * (goStoneCount[1] - goStoneCount[2]) * 100
+      score: (2 * goTurn - 3) * (goStoneCount[1] - goStoneCount[2]) * 100
     }
   ]
 }
@@ -1040,8 +1035,7 @@ state {
       { name: "E", x: 1, y: 0, z: 0 }
       { name: "S", x: 0, y: 1, z: 0 }
       { name: "W", x: -1, y: 0, z: 0 }
-    ]
-    )
+    ])
     // The two trays' spots, in world coordinates over the table's lids.
     grid(
       cellSize: goTrayPitch,
