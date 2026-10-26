@@ -15,7 +15,7 @@ public sealed partial class SdfMeshIrradianceScene {
     /// <returns>Whether a finite, nondegenerate nearest triangle was found.</returns>
     public bool TryNearestSurface(Vector3 point, float radius, out Vector3 surface, out Vector3 normal, out float bakeHalfDiagonal) {
         var nearest = new NearestSurface { Squared = radius * radius, Instance = -1, Triangle = -1 };
-        if (float.IsFinite(nearest.Squared) && radius >= 0 && float.IsFinite(point.LengthSquared())) {
+        if (m_nodes.Length > 0 && float.IsFinite(nearest.Squared) && radius >= 0 && float.IsFinite(point.LengthSquared())) {
             NearestNode(m_nodes, 0, -1, point, ref nearest);
         }
         surface = nearest.Point;

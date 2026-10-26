@@ -76,7 +76,7 @@ derived row and rebuild it with the same values. A group can therefore
 recompute a table from scratch every pass and still settle. The passes count
 ticks: a cascade that needs five passes takes five ticks.
 
-The pass ceiling is `maxPasses(n)`, from 1 to 256, and defaults to 8. What
+The pass ceiling is `maxPasses(n)`, any positive integer, and defaults to 8. What
 happens after a breach depends on the trigger. A group with a trigger latches
 the breach and doesn't run again until its trigger has read false and then holds
 once more. A group with no trigger is always armed, so latching would end it for

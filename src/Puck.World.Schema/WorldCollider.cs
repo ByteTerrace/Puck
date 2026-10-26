@@ -118,7 +118,7 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
     public static WorldCollisionEvents Default { get; } = new();
 }
 /// <summary>Bounds physical depenetration between kits that both author <see cref="WorldBodyContactMode.Solid"/>.
-/// The sweep inspects at most <see cref="CandidateBudget"/> x-overlapping candidates for each solid body and resolves
+/// The sweep inspects at most <see cref="CandidateBudget"/> box-overlapping candidates for each solid body and resolves
 /// at most <see cref="MaxPairsPerBody"/> contacts incident to one body in a tick. Choices are stable population order;
 /// a saturated crowd omits lower-priority pairs instead of turning one authority tick into quadratic work.</summary>
 /// <param name="CandidateBudget">The most sweep candidates inspected for one solid body. Must be at least
@@ -162,12 +162,12 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// bounded. Strictly positive.</param>
 /// <param name="RigidPairIterationBudget">The total pair-pass work one tick's extra rigid-pair sweeps may spend,
 /// before <see cref="RigidPairIterationCeiling"/> caps it — see that field. Strictly positive.</param>
-public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
+public sealed record WorldBodyContactPolicy(int CandidateBudget = 32, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
     float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
     float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f,
     int RigidManifoldIterations = 4, int RigidPairIterationCeiling = 4, int RigidPairIterationBudget = 64) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
-    public const int MaximumCandidateBudget = 32;
+    public const int MaximumCandidateBudget = 256;
     /// <summary>The largest accepted resolved-contact degree per solid body.</summary>
     public const int MaximumPairsPerBody = 16;
     /// <summary>The largest accepted ground-manifold sequential-impulse pass count.</summary>

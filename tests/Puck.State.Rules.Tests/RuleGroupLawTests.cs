@@ -222,7 +222,7 @@ public sealed class RuleGroupLawTests {
             context: context,
             groups: [new RuleGroupDeclaration(
                 Name: CellName.Parse(candidate: "runaway"),
-                Passes: (RuleGroupCapacity.MaxPasses + 1),
+                Passes: 0,
                 Shape: RuleGroupShape.Fixpoint,
                 Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))]
             )],

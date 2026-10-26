@@ -1,8 +1,40 @@
+using System.Numerics;
+using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfMeshPathBakeLawTests {
+    [Fact]
+    public void ACachedReplacementDrawsItsOwnMeshWithoutWaitingForAnotherInvalidation() {
+        var library = new SdfMeshLibrary();
+
+        SdfProgram Cached(float x, out SdfMesh mesh) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+            var program = builder.Translate(offset: new Vector3(x: x, y: 0, z: 0)).Sphere(radius: 0.5f, material: material).Build();
+
+            mesh = new SdfMesh(positions: new Vector3[] { new(x: x, y: 0, z: 0), new(x: (x + 1), y: 0, z: 0), new(x: x, y: 1, z: 0) }, indices: new uint[] { 0, 1, 2 });
+            foreach (var group in SdfMeshBakeGroup.Plan(program: program, transforms: [], farDistance: 100,
+                create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector))) {
+                library.Store(geometry: group.Sealed, materials: group.MaterialOrder, mesh: mesh);
+            }
+            return program;
+        }
+        var first = Cached(mesh: out var firstMesh, x: 0);
+        var second = Cached(mesh: out var secondMesh, x: 5);
+        var bake = new SdfMeshPathBake { Library = library };
+        var frame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { FarDistance = 100 };
+        var firstDraw = bake.Dress(frame: frame);
+        var revision = firstDraw.MeshDrawsRevision;
+
+        Assert.Same(expected: firstMesh, actual: Assert.Single(collection: firstDraw.MeshDraws).Mesh);
+        var replacement = bake.Dress(frame: frame with { Program = second });
+
+        Assert.Same(expected: secondMesh, actual: Assert.Single(collection: replacement.MeshDraws).Mesh);
+        Assert.True(condition: (replacement.MeshDrawsRevision > revision));
+        Assert.False(condition: bake.Pending);
+    }
     // A program rebuilt while a skinned group's member stands off the pose its mesh was baked at (a body breathing when a
     // placement elsewhere changes) keeps the group: the same mesh draws on at once and nothing bakes, where planning the
     // group afresh at the member's new pose would key another geometry and bake it.
@@ -56,7 +88,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var draws = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f)).MeshDraws;
         var renumbered = Assert.Single(collection: draws).Mesh;
 
-        Assert.NotSame(expected: baked, actual: renumbered);
+        Assert.NotSame(actual: renumbered, expected: baked);
         Assert.True(condition: baked.Positions.Span.SequenceEqual(other: renumbered.Positions.Span));
         Assert.Equal(expected: baked.TriangleCount, actual: renumbered.TriangleCount);
         Assert.False(condition: bake.Pending);

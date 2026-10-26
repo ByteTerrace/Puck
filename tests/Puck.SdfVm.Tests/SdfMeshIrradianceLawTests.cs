@@ -15,6 +15,30 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
+    public void RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements() {
+        var volume = new SdfMeshIrradiance();
+        var frame = Frame() with { TickLocked = true, IndirectBounces = 0 };
+        uint[] before = [];
+        uint[] after = [];
+
+        _ = volume.Stage(frame: frame, tier: SdfIndirectTier.Medium, bakePending: false, write: words => before = words.ToArray());
+        Assert.True(condition: (volume.DiagnosticScene(frame: frame)!.TriangleCount > 0));
+        // Dynamic and glass surfaces receive light but contribute no opaque static occluder.
+        var empty = frame with { MeshDraws = [frame.MeshDraws[0] with { IsDynamic = true }, frame.MeshDraws[1] with { Glass = true }] };
+
+        _ = volume.Stage(frame: empty, tier: SdfIndirectTier.Medium, bakePending: false, write: words => after = words.ToArray());
+        var scene = Assert.IsType<SdfMeshIrradianceScene>(@object: volume.DiagnosticScene(frame: empty));
+
+        Assert.Equal(expected: 0, actual: scene.TriangleCount);
+        Assert.True(condition: scene.Unblocked(origin: new Vector3(x: 0, y: 2, z: 0), direction: Vector3.UnitY, maximum: 20));
+        Assert.False(condition: scene.Intersect(new Vector3(x: 0, y: 2, z: 0), Vector3.UnitY, 20, out _, out _, out _));
+        Assert.False(condition: scene.TryNearestSurface(new Vector3(x: 0, y: 4, z: 0), 20, out _, out _, out _));
+        Assert.NotEmpty(collection: after);
+        Assert.False(condition: before.AsSpan().SequenceEqual(other: after));
+        _ = volume.Stage(frame: empty, tier: SdfIndirectTier.Medium, bakePending: false, write: _ => throw new InvalidOperationException(message: "A steady empty scene rewrote its probes."));
+        Assert.False(condition: volume.Settling);
+    }
+    [Fact]
     public void AHalfwayDepthDirectionSelectsTheDiagonalOnEitherSideOfZero() {
         foreach (var sign in new[] { -1, 1 }) {
             Assert.Equal(expected: ((sign < 0) ? 19 : 23),
@@ -136,6 +160,7 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.Equal(expected: 2f, actual: resized.Spacing);
         var view = frame.Views[0];
+
         SdfFrame At(float x) => frame with {
             Views = [view with {
             Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: x, y: 2f, z: 0f),
@@ -144,6 +169,7 @@ public sealed class SdfMeshIrradianceLawTests {
         };
         // A camera still in the window's middle keeps it; one past it recentres the window on its cell.
         var kept = volume.Stage(bakePending: false, frame: At(x: 6f), tier: SdfIndirectTier.Medium, write: static _ => { });
+
         var (moved, _) = Trace(frame: At(x: 30f), tier: SdfIndirectTier.Medium, volume: volume);
 
         Assert.Equal(expected: resized.Low, actual: kept.Low);
@@ -156,6 +182,7 @@ public sealed class SdfMeshIrradianceLawTests {
     public void AWindowHoldsWhileItsFirstViewRendersElsewhereAndFollowsItBack() {
         var frame = Frame() with { IndirectBounces = 0 };
         var volume = new SdfMeshIrradiance();
+
         var (here, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
         var camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: 40f, y: 2f, z: 0f),
             target: new Vector3(x: 41f, y: 2f, z: 0f), viewportHeight: 4u, viewportWidth: 4u);

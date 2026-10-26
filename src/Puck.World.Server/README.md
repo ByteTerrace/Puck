@@ -1006,10 +1006,16 @@ begin budget. `maxPairsPerBody: 0` disables pair events without disabling
 world contact. Saturation deliberately omits lower-priority new event pairs.
 
 `collision.bodyContacts` is the separate physical-depenetration budget for two
-`solid` kits. Its per-body candidate budget (default 16, maximum 32) and
+`solid` kits. Its per-body box-overlapping candidate budget (default 32, maximum 256) and
 resolved-pair degree (default 8, maximum 16) bound a fully coincident crowd;
-stable population order decides which later pairs are omitted. The counters
-`DynamicContactCandidates`, `DynamicContactNarrowPairs`,
+stable population order decides which later pairs are omitted.
+The X sweep also queries a fixed-point YZ grid, rebuilt for each rigid pass.
+Cells span the largest body diameter, so only the same or adjacent cells can
+overlap. Their lists merge in X/index order, preserving deterministic pair
+priority without scanning an entire X-aligned, Y/Z-disjoint column. Reused
+population-sized storage keeps the broadphase allocation-free after load.
+The counters `DynamicContactPairVisits` (before Y/Z rejection or candidate limits,
+summed over all passes), `DynamicContactCandidates`, `DynamicContactNarrowPairs`,
 `DynamicContactResolvedPairs`, and `DynamicContactLimitedBodies` expose the
 actual work to tests and host diagnostics.
 
@@ -1903,6 +1909,10 @@ private back-reference; `WorldServer.Tick` reaches it, and `Step`, `Advance`,
 `Submit`, `EnqueueIntent`, `ApplyIntentSubmission`, `ApplyServerEvent`,
 `DrainAdministrative`, `DispatchServerEvent`, the transfer surface and the
 `Describe*` read-backs stay on the server as forwarders.
+
+An administrative drain that applies edits also emits a snapshot at the
+unchanged completed tick. Replica sessions receive arena cell replacements
+there while paused or stopped; they do not wait for simulation to resume.
 
 ## The document pipeline (`WorldDocument*.cs`)
 

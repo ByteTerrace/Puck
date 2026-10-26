@@ -10,7 +10,7 @@ starting work, and tick or remove an item in the same change that closes it.
 
 ## World authoring diagnostics
 
-- [ ] Make `puck creation stats --world worlds/debug/debug.puck --prototype companion` compose the live world's grant masks. A fresh lane CLI reported `MutationKindVocabularyHook.TryParse was never installed`, while `puck compile --validate` and the real World accepted the same sources. The diagnostic path's initializer failure still needs isolation.
+- [x] Make `puck creation stats --world worlds/debug/debug.puck --prototype companion` compose the live world's grant masks (`CliWorldVocabulary` installs `WorldSchemaVocabularyHooks` alongside the local document source, and `CreationCommand` calls `CliWorldVocabulary.EnsureInstalled()`).
 - [ ] Investigate state-rule bindings after a full `world.reload`: a debug World reported `blink-close`'s state transaction refused because the live edit grant refused `state:blink`, then the companion's sensory and glow rows stayed at their reload seeds while the guest continued to fly. Fresh boots and an addon-row replacement worked. The general cause is unconfirmed.
 
 ## Maths law classification
@@ -769,15 +769,15 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] A board game room in the gallery: the east end of level 2, partitioned from the hall at x = 51 with a doorway as the painting wing is on level 0, under level 2's lights, window band and blinds ([shapes](../../worlds/debug/shapes.md#the-board-game-room)). Chess moved in from the lobby unchanged; Go (9x9) and Reversi joined it, ported from the experimental headless games onto real tables of rigid stones and two-faced discs, each with a seat playing either side and a computer opponent ([go](../../worlds/debug/go.md), [reversi](../../worlds/debug/reversi.md)). The motion rows moved down to level 2 and the form, surface and glass rows up to level 3 to clear the room's footprint. Search jobs now take turns with the whole tick's allowance, so three opponents fit; `poseCell` rolls a body (`rollDegrees`) to turn a disc over; and rigid pieces now share local geometry with one root transform and draw per body.
   - [ ] The room's look is for the owner to review: the tables share the chess table's wood and pedestals, the Go board is kaya tiles over dark lines, the Reversi board green felt tiles; the room otherwise wears the hall's finish.
   - [ ] More games for the room's free table spot at (65, 30.6), from the state programme's landed games; addon seats at the tables.
-  - [ ] Go on a real 19×19 board with all 361 stones, after the limits work below lets every stone draw as itself. Area scoring's flood needs more passes than `RuleGroupCapacity.MaxPasses` (256) allows, and stones in one tray column share an X interval past the contact broadphase's candidate budget (16): charge a candidate only on a full box overlap.
+  - [ ] Go on a real 19×19 board with all 361 stones, after the limits work below lets every stone draw as itself. `RuleGroupCapacity.MaxPasses` is removed so area scoring's flood can run as many passes as it needs, and `ResolveDynamicContacts` charges `CandidateBudget` (default 32, max 256) only on full 3D box overlap so stones sharing a tray column's X interval cost nothing when separated in Y or Z.
 
-- [ ] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The interpreter-era scene ceilings are retired; the remaining vocabulary-hook work is below.
+- [ ] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The interpreter-era scene ceilings are retired; the remaining map audit is below.
   - [x] Rigid creations share local geometry and palettes, with a root transform and draw per copy; articulated creations allocate root and independently moving part slots. Shape caps, fixed full/compact pools, per-shape GPU reservations and the boot probe are deleted. Catalog looks emit only for bodies wearing them. The debug world's actual envelope is 2,697 instances, 2,273 materials and 567 transform slots, including 184 rigid copies; a focused 600-copy check retains every body's identity without rebuilding its program.
   - [x] Delete `WorldDynamicGeometryCeilings` and its validator gate, the noise march-step refusal, and the detail band chosen by body index.
   - [x] Field scope depth 2 → 4; the derived-face screen band follows the authored screens.
   - [x] Guards never truncate silently: skins past 255 members refuse before queuing the named bake group, and volume overflow refuses with the creation or frame context.
   - [x] Machine-derived byte budgets retain meshes by size and age; brick storage allocates on its first bake or upload rather than reserving 64 MiB at boot.
-  - [ ] Stale maps: a skill map says `SdfLights.MaxLights` is 8 where the code allows 128; the sdf-authoring skill and authoring README describe the 367-shape budget; `puck creation stats` fails to install the mutation vocabulary on the debug world.
+  - [ ] Remaining map audit: a skill map says `SdfLights.MaxLights` is 8 where the code allows 128. Shape-budget guidance is removed from the sdf-authoring skill and authoring README; `puck creation stats` now installs the mutation vocabulary on the debug world.
 
 ## [UI](ui.md)
 

@@ -343,4 +343,33 @@ public sealed class CreationCommandTests {
         Assert.Equal(expected: 1, actual: exitCode);
         Assert.Contains(expectedSubstring: "failed to load", actualString: output, comparisonType: StringComparison.Ordinal);
     }
+    /// <summary><c>stats</c> composes <c>worlds/debug/debug.puck</c> directly — including its grant masks and state
+    /// vocabulary — and reports the <c>companion</c> prototype.</summary>
+    [Fact]
+    public void StatsComposesDebugWorldGrantVocabulary() {
+        var debugWorld = RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/debug/debug.puck");
+        var (exitCode, output) = Invoke(
+            "creation",
+            "stats",
+            "--world",
+            debugWorld,
+            "--prototype",
+            "companion"
+        );
+
+        Assert.Equal(
+            actual: exitCode,
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "[companion] shapes:"
+        );
+        Assert.Contains(
+            actualString: output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "contact: accepted"
+        );
+    }
 }

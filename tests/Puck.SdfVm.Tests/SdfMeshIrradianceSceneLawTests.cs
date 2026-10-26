@@ -195,8 +195,8 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         Assert.Equal(expected: ((2L * sheet.TriangleCount) + (2L * cube.TriangleCount)), actual: scene.TriangleCount);
         Assert.Equal(expected: (sheet.TriangleCount + (long)cube.TriangleCount), actual: scene.TrianglesBuilt);
         AnswersAsTheSearch(draws: draws, scene: scene);
-        Assert.Null(@object: SdfMeshIrradianceScene.Build(draws: [Draw(dynamic: true, material: 0, matrix: Matrix4x4.Identity, mesh: cube)]));
-        Assert.Null(@object: SdfMeshIrradianceScene.Build(draws: [Draw(material: 0, matrix: Matrix4x4.CreateScale(scale: 0f), mesh: cube)]));
+        Assert.Equal(expected: 0, actual: SdfMeshIrradianceScene.Build(draws: [Draw(dynamic: true, material: 0, matrix: Matrix4x4.Identity, mesh: cube)]).TriangleCount);
+        Assert.Equal(expected: 0, actual: SdfMeshIrradianceScene.Build(draws: [Draw(material: 0, matrix: Matrix4x4.CreateScale(scale: 0f), mesh: cube)]).TriangleCount);
     }
     // A long thin triangle across a face (what a merged polygon leaves) enters the hierarchy as pieces, each boxed tight,
     // and is still answered as one triangle: counted once, met wherever a ray crosses it, its longest edge first, second

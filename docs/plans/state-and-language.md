@@ -218,7 +218,7 @@ its target:
 | `GeneratorCapacity.MaxDeclaredSources`, `MaxEmissionBound`, `MaxExtendedTableSize` | 256, 256, 4,096 |
 | `SearchCapacity.MaxDepth`, `MaxJobs`, `MaxShapesPerJob`, `MaxPromotions`, `MaxChanceOutcomes` | 64, 16, 16, 16, 256 |
 | `SearchCapacity.TranspositionEntries`, `TreeNodes` | 8,192, 8,192 |
-| `RuleGroupCapacity.MaxMembers`, `MaxPasses` | 256, 256 |
+| `RuleGroupCapacity.MaxMembers` | 256 |
 | `RuleExpressions.MaxArguments`, the evaluator's `MaxTraceEvaluations` | 16, 256 |
 | `ExpressionSpelling.MaxLength` | 16,384 |
 

@@ -405,8 +405,8 @@ pair events while ordinary world contact remains live. Preserve these policies,
 cadence phase, cached steering, and overlap latches through checkpoint/hash.
 
 `collision.bodyContacts` separately bounds physical depenetration between
-`solid` kits: at most 32 inspected candidates and 16 resolved pairs per body
-(defaults 16/8). Dense saturation omits later stable-index pairs. Do not couple
+`solid` kits: at most 256 inspected box-overlapping candidates and 16 resolved pairs per body
+(defaults 32/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
 independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
 bounds a rigid body's own per-tick continuous-collision substep count against
