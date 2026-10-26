@@ -171,6 +171,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         return frame with {
             EnableCadenceGate = host.EnableCadenceGate,
             MeshCull = host.MeshCull,
+            MeshDetail = host.MeshDetail,
             UpdateRates = host.UpdateRates,
             RateCounts = host.RateCounts,
             RateIntervals = host.RateIntervals,

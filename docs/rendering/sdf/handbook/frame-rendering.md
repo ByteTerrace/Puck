@@ -1131,6 +1131,30 @@ stored set's 1.74 GB to 1.02 GB and the mesh region's 1.81 GB to 1.11 GB, and a
 lobby frame's mesh pass from 11.5 M triangles to 4.9 M; the done line counts what
 it removed (`merged=`).
 
+The merged mesh then gets two coarser levels (`SdfMeshCollapse`, `SdfMesh.Levels`),
+each a triangle list over the merged mesh's own vertices made by half-edge
+collapses. A collapse is taken only where three measured distances stay within
+the level's error, a quarter of the contour cell for the first level and two cells
+for the second: every merged vertex to a level triangle of its material whose
+interpolated normal there is within 2 or 6 degrees of its own, every crease and
+material edge vertex and edge midpoint to that line as the level draws it, and
+every new triangle's centroid and edge midpoints to the surface it replaces. The
+level records the largest (`SdfMeshLevel.Error`). The region lays each level's
+indices after the merged triangles', and a raster pass chooses each draw's level
+beside its box cull (`SdfMeshDetail`): a view the coarsest level whose error,
+scaled by the draw and projected over the nearest depth of its box at the
+frustum corner's sharpest projection, is at most one display pixel, keeping the
+level it drew until that shows past 1.1 pixels; a shadow cascade the coarsest
+within one of its texels. The draw pushes its level above its index and the
+vertex stage starts at the level's first triangle, which the draw's record holds;
+the surface pass reads the pixel's triangle as it does any other. Glass, a draw
+with no host box and the irradiance trace keep the merged mesh, and
+`world.detail 0`, `1` or `2` draws one level everywhere for comparison. On the
+debug world the first level keeps 11% of the stored set's triangles and the
+second 6%, for 9% more bytes in the store and the region; in the lobby the mesh
+pass and the two cascades draw 1.3, 2.1 and 2.0 M triangles where the merged
+mesh drew 4.9, 17.9 and 22.8 M.
+
 A body straddling a portal whose counterpart stands in the same world is drawn
 on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding
 the body's slots is clipped to the front of the glass it straddles, and gains a

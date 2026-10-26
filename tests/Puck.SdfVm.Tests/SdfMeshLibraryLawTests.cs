@@ -34,7 +34,7 @@ public sealed class SdfMeshLibraryLawTests {
     public void ATakenMeshIsTheStoredOneOrTheStoredOneRenumberedByPlace() {
         var library = new SdfMeshLibrary();
         var geometry = new SdfMeshGeometry(Dynamic: true, Hash: 42);
-        var mesh = Mesh(materials: [4u, 5u, 9u]);
+        var mesh = Mesh(materials: [4u, 5u, 9u]) with { Levels = [new SdfMeshLevel(Error: 0.5f, Indices: new uint[] { 0, 1, 2 }, TriangleMaterials: new uint[] { 5u })] };
 
         Assert.False(condition: library.TryTake(geometry: geometry, materials: [4, 5], mesh: out _));
 
@@ -48,6 +48,9 @@ public sealed class SdfMeshLibraryLawTests {
         // A material no shape of the group carries keeps its id.
         Assert.Equal(expected: [1u, 2u, 9u], actual: renumbered.TriangleMaterials.ToArray());
         Assert.Equal(expected: mesh.Positions, actual: renumbered.Positions);
+        // Its levels keep their triangles and error, their materials renumbered alike.
+        Assert.Equal(expected: [2u], actual: Assert.Single(collection: renumbered.Levels).TriangleMaterials.ToArray());
+        Assert.Equal(expected: (mesh.Levels[0].Indices, 0.5f), actual: (renumbered.Levels[0].Indices, renumbered.Levels[0].Error));
         Assert.True(condition: library.TryTake(geometry: geometry, materials: [1, 2], mesh: out var again));
         Assert.Same(expected: renumbered, actual: again);
 

@@ -16,6 +16,7 @@ public sealed partial class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private bool m_cadenceGate;
     private SdfMeshCullLevel m_cull;
+    private SdfMeshDetailLevel m_detail;
     private SdfUpdateRates m_updateRates;
     private bool m_dynamicResolution;
     private SdfIndirectTier m_indirectTier;
@@ -77,6 +78,11 @@ public sealed partial class WorldRenderSettings {
     /// draws every draw in every view and cascade, which measure each level's saving. Session state, never durable
     /// config; rides <see cref="Puck.SdfVm.SdfFrame.MeshCull"/>.</summary>
     public SdfMeshCullLevel Cull { get => m_cull; set { m_cull = value; m_revision++; } }
+    /// <summary>Which levels of detail the raster passes draw (default <see cref="SdfMeshDetailLevel.Auto"/>, each pass's
+    /// choice by the error it can show). <c>world.detail 0</c>, <c>1</c> or <c>2</c> draws one level everywhere, which
+    /// shows what a level changes. Session state, never durable config; rides
+    /// <see cref="Puck.SdfVm.SdfFrame.MeshDetail"/>.</summary>
+    public SdfMeshDetailLevel Detail { get => m_detail; set { m_detail = value; m_revision++; } }
     /// <summary>Which work updates less often when it is far or small on screen (<c>world.rates</c>; default
     /// <see cref="SdfUpdateRates.All"/>): bodies' poses, nested views, screens' uploads and the far shadow cascade, each
     /// only where the drop is barely perceptible (<see cref="SdfUpdateRateTiers"/>). Session state, never durable config;

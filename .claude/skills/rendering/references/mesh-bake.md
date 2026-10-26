@@ -295,6 +295,41 @@ laws exercise that boundary.
   boxing such a triangle in pieces (below). The done line counts `merged=`
   triangles; `SdfMeshPlanarMergeLawTests` holds the outline, the area per
   material and normal, and no opened edge.
+- **Every landed mesh then collapses into two coarser levels** (`SdfMeshCollapse`,
+  `SdfMesh.Levels`, the decision in
+  [rendering](../../../../docs/decisions/rendering.md)). A place is a position;
+  its copies are the crease split's vertices there. A collapse moves one place's
+  copies onto a neighbour's, each side of the collapsed edge taking that side's
+  copy, so a level is indices and triangle materials over the merged mesh's
+  vertices. Each (vertex, material) of the merged mesh is a sample tracked to a
+  triangle; a collapse re-measures the samples about it against the triangles
+  that stay (point to triangle in doubles, plus the interpolated normal's angle)
+  and is refused when one has none within the level's bounds
+  (`CellShares` of the contour cell, `NormalDegrees`). Every crease and material
+  edge vertex and edge midpoint is a line sample tracked to the feature edge it
+  lies nearest, re-measured point to segment when a collapse moves that edge: the
+  surface samples alone let a slide fill a notch in a face's outline (the notch's
+  vertices lie inside the filling triangle, at no distance), which drew surface
+  past a raised plate's outline several pixels out. `SdfMeshLevel.Error` is the
+  largest distance the surface samples, the line samples and the triangle bound
+  below measure (raised to the finer level's where
+  re-tracking measures a coarser level nearer). Places sort per pass into free (at most one
+  crease or material edge, ending there), sliding (two copies: only along the
+  crease between them; one copy on material edges: along them) and locked
+  (three or more copies, an open or non-manifold edge, a fan that is not one
+  ring); a refusal also guards the link condition, a fold past `FlipCosine`, and a
+  face turning to the other side of its vertices' normals. A pass locks only the
+  places a collapse moved triangles onto, since those places' lists miss them;
+  the passes take about half as many collapses each, about twelve a level. A
+  third guard bounds each new triangle: its centroid and edge midpoints are
+  measured against the old fan's same-material triangles, and each triangle
+  carries the largest such distance it inherited, so a collapse cannot cut a
+  triangle through a thin rod the samples straddle. On the debug world's stored
+  set it keeps 11% of the triangles at the first level and 6% at the second, for
+  9% more stored and region bytes and about 208 s of CPU over the whole set,
+  which `Land`'s tasks spread across cores. The done line counts `levelled=` meshes and
+  the triangles every mesh draws at `level1=` and `level2=`;
+  `SdfMeshCollapseLawTests` measures each level's contract by brute force.
 
 ## The mesh region
 
